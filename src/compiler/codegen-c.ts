@@ -1494,6 +1494,7 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     continueTargets: [],
     cleanupEnabled: true,
     errorChannelUsed: false,
+    errorObjectNames: new Set(),
     errorTargets: [],
     functionTypes: new Map(),
     mapTypes: new Map(),
@@ -1731,6 +1732,10 @@ function emitStatement(statement, context) {
 
     if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
       return emitNullableRuntimeValueVariableDeclaration(statement, context)
+    }
+
+    if (isErrorConstructorExpression(statement.init)) {
+      return emitErrorObjectVariableDeclaration(statement, context)
     }
 
     if (statement.init?.type === 'ObjectLiteral') {
@@ -2153,13 +2158,20 @@ function emitTryStatement(statement, context) {
   lines.push(`  goto ${finallyLabel ?? endLabel};`)
 
   if (statement.handler != null && catchLabel != null) {
+    const catchValueType = inferCatchBindingValueType(statement, context)
     const catchBody = withFinallyFlowTarget(context, finallyLabel, () => withVariableScope(context, () => {
       const body: string[] = []
 
       if (statement.handler.param != null) {
-        context.variables.set(statement.handler.param, 'string')
-        context.runtimeStrings.add(statement.handler.param)
-        body.push(`ccjs_string* ${statement.handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
+        if (catchValueType === 'object') {
+          context.variables.set(statement.handler.param, 'object')
+          registerErrorObjectShape(context, statement.handler.param)
+          body.push(`ccjs_value ${statement.handler.param} = ccjs_error;`)
+        } else {
+          context.variables.set(statement.handler.param, 'string')
+          context.runtimeStrings.add(statement.handler.param)
+          body.push(`ccjs_string* ${statement.handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
+        }
       }
 
       body.push(...emitStatementBody(statement.handler.body, context))
@@ -2168,7 +2180,7 @@ function emitTryStatement(statement, context) {
     }))
 
     lines.push(`${catchLabel}:`)
-    lines.push(`  if (ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0) ${emitFailureStatement(context)}`)
+    lines.push(`  if (${emitCatchBindingTypeCheck(catchValueType)}) ${emitFailureStatement(context)}`)
     lines.push('  ccjs_error_active = 0;')
     lines.push('  {')
     lines.push(...catchBody.map(line => `    ${line}`))
@@ -2222,8 +2234,10 @@ function emitThrowStatement(statement, context) {
     return []
   }
 
-  if (inferExpressionType(statement.argument, context) !== 'string') {
-    context.diagnostics.push(diagnostic('CCJS_C_THROW', 'C throw currently supports only string values in local try/catch regions', statement.loc))
+  const isErrorObject = isErrorValueExpression(statement.argument, context)
+
+  if (inferExpressionType(statement.argument, context) !== 'string' && !isErrorObject) {
+    context.diagnostics.push(diagnostic('CCJS_C_THROW', 'C throw currently supports only string values and lightweight Error objects in local try/catch regions', statement.loc))
     return []
   }
 
@@ -2235,11 +2249,90 @@ function emitThrowStatement(statement, context) {
     ...value.lines,
     ...emitPrepareOwnedValueWrite('ccjs_error'),
     `ccjs_error = ${value.expression};`,
-    emitRuntimeTypeCheck('ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0', context),
+    emitRuntimeTypeCheck(isErrorObject ? 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0' : 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0', context),
     'ccjs_retain(ccjs_error);',
     'ccjs_error_active = 1;',
     `goto ${target};`
   ]
+}
+
+function inferCatchBindingValueType(statement, context) {
+  const types = collectLocalThrowValueTypes(statement.block, context, new Set(context.errorObjectNames))
+
+  return types.length > 0 && types.every(type => type === 'error') ? 'object' : 'string'
+}
+
+function collectLocalThrowValueTypes(statement, context, errorObjectNames = new Set(context.errorObjectNames)) {
+  if (statement == null) {
+    return []
+  }
+
+  if (statement.type === 'ThrowStatement') {
+    if (isKnownErrorValueExpression(statement.argument, context, errorObjectNames)) {
+      return ['error']
+    }
+
+    return inferExpressionType(statement.argument, context) === 'string' ? ['string'] : ['other']
+  }
+
+  if (statement.type === 'VariableDeclaration') {
+    if (isKnownErrorValueExpression(statement.init, context, errorObjectNames)) {
+      errorObjectNames.add(statement.name)
+    }
+
+    return []
+  }
+
+  if (statement.type === 'BlockStatement') {
+    const scopedErrorObjectNames = new Set(errorObjectNames)
+
+    return statement.body.flatMap(item => collectLocalThrowValueTypes(item, context, scopedErrorObjectNames))
+  }
+
+  if (statement.type === 'IfStatement') {
+    return [
+      ...collectLocalThrowValueTypes(statement.consequent, context, new Set(errorObjectNames)),
+      ...collectLocalThrowValueTypes(statement.alternate, context, new Set(errorObjectNames))
+    ]
+  }
+
+  if (statement.type === 'WhileStatement' || statement.type === 'ForOfStatement') {
+    return collectLocalThrowValueTypes(statement.body, context, new Set(errorObjectNames))
+  }
+
+  if (statement.type === 'ForStatement') {
+    return collectLocalThrowValueTypes(statement.body, context, new Set(errorObjectNames))
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    return statement.cases.flatMap(item => {
+      const scopedErrorObjectNames = new Set(errorObjectNames)
+
+      return item.consequent.flatMap(child => collectLocalThrowValueTypes(child, context, scopedErrorObjectNames))
+    })
+  }
+
+  if (statement.type === 'TryStatement') {
+    if (statement.handler != null) {
+      return [
+        ...collectLocalThrowValueTypes(statement.handler.body, context, new Set(errorObjectNames)),
+        ...collectLocalThrowValueTypes(statement.finalizer, context, new Set(errorObjectNames))
+      ]
+    }
+
+    return [
+      ...collectLocalThrowValueTypes(statement.block, context, new Set(errorObjectNames)),
+      ...collectLocalThrowValueTypes(statement.finalizer, context, new Set(errorObjectNames))
+    ]
+  }
+
+  return []
+}
+
+function emitCatchBindingTypeCheck(valueType) {
+  return valueType === 'object'
+    ? 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
+    : 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
 }
 
 function registerErrorChannel(context) {
@@ -2535,6 +2628,13 @@ function emitPreparedForVariableDeclaration(statement, context) {
   if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
     return {
       lines: emitNullableRuntimeValueVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  if (isErrorConstructorExpression(statement.init)) {
+    return {
+      lines: emitErrorObjectVariableDeclaration(statement, context),
       expression: ''
     }
   }
@@ -2975,6 +3075,10 @@ function emitVariableDeclaration(statement, context) {
     return emitNullableRuntimeValueVariableDeclaration(statement, context).join('\n')
   }
 
+  if (isErrorConstructorExpression(statement.init)) {
+    return emitErrorObjectVariableDeclaration(statement, context).join('\n')
+  }
+
   const inferred = inferExpressionType(statement.init, context)
   context.variables.set(statement.name, inferred)
 
@@ -3021,6 +3125,10 @@ function emitVariableDeclaration(statement, context) {
 function emitScalarVariableDeclaration(statement, context) {
   if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
     return emitNullableRuntimeValueVariableDeclaration(statement, context)
+  }
+
+  if (isErrorConstructorExpression(statement.init)) {
+    return emitErrorObjectVariableDeclaration(statement, context)
   }
 
   const inferred = inferExpressionType(statement.init, context)
@@ -3518,6 +3626,10 @@ function emitCValueExpression(expression, context) {
     return emitCNullishCoalescingValueExpression(expression, context)
   }
 
+  if (isErrorConstructorExpression(expression)) {
+    return emitCErrorObjectValueExpression(expression, context)
+  }
+
   if (expression?.type === 'OptionalCallExpression' && isNullableRuntimeExpression(expression, context)) {
     return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
   }
@@ -3972,6 +4084,72 @@ function emitCObjectLiteralValueExpression(expression, context, shape: AnyNode |
   return {
     lines,
     expression: temp
+  }
+}
+
+function emitErrorObjectVariableDeclaration(statement, context) {
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'object')
+  registerErrorObjectShape(context, statement.name)
+
+  return emitCErrorObjectInitLines(statement.name, statement.init, context)
+}
+
+function emitCErrorObjectValueExpression(expression, context) {
+  const temp = nextCName(context, 'ccjs_error_object')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: emitCErrorObjectInitLines(temp, expression, context),
+    expression: temp
+  }
+}
+
+function emitCErrorObjectInitLines(target, expression, context) {
+  const shapeName = nextCName(context, 'ccjs_shape_error')
+  const fieldsName = `${shapeName}_fields`
+  const name = emitCValueExpression(cStringLiteralNode('Error', expression.loc), context)
+  const message = emitCValueExpression(errorMessageExpression(expression, context), context)
+
+  return [
+    `static const ccjs_field_info ${fieldsName}[] = {`,
+    `  { ${cStringLiteral('name')}, CCJS_FIELD_READONLY },`,
+    `  { ${cStringLiteral('message')}, CCJS_FIELD_READONLY },`,
+    '};',
+    `static const ccjs_shape ${shapeName} = {`,
+    '  2,',
+    `  ${fieldsName}`,
+    '};',
+    ...emitPrepareOwnedValueWrite(target),
+    emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${target})`, context),
+    ...name.lines,
+    emitStatusCheck(`ccjs_object_init_known(${target}, 0, ${name.expression})`, context),
+    ...message.lines,
+    emitStatusCheck(`ccjs_object_init_known(${target}, 1, ${message.expression})`, context)
+  ]
+}
+
+function errorMessageExpression(expression, context) {
+  if (expression.args.length > 1) {
+    context.diagnostics.push(diagnostic('CCJS_ARG_COUNT', `Error constructor expects at most 1 argument(s), got ${expression.args.length}`, expression.loc))
+  }
+
+  const message = expression.args[0] ?? cStringLiteralNode('', expression.loc)
+
+  if (inferExpressionType(message, context) !== 'string') {
+    context.diagnostics.push(diagnostic('CCJS_TYPE_MISMATCH', 'Error message must be a string in the current C backend slice', message.loc ?? expression.loc))
+
+    return cStringLiteralNode('', expression.loc)
+  }
+
+  return message
+}
+
+function cStringLiteralNode(value, loc = null) {
+  return {
+    type: 'StringLiteral',
+    value,
+    loc
   }
 }
 
@@ -5676,6 +5854,10 @@ function inferExpressionType(expression, context) {
     return 'number'
   }
 
+  if (isErrorConstructorExpression(expression)) {
+    return 'object'
+  }
+
   if (expression?.type === 'NewExpression' && collectionConstructorName(expression) === 'Map') {
     return 'map'
   }
@@ -5878,6 +6060,43 @@ function isOptionalChainExpression(expression) {
 
 function isNullishCoalescingExpression(expression) {
   return expression?.type === 'BinaryExpression' && expression.operator === '??'
+}
+
+function isErrorConstructorExpression(expression) {
+  return expression?.type === 'NewExpression'
+    && expression.callee.type === 'Reference'
+    && expression.callee.path.length === 1
+    && expression.callee.path[0] === 'Error'
+}
+
+function isErrorValueExpression(expression, context) {
+  return isKnownErrorValueExpression(expression, context, context.errorObjectNames)
+}
+
+function isKnownErrorValueExpression(expression, context, errorObjectNames) {
+  if (isErrorConstructorExpression(expression)) {
+    return true
+  }
+
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    return errorObjectNames.has(expression.path[0])
+  }
+
+  return false
+}
+
+function registerErrorObjectShape(context, name) {
+  context.errorObjectNames.add(name)
+  context.objectShapes.set(name, [
+    {
+      name: 'name',
+      valueType: 'string'
+    },
+    {
+      name: 'message',
+      valueType: 'string'
+    }
+  ])
 }
 
 function canLowerCNullishCoalescingExpression(expression, context) {
@@ -7425,6 +7644,10 @@ function expressionUsesCRuntime(expression) {
     return false
   }
 
+  if (isErrorConstructorExpression(expression)) {
+    return true
+  }
+
   if (expression.type === 'NewExpression' && collectionConstructorName(expression) != null) {
     return true
   }
@@ -7736,6 +7959,7 @@ function withVariableScope(context, callback) {
   const previous = context.variables
   const previousArrayShapes = context.arrayShapes
   const previousBoxedVariables = context.boxedVariables
+  const previousErrorObjectNames = context.errorObjectNames
   const previousFunctionTypes = context.functionTypes
   const previousMapTypes = context.mapTypes
   const previousNarrowedNullableScalars = context.narrowedNullableScalars
@@ -7748,6 +7972,7 @@ function withVariableScope(context, callback) {
   context.variables = new Map(previous)
   context.arrayShapes = new Map(previousArrayShapes)
   context.boxedVariables = new Set(previousBoxedVariables)
+  context.errorObjectNames = new Set(previousErrorObjectNames)
   context.functionTypes = new Map(previousFunctionTypes)
   context.mapTypes = new Map(previousMapTypes)
   context.narrowedNullableScalars = new Set(previousNarrowedNullableScalars)
@@ -7764,6 +7989,7 @@ function withVariableScope(context, callback) {
     context.variables = previous
     context.arrayShapes = previousArrayShapes
     context.boxedVariables = previousBoxedVariables
+    context.errorObjectNames = previousErrorObjectNames
     context.functionTypes = previousFunctionTypes
     context.mapTypes = previousMapTypes
     context.narrowedNullableScalars = previousNarrowedNullableScalars

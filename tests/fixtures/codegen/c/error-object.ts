@@ -1,8 +1,8 @@
 // @targets c
-// @expect diagnostic
-// @diagnostic CCJS_C_JS_GLOBAL
+// @expect pass
+// @stdout Error boom
 
 export function main(): void {
   const error = new Error('boom')
-  console.log(error)
+  console.log(error.name, error.message)
 }

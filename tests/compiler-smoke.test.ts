@@ -2594,12 +2594,17 @@ test('lowers C break and continue through finally before loop flow', () => {
   assert.match(result.code, /ccjs_continue_\d+:\n\s+if \(ccjs_continue_active\) ccjs_continue_active = 0;/)
 })
 
-test('compiles Error objects to JS and rejects them for C', () => {
+test('compiles Error objects to JS and lowers lightweight Error objects to C', () => {
   const source = `export function main(): void {
+  const created = new Error('created')
+  console.log(created.name, created.message)
   try {
-    throw new Error('boom')
+    const thrown = new Error('boom')
+    throw thrown
   } catch (error) {
-    console.log(error.message)
+    console.log(error.name, error.message)
+  } finally {
+    console.log('finally')
   }
 }
 `
@@ -2607,13 +2612,44 @@ test('compiles Error objects to JS and rejects them for C', () => {
     target: 'js'
   })
 
-  assert.match(js.code, /throw new Error\("boom"\)/)
-  assert.match(js.code, /console\.log\(error\.message\)/)
+  assert.match(js.code, /const thrown = new Error\("boom"\)/)
+  assert.match(js.code, /throw thrown/)
+  assert.match(js.code, /console\.log\(error\.name, error\.message\)/)
+
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /static const ccjs_field_info ccjs_shape_error_\d+_fields\[\] = \{\n\s+\{ "name", CCJS_FIELD_READONLY \},\n\s+\{ "message", CCJS_FIELD_READONLY \},/)
+  assert.match(c.code, /if \(ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_error_\d+, &created\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /ccjs_error = thrown;\n    if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(c.code, /ccjs_try_\d+_catch:\n    if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(c.code, /ccjs_value error = ccjs_error;/)
+  assert.match(c.code, /ccjs_object_get_known\(error, 0, &ccjs_log_value_\d+\)/)
+  assert.match(c.code, /ccjs_object_get_known\(error, 1, &ccjs_log_value_\d+\)/)
+
   assertDiagnostic(`export function main(): void {
-  const error = new Error('boom')
-  console.log(error)
+  try {
+    throw { message: 'boom' }
+  } catch (error) {
+    console.log(error)
+  }
 }
-`, 'CCJS_C_JS_GLOBAL', {
+`, 'CCJS_C_THROW', {
+    target: 'c'
+  })
+  assertDiagnostic(`export function main(): void {
+  const fake = {
+    name: 'Error',
+    message: 'boom'
+  }
+  try {
+    throw fake
+  } catch (error) {
+    console.log(error)
+  }
+}
+`, 'CCJS_C_THROW', {
     target: 'c'
   })
 })

@@ -3994,6 +3994,53 @@ test('generated C local string throw try catch finally compiles and runs with ru
   }
 })
 
+test('generated C lightweight Error objects compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-error-object-'))
+  const source = join(dir, 'error-object.c')
+  const output = join(dir, 'error-object')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const created = new Error('created')
+  console.log(created.name, created.message)
+  try {
+    const thrown = new Error('boom')
+    throw thrown
+  } catch (error) {
+    console.log(error.name, error.message)
+  } finally {
+    console.log('finally')
+  }
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Error created\nError boom\nfinally\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C return through finally compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
