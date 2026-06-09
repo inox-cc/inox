@@ -3702,6 +3702,70 @@ export function main(): void {
   }
 })
 
+test('generated C nullable block arrow callback optional call results compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-block-arrow-callback-optional-call-result-'))
+  const source = join(dir, 'nullable-block-arrow-callback-optional-call-result.c')
+  const output = join(dir, 'nullable-block-arrow-callback-optional-call-result')
+
+  try {
+    const result = compileSource(`type Score = (value: number) => number;
+type Ready = () => boolean;
+
+function printValues(score: Score | null, ready: Ready | null): void {
+  const value: number | null = score?.(4)
+  const flag: boolean | null = ready?.()
+  console.log(value ?? 0, flag ?? false)
+}
+
+export function main(): void {
+  const bonus = 3
+  const score: Score | null = (value: number) => {
+    const doubled = value * 2
+    if (doubled > 4) {
+      return doubled + bonus
+    }
+
+    return bonus
+  }
+  const ready: Ready | null = () => {
+    if (bonus === 3) {
+      return true
+    }
+
+    return false
+  }
+  printValues(score, ready)
+  printValues(null, null)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '11 1\n0 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

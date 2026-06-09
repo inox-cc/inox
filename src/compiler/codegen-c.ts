@@ -463,10 +463,6 @@ function collectCallbackWrappers(programs, context) {
     }
 
     if (expression?.type === 'ArrowFunctionExpression') {
-      if (normalized.returnType !== 'void' && !expression.expressionBody) {
-        return
-      }
-
       registerArrow(expression, normalized, scopes)
       return
     }
@@ -1226,6 +1222,9 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   const context = createFunctionContext(baseContext, 'void')
   context.cleanupEnabled = false
   context.statusReturn = true
+  context.runtimeCallbackReturnType = wrapper.functionType.returnType
+  context.runtimeCallbackReturnOut = '*out'
+  context.runtimeCallbackCleanupLabel = 'ccjs_callback_cleanup'
   const bodyLines: string[] = []
 
   bodyLines.push(...emitRuntimeArrowCallbackContextLocals(wrapper, context))
@@ -1246,6 +1245,9 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...statementLines.map(line => `  ${line}`))
+  if (context.usedRuntimeCallbackCleanupGoto === true) {
+    lines.push(`${context.runtimeCallbackCleanupLabel}:`)
+  }
   lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
   lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
   lines.push('  return CCJS_OK;')
@@ -1257,8 +1259,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
 function emitRuntimeArrowCallbackStatementLines(wrapper, context) {
   if (wrapper.functionType.returnType === 'number' || wrapper.functionType.returnType === 'boolean') {
     if (!wrapper.expression.expressionBody) {
-      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'runtime C callback scalar returns currently require an expression-body arrow function', wrapper.expression.loc))
-      return []
+      return emitStatementList(wrapper.expression.body, context)
     }
 
     const value = emitPreparedNumberExpression(wrapper.expression.body, context)
@@ -1814,6 +1815,10 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ReturnStatement') {
+    if (isRuntimeCallbackScalarReturnContext(context)) {
+      return emitRuntimeCallbackScalarReturnStatement(statement, context)
+    }
+
     if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
       return emitNullableScalarReturnStatement(statement, context)
     }
@@ -2302,6 +2307,30 @@ function emitPreparedForExpressionClause(expression, context) {
   }
 
   return emitPreparedNumberExpression(expression, context)
+}
+
+function isRuntimeCallbackScalarReturnContext(context) {
+  return context.statusReturn === true && (context.runtimeCallbackReturnType === 'number' || context.runtimeCallbackReturnType === 'boolean')
+}
+
+function emitRuntimeCallbackScalarReturnStatement(statement, context) {
+  const value = statement.argument == null
+    ? {
+        lines: [],
+        expression: '0'
+      }
+    : emitPreparedNumberExpression(statement.argument, context)
+  const expression = context.runtimeCallbackReturnType === 'number'
+    ? `ccjs_number_value(${value.expression})`
+    : `ccjs_bool_value((${value.expression}) != 0)`
+
+  context.usedRuntimeCallbackCleanupGoto = true
+
+  return [
+    ...value.lines,
+    `${context.runtimeCallbackReturnOut} = ${expression};`,
+    `goto ${context.runtimeCallbackCleanupLabel};`
+  ]
 }
 
 function emitStringReturnStatement(statement, context) {

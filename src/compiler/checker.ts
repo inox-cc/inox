@@ -406,7 +406,7 @@ class Checker {
       }
 
       const declared = statement.declaredType == null ? null : this.resolveDeclaredType(statement.declaredType, statement.loc)
-      const initType = statement.init == null ? 'unknown' : this.checkExpression(statement.init)
+      const initType = statement.init == null ? 'unknown' : this.checkVariableInitializer(statement.init, declared)
       const valueType = declared?.valueType ?? initType
       const arrayElementType = declared?.arrayElementType ?? this.resolveExpressionArrayElementType(statement.init)
       const mapType = declared?.valueType === 'map'
@@ -1372,10 +1372,39 @@ class Checker {
     return 'object'
   }
 
-  checkArrowFunctionExpression(expression: AnyNode): void {
+  checkVariableInitializer(expression: AnyNode, declared: ResolvedTypeInfo | null): ValueType {
+    if (expression.type === 'ArrowFunctionExpression' && declared?.valueType === 'function' && declared.functionType != null) {
+      this.checkArrowFunctionExpression(expression, declared.functionType)
+      return 'function'
+    }
+
+    return this.checkExpression(expression)
+  }
+
+  checkArrowFunctionExpression(expression: AnyNode, functionType: AnyNode | null = null): void {
     this.withScope(() => {
-      for (const param of expression.params) {
-        const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
+      if (functionType != null && expression.params.length > functionType.params.length) {
+        this.report('CCJS_ARG_COUNT', `function callback expects at most ${functionType.params.length} parameter(s), got ${expression.params.length}`, expression.loc)
+      }
+
+      for (const [index, param] of expression.params.entries()) {
+        const expected = functionType?.params[index]
+        const paramInfo = param.valueType === 'unknown' && expected != null
+          ? {
+              valueType: expected.valueType,
+              nullable: expected.nullable === true,
+              arrayElementType: expected.arrayElementType ?? null,
+              mapKeyType: expected.mapKeyType ?? null,
+              mapValueType: expected.mapValueType ?? null,
+              setElementType: expected.setElementType ?? null,
+              functionType: expected.functionType ?? null,
+              shape: expected.shape ?? null
+            }
+          : this.resolveDeclaredType(param.valueType, param.loc)
+
+        if (expected != null && param.valueType !== 'unknown') {
+          this.checkAssignableType(expected.valueType, paramInfo.valueType, param.loc, expected.nullable === true)
+        }
 
         this.declare(param.name, {
           kind: 'param',
@@ -1393,9 +1422,28 @@ class Checker {
       }
 
       if (expression.expressionBody) {
-        this.checkExpression(expression.body)
+        const actualReturnType = this.checkExpression(expression.body)
+
+        if (functionType != null) {
+          this.checkAssignableType(actualReturnType, functionType.returnType, expression.body.loc, functionType.returnNullable === true)
+        }
       } else {
-        this.checkStatements(expression.body)
+        if (functionType == null) {
+          this.checkStatements(expression.body)
+          return
+        }
+
+        const previousReturnType = this.currentReturnType
+        const previousReturnNullable = this.currentReturnNullable
+
+        try {
+          this.currentReturnType = functionType.returnType
+          this.currentReturnNullable = functionType.returnNullable === true
+          this.checkStatements(expression.body)
+        } finally {
+          this.currentReturnType = previousReturnType
+          this.currentReturnNullable = previousReturnNullable
+        }
       }
     })
   }
