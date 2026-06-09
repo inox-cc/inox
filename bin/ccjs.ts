@@ -32,6 +32,7 @@ const cRuntimeSources = [
   'runtime/c/src/arrays/array.c',
   'runtime/c/src/time/time.c'
 ].map(file => join(repoRoot, file))
+const configFileNames = ['ccjs.config.json', 'ccjs.json']
 
 const result = parseCliArgs(process.argv.slice(2))
 
@@ -208,25 +209,31 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
 }
 
 async function loadConfig(): Promise<CConfig> {
-  try {
-    const text = await readFile('ccjs.config.json', 'utf8')
-    return validateConfig(JSON.parse(text))
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      return {}
-    }
+  for (const fileName of configFileNames) {
+    try {
+      const text = await readFile(fileName, 'utf8')
+      return validateConfig(JSON.parse(text), fileName)
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        continue
+      }
 
-    if (error instanceof SyntaxError) {
-      throw new Error(`invalid ccjs.config.json: ${error.message}`)
-    }
+      if (error instanceof SyntaxError) {
+        throw new Error(`invalid ${fileName}: ${error.message}`)
+      }
 
-    throw error
+      throw error
+    }
   }
+
+  return {}
 }
 
-function validateConfig(config: unknown): CConfig {
+function validateConfig(config: unknown, fileName: string): CConfig {
+  const invalidConfig = (message: string): Error => new Error(`invalid ${fileName}: ${message}`)
+
   if (config == null || typeof config !== 'object' || Array.isArray(config)) {
-    throw new Error('invalid ccjs.config.json: root value must be an object')
+    throw invalidConfig('root value must be an object')
   }
 
   const value = config as CConfig
@@ -236,26 +243,26 @@ function validateConfig(config: unknown): CConfig {
   }
 
   if (typeof value.c !== 'object' || Array.isArray(value.c)) {
-    throw new Error('invalid ccjs.config.json: c must be an object')
+    throw invalidConfig('c must be an object')
   }
 
   if (value.c.cc != null && typeof value.c.cc !== 'string') {
-    throw new Error('invalid ccjs.config.json: c.cc must be a string')
+    throw invalidConfig('c.cc must be a string')
   }
 
-  validateConfigFlags(value.c.cflags, 'c.cflags')
-  validateConfigFlags(value.c.ldflags, 'c.ldflags')
+  validateConfigFlags(value.c.cflags, 'c.cflags', fileName)
+  validateConfigFlags(value.c.ldflags, 'c.ldflags', fileName)
 
   return value
 }
 
-function validateConfigFlags(value: unknown, path: string): void {
+function validateConfigFlags(value: unknown, path: string, fileName: string): void {
   if (value == null || typeof value === 'string') {
     return
   }
 
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
-    throw new Error(`invalid ccjs.config.json: ${path} must be a string or an array of strings`)
+    throw new Error(`invalid ${fileName}: ${path} must be a string or an array of strings`)
   }
 }
 

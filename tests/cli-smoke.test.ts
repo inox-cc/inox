@@ -235,6 +235,128 @@ exec cc "$@"
   }
 })
 
+test('ccjs build --target c reads ccjs.json toolchain settings', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
+  const out = join(dir, 'hello')
+  const wrapper = join(dir, 'cc-wrapper.sh')
+  const log = join(dir, 'cc.log')
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  console.log('hello')
+}
+`)
+    await writeFile(wrapper, `#!/bin/sh
+printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
+exec cc "$@"
+`)
+    await chmod(wrapper, 0o755)
+    await writeFile(join(dir, 'ccjs.json'), `${JSON.stringify({
+      c: {
+        cc: wrapper,
+        cflags: ['-Inonexistent ccjs json path with spaces', '-DCCJS_JSON_CFLAG=1'],
+        ldflags: ['-Llinker ccjs json path with spaces', '-DCCJS_JSON_LDFLAG=1']
+      }
+    }, null, 2)}\n`)
+
+    const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
+      cwd: dir,
+      env: {
+        CCJS_CC_LOG: log
+      }
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const invocation = await readFile(log, 'utf8')
+    const run = await runCommand(out, [])
+
+    assert.match(invocation, new RegExp(escapeRegExp(wrapper)))
+    assert.match(invocation, /<-Inonexistent ccjs json path with spaces>/)
+    assert.match(invocation, /-DCCJS_JSON_CFLAG=1/)
+    assert.match(invocation, /<-Llinker ccjs json path with spaces>/)
+    assert.match(invocation, /-DCCJS_JSON_LDFLAG=1/)
+    assert.equal(run.code, 0)
+    assert.equal(run.stdout, 'hello\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('ccjs build --target c prefers ccjs.config.json over ccjs.json', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
+  const out = join(dir, 'hello')
+  const preferredWrapper = join(dir, 'preferred-cc-wrapper.sh')
+  const fallbackWrapper = join(dir, 'fallback-cc-wrapper.sh')
+  const log = join(dir, 'cc.log')
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  console.log('hello')
+}
+`)
+    await writeFile(preferredWrapper, `#!/bin/sh
+printf 'preferred\\n<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
+exec cc "$@"
+`)
+    await writeFile(fallbackWrapper, `#!/bin/sh
+printf 'fallback\\n<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
+exec cc "$@"
+`)
+    await chmod(preferredWrapper, 0o755)
+    await chmod(fallbackWrapper, 0o755)
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      c: {
+        cc: preferredWrapper
+      }
+    }, null, 2)}\n`)
+    await writeFile(join(dir, 'ccjs.json'), `${JSON.stringify({
+      c: {
+        cc: fallbackWrapper
+      }
+    }, null, 2)}\n`)
+
+    const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
+      cwd: dir,
+      env: {
+        CCJS_CC_LOG: log
+      }
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const invocation = await readFile(log, 'utf8')
+
+    assert.match(invocation, /^preferred\n/)
+    assert.match(invocation, new RegExp(escapeRegExp(preferredWrapper)))
+    assert.doesNotMatch(invocation, new RegExp(escapeRegExp(fallbackWrapper)))
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs build --target c reports invalid ccjs.config.json', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
