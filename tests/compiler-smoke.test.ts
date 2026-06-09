@@ -1383,6 +1383,40 @@ export function main(): void {
   }
 })
 
+test('compiles static ESM import aliases to JS and C bundles', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-aliases-'))
+
+  try {
+    await writeFile(join(dir, 'lib.ts'), `export function greet(): void {
+  console.log('from alias')
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import { greet as sayHello } from './lib.ts'
+
+export function main(): void {
+  sayHello()
+}
+`)
+
+    const js = await compileFile(join(dir, 'main.ts'), {
+      target: 'js'
+    })
+    const c = await compileFile(join(dir, 'main.ts'), {
+      target: 'c'
+    })
+
+    assert.match(js.code, /function sayHello\(\) \{\n  greet\(\)\n}/)
+    assert.match(c.code, /void sayHello\(void\);/)
+    assert.match(c.code, /void sayHello\(void\) \{\n  greet\(\);/)
+    assert.match(c.code, /ccjs_main\(void\) \{\n  sayHello\(\);/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('accepts valid TypeScript source files as canonical input', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-modules-'))
 

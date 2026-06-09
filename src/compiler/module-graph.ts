@@ -55,7 +55,9 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
 
     modules.set(path, module)
 
-    for (const item of module.imports) {
+    const importAliasDeclarations = new Map<number, AnyNode[]>()
+
+    for (const [importIndex, item] of module.imports.entries()) {
       if (item.typeOnly) {
         continue
       }
@@ -77,20 +79,30 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
         continue
       }
 
+      const aliases: AnyNode[] = []
+
       for (const specifier of item.specifiers) {
-        if (specifier.local !== specifier.imported) {
-          diagnostics.push(diagnostic('CCJS_UNSUPPORTED_IMPORT_ALIAS', 'import aliases are not implemented in the current compiler slice', specifier.loc))
+        if (!importedModule.exports.has(specifier.imported)) {
+          diagnostics.push(diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc))
           continue
         }
 
-        if (!importedModule.exports.has(specifier.imported)) {
-          diagnostics.push(diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc))
+        if (specifier.local !== specifier.imported && importedModule.hir != null) {
+          const alias = createImportAliasDeclaration(specifier, importedModule.hir)
+
+          if (alias != null) {
+            aliases.push(alias)
+          }
         }
+      }
+
+      if (aliases.length > 0) {
+        importAliasDeclarations.set(importIndex, aliases)
       }
     }
 
     const checked = checkProgram(ast)
-    module.hir = lowerProgram(checked.ast)
+    module.hir = insertImportAliasDeclarations(lowerProgram(checked.ast), importAliasDeclarations)
     visiting.delete(path)
     order.push(module)
 
@@ -104,6 +116,101 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
       diagnostics.push(diagnostic('CCJS_MODULE_NOT_FOUND', `cannot resolve import ${specifier}`, loc))
       return null
     }
+  }
+}
+
+function insertImportAliasDeclarations(program: ProgramNode, aliasesByImport: Map<number, AnyNode[]>): ProgramNode {
+  if (aliasesByImport.size === 0) {
+    return program
+  }
+
+  const body: AnyNode[] = []
+  let importIndex = 0
+
+  for (const item of program.body) {
+    body.push(item)
+
+    if (item.type === 'ImportDeclaration') {
+      body.push(...(aliasesByImport.get(importIndex) ?? []))
+      importIndex += 1
+    }
+  }
+
+  return {
+    ...program,
+    body
+  }
+}
+
+function createImportAliasDeclaration(specifier: AnyNode, importedProgram: ProgramNode): AnyNode | null {
+  const exported = importedProgram.body.find(item => item.exported && item.name === specifier.imported)
+
+  if (exported == null) {
+    return null
+  }
+
+  if (exported.type === 'FunctionDeclaration') {
+    return createFunctionAliasDeclaration(specifier.local, exported, specifier.loc)
+  }
+
+  return {
+    type: 'VariableDeclaration',
+    kind: 'const',
+    exported: false,
+    name: specifier.local,
+    loc: specifier.loc,
+    declaredType: exported.declaredType ?? null,
+    valueType: exported.valueType ?? 'unknown',
+    init: {
+      type: 'Reference',
+      path: [specifier.imported],
+      loc: specifier.loc,
+      valueType: exported.valueType ?? 'unknown'
+    }
+  }
+}
+
+function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: SourceLocation): AnyNode {
+  const params = target.params.map(param => ({
+    ...param
+  }))
+  const call = {
+    type: 'CallExpression',
+    callee: {
+      type: 'Reference',
+      path: [target.name],
+      loc,
+      valueType: 'function'
+    },
+    args: params.map(param => ({
+      type: 'Reference',
+      path: [param.name],
+      loc: param.loc,
+      valueType: param.valueType
+    })),
+    loc,
+    valueType: target.returnType
+  }
+
+  return {
+    type: 'FunctionDeclaration',
+    exported: false,
+    async: target.async,
+    name,
+    loc,
+    params,
+    returnType: target.returnType,
+    body: target.returnType === 'void'
+      ? [{
+          type: 'ExpressionStatement',
+          expression: call,
+          loc
+        }]
+      : [{
+          type: 'ReturnStatement',
+          argument: call,
+          loc
+        }]
   }
 }
 

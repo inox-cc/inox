@@ -278,6 +278,21 @@ test('ccjs run --target c builds and runs a temporary native executable', async 
   assert.equal(result.stderr, '')
 })
 
+test('ccjs run --target c runs a module graph with import aliases', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const result = await runCli(['run', 'tests/fixtures/modules/alias/main.ts', '--target', 'c'])
+
+  assert.equal(result.code, 0)
+  assert.equal(result.stdout, 'from alias\n')
+  assert.equal(result.stderr, '')
+})
+
 test('ccjs run --target c --keep keeps temporary C artifacts', async t => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -346,6 +361,14 @@ test('ccjs file runs a multi-file module graph', async () => {
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'from module\n')
+  assert.equal(result.stderr, '')
+})
+
+test('ccjs file runs a module graph with import aliases', async () => {
+  const result = await runCli(['tests/fixtures/modules/alias/main.ts'])
+
+  assert.equal(result.code, 0)
+  assert.equal(result.stdout, 'from alias\n')
   assert.equal(result.stderr, '')
 })
 
