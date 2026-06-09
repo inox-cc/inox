@@ -1594,6 +1594,7 @@ function emitForOfStatement(statement, context) {
 
     return [
       ...setup,
+      ...(runtimeArray?.lines ?? []),
       ...(runtimeArray == null
         ? []
         : [
@@ -4032,16 +4033,26 @@ function resolveKnownForOfArray(expression, context) {
 }
 
 function resolveRuntimeForOfArray(expression, context) {
-  if (expression?.type !== 'Reference' || expression.path.length !== 1) {
+  const elementType = resolveRuntimeArrayElementType(expression, context)
+
+  if (elementType == null) {
     return null
   }
 
-  const name = expression.path[0]
-  const elementType = context.runtimeArrayElementTypes.get(name)
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    return {
+      name: expression.path[0],
+      elementType,
+      lines: []
+    }
+  }
 
-  return elementType == null ? null : {
-    name,
-    elementType
+  const value = emitCValueExpression(expression, context)
+
+  return {
+    name: value.expression,
+    elementType,
+    lines: value.lines
   }
 }
 

@@ -1865,6 +1865,58 @@ export function main(): void {
   }
 })
 
+test('generated C for of over runtime array expressions compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-array-expression-for-of-'))
+  const source = join(dir, 'runtime-array-expression-for-of.c')
+  const output = join(dir, 'runtime-array-expression-for-of')
+
+  try {
+    const result = compileSource(`type Box = {
+  values: number[],
+  names: string[]
+}
+
+export function main(): void {
+  const box: Box = { values: [1, 2, 3], names: ['Ada', 'Grace'] }
+  let total = 0
+  let letters = 0
+  for (const value of box.values) {
+    total = total + value
+  }
+  for (const name of box.names) {
+    letters = letters + name.length
+  }
+  console.log(total, letters)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '6 8\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C for of array lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
