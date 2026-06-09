@@ -60,7 +60,7 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, ir
   const baseContext = createBaseContext(diagnostics, functions)
   baseContext.callbackWrappers = collectCallbackWrappers(programs, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || irPrograms.some(program => hasIrFeature(program, 'callback-values')) || programs.some(usesCCallbackRuntime)
-  const needsRuntime = needsCallbackRuntime || irPrograms.some(program => hasIrFeature(program, 'runtime-values')) || programs.some(usesCRuntime)
+  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || irPrograms.some(program => hasIrFeature(program, 'runtime-values')) || programs.some(usesCRuntime)
   const needsTimeRuntime = irPrograms.some(program => hasIrFeature(program, 'clocks')) || programs.some(usesCTimeRuntime)
   const needsStringHeader = irPrograms.some(program => hasIrFeature(program, 'string-bytes')) || programs.some(usesCStringHeader)
   reportUnsupportedClasses(programs, diagnostics)
@@ -179,6 +179,222 @@ function collectFunctions(programs) {
   return programs.flatMap(program => program.body.filter(item => item.type === 'FunctionDeclaration'))
 }
 
+function collectThrowingFunctionInfo(functions) {
+  const functionNames = new Set(functions.map(item => item.name))
+  const functionThrowValueTypes = new Map(functions.map(item => [item.name, []]))
+  let changed = true
+
+  while (changed) {
+    changed = false
+
+    for (const item of functions) {
+      const types = uniqueThrowValueTypes(collectEscapingThrowValueTypesFromStatements(item.body, functionThrowValueTypes, functionNames, new Set(), false))
+      const previous = functionThrowValueTypes.get(item.name) ?? []
+
+      if (!sameThrowValueTypes(previous, types)) {
+        functionThrowValueTypes.set(item.name, types)
+        changed = true
+      }
+    }
+  }
+
+  const throwingFunctions = new Set()
+
+  for (const [name, types] of functionThrowValueTypes.entries()) {
+    if (name !== 'main' && Array.isArray(types) && types.length > 0) {
+      throwingFunctions.add(name)
+    }
+  }
+
+  return {
+    functionThrowValueTypes,
+    throwingFunctions
+  }
+}
+
+function collectEscapingThrowValueTypesFromStatements(statements, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget) {
+  return statements.flatMap(statement => collectEscapingThrowValueTypesFromStatement(statement, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+}
+
+function collectEscapingThrowValueTypesFromStatement(statement, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget) {
+  if (statement == null) {
+    return []
+  }
+
+  if (statement.type === 'ThrowStatement') {
+    return hasErrorTarget ? [] : [inferThrowValueTypeForAnalysis(statement.argument, errorObjectNames)]
+  }
+
+  if (statement.type === 'VariableDeclaration') {
+    const types = collectEscapingThrowValueTypesFromExpression(statement.init, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+
+    if (isErrorValueExpressionForAnalysis(statement.init, errorObjectNames)) {
+      errorObjectNames.add(statement.name)
+    }
+
+    return types
+  }
+
+  if (statement.type === 'ExpressionStatement') {
+    return collectEscapingThrowValueTypesFromExpression(statement.expression, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+  }
+
+  if (statement.type === 'ReturnStatement') {
+    return collectEscapingThrowValueTypesFromExpression(statement.argument, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return collectEscapingThrowValueTypesFromStatements(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+  }
+
+  if (statement.type === 'IfStatement') {
+    return [
+      ...collectEscapingThrowValueTypesFromExpression(statement.condition, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromStatement(statement.consequent, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromStatement(statement.alternate, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+    ]
+  }
+
+  if (statement.type === 'WhileStatement') {
+    return [
+      ...collectEscapingThrowValueTypesFromExpression(statement.condition, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromStatement(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+    ]
+  }
+
+  if (statement.type === 'ForStatement') {
+    return [
+      ...(statement.init?.type === 'VariableDeclaration'
+        ? collectEscapingThrowValueTypesFromStatement(statement.init, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+        : collectEscapingThrowValueTypesFromExpression(statement.init, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)),
+      ...collectEscapingThrowValueTypesFromExpression(statement.test, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromExpression(statement.update, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromStatement(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+    ]
+  }
+
+  if (statement.type === 'ForOfStatement') {
+    return [
+      ...collectEscapingThrowValueTypesFromExpression(statement.iterable, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromStatement(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+    ]
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    return [
+      ...collectEscapingThrowValueTypesFromExpression(statement.discriminant, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...statement.cases.flatMap(item => [
+        ...collectEscapingThrowValueTypesFromExpression(item.test, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+        ...collectEscapingThrowValueTypesFromStatements(item.consequent, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+      ])
+    ]
+  }
+
+  if (statement.type === 'TryStatement') {
+    const blockHasTarget = statement.handler != null ? true : hasErrorTarget
+
+    return [
+      ...collectEscapingThrowValueTypesFromStatement(statement.block, functionThrowValueTypes, functionNames, new Set(errorObjectNames), blockHasTarget),
+      ...collectEscapingThrowValueTypesFromStatement(statement.handler?.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromStatement(statement.finalizer, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+    ]
+  }
+
+  return []
+}
+
+function collectEscapingThrowValueTypesFromExpression(expression, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget) {
+  if (expression == null) {
+    return []
+  }
+
+  if (expression.type === 'CallExpression') {
+    const callTypes = !hasErrorTarget && expression.callee.type === 'Reference' && expression.callee.path.length === 1 && functionNames.has(expression.callee.path[0])
+      ? functionThrowValueTypes.get(expression.callee.path[0]) ?? []
+      : []
+
+    return [
+      ...callTypes,
+      ...collectEscapingThrowValueTypesFromExpression(expression.callee, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...expression.args.flatMap(arg => collectEscapingThrowValueTypesFromExpression(arg, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+    ]
+  }
+
+  if (expression.type === 'NewExpression' || expression.type === 'OptionalCallExpression') {
+    return [
+      ...collectEscapingThrowValueTypesFromExpression(expression.callee, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...expression.args.flatMap(arg => collectEscapingThrowValueTypesFromExpression(arg, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+    ]
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    return collectEscapingThrowValueTypesFromExpression(expression.object, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+  }
+
+  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
+    return [
+      ...collectEscapingThrowValueTypesFromExpression(expression.object, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromExpression(expression.index, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+    ]
+  }
+
+  if (expression.type === 'AssignmentExpression') {
+    return [
+      ...collectEscapingThrowValueTypesFromExpression(expression.target, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromExpression(expression.value, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+    ]
+  }
+
+  if (expression.type === 'BinaryExpression') {
+    return [
+      ...collectEscapingThrowValueTypesFromExpression(expression.left, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
+      ...collectEscapingThrowValueTypesFromExpression(expression.right, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+    ]
+  }
+
+  if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
+    return collectEscapingThrowValueTypesFromExpression(expression.argument, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+  }
+
+  if (expression.type === 'ArrayLiteral') {
+    return expression.elements.flatMap(item => collectEscapingThrowValueTypesFromExpression(item, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+  }
+
+  if (expression.type === 'ObjectLiteral') {
+    return expression.properties.flatMap(property => collectEscapingThrowValueTypesFromExpression(property.value, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+  }
+
+  return []
+}
+
+function inferThrowValueTypeForAnalysis(expression, errorObjectNames) {
+  if (isErrorValueExpressionForAnalysis(expression, errorObjectNames)) {
+    return 'error'
+  }
+
+  if (expression?.type === 'StringLiteral' || expression?.type === 'TemplateLiteral' || expression?.valueType === 'string') {
+    return 'string'
+  }
+
+  return 'other'
+}
+
+function isErrorValueExpressionForAnalysis(expression, errorObjectNames) {
+  if (isErrorConstructorExpression(expression)) {
+    return true
+  }
+
+  return expression?.type === 'Reference' && expression.path.length === 1 && errorObjectNames.has(expression.path[0])
+}
+
+function uniqueThrowValueTypes(types) {
+  return [...new Set(types)]
+}
+
+function sameThrowValueTypes(left, right) {
+  return left.length === right.length && left.every(item => right.includes(item))
+}
+
 function reportUnsupportedClasses(programs, diagnostics) {
   for (const item of programs.flatMap(program => program.body)) {
     if (item.type === 'ClassDeclaration') {
@@ -196,16 +412,20 @@ function reportUnsupportedAsync(programs, diagnostics) {
 }
 
 function createBaseContext(diagnostics, functions) {
+  const throwing = collectThrowingFunctionInfo(functions)
+
   return {
     boxedMutableCaptureDeclarations: new Set(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
     diagnostics,
+    functionThrowValueTypes: throwing.functionThrowValueTypes,
     functionNames: new Map(functions.map(item => [item.name, emitCFunctionName(item.name)])),
     functionParams: new Map(functions.map(item => [item.name, item.params])),
     functionReturnNullables: new Map(functions.map(item => [item.name, item.returnNullable === true])),
     functionReturnTypes: new Map(functions.map(item => [item.name, item.returnType])),
     runtimeFunctionParams: new Map(),
+    throwingFunctions: throwing.throwingFunctions,
     nextId: 0
   }
 }
@@ -213,6 +433,13 @@ function createBaseContext(diagnostics, functions) {
 function emitFunctionDeclaration(statement, baseContext) {
   const context = createFunctionContext(baseContext, statement.returnType, statement.returnNullable === true)
   context.returnShape = statement.returnShape ?? null
+  context.throwingFunction = isThrowingFunctionName(statement.name, context)
+  context.functionReturnOut = 'ccjs_out'
+  context.functionErrorOut = 'ccjs_error_out'
+
+  if (context.throwingFunction) {
+    registerErrorChannel(context)
+  }
 
   for (const [index, param] of statement.params.entries()) {
     if (isNullableScalarParam(param)) {
@@ -258,7 +485,9 @@ function emitFunctionDeclaration(statement, baseContext) {
 
   const lines = [
     `${emitFunctionHead(statement, context)} {`,
+    ...emitThrowingFunctionPrelude(context).map(line => `  ${line}`),
     ...emitReturnValueDeclarations(context).map(line => `  ${line}`),
+    ...emitStatusResultDeclarations(context).map(line => `  ${line}`),
     ...emitLoopFlowDeclarations(context).map(line => `  ${line}`),
     ...emitReturnFlowDeclarations(context).map(line => `  ${line}`),
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
@@ -269,9 +498,10 @@ function emitFunctionDeclaration(statement, baseContext) {
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
+    lines.push(...emitThrowingFunctionErrorTransfer(context).map(line => `  ${line}`))
     lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
     lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
-    lines.push(`  ${emitCleanupReturn(context)}`)
+    lines.push(...emitCleanupReturn(context).map(line => `  ${line}`))
   } else if (statement.returnType !== 'void') {
     lines.push(`  return ${statement.returnType === 'string' ? '""' : '0'};`)
   }
@@ -313,9 +543,19 @@ function emitFunctionHead(statement, context) {
     }
 
     return `${emitCType(param.valueType)} ${param.name}`
-  }).join(', ')
+  })
 
-  return `${emitCReturnType(statement.returnType, statement.returnNullable === true)} ${name}(${params === '' ? 'void' : params})`
+  if (isThrowingFunctionName(statement.name, context)) {
+    if (statement.returnType !== 'void') {
+      params.push(`${emitThrowingFunctionOutType(statement.returnType, statement.returnNullable === true)}* ccjs_out`)
+    }
+
+    params.push('ccjs_value* ccjs_error_out')
+
+    return `ccjs_status ${name}(${params.length === 0 ? 'void' : params.join(', ')})`
+  }
+
+  return `${emitCReturnType(statement.returnType, statement.returnNullable === true)} ${name}(${params.length === 0 ? 'void' : params.join(', ')})`
 }
 
 function emitFunctionParameter(name, functionType, context, loc) {
@@ -1496,6 +1736,8 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     errorChannelUsed: false,
     errorObjectNames: new Set(),
     errorTargets: [],
+    functionErrorOut: null,
+    functionReturnOut: null,
     functionTypes: new Map(),
     mapTypes: new Map(),
     narrowedNullableScalars: new Set(),
@@ -1509,6 +1751,7 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     setElementTypes: new Map(),
     runtimeStrings: new Set(),
     statusReturn: false,
+    throwingFunction: false,
     usedCleanupGoto: false,
     variables: new Map(),
     returnNullable,
@@ -1660,6 +1903,36 @@ function emitCReturnType(type, nullable = false) {
   }
 
   return emitCType(type)
+}
+
+function emitThrowingFunctionOutType(type, nullable = false) {
+  if (nullable && isNullableScalarType(type)) {
+    return 'ccjs_value'
+  }
+
+  if (isManagedRuntimeReturnType(type)) {
+    return 'ccjs_value'
+  }
+
+  return emitCType(type)
+}
+
+function emitThrowingFunctionPrelude(context) {
+  if (!context.throwingFunction) {
+    return []
+  }
+
+  return [
+    `if (${context.functionErrorOut} == 0${context.returnType === 'void' ? '' : ` || ${context.functionReturnOut} == 0`}) return CCJS_ERR_TYPE;`,
+    `*${context.functionErrorOut} = ccjs_undefined_value();`,
+    ...(context.returnType === 'void'
+      ? []
+      : [`*${context.functionReturnOut} = ${isThrowingFunctionRuntimeOut(context) ? 'ccjs_undefined_value()' : '0'};`])
+  ]
+}
+
+function isThrowingFunctionRuntimeOut(context) {
+  return isManagedRuntimeReturnType(context.returnType) || (context.returnNullable === true && isNullableScalarType(context.returnType))
 }
 
 function emitStatement(statement, context) {
@@ -2229,7 +2502,7 @@ function emitTryStatement(statement, context) {
 function emitThrowStatement(statement, context) {
   const target = currentErrorTarget(context)
 
-  if (target == null) {
+  if (target == null && !context.throwingFunction) {
     context.diagnostics.push(diagnostic('CCJS_C_THROW', 'uncaught throw is not supported by the current C backend slice', statement.loc))
     return []
   }
@@ -2251,8 +2524,13 @@ function emitThrowStatement(statement, context) {
     `ccjs_error = ${value.expression};`,
     emitRuntimeTypeCheck(isErrorObject ? 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0' : 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0', context),
     'ccjs_retain(ccjs_error);',
+    ...(target == null
+      ? [
+          'ccjs_status_result = CCJS_ERR_THROW;'
+        ]
+      : []),
     'ccjs_error_active = 1;',
-    `goto ${target};`
+    `goto ${target ?? 'ccjs_cleanup'};`
   ]
 }
 
@@ -2276,11 +2554,21 @@ function collectLocalThrowValueTypes(statement, context, errorObjectNames = new 
   }
 
   if (statement.type === 'VariableDeclaration') {
+    const types = collectLocalThrowValueTypesFromExpression(statement.init, context, errorObjectNames)
+
     if (isKnownErrorValueExpression(statement.init, context, errorObjectNames)) {
       errorObjectNames.add(statement.name)
     }
 
-    return []
+    return types
+  }
+
+  if (statement.type === 'ExpressionStatement') {
+    return collectLocalThrowValueTypesFromExpression(statement.expression, context, errorObjectNames)
+  }
+
+  if (statement.type === 'ReturnStatement') {
+    return collectLocalThrowValueTypesFromExpression(statement.argument, context, errorObjectNames)
   }
 
   if (statement.type === 'BlockStatement') {
@@ -2324,6 +2612,70 @@ function collectLocalThrowValueTypes(statement, context, errorObjectNames = new 
       ...collectLocalThrowValueTypes(statement.block, context, new Set(errorObjectNames)),
       ...collectLocalThrowValueTypes(statement.finalizer, context, new Set(errorObjectNames))
     ]
+  }
+
+  return []
+}
+
+function collectLocalThrowValueTypesFromExpression(expression, context, errorObjectNames) {
+  if (expression == null) {
+    return []
+  }
+
+  if (expression.type === 'CallExpression') {
+    const types = expression.callee.type === 'Reference' && expression.callee.path.length === 1 && isThrowingFunctionName(expression.callee.path[0], context)
+      ? context.functionThrowValueTypes.get(expression.callee.path[0]) ?? ['other']
+      : []
+
+    return [
+      ...types,
+      ...collectLocalThrowValueTypesFromExpression(expression.callee, context, errorObjectNames),
+      ...expression.args.flatMap(arg => collectLocalThrowValueTypesFromExpression(arg, context, errorObjectNames))
+    ]
+  }
+
+  if (expression.type === 'NewExpression' || expression.type === 'OptionalCallExpression') {
+    return [
+      ...collectLocalThrowValueTypesFromExpression(expression.callee, context, errorObjectNames),
+      ...expression.args.flatMap(arg => collectLocalThrowValueTypesFromExpression(arg, context, errorObjectNames))
+    ]
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    return collectLocalThrowValueTypesFromExpression(expression.object, context, errorObjectNames)
+  }
+
+  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
+    return [
+      ...collectLocalThrowValueTypesFromExpression(expression.object, context, errorObjectNames),
+      ...collectLocalThrowValueTypesFromExpression(expression.index, context, errorObjectNames)
+    ]
+  }
+
+  if (expression.type === 'AssignmentExpression') {
+    return [
+      ...collectLocalThrowValueTypesFromExpression(expression.target, context, errorObjectNames),
+      ...collectLocalThrowValueTypesFromExpression(expression.value, context, errorObjectNames)
+    ]
+  }
+
+  if (expression.type === 'BinaryExpression') {
+    return [
+      ...collectLocalThrowValueTypesFromExpression(expression.left, context, errorObjectNames),
+      ...collectLocalThrowValueTypesFromExpression(expression.right, context, errorObjectNames)
+    ]
+  }
+
+  if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
+    return collectLocalThrowValueTypesFromExpression(expression.argument, context, errorObjectNames)
+  }
+
+  if (expression.type === 'ArrayLiteral') {
+    return expression.elements.flatMap(item => collectLocalThrowValueTypesFromExpression(item, context, errorObjectNames))
+  }
+
+  if (expression.type === 'ObjectLiteral') {
+    return expression.properties.flatMap(property => collectLocalThrowValueTypesFromExpression(property.value, context, errorObjectNames))
   }
 
   return []
@@ -5496,10 +5848,84 @@ function emitPreparedCallExpression(expression, context) {
     }
   }
 
+  if (isThrowingFunctionCallee(expression.callee, context)) {
+    return emitPreparedThrowingCallExpression(expression, args, lines, context)
+  }
+
   return {
     lines,
     expression: `${emitCallee(expression.callee, context)}(${args.join(', ')})`
   }
+}
+
+function emitPreparedThrowingCallExpression(expression, args, preparedLines, context) {
+  const name = expression.callee.path[0]
+  const returnType = context.functionReturnTypes.get(name) ?? 'void'
+  const returnNullable = context.functionReturnNullables.get(name) === true
+  const callArgs = [...args]
+  const lines: string[] = [...preparedLines]
+  let result = ''
+
+  if (currentErrorTarget(context) == null && !context.throwingFunction) {
+    context.diagnostics.push(diagnostic('CCJS_C_THROW', 'uncaught throwing function calls must be inside try/catch in the current C backend slice', expression.loc))
+  }
+
+  registerErrorChannel(context)
+  lines.push(...emitPrepareOwnedValueWrite('ccjs_error'))
+
+  if (returnType !== 'void') {
+    if (isManagedRuntimeReturnType(returnType) || (returnNullable && isNullableScalarType(returnType))) {
+      result = nextCName(context, 'ccjs_call_result')
+      lines.push(`ccjs_value ${result} = ccjs_undefined_value();`)
+    } else {
+      result = nextCName(context, 'ccjs_call_result')
+      lines.push(`double ${result} = 0;`)
+    }
+
+    callArgs.push(`&${result}`)
+  }
+
+  callArgs.push('&ccjs_error')
+
+  const status = nextCName(context, 'ccjs_call_status')
+
+  lines.push(`ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${callArgs.join(', ')});`)
+  lines.push(...emitThrowingCallStatusCheck(status, context))
+
+  return {
+    lines,
+    expression: result
+  }
+}
+
+function emitThrowingCallStatusCheck(status, context) {
+  const target = currentErrorTarget(context)
+  const lines = [
+    `if (${status} == CCJS_ERR_THROW) {`,
+    '  ccjs_error_active = 1;'
+  ]
+
+  if (target != null) {
+    lines.push(`  goto ${target};`)
+  } else if (context.throwingFunction) {
+    lines.push('  ccjs_status_result = CCJS_ERR_THROW;')
+    lines.push('  goto ccjs_cleanup;')
+  } else {
+    lines.push(`  ${emitFailureStatement(context)}`)
+  }
+
+  lines.push('}')
+  lines.push(`if (${status} != CCJS_OK) ${emitFailureStatement(context)}`)
+
+  return lines
+}
+
+function isThrowingFunctionCallee(callee, context) {
+  return callee?.type === 'Reference' && callee.path.length === 1 && isThrowingFunctionName(callee.path[0], context)
+}
+
+function isThrowingFunctionName(name, context) {
+  return context.throwingFunctions?.has(name) === true
 }
 
 function emitCallee(callee, context) {
@@ -7174,6 +7600,11 @@ function emitRuntimeTypeCheck(condition, context) {
 }
 
 function emitFailureStatement(context) {
+  if (context.throwingFunction && context.cleanupEnabled) {
+    context.usedCleanupGoto = true
+    return 'do { ccjs_status_result = CCJS_ERR_TYPE; goto ccjs_cleanup; } while (0);'
+  }
+
   if (context.statusReturn) {
     return 'return CCJS_ERR_TYPE;'
   }
@@ -7208,7 +7639,8 @@ function emitPrepareOwnedValueWrite(name) {
 }
 
 function shouldEmitCleanupLabel(context) {
-  return context.returnType !== 'void'
+  return context.throwingFunction
+    || context.returnType !== 'void'
     || (context.returnType === 'void' && (context.ownedValues.length > 0 || context.boxedValues.length > 0 || context.usedCleanupGoto))
 }
 
@@ -7226,6 +7658,10 @@ function emitReturnValueDeclarations(context) {
   }
 
   return []
+}
+
+function emitStatusResultDeclarations(context) {
+  return context.throwingFunction ? ['ccjs_status ccjs_status_result = CCJS_OK;'] : []
 }
 
 function emitLoopFlowDeclarations(context) {
@@ -7273,15 +7709,46 @@ function isRuntimeBoxedValueType(valueType) {
 }
 
 function emitCleanupReturn(context) {
+  if (context.throwingFunction) {
+    return emitThrowingFunctionCleanupReturn(context)
+  }
+
   if (isManagedRuntimeReturnType(context.returnType)) {
-    return 'return ccjs_return;'
+    return ['return ccjs_return;']
   }
 
   if (context.returnType !== 'void') {
-    return 'return ccjs_return;'
+    return ['return ccjs_return;']
   }
 
-  return 'return;'
+  return ['return;']
+}
+
+function emitThrowingFunctionErrorTransfer(context) {
+  if (!context.throwingFunction) {
+    return []
+  }
+
+  return [
+    'if (ccjs_error_active) {',
+    `  *${context.functionErrorOut} = ccjs_error;`,
+    '  ccjs_error = ccjs_undefined_value();',
+    '}'
+  ]
+}
+
+function emitThrowingFunctionCleanupReturn(context) {
+  const lines = [
+    'if (ccjs_status_result != CCJS_OK) return ccjs_status_result;'
+  ]
+
+  if (context.returnType !== 'void') {
+    lines.push(`*${context.functionReturnOut} = ccjs_return;`)
+  }
+
+  lines.push('return CCJS_OK;')
+
+  return lines
 }
 
 function nextCName(context, prefix) {

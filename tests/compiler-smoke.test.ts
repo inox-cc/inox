@@ -2654,6 +2654,60 @@ test('compiles Error objects to JS and lowers lightweight Error objects to C', (
   })
 })
 
+test('lowers C interfunction throws through status error ABI', () => {
+  const source = `export function failString(): void {
+  throw 'boom'
+}
+
+export function failError(): void {
+  const error = new Error('bad')
+  throw error
+}
+
+export function readValue(ok: boolean): number {
+  if (ok) {
+    return 7
+  }
+
+  throw 'no value'
+}
+
+export function main(): void {
+  try {
+    failString()
+  } catch (error) {
+    console.log(error)
+  }
+
+  try {
+    failError()
+  } catch (error) {
+    console.log(error.name, error.message)
+  }
+
+  try {
+    console.log(readValue(true))
+    console.log(readValue(false))
+  } catch (error) {
+    console.log(error)
+  }
+}
+`
+  const result = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_status failString\(ccjs_value\* ccjs_error_out\);/)
+  assert.match(result.code, /ccjs_status failError\(ccjs_value\* ccjs_error_out\);/)
+  assert.match(result.code, /ccjs_status readValue\(double ok, double\* ccjs_out, ccjs_value\* ccjs_error_out\);/)
+  assert.match(result.code, /ccjs_status_result = CCJS_ERR_THROW;\n  ccjs_error_active = 1;\n  goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_error_active\) \{\n    \*ccjs_error_out = ccjs_error;\n    ccjs_error = ccjs_undefined_value\(\);\n  \}/)
+  assert.match(result.code, /ccjs_status ccjs_call_status_\d+ = failString\(&ccjs_error\);\n    if \(ccjs_call_status_\d+ == CCJS_ERR_THROW\) \{\n      ccjs_error_active = 1;\n      goto ccjs_try_\d+_catch;/)
+  assert.match(result.code, /ccjs_status ccjs_call_status_\d+ = failError\(&ccjs_error\);\n    if \(ccjs_call_status_\d+ == CCJS_ERR_THROW\) \{\n      ccjs_error_active = 1;\n      goto ccjs_try_\d+_catch;/)
+  assert.match(result.code, /double ccjs_call_result_\d+ = 0;\n    ccjs_status ccjs_call_status_\d+ = readValue\(1, &ccjs_call_result_\d+, &ccjs_error\);/)
+  assert.match(result.code, /ccjs_try_\d+_catch:\n    if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;\n    ccjs_error_active = 0;\n    \{\n      ccjs_value error = ccjs_error;/)
+})
+
 test('compiles simple classes to JS and rejects them for C', () => {
   const source = `class User {
   constructor(name: string) {

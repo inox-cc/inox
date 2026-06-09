@@ -4041,6 +4041,78 @@ test('generated C lightweight Error objects compile and run with runtime sources
   }
 })
 
+test('generated C interfunction throws compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-interfunction-throw-'))
+  const source = join(dir, 'interfunction-throw.c')
+  const output = join(dir, 'interfunction-throw')
+
+  try {
+    const result = compileSource(`export function failString(): void {
+  throw 'boom'
+}
+
+export function failError(): void {
+  const error = new Error('bad')
+  throw error
+}
+
+export function readValue(ok: boolean): number {
+  if (ok) {
+    return 7
+  }
+
+  throw 'no value'
+}
+
+export function main(): void {
+  try {
+    failString()
+  } catch (error) {
+    console.log(error)
+  }
+
+  try {
+    failError()
+  } catch (error) {
+    console.log(error.name, error.message)
+  }
+
+  try {
+    console.log(readValue(true))
+    console.log(readValue(false))
+  } catch (error) {
+    console.log(error)
+  }
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'boom\nError bad\n7\nno value\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C return through finally compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

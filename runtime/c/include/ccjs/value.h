@@ -12,6 +12,7 @@ typedef enum ccjs_status {
   CCJS_OK,
   CCJS_ERR_OOM,
   CCJS_ERR_TYPE,
+  CCJS_ERR_THROW,
   CCJS_ERR_FIELD,
   CCJS_ERR_READONLY
 } ccjs_status;
