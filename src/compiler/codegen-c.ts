@@ -1020,6 +1020,28 @@ function collectArrowCaptures(expression, outerScopes, context) {
         localScopes.pop()
       }
     }
+
+    if (statement.type === 'TryStatement') {
+      visitStatement(statement.block)
+
+      if (statement.handler != null) {
+        const catchScope = new Map()
+
+        if (statement.handler.param != null) {
+          catchScope.set(statement.handler.param, {
+            name: statement.handler.param,
+            valueType: 'string',
+            mutable: true
+          })
+        }
+
+        localScopes.push(catchScope)
+        visitStatement(statement.handler.body)
+        localScopes.pop()
+      }
+
+      visitStatement(statement.finalizer)
+    }
   }
   const visitExpression = node => {
     if (node == null) {
@@ -1842,11 +1864,6 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ReturnStatement') {
-    if (currentReturnTarget(context) != null && isRuntimeCallbackReturnContext(context)) {
-      context.diagnostics.push(diagnostic('CCJS_C_TRY', 'C runtime callback returns through finally are not supported by the current backend slice', statement.loc))
-      return []
-    }
-
     if (isRuntimeCallbackReturnContext(context)) {
       return emitRuntimeCallbackReturnStatement(statement, context)
     }
@@ -2117,11 +2134,6 @@ function emitSwitchCaseLabel(expression, context) {
 }
 
 function emitTryStatement(statement, context) {
-  if (tryStatementHasUnsupportedControlFlow(statement, context)) {
-    context.diagnostics.push(diagnostic('CCJS_C_TRY', 'C try/catch/finally currently does not support return through finally inside runtime callback wrappers', statement.loc))
-    return []
-  }
-
   registerErrorChannel(context)
 
   const id = nextCName(context, 'ccjs_try')
@@ -2414,90 +2426,6 @@ function withErrorTarget(context, target, callback) {
   }
 }
 
-function tryStatementHasUnsupportedControlFlow(statement, context) {
-  if (context.statusReturn && statementHasReturnThroughFinally(statement)) {
-    return true
-  }
-
-  return statementHasUnsupportedTryControlFlow(statement.block)
-    || (statement.handler != null && statementHasUnsupportedTryControlFlow(statement.handler.body))
-    || (statement.finalizer != null && statementHasUnsupportedTryControlFlow(statement.finalizer))
-}
-
-function statementHasReturnThroughFinally(statement) {
-  if (statement == null) {
-    return false
-  }
-
-  if (statement.type === 'ReturnStatement') {
-    return true
-  }
-
-  if (statement.type === 'BlockStatement') {
-    return statement.body.some(item => statementHasReturnThroughFinally(item))
-  }
-
-  if (statement.type === 'IfStatement') {
-    return statementHasReturnThroughFinally(statement.consequent)
-      || (statement.alternate != null && statementHasReturnThroughFinally(statement.alternate))
-  }
-
-  if (statement.type === 'WhileStatement' || statement.type === 'ForOfStatement') {
-    return statementHasReturnThroughFinally(statement.body)
-  }
-
-  if (statement.type === 'ForStatement') {
-    return statementHasReturnThroughFinally(statement.body)
-  }
-
-  if (statement.type === 'SwitchStatement') {
-    return statement.cases.some(item => item.consequent.some(child => statementHasReturnThroughFinally(child)))
-  }
-
-  if (statement.type === 'TryStatement') {
-    return statementHasReturnThroughFinally(statement.block)
-      || (statement.handler != null && statementHasReturnThroughFinally(statement.handler.body))
-      || (statement.finalizer != null && statementHasReturnThroughFinally(statement.finalizer))
-  }
-
-  return false
-}
-
-function statementHasUnsupportedTryControlFlow(statement) {
-  if (statement == null) {
-    return false
-  }
-
-  if (statement.type === 'BlockStatement') {
-    return statement.body.some(item => statementHasUnsupportedTryControlFlow(item))
-  }
-
-  if (statement.type === 'IfStatement') {
-    return statementHasUnsupportedTryControlFlow(statement.consequent)
-      || (statement.alternate != null && statementHasUnsupportedTryControlFlow(statement.alternate))
-  }
-
-  if (statement.type === 'WhileStatement' || statement.type === 'ForOfStatement') {
-    return statementHasUnsupportedTryControlFlow(statement.body)
-  }
-
-  if (statement.type === 'ForStatement') {
-    return statementHasUnsupportedTryControlFlow(statement.body)
-  }
-
-  if (statement.type === 'SwitchStatement') {
-    return statement.cases.some(item => item.consequent.some(child => statementHasUnsupportedTryControlFlow(child)))
-  }
-
-  if (statement.type === 'TryStatement') {
-    return tryStatementHasUnsupportedControlFlow(statement, {
-      statusReturn: false
-    })
-  }
-
-  return false
-}
-
 function emitStatementBody(statement, context) {
   if (statement.type === 'BlockStatement') {
     return emitStatementList(statement.body, context)
@@ -2748,11 +2676,9 @@ function emitRuntimeCallbackReturnStatement(statement, context) {
     ? emitRuntimeCallbackRuntimeValueReturnLines(statement.argument, context)
     : emitRuntimeCallbackScalarReturnLines(statement.argument, context)
 
-  context.usedRuntimeCallbackCleanupGoto = true
-
   return [
     ...lines,
-    `goto ${context.runtimeCallbackCleanupLabel};`
+    ...emitReturnJump(context)
   ]
 }
 

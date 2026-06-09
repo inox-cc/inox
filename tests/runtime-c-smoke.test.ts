@@ -3766,6 +3766,76 @@ export function main(): void {
   }
 })
 
+test('generated C runtime callback returns through finally compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-callback-return-finally-'))
+  const source = join(dir, 'callback-return-finally.c')
+  const output = join(dir, 'callback-return-finally')
+
+  try {
+    const result = compileSource(`type Score = (value: number) => number;
+type Name = () => string;
+
+function printScore(score: Score | null): void {
+  const value: number | null = score?.(4)
+  console.log(value ?? 0)
+}
+
+function printName(name: Name | null): void {
+  const value: string | null = name?.()
+  console.log(value ?? 'missing')
+}
+
+export function main(): void {
+  const score: Score | null = (value: number) => {
+    try {
+      return value + 3
+    } finally {
+      console.log('score finally', value)
+    }
+  }
+
+  const name: Name | null = () => {
+    try {
+      return 'Ada'
+    } finally {
+      console.log('name finally')
+    }
+  }
+
+  printScore(score)
+  printName(name)
+  printScore(null)
+  printName(null)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'score finally 4\n7\nname finally\nAda\n0\nmissing\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C nullable string callback optional call results compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

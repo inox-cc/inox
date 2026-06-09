@@ -2350,6 +2350,42 @@ export function main(): void {
   assert.match(result.code, /ccjs_callback_call\(ready, 0, 0, &ccjs_optional_call_\d+\)/)
 })
 
+test('lowers C runtime callback returns through finally before callback cleanup', () => {
+  const result = compileSource(`type Score = (value: number) => number;
+type Name = () => string;
+
+export function main(): void {
+  const score: Score | null = (value: number) => {
+    try {
+      return value + 3
+    } finally {
+      console.log('score finally', value)
+    }
+  }
+
+  const name: Name | null = () => {
+    try {
+      return 'Ada'
+    } finally {
+      console.log('name finally')
+    }
+  }
+
+  const value: number | null = score?.(4)
+  const text: string | null = name?.()
+  console.log(value ?? 0, text ?? 'missing')
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\) \{\n  \(void\)context;\n  if \(out == 0 \|\| arg_count != 1 \|\| args == 0\) return CCJS_ERR_TYPE;\n  \*out = ccjs_undefined_value\(\);\n  if \(args\[0\]\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n  double value = args\[0\]\.as\.number;\n  int ccjs_return_active = 0;/)
+  assert.match(result.code, /\(\*out\) = ccjs_number_value\(\(value \+ 3\)\);\n\s+ccjs_return_active = 1;\n\s+goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /printf\("%s %g\\n", "score finally", .*value.*\);\n\s+if \(ccjs_error_active\) return CCJS_ERR_TYPE;\n\s+if \(ccjs_return_active\) goto ccjs_callback_cleanup;/)
+  assert.match(result.code, /\(\*out\) = ccjs_value_\d+;\n\s+if \(\(\*out\)\.tag != CCJS_TAG_STRING \|\| \(\*out\)\.as\.ref == 0\) return CCJS_ERR_TYPE;\n\s+ccjs_retain\(\(\*out\)\);\n\s+ccjs_return_active = 1;\n\s+goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /ccjs_callback_cleanup:\n  ccjs_release\(ccjs_value_\d+\);\n  ccjs_release\(ccjs_error\);\n  return CCJS_OK;/)
+})
+
 test('lowers C optional call results over nullable string callbacks', () => {
   const result = compileSource(`type Name = () => string;
 
