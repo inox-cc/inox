@@ -2284,6 +2284,29 @@ export function main(): void {
   assert.match(result.code, /ccjs_callback_call\(ready, 0, 0, &ccjs_optional_call_\d+\)/)
 })
 
+test('lowers C optional call results over nullable scalar arrow callbacks', () => {
+  const result = compileSource(`type Score = (value: number) => number;
+type Ready = () => boolean;
+
+export function main(): void {
+  const bonus = 3
+  const score: Score | null = (value: number) => value + bonus
+  const ready: Ready | null = () => bonus === 3
+  const value: number | null = score?.(4)
+  const flag: boolean | null = ready?.()
+  console.log(value ?? 0, flag ?? false)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/)
+  assert.match(result.code, /\*out = ccjs_number_value\(\(value \+ bonus\)\);/)
+  assert.match(result.code, /\*out = ccjs_bool_value\(\(\(bonus == 3\)\) != 0\);/)
+  assert.match(result.code, /ccjs_callback_call\(score, ccjs_callback_args_\d+, 1, &ccjs_optional_call_\d+\)/)
+  assert.match(result.code, /ccjs_callback_call\(ready, 0, 0, &ccjs_optional_call_\d+\)/)
+})
+
 test('compiles unsupported nullish coalescing to JS and rejects it for C', () => {
   const source = `function printValue(value: unknown): void {
   console.log(value ?? 'Ada')

@@ -463,7 +463,7 @@ function collectCallbackWrappers(programs, context) {
     }
 
     if (expression?.type === 'ArrowFunctionExpression') {
-      if (normalized.returnType !== 'void') {
+      if (normalized.returnType !== 'void' && !expression.expressionBody) {
         return
       }
 
@@ -1230,13 +1230,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
 
   bodyLines.push(...emitRuntimeArrowCallbackContextLocals(wrapper, context))
   bodyLines.push(...emitRuntimeArrowCallbackParamPrelude(wrapper, context))
-  const statements = wrapper.expression.expressionBody
-    ? [{
-        type: 'ExpressionStatement',
-        expression: wrapper.expression.body
-      }]
-    : wrapper.expression.body
-  const statementLines = emitStatementList(statements, context)
+  const statementLines = emitRuntimeArrowCallbackStatementLines(wrapper, context)
 
   lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)} {`)
 
@@ -1258,6 +1252,34 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   lines.push('}')
 
   return lines
+}
+
+function emitRuntimeArrowCallbackStatementLines(wrapper, context) {
+  if (wrapper.functionType.returnType === 'number' || wrapper.functionType.returnType === 'boolean') {
+    if (!wrapper.expression.expressionBody) {
+      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'runtime C callback scalar returns currently require an expression-body arrow function', wrapper.expression.loc))
+      return []
+    }
+
+    const value = emitPreparedNumberExpression(wrapper.expression.body, context)
+    const expression = wrapper.functionType.returnType === 'number'
+      ? `ccjs_number_value(${value.expression})`
+      : `ccjs_bool_value((${value.expression}) != 0)`
+
+    return [
+      ...value.lines,
+      `*out = ${expression};`
+    ]
+  }
+
+  const statements = wrapper.expression.expressionBody
+    ? [{
+        type: 'ExpressionStatement',
+        expression: wrapper.expression.body
+      }]
+    : wrapper.expression.body
+
+  return emitStatementList(statements, context)
 }
 
 function emitRuntimeArrowCallbackContextLocals(wrapper, context) {
