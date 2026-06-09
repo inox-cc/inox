@@ -1536,7 +1536,8 @@ function emitForStatement(statement, context) {
 
 function emitForOfStatement(statement, context) {
   const setup: string[] = []
-  let array = resolveKnownForOfArray(statement.iterable, context)
+  let array: any = resolveKnownForOfArray(statement.iterable, context)
+  let runtimeArray: any = null
 
   if (array == null && statement.iterable?.type === 'ArrayLiteral') {
     const name = nextCName(context, 'ccjs_for_array')
@@ -1553,11 +1554,15 @@ function emitForOfStatement(statement, context) {
   }
 
   if (array == null) {
+    runtimeArray = resolveRuntimeForOfArray(statement.iterable, context)
+  }
+
+  if (array == null && runtimeArray == null) {
     context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports only local array variables and array literals', statement.loc))
     return []
   }
 
-  const elementType = resolveForOfElementType(array.elements)
+  const elementType = runtimeArray?.elementType ?? resolveForOfElementType(array.elements)
 
   if (!['number', 'boolean', 'string'].includes(elementType)) {
     context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports only uniform number/boolean/string arrays', statement.loc))
@@ -1566,6 +1571,8 @@ function emitForOfStatement(statement, context) {
 
   const index = nextCName(context, 'ccjs_for_index')
   const value = nextCName(context, 'ccjs_for_value')
+  const length = runtimeArray == null ? `${array.elements.length}` : nextCName(context, 'ccjs_for_length')
+  const arrayName = runtimeArray?.name ?? array.name
   const loopValue = elementType === 'boolean'
     ? `((double)(${value}.as.boolean ? 1 : 0))`
     : `${value}.as.number`
@@ -1587,9 +1594,15 @@ function emitForOfStatement(statement, context) {
 
     return [
       ...setup,
-      `for (size_t ${index} = 0; ${index} < ${array.elements.length}; ${index} += 1) {`,
+      ...(runtimeArray == null
+        ? []
+        : [
+            `size_t ${length} = 0;`,
+            emitStatusCheck(`ccjs_array_len(${arrayName}, &${length})`, context)
+          ]),
+      `for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`,
       ...emitPrepareOwnedValueWrite(value).map(line => `  ${line}`),
-      `  ${emitStatusCheck(`ccjs_array_get(${array.name}, ${index}, &${value})`, context)}`,
+      `  ${emitStatusCheck(`ccjs_array_get(${arrayName}, ${index}, &${value})`, context)}`,
       ...checks.map(line => `  ${line}`),
       `  ${declaration}`,
       ...body.map(line => `  ${line}`),
@@ -4015,6 +4028,20 @@ function resolveKnownForOfArray(expression, context) {
   return elements == null ? null : {
     name,
     elements
+  }
+}
+
+function resolveRuntimeForOfArray(expression, context) {
+  if (expression?.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.path[0]
+  const elementType = context.runtimeArrayElementTypes.get(name)
+
+  return elementType == null ? null : {
+    name,
+    elementType
   }
 }
 

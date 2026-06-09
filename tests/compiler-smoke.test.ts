@@ -260,6 +260,37 @@ export function main(): void {
   assert.match(result.code, /ccjs_array_get\(names, 0, &ccjs_log_value_\d+\)/)
 })
 
+test('lowers C for of over runtime array locals', () => {
+  const result = compileSource(`type Box = {
+  values: number[],
+  names: string[]
+}
+
+export function main(): void {
+  const box: Box = { values: [1, 2, 3], names: ['Ada', 'Grace'] }
+  const values = box.values
+  const names = box.names
+  let total = 0
+  let letters = 0
+  for (const value of values) {
+    total = total + value
+  }
+  for (const name of names) {
+    letters = letters + name.length
+  }
+  console.log(total, letters)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_array_len\(values, &ccjs_for_length_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(values, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_len\(names, &ccjs_for_length_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(names, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
+  assert.match(result.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_STRING/)
+})
+
 test('lowers C string length for literals and runtime strings', () => {
   const result = compileSource(`type User = {
   name: string
