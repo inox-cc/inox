@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -1443,6 +1443,40 @@ export function main(): void {
     assert.match(js.code, /const user = \{ name: "Ada" \}/)
     assert.match(c.code, /static const ccjs_field_info ccjs_shape_user_\d+_fields\[\]/)
     assert.match(c.code, /ccjs_object_get_known\(user, 0, &ccjs_log_value_\d+\)/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('resolves static ESM directory index imports', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-index-imports-'))
+
+  try {
+    await mkdir(join(dir, 'lib'))
+    await writeFile(join(dir, 'lib', 'index.ts'), `export function greet(): void {
+  console.log('from index')
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import { greet } from './lib'
+
+export function main(): void {
+  greet()
+}
+`)
+
+    const js = await compileFile(join(dir, 'main.ts'), {
+      target: 'js'
+    })
+    const c = await compileFile(join(dir, 'main.ts'), {
+      target: 'c'
+    })
+
+    assert.equal(js.graph.modules.some(module => module.path.endsWith('/lib/index.ts')), true)
+    assert.match(js.code, /from index/)
+    assert.match(c.code, /void greet\(void\);/)
   } finally {
     await rm(dir, {
       recursive: true,

@@ -285,7 +285,12 @@ export function moduleId(path: string): string {
 
 async function resolveExistingSource(path: string): Promise<string> {
   const normalized = normalize(isAbsolute(path) ? path : resolve(path))
-  const candidates = extname(normalized) === '' ? sourceExtensions.map(ext => `${normalized}${ext}`) : [normalized]
+  const candidates = extname(normalized) === ''
+    ? [
+        ...sourceExtensions.map(ext => `${normalized}${ext}`),
+        ...sourceExtensions.map(ext => join(normalized, `index${ext}`))
+      ]
+    : [normalized]
 
   for (const candidate of candidates) {
     try {
