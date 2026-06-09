@@ -1724,7 +1724,36 @@ export function main(): void {
   assert.match(c.code, /runNumber\(numberCallback\);/)
 })
 
-test('rejects mutable plain C callback captures with a stable diagnostic', () => {
+test('boxes mutable numeric C callback captures', () => {
+  const source = `function run(callback: Function): void {
+  callback()
+}
+
+export function main(): void {
+  let count = 0
+  const callback: Function = () => {
+    count = count + 1
+    console.log(count)
+  }
+  run(callback)
+  console.log(count)
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /double\* count = 0;/)
+  assert.match(c.code, /count = ccjs_default_alloc\(0, sizeof\(double\), _Alignof\(double\)\);/)
+  assert.match(c.code, /\*count = 0;/)
+  assert.match(c.code, /double\* count = captured->count;/)
+  assert.match(c.code, /\(\*count\) = \(\(\*count\) \+ 1\);/)
+  assert.match(c.code, /run\(callback\);/)
+  assert.match(c.code, /printf\("%g\\n", \(\(double\)\(\*count\)\)\);/)
+  assert.match(c.code, /if \(count != 0\) ccjs_default_free\(0, count, sizeof\(double\), _Alignof\(double\)\);/)
+})
+
+test('rejects unsupported mutable string C callback captures with a stable diagnostic', () => {
   assertDiagnostic(`function run(callback: Function): void {
   callback()
 }

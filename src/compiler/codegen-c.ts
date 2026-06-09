@@ -192,6 +192,7 @@ function reportUnsupportedAsync(programs, diagnostics) {
 
 function createBaseContext(diagnostics, functions) {
   return {
+    boxedMutableCaptureDeclarations: new Set(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
     diagnostics,
@@ -239,12 +240,14 @@ function emitFunctionDeclaration(statement, baseContext) {
     `${emitFunctionHead(statement, context)} {`,
     ...emitReturnValueDeclarations(context).map(line => `  ${line}`),
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
     ...bodyLines
   ]
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
     lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
     lines.push(`  ${emitCleanupReturn(context)}`)
   } else if (statement.returnType !== 'void') {
     lines.push(`  return ${statement.returnType === 'string' ? '""' : '0'};`)
@@ -461,6 +464,14 @@ function collectCallbackWrappers(programs, context) {
 
     const index = wrappers.size
     const key = `arrow:${index}`
+    const captures = collectArrowCaptures(expression, scopes, context)
+
+    for (const capture of captures) {
+      if (capture.mutable && ['number', 'boolean'].includes(capture.valueType) && capture.declaration != null) {
+        context.boxedMutableCaptureDeclarations.add(capture.declaration)
+      }
+    }
+
     const wrapper = {
       kind: 'arrow',
       key,
@@ -469,7 +480,7 @@ function collectCallbackWrappers(programs, context) {
       finalizerName: `ccjs_callback_context_${index}_finalize`,
       expression,
       functionType,
-      captures: collectArrowCaptures(expression, scopes, context)
+      captures
     }
 
     wrappers.set(key, wrapper)
@@ -523,6 +534,7 @@ function collectCallbackWrappers(programs, context) {
       name: statement.name,
       valueType,
       functionType: statement.functionType,
+      declaration: statement,
       shape: statement.shape,
       runtimeCallback: isRuntimeFunctionType(statement.functionType) || shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes),
       runtimeManaged: isRuntimeManagedCaptureBinding(statement, scopes, valueType),
@@ -1062,12 +1074,14 @@ function emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   const lines = [
     `${emitPlainArrowCallbackWrapperHead(wrapper)} {`,
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
     ...statementLines.map(line => `  ${line}`)
   ]
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
     lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
     lines.push(`  ${emitCleanupReturn(context)}`)
   }
 
@@ -1161,8 +1175,10 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   lines.push('  *out = ccjs_undefined_value();')
   lines.push(...bodyLines.map(line => `  ${line}`))
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
+  lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...statementLines.map(line => `  ${line}`))
   lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+  lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
   lines.push('  return CCJS_OK;')
   lines.push('}')
 
@@ -1180,6 +1196,10 @@ function emitRuntimeArrowCallbackContextLocals(wrapper, context) {
 
   for (const capture of wrapper.captures) {
     context.variables.set(capture.name, capture.valueType)
+
+    if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
+      context.boxedVariables.add(capture.name)
+    }
 
     if (isRetainedRuntimeArrowCapture(capture)) {
       if (capture.valueType === 'string') {
@@ -1236,6 +1256,10 @@ function emitRuntimeArrowCallbackParamPrelude(wrapper, context) {
 }
 
 function emitRuntimeArrowCaptureCType(capture) {
+  if (capture.mutable && ['number', 'boolean'].includes(capture.valueType)) {
+    return 'double*'
+  }
+
   if (isRetainedRuntimeArrowCapture(capture)) {
     return 'ccjs_value'
   }
@@ -1253,6 +1277,13 @@ function emitRuntimeArrowCaptureField(capture) {
 
 function isRetainedRuntimeArrowCapture(capture) {
   return capture.runtimeManaged === true && ['string', 'object'].includes(capture.valueType)
+}
+
+function isSupportedMutableRuntimeArrowCapture(capture, context) {
+  return capture.mutable
+    && ['number', 'boolean'].includes(capture.valueType)
+    && capture.declaration != null
+    && context.boxedMutableCaptureDeclarations.has(capture.declaration)
 }
 
 function emitRuntimeCallbackWrapperArgChecks(param, index) {
@@ -1303,6 +1334,8 @@ function createFunctionContext(baseContext, returnType) {
   return {
     ...baseContext,
     arrayShapes: new Map(),
+    boxedValues: [],
+    boxedVariables: new Set(),
     cleanupEnabled: true,
     functionTypes: new Map(),
     objectShapes: new Map(),
@@ -1341,11 +1374,13 @@ function emitMainWrapper(entryProgram, baseContext) {
   }
 
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
+  lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
     lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
   }
 
   lines.push('  return 0;')
@@ -2110,6 +2145,10 @@ function emitScalarVariableDeclaration(statement, context) {
     return [`double ${statement.name} = 0;`]
   }
 
+  if ((inferred === 'number' || inferred === 'boolean') && context.boxedMutableCaptureDeclarations.has(statement)) {
+    return emitBoxedScalarVariableDeclaration(statement, context)
+  }
+
   if (!['number', 'boolean'].includes(inferred)) {
     context.diagnostics.push(diagnostic(cUnsupportedExpressionCode(inferred), 'this expression is not supported by the current C backend slice', statement.loc))
     return [`double ${statement.name} = 0;`]
@@ -2120,6 +2159,20 @@ function emitScalarVariableDeclaration(statement, context) {
   return [
     ...value.lines,
     `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${value.expression};`
+  ]
+}
+
+function emitBoxedScalarVariableDeclaration(statement, context) {
+  const value = emitPreparedNumberExpression(statement.init, context)
+
+  registerBoxedValue(context, statement.name)
+  context.boxedVariables.add(statement.name)
+
+  return [
+    ...value.lines,
+    `${statement.name} = ccjs_default_alloc(0, sizeof(double), _Alignof(double));`,
+    `if (${statement.name} == 0) ${emitFailureStatement(context)}`,
+    `*${statement.name} = ${value.expression};`
   ]
 }
 
@@ -3365,7 +3418,12 @@ function emitCExpression(expression, context) {
 function emitReference(expression, context) {
   if (expression?.type === 'Reference') {
     const name = expression.path.join('_')
-    return context.variables.has(name) ? name : context.functionNames.get(name) ?? name
+
+    if (context.variables.has(name)) {
+      return context.boxedVariables.has(name) ? `(*${name})` : name
+    }
+
+    return context.functionNames.get(name) ?? name
   }
 
   context.diagnostics.push(diagnostic('CCJS_C_ASSIGNMENT_TARGET', 'this assignment target is not supported by the current C backend slice', expression?.loc))
@@ -3584,8 +3642,8 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
   ]
 
   for (const capture of wrapper.captures) {
-    if (capture.mutable) {
-      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing mutable let bindings in C callbacks requires boxed closure storage and is not supported yet', wrapper.expression.loc))
+    if (capture.mutable && !isSupportedMutableRuntimeArrowCapture(capture, context)) {
+      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing this mutable binding in C callbacks requires unsupported boxed closure storage', wrapper.expression.loc))
     }
 
     if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
@@ -4277,6 +4335,12 @@ function registerOwnedValue(context, name) {
   }
 }
 
+function registerBoxedValue(context, name) {
+  if (!context.boxedValues.includes(name)) {
+    context.boxedValues.push(name)
+  }
+}
+
 function emitPrepareOwnedValueWrite(name) {
   return [
     `ccjs_release(${name});`,
@@ -4285,7 +4349,8 @@ function emitPrepareOwnedValueWrite(name) {
 }
 
 function shouldEmitCleanupLabel(context) {
-  return context.returnType !== 'void' || (context.returnType === 'void' && (context.ownedValues.length > 0 || context.usedCleanupGoto))
+  return context.returnType !== 'void'
+    || (context.returnType === 'void' && (context.ownedValues.length > 0 || context.boxedValues.length > 0 || context.usedCleanupGoto))
 }
 
 function emitReturnValueDeclarations(context) {
@@ -4304,8 +4369,16 @@ function emitOwnedValueDeclarations(context) {
   return context.ownedValues.map(name => `ccjs_value ${name} = ccjs_undefined_value();`)
 }
 
+function emitBoxedValueDeclarations(context) {
+  return context.boxedValues.map(name => `double* ${name} = 0;`)
+}
+
 function emitOwnedValueCleanup(context) {
   return context.ownedValues.toReversed().map(name => `ccjs_release(${name});`)
+}
+
+function emitBoxedValueCleanup(context) {
+  return context.boxedValues.toReversed().map(name => `if (${name} != 0) ccjs_default_free(0, ${name}, sizeof(double), _Alignof(double));`)
 }
 
 function emitCleanupReturn(context) {
@@ -4974,6 +5047,7 @@ function isCStringRuntimeMethodName(name) {
 function withVariableScope(context, callback) {
   const previous = context.variables
   const previousArrayShapes = context.arrayShapes
+  const previousBoxedVariables = context.boxedVariables
   const previousFunctionTypes = context.functionTypes
   const previousObjectShapes = context.objectShapes
   const previousRuntimeCallbacks = context.runtimeCallbacks
@@ -4981,6 +5055,7 @@ function withVariableScope(context, callback) {
   const previousRuntimeStrings = context.runtimeStrings
   context.variables = new Map(previous)
   context.arrayShapes = new Map(previousArrayShapes)
+  context.boxedVariables = new Set(previousBoxedVariables)
   context.functionTypes = new Map(previousFunctionTypes)
   context.objectShapes = new Map(previousObjectShapes)
   context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
@@ -4992,6 +5067,7 @@ function withVariableScope(context, callback) {
   } finally {
     context.variables = previous
     context.arrayShapes = previousArrayShapes
+    context.boxedVariables = previousBoxedVariables
     context.functionTypes = previousFunctionTypes
     context.objectShapes = previousObjectShapes
     context.runtimeCallbacks = previousRuntimeCallbacks
