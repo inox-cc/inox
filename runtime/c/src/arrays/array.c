@@ -1,5 +1,77 @@
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "ccjs/array.h"
+#include "ccjs/string.h"
+
+static void ccjs_array_sort_key(ccjs_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
+  if (value.tag == CCJS_TAG_STRING && value.as.ref != 0) {
+    ccjs_string* string = (ccjs_string*)value.as.ref;
+    *bytes = string->bytes;
+    *len = string->len;
+    return;
+  }
+
+  if (value.tag == CCJS_TAG_NUMBER) {
+    int written = snprintf(buffer, buffer_len, "%.15g", value.as.number);
+    *bytes = buffer;
+    *len = written < 0 ? 0 : (size_t)written;
+    return;
+  }
+
+  if (value.tag == CCJS_TAG_BOOL) {
+    *bytes = value.as.boolean ? "true" : "false";
+    *len = value.as.boolean ? 4 : 5;
+    return;
+  }
+
+  if (value.tag == CCJS_TAG_NULL) {
+    *bytes = "null";
+    *len = 4;
+    return;
+  }
+
+  if (value.tag == CCJS_TAG_UNDEFINED) {
+    *bytes = "undefined";
+    *len = 9;
+    return;
+  }
+
+  *bytes = "";
+  *len = 0;
+}
+
+static int ccjs_array_sort_compare(const void* left_ptr, const void* right_ptr) {
+  const ccjs_value* left = (const ccjs_value*)left_ptr;
+  const ccjs_value* right = (const ccjs_value*)right_ptr;
+  char left_buffer[64];
+  char right_buffer[64];
+  const char* left_bytes = "";
+  const char* right_bytes = "";
+  size_t left_len = 0;
+  size_t right_len = 0;
+
+  ccjs_array_sort_key(*left, left_buffer, sizeof(left_buffer), &left_bytes, &left_len);
+  ccjs_array_sort_key(*right, right_buffer, sizeof(right_buffer), &right_bytes, &right_len);
+
+  size_t min_len = left_len < right_len ? left_len : right_len;
+  int result = memcmp(left_bytes, right_bytes, min_len);
+
+  if (result != 0) {
+    return result;
+  }
+
+  if (left_len < right_len) {
+    return -1;
+  }
+
+  if (left_len > right_len) {
+    return 1;
+  }
+
+  return 0;
+}
 
 ccjs_status ccjs_array_new(ccjs_allocator* allocator, size_t len, ccjs_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || out == 0) {
@@ -85,6 +157,22 @@ ccjs_status ccjs_array_set(ccjs_value array, size_t index, ccjs_value value) {
   ccjs_retain(value);
   ccjs_release(instance->items[index]);
   instance->items[index] = value;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_array_sort(ccjs_value array) {
+  if (array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_array* instance = (ccjs_array*)array.as.ref;
+
+  if (instance->len < 2) {
+    return CCJS_OK;
+  }
+
+  qsort(instance->items, instance->len, sizeof(ccjs_value), ccjs_array_sort_compare);
 
   return CCJS_OK;
 }

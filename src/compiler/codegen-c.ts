@@ -1564,6 +1564,12 @@ function emitStatement(statement, context) {
       return emitCollectionVariableDeclaration(statement, context)
     }
 
+    const arraySortCall = emitPreparedArraySortCallExpression(statement.init, context)
+
+    if (arraySortCall != null) {
+      return emitArraySortVariableDeclaration(statement, arraySortCall, context)
+    }
+
     if (statement.init?.type === 'ObjectLiteral') {
       if (context.boxedMutableCaptureDeclarations.has(statement)) {
         return emitBoxedObjectVariableDeclaration(statement, context)
@@ -1610,6 +1616,17 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'CallExpression') {
+    const arraySortCall = emitPreparedArraySortCallExpression(statement.expression, context)
+
+    if (arraySortCall != null) {
+      return arraySortCall.lines
+    }
+
+    if (isArrayMethodCall(statement.expression)) {
+      context.diagnostics.push(diagnostic('CCJS_C_ARRAY_METHOD', 'array methods are not supported by the current C backend slice', statement.loc))
+      return []
+    }
+
     const collectionCall = emitPreparedCollectionCallExpression(statement.expression, context)
 
     if (collectionCall != null) {
@@ -1945,6 +1962,15 @@ function emitPreparedForVariableDeclaration(statement, context) {
   if (isCollectionConstructorExpression(statement.init)) {
     return {
       lines: emitCollectionVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  const arraySortCall = emitPreparedArraySortCallExpression(statement.init, context)
+
+  if (arraySortCall != null) {
+    return {
+      lines: emitArraySortVariableDeclaration(statement, arraySortCall, context),
       expression: ''
     }
   }
@@ -3805,6 +3831,12 @@ function emitCallExpression(expression, context) {
 }
 
 function emitPreparedCallExpression(expression, context) {
+  const arraySortCall = emitPreparedArraySortCallExpression(expression, context)
+
+  if (arraySortCall != null) {
+    return arraySortCall
+  }
+
   const collectionCall = emitPreparedCollectionCallExpression(expression, context)
 
   if (collectionCall != null) {
@@ -4374,6 +4406,83 @@ function isArrayMethodCall(expression) {
   return expression?.type === 'CallExpression'
     && expression.callee.type === 'MemberExpression'
     && cArrayMethods.has(expression.callee.property)
+}
+
+function emitArraySortVariableDeclaration(statement, sorted, context) {
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'array')
+
+  const shape = context.arrayShapes.get(sorted.expression)
+
+  if (shape != null) {
+    context.arrayShapes.set(statement.name, shape.map(element => ({ ...element })))
+  } else {
+    context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType ?? sorted.elementType ?? 'unknown')
+  }
+
+  return [
+    ...sorted.lines,
+    ...emitPrepareOwnedValueWrite(statement.name),
+    `${statement.name} = ${sorted.expression};`,
+    `ccjs_retain(${statement.name});`
+  ]
+}
+
+function emitPreparedArraySortCallExpression(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'sort' || expression.args.length !== 0) {
+    return null
+  }
+
+  const receiver = emitPreparedArrayReceiver(expression.callee.object, context)
+
+  if (receiver == null) {
+    return null
+  }
+
+  return {
+    lines: [
+      ...receiver.lines,
+      emitStatusCheck(`ccjs_array_sort(${receiver.expression})`, context)
+    ],
+    expression: receiver.expression,
+    elementType: receiver.elementType
+  }
+}
+
+function emitPreparedArrayReceiver(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+
+    if (context.variables.get(name) !== 'array') {
+      return null
+    }
+
+    return {
+      lines: [],
+      expression: name,
+      elementType: context.runtimeArrayElementTypes.get(name) ?? context.arrayShapes.get(name)?.[0]?.valueType ?? 'unknown'
+    }
+  }
+
+  if (expression?.type === 'CallExpression') {
+    const valueType = inferExpressionType(expression, context)
+
+    if (valueType !== 'array') {
+      return null
+    }
+
+    const call = emitPreparedArraySortCallExpression(expression, context)
+
+    return call == null
+      ? null
+      : {
+          lines: call.lines,
+          expression: call.expression,
+          elementType: call.elementType
+        }
+  }
+
+  return null
 }
 
 function isCollectionConstructorExpression(expression) {
