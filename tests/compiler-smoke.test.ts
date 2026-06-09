@@ -252,6 +252,35 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_ends_with_parts\(message->bytes, message->len, "!", 1\)/)
 })
 
+test('lowers C string slice for literals and runtime strings', () => {
+  const result = compileSource(`type User = {
+  name: string
+}
+
+function middle(name: string): string {
+  return name.slice(1, 3)
+}
+
+function getName(): string {
+  return 'Grace'
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  const name = user.name
+  const message = name + '!'
+  console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, name->bytes, name->len, \(size_t\)\(1\), \(size_t\)\(3\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, "Ada", 3, \(size_t\)\(1\), \(size_t\)\(3\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, ccjs_slice_string_\d+->bytes, ccjs_slice_string_\d+->len, \(size_t\)\(0\), \(size_t\)\(1\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, message->bytes, message->len, \(size_t\)\(3\), \(size_t\)\(message->len\), &ccjs_value_\d+\)/)
+})
+
 test('lowers known C object field access to runtime calls', () => {
   const result = compileSource(`export function main(): void {
   const user = { score: 42, active: true }
@@ -1977,6 +2006,33 @@ export function main(): void {
   assertDiagnostic(`export function main(): void {
   const name = 'Ada'
   name.startsWith()
+}
+`, 'CCJS_ARG_COUNT')
+})
+
+test('checks string slice as a string call', () => {
+  const result = compileSource(`function middle(name: string): string {
+  return name.slice(1, 3)
+}
+
+export function main(): void {
+  console.log(middle('Ada'))
+}
+`, {
+    target: 'js'
+  })
+
+  assert.match(result.code, /return name\.slice\(1, 3\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const name = 'Ada'
+  name.slice('1', 2)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const name = 'Ada'
+  name.slice()
 }
 `, 'CCJS_ARG_COUNT')
 })

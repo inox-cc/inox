@@ -688,6 +688,12 @@ class Checker {
   }
 
   checkCallExpression(expression: AnyNode): ValueType {
+    const stringSliceType = this.checkStringSliceCall(expression)
+
+    if (stringSliceType != null) {
+      return stringSliceType
+    }
+
     const stringMethodType = this.checkStringPredicateCall(expression)
 
     if (stringMethodType != null) {
@@ -717,6 +723,29 @@ class Checker {
     }
 
     return symbol.returnType ?? 'unknown'
+  }
+
+  checkStringSliceCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'slice') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+
+    if (objectType !== 'string') {
+      return null
+    }
+
+    if (expression.args.length < 1 || expression.args.length > 2) {
+      this.report('CCJS_ARG_COUNT', `string.slice expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    for (const [index, argType] of argTypes.entries()) {
+      this.checkAssignableType(argType, 'number', expression.args[index].loc)
+    }
+
+    return 'string'
   }
 
   checkStringPredicateCall(expression: AnyNode): ValueType | null {

@@ -2100,6 +2100,10 @@ function emitArrayVariableDeclaration(statement, context) {
 }
 
 function emitCValueExpression(expression, context) {
+  if (isStringSliceCall(expression, context)) {
+    return emitCStringSliceValueExpression(expression, context)
+  }
+
   if (isStringConcatExpression(expression, context)) {
     return emitCStringConcatValueExpression(expression, context)
   }
@@ -2265,6 +2269,30 @@ function emitCStringConcatValueExpression(expression, context) {
       ...right.lines,
       ...emitPrepareOwnedValueWrite(temp),
       emitStatusCheck(`ccjs_string_concat_parts(&ccjs_default_allocator, ${left.bytes}, ${left.length}, ${right.bytes}, ${right.length}, &${temp})`, context)
+    ],
+    expression: temp
+  }
+}
+
+function emitCStringSliceValueExpression(expression, context) {
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_slice_string')
+  const start = emitPreparedNumberExpression(expression.args[0], context)
+  const end = expression.args[1] == null
+    ? {
+        lines: [],
+        expression: value.length
+      }
+    : emitPreparedNumberExpression(expression.args[1], context)
+  const temp = nextCName(context, 'ccjs_value')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...value.lines,
+      ...start.lines,
+      ...end.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_string_slice_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, (size_t)(${start.expression}), (size_t)(${end.expression}), &${temp})`, context)
     ],
     expression: temp
   }
@@ -3283,6 +3311,10 @@ function inferExpressionType(expression, context) {
     return 'number'
   }
 
+  if (isStringSliceCall(expression, context)) {
+    return 'string'
+  }
+
   if (isStringPredicateCall(expression, context)) {
     return 'boolean'
   }
@@ -3464,6 +3496,14 @@ function isStringConcatExpression(expression, context) {
 function isRuntimeProducedStringExpression(expression, context) {
   return (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string')
     || isStringConcatExpression(expression, context)
+}
+
+function isStringSliceCall(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'slice' || expression.args.length < 1 || expression.args.length > 2) {
+    return false
+  }
+
+  return isStringLengthObject(expression.callee.object, context) && expression.args.every(arg => inferExpressionType(arg, context) === 'number')
 }
 
 function isStringPredicateCall(expression, context) {
@@ -3831,7 +3871,7 @@ function usesCStringCompare(program) {
 }
 
 function usesCStringHeader(program) {
-  return usesCStringCompare(program) || nodeUsesCStringLength(program) || nodeUsesCStringPredicate(program)
+  return usesCStringCompare(program) || nodeUsesCStringLength(program) || nodeUsesCStringMethodCall(program)
 }
 
 function itemUsesCRuntime(item) {
@@ -4131,7 +4171,7 @@ function expressionUsesCRuntime(expression) {
   }
 
   if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
-    if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' && cStringPredicateMethods.has(expression.callee.property)) {
+    if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' && (expression.callee.property === 'slice' || cStringPredicateMethods.has(expression.callee.property))) {
       return true
     }
 
@@ -4340,26 +4380,26 @@ function nodeUsesCStringLength(node) {
     .some(([, value]) => nodeUsesCStringLength(value))
 }
 
-function nodeUsesCStringPredicate(node) {
+function nodeUsesCStringMethodCall(node) {
   if (node == null) {
     return false
   }
 
   if (Array.isArray(node)) {
-    return node.some(item => nodeUsesCStringPredicate(item))
+    return node.some(item => nodeUsesCStringMethodCall(item))
   }
 
   if (typeof node !== 'object') {
     return false
   }
 
-  if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' && cStringPredicateMethods.has(node.callee.property)) {
+  if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' && (node.callee.property === 'slice' || cStringPredicateMethods.has(node.callee.property))) {
     return true
   }
 
   return Object.entries(node)
     .filter(([key]) => key !== 'loc')
-    .some(([, value]) => nodeUsesCStringPredicate(value))
+    .some(([, value]) => nodeUsesCStringMethodCall(value))
 }
 
 function expressionMayBeCStringLengthOperand(expression) {
