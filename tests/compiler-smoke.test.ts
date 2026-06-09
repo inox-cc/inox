@@ -2479,15 +2479,61 @@ test('compiles throw and try catch finally to JS and lowers local string throws 
     target: 'c'
   })
   assertDiagnostic(`export function main(): void {
-  try {
-    return
-  } finally {
-    console.log('finally')
+  while (true) {
+    try {
+      break
+    } finally {
+      console.log('finally')
+    }
   }
 }
 `, 'CCJS_C_TRY', {
     target: 'c'
   })
+})
+
+test('lowers C number return through finally before cleanup', () => {
+  const result = compileSource(`function getScore(): number {
+  try {
+    return 7
+  } finally {
+    console.log('finally')
+  }
+}
+
+export function main(): void {
+  console.log(getScore())
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /double getScore\(void\) \{\n  double ccjs_return = 0;\n  int ccjs_return_active = 0;/)
+  assert.match(result.code, /ccjs_return = 7;\n    ccjs_return_active = 1;\n    goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /ccjs_try_\d+_finally:\n    printf\("%s\\n", "finally"\);\n    if \(ccjs_error_active\) goto ccjs_cleanup;\n    if \(ccjs_return_active\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_cleanup:\n  ccjs_release\(ccjs_error\);\n  return ccjs_return;/)
+})
+
+test('lowers C void return through finally before cleanup', () => {
+  const result = compileSource(`function stop(): void {
+  try {
+    return
+  } finally {
+    console.log('finally')
+  }
+  console.log('after')
+}
+
+export function main(): void {
+  stop()
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /void stop\(void\) \{\n  int ccjs_return_active = 0;/)
+  assert.match(result.code, /ccjs_return_active = 1;\n    goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /ccjs_try_\d+_finally:\n    printf\("%s\\n", "finally"\);\n    if \(ccjs_error_active\) goto ccjs_cleanup;\n    if \(ccjs_return_active\) goto ccjs_cleanup;/)
 })
 
 test('compiles Error objects to JS and rejects them for C', () => {

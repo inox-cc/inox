@@ -259,6 +259,7 @@ function emitFunctionDeclaration(statement, baseContext) {
   const lines = [
     `${emitFunctionHead(statement, context)} {`,
     ...emitReturnValueDeclarations(context).map(line => `  ${line}`),
+    ...emitReturnFlowDeclarations(context).map(line => `  ${line}`),
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
     ...emitErrorChannelDeclarations(context).map(line => `  ${line}`),
     ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
@@ -1247,6 +1248,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   lines.push(`  if (out == 0 || arg_count != ${wrapper.functionType.params.length}${wrapper.functionType.params.length === 0 ? '' : ' || args == 0'}) return CCJS_ERR_TYPE;`)
   lines.push('  *out = ccjs_undefined_value();')
   lines.push(...bodyLines.map(line => `  ${line}`))
+  lines.push(...emitReturnFlowDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitErrorChannelDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
@@ -1471,6 +1473,8 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     nullableVariables: new Set(),
     objectShapes: new Map(),
     ownedValues: [],
+    returnFlowUsed: false,
+    returnTargets: [],
     runtimeCallbacks: new Set(),
     runtimeArrayElementTypes: new Map(),
     setElementTypes: new Map(),
@@ -1504,6 +1508,7 @@ function emitMainWrapper(entryProgram, baseContext) {
 
   bodyLines.push(...emitStatementList(body, context).map(line => `  ${line}`))
 
+  lines.push(...emitReturnFlowDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitErrorChannelDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
@@ -1830,6 +1835,11 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ReturnStatement') {
+    if (currentReturnTarget(context) != null && isRuntimeCallbackReturnContext(context)) {
+      context.diagnostics.push(diagnostic('CCJS_C_TRY', 'C runtime callback returns through finally are not supported by the current backend slice', statement.loc))
+      return []
+    }
+
     if (isRuntimeCallbackReturnContext(context)) {
       return emitRuntimeCallbackReturnStatement(statement, context)
     }
@@ -1849,19 +1859,17 @@ function emitStatement(statement, context) {
             expression: '0'
           }
         : emitPreparedNumberExpression(statement.argument, context)
-      context.usedCleanupGoto = true
 
       return [
         ...value.lines,
         `ccjs_return = ${value.expression};`,
-        'goto ccjs_cleanup;'
+        ...emitReturnJump(context)
       ]
     }
 
     if (statement.argument == null || context.returnType === 'void') {
       if (context.cleanupEnabled) {
-        context.usedCleanupGoto = true
-        return ['goto ccjs_cleanup;']
+        return emitReturnJump(context)
       }
 
       return ['return;']
@@ -2084,8 +2092,8 @@ function emitSwitchCaseLabel(expression, context) {
 }
 
 function emitTryStatement(statement, context) {
-  if (tryStatementHasUnsupportedControlFlow(statement)) {
-    context.diagnostics.push(diagnostic('CCJS_C_TRY', 'C try/catch/finally currently does not support return, break or continue inside the try region', statement.loc))
+  if (tryStatementHasUnsupportedControlFlow(statement, context)) {
+    context.diagnostics.push(diagnostic('CCJS_C_TRY', 'C try/catch/finally currently supports return through finally, but not break or continue through finally', statement.loc))
     return []
   }
 
@@ -2096,16 +2104,17 @@ function emitTryStatement(statement, context) {
   const finallyLabel = statement.finalizer == null ? null : `${id}_finally`
   const endLabel = `${id}_end`
   const throwTarget = catchLabel ?? finallyLabel
+  const outerReturnTarget = currentReturnTarget(context)
   const lines = [
     '{'
   ]
-  const tryBody = withErrorTarget(context, throwTarget, () => withVariableScope(context, () => emitStatementBody(statement.block, context)))
+  const tryBody = withErrorTarget(context, throwTarget, () => withReturnTarget(context, finallyLabel, () => withVariableScope(context, () => emitStatementBody(statement.block, context))))
 
   lines.push(...tryBody.map(line => `  ${line}`))
   lines.push(`  goto ${finallyLabel ?? endLabel};`)
 
   if (statement.handler != null && catchLabel != null) {
-    const catchBody = withVariableScope(context, () => {
+    const catchBody = withReturnTarget(context, finallyLabel, () => withVariableScope(context, () => {
       const body: string[] = []
 
       if (statement.handler.param != null) {
@@ -2117,7 +2126,7 @@ function emitTryStatement(statement, context) {
       body.push(...emitStatementBody(statement.handler.body, context))
 
       return body
-    })
+    }))
 
     lines.push(`${catchLabel}:`)
     lines.push(`  if (ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0) ${emitFailureStatement(context)}`)
@@ -2140,6 +2149,14 @@ function emitTryStatement(statement, context) {
       lines.push(`  if (ccjs_error_active) goto ${outerThrowTarget};`)
     } else {
       lines.push(`  if (ccjs_error_active) ${emitFailureStatement(context)}`)
+    }
+
+    if (context.returnFlowUsed) {
+      if (outerReturnTarget != null) {
+        lines.push(`  if (ccjs_return_active) goto ${outerReturnTarget};`)
+      } else {
+        lines.push(`  if (ccjs_return_active) ${emitReturnCleanupStatement(context)}`)
+      }
     }
   }
 
@@ -2187,6 +2204,59 @@ function currentErrorTarget(context) {
   return context.errorTargets.at(-1) ?? null
 }
 
+function emitReturnJump(context) {
+  const target = currentReturnTarget(context)
+
+  if (target != null) {
+    registerReturnFlow(context)
+
+    return [
+      'ccjs_return_active = 1;',
+      `goto ${target};`
+    ]
+  }
+
+  return [emitReturnCleanupStatement(context)]
+}
+
+function emitReturnCleanupStatement(context) {
+  if (context.statusReturn && context.runtimeCallbackCleanupLabel != null) {
+    context.usedRuntimeCallbackCleanupGoto = true
+
+    return `goto ${context.runtimeCallbackCleanupLabel};`
+  }
+
+  if (context.cleanupEnabled) {
+    context.usedCleanupGoto = true
+
+    return 'goto ccjs_cleanup;'
+  }
+
+  return context.returnType === 'void' ? 'return;' : 'return ccjs_return;'
+}
+
+function registerReturnFlow(context) {
+  context.returnFlowUsed = true
+}
+
+function currentReturnTarget(context) {
+  return context.returnTargets.at(-1) ?? null
+}
+
+function withReturnTarget(context, target, callback) {
+  if (target == null) {
+    return callback()
+  }
+
+  context.returnTargets.push(target)
+
+  try {
+    return callback()
+  } finally {
+    context.returnTargets.pop()
+  }
+}
+
 function withErrorTarget(context, target, callback) {
   if (target == null) {
     return callback()
@@ -2201,10 +2271,53 @@ function withErrorTarget(context, target, callback) {
   }
 }
 
-function tryStatementHasUnsupportedControlFlow(statement) {
+function tryStatementHasUnsupportedControlFlow(statement, context) {
+  if (context.statusReturn && statementHasReturnThroughFinally(statement)) {
+    return true
+  }
+
   return statementHasUnsupportedTryControlFlow(statement.block)
     || (statement.handler != null && statementHasUnsupportedTryControlFlow(statement.handler.body))
     || (statement.finalizer != null && statementHasUnsupportedTryControlFlow(statement.finalizer))
+}
+
+function statementHasReturnThroughFinally(statement) {
+  if (statement == null) {
+    return false
+  }
+
+  if (statement.type === 'ReturnStatement') {
+    return true
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return statement.body.some(item => statementHasReturnThroughFinally(item))
+  }
+
+  if (statement.type === 'IfStatement') {
+    return statementHasReturnThroughFinally(statement.consequent)
+      || (statement.alternate != null && statementHasReturnThroughFinally(statement.alternate))
+  }
+
+  if (statement.type === 'WhileStatement' || statement.type === 'ForOfStatement') {
+    return statementHasReturnThroughFinally(statement.body)
+  }
+
+  if (statement.type === 'ForStatement') {
+    return statementHasReturnThroughFinally(statement.body)
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    return statement.cases.some(item => item.consequent.some(child => statementHasReturnThroughFinally(child)))
+  }
+
+  if (statement.type === 'TryStatement') {
+    return statementHasReturnThroughFinally(statement.block)
+      || (statement.handler != null && statementHasReturnThroughFinally(statement.handler.body))
+      || (statement.finalizer != null && statementHasReturnThroughFinally(statement.finalizer))
+  }
+
+  return false
 }
 
 function statementHasUnsupportedTryControlFlow(statement) {
@@ -2212,7 +2325,7 @@ function statementHasUnsupportedTryControlFlow(statement) {
     return false
   }
 
-  if (statement.type === 'ReturnStatement' || statement.type === 'BreakStatement' || statement.type === 'ContinueStatement') {
+  if (statement.type === 'BreakStatement' || statement.type === 'ContinueStatement') {
     return true
   }
 
@@ -2238,7 +2351,9 @@ function statementHasUnsupportedTryControlFlow(statement) {
   }
 
   if (statement.type === 'TryStatement') {
-    return tryStatementHasUnsupportedControlFlow(statement)
+    return tryStatementHasUnsupportedControlFlow(statement, {
+      statusReturn: false
+    })
   }
 
   return false
@@ -2550,21 +2665,18 @@ function emitRuntimeReturnValueExpression(argument, context, returnType, returnS
 
 function emitRuntimeValueReturnStatement(statement, context) {
   if (statement.argument == null) {
-    context.usedCleanupGoto = true
-
-    return ['goto ccjs_cleanup;']
+    return emitReturnJump(context)
   }
 
   const expectedTag = cRuntimeValueTag(context.returnType)
   const value = emitRuntimeReturnValueExpression(statement.argument, context, context.returnType, context.returnShape)
-  context.usedCleanupGoto = true
 
   return [
     ...value.lines,
     `ccjs_return = ${value.expression};`,
     emitRuntimeValueCheck('ccjs_return', expectedTag, context),
     'ccjs_retain(ccjs_return);',
-    'goto ccjs_cleanup;'
+    ...emitReturnJump(context)
   ]
 }
 
@@ -2577,13 +2689,11 @@ function emitNullableScalarReturnStatement(statement, context) {
       }
     : emitNullableScalarValueExpression(statement.argument, context)
 
-  context.usedCleanupGoto = true
-
   return [
     ...value.lines,
     `ccjs_return = ${value.expression};`,
     ...emitRuntimeNullableValueCheck('ccjs_return', expectedTag, context),
-    'goto ccjs_cleanup;'
+    ...emitReturnJump(context)
   ]
 }
 
@@ -6832,6 +6942,10 @@ function emitReturnValueDeclarations(context) {
   }
 
   return []
+}
+
+function emitReturnFlowDeclarations(context) {
+  return context.returnFlowUsed ? ['int ccjs_return_active = 0;'] : []
 }
 
 function emitOwnedValueDeclarations(context) {

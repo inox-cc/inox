@@ -3,9 +3,11 @@
 // @diagnostic CCJS_C_TRY
 
 export function main(): void {
-  try {
-    return
-  } finally {
-    console.log('finally')
+  while (true) {
+    try {
+      break
+    } finally {
+      console.log('finally')
+    }
   }
 }

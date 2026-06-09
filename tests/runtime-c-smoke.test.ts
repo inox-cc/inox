@@ -3924,6 +3924,62 @@ test('generated C local string throw try catch finally compiles and runs with ru
   }
 })
 
+test('generated C return through finally compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-return-finally-'))
+  const source = join(dir, 'return-finally.c')
+  const output = join(dir, 'return-finally')
+
+  try {
+    const result = compileSource(`function getScore(): number {
+  try {
+    return 7
+  } finally {
+    console.log('score finally')
+  }
+}
+
+function stop(): void {
+  try {
+    return
+  } finally {
+    console.log('stop finally')
+  }
+  console.log('after')
+}
+
+export function main(): void {
+  console.log(getScore())
+  stop()
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'score finally\n7\nstop finally\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
