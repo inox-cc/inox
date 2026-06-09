@@ -221,6 +221,37 @@ export function main(): void {
   assert.match(result.code, /printf\("%g %g %g %g %g\\n", \(\(double\)3\), \(\(double\)length\(ccjs_value_\d+\)\), \(\(double\)ccjs_length_string_\d+->len\), \(\(double\)ccjs_length_string_\d+->len\), \(\(double\)message->len\)\);/)
 })
 
+test('lowers C string predicate methods for literals and runtime strings', () => {
+  const result = compileSource(`type User = {
+  name: string
+}
+
+function hasAda(name: string): boolean {
+  return name.includes('d') && name.startsWith('A') && name.endsWith('a')
+}
+
+function getName(): string {
+  return 'Grace'
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  const name = user.name
+  const message = name + '!'
+  console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getName().endsWith('e'), message.endsWith('!'), name.includes('z'))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /#include "ccjs\/string\.h"/)
+  assert.match(result.code, /ccjs_string_includes_parts\(name->bytes, name->len, "d", 1\)/)
+  assert.match(result.code, /ccjs_string_starts_with_parts\(name->bytes, name->len, "A", 1\)/)
+  assert.match(result.code, /ccjs_string_ends_with_parts\(name->bytes, name->len, "a", 1\)/)
+  assert.match(result.code, /ccjs_string_includes_parts\("Ada", 3, "d", 1\)/)
+  assert.match(result.code, /ccjs_string_ends_with_parts\(message->bytes, message->len, "!", 1\)/)
+})
+
 test('lowers known C object field access to runtime calls', () => {
   const result = compileSource(`export function main(): void {
   const user = { score: 42, active: true }
@@ -1921,6 +1952,33 @@ export function main(): void {
   name.length = 4
 }
 `, 'CCJS_ASSIGN_READONLY_FIELD')
+})
+
+test('checks string predicate methods as boolean calls', () => {
+  const result = compileSource(`function hasAda(name: string): boolean {
+  return name.includes('Ada') && name.startsWith('A') && name.endsWith('a')
+}
+
+export function main(): void {
+  console.log(hasAda('Ada'))
+}
+`, {
+    target: 'js'
+  })
+
+  assert.match(result.code, /return \(\(name\.includes\("Ada"\) && name\.startsWith\("A"\)\) && name\.endsWith\("a"\)\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const name = 'Ada'
+  name.includes(1)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const name = 'Ada'
+  name.startsWith()
+}
+`, 'CCJS_ARG_COUNT')
 })
 
 test('checks typed object aliases and readonly fields', () => {

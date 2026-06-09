@@ -84,3 +84,51 @@ ccjs_status ccjs_string_concat_parts(
 
   return CCJS_OK;
 }
+
+bool ccjs_string_includes_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len) {
+  if ((value_bytes == 0 && value_len != 0) || (search_bytes == 0 && search_len != 0)) {
+    return false;
+  }
+
+  if (search_len == 0) {
+    return true;
+  }
+
+  if (search_len > value_len) {
+    return false;
+  }
+
+  const size_t max_start = value_len - search_len;
+
+  for (size_t index = 0; index <= max_start; index += 1) {
+    if (memcmp(value_bytes + index, search_bytes, search_len) == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool ccjs_string_starts_with_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len) {
+  if ((value_bytes == 0 && value_len != 0) || (search_bytes == 0 && search_len != 0)) {
+    return false;
+  }
+
+  if (search_len > value_len) {
+    return false;
+  }
+
+  return search_len == 0 || memcmp(value_bytes, search_bytes, search_len) == 0;
+}
+
+bool ccjs_string_ends_with_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len) {
+  if ((value_bytes == 0 && value_len != 0) || (search_bytes == 0 && search_len != 0)) {
+    return false;
+  }
+
+  if (search_len > value_len) {
+    return false;
+  }
+
+  return search_len == 0 || memcmp(value_bytes + value_len - search_len, search_bytes, search_len) == 0;
+}

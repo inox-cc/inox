@@ -688,6 +688,12 @@ class Checker {
   }
 
   checkCallExpression(expression: AnyNode): ValueType {
+    const stringMethodType = this.checkStringPredicateCall(expression)
+
+    if (stringMethodType != null) {
+      return stringMethodType
+    }
+
     const calleeType = this.checkExpression(expression.callee)
     const argTypes = expression.args.map(arg => this.checkExpression(arg))
     const symbol = this.getCallableSymbol(expression.callee)
@@ -711,6 +717,29 @@ class Checker {
     }
 
     return symbol.returnType ?? 'unknown'
+  }
+
+  checkStringPredicateCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || !isStringPredicateMethod(expression.callee.property)) {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+
+    if (objectType !== 'string') {
+      return null
+    }
+
+    if (expression.args.length !== 1) {
+      this.report('CCJS_ARG_COUNT', `string.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    if (argTypes[0] != null) {
+      this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc)
+    }
+
+    return 'boolean'
   }
 
   checkNewExpression(expression: AnyNode): ValueType {
@@ -1134,6 +1163,10 @@ function inferBinaryExpressionType(operator: string, left: ValueType, right: Val
 
 function isEqualityOperator(operator: string): boolean {
   return ['===', '!==', '==', '!='].includes(operator)
+}
+
+function isStringPredicateMethod(name: string): boolean {
+  return ['includes', 'startsWith', 'endsWith'].includes(name)
 }
 
 function isEqualityComparableType(left: ValueType, right: ValueType): boolean {

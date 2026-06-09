@@ -29,6 +29,12 @@ const cJsGlobalRoots = new Set([
   'setImmediate'
 ])
 
+const cStringPredicateMethods = new Set([
+  'includes',
+  'startsWith',
+  'endsWith'
+])
+
 export function emitC(program: ProgramNode): string {
   return emitCUnit([program], program)
 }
@@ -2742,6 +2748,10 @@ function emitPreparedNumberExpression(expression, context) {
   }
 
   if (expression?.type === 'CallExpression') {
+    if (isStringPredicateCall(expression, context)) {
+      return emitPreparedStringPredicateCall(expression, context)
+    }
+
     return emitPreparedCallExpression(expression, context)
   }
 
@@ -2830,6 +2840,20 @@ function emitPreparedStringCompareExpression(expression, context) {
       ...right.lines
     ],
     expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
+  }
+}
+
+function emitPreparedStringPredicateCall(expression, context) {
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_string_method_value')
+  const search = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_string_method_search')
+  const helper = cStringPredicateHelperName(expression.callee.property)
+
+  return {
+    lines: [
+      ...value.lines,
+      ...search.lines
+    ],
+    expression: `(${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}) ? 1 : 0)`
   }
 }
 
@@ -3259,6 +3283,10 @@ function inferExpressionType(expression, context) {
     return 'number'
   }
 
+  if (isStringPredicateCall(expression, context)) {
+    return 'boolean'
+  }
+
   if (expression?.type === 'CallExpression' && usesCJsGlobal(expression.callee)) {
     return 'js-global'
   }
@@ -3436,6 +3464,26 @@ function isStringConcatExpression(expression, context) {
 function isRuntimeProducedStringExpression(expression, context) {
   return (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string')
     || isStringConcatExpression(expression, context)
+}
+
+function isStringPredicateCall(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || !cStringPredicateMethods.has(expression.callee.property) || expression.args.length !== 1) {
+    return false
+  }
+
+  return isStringLengthObject(expression.callee.object, context) && inferExpressionType(expression.args[0], context) === 'string'
+}
+
+function cStringPredicateHelperName(method) {
+  if (method === 'startsWith') {
+    return 'ccjs_string_starts_with_parts'
+  }
+
+  if (method === 'endsWith') {
+    return 'ccjs_string_ends_with_parts'
+  }
+
+  return 'ccjs_string_includes_parts'
 }
 
 function isStringLengthObject(expression, context) {
@@ -3783,7 +3831,7 @@ function usesCStringCompare(program) {
 }
 
 function usesCStringHeader(program) {
-  return usesCStringCompare(program) || nodeUsesCStringLength(program)
+  return usesCStringCompare(program) || nodeUsesCStringLength(program) || nodeUsesCStringPredicate(program)
 }
 
 function itemUsesCRuntime(item) {
@@ -4083,6 +4131,10 @@ function expressionUsesCRuntime(expression) {
   }
 
   if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+    if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' && cStringPredicateMethods.has(expression.callee.property)) {
+      return true
+    }
+
     return expressionUsesCRuntime(expression.callee) || expression.args.some(arg => expressionUsesCRuntime(arg))
   }
 
@@ -4286,6 +4338,28 @@ function nodeUsesCStringLength(node) {
   return Object.entries(node)
     .filter(([key]) => key !== 'loc')
     .some(([, value]) => nodeUsesCStringLength(value))
+}
+
+function nodeUsesCStringPredicate(node) {
+  if (node == null) {
+    return false
+  }
+
+  if (Array.isArray(node)) {
+    return node.some(item => nodeUsesCStringPredicate(item))
+  }
+
+  if (typeof node !== 'object') {
+    return false
+  }
+
+  if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' && cStringPredicateMethods.has(node.callee.property)) {
+    return true
+  }
+
+  return Object.entries(node)
+    .filter(([key]) => key !== 'loc')
+    .some(([, value]) => nodeUsesCStringPredicate(value))
 }
 
 function expressionMayBeCStringLengthOperand(expression) {
