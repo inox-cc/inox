@@ -363,7 +363,7 @@ function isPlainFunctionPointerType(functionType) {
 
 function isRuntimeFunctionType(functionType) {
   return functionType != null
-    && functionType.returnType === 'void'
+    && isSupportedRuntimeCallbackReturnType(functionType.returnType)
     && functionType.params.some(param => ['string', 'object'].includes(param.valueType))
     && functionType.params.every(param => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
 }
@@ -375,8 +375,12 @@ function isNullableFunctionType(valueType, nullable) {
 function isSupportedRuntimeCallbackType(functionType) {
   const normalized = normalizeFunctionType(functionType)
 
-  return normalized.returnType === 'void'
+  return isSupportedRuntimeCallbackReturnType(normalized.returnType)
     && normalized.params.every(param => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
+}
+
+function isSupportedRuntimeCallbackReturnType(returnType) {
+  return ['void', 'number', 'boolean'].includes(returnType)
 }
 
 function runtimeFunctionParamKey(functionName, index) {
@@ -459,6 +463,10 @@ function collectCallbackWrappers(programs, context) {
     }
 
     if (expression?.type === 'ArrowFunctionExpression') {
+      if (normalized.returnType !== 'void') {
+        return
+      }
+
       registerArrow(expression, normalized, scopes)
       return
     }
@@ -1170,7 +1178,16 @@ function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
     args.push(emitRuntimeCallbackWrapperArg(param, index))
   }
 
-  lines.push(`  ${context.functionNames.get(wrapper.target) ?? emitCFunctionName(wrapper.target)}(${args.join(', ')});`)
+  const call = `${context.functionNames.get(wrapper.target) ?? emitCFunctionName(wrapper.target)}(${args.join(', ')})`
+
+  if (wrapper.functionType.returnType === 'number') {
+    lines.push(`  *out = ccjs_number_value(${call});`)
+  } else if (wrapper.functionType.returnType === 'boolean') {
+    lines.push(`  *out = ccjs_bool_value((${call}) != 0);`)
+  } else {
+    lines.push(`  ${call};`)
+  }
+
   lines.push('  return CCJS_OK;')
   lines.push('}')
 
@@ -3369,6 +3386,10 @@ function emitPreparedNullableScalarRuntimeValueExpression(expression, context) {
     return emitCOptionalIndexValueExpression(expression, context)
   }
 
+  if (expression?.type === 'OptionalCallExpression') {
+    return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
+  }
+
   if (expression?.type === 'CallExpression' && isNullableScalarRuntimeExpression(expression, context)) {
     const valueType = inferExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
@@ -5114,6 +5135,59 @@ function emitOptionalRuntimeCallbackCallExpression(expression, context) {
   return lines
 }
 
+function emitOptionalRuntimeCallbackCallValueExpression(expression, context) {
+  const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
+  const resultType = inferExpressionType(expression, context)
+  const expectedTag = cRuntimeValueTag(resultType)
+
+  if (functionType == null || !isNullableScalarType(functionType.returnType) || expectedTag == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_OPTIONAL_CHAINING', 'optional call results currently support nullable number/boolean runtime callbacks in the C backend', expression.loc))
+
+    return {
+      lines: [],
+      expression: 'ccjs_null_value()'
+    }
+  }
+
+  const callee = emitReference(expression.callee, context)
+  const out = nextCName(context, 'ccjs_optional_call')
+  const lines: string[] = [
+    ...emitPrepareOwnedValueWrite(out),
+    `${out} = ccjs_null_value();`,
+    `if (${callee}.tag != CCJS_TAG_NULL) {`,
+    `  ${emitRuntimeTypeCheck(`${callee}.tag != CCJS_TAG_FUNCTION || ${callee}.as.ref == 0`, context)}`
+  ]
+  const args: string[] = []
+
+  registerOwnedValue(context, out)
+
+  for (const arg of expression.args) {
+    const value = emitCValueExpression(arg, context)
+
+    lines.push(...value.lines.map(line => `  ${line}`))
+    args.push(value.expression)
+  }
+
+  lines.push(...emitPrepareOwnedValueWrite(out).map(line => `  ${line}`))
+
+  if (args.length === 0) {
+    lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, 0, 0, &${out})`, context)}`)
+  } else {
+    const argArray = nextCName(context, 'ccjs_callback_args')
+
+    lines.push(`  ccjs_value ${argArray}[] = { ${args.join(', ')} };`)
+    lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`, context)}`)
+  }
+
+  lines.push(`  ${emitRuntimeTypeCheck(`${out}.tag != ${expectedTag}`, context)}`)
+  lines.push('}')
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
 function resolveFunctionParams(callee, context) {
   if (callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
@@ -5360,6 +5434,12 @@ function isNullableRuntimeExpression(expression, context) {
 
   if (expression?.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
     return context.functionReturnNullables.get(expression.callee.path[0]) === true
+  }
+
+  if (expression?.type === 'OptionalCallExpression') {
+    const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
+
+    return functionType != null && isNullableScalarType(functionType.returnType)
   }
 
   if (isNullishCoalescingExpression(expression)) {

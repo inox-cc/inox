@@ -2250,6 +2250,40 @@ export function main(): void {
   })
 })
 
+test('lowers C optional call results over nullable scalar callbacks', () => {
+  const result = compileSource(`type Score = (value: number) => number;
+type Ready = () => boolean;
+
+function addOne(value: number): number {
+  return value + 1
+}
+
+function isReady(): boolean {
+  return true
+}
+
+function printValues(score: Score | null, ready: Ready | null): void {
+  const value: number | null = score?.(4)
+  const flag: boolean | null = ready?.()
+  console.log(value ?? 0, flag ?? false)
+}
+
+export function main(): void {
+  printValues(addOne, isReady)
+  printValues(null, null)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_callback_addOne_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/)
+  assert.match(result.code, /\*out = ccjs_number_value\(addOne\(args\[0\]\.as\.number\)\);/)
+  assert.match(result.code, /\*out = ccjs_bool_value\(\(isReady\(\)\) != 0\);/)
+  assert.match(result.code, /ccjs_optional_call_\d+ = ccjs_null_value\(\);/)
+  assert.match(result.code, /ccjs_callback_call\(score, ccjs_callback_args_\d+, 1, &ccjs_optional_call_\d+\)/)
+  assert.match(result.code, /ccjs_callback_call\(ready, 0, 0, &ccjs_optional_call_\d+\)/)
+})
+
 test('compiles unsupported nullish coalescing to JS and rejects it for C', () => {
   const source = `function printValue(value: unknown): void {
   console.log(value ?? 'Ada')
