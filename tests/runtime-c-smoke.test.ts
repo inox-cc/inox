@@ -890,6 +890,61 @@ export function main(): void {
   }
 })
 
+test('generated C capturing plain callback arguments compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-capturing-plain-callback-'))
+  const source = join(dir, 'capturing-plain-callback.c')
+  const output = join(dir, 'capturing-plain-callback')
+
+  try {
+    const result = compileSource(`type NumberCallback = (value: number) => void;
+
+function runPlain(callback: Function): void {
+  callback()
+}
+
+function runNumber(callback: NumberCallback): void {
+  callback(7)
+}
+
+export function main(): void {
+  const label = 'captured'
+  const offset = 5
+  runPlain(() => {
+    console.log(label)
+  })
+  runNumber((value: number) => {
+    console.log(value + offset)
+  })
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'captured\n12\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C typed callback aliases compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

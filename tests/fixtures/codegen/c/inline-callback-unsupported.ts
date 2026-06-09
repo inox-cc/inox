@@ -7,7 +7,7 @@ function run(callback: Function): void {
 }
 
 export function main(): void {
-  const label = 'inline'
+  let label = 'inline'
   run(() => {
     console.log(label)
   })

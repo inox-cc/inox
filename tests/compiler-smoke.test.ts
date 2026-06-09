@@ -1567,9 +1567,9 @@ export function main(): void {
   assert.match(c.code, /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/)
   assert.match(c.code, /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)context;/)
   assert.match(c.code, /char\* prefix = captured->prefix;/)
-  assert.match(c.code, /ccjs_callback_context_\d+\* ccjs_callback_context_\d+ = ccjs_default_alloc\(0, sizeof\(ccjs_callback_context_\d+\), _Alignof\(ccjs_callback_context_\d+\)\);/)
-  assert.match(c.code, /ccjs_callback_context_\d+->prefix = prefix;/)
-  assert.match(c.code, /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_arrow_\d+, ccjs_callback_context_\d+, ccjs_callback_context_\d+_finalize, &callback\) != CCJS_OK\) \{/)
+  assert.match(c.code, /ccjs_callback_context_\d+\* ccjs_callback_ctx_\d+ = ccjs_default_alloc\(0, sizeof\(ccjs_callback_context_\d+\), _Alignof\(ccjs_callback_context_\d+\)\);/)
+  assert.match(c.code, /ccjs_callback_ctx_\d+->prefix = prefix;/)
+  assert.match(c.code, /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_arrow_\d+, ccjs_callback_ctx_\d+, ccjs_callback_context_\d+_finalize, &callback\) != CCJS_OK\) \{/)
 })
 
 test('compiles runtime callback arrows with retained runtime captures', () => {
@@ -1600,8 +1600,8 @@ export function main(): void {
   assert.match(c.code, /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)context;\n  ccjs_release\(captured->name\);\n  ccjs_release\(captured->user\);/)
   assert.match(c.code, /ccjs_string\* name = \(ccjs_string\*\)captured->name\.as\.ref;/)
   assert.match(c.code, /ccjs_value user = captured->user;/)
-  assert.match(c.code, /ccjs_callback_context_\d+->name\.tag = CCJS_TAG_STRING;\n  ccjs_callback_context_\d+->name\.as\.ref = \(ccjs_ref\*\)&name->header;\n  ccjs_retain\(ccjs_callback_context_\d+->name\);/)
-  assert.match(c.code, /ccjs_callback_context_\d+->user = user;\n  ccjs_retain\(ccjs_callback_context_\d+->user\);/)
+  assert.match(c.code, /ccjs_callback_ctx_\d+->name\.tag = CCJS_TAG_STRING;\n  ccjs_callback_ctx_\d+->name\.as\.ref = \(ccjs_ref\*\)&name->header;\n  ccjs_retain\(ccjs_callback_ctx_\d+->name\);/)
+  assert.match(c.code, /ccjs_callback_ctx_\d+->user = user;\n  ccjs_retain\(ccjs_callback_ctx_\d+->user\);/)
 })
 
 test('checks typed callback argument counts', () => {
@@ -1635,13 +1635,64 @@ export function main(): void {
   assert.match(c.code, /run\(ccjs_callback_arrow_\d+\);/)
 })
 
-test('rejects capturing plain C callback values with a stable diagnostic', () => {
-  assertDiagnostic(`function run(callback: Function): void {
+test('promotes capturing plain C callback values to runtime callbacks', () => {
+  const source = `function run(callback: Function): void {
   callback()
 }
 
 export function main(): void {
   const label = 'captured'
+  run(() => {
+    console.log(label)
+  })
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /void run\(ccjs_value callback\);/)
+  assert.match(c.code, /if \(callback\.tag != CCJS_TAG_FUNCTION \|\| callback\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n  char\* label;\n\} ccjs_callback_context_\d+;/)
+  assert.match(c.code, /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/)
+  assert.match(c.code, /if \(ccjs_callback_call\(callback, 0, 0, &ccjs_callback_out_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_arrow_\d+, ccjs_callback_ctx_\d+, ccjs_callback_context_\d+_finalize, &ccjs_callback_\d+\) != CCJS_OK\) \{/)
+  assert.match(c.code, /run\(ccjs_callback_\d+\);/)
+})
+
+test('promotes capturing number callback values to runtime callbacks', () => {
+  const source = `type NumberCallback = (value: number) => void;
+
+function run(callback: NumberCallback): void {
+  callback(7)
+}
+
+export function main(): void {
+  const offset = 5
+  run((value: number) => {
+    console.log(value + offset)
+  })
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /void run\(ccjs_value callback\);/)
+  assert.match(c.code, /if \(callback\.tag != CCJS_TAG_FUNCTION \|\| callback\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(c.code, /ccjs_value ccjs_callback_args_\d+\[\] = \{ ccjs_number_value\(7\) \};/)
+  assert.match(c.code, /if \(ccjs_callback_call\(callback, ccjs_callback_args_\d+, 1, &ccjs_callback_out_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /double value = args\[0\]\.as\.number;/)
+  assert.match(c.code, /double offset = captured->offset;/)
+})
+
+test('rejects mutable plain C callback captures with a stable diagnostic', () => {
+  assertDiagnostic(`function run(callback: Function): void {
+  callback()
+}
+
+export function main(): void {
+  let label = 'captured'
   run(() => {
     console.log(label)
   })

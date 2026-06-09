@@ -198,6 +198,7 @@ function createBaseContext(diagnostics, functions) {
     functionNames: new Map(functions.map(item => [item.name, emitCFunctionName(item.name)])),
     functionParams: new Map(functions.map(item => [item.name, item.params])),
     functionReturnTypes: new Map(functions.map(item => [item.name, item.returnType])),
+    runtimeFunctionParams: new Map(),
     nextId: 0
   }
 }
@@ -205,7 +206,7 @@ function createBaseContext(diagnostics, functions) {
 function emitFunctionDeclaration(statement, baseContext) {
   const context = createFunctionContext(baseContext, statement.returnType)
 
-  for (const param of statement.params) {
+  for (const [index, param] of statement.params.entries()) {
     if (param.valueType === 'string') {
       context.variables.set(param.name, 'string')
       context.runtimeStrings.add(param.name)
@@ -213,10 +214,12 @@ function emitFunctionDeclaration(statement, baseContext) {
       context.variables.set(param.name, 'object')
       registerObjectShape(context, param.name, param.shape)
     } else if (param.valueType === 'function') {
-      context.variables.set(param.name, 'function')
-      context.functionTypes.set(param.name, param.functionType)
+      const runtimeFunctionType = resolveFunctionParameterRuntimeType(statement.name, index, param, context)
 
-      if (isRuntimeFunctionType(param.functionType)) {
+      context.variables.set(param.name, 'function')
+      context.functionTypes.set(param.name, runtimeFunctionType ?? param.functionType)
+
+      if (runtimeFunctionType != null) {
         context.runtimeCallbacks.add(param.name)
       }
     } else {
@@ -226,7 +229,7 @@ function emitFunctionDeclaration(statement, baseContext) {
 
   const bodyLines: string[] = []
 
-  bodyLines.push(...emitRuntimeParamPrelude(statement.params, context).map(line => `  ${line}`))
+  bodyLines.push(...emitRuntimeParamPrelude(statement, context).map(line => `  ${line}`))
 
   for (const item of statement.body) {
     bodyLines.push(...emitStatement(item, context).map(line => `  ${line}`))
@@ -254,7 +257,7 @@ function emitFunctionDeclaration(statement, baseContext) {
 
 function emitFunctionHead(statement, context) {
   const name = context.functionNames.get(statement.name) ?? emitCFunctionName(statement.name)
-  const params = statement.params.map(param => {
+  const params = statement.params.map((param, index) => {
     if (param.valueType === 'string') {
       return `ccjs_value ${emitCStringParamName(param.name)}`
     }
@@ -264,6 +267,10 @@ function emitFunctionHead(statement, context) {
     }
 
     if (param.valueType === 'function') {
+      if (resolveFunctionParameterRuntimeType(statement.name, index, param, context) != null) {
+        return `ccjs_value ${param.name}`
+      }
+
       return emitFunctionParameter(param.name, param.functionType, context, param.loc)
     }
 
@@ -305,6 +312,16 @@ function reportUnsupportedCFunctionType(functionType, context, loc) {
   context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'typed C callbacks currently support only void callbacks with number/boolean/string/object parameters', loc))
 }
 
+const genericFunctionType = {
+  kind: 'function',
+  params: [],
+  returnType: 'void'
+}
+
+function normalizeFunctionType(functionType) {
+  return functionType ?? genericFunctionType
+}
+
 function isPlainFunctionPointerType(functionType) {
   return functionType == null
     || (functionType.returnType === 'void' && functionType.params.every(param => ['number', 'boolean'].includes(param.valueType)))
@@ -317,8 +334,60 @@ function isRuntimeFunctionType(functionType) {
     && functionType.params.every(param => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
 }
 
+function isSupportedRuntimeCallbackType(functionType) {
+  const normalized = normalizeFunctionType(functionType)
+
+  return normalized.returnType === 'void'
+    && normalized.params.every(param => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
+}
+
+function runtimeFunctionParamKey(functionName, index) {
+  return `${functionName}:${index}`
+}
+
+function markRuntimeFunctionParam(callee, index, functionType, context) {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return
+  }
+
+  const name = callee.path[0]
+
+  if (!context.functionParams.has(name) || !isSupportedRuntimeCallbackType(functionType)) {
+    return
+  }
+
+  context.runtimeFunctionParams.set(runtimeFunctionParamKey(name, index), normalizeFunctionType(functionType))
+}
+
+function resolveFunctionParameterRuntimeType(functionName, index, param, context) {
+  const promoted = context.runtimeFunctionParams.get(runtimeFunctionParamKey(functionName, index))
+
+  if (promoted != null) {
+    return promoted
+  }
+
+  return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
+}
+
+function resolveRuntimeFunctionArgumentType(callee, index, param, context) {
+  if (param?.valueType !== 'function') {
+    return null
+  }
+
+  if (callee?.type === 'Reference' && callee.path.length === 1) {
+    const promoted = context.runtimeFunctionParams.get(runtimeFunctionParamKey(callee.path[0], index))
+
+    if (promoted != null) {
+      return promoted
+    }
+  }
+
+  return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
+}
+
 function collectCallbackWrappers(programs, context) {
   const wrappers = new Map()
+  const pendingPlainFunctionArgs: any[] = []
   const register = (expression, functionType, scopes) => {
     if (isPlainFunctionPointerType(functionType) && expression?.type === 'ArrowFunctionExpression') {
       registerPlainArrow(expression, functionType, scopes)
@@ -336,6 +405,27 @@ function collectCallbackWrappers(programs, context) {
 
     registerNamed(expression, functionType)
   }
+  const registerRuntime = (expression, functionType, scopes) => {
+    const normalized = normalizeFunctionType(functionType)
+
+    if (!isSupportedRuntimeCallbackType(normalized)) {
+      return
+    }
+
+    if (expression?.type === 'ArrowFunctionExpression') {
+      registerArrow(expression, normalized, scopes)
+      return
+    }
+
+    registerNamed(expression, normalized)
+  }
+  const registerPlain = (expression, functionType, scopes) => {
+    if (expression?.type === 'ArrowFunctionExpression') {
+      registerPlainArrow(expression, functionType, scopes)
+    }
+  }
+  const hasCaptures = (expression, scopes) => expression?.type === 'ArrowFunctionExpression'
+    && collectArrowCaptures(expression, scopes, context).length > 0
   const registerNamed = (expression, functionType) => {
     if (expression?.type !== 'Reference' || expression.path.length !== 1) {
       return
@@ -606,7 +696,21 @@ function collectCallbackWrappers(programs, context) {
         const param = params?.[index]
 
         if (param?.valueType === 'function') {
-          register(arg, param.functionType, scopes)
+          if (isRuntimeFunctionType(param.functionType)) {
+            registerRuntime(arg, param.functionType, scopes)
+          } else {
+            pendingPlainFunctionArgs.push({
+              callee: expression.callee,
+              index,
+              arg,
+              functionType: normalizeFunctionType(param.functionType),
+              scopes
+            })
+
+            if (hasCaptures(arg, scopes)) {
+              markRuntimeFunctionParam(expression.callee, index, param.functionType, context)
+            }
+          }
         }
 
         visitExpression(arg, scopes)
@@ -676,6 +780,17 @@ function collectCallbackWrappers(programs, context) {
       } else {
         visitStatement(item, [topLevelScope])
       }
+    }
+  }
+
+  for (const pending of pendingPlainFunctionArgs) {
+    if (resolveRuntimeFunctionArgumentType(pending.callee, pending.index, {
+      valueType: 'function',
+      functionType: pending.functionType
+    }, context) != null) {
+      registerRuntime(pending.arg, pending.functionType, pending.scopes)
+    } else {
+      registerPlain(pending.arg, pending.functionType, pending.scopes)
     }
   }
 
@@ -1234,8 +1349,8 @@ function emitCStringParamName(name) {
   return `ccjs_param_${name}`
 }
 
-function emitRuntimeParamPrelude(params, context) {
-  return params.flatMap(param => {
+function emitRuntimeParamPrelude(statement, context) {
+  return statement.params.flatMap((param, index) => {
     if (param.valueType === 'string') {
       const paramName = emitCStringParamName(param.name)
 
@@ -1248,6 +1363,12 @@ function emitRuntimeParamPrelude(params, context) {
     if (param.valueType === 'object') {
       return [
         emitRuntimeTypeCheck(`${param.name}.tag != CCJS_TAG_OBJECT || ${param.name}.as.ref == 0`, context)
+      ]
+    }
+
+    if (param.valueType === 'function' && resolveFunctionParameterRuntimeType(statement.name, index, param, context) != null) {
+      return [
+        emitRuntimeTypeCheck(`${param.name}.tag != CCJS_TAG_FUNCTION || ${param.name}.as.ref == 0`, context)
       ]
     }
 
@@ -3269,8 +3390,10 @@ function emitPreparedCallExpression(expression, context) {
       lines.push(...value.lines)
       args.push(value.expression)
     } else if (params[index]?.valueType === 'function') {
-      if (isRuntimeFunctionType(params[index].functionType)) {
-        const value = emitRuntimeCallbackValue(arg, params[index].functionType, context)
+      const runtimeFunctionType = resolveRuntimeFunctionArgumentType(expression.callee, index, params[index], context)
+
+      if (runtimeFunctionType != null) {
+        const value = emitRuntimeCallbackValue(arg, runtimeFunctionType, context)
 
         lines.push(...value.lines)
         args.push(value.expression)
@@ -3356,7 +3479,7 @@ function resolveRuntimeCallbackCalleeType(callee, context) {
 
   const functionType = context.functionTypes.get(name)
 
-  return isRuntimeFunctionType(functionType) ? functionType : null
+  return isSupportedRuntimeCallbackType(functionType) ? normalizeFunctionType(functionType) : null
 }
 
 function emitRuntimeCallbackVariableDeclaration(statement, context) {
@@ -3452,7 +3575,7 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
     return lines
   }
 
-  const contextName = nextCName(context, 'ccjs_callback_context')
+  const contextName = nextCName(context, 'ccjs_callback_ctx')
 
   lines.push(`${wrapper.contextTypeName}* ${contextName} = ccjs_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`)
   lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
