@@ -2133,6 +2133,62 @@ test('generated C Array.filter expression callbacks compile and run with runtime
   }
 })
 
+test('generated C Array.map expression callbacks compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-map-'))
+  const source = join(dir, 'array-map.c')
+  const output = join(dir, 'array-map')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = [1, 2, 3]
+  const doubled = values.map((value, index) => value * 2 + index)
+  console.log(doubled.length, doubled[0], doubled[1], doubled[2])
+
+  const flags = values.map(value => value > 1)
+  console.log(flags.length, flags[0], flags[1], flags[2])
+
+  const names = ['Ada', 'Grace']
+  const initials = names.map(name => name.slice(0, 1))
+  console.log(initials.length, initials[0], initials[1])
+
+  const filteredMapped = values.filter(value => value > 1).map(value => value * 10)
+  console.log(filteredMapped.length, filteredMapped[0], filteredMapped[1])
+
+  const mappedFiltered = values.map(value => value + 1).filter(value => value > 2)
+  console.log(mappedFiltered.length, mappedFiltered[0], mappedFiltered[1])
+
+  const mappedSorted = values.map(value => String(value * 10)).sort()
+  console.log(mappedSorted.length, mappedSorted[0], mappedSorted[1], mappedSorted[2])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3 2 5 8\n3 0 1 1\n2 A G\n2 20 30\n2 3 4\n3 10 20 30\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C array length lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
