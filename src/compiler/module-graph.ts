@@ -5,6 +5,7 @@ import { CompileError, diagnostic } from './diagnostics.ts'
 import { tokenize } from './lexer.ts'
 import { parse } from './parser.ts'
 import { checkProgram } from './checker.ts'
+import { lowerHirToIr } from './ir.ts'
 import { lowerProgram } from './lower.ts'
 import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord, ProgramNode, SourceLocation } from './types.ts'
 
@@ -49,6 +50,7 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
       source,
       ast,
       hir: null,
+      ir: null,
       imports: ast.body.filter(item => item.type === 'ImportDeclaration'),
       exports: collectExports(ast)
     }
@@ -122,6 +124,7 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
 
     const checked = checkProgram(insertImportSyntheticDeclarations(ast, importTypeDeclarations))
     module.hir = insertImportSyntheticDeclarations(lowerProgram(checked.ast), importAliasDeclarations)
+    module.ir = lowerHirToIr(module.hir)
     visiting.delete(path)
     order.push(module)
 

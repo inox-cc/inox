@@ -24,6 +24,19 @@ export type ProgramNode = AnyNode & {
   body: AnyNode[]
 }
 
+export type IrFeature =
+  | 'callback-values'
+  | 'clocks'
+  | 'runtime-values'
+  | 'string-bytes'
+
+export type IrProgram = {
+  type: 'IrProgram'
+  version: 1
+  features: IrFeature[]
+  body: AnyNode[]
+}
+
 export type ValueType =
   | 'array'
   | 'boolean'
@@ -79,6 +92,7 @@ export type ModuleRecord = {
   source: string
   ast: ProgramNode
   hir: ProgramNode | null
+  ir: IrProgram | null
   imports: AnyNode[]
   exports: Map<string, AnyNode>
 }
@@ -99,6 +113,7 @@ export type SourceCompileResult = {
   target: CompileTarget
   ast: ProgramNode
   hir: ProgramNode
+  ir: IrProgram
   code: string
 }
 

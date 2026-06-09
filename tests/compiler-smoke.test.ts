@@ -1362,7 +1362,7 @@ export function main(): void {
   assert.match(result.code, /ccjs_release\(ccjs_value_\d+\);\n  ccjs_value_\d+ = ccjs_undefined_value\(\);\n  if \(ccjs_string_from_literal\(&ccjs_default_allocator, "step", 4, &ccjs_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;\n  index = nextIndex\(index, ccjs_value_\d+\);/)
 })
 
-test('returns checked HIR with simple value types', () => {
+test('returns checked HIR and target-neutral IR with simple value types', () => {
   const result = compileSource(`export function main(): void {
   const name = 'Ada'
   const count = 1
@@ -1378,6 +1378,30 @@ test('returns checked HIR with simple value types', () => {
   assert.equal(result.hir.type, 'HirProgram')
   assert.equal(name.valueType, 'string')
   assert.equal(count.valueType, 'number')
+  assert.equal(result.ir.type, 'IrProgram')
+  assert.equal(result.ir.version, 1)
+  assert.deepEqual(result.ir.body, result.hir.body)
+})
+
+test('collects target-neutral IR feature requirements', () => {
+  const result = compileSource(`export function main(): void {
+  const values = [1, 2, 3]
+  const names = ['Ada', 'Grace']
+  const initials = names.map(name => name.slice(0, 1))
+  const now = Date.now()
+  console.log(values.length, initials[0], now, 'Ada' === names[0])
+}
+`, {
+    target: 'c'
+  })
+
+  assert.equal(result.ir.type, 'IrProgram')
+  assert.deepEqual(result.ir.features, [
+    'clocks',
+    'runtime-values',
+    'string-bytes'
+  ])
+  assert.match(result.code, /#include "ccjs\/time\.h"/)
 })
 
 test('keeps function signatures in HIR and compiles typed calls', () => {
@@ -2075,7 +2099,7 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
   }
 })
 
-test('module graph stores HIR per module', async () => {
+test('module graph stores HIR and IR per module', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
 
   try {
@@ -2095,6 +2119,7 @@ export function main(): void {
     })
 
     assert.equal(result.graph.modules.every(module => module.hir?.type === 'HirProgram'), true)
+    assert.equal(result.graph.modules.every(module => module.ir?.type === 'IrProgram'), true)
   } finally {
     await rm(dir, {
       recursive: true,

@@ -1,5 +1,6 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import type { AnyNode, Diagnostic, ModuleGraph, ProgramNode } from './types.ts'
+import { hasIrFeature, lowerHirToIr } from './ir.ts'
+import type { AnyNode, Diagnostic, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
 
 const cJsGlobalRoots = new Set([
   'Array',
@@ -41,25 +42,27 @@ const cArrayMethods = new Set([
   'map'
 ])
 
-export function emitC(program: ProgramNode): string {
-  return emitCUnit([program], program)
+export function emitC(program: ProgramNode, ir: IrProgram = lowerHirToIr(program)): string {
+  return emitCUnit([program], program, [ir])
 }
 
 export function emitCBundle(graph: ModuleGraph): string {
   const entryModule = graph.modules.find(module => module.path === graph.entry)
+  const programs = graph.modules.map(module => module.hir).filter((program): program is ProgramNode => program != null)
+  const irPrograms = graph.modules.flatMap(module => module.hir == null ? [] : [module.ir ?? lowerHirToIr(module.hir)])
 
-  return emitCUnit(graph.modules.map(module => module.hir).filter(program => program != null), entryModule?.hir ?? graph.modules.at(-1)?.hir ?? null)
+  return emitCUnit(programs, entryModule?.hir ?? graph.modules.at(-1)?.hir ?? null, irPrograms)
 }
 
-function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
+function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program))) {
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(programs)
   const baseContext = createBaseContext(diagnostics, functions)
   baseContext.callbackWrappers = collectCallbackWrappers(programs, baseContext)
-  const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || programs.some(usesCCallbackRuntime)
-  const needsRuntime = needsCallbackRuntime || programs.some(usesCRuntime)
-  const needsTimeRuntime = programs.some(usesCTimeRuntime)
-  const needsStringHeader = programs.some(usesCStringHeader)
+  const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || irPrograms.some(program => hasIrFeature(program, 'callback-values')) || programs.some(usesCCallbackRuntime)
+  const needsRuntime = needsCallbackRuntime || irPrograms.some(program => hasIrFeature(program, 'runtime-values')) || programs.some(usesCRuntime)
+  const needsTimeRuntime = irPrograms.some(program => hasIrFeature(program, 'clocks')) || programs.some(usesCTimeRuntime)
+  const needsStringHeader = irPrograms.some(program => hasIrFeature(program, 'string-bytes')) || programs.some(usesCStringHeader)
   reportUnsupportedClasses(programs, diagnostics)
   reportUnsupportedAsync(programs, diagnostics)
   const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader)

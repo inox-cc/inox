@@ -1,6 +1,7 @@
 import { emitC, emitCBundle } from './codegen-c.ts'
 import { emitJs, emitJsBundle, emitTs } from './codegen-js.ts'
 import { checkProgram } from './checker.ts'
+import { lowerHirToIr } from './ir.ts'
 import { tokenize } from './lexer.ts'
 import { lowerProgram } from './lower.ts'
 import { buildModuleGraph } from './module-graph.ts'
@@ -13,13 +14,15 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
   const ast = parse(tokens)
   const checked = checkProgram(ast)
   const hir = lowerProgram(checked.ast)
+  const ir = lowerHirToIr(hir)
 
   if (target === 'c') {
     return {
       target,
       ast: checked.ast,
       hir,
-      code: emitC(hir)
+      ir,
+      code: emitC(hir, ir)
     }
   }
 
@@ -28,6 +31,7 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
       target,
       ast: checked.ast,
       hir,
+      ir,
       code: emitTs(hir, {
         callMain: options.callMain
       })
@@ -39,6 +43,7 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
       target,
       ast: checked.ast,
       hir,
+      ir,
       code: emitJs(hir, {
         callMain: options.callMain
       })
