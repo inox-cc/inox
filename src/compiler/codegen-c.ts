@@ -1439,27 +1439,39 @@ function emitForOfStatement(statement, context) {
 
   const elementType = resolveForOfElementType(array.elements)
 
-  if (!['number', 'boolean'].includes(elementType)) {
-    context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports only uniform number/boolean arrays', statement.loc))
+  if (!['number', 'boolean', 'string'].includes(elementType)) {
+    context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports only uniform number/boolean/string arrays', statement.loc))
     return []
   }
 
   const index = nextCName(context, 'ccjs_for_index')
   const value = nextCName(context, 'ccjs_for_value')
-  const loopValue = elementType === 'boolean' ? `((double)(${value}.as.boolean ? 1 : 0))` : `${value}.as.number`
+  const loopValue = elementType === 'boolean'
+    ? `((double)(${value}.as.boolean ? 1 : 0))`
+    : `${value}.as.number`
 
   registerOwnedValue(context, value)
 
   return withVariableScope(context, () => {
     context.variables.set(statement.name, elementType)
+    if (elementType === 'string') {
+      context.runtimeStrings.add(statement.name)
+    }
     const body = withVariableScope(context, () => emitStatementBody(statement.body, context))
+    const declaration = elementType === 'string'
+      ? `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
+      : `double ${statement.name} = ${loopValue};`
+    const checks = elementType === 'string'
+      ? [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context)]
+      : []
 
     return [
       ...setup,
       `for (size_t ${index} = 0; ${index} < ${array.elements.length}; ${index} += 1) {`,
       ...emitPrepareOwnedValueWrite(value).map(line => `  ${line}`),
       `  ${emitStatusCheck(`ccjs_array_get(${array.name}, ${index}, &${value})`, context)}`,
-      `  double ${statement.name} = ${loopValue};`,
+      ...checks.map(line => `  ${line}`),
+      `  ${declaration}`,
       ...body.map(line => `  ${line}`),
       '}',
       ...emitPrepareOwnedValueWrite(value)

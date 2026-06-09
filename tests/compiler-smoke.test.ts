@@ -831,9 +831,28 @@ test('compiles for of loops over arrays to JS and C', () => {
   assert.match(c.code, /double value = ccjs_for_value_\d+\.as\.number;/)
 })
 
+test('compiles for of loops over string arrays to C', () => {
+  const c = compileSource(`export function main(): void {
+  const names = ['Ada', 'Grace']
+
+  for (const name of names) {
+    console.log(name)
+  }
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /ccjs_array_get\(names, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
+  assert.match(c.code, /if \(ccjs_for_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_for_value_\d+\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(c.code, /ccjs_string\* name = \(ccjs_string\*\)ccjs_for_value_\d+\.as\.ref;/)
+  assert.match(c.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
+})
+
 test('rejects unsupported C for of iterables with a stable diagnostic', () => {
   assertDiagnostic(`export function main(): void {
-  for (const value of ['a', 'b']) {
+  const user = { name: 'Ada' }
+  for (const value of user) {
     console.log(value)
   }
 }
