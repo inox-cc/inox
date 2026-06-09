@@ -1786,6 +1786,11 @@ function emitStringExpression(expression, context) {
     return emitCallExpression(expression, context)
   }
 
+  if (isNullishCoalescingExpression(expression)) {
+    context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc))
+    return '""'
+  }
+
   if (isMemberAccessExpression(expression)) {
     const member = resolveKnownObjectMember(expression, context)
 
@@ -1845,6 +1850,15 @@ function emitPreparedNumberExpression(expression, context) {
   }
 
   if (expression?.type === 'BinaryExpression') {
+    if (isNullishCoalescingExpression(expression)) {
+      context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc))
+
+      return {
+        lines: [],
+        expression: '0'
+      }
+    }
+
     if (inferExpressionType(expression.left, context) === 'string' || inferExpressionType(expression.right, context) === 'string') {
       context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'string binary expressions are not supported by the current C backend slice', expression.loc))
 
@@ -1916,6 +1930,11 @@ function emitPreparedNumberExpression(expression, context) {
 }
 
 function emitCExpression(expression, context) {
+  if (isNullishCoalescingExpression(expression)) {
+    context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc))
+    return '0'
+  }
+
   const type = inferExpressionType(expression, context)
 
   if (type === 'string') {
@@ -2208,7 +2227,17 @@ function inferExpressionType(expression, context) {
   }
 
   if (expression?.type === 'BinaryExpression') {
-    return ['===', '!==', '<', '<=', '>', '>=', '&&', '||'].includes(expression.operator) ? 'boolean' : 'number'
+    if (['===', '!==', '<', '<=', '>', '>=', '&&', '||'].includes(expression.operator)) {
+      return 'boolean'
+    }
+
+    if (expression.operator === '??') {
+      const left = inferExpressionType(expression.left, context)
+
+      return left === 'null' || left === 'unknown' ? inferExpressionType(expression.right, context) : left
+    }
+
+    return 'number'
   }
 
   if (expression?.type === 'ArrayLiteral') {
@@ -2318,6 +2347,10 @@ function isOptionalChainExpression(expression) {
   return expression?.type === 'OptionalMemberExpression'
     || expression?.type === 'OptionalIndexExpression'
     || expression?.type === 'OptionalCallExpression'
+}
+
+function isNullishCoalescingExpression(expression) {
+  return expression?.type === 'BinaryExpression' && expression.operator === '??'
 }
 
 function isMemberAccessExpression(expression) {

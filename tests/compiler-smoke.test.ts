@@ -1193,6 +1193,25 @@ export function main(): void {
   })
 })
 
+test('compiles nullish coalescing to JS and rejects it for C', () => {
+  const source = `function printValue(value: unknown): void {
+  console.log(value ?? 'Ada')
+}
+
+export function main(): void {
+  printValue(1)
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+
+  assert.match(js.code, /console\.log\(\(value \?\? "Ada"\)\)/)
+  assertDiagnostic(source, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+})
+
 test('compiles simple classes to JS and rejects them for C', () => {
   const source = `class User {
   constructor(name: string) {

@@ -416,6 +416,10 @@ function inferBinaryExpressionType(operator, left, right) {
     return 'boolean'
   }
 
+  if (operator === '??') {
+    return left.valueType === 'null' || left.valueType === 'unknown' ? right.valueType : left.valueType
+  }
+
   if (operator === '+' && (left.valueType === 'string' || right.valueType === 'string')) {
     return 'string'
   }

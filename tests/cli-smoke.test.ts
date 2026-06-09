@@ -421,6 +421,14 @@ test('ccjs file runs optional chaining', async () => {
   assert.equal(result.stderr, '')
 })
 
+test('ccjs file runs nullish coalescing', async () => {
+  const result = await runCli(['tests/fixtures/runtime/nullish-coalescing.ts'])
+
+  assert.equal(result.code, 0)
+  assert.equal(result.stdout, 'Ada Grace\n')
+  assert.equal(result.stderr, '')
+})
+
 test('ccjs file runs simple classes', async () => {
   const result = await runCli(['tests/fixtures/runtime/class.ts'])
 

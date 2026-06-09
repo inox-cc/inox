@@ -657,7 +657,7 @@ class Parser {
       return this.parseArrowFunction()
     }
 
-    const expression = this.parseLogicalOr()
+    const expression = this.parseNullish()
 
     if (this.matchValue('=')) {
       return {
@@ -722,6 +722,10 @@ class Parser {
     this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after arrow parameters')
 
     return params
+  }
+
+  parseNullish(): AnyNode {
+    return this.parseBinaryExpression(() => this.parseLogicalOr(), ['??'])
   }
 
   parseLogicalOr(): AnyNode {
