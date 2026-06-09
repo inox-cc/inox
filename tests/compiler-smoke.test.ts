@@ -2050,6 +2050,53 @@ export function main(): void {
   })
 })
 
+test('narrows C nullable scalar values through logical conditions', () => {
+  const result = compileSource(`function printScore(score: number | null, backup: number | null): void {
+  if (score !== null && score > 2) {
+    console.log(score + 1)
+  }
+
+  if (backup === null || backup < 1) {
+    console.log(0)
+  } else {
+    console.log(backup + 2)
+  }
+}
+
+export function main(): void {
+  printScore(4, 3)
+  printScore(null, null)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /score\.as\.number > 2/)
+  assert.match(result.code, /\(score\.as\.number \+ 1\)/)
+  assert.match(result.code, /backup\.as\.number < 1/)
+  assert.match(result.code, /\(backup\.as\.number \+ 2\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const score: number | null = 1
+  if (score !== null || score > 1) {
+    console.log(1)
+  }
+}
+`, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`export function main(): void {
+  const score: number | null = 1
+  if (score === null && score > 1) {
+    console.log(1)
+  }
+}
+`, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+})
+
 test('lowers C optional calls over nullable callbacks', () => {
   const result = compileSource(`type Named = (name: string) => void;
 

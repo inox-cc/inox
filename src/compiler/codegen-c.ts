@@ -1824,13 +1824,11 @@ function emitStatement(statement, context) {
 
 function emitIfStatement(statement, context) {
   const condition = emitPreparedNumberExpression(statement.condition, context)
-  const narrowing = resolveNullableScalarNullCheckNarrowing(statement.condition, context)
-  const consequentNarrowed = narrowing?.nonNullWhenTrue === true ? [narrowing.name] : []
-  const alternateNarrowed = narrowing?.nonNullWhenTrue === false ? [narrowing.name] : []
+  const narrowing = resolveNullableScalarConditionNarrowing(statement.condition, context)
   const lines = [
     ...condition.lines,
     `if (${condition.expression}) {`,
-    ...withVariableScope(context, () => withNullableScalarNarrowing(context, consequentNarrowed, () => emitStatementBody(statement.consequent, context))).map(line => `  ${line}`)
+    ...withVariableScope(context, () => withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.consequent, context))).map(line => `  ${line}`)
   ]
 
   if (statement.alternate == null) {
@@ -1839,7 +1837,7 @@ function emitIfStatement(statement, context) {
   }
 
   lines.push('} else {')
-  lines.push(...withVariableScope(context, () => withNullableScalarNarrowing(context, alternateNarrowed, () => emitStatementBody(statement.alternate, context))).map(line => `  ${line}`))
+  lines.push(...withVariableScope(context, () => withNullableScalarNarrowing(context, narrowing.falseNames, () => emitStatementBody(statement.alternate, context))).map(line => `  ${line}`))
   lines.push('}')
 
   return lines
@@ -4215,6 +4213,10 @@ function emitPreparedNumberExpression(expression, context) {
       }
     }
 
+    if (['&&', '||'].includes(expression.operator)) {
+      return emitPreparedLogicalExpression(expression, context)
+    }
+
     const left = emitPreparedNumberExpression(expression.left, context)
     const right = emitPreparedNumberExpression(expression.right, context)
 
@@ -4352,6 +4354,44 @@ function emitPreparedStringCompareExpression(expression, context) {
   }
 }
 
+function emitPreparedLogicalExpression(expression, context) {
+  const left = emitPreparedNumberExpression(expression.left, context)
+  const leftNarrowing = resolveNullableScalarConditionNarrowing(expression.left, context)
+  const rightNarrowed = expression.operator === '&&'
+    ? leftNarrowing.trueNames
+    : leftNarrowing.falseNames
+  const right = withNullableScalarNarrowing(context, rightNarrowed, () => emitPreparedNumberExpression(expression.right, context))
+  const temp = nextCName(context, 'ccjs_logical')
+
+  if (expression.operator === '&&') {
+    return {
+      lines: [
+        ...left.lines,
+        `double ${temp} = 0;`,
+        `if (${left.expression}) {`,
+        ...right.lines.map(line => `  ${line}`),
+        `  ${temp} = ${right.expression};`,
+        '}'
+      ],
+      expression: temp
+    }
+  }
+
+  return {
+    lines: [
+      ...left.lines,
+      `double ${temp} = 0;`,
+      `if (${left.expression}) {`,
+      `  ${temp} = 1;`,
+      '} else {',
+      ...right.lines.map(line => `  ${line}`),
+      `  ${temp} = ${right.expression};`,
+      '}'
+    ],
+    expression: temp
+  }
+}
+
 function emitPreparedScalarNullishCoalescingExpression(expression, context) {
   if (!canLowerCScalarNullishCoalescingExpression(expression, context)) {
     return null
@@ -4403,28 +4443,92 @@ function emitPreparedNullableNullCompareExpression(expression, context) {
   }
 }
 
+function resolveNullableScalarConditionNarrowing(expression, context) {
+  if (expression?.type !== 'BinaryExpression') {
+    return emptyNullableScalarNarrowing()
+  }
+
+  if (expression.operator === '&&') {
+    const left = resolveNullableScalarConditionNarrowing(expression.left, context)
+    const right = withNullableScalarNarrowing(context, left.trueNames, () => resolveNullableScalarConditionNarrowing(expression.right, context))
+
+    return {
+      trueNames: uniqueNames([
+        ...left.trueNames,
+        ...right.trueNames
+      ]),
+      falseNames: intersectNames(left.falseNames, uniqueNames([
+        ...left.trueNames,
+        ...right.falseNames
+      ]))
+    }
+  }
+
+  if (expression.operator === '||') {
+    const left = resolveNullableScalarConditionNarrowing(expression.left, context)
+    const right = withNullableScalarNarrowing(context, left.falseNames, () => resolveNullableScalarConditionNarrowing(expression.right, context))
+
+    return {
+      trueNames: intersectNames(left.trueNames, uniqueNames([
+        ...left.falseNames,
+        ...right.trueNames
+      ])),
+      falseNames: uniqueNames([
+        ...left.falseNames,
+        ...right.falseNames
+      ])
+    }
+  }
+
+  return resolveNullableScalarNullCheckNarrowing(expression, context)
+}
+
 function resolveNullableScalarNullCheckNarrowing(expression, context) {
   if (expression?.type !== 'BinaryExpression' || !['===', '!==', '==', '!='].includes(expression.operator)) {
-    return null
+    return emptyNullableScalarNarrowing()
   }
 
   const nullable = expression.left?.type === 'NullLiteral' ? expression.right : expression.left
   const maybeNull = expression.left?.type === 'NullLiteral' ? expression.left : expression.right
 
   if (maybeNull?.type !== 'NullLiteral' || nullable?.type !== 'Reference' || nullable.path.length !== 1) {
-    return null
+    return emptyNullableScalarNarrowing()
   }
 
   const name = nullable.path[0]
 
   if (!context.nullableVariables.has(name) || !isNullableScalarType(context.variables.get(name))) {
-    return null
+    return emptyNullableScalarNarrowing()
+  }
+
+  if (['!==', '!='].includes(expression.operator)) {
+    return {
+      trueNames: [name],
+      falseNames: []
+    }
   }
 
   return {
-    name,
-    nonNullWhenTrue: ['!==', '!='].includes(expression.operator)
+    trueNames: [],
+    falseNames: [name]
   }
+}
+
+function emptyNullableScalarNarrowing() {
+  return {
+    trueNames: [],
+    falseNames: []
+  }
+}
+
+function uniqueNames(names) {
+  return [...new Set(names)]
+}
+
+function intersectNames(left, right) {
+  const rightNames = new Set(right)
+
+  return uniqueNames(left.filter(name => rightNames.has(name)))
 }
 
 function isNarrowedNullableScalarReference(expression, context) {
