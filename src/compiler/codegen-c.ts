@@ -2588,12 +2588,26 @@ function emitRuntimeNullableValueCheck(name, expectedTag, context) {
     return []
   }
 
+  if (expectedTag === 'CCJS_TAG_BOOL' || expectedTag === 'CCJS_TAG_NUMBER') {
+    return [
+      emitRuntimeTypeCheck(`${name}.tag != CCJS_TAG_NULL && ${name}.tag != ${expectedTag}`, context)
+    ]
+  }
+
   return [
     emitRuntimeTypeCheck(`${name}.tag != CCJS_TAG_NULL && (${name}.tag != ${expectedTag} || ${name}.as.ref == 0)`, context)
   ]
 }
 
 function cRuntimeValueTag(valueType) {
+  if (valueType === 'boolean') {
+    return 'CCJS_TAG_BOOL'
+  }
+
+  if (valueType === 'number') {
+    return 'CCJS_TAG_NUMBER'
+  }
+
   if (valueType === 'string') {
     return 'CCJS_TAG_STRING'
   }
@@ -3909,6 +3923,15 @@ function emitPreparedNumberExpression(expression, context) {
     }
   }
 
+  if (expression?.type === 'Reference' && expression.path.length === 1 && context.nullableVariables.has(expression.path[0]) && ['number', 'boolean'].includes(context.variables.get(expression.path[0]))) {
+    context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'nullable scalar values must be narrowed with ?? before scalar use in the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: '0'
+    }
+  }
+
   if (expression?.type === 'Reference') {
     return {
       lines: [],
@@ -3933,6 +3956,12 @@ function emitPreparedNumberExpression(expression, context) {
   }
 
   if (expression?.type === 'BinaryExpression') {
+    const scalarNullish = emitPreparedScalarNullishCoalescingExpression(expression, context)
+
+    if (scalarNullish != null) {
+      return scalarNullish
+    }
+
     if (isNullishCoalescingExpression(expression)) {
       context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc))
 
@@ -4097,6 +4126,36 @@ function emitPreparedStringCompareExpression(expression, context) {
       ...right.lines
     ],
     expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
+  }
+}
+
+function emitPreparedScalarNullishCoalescingExpression(expression, context) {
+  if (!canLowerCScalarNullishCoalescingExpression(expression, context)) {
+    return null
+  }
+
+  const valueType = inferExpressionType(expression, context)
+  const expectedTag = cRuntimeValueTag(valueType)
+  const left = emitCValueExpression(expression.left, context)
+  const right = emitPreparedNumberExpression(expression.right, context)
+  const temp = nextCName(context, 'ccjs_nullable_scalar')
+  const leftValue = valueType === 'boolean'
+    ? `(${left.expression}.as.boolean ? 1 : 0)`
+    : `${left.expression}.as.number`
+
+  return {
+    lines: [
+      ...left.lines,
+      `double ${temp} = 0;`,
+      `if (${left.expression}.tag == CCJS_TAG_NULL) {`,
+      ...right.lines.map(line => `  ${line}`),
+      `  ${temp} = ${right.expression};`,
+      '} else {',
+      `  ${emitRuntimeTypeCheck(`${left.expression}.tag != ${expectedTag}`, context)}`,
+      `  ${temp} = ${leftValue};`,
+      '}'
+    ],
+    expression: temp
   }
 }
 
@@ -4831,6 +4890,17 @@ function canLowerCNullishCoalescingExpression(expression, context) {
   const resultType = inferExpressionType(expression, context)
 
   return isRuntimeNullableType(resultType)
+    && (inferExpressionType(expression.left, context) === 'null' || isNullableRuntimeExpression(expression.left, context))
+}
+
+function canLowerCScalarNullishCoalescingExpression(expression, context) {
+  if (!isNullishCoalescingExpression(expression)) {
+    return false
+  }
+
+  const resultType = inferExpressionType(expression, context)
+
+  return ['number', 'boolean'].includes(resultType)
     && (inferExpressionType(expression.left, context) === 'null' || isNullableRuntimeExpression(expression.left, context))
 }
 

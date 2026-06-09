@@ -1921,6 +1921,40 @@ test('lowers C nullable string nullish coalescing', () => {
   assert.match(result.code, /present\.tag == CCJS_TAG_NULL/)
 })
 
+test('lowers C nullable scalar nullish coalescing', () => {
+  const result = compileSource(`type User = {
+  score: number,
+  active: boolean
+}
+
+export function main(): void {
+  let score: number | null = null
+  let active: boolean | null = null
+  const values = [7]
+  const maybeValues: number[] | null = values
+  let user: User | null = { score: 9, active: true }
+  console.log(score ?? 1, active ?? false, maybeValues?.[0] ?? 0, user?.score ?? 0, user?.active ?? false)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /score = ccjs_null_value\(\);/)
+  assert.match(result.code, /ccjs_number_value\(9\)/)
+  assert.match(result.code, /if \(score\.tag == CCJS_TAG_NULL\) \{/)
+  assert.match(result.code, /score\.tag != CCJS_TAG_NUMBER/)
+  assert.match(result.code, /active\.tag != CCJS_TAG_BOOL/)
+  assert.match(result.code, /ccjs_array_get\(maybeValues, 0, &ccjs_optional_value_\d+\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const score: number | null = null
+  console.log(score)
+}
+`, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+})
+
 test('compiles unsupported nullish coalescing to JS and rejects it for C', () => {
   const source = `function printValue(value: unknown): void {
   console.log(value ?? 'Ada')

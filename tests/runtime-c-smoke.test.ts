@@ -3172,6 +3172,66 @@ export function main(): void {
   }
 })
 
+test('generated C nullable scalar nullish coalescing compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-nullish-'))
+  const source = join(dir, 'nullable-scalar-nullish.c')
+  const output = join(dir, 'nullable-scalar-nullish')
+
+  try {
+    const result = compileSource(`type User = {
+  score: number,
+  active: boolean
+}
+
+export function main(): void {
+  let score: number | null = null
+  let active: boolean | null = null
+  console.log(score ?? 1, active ?? false, score === null, active !== null)
+  score = 7
+  active = true
+  console.log(score ?? 0, active ?? false, score !== null, active === null)
+
+  let user: User | null = null
+  console.log(user?.score ?? 3, user?.active ?? true)
+  user = { score: 9, active: false }
+  const maybeScore = user?.score
+  const maybeActive = user?.active
+  console.log(maybeScore ?? 0, maybeActive ?? true)
+
+  const values = [2]
+  const maybeValues: number[] | null = values
+  const emptyValues: number[] | null = null
+  console.log(maybeValues?.[0] ?? 5, emptyValues?.[0] ?? 5)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 0 1 0\n7 1 1 0\n3 1\n9 0\n2 5\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
