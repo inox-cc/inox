@@ -1564,6 +1564,12 @@ function emitStatement(statement, context) {
       return emitCollectionVariableDeclaration(statement, context)
     }
 
+    const arrayFilterCall = emitPreparedArrayFilterCallExpression(statement.init, context)
+
+    if (arrayFilterCall != null) {
+      return emitArrayFilterVariableDeclaration(statement, arrayFilterCall, context)
+    }
+
     const arraySortCall = emitPreparedArraySortCallExpression(statement.init, context)
 
     if (arraySortCall != null) {
@@ -1616,6 +1622,12 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'CallExpression') {
+    const arrayFilterCall = emitPreparedArrayFilterCallExpression(statement.expression, context)
+
+    if (arrayFilterCall != null) {
+      return arrayFilterCall.lines
+    }
+
     const arraySortCall = emitPreparedArraySortCallExpression(statement.expression, context)
 
     if (arraySortCall != null) {
@@ -1962,6 +1974,15 @@ function emitPreparedForVariableDeclaration(statement, context) {
   if (isCollectionConstructorExpression(statement.init)) {
     return {
       lines: emitCollectionVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  const arrayFilterCall = emitPreparedArrayFilterCallExpression(statement.init, context)
+
+  if (arrayFilterCall != null) {
+    return {
+      lines: emitArrayFilterVariableDeclaration(statement, arrayFilterCall, context),
       expression: ''
     }
   }
@@ -3865,6 +3886,12 @@ function emitCallExpression(expression, context) {
 }
 
 function emitPreparedCallExpression(expression, context) {
+  const arrayFilterCall = emitPreparedArrayFilterCallExpression(expression, context)
+
+  if (arrayFilterCall != null) {
+    return arrayFilterCall
+  }
+
   const arraySortCall = emitPreparedArraySortCallExpression(expression, context)
 
   if (arraySortCall != null) {
@@ -4462,6 +4489,19 @@ function emitArraySortVariableDeclaration(statement, sorted, context) {
   ]
 }
 
+function emitArrayFilterVariableDeclaration(statement, filtered, context) {
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'array')
+  context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType ?? filtered.elementType ?? 'unknown')
+
+  return [
+    ...filtered.lines,
+    ...emitPrepareOwnedValueWrite(statement.name),
+    `${statement.name} = ${filtered.expression};`,
+    `ccjs_retain(${statement.name});`
+  ]
+}
+
 function emitPreparedArraySortCallExpression(expression, context) {
   if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'sort' || expression.args.length !== 0) {
     return null
@@ -4483,6 +4523,89 @@ function emitPreparedArraySortCallExpression(expression, context) {
   }
 }
 
+function emitPreparedArrayFilterCallExpression(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'filter' || expression.args.length !== 1) {
+    return null
+  }
+
+  const callback = expression.args[0]
+
+  if (callback?.type !== 'ArrowFunctionExpression' || !callback.expressionBody || callback.params.length > 2) {
+    return null
+  }
+
+  const receiver = emitPreparedArrayReceiver(expression.callee.object, context)
+
+  if (receiver == null || !['number', 'boolean', 'string'].includes(receiver.elementType)) {
+    return null
+  }
+
+  const out = nextCName(context, 'ccjs_filter_array')
+  const length = nextCName(context, 'ccjs_filter_length')
+  const index = nextCName(context, 'ccjs_filter_index')
+  const value = nextCName(context, 'ccjs_filter_value')
+
+  registerOwnedValue(context, out)
+  registerOwnedValue(context, value)
+
+  const body = withVariableScope(context, () => {
+    const checks: string[] = []
+    const declarations: string[] = []
+    const valueParam = callback.params[0]
+    const indexParam = callback.params[1]
+
+    if (valueParam != null) {
+      context.variables.set(valueParam.name, receiver.elementType)
+
+      if (receiver.elementType === 'string') {
+        context.runtimeStrings.add(valueParam.name)
+        checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+        declarations.push(`ccjs_string* ${valueParam.name} = (ccjs_string*)${value}.as.ref;`)
+      } else if (receiver.elementType === 'boolean') {
+        checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context))
+        declarations.push(`double ${valueParam.name} = (${value}.as.boolean ? 1 : 0);`)
+      } else {
+        checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context))
+        declarations.push(`double ${valueParam.name} = ${value}.as.number;`)
+      }
+    }
+
+    if (indexParam != null) {
+      context.variables.set(indexParam.name, 'number')
+      declarations.push(`double ${indexParam.name} = (double)${index};`)
+    }
+
+    const predicate = emitPreparedNumberExpression(callback.body, context)
+
+    return [
+      ...checks,
+      ...declarations,
+      ...predicate.lines,
+      `if (${predicate.expression}) {`,
+      `  ${emitStatusCheck(`ccjs_array_push(${out}, ${value})`, context)}`,
+      '}'
+    ]
+  })
+
+  return {
+    lines: [
+      ...receiver.lines,
+      ...emitPrepareOwnedValueWrite(out),
+      emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, 0, &${out})`, context),
+      `size_t ${length} = 0;`,
+      emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context),
+      `for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`,
+      ...emitPrepareOwnedValueWrite(value).map(line => `  ${line}`),
+      `  ${emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)}`,
+      ...body.map(line => `  ${line}`),
+      '}',
+      ...emitPrepareOwnedValueWrite(value)
+    ],
+    expression: out,
+    elementType: receiver.elementType
+  }
+}
+
 function emitPreparedArrayReceiver(expression, context) {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
@@ -4494,7 +4617,7 @@ function emitPreparedArrayReceiver(expression, context) {
     return {
       lines: [],
       expression: name,
-      elementType: context.runtimeArrayElementTypes.get(name) ?? context.arrayShapes.get(name)?.[0]?.valueType ?? 'unknown'
+      elementType: context.runtimeArrayElementTypes.get(name) ?? resolveForOfElementType(context.arrayShapes.get(name) ?? [])
     }
   }
 
@@ -4505,7 +4628,7 @@ function emitPreparedArrayReceiver(expression, context) {
       return null
     }
 
-    const call = emitPreparedArraySortCallExpression(expression, context)
+    const call = emitPreparedArrayFilterCallExpression(expression, context) ?? emitPreparedArraySortCallExpression(expression, context)
 
     return call == null
       ? null

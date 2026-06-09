@@ -73,6 +73,44 @@ static int ccjs_array_sort_compare(const void* left_ptr, const void* right_ptr) 
   return 0;
 }
 
+static ccjs_status ccjs_array_reserve(ccjs_array* array, size_t cap) {
+  if (array == 0 || array->header.allocator == 0 || array->header.allocator->realloc == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (cap <= array->cap) {
+    return CCJS_OK;
+  }
+
+  size_t next_cap = array->cap == 0 ? 4 : array->cap;
+
+  while (next_cap < cap) {
+    next_cap *= 2;
+  }
+
+  ccjs_value* items = array->header.allocator->realloc(
+    array->header.allocator->user,
+    array->items,
+    sizeof(ccjs_value) * array->cap,
+    sizeof(ccjs_value) * next_cap,
+    _Alignof(ccjs_value)
+  );
+
+  if (items == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  array->items = items;
+
+  for (size_t index = array->cap; index < next_cap; index += 1) {
+    array->items[index] = ccjs_undefined_value();
+  }
+
+  array->cap = next_cap;
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_array_new(ccjs_allocator* allocator, size_t len, ccjs_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || out == 0) {
     return CCJS_ERR_TYPE;
@@ -110,6 +148,25 @@ ccjs_status ccjs_array_new(ccjs_allocator* allocator, size_t len, ccjs_value* ou
 
   out->tag = CCJS_TAG_ARRAY;
   out->as.ref = &array->header;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_array_push(ccjs_value array, ccjs_value value) {
+  if (array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  ccjs_status status = ccjs_array_reserve(instance, instance->len + 1);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  ccjs_retain(value);
+  instance->items[instance->len] = value;
+  instance->len += 1;
 
   return CCJS_OK;
 }

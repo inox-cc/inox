@@ -15,6 +15,7 @@ typedef struct ccjs_array {
 ccjs_status ccjs_array_new(ccjs_allocator* allocator, size_t len, ccjs_value* out);
 ccjs_status ccjs_array_get(ccjs_value array, size_t index, ccjs_value* out);
 ccjs_status ccjs_array_len(ccjs_value array, size_t* out);
+ccjs_status ccjs_array_push(ccjs_value array, ccjs_value value);
 ccjs_status ccjs_array_set(ccjs_value array, size_t index, ccjs_value value);
 ccjs_status ccjs_array_sort(ccjs_value array);
 

@@ -2085,6 +2085,54 @@ test('generated C Array.sort without comparator compiles and runs with runtime s
   }
 })
 
+test('generated C Array.filter expression callbacks compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-filter-'))
+  const source = join(dir, 'array-filter.c')
+  const output = join(dir, 'array-filter')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = [1, 2, 3, 4]
+  const middle = values.filter((value, index) => value > 1 && index < 3)
+  console.log(middle.length, middle[0], middle[1])
+
+  const chainValues = [10, 2, 1]
+  const chained = chainValues.sort().filter(value => value !== 10)
+  console.log(chained.length, chained[0], chained[1])
+
+  const names = ['Ada', 'Grace', 'Alan']
+  const aNames = names.filter(name => name.startsWith('A'))
+  console.log(aNames.length, aNames[0], aNames[1])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2 2 3\n2 1 2\n2 Ada Alan\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C array length lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
