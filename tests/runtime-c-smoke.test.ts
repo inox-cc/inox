@@ -1051,6 +1051,53 @@ export function main(): void {
   }
 })
 
+test('generated C mutable numeric callback parameter captures compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-mutable-callback-param-'))
+  const source = join(dir, 'mutable-callback-param.c')
+  const output = join(dir, 'mutable-callback-param')
+
+  try {
+    const result = compileSource(`function run(seed: number): void {
+  const callback: Function = () => {
+    seed = seed + 1
+    console.log(seed)
+  }
+  callback()
+  console.log(seed)
+}
+
+export function main(): void {
+  run(1)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2\n2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C typed callback aliases compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

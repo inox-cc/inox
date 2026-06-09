@@ -1753,6 +1753,33 @@ export function main(): void {
   assert.match(c.code, /if \(count != 0\) ccjs_default_free\(0, count, sizeof\(double\), _Alignof\(double\)\);/)
 })
 
+test('boxes mutable numeric C callback parameter captures', () => {
+  const source = `function run(seed: number): void {
+  const callback: Function = () => {
+    seed = seed + 1
+    console.log(seed)
+  }
+  callback()
+  console.log(seed)
+}
+
+export function main(): void {
+  run(1)
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /void run\(double ccjs_param_seed\);/)
+  assert.match(c.code, /double\* seed = 0;/)
+  assert.match(c.code, /seed = ccjs_default_alloc\(0, sizeof\(double\), _Alignof\(double\)\);/)
+  assert.match(c.code, /\*seed = ccjs_param_seed;/)
+  assert.match(c.code, /double\* seed = captured->seed;/)
+  assert.match(c.code, /\(\*seed\) = \(\(\*seed\) \+ 1\);/)
+  assert.match(c.code, /if \(seed != 0\) ccjs_default_free\(0, seed, sizeof\(double\), _Alignof\(double\)\);/)
+})
+
 test('rejects unsupported mutable string C callback captures with a stable diagnostic', () => {
   assertDiagnostic(`function run(callback: Function): void {
   callback()

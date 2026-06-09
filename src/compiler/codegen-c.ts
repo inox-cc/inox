@@ -223,6 +223,10 @@ function emitFunctionDeclaration(statement, baseContext) {
       if (runtimeFunctionType != null) {
         context.runtimeCallbacks.add(param.name)
       }
+    } else if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean'].includes(param.valueType)) {
+      context.variables.set(param.name, param.valueType)
+      context.boxedVariables.add(param.name)
+      registerBoxedValue(context, param.name)
     } else {
       context.variables.set(param.name, param.valueType)
     }
@@ -275,6 +279,10 @@ function emitFunctionHead(statement, context) {
       }
 
       return emitFunctionParameter(param.name, param.functionType, context, param.loc)
+    }
+
+    if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean'].includes(param.valueType)) {
+      return `${emitCType(param.valueType)} ${emitCScalarParamName(param.name)}`
     }
 
     return `${emitCType(param.valueType)} ${param.name}`
@@ -518,6 +526,7 @@ function collectCallbackWrappers(programs, context) {
       declare(scope, param.name, {
         name: param.name,
         valueType: param.valueType,
+        declaration: param,
         functionType: param.functionType,
         shape: param.shape,
         runtimeManaged: ['string', 'object'].includes(param.valueType),
@@ -1397,6 +1406,10 @@ function emitCStringParamName(name) {
   return `ccjs_param_${name}`
 }
 
+function emitCScalarParamName(name) {
+  return `ccjs_param_${name}`
+}
+
 function emitRuntimeParamPrelude(statement, context) {
   return statement.params.flatMap((param, index) => {
     if (param.valueType === 'string') {
@@ -1417,6 +1430,14 @@ function emitRuntimeParamPrelude(statement, context) {
     if (param.valueType === 'function' && resolveFunctionParameterRuntimeType(statement.name, index, param, context) != null) {
       return [
         emitRuntimeTypeCheck(`${param.name}.tag != CCJS_TAG_FUNCTION || ${param.name}.as.ref == 0`, context)
+      ]
+    }
+
+    if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean'].includes(param.valueType)) {
+      return [
+        `${param.name} = ccjs_default_alloc(0, sizeof(double), _Alignof(double));`,
+        `if (${param.name} == 0) ${emitFailureStatement(context)}`,
+        `*${param.name} = ${emitCScalarParamName(param.name)};`
       ]
     }
 
