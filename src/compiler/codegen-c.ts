@@ -4334,21 +4334,55 @@ function emitPreparedCollectionCallExpression(expression, context) {
     return null
   }
 
-  const object = expression.callee.object
+  const receiver = emitPreparedCollectionReceiver(expression.callee.object, context)
 
-  if (object.type !== 'Reference' || object.path.length !== 1) {
+  if (receiver == null) {
     return null
   }
 
-  const name = object.path[0]
-  const type = context.variables.get(name)
+  const call = receiver.type === 'map'
+    ? emitPreparedMapMethodCall(receiver.expression, expression, context)
+    : emitPreparedSetMethodCall(receiver.expression, expression, context)
 
-  if (type === 'map') {
-    return emitPreparedMapMethodCall(name, expression, context)
+  return {
+    lines: [
+      ...receiver.lines,
+      ...call.lines
+    ],
+    expression: call.expression
+  }
+}
+
+function emitPreparedCollectionReceiver(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+    const type = context.variables.get(name)
+
+    return type === 'map' || type === 'set'
+      ? {
+          type,
+          lines: [],
+          expression: name
+        }
+      : null
   }
 
-  if (type === 'set') {
-    return emitPreparedSetMethodCall(name, expression, context)
+  if (expression?.type === 'CallExpression') {
+    const valueType = inferExpressionType(expression, context)
+
+    if (valueType !== 'map' && valueType !== 'set') {
+      return null
+    }
+
+    const call = emitPreparedCollectionCallExpression(expression, context)
+
+    return call == null || call.expression === ''
+      ? null
+      : {
+          type: valueType,
+          lines: call.lines,
+          expression: call.expression
+        }
   }
 
   return null

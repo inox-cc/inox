@@ -3449,6 +3449,52 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
   }
 })
 
+test('generated C Map and Set method chains compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-chains-'))
+  const source = join(dir, 'collection-chains.c')
+  const output = join(dir, 'collection-chains')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const scores: Map<string, number> = new Map()
+  const score = scores.set('Ada', 7).get('Ada')
+  const hasScore = scores.set('Grace', 9).has('Grace')
+
+  const names: Set<string> = new Set()
+  const hasName = names.add('Ada').has('Ada')
+  const removed = names.add('Grace').delete('Grace')
+
+  console.log(score, hasScore, hasName, removed, names.size)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7 1 1 1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 function compileRuntimeProgram(source: string, output: string): Promise<CommandResult> {
   return runCommand('cc', [
     '-Iruntime/c/include',
