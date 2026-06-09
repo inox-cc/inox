@@ -580,12 +580,43 @@ export function main(): void {
 }
 
 export function main(): void {
-  const same = getName() === 'Ada'
+  const same = getName() < 'Ada'
   console.log(same)
 }
 `, 'CCJS_C_STRING_EXPR', {
     target: 'c'
   })
+})
+
+test('lowers C string equality comparisons by content', () => {
+  const result = compileSource(`type User = {
+  name: string
+}
+
+function getName(): string {
+  return 'Ada'
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  const values = ['Ada', 'Grace']
+  const name = 'Ada'
+  const sameLocal = name === 'Ada'
+  const sameRuntime = user.name === values[0]
+  const differentCall = getName() !== values[1]
+  console.log(sameLocal, sameRuntime, differentCall)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /#include <string\.h>/)
+  assert.match(result.code, /const char\* name = "Ada";/)
+  assert.match(result.code, /const double sameLocal = \(strlen\(name\) == 3 && memcmp\(name, "Ada", strlen\(name\)\) == 0\);/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /const double sameRuntime = \(ccjs_cmp_string_\d+->len == ccjs_cmp_string_\d+->len && memcmp\(ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->len\) == 0\);/)
+  assert.match(result.code, /const double differentCall = \(!\(ccjs_cmp_string_\d+->len == ccjs_cmp_string_\d+->len && memcmp\(ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->len\) == 0\)\);/)
 })
 
 test('lowers direct C console.log member and index expressions', () => {

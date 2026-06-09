@@ -1139,6 +1139,58 @@ export function main(): void {
   }
 })
 
+test('generated C string equality comparisons compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-equality-'))
+  const source = join(dir, 'string-equality.c')
+  const output = join(dir, 'string-equality')
+
+  try {
+    const result = compileSource(`type User = {
+  name: string
+}
+
+function getName(): string {
+  return 'Ada'
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  const values = ['Ada', 'Grace']
+  const name = 'Ada'
+  const sameLocal = name === 'Ada'
+  const sameRuntime = user.name === values[0]
+  const differentCall = getName() !== values[1]
+  console.log(sameLocal, sameRuntime, differentCall)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C time globals compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

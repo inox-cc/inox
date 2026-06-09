@@ -47,9 +47,10 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || programs.some(usesCCallbackRuntime)
   const needsRuntime = needsCallbackRuntime || programs.some(usesCRuntime)
   const needsTimeRuntime = programs.some(usesCTimeRuntime)
+  const needsStringCompare = programs.some(usesCStringCompare)
   reportUnsupportedClasses(programs, diagnostics)
   reportUnsupportedAsync(programs, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringCompare)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
   for (const wrapper of arrowCallbackWrappers) {
@@ -99,10 +100,14 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringCompare) {
   const lines = [
     '#include <stdio.h>'
   ]
+
+  if (needsStringCompare) {
+    lines.push('#include <string.h>')
+  }
 
   if (needsRuntime) {
     lines.push('#include <stdlib.h>')
@@ -2530,7 +2535,14 @@ function emitPreparedNumberExpression(expression, context) {
       }
     }
 
-    if (inferExpressionType(expression.left, context) === 'string' || inferExpressionType(expression.right, context) === 'string') {
+    const leftType = inferExpressionType(expression.left, context)
+    const rightType = inferExpressionType(expression.right, context)
+
+    if (['===', '!=='].includes(expression.operator) && leftType === 'string' && rightType === 'string') {
+      return emitPreparedStringCompareExpression(expression, context)
+    }
+
+    if (leftType === 'string' || rightType === 'string') {
       context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'string binary expressions are not supported by the current C backend slice', expression.loc))
 
       return {
@@ -2616,6 +2628,92 @@ function emitPreparedNumberExpression(expression, context) {
   return {
     lines: [],
     expression: '0'
+  }
+}
+
+function emitPreparedStringCompareExpression(expression, context) {
+  const left = emitPreparedStringCompareOperand(expression.left, context)
+  const right = emitPreparedStringCompareOperand(expression.right, context)
+  const equals = `(${left.length} == ${right.length} && memcmp(${left.bytes}, ${right.bytes}, ${left.length}) == 0)`
+
+  return {
+    lines: [
+      ...left.lines,
+      ...right.lines
+    ],
+    expression: expression.operator === '===' ? equals : `(!${equals})`
+  }
+}
+
+function emitPreparedStringCompareOperand(expression, context) {
+  if (expression?.type === 'StringLiteral') {
+    return {
+      lines: [],
+      bytes: cStringLiteral(expression.value),
+      length: `${utf8ByteLength(expression.value)}`
+    }
+  }
+
+  if (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
+    const value = expression.raw.slice(1, -1)
+
+    return {
+      lines: [],
+      bytes: cStringLiteral(value),
+      length: `${utf8ByteLength(value)}`
+    }
+  }
+
+  if (expression?.type === 'TemplateLiteral') {
+    context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'template string comparison operands with placeholders are not supported by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      bytes: '""',
+      length: '0'
+    }
+  }
+
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    const name = emitReference(expression, context)
+
+    if (context.variables.get(name) === 'string') {
+      if (context.runtimeStrings.has(name)) {
+        return {
+          lines: [],
+          bytes: `${name}->bytes`,
+          length: `${name}->len`
+        }
+      }
+
+      return {
+        lines: [],
+        bytes: name,
+        length: `strlen(${name})`
+      }
+    }
+  }
+
+  if (inferExpressionType(expression, context) === 'string') {
+    const value = emitCValueExpression(expression, context)
+    const string = nextCName(context, 'ccjs_cmp_string')
+
+    return {
+      lines: [
+        ...value.lines,
+        `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`
+      ],
+      bytes: `${string}->bytes`,
+      length: `${string}->len`
+    }
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'this string comparison operand is not supported by the current C backend slice', expression?.loc))
+
+  return {
+    lines: [],
+    bytes: '""',
+    length: '0'
   }
 }
 
@@ -3435,6 +3533,10 @@ function usesCTimeRuntime(program) {
   return program.body.some(item => itemUsesCTimeRuntime(item))
 }
 
+function usesCStringCompare(program) {
+  return program.body.some(item => itemUsesCStringCompare(item))
+}
+
 function itemUsesCRuntime(item) {
   if (item.type === 'FunctionDeclaration') {
     return item.returnType === 'string'
@@ -3472,6 +3574,18 @@ function itemUsesCTimeRuntime(item) {
   }
 
   return statementUsesCTimeRuntime(item)
+}
+
+function itemUsesCStringCompare(item) {
+  if (item.type === 'FunctionDeclaration') {
+    return item.body.some(statement => statementUsesCStringCompare(statement))
+  }
+
+  if (item.type === 'ClassDeclaration') {
+    return item.methods.some(method => method.body.some(statement => statementUsesCStringCompare(statement)))
+  }
+
+  return statementUsesCStringCompare(item)
 }
 
 function statementUsesCRuntime(statement) {
@@ -3642,6 +3756,62 @@ function statementUsesCTimeRuntime(statement) {
   return false
 }
 
+function statementUsesCStringCompare(statement) {
+  if (statement.type === 'VariableDeclaration') {
+    return expressionUsesCStringCompare(statement.init)
+  }
+
+  if (statement.type === 'ExpressionStatement') {
+    return expressionUsesCStringCompare(statement.expression)
+  }
+
+  if (statement.type === 'ReturnStatement') {
+    return expressionUsesCStringCompare(statement.argument)
+  }
+
+  if (statement.type === 'ThrowStatement') {
+    return expressionUsesCStringCompare(statement.argument)
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return statement.body.some(item => statementUsesCStringCompare(item))
+  }
+
+  if (statement.type === 'IfStatement') {
+    return expressionUsesCStringCompare(statement.condition)
+      || statementUsesCStringCompare(statement.consequent)
+      || (statement.alternate != null && statementUsesCStringCompare(statement.alternate))
+  }
+
+  if (statement.type === 'WhileStatement') {
+    return expressionUsesCStringCompare(statement.condition) || statementUsesCStringCompare(statement.body)
+  }
+
+  if (statement.type === 'ForStatement') {
+    return (statement.init != null && (statement.init.type === 'VariableDeclaration' ? statementUsesCStringCompare(statement.init) : expressionUsesCStringCompare(statement.init)))
+      || expressionUsesCStringCompare(statement.test)
+      || expressionUsesCStringCompare(statement.update)
+      || statementUsesCStringCompare(statement.body)
+  }
+
+  if (statement.type === 'ForOfStatement') {
+    return expressionUsesCStringCompare(statement.iterable) || statementUsesCStringCompare(statement.body)
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    return expressionUsesCStringCompare(statement.discriminant)
+      || statement.cases.some(item => expressionUsesCStringCompare(item.test) || item.consequent.some(child => statementUsesCStringCompare(child)))
+  }
+
+  if (statement.type === 'TryStatement') {
+    return statementUsesCStringCompare(statement.block)
+      || (statement.handler != null && statementUsesCStringCompare(statement.handler.body))
+      || (statement.finalizer != null && statementUsesCStringCompare(statement.finalizer))
+  }
+
+  return false
+}
+
 function expressionUsesCRuntime(expression) {
   if (expression == null) {
     return false
@@ -3778,6 +3948,69 @@ function expressionUsesCTimeRuntime(expression) {
   }
 
   return false
+}
+
+function expressionUsesCStringCompare(expression) {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.type === 'BinaryExpression') {
+    const isStringEquality = ['===', '!=='].includes(expression.operator)
+      && (expressionMayBeCStringCompareOperand(expression.left) || expressionMayBeCStringCompareOperand(expression.right))
+
+    return isStringEquality
+      || expressionUsesCStringCompare(expression.left)
+      || expressionUsesCStringCompare(expression.right)
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    return expressionUsesCStringCompare(expression.object)
+  }
+
+  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
+    return expressionUsesCStringCompare(expression.object) || expressionUsesCStringCompare(expression.index)
+  }
+
+  if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+    return expressionUsesCStringCompare(expression.callee) || expression.args.some(arg => expressionUsesCStringCompare(arg))
+  }
+
+  if (expression.type === 'AssignmentExpression') {
+    return expressionUsesCStringCompare(expression.target) || expressionUsesCStringCompare(expression.value)
+  }
+
+  if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
+    return expressionUsesCStringCompare(expression.argument)
+  }
+
+  if (expression.type === 'ArrayLiteral') {
+    return expression.elements.some(element => expressionUsesCStringCompare(element))
+  }
+
+  if (expression.type === 'ObjectLiteral') {
+    return expression.properties.some(property => expressionUsesCStringCompare(property.value))
+  }
+
+  if (expression.type === 'ArrowFunctionExpression') {
+    return expression.expressionBody
+      ? expressionUsesCStringCompare(expression.body)
+      : expression.body.some(statement => statementUsesCStringCompare(statement))
+  }
+
+  return false
+}
+
+function expressionMayBeCStringCompareOperand(expression) {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.valueType === 'string') {
+    return true
+  }
+
+  return ['Reference', 'MemberExpression', 'IndexExpression', 'CallExpression'].includes(expression.type)
 }
 
 function withVariableScope(context, callback) {
