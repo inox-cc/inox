@@ -85,6 +85,7 @@ int main(void) {
       source,
       'runtime/c/src/core/value.c',
       'runtime/c/src/core/allocator.c',
+      'runtime/c/src/core/callback.c',
       'runtime/c/src/strings/string.c',
       'runtime/c/src/objects/object.c',
       'runtime/c/src/arrays/array.c',
@@ -190,6 +191,114 @@ int main(void) {
 
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, '4 4 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('C runtime callback object invokes and releases context', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-callback-'))
+  const source = join(dir, 'callback-smoke.c')
+  const output = join(dir, 'callback-smoke')
+
+  try {
+    await writeFile(source, `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/callback.h"
+
+typedef struct alloc_state {
+  int allocs;
+  int frees;
+} alloc_state;
+
+typedef struct callback_state {
+  int calls;
+  int finalized;
+  double total;
+} callback_state;
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)align;
+  alloc_state* state = (alloc_state*)user;
+  state->allocs += 1;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)size;
+  (void)align;
+  alloc_state* state = (alloc_state*)user;
+  state->frees += 1;
+  free(ptr);
+}
+
+static ccjs_status add_values(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out) {
+  if (context == 0 || args == 0 || out == 0 || arg_count != 2) return CCJS_ERR_TYPE;
+  if (args[0].tag != CCJS_TAG_NUMBER || args[1].tag != CCJS_TAG_BOOL) return CCJS_ERR_TYPE;
+
+  callback_state* state = (callback_state*)context;
+  state->calls += 1;
+  state->total += args[0].as.number + (args[1].as.boolean ? 1 : 0);
+  *out = ccjs_number_value(state->total);
+
+  return CCJS_OK;
+}
+
+static void finalize_callback(void* context) {
+  callback_state* state = (callback_state*)context;
+  state->finalized += 1;
+}
+
+int main(void) {
+  alloc_state alloc = { 0, 0 };
+  callback_state callback = { 0, 0, 0 };
+  ccjs_allocator allocator = { &alloc, test_alloc, test_realloc, test_free };
+  ccjs_value fn;
+  ccjs_value out;
+  ccjs_value args[] = {
+    ccjs_number_value(3),
+    ccjs_bool_value(true)
+  };
+
+  if (ccjs_callback_new(&allocator, add_values, &callback, finalize_callback, &fn) != CCJS_OK) return 1;
+  if (ccjs_callback_call(fn, args, 2, &out) != CCJS_OK) return 2;
+  if (out.tag != CCJS_TAG_NUMBER) return 3;
+
+  ccjs_retain(fn);
+  ccjs_release(fn);
+  if (callback.finalized != 0) return 4;
+  ccjs_release(fn);
+
+  printf("%d %d %.0f %.0f %d %d\\n", callback.calls, callback.finalized, callback.total, out.as.number, alloc.allocs, alloc.frees);
+  return 0;
+}
+`)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 1 4 4 1 1\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -1734,6 +1843,7 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
     source,
     'runtime/c/src/core/value.c',
     'runtime/c/src/core/allocator.c',
+    'runtime/c/src/core/callback.c',
     'runtime/c/src/strings/string.c',
     'runtime/c/src/objects/object.c',
     'runtime/c/src/arrays/array.c',

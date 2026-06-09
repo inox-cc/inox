@@ -1,4 +1,5 @@
 #include "ccjs/array.h"
+#include "ccjs/callback.h"
 #include "ccjs/object.h"
 #include "ccjs/value.h"
 
@@ -36,6 +37,12 @@ void ccjs_release(ccjs_value value) {
 
     if (allocator != 0 && allocator->free != 0 && array->items != 0) {
       allocator->free(allocator->user, array->items, sizeof(ccjs_value) * array->cap, _Alignof(ccjs_value));
+    }
+  } else if (value.as.ref->kind == CCJS_REF_FUNCTION) {
+    ccjs_callback* callback = (ccjs_callback*)value.as.ref;
+
+    if (callback->finalizer != 0) {
+      callback->finalizer(callback->context);
     }
   }
 

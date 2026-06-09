@@ -26,6 +26,7 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const cRuntimeSources = [
   'runtime/c/src/core/value.c',
   'runtime/c/src/core/allocator.c',
+  'runtime/c/src/core/callback.c',
   'runtime/c/src/strings/string.c',
   'runtime/c/src/objects/object.c',
   'runtime/c/src/arrays/array.c',
