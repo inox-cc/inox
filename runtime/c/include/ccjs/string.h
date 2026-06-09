@@ -12,5 +12,13 @@ typedef struct ccjs_string {
 } ccjs_string;
 
 ccjs_status ccjs_string_from_literal(ccjs_allocator* allocator, const char* bytes, size_t len, ccjs_value* out);
+ccjs_status ccjs_string_concat_parts(
+  ccjs_allocator* allocator,
+  const char* left_bytes,
+  size_t left_len,
+  const char* right_bytes,
+  size_t right_len,
+  ccjs_value* out
+);
 
 #endif

@@ -569,33 +569,33 @@ test('diagnoses unsupported C console.log template placeholders', () => {
   })
 })
 
-test('rejects unsupported C runtime string composition with a stable diagnostic', () => {
-  assertDiagnostic(`type User = {
+test('lowers C runtime string concatenation', () => {
+  const result = compileSource(`type User = {
   name: string
+}
+
+function getName(): string {
+  return 'Grace'
 }
 
 export function main(): void {
   const user: User = { name: 'Ada' }
   const name = user.name
-  const message = name + '!'
+  const message = name + ' ' + getName() + '!'
   console.log(message)
 }
-`, 'CCJS_C_STRING_EXPR', {
+`, {
     target: 'c'
   })
 
-  assertDiagnostic(`function getName(): string {
-  return 'Ada'
-}
+  assert.match(result.code, /ccjs_string_concat_parts\(&ccjs_default_allocator, name->bytes, name->len, " ", 1, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_concat_parts\(&ccjs_default_allocator, ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->len, ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->len, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_concat_parts\(&ccjs_default_allocator, ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->len, "!", 1, &ccjs_value_\d+\)/)
+  assert.match(result.code, /const ccjs_string\* message = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /printf\("%\.\*s\\n", \(int\)message->len, message->bytes\);/)
+})
 
-export function main(): void {
-  const message = getName() + '!'
-  console.log(message)
-}
-`, 'CCJS_C_STRING_EXPR', {
-    target: 'c'
-  })
-
+test('rejects unsupported C non-equality string binary expressions with a stable diagnostic', () => {
   assertDiagnostic(`function getName(): string {
   return 'Ada'
 }

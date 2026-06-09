@@ -1709,7 +1709,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
     }
   }
 
-  if (statement.init?.type === 'CallExpression' && inferExpressionType(statement.init, context) === 'string') {
+  if (isRuntimeProducedStringExpression(statement.init, context)) {
     return {
       lines: emitRuntimeStringVariableDeclaration(statement, statement.init, context),
       expression: ''
@@ -1727,6 +1727,13 @@ function emitPreparedForVariableDeclaration(statement, context) {
       return {
         lines: [],
         expression: `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString}`
+      }
+    }
+
+    if (isRuntimeProducedStringExpression(statement.init, context)) {
+      return {
+        lines: emitRuntimeStringVariableDeclaration(statement, statement.init, context),
+        expression: ''
       }
     }
 
@@ -1872,6 +1879,11 @@ function emitVariableDeclaration(statement, context) {
       return `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString}`
     }
 
+    if (isRuntimeProducedStringExpression(statement.init, context)) {
+      context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'runtime string declarations need prepared statement lowering in the current C backend slice', statement.loc))
+      return `char* ${statement.name} = ""`
+    }
+
     return `${statement.kind === 'const' ? 'const ' : ''}char* ${statement.name} = ${emitStringExpression(statement.init, context)}`
   }
 
@@ -1905,6 +1917,10 @@ function emitScalarVariableDeclaration(statement, context) {
     if (runtimeString != null) {
       context.runtimeStrings.add(statement.name)
       return [`${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString};`]
+    }
+
+    if (isRuntimeProducedStringExpression(statement.init, context)) {
+      return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
     }
 
     return [`${statement.kind === 'const' ? 'const ' : ''}char* ${statement.name} = ${emitStringExpression(statement.init, context)};`]
@@ -2078,6 +2094,10 @@ function emitArrayVariableDeclaration(statement, context) {
 }
 
 function emitCValueExpression(expression, context) {
+  if (isStringConcatExpression(expression, context)) {
+    return emitCStringConcatValueExpression(expression, context)
+  }
+
   if (expression?.type === 'StringLiteral') {
     const temp = nextCName(context, 'ccjs_value')
     registerOwnedValue(context, temp)
@@ -2224,6 +2244,23 @@ function emitCValueExpression(expression, context) {
   return {
     lines: [],
     expression: 'ccjs_undefined_value()'
+  }
+}
+
+function emitCStringConcatValueExpression(expression, context) {
+  const left = emitPreparedStringBytesOperand(expression.left, context)
+  const right = emitPreparedStringBytesOperand(expression.right, context)
+  const temp = nextCName(context, 'ccjs_value')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...left.lines,
+      ...right.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_string_concat_parts(&ccjs_default_allocator, ${left.bytes}, ${left.length}, ${right.bytes}, ${right.length}, &${temp})`, context)
+    ],
+    expression: temp
   }
 }
 
@@ -2450,6 +2487,20 @@ function emitStringLogValue(expression, context) {
   }
 
   if (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') {
+    const value = emitCValueExpression(expression, context)
+    const string = nextCName(context, 'ccjs_log_string')
+
+    return {
+      lines: [
+        ...value.lines,
+        `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`
+      ],
+      format: '%.*s',
+      values: [`(int)${string}->len`, `${string}->bytes`]
+    }
+  }
+
+  if (isStringConcatExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
     const string = nextCName(context, 'ccjs_log_string')
 
@@ -2740,8 +2791,8 @@ function emitPreparedNumberExpression(expression, context) {
 }
 
 function emitPreparedStringCompareExpression(expression, context) {
-  const left = emitPreparedStringCompareOperand(expression.left, context)
-  const right = emitPreparedStringCompareOperand(expression.right, context)
+  const left = emitPreparedStringBytesOperand(expression.left, context)
+  const right = emitPreparedStringBytesOperand(expression.right, context)
   const equals = `(${left.length} == ${right.length} && memcmp(${left.bytes}, ${right.bytes}, ${left.length}) == 0)`
 
   return {
@@ -2753,7 +2804,7 @@ function emitPreparedStringCompareExpression(expression, context) {
   }
 }
 
-function emitPreparedStringCompareOperand(expression, context) {
+function emitPreparedStringBytesOperand(expression, context) {
   if (expression?.type === 'StringLiteral') {
     return {
       lines: [],
@@ -2816,7 +2867,7 @@ function emitPreparedStringCompareOperand(expression, context) {
     }
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'this string comparison operand is not supported by the current C backend slice', expression?.loc))
+  context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'this string operand is not supported by the current C backend slice', expression?.loc))
 
   return {
     lines: [],
@@ -3340,6 +3391,18 @@ function isOptionalChainExpression(expression) {
 
 function isNullishCoalescingExpression(expression) {
   return expression?.type === 'BinaryExpression' && expression.operator === '??'
+}
+
+function isStringConcatExpression(expression, context) {
+  return expression?.type === 'BinaryExpression'
+    && expression.operator === '+'
+    && inferExpressionType(expression.left, context) === 'string'
+    && inferExpressionType(expression.right, context) === 'string'
+}
+
+function isRuntimeProducedStringExpression(expression, context) {
+  return (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string')
+    || isStringConcatExpression(expression, context)
 }
 
 function isMemberAccessExpression(expression) {
@@ -3969,6 +4032,10 @@ function expressionUsesCRuntime(expression) {
   }
 
   if (expression.type === 'BinaryExpression') {
+    if (expression.operator === '+' && expression.valueType === 'string') {
+      return true
+    }
+
     return expressionUsesCRuntime(expression.left) || expressionUsesCRuntime(expression.right)
   }
 
