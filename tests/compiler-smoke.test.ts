@@ -531,6 +531,23 @@ test('lowers C console.log template interpolation', () => {
   assert.match(result.code, /printf\("hello %\.\*s %s score %g ready %g\\n"/)
 })
 
+test('diagnoses unsupported C console.log template placeholders', () => {
+  assertDiagnostic(`export function main(): void {
+  console.log(\`hello \${missing}\`)
+}
+`, 'CCJS_UNKNOWN_NAME', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`export function main(): void {
+  const name = 'Ada'
+  console.log(\`hello \${name + '!'}\`)
+}
+`, 'CCJS_C_STRING_EXPR', {
+    target: 'c'
+  })
+})
+
 test('rejects unsupported C runtime string composition with a stable diagnostic', () => {
   assertDiagnostic(`type User = {
   name: string
