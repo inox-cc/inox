@@ -365,7 +365,7 @@ function splitCommandWords(value: string | undefined): string[] {
 }
 
 function defaultCBuildOutput(entry: string): string {
-  const ext = entry.endsWith('.ccjs') ? '.ccjs' : entry.endsWith('.js') ? '.js' : ''
+  const ext = entry.endsWith('.ts') ? '.ts' : entry.endsWith('.js') ? '.js' : ''
   const base = ext === '' ? entry : entry.slice(0, -ext.length)
 
   return base

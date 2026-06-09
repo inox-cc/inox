@@ -2,13 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { defaultEmitOutput, parseCliArgs } from '../scripts/lib/cli-args.ts'
 
-test('ccjs index.js defaults to run command', () => {
-  const result = parseCliArgs(['index.js'])
+test('ccjs index.ts defaults to run command', () => {
+  const result = parseCliArgs(['index.ts'])
 
   assert.equal(result.ok, true)
   assert.deepEqual(result.plan, {
     command: 'run',
-    entry: 'index.js',
+    entry: 'index.ts',
     emit: null,
     target: null,
     out: null,
@@ -16,13 +16,13 @@ test('ccjs index.js defaults to run command', () => {
   })
 })
 
-test('ccjs index.js --emit c compiles source without running', () => {
-  const result = parseCliArgs(['index.js', '--emit', 'c'])
+test('ccjs index.ts --emit c compiles source without running', () => {
+  const result = parseCliArgs(['index.ts', '--emit', 'c'])
 
   assert.equal(result.ok, true)
   assert.deepEqual(result.plan, {
     command: 'emit',
-    entry: 'index.js',
+    entry: 'index.ts',
     emit: 'c',
     target: 'c',
     out: 'index.c',
@@ -31,19 +31,20 @@ test('ccjs index.js --emit c compiles source without running', () => {
 })
 
 test('emit accepts explicit output path', () => {
-  const result = parseCliArgs(['index.js', '--emit', 'c', '-o', 'build/index.c'])
+  const result = parseCliArgs(['index.ts', '--emit', 'c', '-o', 'build/index.c'])
 
   assert.equal(result.ok, true)
   assert.equal(result.plan.out, 'build/index.c')
 })
 
 test('build requires target', () => {
-  const result = parseCliArgs(['build', 'index.js'])
+  const result = parseCliArgs(['build', 'index.ts'])
 
   assert.equal(result.ok, false)
   assert.equal(result.error, 'build requires --target js|ts|c')
 })
 
-test('js emit does not overwrite js input by default', () => {
+test('emit does not overwrite same-extension input by default', () => {
   assert.equal(defaultEmitOutput('src/index.js', 'js'), 'src/index.out.js')
+  assert.equal(defaultEmitOutput('src/index.ts', 'ts'), 'src/index.out.ts')
 })

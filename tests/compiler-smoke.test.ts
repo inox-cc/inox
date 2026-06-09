@@ -1282,6 +1282,35 @@ export function main(): void {
   }
 })
 
+test('accepts valid TypeScript source files as canonical input', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-modules-'))
+
+  try {
+    await writeFile(join(dir, 'lib.ts'), `export function greet(): string {
+  return 'from ts'
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import { greet } from './lib.ts'
+
+export function main(): void {
+  console.log(greet())
+}
+`)
+
+    const result = await compileFile(join(dir, 'main.ts'), {
+      target: 'js'
+    })
+
+    assert.match(result.code, /from ts/)
+    assert.equal(result.graph.modules.every(module => module.path.endsWith('.ts')), true)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('rejects duplicate declarations in the same scope', () => {
   assertDiagnostic(`export function main(): void {
   const value = 1

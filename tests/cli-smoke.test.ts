@@ -21,11 +21,35 @@ type RunOptions = {
 }
 
 test('ccjs file compiles and runs on the fly', async () => {
-  const result = await runCli(['tests/fixtures/parser/valid/hello.ccjs'])
+  const result = await runCli(['tests/fixtures/parser/valid/hello.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'hello\n')
   assert.equal(result.stderr, '')
+})
+
+test('ccjs accepts valid TypeScript files as canonical source input', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-cli-'))
+  const entry = join(dir, 'main.ts')
+
+  try {
+    await writeFile(entry, `export function main(): void {
+  const name: string = 'Ada'
+  console.log(\`hello \${name}\`)
+}
+`)
+
+    const result = await runCli([entry])
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, 'hello Ada\n')
+    assert.equal(result.stderr, '')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
 })
 
 test('ccjs file --emit c writes C source', async () => {
@@ -33,7 +57,7 @@ test('ccjs file --emit c writes C source', async () => {
   const out = join(dir, 'hello.c')
 
   try {
-    const result = await runCli(['tests/fixtures/parser/valid/hello.ccjs', '--emit', 'c', '-o', out])
+    const result = await runCli(['tests/fixtures/parser/valid/hello.ts', '--emit', 'c', '-o', out])
 
     assert.equal(result.code, 0)
     assert.equal(result.stdout, `${out}\n`)
@@ -83,7 +107,7 @@ test('ccjs build --target c writes a native executable', async t => {
   const out = join(dir, 'hello')
 
   try {
-    const result = await runCli(['build', 'tests/fixtures/parser/valid/hello.ccjs', '--target', 'c', '-o', out])
+    const result = await runCli(['build', 'tests/fixtures/parser/valid/hello.ts', '--target', 'c', '-o', out])
 
     assert.equal(result.code, 0)
     assert.equal(result.stdout, `${out}\n`)
@@ -122,7 +146,7 @@ exec cc "$@"
 `)
     await chmod(wrapper, 0o755)
 
-    const result = await runCli(['build', 'tests/fixtures/parser/valid/hello.ccjs', '--target', 'c', '-o', out], {
+    const result = await runCli(['build', 'tests/fixtures/parser/valid/hello.ts', '--target', 'c', '-o', out], {
       env: {
         CC: wrapper,
         CFLAGS: '"-Inonexistent path with spaces" -DCCJS_TEST_CFLAG=1',
@@ -166,7 +190,7 @@ test('ccjs build --target c reads ccjs.config.json toolchain settings', async t 
   const log = join(dir, 'cc.log')
 
   try {
-    await writeFile(join(dir, 'main.ccjs'), `export function main(): void {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
   console.log('hello')
 }
 `)
@@ -183,7 +207,7 @@ exec cc "$@"
       }
     }, null, 2)}\n`)
 
-    const result = await runCli(['build', 'main.ccjs', '--target', 'c', '-o', out], {
+    const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
       cwd: dir,
       env: {
         CCJS_CC_LOG: log
@@ -215,7 +239,7 @@ test('ccjs build --target c reports invalid ccjs.config.json', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
-    await writeFile(join(dir, 'main.ccjs'), `export function main(): void {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
   console.log('hello')
 }
 `)
@@ -225,7 +249,7 @@ test('ccjs build --target c reports invalid ccjs.config.json', async () => {
       }
     }, null, 2)}\n`)
 
-    const result = await runCli(['build', 'main.ccjs', '--target', 'c'], {
+    const result = await runCli(['build', 'main.ts', '--target', 'c'], {
       cwd: dir
     })
 
@@ -247,7 +271,7 @@ test('ccjs run --target c builds and runs a temporary native executable', async 
     return
   }
 
-  const result = await runCli(['run', 'tests/fixtures/parser/valid/hello.ccjs', '--target', 'c'])
+  const result = await runCli(['run', 'tests/fixtures/parser/valid/hello.ts', '--target', 'c'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'hello\n')
@@ -262,7 +286,7 @@ test('ccjs run --target c --keep keeps temporary C artifacts', async t => {
     return
   }
 
-  const result = await runCli(['run', 'tests/fixtures/parser/valid/hello.ccjs', '--target', 'c', '--keep'])
+  const result = await runCli(['run', 'tests/fixtures/parser/valid/hello.ts', '--target', 'c', '--keep'])
   const match = result.stderr.match(/kept (.+)\n?$/)
 
   assert.equal(result.code, 0)
@@ -287,7 +311,7 @@ test('ccjs run --target c --keep keeps temporary C artifacts', async t => {
 })
 
 test('ccjs run --keep writes temporary js output', async () => {
-  const result = await runCli(['tests/fixtures/parser/valid/hello.ccjs', '--keep'])
+  const result = await runCli(['tests/fixtures/parser/valid/hello.ts', '--keep'])
   const match = result.stderr.match(/kept (.+)\n?$/)
 
   assert.equal(result.code, 0)
@@ -311,7 +335,7 @@ test('ccjs run --keep writes temporary js output', async () => {
 })
 
 test('ccjs reports diagnostics for invalid source', async () => {
-  const result = await runCli(['tests/fixtures/diagnostics/no-var.ccjs'])
+  const result = await runCli(['tests/fixtures/diagnostics/no-var.ts'])
 
   assert.equal(result.code, 1)
   assert.match(result.stderr, /CCJS_NO_VAR/)
@@ -326,7 +350,7 @@ test('ccjs file runs a multi-file module graph', async () => {
 })
 
 test('ccjs file runs composite expressions', async () => {
-  const result = await runCli(['tests/fixtures/runtime/composite-expressions.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/composite-expressions.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'Grace 5 true\n')
@@ -334,7 +358,7 @@ test('ccjs file runs composite expressions', async () => {
 })
 
 test('ccjs file runs if else blocks', async () => {
-  const result = await runCli(['tests/fixtures/runtime/if-else.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/if-else.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'yes\n')
@@ -342,7 +366,7 @@ test('ccjs file runs if else blocks', async () => {
 })
 
 test('ccjs file runs while loops', async () => {
-  const result = await runCli(['tests/fixtures/runtime/while.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/while.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, '6\n')
@@ -350,7 +374,7 @@ test('ccjs file runs while loops', async () => {
 })
 
 test('ccjs file runs classic for loops', async () => {
-  const result = await runCli(['tests/fixtures/runtime/for.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/for.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, '6\n')
@@ -358,7 +382,7 @@ test('ccjs file runs classic for loops', async () => {
 })
 
 test('ccjs file runs for of loops', async () => {
-  const result = await runCli(['tests/fixtures/runtime/for-of.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/for-of.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, '6\n')
@@ -366,7 +390,7 @@ test('ccjs file runs for of loops', async () => {
 })
 
 test('ccjs file runs switch statements', async () => {
-  const result = await runCli(['tests/fixtures/runtime/switch.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/switch.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'two\n')
@@ -374,7 +398,7 @@ test('ccjs file runs switch statements', async () => {
 })
 
 test('ccjs file runs callbacks', async () => {
-  const result = await runCli(['tests/fixtures/runtime/callback.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/callback.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'callback\n')
@@ -382,7 +406,7 @@ test('ccjs file runs callbacks', async () => {
 })
 
 test('ccjs file runs optional chaining', async () => {
-  const result = await runCli(['tests/fixtures/runtime/optional-chaining.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/optional-chaining.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'Ada undefined called\n')
@@ -390,7 +414,7 @@ test('ccjs file runs optional chaining', async () => {
 })
 
 test('ccjs file runs simple classes', async () => {
-  const result = await runCli(['tests/fixtures/runtime/class.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/class.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'Ada\n')
@@ -398,7 +422,7 @@ test('ccjs file runs simple classes', async () => {
 })
 
 test('ccjs file runs async await', async () => {
-  const result = await runCli(['tests/fixtures/runtime/async-await.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/async-await.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, '2\n')
@@ -406,7 +430,7 @@ test('ccjs file runs async await', async () => {
 })
 
 test('ccjs file runs arrow function chains', async () => {
-  const result = await runCli(['tests/fixtures/runtime/arrow-chain.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/arrow-chain.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, '4 6\n')
@@ -414,7 +438,7 @@ test('ccjs file runs arrow function chains', async () => {
 })
 
 test('ccjs file runs JS stdlib globals', async () => {
-  const result = await runCli(['tests/fixtures/runtime/js-stdlib.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/js-stdlib.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'true true\ntrue 42\nhello Ada\n')
@@ -422,7 +446,7 @@ test('ccjs file runs JS stdlib globals', async () => {
 })
 
 test('ccjs file runs fetch and timers', async () => {
-  const result = await runCli(['tests/fixtures/runtime/fetch-timers.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/fetch-timers.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'hello\n')
@@ -430,7 +454,7 @@ test('ccjs file runs fetch and timers', async () => {
 })
 
 test('ccjs file runs fs globals', async () => {
-  const result = await runCli(['tests/fixtures/runtime/fs.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/fs.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'hello fs\n')
@@ -438,7 +462,7 @@ test('ccjs file runs fs globals', async () => {
 })
 
 test('ccjs file runs JSON and binary globals', async () => {
-  const result = await runCli(['tests/fixtures/runtime/json-binary.ccjs'])
+  const result = await runCli(['tests/fixtures/runtime/json-binary.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'Ada true 2 3 3\n')

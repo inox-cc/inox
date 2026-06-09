@@ -47,11 +47,11 @@ export const usage = `Usage:
   ccjs test
 
 Examples:
-  ccjs index.js
-  ccjs index.js --emit c
-  ccjs index.js --emit c -o build/index.c
-  ccjs run src/main.ccjs
-  ccjs build src/main.ccjs --target c -o build/main`
+  ccjs index.ts
+  ccjs index.ts --emit c
+  ccjs index.ts --emit c -o build/index.c
+  ccjs run src/main.ts
+  ccjs build src/main.ts --target c -o build/main`
 
 export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
   if (args.length === 0) {
@@ -124,7 +124,8 @@ export function defaultEmitOutput(entry: string, emit: CliTarget): string {
   const dir = dirname(entry)
   const ext = extname(entry)
   const base = basename(entry, ext)
-  const file = emit === 'js' ? `${base}.out.js` : `${base}.${emit}`
+  const outputExt = `.${emit}`
+  const file = ext === outputExt ? `${base}.out${outputExt}` : `${base}.${emit}`
 
   return dir === '.' ? file : join(dir, file)
 }

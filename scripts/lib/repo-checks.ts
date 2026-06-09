@@ -80,7 +80,7 @@ export async function findFixtureFiles(): Promise<string[]> {
     return []
   }
 
-  return findFiles(root, file => file.endsWith('.ccjs') || file.endsWith('.js'))
+  return findFiles(root, file => file.endsWith('.ts') || file.endsWith('.js'))
 }
 
 export function formatFailures(title: string, failures: string[]): string {

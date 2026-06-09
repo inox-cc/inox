@@ -8,7 +8,7 @@ import { checkProgram } from './checker.ts'
 import { lowerProgram } from './lower.ts'
 import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord, ProgramNode, SourceLocation } from './types.ts'
 
-const sourceExtensions = ['', '.ccjs', '.js']
+const sourceExtensions = ['', '.ts', '.js']
 
 export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
   const entryPath = resolve(entry)
