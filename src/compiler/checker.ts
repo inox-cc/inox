@@ -297,7 +297,7 @@ class Checker {
     }
 
     if (statement.type === 'IfStatement') {
-      this.checkExpression(statement.condition)
+      this.checkBooleanCondition(statement.condition)
       this.checkScopedBody(statement.consequent)
 
       if (statement.alternate != null) {
@@ -308,7 +308,7 @@ class Checker {
     }
 
     if (statement.type === 'WhileStatement') {
-      this.checkExpression(statement.condition)
+      this.checkBooleanCondition(statement.condition)
       this.withLoop(() => {
         this.checkScopedBody(statement.body)
       })
@@ -824,7 +824,7 @@ class Checker {
       }
 
       if (statement.test != null) {
-        this.checkExpression(statement.test)
+        this.checkBooleanCondition(statement.test)
       }
 
       if (statement.update != null) {
@@ -875,6 +875,14 @@ class Checker {
         })
       }
     })
+  }
+
+  checkBooleanCondition(expression: AnyNode): void {
+    const type = this.checkExpression(expression)
+
+    if (type !== 'boolean' && type !== 'unknown') {
+      this.report('CCJS_CONDITION_TYPE', `condition must be boolean, got ${type}`, expression.loc)
+    }
   }
 
   checkScopedBody(statement: AnyNode): void {

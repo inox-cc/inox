@@ -1682,6 +1682,29 @@ test('rejects continue outside loops', () => {
 `, 'CCJS_CONTINUE_OUTSIDE')
 })
 
+test('rejects non-boolean conditions', () => {
+  assertDiagnostic(`export function main(): void {
+  if (1) {
+    console.log('bad')
+  }
+}
+`, 'CCJS_CONDITION_TYPE')
+
+  assertDiagnostic(`export function main(): void {
+  while ('yes') {
+    console.log('bad')
+  }
+}
+`, 'CCJS_CONDITION_TYPE')
+
+  assertDiagnostic(`export function main(): void {
+  for (let index = 0; 'yes'; index = index + 1) {
+    console.log(index)
+  }
+}
+`, 'CCJS_CONDITION_TYPE')
+})
+
 test('rejects duplicate switch default branches', () => {
   assertDiagnostic(`export function main(): void {
   switch (1) {
