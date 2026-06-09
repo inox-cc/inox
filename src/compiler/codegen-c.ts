@@ -404,24 +404,103 @@ function collectCallbackWrappers(programs, context) {
         valueType: param.valueType,
         functionType: param.functionType,
         shape: param.shape,
+        runtimeManaged: ['string', 'object'].includes(param.valueType),
         mutable: true
       })
     }
   }
-  const declareVariable = (scope, statement) => {
+  const declareVariable = (scope, statement, scopes) => {
+    const valueType = statement.valueType === 'unknown'
+      ? inferCapturedExpressionValueType(statement.init, scopes)
+      : statement.valueType
+
     declare(scope, statement.name, {
       name: statement.name,
-      valueType: statement.valueType,
+      valueType,
       functionType: statement.functionType,
       shape: statement.shape,
+      runtimeManaged: isRuntimeManagedCaptureBinding(statement, scopes, valueType),
       mutable: statement.kind === 'let'
     })
+  }
+  const lookup = (name, scopes) => {
+    for (let index = scopes.length - 1; index >= 0; index -= 1) {
+      const entry = scopes[index].get(name)
+
+      if (entry != null) {
+        return entry
+      }
+    }
+
+    return null
+  }
+  const isRuntimeManagedCaptureBinding = (statement, scopes, valueType) => {
+    if (valueType === 'object') {
+      return true
+    }
+
+    if (valueType !== 'string') {
+      return false
+    }
+
+    if (statement.init?.type === 'StringLiteral') {
+      return false
+    }
+
+    if (statement.init?.type === 'TemplateLiteral' && !statement.init.raw.includes('${')) {
+      return false
+    }
+
+    if (statement.init?.type === 'Reference' && statement.init.path.length === 1) {
+      return lookup(statement.init.path[0], scopes)?.runtimeManaged === true
+    }
+
+    return true
+  }
+  const inferCapturedExpressionValueType = (expression, scopes) => {
+    if (expression?.valueType != null && expression.valueType !== 'unknown') {
+      return expression.valueType
+    }
+
+    if (expression?.type === 'Reference' && expression.path.length === 1) {
+      return lookup(expression.path[0], scopes)?.valueType ?? 'unknown'
+    }
+
+    if (expression?.type === 'MemberExpression') {
+      const object = inferCapturedExpressionInfo(expression.object, scopes)
+      const field = object.shape?.fields?.find(field => field.name === expression.property)
+
+      return field?.valueType ?? 'unknown'
+    }
+
+    if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      const object = inferCapturedExpressionInfo(expression.object, scopes)
+      const field = object.shape?.fields?.find(field => field.name === expression.index.value)
+
+      return field?.valueType ?? 'unknown'
+    }
+
+    return 'unknown'
+  }
+  const inferCapturedExpressionInfo = (expression, scopes) => {
+    if (expression?.type === 'Reference' && expression.path.length === 1) {
+      const entry = lookup(expression.path[0], scopes)
+
+      if (entry != null) {
+        return entry
+      }
+    }
+
+    return {
+      valueType: inferCapturedExpressionValueType(expression, scopes),
+      shape: null
+    }
   }
   const visitStatement = (statement, scopes) => {
     if (statement?.type === 'VariableDeclaration') {
       register(statement.init, statement.functionType, scopes)
       visitExpression(statement.init, scopes)
-      declareVariable(scopes.at(-1), statement)
+      declareVariable(scopes.at(-1), statement, scopes)
       return
     }
 
@@ -904,6 +983,12 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
     lines.push(`static void ${wrapper.finalizerName}(void* context) {`)
     lines.push('  if (context == 0) return;')
+    lines.push(`  ${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)context;`)
+
+    for (const capture of wrapper.captures.filter(isRetainedRuntimeArrowCapture)) {
+      lines.push(`  ccjs_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
+    }
+
     lines.push(`  ccjs_default_free(0, context, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`)
     lines.push('}')
     lines.push('')
@@ -955,6 +1040,21 @@ function emitRuntimeArrowCallbackContextLocals(wrapper, context) {
 
   for (const capture of wrapper.captures) {
     context.variables.set(capture.name, capture.valueType)
+
+    if (isRetainedRuntimeArrowCapture(capture)) {
+      if (capture.valueType === 'string') {
+        context.runtimeStrings.add(capture.name)
+        lines.push(`ccjs_string* ${capture.name} = (ccjs_string*)captured->${emitRuntimeArrowCaptureField(capture)}.as.ref;`)
+        continue
+      }
+
+      if (capture.valueType === 'object') {
+        registerObjectShape(context, capture.name, capture.shape)
+        lines.push(`ccjs_value ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+        continue
+      }
+    }
+
     lines.push(`${emitRuntimeArrowCaptureCType(capture)} ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`)
   }
 
@@ -996,6 +1096,10 @@ function emitRuntimeArrowCallbackParamPrelude(wrapper, context) {
 }
 
 function emitRuntimeArrowCaptureCType(capture) {
+  if (isRetainedRuntimeArrowCapture(capture)) {
+    return 'ccjs_value'
+  }
+
   if (capture.valueType === 'string') {
     return 'char*'
   }
@@ -1005,6 +1109,10 @@ function emitRuntimeArrowCaptureCType(capture) {
 
 function emitRuntimeArrowCaptureField(capture) {
   return emitCIdentifier(capture.name)
+}
+
+function isRetainedRuntimeArrowCapture(capture) {
+  return capture.runtimeManaged === true && ['string', 'object'].includes(capture.valueType)
 }
 
 function emitRuntimeCallbackWrapperArgChecks(param, index) {
@@ -2978,12 +3086,8 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
       context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing mutable let bindings in C callbacks requires boxed closure storage and is not supported yet', wrapper.expression.loc))
     }
 
-    if (!['number', 'boolean', 'string'].includes(capture.valueType)) {
-      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing C callbacks currently support only const number/boolean/string bindings', wrapper.expression.loc))
-    }
-
-    if (capture.valueType === 'string' && context.runtimeStrings.has(capture.name)) {
-      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing runtime string refs in C callbacks requires retained context values and is not supported yet', wrapper.expression.loc))
+    if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
+      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing C callbacks currently support only const number/boolean/string/object bindings', wrapper.expression.loc))
     }
   }
 
@@ -2998,7 +3102,7 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
   lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
 
   for (const capture of wrapper.captures) {
-    lines.push(`${contextName}->${emitRuntimeArrowCaptureField(capture)} = ${capture.name};`)
+    lines.push(...emitRuntimeArrowCaptureStoreLines(capture, contextName))
   }
 
   lines.push(`if (ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, ${contextName}, ${wrapper.finalizerName}, &${out}) != CCJS_OK) {`)
@@ -3007,6 +3111,29 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
   lines.push('}')
 
   return lines
+}
+
+function emitRuntimeArrowCaptureStoreLines(capture, contextName) {
+  const field = `${contextName}->${emitRuntimeArrowCaptureField(capture)}`
+
+  if (isRetainedRuntimeArrowCapture(capture)) {
+    if (capture.valueType === 'string') {
+      return [
+        `${field}.tag = CCJS_TAG_STRING;`,
+        `${field}.as.ref = (ccjs_ref*)&${capture.name}->header;`,
+        `ccjs_retain(${field});`
+      ]
+    }
+
+    return [
+      `${field} = ${capture.name};`,
+      `ccjs_retain(${field});`
+    ]
+  }
+
+  return [
+    `${field} = ${capture.name};`
+  ]
 }
 
 function emitRuntimeCallbackCall(expression, functionType, context) {

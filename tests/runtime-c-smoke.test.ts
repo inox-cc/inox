@@ -1139,6 +1139,59 @@ export function main(): void {
   }
 })
 
+test('generated C retained runtime callback captures compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-retained-callback-'))
+  const source = join(dir, 'retained-callback.c')
+  const output = join(dir, 'retained-callback')
+
+  try {
+    const result = compileSource(`type User = {
+  name: string
+}
+
+type StringCallback = (value: string) => void;
+
+function run(callback: StringCallback): void {
+  callback('Grace')
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  const name = user.name
+  const callback: StringCallback = (value: string) => {
+    console.log(name, user.name, value)
+  }
+  run(callback)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada Ada Grace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C string equality comparisons compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

@@ -1274,6 +1274,38 @@ export function main(): void {
   assert.match(c.code, /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_arrow_\d+, ccjs_callback_context_\d+, ccjs_callback_context_\d+_finalize, &callback\) != CCJS_OK\) \{/)
 })
 
+test('compiles runtime callback arrows with retained runtime captures', () => {
+  const source = `type User = {
+  name: string
+}
+
+type StringCallback = (value: string) => void;
+
+function run(callback: StringCallback): void {
+  callback('Grace')
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  const name = user.name
+  const callback: StringCallback = (value: string) => {
+    console.log(name, user.name, value)
+  }
+  run(callback)
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n  ccjs_value name;\n  ccjs_value user;\n\} ccjs_callback_context_\d+;/)
+  assert.match(c.code, /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)context;\n  ccjs_release\(captured->name\);\n  ccjs_release\(captured->user\);/)
+  assert.match(c.code, /ccjs_string\* name = \(ccjs_string\*\)captured->name\.as\.ref;/)
+  assert.match(c.code, /ccjs_value user = captured->user;/)
+  assert.match(c.code, /ccjs_callback_context_\d+->name\.tag = CCJS_TAG_STRING;\n  ccjs_callback_context_\d+->name\.as\.ref = \(ccjs_ref\*\)&name->header;\n  ccjs_retain\(ccjs_callback_context_\d+->name\);/)
+  assert.match(c.code, /ccjs_callback_context_\d+->user = user;\n  ccjs_retain\(ccjs_callback_context_\d+->user\);/)
+})
+
 test('checks typed callback argument counts', () => {
   assertDiagnostic(`type NumberCallback = (value: number) => void;
 
