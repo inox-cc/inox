@@ -2116,6 +2116,10 @@ function emitCValueExpression(expression, context) {
     return emitCStringConcatValueExpression(expression, context)
   }
 
+  if (expression?.type === 'ArrayLiteral') {
+    return emitCArrayLiteralValueExpression(expression, context)
+  }
+
   if (expression?.type === 'StringLiteral') {
     const temp = nextCName(context, 'ccjs_value')
     registerOwnedValue(context, temp)
@@ -2192,6 +2196,20 @@ function emitCValueExpression(expression, context) {
   if (isMemberAccessExpression(expression)) {
     const member = resolveKnownObjectMember(expression, context)
 
+    if (member?.valueType === 'array') {
+      const temp = nextCName(context, 'ccjs_value')
+      registerOwnedValue(context, temp)
+
+      return {
+        lines: [
+          ...emitPrepareOwnedValueWrite(temp),
+          emitStatusCheck(`ccjs_object_get_known(${member.objectName}, ${member.index}, &${temp})`, context),
+          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_ARRAY || ${temp}.as.ref == 0`, context)
+        ],
+        expression: temp
+      }
+    }
+
     if (member?.valueType === 'string') {
       const temp = nextCName(context, 'ccjs_value')
       registerOwnedValue(context, temp)
@@ -2210,6 +2228,20 @@ function emitCValueExpression(expression, context) {
   if (isIndexAccessExpression(expression)) {
     const element = resolveKnownArrayIndex(expression, context)
 
+    if (element?.valueType === 'array') {
+      const temp = nextCName(context, 'ccjs_value')
+      registerOwnedValue(context, temp)
+
+      return {
+        lines: [
+          ...emitPrepareOwnedValueWrite(temp),
+          emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context),
+          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_ARRAY || ${temp}.as.ref == 0`, context)
+        ],
+        expression: temp
+      }
+    }
+
     if (element?.valueType === 'string') {
       const temp = nextCName(context, 'ccjs_value')
       registerOwnedValue(context, temp)
@@ -2225,6 +2257,20 @@ function emitCValueExpression(expression, context) {
     }
 
     const field = resolveKnownObjectIndex(expression, context)
+
+    if (field?.valueType === 'array') {
+      const temp = nextCName(context, 'ccjs_value')
+      registerOwnedValue(context, temp)
+
+      return {
+        lines: [
+          ...emitPrepareOwnedValueWrite(temp),
+          emitStatusCheck(`ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context),
+          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_ARRAY || ${temp}.as.ref == 0`, context)
+        ],
+        expression: temp
+      }
+    }
 
     if (field?.valueType === 'string') {
       const temp = nextCName(context, 'ccjs_value')
@@ -2262,6 +2308,26 @@ function emitCValueExpression(expression, context) {
   return {
     lines: [],
     expression: 'ccjs_undefined_value()'
+  }
+}
+
+function emitCArrayLiteralValueExpression(expression, context) {
+  const temp = nextCName(context, 'ccjs_array')
+  registerOwnedValue(context, temp)
+  const lines = [
+    ...emitPrepareOwnedValueWrite(temp),
+    emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, ${expression.elements.length}, &${temp})`, context)
+  ]
+
+  for (const [index, element] of expression.elements.entries()) {
+    const value = emitCValueExpression(element, context)
+    lines.push(...value.lines)
+    lines.push(emitStatusCheck(`ccjs_array_set(${temp}, ${index}, ${value.expression})`, context))
+  }
+
+  return {
+    lines,
+    expression: temp
   }
 }
 
@@ -2624,13 +2690,13 @@ function emitNumberLogValue(expression, type, context) {
       }
     }
 
-    const length = resolveKnownArrayLength(expression, context)
+    const length = emitPreparedArrayLengthExpression(expression, context)
 
     if (length != null) {
       return {
-        lines: [],
+        lines: length.lines,
         format: '%g',
-        values: [`((double)${length})`]
+        values: [`((double)${length.expression})`]
       }
     }
 
@@ -2847,13 +2913,10 @@ function emitPreparedNumberExpression(expression, context) {
       return stringLength
     }
 
-    const length = resolveKnownArrayLength(expression, context)
+    const length = emitPreparedArrayLengthExpression(expression, context)
 
     if (length != null) {
-      return {
-        lines: [],
-        expression: length
-      }
+      return length
     }
 
     const member = resolveKnownObjectMember(expression, context)
@@ -3447,6 +3510,10 @@ function inferExpressionType(expression, context) {
   }
 
   if (isMemberAccessExpression(expression)) {
+    if (isArrayLengthExpression(expression, context)) {
+      return 'number'
+    }
+
     const length = resolveKnownArrayLength(expression, context)
 
     if (length != null) {
@@ -3629,6 +3696,12 @@ function isStringLengthObject(expression, context) {
   return inferExpressionType(expression, context) === 'string'
 }
 
+function isArrayLengthExpression(expression, context) {
+  return expression?.type === 'MemberExpression'
+    && expression.property === 'length'
+    && inferExpressionType(expression.object, context) === 'array'
+}
+
 function isMemberAccessExpression(expression) {
   return expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression'
 }
@@ -3757,6 +3830,37 @@ function resolveKnownArrayLength(expression, context) {
   const elements = context.arrayShapes.get(expression.object.path[0])
 
   return elements == null ? null : `${elements.length}`
+}
+
+function emitPreparedArrayLengthExpression(expression, context) {
+  if (expression?.type !== 'MemberExpression' || expression.property !== 'length') {
+    return null
+  }
+
+  const knownLength = resolveKnownArrayLength(expression, context)
+
+  if (knownLength != null) {
+    return {
+      lines: [],
+      expression: knownLength
+    }
+  }
+
+  if (inferExpressionType(expression.object, context) !== 'array') {
+    return null
+  }
+
+  const value = emitCValueExpression(expression.object, context)
+  const temp = nextCName(context, 'ccjs_array_len')
+
+  return {
+    lines: [
+      ...value.lines,
+      `size_t ${temp} = 0;`,
+      emitStatusCheck(`ccjs_array_len(${value.expression}, &${temp})`, context)
+    ],
+    expression: temp
+  }
 }
 
 function resolveKnownForOfArray(expression, context) {

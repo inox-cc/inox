@@ -192,6 +192,25 @@ test('lowers C array length for known arrays', () => {
   assert.match(result.code, /printf\("%g %g\\n", \(\(double\)3\), \(\(double\)2\)\);/)
 })
 
+test('lowers C runtime array length for object fields', () => {
+  const result = compileSource(`type Box = {
+  values: number[]
+}
+
+export function main(): void {
+  const box: Box = { values: [1, 2, 3] }
+  console.log(box.values.length)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_array_new\(&ccjs_default_allocator, 3, &ccjs_array_\d+\)/)
+  assert.match(result.code, /ccjs_object_init_known\(box, 0, ccjs_array_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
+})
+
 test('lowers C string length for literals and runtime strings', () => {
   const result = compileSource(`type User = {
   name: string
@@ -2039,6 +2058,28 @@ export function main(): void {
   assertDiagnostic(`export function main(): void {
   const name = 'Ada'
   name.length = 4
+}
+`, 'CCJS_ASSIGN_READONLY_FIELD')
+})
+
+test('checks array length as a readonly number field', () => {
+  const result = compileSource(`function length(values: number[]): number {
+  return values.length
+}
+
+export function main(): void {
+  const values = [1, 2, 3]
+  console.log(length(values))
+}
+`, {
+    target: 'js'
+  })
+
+  assert.match(result.code, /return values\.length/)
+
+  assertDiagnostic(`export function main(): void {
+  const values = [1, 2, 3]
+  values.length = 4
 }
 `, 'CCJS_ASSIGN_READONLY_FIELD')
 })

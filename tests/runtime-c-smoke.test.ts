@@ -1676,6 +1676,49 @@ test('generated C array length lowering compiles and runs with runtime sources',
   }
 })
 
+test('generated C runtime array length compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-array-length-'))
+  const source = join(dir, 'runtime-array-length.c')
+  const output = join(dir, 'runtime-array-length')
+
+  try {
+    const result = compileSource(`type Box = {
+  values: number[]
+}
+
+export function main(): void {
+  const box: Box = { values: [1, 2, 3] }
+  console.log(box.values.length)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C for of array lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

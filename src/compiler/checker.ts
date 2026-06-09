@@ -584,6 +584,10 @@ class Checker {
       return 'number'
     }
 
+    if (objectType === 'array' && expression.property === 'length') {
+      return 'number'
+    }
+
     const shape = this.resolveExpressionShape(expression.object)
 
     if (shape == null) {
@@ -606,6 +610,11 @@ class Checker {
     const valueType = this.checkExpression(expression.value)
 
     if (targetType === 'string' && expression.target.property === 'length') {
+      this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
+      return valueType
+    }
+
+    if (targetType === 'array' && expression.target.property === 'length') {
       this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
       return valueType
     }

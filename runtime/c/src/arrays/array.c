@@ -60,6 +60,17 @@ ccjs_status ccjs_array_get(ccjs_value array, size_t index, ccjs_value* out) {
   return CCJS_OK;
 }
 
+ccjs_status ccjs_array_len(ccjs_value array, size_t* out) {
+  if (out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  *out = instance->len;
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_array_set(ccjs_value array, size_t index, ccjs_value value) {
   if (array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
     return CCJS_ERR_TYPE;
