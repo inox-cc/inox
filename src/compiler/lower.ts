@@ -177,7 +177,7 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       name: statement.name,
       loc: statement.loc,
       declaredType: statement.declaredType,
-      nullable: declared.nullable,
+      nullable: declared.nullable || init?.nullable === true,
       shape: declared.shape,
       functionType: declared.functionType,
       arrayElementType: declared.arrayElementType ?? inferArrayElementType(init),
@@ -585,7 +585,13 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
     return {
       ...expression,
       object: lowerExpression(expression.object, context),
-      valueType: 'unknown'
+      valueType: expression.valueType ?? 'unknown',
+      nullable: expression.nullable === true,
+      arrayElementType: expression.arrayElementType ?? null,
+      mapKeyType: expression.mapKeyType ?? null,
+      mapValueType: expression.mapValueType ?? null,
+      setElementType: expression.setElementType ?? null,
+      shape: expression.shape ?? null
     }
   }
 
@@ -594,7 +600,13 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       ...expression,
       object: lowerExpression(expression.object, context),
       index: lowerExpression(expression.index, context),
-      valueType: 'unknown'
+      valueType: expression.valueType ?? 'unknown',
+      nullable: expression.nullable === true,
+      arrayElementType: expression.arrayElementType ?? null,
+      mapKeyType: expression.mapKeyType ?? null,
+      mapValueType: expression.mapValueType ?? null,
+      setElementType: expression.setElementType ?? null,
+      shape: expression.shape ?? null
     }
   }
 

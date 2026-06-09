@@ -425,7 +425,7 @@ class Checker {
         kind: statement.kind,
         mutable: statement.kind === 'let',
         valueType,
-        nullable: declared?.nullable ?? false,
+        nullable: declared?.nullable === true || statement.init?.nullable === true,
         arrayElementType,
         mapKeyType: mapType?.key ?? null,
         mapValueType: mapType?.value ?? null,
@@ -537,14 +537,11 @@ class Checker {
     }
 
     if (expression.type === 'OptionalMemberExpression') {
-      this.checkExpression(expression.object)
-      return 'unknown'
+      return this.checkOptionalMemberExpression(expression)
     }
 
     if (expression.type === 'OptionalIndexExpression') {
-      this.checkExpression(expression.object)
-      this.checkExpression(expression.index)
-      return 'unknown'
+      return this.checkOptionalIndexExpression(expression)
     }
 
     if (expression.type === 'OptionalCallExpression') {
@@ -695,6 +692,40 @@ class Checker {
     return field.valueType ?? fieldType.valueType
   }
 
+  checkOptionalMemberExpression(expression: AnyNode): ValueType {
+    this.checkExpression(expression.object)
+
+    const shape = this.resolveExpressionShape(expression.object)
+
+    if (shape == null) {
+      expression.nullable = true
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    const field = this.findShapeField(shape, expression.property)
+
+    if (field == null) {
+      this.report('CCJS_UNKNOWN_FIELD', `unknown field ${expression.property}`, expression.loc)
+      expression.nullable = true
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    const valueType = field.valueType ?? fieldType.valueType
+
+    expression.nullable = true
+    expression.valueType = valueType
+    expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
+    expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
+    expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
+    expression.setElementType = field.setElementType ?? fieldType.setElementType
+    expression.shape = field.shape ?? fieldType.shape
+
+    return valueType
+  }
+
   checkMemberAssignment(expression: AnyNode): ValueType {
     const targetType = this.checkExpression(expression.target.object)
     const shape = this.resolveExpressionShape(expression.target.object)
@@ -788,6 +819,58 @@ class Checker {
     expression.nullable = field.nullable === true || fieldType.nullable
 
     return field.valueType ?? fieldType.valueType
+  }
+
+  checkOptionalIndexExpression(expression: AnyNode): ValueType {
+    const objectType = this.checkExpression(expression.object)
+    const indexType = this.checkExpression(expression.index)
+
+    if (expression.index.type !== 'StringLiteral') {
+      if (objectType === 'array') {
+        this.checkAssignableType(indexType, 'number', expression.index.loc)
+        const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
+
+        expression.nullable = true
+        expression.valueType = valueType
+
+        return valueType
+      }
+
+      expression.nullable = true
+      expression.valueType = 'unknown'
+
+      return 'unknown'
+    }
+
+    const shape = this.resolveExpressionShape(expression.object)
+
+    if (shape == null) {
+      expression.nullable = true
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    const field = this.findShapeField(shape, expression.index.value)
+
+    if (field == null) {
+      this.report('CCJS_UNKNOWN_FIELD', `unknown field ${expression.index.value}`, expression.index.loc)
+      expression.nullable = true
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    const valueType = field.valueType ?? fieldType.valueType
+
+    expression.nullable = true
+    expression.valueType = valueType
+    expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
+    expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
+    expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
+    expression.setElementType = field.setElementType ?? fieldType.setElementType
+    expression.shape = field.shape ?? fieldType.shape
+
+    return valueType
   }
 
   checkIndexAssignment(expression: AnyNode): ValueType {

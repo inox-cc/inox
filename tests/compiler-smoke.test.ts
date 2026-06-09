@@ -1879,6 +1879,28 @@ export function main(): void {
   })
 })
 
+test('lowers C optional access over nullable runtime values', () => {
+  const result = compileSource(`type User = {
+  name: string
+}
+
+export function main(): void {
+  let user: User | null = null
+  const names = ['Grace']
+  const maybeNames: string[] | null = names
+  console.log(user?.name ?? 'Ada', user?.['name'] ?? 'Ada', maybeNames?.[0] ?? 'Ada')
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /if \(user\.tag == CCJS_TAG_NULL\) \{/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_optional_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(user, "name", 4, &ccjs_optional_value_\d+\)/)
+  assert.match(result.code, /if \(maybeNames\.tag == CCJS_TAG_NULL\) \{/)
+  assert.match(result.code, /ccjs_array_get\(maybeNames, 0, &ccjs_optional_value_\d+\)/)
+})
+
 test('lowers C nullable string nullish coalescing', () => {
   const result = compileSource(`export function main(): void {
   const missing: string | null = null

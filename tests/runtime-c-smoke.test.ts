@@ -3116,6 +3116,62 @@ test('generated C nullable string nullish coalescing compiles and runs with runt
   }
 })
 
+test('generated C nullable runtime optional access compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-optional-access-'))
+  const source = join(dir, 'nullable-optional-access.c')
+  const output = join(dir, 'nullable-optional-access')
+
+  try {
+    const result = compileSource(`type User = {
+  name: string
+}
+
+export function main(): void {
+  let user: User | null = null
+  const missingName = user?.name ?? 'missing'
+  user = { name: 'Ada' }
+  const memberName = user?.name ?? 'missing'
+  const indexName = user?.['name'] ?? 'missing'
+
+  const names = ['Grace']
+  const maybeNames: string[] | null = names
+  const emptyNames: string[] | null = null
+  const arrayName = maybeNames?.[0] ?? 'empty'
+  const emptyName = emptyNames?.[0] ?? 'empty'
+
+  const scores: Map<string, number> = new Map([['Ada', 7]])
+  const maybeScores: Map<string, number> | null = scores
+  console.log(missingName, memberName, indexName, arrayName, emptyName, maybeScores !== null)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'missing Ada Ada Grace empty 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
