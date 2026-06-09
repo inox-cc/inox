@@ -2646,7 +2646,7 @@ function emitPreparedNumberExpression(expression, context) {
     const leftType = inferExpressionType(expression.left, context)
     const rightType = inferExpressionType(expression.right, context)
 
-    if (['===', '!=='].includes(expression.operator) && leftType === 'string' && rightType === 'string') {
+    if (['===', '!==', '==', '!='].includes(expression.operator) && leftType === 'string' && rightType === 'string') {
       return emitPreparedStringCompareExpression(expression, context)
     }
 
@@ -2749,7 +2749,7 @@ function emitPreparedStringCompareExpression(expression, context) {
       ...left.lines,
       ...right.lines
     ],
-    expression: expression.operator === '===' ? equals : `(!${equals})`
+    expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
   }
 }
 
@@ -3216,7 +3216,7 @@ function inferExpressionType(expression, context) {
   }
 
   if (expression?.type === 'BinaryExpression') {
-    if (['===', '!==', '<', '<=', '>', '>=', '&&', '||'].includes(expression.operator)) {
+    if (['===', '!==', '==', '!=', '<', '<=', '>', '>=', '&&', '||'].includes(expression.operator)) {
       return 'boolean'
     }
 
@@ -3297,11 +3297,11 @@ function isConsoleLog(expression) {
 }
 
 function emitCOperator(operator) {
-  if (operator === '===') {
+  if (operator === '===' || operator === '==') {
     return '=='
   }
 
-  if (operator === '!==') {
+  if (operator === '!==' || operator === '!=') {
     return '!='
   }
 
@@ -4083,7 +4083,7 @@ function expressionUsesCStringCompare(expression) {
   }
 
   if (expression.type === 'BinaryExpression') {
-    const isStringEquality = ['===', '!=='].includes(expression.operator)
+    const isStringEquality = ['===', '!==', '==', '!='].includes(expression.operator)
       && (expressionMayBeCStringCompareOperand(expression.left) || expressionMayBeCStringCompareOperand(expression.right))
 
     return isStringEquality

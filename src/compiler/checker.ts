@@ -1098,7 +1098,7 @@ class Scope {
 }
 
 function inferBinaryExpressionType(operator: string, left: ValueType, right: ValueType): ValueType {
-  if (['===', '!==', '<', '<=', '>', '>=', '&&', '||'].includes(operator)) {
+  if (['===', '!==', '==', '!=', '<', '<=', '>', '>=', '&&', '||'].includes(operator)) {
     return 'boolean'
   }
 

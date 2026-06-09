@@ -79,6 +79,27 @@ test('emits C for numeric operators', () => {
   assert.match(result.code, /printf\("%g %g\\n", \(\(double\)value\), \(\(double\)\(value == 7\)\)\);/)
 })
 
+test('treats double equality as strict equality aliases', () => {
+  const source = `export function main(): void {
+  const same = 1 == 1
+  const different = 'Ada' != 'Grace'
+  console.log(same, different)
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(js.code, /const same = \(1 === 1\)/)
+  assert.match(js.code, /const different = \("Ada" !== "Grace"\)/)
+  assert.match(c.code, /#include <string\.h>/)
+  assert.match(c.code, /const double same = \(1 == 1\);/)
+  assert.match(c.code, /const double different = \(!\(3 == 5 && memcmp\("Ada", "Grace", 3\) == 0\)\);/)
+})
+
 test('lowers C object literals to runtime calls', () => {
   const result = compileSource(`export function main(): void {
   const user = { name: 'Ada', score: 42, active: true }

@@ -435,7 +435,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
 }
 
 function inferBinaryExpressionType(operator, left, right) {
-  if (['===', '!==', '<', '<=', '>', '>=', '&&', '||'].includes(operator)) {
+  if (['===', '!==', '==', '!=', '<', '<=', '>', '>=', '&&', '||'].includes(operator)) {
     return 'boolean'
   }
 

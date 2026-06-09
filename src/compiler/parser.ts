@@ -809,7 +809,7 @@ class Parser {
   }
 
   parseEquality(): AnyNode {
-    return this.parseBinaryExpression(() => this.parseComparison(), ['===', '!=='])
+    return this.parseBinaryExpression(() => this.parseComparison(), ['===', '!==', '==', '!='])
   }
 
   parseComparison(): AnyNode {

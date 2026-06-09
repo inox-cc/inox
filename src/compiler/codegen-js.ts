@@ -504,7 +504,7 @@ function emitExpression(expression: AnyNode): string {
   }
 
   if (expression.type === 'BinaryExpression') {
-    return `(${emitExpression(expression.left)} ${expression.operator} ${emitExpression(expression.right)})`
+    return `(${emitExpression(expression.left)} ${emitJsOperator(expression.operator)} ${emitExpression(expression.right)})`
   }
 
   if (expression.type === 'UnaryExpression') {
@@ -520,6 +520,18 @@ function emitExpression(expression: AnyNode): string {
   }
 
   return 'undefined'
+}
+
+function emitJsOperator(operator: string): string {
+  if (operator === '==') {
+    return '==='
+  }
+
+  if (operator === '!=') {
+    return '!=='
+  }
+
+  return operator
 }
 
 function emitObjectProperty(property: AnyNode): string {
