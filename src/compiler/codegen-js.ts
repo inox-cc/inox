@@ -174,6 +174,10 @@ function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[
     return ['break']
   }
 
+  if (statement.type === 'ContinueStatement') {
+    return ['continue']
+  }
+
   if (statement.type === 'VariableDeclaration') {
     const init = statement.init == null ? '' : ` = ${emitExpression(statement.init)}`
     const exported = statement.exported && !options.stripExports

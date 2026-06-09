@@ -401,6 +401,16 @@ class Parser {
       }
     }
 
+    if (this.matchKeyword('continue')) {
+      const token = this.previous()
+      this.matchValue(';')
+
+      return {
+        type: 'ContinueStatement',
+        loc: locFromToken(token)
+      }
+    }
+
     if (this.matchKeyword('const')) {
       return this.parseVariableDeclaration('const', false)
     }

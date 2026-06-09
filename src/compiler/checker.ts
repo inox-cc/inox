@@ -155,6 +155,7 @@ class Checker {
   scope: Scope
   types: Map<string, TypeAliasInfo>
   breakDepth: number
+  continueDepth: number
   currentReturnType: ValueType
   asyncDepth: number
 
@@ -164,6 +165,7 @@ class Checker {
     this.scope = new Scope(null)
     this.types = new Map()
     this.breakDepth = 0
+    this.continueDepth = 0
     this.currentReturnType = 'void'
     this.asyncDepth = 0
   }
@@ -307,7 +309,7 @@ class Checker {
 
     if (statement.type === 'WhileStatement') {
       this.checkExpression(statement.condition)
-      this.withBreakable(() => {
+      this.withLoop(() => {
         this.checkScopedBody(statement.body)
       })
       return
@@ -331,6 +333,14 @@ class Checker {
     if (statement.type === 'BreakStatement') {
       if (this.breakDepth === 0) {
         this.report('CCJS_BREAK_OUTSIDE', 'break can only be used inside a loop or switch', statement.loc)
+      }
+
+      return
+    }
+
+    if (statement.type === 'ContinueStatement') {
+      if (this.continueDepth === 0) {
+        this.report('CCJS_CONTINUE_OUTSIDE', 'continue can only be used inside a loop', statement.loc)
       }
 
       return
@@ -821,7 +831,7 @@ class Checker {
         this.checkExpression(statement.update)
       }
 
-      this.withBreakable(() => {
+      this.withLoop(() => {
         this.checkScopedBody(statement.body)
       })
     })
@@ -838,7 +848,7 @@ class Checker {
         loc: statement.nameLoc
       }, statement.nameLoc)
 
-      this.withBreakable(() => {
+      this.withLoop(() => {
         this.checkScopedBody(statement.body)
       })
     })
@@ -983,6 +993,18 @@ class Checker {
     try {
       callback()
     } finally {
+      this.breakDepth -= 1
+    }
+  }
+
+  withLoop(callback: () => void): void {
+    this.breakDepth += 1
+    this.continueDepth += 1
+
+    try {
+      callback()
+    } finally {
+      this.continueDepth -= 1
       this.breakDepth -= 1
     }
   }

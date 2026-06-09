@@ -123,7 +123,7 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
     }
   }
 
-  if (statement.type === 'BreakStatement') {
+  if (statement.type === 'BreakStatement' || statement.type === 'ContinueStatement') {
     return statement
   }
 

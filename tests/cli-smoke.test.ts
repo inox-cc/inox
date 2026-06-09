@@ -381,6 +381,14 @@ test('ccjs file runs classic for loops', async () => {
   assert.equal(result.stderr, '')
 })
 
+test('ccjs file runs continue statements', async () => {
+  const result = await runCli(['tests/fixtures/runtime/continue.ts'])
+
+  assert.equal(result.code, 0)
+  assert.equal(result.stdout, '8\n')
+  assert.equal(result.stderr, '')
+})
+
 test('ccjs file runs for of loops', async () => {
   const result = await runCli(['tests/fixtures/runtime/for-of.ts'])
 

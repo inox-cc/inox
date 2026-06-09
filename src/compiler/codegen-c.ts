@@ -682,6 +682,10 @@ function emitStatement(statement, context) {
     return ['break;']
   }
 
+  if (statement.type === 'ContinueStatement') {
+    return ['continue;']
+  }
+
   if (statement.type === 'VariableDeclaration') {
     if (statement.init?.type === 'ObjectLiteral') {
       return emitObjectVariableDeclaration(statement, context)

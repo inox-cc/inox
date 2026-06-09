@@ -9,6 +9,7 @@ const keywords = new Set([
   'class',
   'const',
   'constructor',
+  'continue',
   'default',
   'export',
   'false',

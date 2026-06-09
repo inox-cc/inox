@@ -709,6 +709,32 @@ test('compiles classic for loops to JS and C', () => {
   assert.match(c.code, /for \(double index = 0; \(index < 4\); \(index = \(index \+ 1\)\)\) \{/)
 })
 
+test('compiles continue statements to JS and C', () => {
+  const source = `export function main(): void {
+  let total = 0
+
+  for (let index = 0; index < 5; index = index + 1) {
+    if (index === 2) {
+      continue
+    }
+
+    total = total + index
+  }
+
+  console.log(total)
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(js.code, /continue/)
+  assert.match(c.code, /continue;/)
+})
+
 test('prepares C string-argument calls in classic for clauses', () => {
   const source = `function start(label: string): number {
   return 0
@@ -1631,6 +1657,13 @@ test('rejects break outside loops and switches', () => {
   break
 }
 `, 'CCJS_BREAK_OUTSIDE')
+})
+
+test('rejects continue outside loops', () => {
+  assertDiagnostic(`export function main(): void {
+  continue
+}
+`, 'CCJS_CONTINUE_OUTSIDE')
 })
 
 test('rejects duplicate switch default branches', () => {

@@ -593,6 +593,54 @@ export function main(): void {
   }
 })
 
+test('generated C continue statements compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-continue-'))
+  const source = join(dir, 'continue.c')
+  const output = join(dir, 'continue')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  let total = 0
+
+  for (let index = 0; index < 5; index = index + 1) {
+    if (index === 2) {
+      continue
+    }
+
+    total = total + index
+  }
+
+  console.log(total)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '8\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C string-returning for initializer compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
