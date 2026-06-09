@@ -1129,6 +1129,35 @@ export function main(): void {
   assert.match(c.code, /if \(ccjs_object_get_known\(value, 0, &ccjs_log_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
+test('compiles capturing runtime callback arrows to C callback context', () => {
+  const source = `type StringCallback = (value: string) => void;
+
+function run(callback: StringCallback): void {
+  callback('Ada')
+}
+
+export function main(): void {
+  const prefix = 'hello'
+  const callback: StringCallback = (value: string) => {
+    console.log(prefix, value)
+  }
+  run(callback)
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n  char\* prefix;\n\} ccjs_callback_context_\d+;/)
+  assert.match(c.code, /static void ccjs_callback_context_\d+_finalize\(void\* context\);/)
+  assert.match(c.code, /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/)
+  assert.match(c.code, /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)context;/)
+  assert.match(c.code, /char\* prefix = captured->prefix;/)
+  assert.match(c.code, /ccjs_callback_context_\d+\* ccjs_callback_context_\d+ = ccjs_default_alloc\(0, sizeof\(ccjs_callback_context_\d+\), _Alignof\(ccjs_callback_context_\d+\)\);/)
+  assert.match(c.code, /ccjs_callback_context_\d+->prefix = prefix;/)
+  assert.match(c.code, /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_arrow_\d+, ccjs_callback_context_\d+, ccjs_callback_context_\d+_finalize, &callback\) != CCJS_OK\) \{/)
+})
+
 test('checks typed callback argument counts', () => {
   assertDiagnostic(`type NumberCallback = (value: number) => void;
 

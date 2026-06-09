@@ -1000,6 +1000,101 @@ export function main(): void {
   }
 })
 
+test('generated C capturing runtime callback arrows compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-capturing-callback-'))
+  const source = join(dir, 'capturing-callback.c')
+  const output = join(dir, 'capturing-callback')
+
+  try {
+    const result = compileSource(`type StringCallback = (value: string) => void;
+
+function run(callback: StringCallback): void {
+  callback('Ada')
+}
+
+export function main(): void {
+  const prefix = 'hello'
+  const callback: StringCallback = (value: string) => {
+    console.log(prefix, value)
+  }
+  run(callback)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'hello Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C inline runtime callback arguments compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-inline-callback-'))
+  const source = join(dir, 'inline-callback.c')
+  const output = join(dir, 'inline-callback')
+
+  try {
+    const result = compileSource(`type StringCallback = (value: string) => void;
+
+function run(callback: StringCallback): void {
+  callback('direct')
+}
+
+export function main(): void {
+  const prefix = 'hello'
+  run((value: string) => {
+    console.log(prefix, value)
+  })
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'hello direct\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C time globals compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

@@ -50,16 +50,26 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   reportUnsupportedClasses(programs, diagnostics)
   reportUnsupportedAsync(programs, diagnostics)
   const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime)
+  const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
+
+  for (const wrapper of arrowCallbackWrappers) {
+    lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
+    lines.push('')
+  }
 
   for (const item of functions) {
     lines.push(`${emitFunctionHead(item, baseContext)};`)
   }
 
   for (const wrapper of baseContext.callbackWrappers.values()) {
+    if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+      lines.push(`static void ${wrapper.finalizerName}(void* context);`)
+    }
+
     lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)};`)
   }
 
-  if (functions.length > 0) {
+  if (functions.length > 0 || baseContext.callbackWrappers.size > 0) {
     lines.push('')
   }
 
@@ -158,6 +168,7 @@ function reportUnsupportedAsync(programs, diagnostics) {
 
 function createBaseContext(diagnostics, functions) {
   return {
+    callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
     diagnostics,
     functionNames: new Map(functions.map(item => [item.name, emitCFunctionName(item.name)])),
@@ -284,8 +295,20 @@ function isRuntimeFunctionType(functionType) {
 
 function collectRuntimeCallbackWrappers(programs, context) {
   const wrappers = new Map()
-  const register = (expression, functionType) => {
-    if (!isRuntimeFunctionType(functionType) || expression?.type !== 'Reference' || expression.path.length !== 1) {
+  const register = (expression, functionType, scopes) => {
+    if (!isRuntimeFunctionType(functionType)) {
+      return
+    }
+
+    if (expression?.type === 'ArrowFunctionExpression') {
+      registerArrow(expression, functionType, scopes)
+      return
+    }
+
+    registerNamed(expression, functionType)
+  }
+  const registerNamed = (expression, functionType) => {
+    if (expression?.type !== 'Reference' || expression.path.length !== 1) {
       return
     }
 
@@ -302,87 +325,144 @@ function collectRuntimeCallbackWrappers(programs, context) {
     }
 
     wrappers.set(key, {
+      kind: 'named',
       key,
       name: `ccjs_callback_${emitCIdentifier(target)}_${wrappers.size}`,
       target,
       functionType
     })
   }
-  const visitStatement = statement => {
+  const registerArrow = (expression, functionType, scopes) => {
+    if (context.callbackArrowWrappers.has(expression)) {
+      return
+    }
+
+    const index = wrappers.size
+    const key = `arrow:${index}`
+    const wrapper = {
+      kind: 'arrow',
+      key,
+      name: `ccjs_callback_arrow_${index}`,
+      contextTypeName: `ccjs_callback_context_${index}`,
+      finalizerName: `ccjs_callback_context_${index}_finalize`,
+      expression,
+      functionType,
+      captures: collectArrowCaptures(expression, scopes, context)
+    }
+
+    wrappers.set(key, wrapper)
+    context.callbackArrowWrappers.set(expression, wrapper)
+  }
+  const declare = (scope, name, info) => {
+    scope.set(name, info)
+  }
+  const declareParams = (scope, params) => {
+    for (const param of params) {
+      declare(scope, param.name, {
+        name: param.name,
+        valueType: param.valueType,
+        functionType: param.functionType,
+        shape: param.shape,
+        mutable: true
+      })
+    }
+  }
+  const declareVariable = (scope, statement) => {
+    declare(scope, statement.name, {
+      name: statement.name,
+      valueType: statement.valueType,
+      functionType: statement.functionType,
+      shape: statement.shape,
+      mutable: statement.kind === 'let'
+    })
+  }
+  const visitStatement = (statement, scopes) => {
     if (statement?.type === 'VariableDeclaration') {
-      register(statement.init, statement.functionType)
-      visitExpression(statement.init)
+      register(statement.init, statement.functionType, scopes)
+      visitExpression(statement.init, scopes)
+      declareVariable(scopes.at(-1), statement)
       return
     }
 
     if (statement?.type === 'ExpressionStatement') {
-      visitExpression(statement.expression)
+      visitExpression(statement.expression, scopes)
       return
     }
 
     if (statement?.type === 'ReturnStatement') {
-      visitExpression(statement.argument)
+      visitExpression(statement.argument, scopes)
       return
     }
 
     if (statement?.type === 'ThrowStatement') {
-      visitExpression(statement.argument)
+      visitExpression(statement.argument, scopes)
       return
     }
 
     if (statement?.type === 'BlockStatement') {
-      statement.body.forEach(visitStatement)
+      const scope = new Map()
+      statement.body.forEach(item => visitStatement(item, [...scopes, scope]))
       return
     }
 
     if (statement?.type === 'IfStatement') {
-      visitExpression(statement.condition)
-      visitStatement(statement.consequent)
-      visitStatement(statement.alternate)
+      visitExpression(statement.condition, scopes)
+      visitStatement(statement.consequent, scopes)
+      visitStatement(statement.alternate, scopes)
       return
     }
 
     if (statement?.type === 'WhileStatement') {
-      visitExpression(statement.condition)
-      visitStatement(statement.body)
+      visitExpression(statement.condition, scopes)
+      visitStatement(statement.body, scopes)
       return
     }
 
     if (statement?.type === 'ForStatement') {
+      const scope = new Map()
+      const loopScopes = [...scopes, scope]
+
       if (statement.init?.type === 'VariableDeclaration') {
-        visitStatement(statement.init)
+        visitStatement(statement.init, loopScopes)
       } else {
-        visitExpression(statement.init)
+        visitExpression(statement.init, loopScopes)
       }
 
-      visitExpression(statement.test)
-      visitExpression(statement.update)
-      visitStatement(statement.body)
+      visitExpression(statement.test, loopScopes)
+      visitExpression(statement.update, loopScopes)
+      visitStatement(statement.body, loopScopes)
       return
     }
 
     if (statement?.type === 'ForOfStatement') {
-      visitExpression(statement.iterable)
-      visitStatement(statement.body)
+      visitExpression(statement.iterable, scopes)
+      const scope = new Map()
+      declare(scope, statement.name, {
+        name: statement.name,
+        valueType: 'unknown',
+        mutable: statement.kind === 'let'
+      })
+      visitStatement(statement.body, [...scopes, scope])
       return
     }
 
     if (statement?.type === 'SwitchStatement') {
-      visitExpression(statement.discriminant)
+      visitExpression(statement.discriminant, scopes)
 
       for (const item of statement.cases) {
-        visitExpression(item.test)
-        item.consequent.forEach(visitStatement)
+        visitExpression(item.test, scopes)
+        const scope = new Map()
+        item.consequent.forEach(statement => visitStatement(statement, [...scopes, scope]))
       }
     }
 
     if (statement?.type === 'TryStatement') {
-      visitStatement(statement.block)
-      visitStatement(statement.handler?.body)
-      visitStatement(statement.finalizer)
+      visitStatement(statement.block, scopes)
+      visitStatement(statement.handler?.body, scopes)
+      visitStatement(statement.finalizer, scopes)
     }
   }
-  const visitExpression = expression => {
+  const visitExpression = (expression, scopes) => {
     if (expression == null) {
       return
     }
@@ -394,80 +474,276 @@ function collectRuntimeCallbackWrappers(programs, context) {
         const param = params?.[index]
 
         if (param?.valueType === 'function') {
-          register(arg, param.functionType)
+          register(arg, param.functionType, scopes)
         }
 
-        visitExpression(arg)
+        visitExpression(arg, scopes)
       }
 
-      visitExpression(expression.callee)
+      visitExpression(expression.callee, scopes)
       return
     }
 
     if (expression.type === 'AssignmentExpression') {
-      visitExpression(expression.target)
-      visitExpression(expression.value)
+      visitExpression(expression.target, scopes)
+      visitExpression(expression.value, scopes)
       return
     }
 
     if (expression.type === 'BinaryExpression') {
-      visitExpression(expression.left)
-      visitExpression(expression.right)
+      visitExpression(expression.left, scopes)
+      visitExpression(expression.right, scopes)
       return
     }
 
     if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
-      visitExpression(expression.argument)
+      visitExpression(expression.argument, scopes)
       return
     }
 
     if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
-      visitExpression(expression.object)
+      visitExpression(expression.object, scopes)
       return
     }
 
     if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
-      visitExpression(expression.object)
-      visitExpression(expression.index)
+      visitExpression(expression.object, scopes)
+      visitExpression(expression.index, scopes)
       return
     }
 
     if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
-      visitExpression(expression.callee)
-      expression.args.forEach(visitExpression)
+      visitExpression(expression.callee, scopes)
+      expression.args.forEach(arg => visitExpression(arg, scopes))
       return
     }
 
     if (expression.type === 'ArrayLiteral') {
-      expression.elements.forEach(visitExpression)
+      expression.elements.forEach(element => visitExpression(element, scopes))
       return
     }
 
     if (expression.type === 'ObjectLiteral') {
-      expression.properties.forEach(property => visitExpression(property.value))
+      expression.properties.forEach(property => visitExpression(property.value, scopes))
       return
     }
 
     if (expression.type === 'ArrowFunctionExpression') {
-      if (expression.expressionBody) {
-        visitExpression(expression.body)
-      } else {
-        expression.body.forEach(visitStatement)
-      }
+      return
     }
   }
 
   for (const program of programs) {
+    const topLevelScope = new Map()
+
     for (const item of program.body) {
       if (item.type === 'FunctionDeclaration') {
-        item.body.forEach(visitStatement)
+        const scope = new Map()
+        declareParams(scope, item.params)
+        item.body.forEach(statement => visitStatement(statement, [topLevelScope, scope]))
       } else {
-        visitStatement(item)
+        visitStatement(item, [topLevelScope])
       }
     }
   }
 
   return wrappers
+}
+
+function collectArrowCaptures(expression, outerScopes, context) {
+  const captures = new Map()
+  const localScope = new Map()
+  const localScopes = [localScope]
+
+  for (const param of expression.params) {
+    localScope.set(param.name, {
+      name: param.name,
+      valueType: param.valueType,
+      mutable: true
+    })
+  }
+
+  const lookup = (name, scopes) => {
+    for (let index = scopes.length - 1; index >= 0; index -= 1) {
+      const entry = scopes[index].get(name)
+
+      if (entry != null) {
+        return entry
+      }
+    }
+
+    return null
+  }
+  const addReference = reference => {
+    if (reference.path.length !== 1) {
+      return
+    }
+
+    const name = reference.path[0]
+
+    if (lookup(name, localScopes) != null || context.functionNames.has(name) || isCJsGlobalRoot(name)) {
+      return
+    }
+
+    const outer = lookup(name, outerScopes)
+
+    if (outer != null && !captures.has(name)) {
+      captures.set(name, {
+        ...outer,
+        name
+      })
+    }
+  }
+  const declareLocal = statement => {
+    localScopes[localScopes.length - 1].set(statement.name, {
+      name: statement.name,
+      valueType: statement.valueType,
+      functionType: statement.functionType,
+      shape: statement.shape,
+      mutable: statement.kind === 'let'
+    })
+  }
+  const visitStatement = statement => {
+    if (statement == null) {
+      return
+    }
+
+    if (statement.type === 'VariableDeclaration') {
+      visitExpression(statement.init)
+      declareLocal(statement)
+      return
+    }
+
+    if (statement.type === 'ExpressionStatement') {
+      visitExpression(statement.expression)
+      return
+    }
+
+    if (statement.type === 'ReturnStatement' || statement.type === 'ThrowStatement') {
+      visitExpression(statement.argument)
+      return
+    }
+
+    if (statement.type === 'BlockStatement') {
+      localScopes.push(new Map())
+      statement.body.forEach(visitStatement)
+      localScopes.pop()
+      return
+    }
+
+    if (statement.type === 'IfStatement') {
+      visitExpression(statement.condition)
+      visitStatement(statement.consequent)
+      visitStatement(statement.alternate)
+      return
+    }
+
+    if (statement.type === 'WhileStatement') {
+      visitExpression(statement.condition)
+      visitStatement(statement.body)
+      return
+    }
+
+    if (statement.type === 'ForStatement') {
+      localScopes.push(new Map())
+
+      if (statement.init?.type === 'VariableDeclaration') {
+        visitStatement(statement.init)
+      } else {
+        visitExpression(statement.init)
+      }
+
+      visitExpression(statement.test)
+      visitExpression(statement.update)
+      visitStatement(statement.body)
+      localScopes.pop()
+      return
+    }
+
+    if (statement.type === 'ForOfStatement') {
+      visitExpression(statement.iterable)
+      localScopes.push(new Map([[statement.name, {
+        name: statement.name,
+        valueType: 'unknown',
+        mutable: statement.kind === 'let'
+      }]]))
+      visitStatement(statement.body)
+      localScopes.pop()
+      return
+    }
+
+    if (statement.type === 'SwitchStatement') {
+      visitExpression(statement.discriminant)
+
+      for (const item of statement.cases) {
+        visitExpression(item.test)
+        localScopes.push(new Map())
+        item.consequent.forEach(visitStatement)
+        localScopes.pop()
+      }
+    }
+  }
+  const visitExpression = node => {
+    if (node == null) {
+      return
+    }
+
+    if (node.type === 'Reference') {
+      addReference(node)
+      return
+    }
+
+    if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
+      visitExpression(node.object)
+      return
+    }
+
+    if (node.type === 'IndexExpression' || node.type === 'OptionalIndexExpression') {
+      visitExpression(node.object)
+      visitExpression(node.index)
+      return
+    }
+
+    if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression' || node.type === 'NewExpression') {
+      visitExpression(node.callee)
+      node.args.forEach(visitExpression)
+      return
+    }
+
+    if (node.type === 'AssignmentExpression') {
+      visitExpression(node.target)
+      visitExpression(node.value)
+      return
+    }
+
+    if (node.type === 'BinaryExpression') {
+      visitExpression(node.left)
+      visitExpression(node.right)
+      return
+    }
+
+    if (node.type === 'UnaryExpression' || node.type === 'AwaitExpression') {
+      visitExpression(node.argument)
+      return
+    }
+
+    if (node.type === 'ArrayLiteral') {
+      node.elements.forEach(visitExpression)
+      return
+    }
+
+    if (node.type === 'ObjectLiteral') {
+      node.properties.forEach(property => visitExpression(property.value))
+    }
+  }
+
+  if (expression.expressionBody) {
+    visitExpression(expression.body)
+  } else {
+    expression.body.forEach(visitStatement)
+  }
+
+  return [...captures.values()]
 }
 
 function resolveStaticFunctionParams(callee, context) {
@@ -491,6 +767,10 @@ function emitRuntimeCallbackWrapperHead(wrapper) {
 }
 
 function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
+  if (wrapper.kind === 'arrow') {
+    return emitRuntimeArrowCallbackWrapperDeclaration(wrapper, context)
+  }
+
   const lines = [
     `${emitRuntimeCallbackWrapperHead(wrapper)} {`,
     '  (void)context;',
@@ -509,6 +789,127 @@ function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
   lines.push('}')
 
   return lines
+}
+
+function isRuntimeArrowCallbackWrapperWithContext(wrapper) {
+  return wrapper.kind === 'arrow' && wrapper.captures.length > 0
+}
+
+function emitRuntimeArrowCallbackContextType(wrapper) {
+  return [
+    `typedef struct ${wrapper.contextTypeName} {`,
+    ...wrapper.captures.map(capture => `  ${emitRuntimeArrowCaptureCType(capture)} ${emitRuntimeArrowCaptureField(capture)};`),
+    `} ${wrapper.contextTypeName};`
+  ]
+}
+
+function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
+  const lines: string[] = []
+
+  if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+    lines.push(`static void ${wrapper.finalizerName}(void* context) {`)
+    lines.push('  if (context == 0) return;')
+    lines.push(`  ccjs_default_free(0, context, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`)
+    lines.push('}')
+    lines.push('')
+  }
+
+  const context = createFunctionContext(baseContext, 'void')
+  context.cleanupEnabled = false
+  context.statusReturn = true
+  const bodyLines: string[] = []
+
+  bodyLines.push(...emitRuntimeArrowCallbackContextLocals(wrapper, context))
+  bodyLines.push(...emitRuntimeArrowCallbackParamPrelude(wrapper, context))
+  const statements = wrapper.expression.expressionBody
+    ? [{
+        type: 'ExpressionStatement',
+        expression: wrapper.expression.body
+      }]
+    : wrapper.expression.body
+  const statementLines = statements.flatMap(statement => emitStatement(statement, context))
+
+  lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)} {`)
+
+  if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+    lines.push('  if (context == 0) return CCJS_ERR_TYPE;')
+  } else {
+    lines.push('  (void)context;')
+  }
+
+  lines.push(`  if (out == 0 || arg_count != ${wrapper.functionType.params.length}${wrapper.functionType.params.length === 0 ? '' : ' || args == 0'}) return CCJS_ERR_TYPE;`)
+  lines.push('  *out = ccjs_undefined_value();')
+  lines.push(...bodyLines.map(line => `  ${line}`))
+  lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
+  lines.push(...statementLines.map(line => `  ${line}`))
+  lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+  lines.push('  return CCJS_OK;')
+  lines.push('}')
+
+  return lines
+}
+
+function emitRuntimeArrowCallbackContextLocals(wrapper, context) {
+  if (!isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+    return []
+  }
+
+  const lines = [
+    `${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)context;`
+  ]
+
+  for (const capture of wrapper.captures) {
+    context.variables.set(capture.name, capture.valueType)
+    lines.push(`${emitRuntimeArrowCaptureCType(capture)} ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+  }
+
+  return lines
+}
+
+function emitRuntimeArrowCallbackParamPrelude(wrapper, context) {
+  const lines: string[] = []
+
+  for (const [index, param] of wrapper.functionType.params.entries()) {
+    const name = wrapper.expression.params[index]?.name ?? `ccjs_arg_${index}`
+
+    lines.push(...emitRuntimeCallbackWrapperArgChecks(param, index))
+    context.variables.set(name, param.valueType)
+
+    if (param.valueType === 'string') {
+      context.runtimeStrings.add(name)
+      lines.push(`ccjs_string* ${name} = (ccjs_string*)args[${index}].as.ref;`)
+      continue
+    }
+
+    if (param.valueType === 'object') {
+      registerObjectShape(context, name, param.shape)
+      lines.push(`ccjs_value ${name} = args[${index}];`)
+      continue
+    }
+
+    if (param.valueType === 'number') {
+      lines.push(`double ${name} = args[${index}].as.number;`)
+      continue
+    }
+
+    if (param.valueType === 'boolean') {
+      lines.push(`double ${name} = args[${index}].as.boolean ? 1 : 0;`)
+    }
+  }
+
+  return lines
+}
+
+function emitRuntimeArrowCaptureCType(capture) {
+  if (capture.valueType === 'string') {
+    return 'char*'
+  }
+
+  return 'double'
+}
+
+function emitRuntimeArrowCaptureField(capture) {
+  return emitCIdentifier(capture.name)
 }
 
 function emitRuntimeCallbackWrapperArgChecks(param, index) {
@@ -565,6 +966,7 @@ function createFunctionContext(baseContext, returnType) {
     ownedValues: [],
     runtimeCallbacks: new Set(),
     runtimeStrings: new Set(),
+    statusReturn: false,
     usedCleanupGoto: false,
     variables: new Map(),
     returnType
@@ -2145,6 +2547,20 @@ function emitRuntimeCallbackValueInto(expression, functionType, out, context) {
     ]
   }
 
+  if (expression?.type === 'ArrowFunctionExpression') {
+    const wrapper = context.callbackArrowWrappers.get(expression)
+
+    if (wrapper == null) {
+      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'runtime C callback wrapper was not generated for this arrow function', expression.loc))
+      return [
+        ...emitPrepareOwnedValueWrite(out),
+        `${out} = ccjs_undefined_value();`
+      ]
+    }
+
+    return emitRuntimeArrowCallbackValueInto(wrapper, out, context)
+  }
+
   if (expression?.type !== 'Reference' || expression.path.length !== 1 || !context.functionNames.has(expression.path[0])) {
     context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'runtime C callbacks currently require a named non-capturing function', expression?.loc))
     return [
@@ -2167,6 +2583,47 @@ function emitRuntimeCallbackValueInto(expression, functionType, out, context) {
     ...emitPrepareOwnedValueWrite(out),
     emitStatusCheck(`ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, 0, 0, &${out})`, context)
   ]
+}
+
+function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
+  const lines = [
+    ...emitPrepareOwnedValueWrite(out)
+  ]
+
+  for (const capture of wrapper.captures) {
+    if (capture.mutable) {
+      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing mutable let bindings in C callbacks requires boxed closure storage and is not supported yet', wrapper.expression.loc))
+    }
+
+    if (!['number', 'boolean', 'string'].includes(capture.valueType)) {
+      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing C callbacks currently support only const number/boolean/string bindings', wrapper.expression.loc))
+    }
+
+    if (capture.valueType === 'string' && context.runtimeStrings.has(capture.name)) {
+      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing runtime string refs in C callbacks requires retained context values and is not supported yet', wrapper.expression.loc))
+    }
+  }
+
+  if (wrapper.captures.length === 0) {
+    lines.push(emitStatusCheck(`ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, 0, 0, &${out})`, context))
+    return lines
+  }
+
+  const contextName = nextCName(context, 'ccjs_callback_context')
+
+  lines.push(`${wrapper.contextTypeName}* ${contextName} = ccjs_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`)
+  lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
+
+  for (const capture of wrapper.captures) {
+    lines.push(`${contextName}->${emitRuntimeArrowCaptureField(capture)} = ${capture.name};`)
+  }
+
+  lines.push(`if (ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, ${contextName}, ${wrapper.finalizerName}, &${out}) != CCJS_OK) {`)
+  lines.push(`  ${wrapper.finalizerName}(${contextName});`)
+  lines.push(`  ${emitFailureStatement(context)}`)
+  lines.push('}')
+
+  return lines
 }
 
 function emitRuntimeCallbackCall(expression, functionType, context) {
@@ -2551,21 +3008,24 @@ function updateKnownArrayElementValueType(element, valueType, context) {
 }
 
 function emitStatusCheck(call, context) {
-  if (context.cleanupEnabled) {
-    context.usedCleanupGoto = true
-    return `if (${call} != CCJS_OK) goto ccjs_cleanup;`
-  }
-
-  return `if (${call} != CCJS_OK) ${context.returnType === 'void' ? 'return;' : 'return 0;'}`
+  return `if (${call} != CCJS_OK) ${emitFailureStatement(context)}`
 }
 
 function emitRuntimeTypeCheck(condition, context) {
-  if (context.cleanupEnabled) {
-    context.usedCleanupGoto = true
-    return `if (${condition}) goto ccjs_cleanup;`
+  return `if (${condition}) ${emitFailureStatement(context)}`
+}
+
+function emitFailureStatement(context) {
+  if (context.statusReturn) {
+    return 'return CCJS_ERR_TYPE;'
   }
 
-  return `if (${condition}) ${context.returnType === 'void' ? 'return;' : 'return 0;'}`
+  if (context.cleanupEnabled) {
+    context.usedCleanupGoto = true
+    return 'goto ccjs_cleanup;'
+  }
+
+  return context.returnType === 'void' ? 'return;' : 'return 0;'
 }
 
 function registerOwnedValue(context, name) {
