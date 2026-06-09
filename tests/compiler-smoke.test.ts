@@ -2097,6 +2097,61 @@ export function main(): void {
   })
 })
 
+test('narrows C nullable scalar values after null-checked early returns', () => {
+  const result = compileSource(`function printScore(score: number | null, active: boolean | null): void {
+  if (score === null) {
+    return
+  }
+  console.log(score + 1)
+
+  if (active === null) {
+    return
+  }
+  console.log(active)
+}
+
+function printHigh(score: number | null): void {
+  if (score === null || score < 2) {
+    return
+  }
+  console.log(score + 1)
+}
+
+export function main(): void {
+  printScore(4, true)
+  printHigh(3)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /\(score\.as\.number \+ 1\)/)
+  assert.match(result.code, /\(active\.as\.boolean \? 1 : 0\)/)
+  assert.match(result.code, /score\.as\.number < 2/)
+
+  assertDiagnostic(`export function main(): void {
+  const score: number | null = 1
+  if (score !== null) {
+    return
+  }
+  console.log(score)
+}
+`, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`export function main(): void {
+  const score: number | null = 1
+  if (score === null) {
+    console.log(0)
+  }
+  console.log(score)
+}
+`, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+})
+
 test('lowers C optional calls over nullable callbacks', () => {
   const result = compileSource(`type Named = (name: string) => void;
 

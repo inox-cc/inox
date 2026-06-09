@@ -253,9 +253,7 @@ function emitFunctionDeclaration(statement, baseContext) {
 
   bodyLines.push(...emitRuntimeParamPrelude(statement, context).map(line => `  ${line}`))
 
-  for (const item of statement.body) {
-    bodyLines.push(...emitStatement(item, context).map(line => `  ${line}`))
-  }
+  bodyLines.push(...emitStatementList(statement.body, context).map(line => `  ${line}`))
 
   const lines = [
     `${emitFunctionHead(statement, context)} {`,
@@ -1130,7 +1128,7 @@ function emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext) {
         expression: wrapper.expression.body
       }]
     : wrapper.expression.body
-  const statementLines = statements.flatMap(statement => emitStatement(statement, context))
+  const statementLines = emitStatementList(statements, context)
   const lines = [
     `${emitPlainArrowCallbackWrapperHead(wrapper)} {`,
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
@@ -1221,7 +1219,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
         expression: wrapper.expression.body
       }]
     : wrapper.expression.body
-  const statementLines = statements.flatMap(statement => emitStatement(statement, context))
+  const statementLines = emitStatementList(statements, context)
 
   lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)} {`)
 
@@ -1448,9 +1446,7 @@ function emitMainWrapper(entryProgram, baseContext) {
     'int main(void) {'
   ]
 
-  for (const statement of body) {
-    bodyLines.push(...emitStatement(statement, context).map(line => `  ${line}`))
-  }
+  bodyLines.push(...emitStatementList(body, context).map(line => `  ${line}`))
 
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
@@ -1578,7 +1574,7 @@ function emitStatement(statement, context) {
   if (statement.type === 'BlockStatement') {
     return withVariableScope(context, () => [
       '{',
-      ...statement.body.flatMap(item => emitStatement(item, context).map(line => `  ${line}`)),
+      ...emitStatementBody(statement, context).map(line => `  ${line}`),
       '}'
     ])
   }
@@ -1999,7 +1995,7 @@ function emitSwitchStatement(statement, context) {
 
   for (const item of statement.cases) {
     lines.push(item.test == null ? '  default: {' : `  case ${emitSwitchCaseLabel(item.test, context)}: {`)
-    lines.push(...withVariableScope(context, () => item.consequent.flatMap(statement => emitStatement(statement, context))).map(line => `    ${line}`))
+    lines.push(...withVariableScope(context, () => emitStatementList(item.consequent, context)).map(line => `    ${line}`))
     lines.push('  }')
   }
 
@@ -2028,10 +2024,46 @@ function emitSwitchCaseLabel(expression, context) {
 
 function emitStatementBody(statement, context) {
   if (statement.type === 'BlockStatement') {
-    return statement.body.flatMap(item => emitStatement(item, context))
+    return emitStatementList(statement.body, context)
   }
 
   return emitStatement(statement, context)
+}
+
+function emitStatementList(statements, context) {
+  return statements.flatMap(statement => {
+    const lines = emitStatement(statement, context)
+
+    applyNullableScalarEarlyReturnNarrowing(statement, context)
+
+    return lines
+  })
+}
+
+function applyNullableScalarEarlyReturnNarrowing(statement, context) {
+  if (statement.type !== 'IfStatement' || statement.alternate != null || !statementDefinitelyReturns(statement.consequent)) {
+    return
+  }
+
+  const narrowing = resolveNullableScalarConditionNarrowing(statement.condition, context)
+
+  narrowNullableScalars(context, narrowing.falseNames)
+}
+
+function statementDefinitelyReturns(statement) {
+  if (statement.type === 'ReturnStatement') {
+    return true
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return statement.body.some(statementDefinitelyReturns)
+  }
+
+  if (statement.type === 'IfStatement' && statement.alternate != null) {
+    return statementDefinitelyReturns(statement.consequent) && statementDefinitelyReturns(statement.alternate)
+  }
+
+  return false
 }
 
 function emitForInitializer(init, context) {
@@ -7190,6 +7222,12 @@ function withNullableScalarNarrowing(context, names, callback) {
     return callback()
   } finally {
     context.narrowedNullableScalars = previous
+  }
+}
+
+function narrowNullableScalars(context, names) {
+  for (const name of names) {
+    context.narrowedNullableScalars.add(name)
   }
 }
 
