@@ -1945,6 +1945,46 @@ test('generated C direct console log member and index expressions compile and ru
   }
 })
 
+test('generated C optional object member and index access compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-optional-member-'))
+  const source = join(dir, 'optional-member.c')
+  const output = join(dir, 'optional-member')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { name: 'Ada', score: 7 }
+  const name = user?.name
+  console.log(name, user?.['score'])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada 7\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C typed object shape lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

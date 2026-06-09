@@ -1155,6 +1155,22 @@ export function main(): void {
   })
 })
 
+test('compiles simple optional object member and index access to C', () => {
+  const source = `export function main(): void {
+  const data = { name: 'Ada', score: 7 }
+  const name = data?.name
+  console.log(name, data?.['score'])
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /if \(ccjs_object_get_known\(data, 0, &ccjs_field_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /const ccjs_string\* name = \(ccjs_string\*\)ccjs_field_\d+\.as\.ref;/)
+  assert.match(c.code, /if \(ccjs_object_get\(data, "score", 5, &ccjs_log_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+})
+
 test('compiles optional chaining to JS and rejects it for C', () => {
   const source = `function hello(): string {
   return 'called'

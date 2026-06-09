@@ -695,7 +695,7 @@ function emitStatement(statement, context) {
       return emitArrayVariableDeclaration(statement, context)
     }
 
-    if (statement.init?.type === 'MemberExpression') {
+    if (isMemberAccessExpression(statement.init)) {
       const member = resolveKnownObjectMember(statement.init, context)
 
       if (member != null) {
@@ -703,7 +703,7 @@ function emitStatement(statement, context) {
       }
     }
 
-    if (statement.init?.type === 'IndexExpression') {
+    if (isIndexAccessExpression(statement.init)) {
       const element = resolveKnownArrayIndex(statement.init, context)
 
       if (element != null) {
@@ -1039,7 +1039,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
     }
   }
 
-  if (statement.init?.type === 'MemberExpression') {
+  if (isMemberAccessExpression(statement.init)) {
     const member = resolveKnownObjectMember(statement.init, context)
 
     if (member != null) {
@@ -1050,7 +1050,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
     }
   }
 
-  if (statement.init?.type === 'IndexExpression') {
+  if (isIndexAccessExpression(statement.init)) {
     const element = resolveKnownArrayIndex(statement.init, context)
 
     if (element != null) {
@@ -1512,7 +1512,7 @@ function emitCValueExpression(expression, context) {
     }
   }
 
-  if (expression?.type === 'MemberExpression') {
+  if (isMemberAccessExpression(expression)) {
     const member = resolveKnownObjectMember(expression, context)
 
     if (member?.valueType === 'string') {
@@ -1530,7 +1530,7 @@ function emitCValueExpression(expression, context) {
     }
   }
 
-  if (expression?.type === 'IndexExpression') {
+  if (isIndexAccessExpression(expression)) {
     const element = resolveKnownArrayIndex(expression, context)
 
     if (element?.valueType === 'string') {
@@ -1643,7 +1643,7 @@ function emitStringLogValue(expression, context) {
     }
   }
 
-  if (expression?.type === 'MemberExpression') {
+  if (isMemberAccessExpression(expression)) {
     const member = resolveKnownObjectMember(expression, context)
 
     if (member?.valueType === 'string') {
@@ -1651,7 +1651,7 @@ function emitStringLogValue(expression, context) {
     }
   }
 
-  if (expression?.type === 'IndexExpression') {
+  if (isIndexAccessExpression(expression)) {
     const element = resolveKnownArrayIndex(expression, context)
 
     if (element?.valueType === 'string') {
@@ -1687,7 +1687,7 @@ function emitStringLogValue(expression, context) {
 }
 
 function emitNumberLogValue(expression, type, context) {
-  if (expression?.type === 'MemberExpression') {
+  if (isMemberAccessExpression(expression)) {
     const length = resolveKnownArrayLength(expression, context)
 
     if (length != null) {
@@ -1705,7 +1705,7 @@ function emitNumberLogValue(expression, type, context) {
     }
   }
 
-  if (expression?.type === 'IndexExpression') {
+  if (isIndexAccessExpression(expression)) {
     const element = resolveKnownArrayIndex(expression, context)
 
     if (element != null && ['number', 'boolean'].includes(element.valueType)) {
@@ -1786,7 +1786,7 @@ function emitStringExpression(expression, context) {
     return emitCallExpression(expression, context)
   }
 
-  if (expression?.type === 'MemberExpression') {
+  if (isMemberAccessExpression(expression)) {
     const member = resolveKnownObjectMember(expression, context)
 
     if (member != null && ['number', 'boolean'].includes(member.valueType)) {
@@ -1879,7 +1879,7 @@ function emitPreparedNumberExpression(expression, context) {
     return emitPreparedCallExpression(expression, context)
   }
 
-  if (expression?.type === 'MemberExpression') {
+  if (isMemberAccessExpression(expression)) {
     const member = resolveKnownObjectMember(expression, context)
 
     if (member != null && ['number', 'boolean'].includes(member.valueType)) {
@@ -2219,18 +2219,35 @@ function inferExpressionType(expression, context) {
     return 'object'
   }
 
-  if (expression?.type === 'MemberExpression') {
+  if (isMemberAccessExpression(expression)) {
     const length = resolveKnownArrayLength(expression, context)
 
     if (length != null) {
       return 'number'
     }
 
-    return resolveKnownObjectMember(expression, context)?.valueType ?? 'number'
+    const member = resolveKnownObjectMember(expression, context)
+
+    if (member != null) {
+      return member.valueType
+    }
+
+    return expression.type === 'OptionalMemberExpression' ? 'optional' : 'number'
   }
 
-  if (expression?.type === 'IndexExpression') {
-    return resolveKnownArrayIndex(expression, context)?.valueType ?? resolveKnownObjectIndex(expression, context)?.valueType ?? 'number'
+  if (isIndexAccessExpression(expression)) {
+    const element = resolveKnownArrayIndex(expression, context)
+    const field = resolveKnownObjectIndex(expression, context)
+
+    if (element != null) {
+      return element.valueType
+    }
+
+    if (field != null) {
+      return field.valueType
+    }
+
+    return expression.type === 'OptionalIndexExpression' ? 'optional' : 'number'
   }
 
   if (expression?.type === 'CallExpression' && expression.callee.type === 'Reference') {
@@ -2303,8 +2320,16 @@ function isOptionalChainExpression(expression) {
     || expression?.type === 'OptionalCallExpression'
 }
 
+function isMemberAccessExpression(expression) {
+  return expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression'
+}
+
+function isIndexAccessExpression(expression) {
+  return expression?.type === 'IndexExpression' || expression?.type === 'OptionalIndexExpression'
+}
+
 function resolveKnownObjectMember(expression, context) {
-  if (expression?.type !== 'MemberExpression' || expression.object.type !== 'Reference' || expression.object.path.length !== 1) {
+  if (!isMemberAccessExpression(expression) || expression.object.type !== 'Reference' || expression.object.path.length !== 1) {
     return null
   }
 
@@ -2329,7 +2354,7 @@ function resolveKnownObjectMember(expression, context) {
 }
 
 function resolveKnownObjectIndex(expression, context) {
-  if (expression?.type !== 'IndexExpression' || expression.object.type !== 'Reference' || expression.object.path.length !== 1 || expression.index.type !== 'StringLiteral') {
+  if (!isIndexAccessExpression(expression) || expression.object.type !== 'Reference' || expression.object.path.length !== 1 || expression.index.type !== 'StringLiteral') {
     return null
   }
 
