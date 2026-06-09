@@ -2119,12 +2119,20 @@ function emitConsoleLogStatement(args, context) {
     values.push(...value.values)
   }
 
-  lines.push(`printf("${escapeCString(parts.join(' '))}\\n", ${values.join(', ')});`)
+  if (values.length === 0) {
+    lines.push(`printf("${escapeCString(parts.join(' '))}\\n");`)
+  } else {
+    lines.push(`printf("${escapeCString(parts.join(' '))}\\n", ${values.join(', ')});`)
+  }
 
   return lines
 }
 
 function emitConsoleLogValue(expression, context) {
+  if (expression?.type === 'TemplateLiteral' && expression.raw.includes('${')) {
+    return emitTemplateLogValue(expression, context)
+  }
+
   const type = inferExpressionType(expression, context)
 
   if (type === 'string') {
@@ -2142,6 +2150,143 @@ function emitConsoleLogValue(expression, context) {
     format: '%g',
     values: ['0']
   }
+}
+
+function emitTemplateLogValue(expression, context) {
+  const lines: string[] = []
+  const formats: string[] = []
+  const values: string[] = []
+  const parts = parseTemplateLogParts(expression.raw, context, expression.loc)
+
+  for (const part of parts) {
+    if (part.type === 'text') {
+      formats.push(part.value.replaceAll('%', '%%'))
+      continue
+    }
+
+    const placeholder = parseTemplatePlaceholder(part.value, expression.loc, context)
+
+    if (placeholder == null) {
+      continue
+    }
+
+    const value = emitConsoleLogValue(placeholder, context)
+
+    lines.push(...value.lines)
+    formats.push(value.format)
+    values.push(...value.values)
+  }
+
+  return {
+    lines,
+    format: formats.join(''),
+    values
+  }
+}
+
+function parseTemplateLogParts(raw, context, loc) {
+  const body = raw.slice(1, -1)
+  const parts: { type: string, value: string }[] = []
+  let text = ''
+  let index = 0
+
+  while (index < body.length) {
+    const char = body[index]
+
+    if (char === '\\') {
+      text += body.slice(index, index + 2)
+      index += 2
+      continue
+    }
+
+    if (char === '$' && body[index + 1] === '{') {
+      if (text !== '') {
+        parts.push({
+          type: 'text',
+          value: text
+        })
+        text = ''
+      }
+
+      const end = body.indexOf('}', index + 2)
+
+      if (end === -1) {
+        context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'unterminated template placeholder in C console.log', loc))
+        return parts
+      }
+
+      parts.push({
+        type: 'placeholder',
+        value: body.slice(index + 2, end).trim()
+      })
+      index = end + 1
+      continue
+    }
+
+    text += char
+    index += 1
+  }
+
+  if (text !== '') {
+    parts.push({
+      type: 'text',
+      value: text
+    })
+  }
+
+  return parts
+}
+
+function parseTemplatePlaceholder(value, loc, context) {
+  if (value === '') {
+    context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'empty template placeholder in C console.log', loc))
+    return null
+  }
+
+  if (/^-?\d+(?:\.\d+)?$/.test(value)) {
+    return {
+      type: 'NumberLiteral',
+      value,
+      loc
+    }
+  }
+
+  if (value === 'true' || value === 'false') {
+    return {
+      type: 'BooleanLiteral',
+      value: value === 'true',
+      loc
+    }
+  }
+
+  const names = value.split('.')
+
+  if (!names.every(name => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name))) {
+    context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'C console.log template placeholders currently support only identifiers and dotted members', loc))
+    return null
+  }
+
+  if (!context.variables.has(names[0])) {
+    context.diagnostics.push(diagnostic('CCJS_UNKNOWN_NAME', `unknown name ${names[0]}`, loc))
+    return null
+  }
+
+  let expression: AnyNode = {
+    type: 'Reference',
+    path: [names[0]],
+    loc
+  }
+
+  for (const property of names.slice(1)) {
+    expression = {
+      type: 'MemberExpression',
+      object: expression,
+      property,
+      loc
+    }
+  }
+
+  return expression
 }
 
 function emitStringLogValue(expression, context) {
@@ -3618,5 +3763,10 @@ function withVariableScope(context, callback) {
 }
 
 function escapeCString(value) {
-  return value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')
+  return value
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"')
+    .replaceAll('\n', '\\n')
+    .replaceAll('\r', '\\r')
+    .replaceAll('\t', '\\t')
 }

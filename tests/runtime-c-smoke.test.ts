@@ -2044,6 +2044,47 @@ export function main(): void {
   }
 })
 
+test('generated C console log template interpolation compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-template-log-'))
+  const source = join(dir, 'template-log.c')
+  const output = join(dir, 'template-log')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { name: 'Ada', score: 7 }
+  const suffix = 'ok'
+  const ready = true
+  console.log(\`hello \${user.name} \${suffix} score \${user.score} ready \${ready}\`)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'hello Ada ok score 7 ready 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C direct console log member and index expressions compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

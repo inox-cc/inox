@@ -515,6 +515,22 @@ export function main(): void {
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)ccjs_log_string_\d+->len, ccjs_log_string_\d+->bytes\);/)
 })
 
+test('lowers C console.log template interpolation', () => {
+  const result = compileSource(`export function main(): void {
+  const user = { name: 'Ada', score: 7 }
+  const suffix = 'ok'
+  const ready = true
+  console.log(\`hello \${user.name} \${suffix} score \${user.score} ready \${ready}\`)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 1, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /printf\("hello %\.\*s %s score %g ready %g\\n"/)
+})
+
 test('rejects unsupported C runtime string composition with a stable diagnostic', () => {
   assertDiagnostic(`type User = {
   name: string
