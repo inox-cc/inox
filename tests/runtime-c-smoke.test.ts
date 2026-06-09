@@ -1719,6 +1719,52 @@ export function main(): void {
   }
 })
 
+test('generated C runtime array index reads compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-array-index-'))
+  const source = join(dir, 'runtime-array-index.c')
+  const output = join(dir, 'runtime-array-index')
+
+  try {
+    const result = compileSource(`type Box = {
+  values: number[],
+  flags: boolean[],
+  names: string[]
+}
+
+export function main(): void {
+  const box: Box = { values: [1, 2, 3], flags: [true], names: ['Ada'] }
+  const name = box.names[0]
+  console.log(box.values[1], box.flags[0], name)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2 1 Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C for of array lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

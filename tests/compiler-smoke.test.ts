@@ -211,6 +211,31 @@ export function main(): void {
   assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
 })
 
+test('lowers C runtime array index reads for object fields', () => {
+  const result = compileSource(`type Box = {
+  values: number[],
+  flags: boolean[],
+  names: string[]
+}
+
+export function main(): void {
+  const box: Box = { values: [1, 2, 3], flags: [true], names: ['Ada'] }
+  const name = box.names[0]
+  console.log(box.values[1], box.flags[0], name)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, 1, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(box, 1, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, 0, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(box, 2, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /printf\("%g %g %\.\*s\\n", ccjs_log_value_\d+\.as\.number, \(\(double\)\(ccjs_log_value_\d+\.as\.boolean \? 1 : 0\)\), \(int\)name->len, name->bytes\);/)
+})
+
 test('lowers C string length for literals and runtime strings', () => {
   const result = compileSource(`type User = {
   name: string

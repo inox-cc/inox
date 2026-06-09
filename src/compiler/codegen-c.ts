@@ -1854,7 +1854,8 @@ function emitObjectVariableDeclaration(statement, context) {
   context.variables.set(statement.name, 'object')
   context.objectShapes.set(statement.name, fields.map(field => ({
     name: field.name,
-    valueType: field.valueType
+    valueType: field.valueType,
+    arrayElementType: field.arrayElementType
   })))
 
   for (const [index, field] of fields.entries()) {
@@ -1925,7 +1926,9 @@ function emitScalarVariableDeclaration(statement, context) {
       return [`${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString};`]
     }
 
-    if (isRuntimeProducedStringExpression(statement.init, context)) {
+    const runtimeElement = resolveRuntimeArrayIndex(statement.init, context)
+
+    if (isRuntimeProducedStringExpression(statement.init, context) || runtimeElement?.valueType === 'string') {
       return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
     }
 
@@ -2240,6 +2243,22 @@ function emitCValueExpression(expression, context) {
         ],
         expression: temp
       }
+    }
+
+    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+
+    if (runtimeElement != null && ['boolean', 'number', 'string'].includes(runtimeElement.valueType)) {
+      const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_value')
+
+      return runtimeElement.valueType === 'string'
+        ? {
+            lines: [
+              ...value.lines,
+              emitRuntimeTypeCheck(`${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`, context)
+            ],
+            expression: value.expression
+          }
+        : value
     }
 
     if (element?.valueType === 'string') {
@@ -2641,6 +2660,23 @@ function emitStringLogValue(expression, context) {
     if (field?.valueType === 'string') {
       return emitRuntimeStringLogValue(temp => `ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
     }
+
+    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+
+    if (runtimeElement?.valueType === 'string') {
+      const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_log_value')
+      const string = nextCName(context, 'ccjs_log_string')
+
+      return {
+        lines: [
+          ...value.lines,
+          emitRuntimeTypeCheck(`${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`, context),
+          `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`
+        ],
+        format: '%.*s',
+        values: [`(int)${string}->len`, `${string}->bytes`]
+      }
+    }
   }
 
   if (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') {
@@ -2718,6 +2754,18 @@ function emitNumberLogValue(expression, type, context) {
 
     if (field != null && ['number', 'boolean'].includes(field.valueType)) {
       return emitRuntimeNumberLogValue(field.valueType, temp => `ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
+    }
+
+    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+
+    if (runtimeElement != null && ['number', 'boolean'].includes(runtimeElement.valueType)) {
+      const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_log_value')
+
+      return {
+        lines: value.lines,
+        format: '%g',
+        values: [runtimeElement.valueType === 'boolean' ? `((double)(${value.expression}.as.boolean ? 1 : 0))` : `${value.expression}.as.number`]
+      }
     }
   }
 
@@ -2937,6 +2985,17 @@ function emitPreparedNumberExpression(expression, context) {
 
     if (field != null && ['number', 'boolean'].includes(field.valueType)) {
       return emitPreparedRuntimeNumberValue(field.valueType, temp => `ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
+    }
+
+    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+
+    if (runtimeElement != null && ['number', 'boolean'].includes(runtimeElement.valueType)) {
+      const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_expr_value')
+
+      return {
+        lines: value.lines,
+        expression: runtimeElement.valueType === 'boolean' ? `(${value.expression}.as.boolean ? 1 : 0)` : `${value.expression}.as.number`
+      }
     }
   }
 
@@ -3532,6 +3591,7 @@ function inferExpressionType(expression, context) {
   if (isIndexAccessExpression(expression)) {
     const element = resolveKnownArrayIndex(expression, context)
     const field = resolveKnownObjectIndex(expression, context)
+    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
 
     if (element != null) {
       return element.valueType
@@ -3539,6 +3599,10 @@ function inferExpressionType(expression, context) {
 
     if (field != null) {
       return field.valueType
+    }
+
+    if (runtimeElement != null) {
+      return runtimeElement.valueType
     }
 
     return expression.type === 'OptionalIndexExpression' ? 'optional' : 'number'
@@ -3731,7 +3795,8 @@ function resolveKnownObjectMember(expression, context) {
   return {
     objectName,
     index,
-    valueType: fields[index].valueType
+    valueType: fields[index].valueType,
+    arrayElementType: fields[index].arrayElementType
   }
 }
 
@@ -3757,7 +3822,8 @@ function resolveKnownObjectIndex(expression, context) {
     objectName,
     key: expression.index.value,
     index,
-    valueType: fields[index].valueType
+    valueType: fields[index].valueType,
+    arrayElementType: fields[index].arrayElementType
   }
 }
 
@@ -3785,7 +3851,8 @@ function registerObjectShape(context, name, shape) {
 
   context.objectShapes.set(name, shape.fields.map(field => ({
     name: field.name,
-    valueType: field.valueType
+    valueType: field.valueType,
+    arrayElementType: field.arrayElementType
   })))
 }
 
@@ -3811,6 +3878,56 @@ function resolveKnownArrayIndex(expression, context) {
     arrayName,
     index,
     valueType: elements[index].valueType
+  }
+}
+
+function resolveRuntimeArrayIndex(expression, context) {
+  if (expression?.type !== 'IndexExpression' || expression.index.type !== 'NumberLiteral') {
+    return null
+  }
+
+  const index = Number.parseInt(expression.index.value, 10)
+
+  if (!Number.isInteger(index) || index < 0) {
+    return null
+  }
+
+  const valueType = resolveRuntimeArrayElementType(expression.object, context)
+
+  return valueType == null ? null : {
+    index,
+    valueType
+  }
+}
+
+function resolveRuntimeArrayElementType(expression, context) {
+  if (expression?.type === 'MemberExpression') {
+    const member = resolveKnownObjectMember(expression, context)
+
+    return member?.valueType === 'array' ? member.arrayElementType ?? 'unknown' : null
+  }
+
+  if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    const field = resolveKnownObjectIndex(expression, context)
+
+    return field?.valueType === 'array' ? field.arrayElementType ?? 'unknown' : null
+  }
+
+  return null
+}
+
+function emitPreparedRuntimeArrayIndexValue(expression, element, context, prefix = 'ccjs_array_item') {
+  const array = emitCValueExpression(expression.object, context)
+  const value = nextCName(context, prefix)
+  registerOwnedValue(context, value)
+
+  return {
+    lines: [
+      ...array.lines,
+      ...emitPrepareOwnedValueWrite(value),
+      emitStatusCheck(`ccjs_array_get(${array.expression}, ${element.index}, &${value})`, context)
+    ],
+    expression: value
   }
 }
 
