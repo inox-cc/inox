@@ -688,6 +688,12 @@ class Checker {
   }
 
   checkCallExpression(expression: AnyNode): ValueType {
+    const stringTrimType = this.checkStringTrimCall(expression)
+
+    if (stringTrimType != null) {
+      return stringTrimType
+    }
+
     const stringSliceType = this.checkStringSliceCall(expression)
 
     if (stringSliceType != null) {
@@ -723,6 +729,28 @@ class Checker {
     }
 
     return symbol.returnType ?? 'unknown'
+  }
+
+  checkStringTrimCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'trim') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+
+    for (const arg of expression.args) {
+      this.checkExpression(arg)
+    }
+
+    if (objectType !== 'string') {
+      return null
+    }
+
+    if (expression.args.length !== 0) {
+      this.report('CCJS_ARG_COUNT', `string.trim expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    return 'string'
   }
 
   checkStringSliceCall(expression: AnyNode): ValueType | null {

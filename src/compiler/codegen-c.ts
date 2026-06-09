@@ -2100,6 +2100,10 @@ function emitArrayVariableDeclaration(statement, context) {
 }
 
 function emitCValueExpression(expression, context) {
+  if (isStringTrimCall(expression, context)) {
+    return emitCStringTrimValueExpression(expression, context)
+  }
+
   if (isStringSliceCall(expression, context)) {
     return emitCStringSliceValueExpression(expression, context)
   }
@@ -2269,6 +2273,21 @@ function emitCStringConcatValueExpression(expression, context) {
       ...right.lines,
       ...emitPrepareOwnedValueWrite(temp),
       emitStatusCheck(`ccjs_string_concat_parts(&ccjs_default_allocator, ${left.bytes}, ${left.length}, ${right.bytes}, ${right.length}, &${temp})`, context)
+    ],
+    expression: temp
+  }
+}
+
+function emitCStringTrimValueExpression(expression, context) {
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_trim_string')
+  const temp = nextCName(context, 'ccjs_value')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...value.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_string_trim_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`, context)
     ],
     expression: temp
   }
@@ -3311,6 +3330,10 @@ function inferExpressionType(expression, context) {
     return 'number'
   }
 
+  if (isStringTrimCall(expression, context)) {
+    return 'string'
+  }
+
   if (isStringSliceCall(expression, context)) {
     return 'string'
   }
@@ -3496,6 +3519,14 @@ function isStringConcatExpression(expression, context) {
 function isRuntimeProducedStringExpression(expression, context) {
   return (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string')
     || isStringConcatExpression(expression, context)
+}
+
+function isStringTrimCall(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'trim' || expression.args.length !== 0) {
+    return false
+  }
+
+  return isStringLengthObject(expression.callee.object, context)
 }
 
 function isStringSliceCall(expression, context) {
@@ -4171,7 +4202,7 @@ function expressionUsesCRuntime(expression) {
   }
 
   if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
-    if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' && (expression.callee.property === 'slice' || cStringPredicateMethods.has(expression.callee.property))) {
+    if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' && isCStringRuntimeMethodName(expression.callee.property)) {
       return true
     }
 
@@ -4393,7 +4424,7 @@ function nodeUsesCStringMethodCall(node) {
     return false
   }
 
-  if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' && (node.callee.property === 'slice' || cStringPredicateMethods.has(node.callee.property))) {
+  if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' && isCStringRuntimeMethodName(node.callee.property)) {
     return true
   }
 
@@ -4412,6 +4443,10 @@ function expressionMayBeCStringLengthOperand(expression) {
   }
 
   return ['StringLiteral', 'TemplateLiteral', 'Reference', 'MemberExpression', 'IndexExpression', 'CallExpression', 'BinaryExpression'].includes(expression.type)
+}
+
+function isCStringRuntimeMethodName(name) {
+  return name === 'trim' || name === 'slice' || cStringPredicateMethods.has(name)
 }
 
 function withVariableScope(context, callback) {

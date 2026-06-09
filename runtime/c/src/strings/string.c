@@ -85,6 +85,39 @@ ccjs_status ccjs_string_concat_parts(
   return CCJS_OK;
 }
 
+static bool ccjs_string_is_ascii_trim_space(char value) {
+  return value == ' '
+    || value == '\t'
+    || value == '\n'
+    || value == '\r'
+    || value == '\f'
+    || value == '\v';
+}
+
+ccjs_status ccjs_string_trim_parts(ccjs_allocator* allocator, const char* value_bytes, size_t value_len, ccjs_value* out) {
+  if (value_bytes == 0 && value_len != 0) {
+    if (out != 0) {
+      *out = ccjs_undefined_value();
+    }
+
+    return CCJS_ERR_TYPE;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  size_t start = 0;
+  size_t end = value_len;
+
+  while (start < end && ccjs_string_is_ascii_trim_space(bytes[start])) {
+    start += 1;
+  }
+
+  while (end > start && ccjs_string_is_ascii_trim_space(bytes[end - 1])) {
+    end -= 1;
+  }
+
+  return ccjs_string_from_literal(allocator, bytes + start, end - start, out);
+}
+
 ccjs_status ccjs_string_slice_parts(ccjs_allocator* allocator, const char* value_bytes, size_t value_len, size_t start, size_t end, ccjs_value* out) {
   if (value_bytes == 0 && value_len != 0) {
     if (out != 0) {

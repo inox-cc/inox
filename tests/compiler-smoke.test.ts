@@ -281,6 +281,35 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, message->bytes, message->len, \(size_t\)\(3\), \(size_t\)\(message->len\), &ccjs_value_\d+\)/)
 })
 
+test('lowers C string trim for literals and runtime strings', () => {
+  const result = compileSource(`type User = {
+  name: string
+}
+
+function clean(name: string): string {
+  return name.trim()
+}
+
+function getName(): string {
+  return ' Grace '
+}
+
+export function main(): void {
+  const user: User = { name: ' Ada ' }
+  const name = user.name
+  const message = ' ' + name + ' '
+  console.log(' Ada '.trim(), clean(name), user.name.trim(), getName().trim(), message.trim())
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_string_trim_parts\(&ccjs_default_allocator, name->bytes, name->len, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_trim_parts\(&ccjs_default_allocator, " Ada ", 5, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_trim_parts\(&ccjs_default_allocator, ccjs_trim_string_\d+->bytes, ccjs_trim_string_\d+->len, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_trim_parts\(&ccjs_default_allocator, message->bytes, message->len, &ccjs_value_\d+\)/)
+})
+
 test('lowers known C object field access to runtime calls', () => {
   const result = compileSource(`export function main(): void {
   const user = { score: 42, active: true }
@@ -2033,6 +2062,27 @@ export function main(): void {
   assertDiagnostic(`export function main(): void {
   const name = 'Ada'
   name.slice()
+}
+`, 'CCJS_ARG_COUNT')
+})
+
+test('checks string trim as a string call', () => {
+  const result = compileSource(`function clean(name: string): string {
+  return name.trim()
+}
+
+export function main(): void {
+  console.log(clean(' Ada '))
+}
+`, {
+    target: 'js'
+  })
+
+  assert.match(result.code, /return name\.trim\(\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const name = 'Ada'
+  name.trim(1)
 }
 `, 'CCJS_ARG_COUNT')
 })
