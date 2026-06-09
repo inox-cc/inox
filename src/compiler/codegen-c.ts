@@ -2259,7 +2259,10 @@ function emitObjectVariableDeclaration(statement, context) {
   context.objectShapes.set(statement.name, fields.map(field => ({
     name: field.name,
     valueType: field.valueType,
-    arrayElementType: field.arrayElementType
+    arrayElementType: field.arrayElementType,
+    mapKeyType: field.mapKeyType,
+    mapValueType: field.mapValueType,
+    setElementType: field.setElementType
   })))
 
   for (const [index, field] of fields.entries()) {
@@ -2483,7 +2486,10 @@ function emitBoxedObjectVariableDeclaration(statement, context) {
   context.objectShapes.set(statement.name, fields.map(field => ({
     name: field.name,
     valueType: field.valueType,
-    arrayElementType: field.arrayElementType
+    arrayElementType: field.arrayElementType,
+    mapKeyType: field.mapKeyType,
+    mapValueType: field.mapValueType,
+    setElementType: field.setElementType
   })))
   lines.push(`${statement.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`)
   lines.push(`if (${statement.name} == 0) ${emitFailureStatement(context)}`)
@@ -2519,6 +2525,10 @@ function emitObjectMemberVariableDeclaration(statement, member, context, emitGet
     return emitObjectArrayMemberVariableDeclaration(statement, member, context, emitGetCall)
   }
 
+  if (member.valueType === 'map' || member.valueType === 'set') {
+    return emitObjectCollectionMemberVariableDeclaration(statement, member, context, emitGetCall)
+  }
+
   if (member.valueType === 'string') {
     return emitObjectStringMemberVariableDeclaration(statement, member, context, emitGetCall)
   }
@@ -2552,6 +2562,30 @@ function emitObjectArrayMemberVariableDeclaration(statement, member, context, em
 
   context.variables.set(statement.name, 'array')
   context.runtimeArrayElementTypes.set(statement.name, member.arrayElementType ?? 'unknown')
+
+  return lines
+}
+
+function emitObjectCollectionMemberVariableDeclaration(statement, member, context, emitGetCall) {
+  registerOwnedValue(context, statement.name)
+
+  const tag = member.valueType === 'map' ? 'CCJS_TAG_MAP' : 'CCJS_TAG_SET'
+  const lines = [
+    ...emitPrepareOwnedValueWrite(statement.name),
+    emitStatusCheck(emitGetCall(statement.name), context),
+    emitRuntimeTypeCheck(`${statement.name}.tag != ${tag} || ${statement.name}.as.ref == 0`, context)
+  ]
+
+  context.variables.set(statement.name, member.valueType)
+
+  if (member.valueType === 'map') {
+    context.mapTypes.set(statement.name, {
+      key: member.mapKeyType ?? 'unknown',
+      value: member.mapValueType ?? 'unknown'
+    })
+  } else {
+    context.setElementTypes.set(statement.name, member.setElementType ?? 'unknown')
+  }
 
   return lines
 }
@@ -4784,7 +4818,10 @@ function resolveKnownObjectMember(expression, context) {
     objectName,
     index,
     valueType: fields[index].valueType,
-    arrayElementType: fields[index].arrayElementType
+    arrayElementType: fields[index].arrayElementType,
+    mapKeyType: fields[index].mapKeyType,
+    mapValueType: fields[index].mapValueType,
+    setElementType: fields[index].setElementType
   }
 }
 
@@ -4815,7 +4852,10 @@ function resolveKnownObjectIndex(expression, context) {
     key: expression.index.value,
     index,
     valueType: fields[index].valueType,
-    arrayElementType: fields[index].arrayElementType
+    arrayElementType: fields[index].arrayElementType,
+    mapKeyType: fields[index].mapKeyType,
+    mapValueType: fields[index].mapValueType,
+    setElementType: fields[index].setElementType
   }
 }
 
@@ -4844,7 +4884,10 @@ function registerObjectShape(context, name, shape) {
   context.objectShapes.set(name, shape.fields.map(field => ({
     name: field.name,
     valueType: field.valueType,
-    arrayElementType: field.arrayElementType
+    arrayElementType: field.arrayElementType,
+    mapKeyType: field.mapKeyType,
+    mapValueType: field.mapValueType,
+    setElementType: field.setElementType
   })))
 }
 

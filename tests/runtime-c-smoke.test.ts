@@ -3580,6 +3580,55 @@ test('generated C Map and Set array literal constructors compile and run with ru
   }
 })
 
+test('generated C Map and Set object fields compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-fields-'))
+  const source = join(dir, 'collection-fields.c')
+  const output = join(dir, 'collection-fields')
+
+  try {
+    const result = compileSource(`type Bag = {
+  scores: Map<string, number>,
+  names: Set<string>
+}
+
+export function main(): void {
+  const scores: Map<string, number> = new Map([['Ada', 7]])
+  const names: Set<string> = new Set(['Ada'])
+  const bag: Bag = { scores, names }
+  const bagScores = bag.scores
+  const bagNames = bag['names']
+
+  console.log(bagScores.get('Ada'), bagNames.has('Ada'), bagScores.size, bagNames.size)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7 1 1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 function compileRuntimeProgram(source: string, output: string): Promise<CommandResult> {
   return runCommand('cc', [
     '-Iruntime/c/include',
