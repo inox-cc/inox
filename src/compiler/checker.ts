@@ -514,9 +514,7 @@ class Checker {
     }
 
     if (expression.type === 'BinaryExpression') {
-      const left = this.checkExpression(expression.left)
-      const right = this.checkExpression(expression.right)
-      return inferBinaryExpressionType(expression.operator, left, right)
+      return this.checkBinaryExpression(expression)
     }
 
     if (expression.type === 'UnaryExpression') {
@@ -566,6 +564,17 @@ class Checker {
     }
 
     return valueType
+  }
+
+  checkBinaryExpression(expression: AnyNode): ValueType {
+    const left = this.checkExpression(expression.left)
+    const right = this.checkExpression(expression.right)
+
+    if (isEqualityOperator(expression.operator) && !isEqualityComparableType(left, right)) {
+      this.report('CCJS_TYPE_MISMATCH', `cannot compare ${left} and ${right} with ${expression.operator}`, expression.loc)
+    }
+
+    return inferBinaryExpressionType(expression.operator, left, right)
   }
 
   checkMemberExpression(expression: AnyNode): ValueType {
@@ -1111,6 +1120,18 @@ function inferBinaryExpressionType(operator: string, left: ValueType, right: Val
   }
 
   return 'number'
+}
+
+function isEqualityOperator(operator: string): boolean {
+  return ['===', '!==', '==', '!='].includes(operator)
+}
+
+function isEqualityComparableType(left: ValueType, right: ValueType): boolean {
+  if (left === 'unknown' || right === 'unknown') {
+    return true
+  }
+
+  return ['boolean', 'number', 'string', 'null'].includes(left) && left === right
 }
 
 function isAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined): boolean {

@@ -1825,6 +1825,20 @@ test('rejects variable type mismatches', () => {
 `, 'CCJS_TYPE_MISMATCH')
 })
 
+test('rejects equality type mismatches', () => {
+  assertDiagnostic(`export function main(): void {
+  const same = 1 === '1'
+  console.log(same)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const same = 1 == '1'
+  console.log(same)
+}
+`, 'CCJS_TYPE_MISMATCH')
+})
+
 test('rejects function argument type mismatches', () => {
   assertDiagnostic(`function greet(name: string): void {
   console.log(name)
