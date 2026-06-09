@@ -1413,6 +1413,7 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     cleanupEnabled: true,
     functionTypes: new Map(),
     mapTypes: new Map(),
+    narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
     objectShapes: new Map(),
     ownedValues: [],
@@ -1823,10 +1824,13 @@ function emitStatement(statement, context) {
 
 function emitIfStatement(statement, context) {
   const condition = emitPreparedNumberExpression(statement.condition, context)
+  const narrowing = resolveNullableScalarNullCheckNarrowing(statement.condition, context)
+  const consequentNarrowed = narrowing?.nonNullWhenTrue === true ? [narrowing.name] : []
+  const alternateNarrowed = narrowing?.nonNullWhenTrue === false ? [narrowing.name] : []
   const lines = [
     ...condition.lines,
     `if (${condition.expression}) {`,
-    ...withVariableScope(context, () => emitStatementBody(statement.consequent, context)).map(line => `  ${line}`)
+    ...withVariableScope(context, () => withNullableScalarNarrowing(context, consequentNarrowed, () => emitStatementBody(statement.consequent, context))).map(line => `  ${line}`)
   ]
 
   if (statement.alternate == null) {
@@ -1835,7 +1839,7 @@ function emitIfStatement(statement, context) {
   }
 
   lines.push('} else {')
-  lines.push(...withVariableScope(context, () => emitStatementBody(statement.alternate, context)).map(line => `  ${line}`))
+  lines.push(...withVariableScope(context, () => withNullableScalarNarrowing(context, alternateNarrowed, () => emitStatementBody(statement.alternate, context))).map(line => `  ${line}`))
   lines.push('}')
 
   return lines
@@ -2657,7 +2661,8 @@ function emitNullableRuntimeValueAssignment(expression, context) {
     ...emitRuntimeNullableValueCheck(temp, expectedTag, context),
     `ccjs_retain(${temp});`,
     `ccjs_release(${name});`,
-    `${name} = ${temp};`
+    `${name} = ${temp};`,
+    ...clearNullableScalarNarrowing(name, context)
   ]
 }
 
@@ -4131,6 +4136,16 @@ function emitPreparedNumberExpression(expression, context) {
     }
   }
 
+  if (isNarrowedNullableScalarReference(expression, context)) {
+    const name = expression.path[0]
+    const valueType = context.variables.get(name)
+
+    return {
+      lines: [],
+      expression: valueType === 'boolean' ? `(${name}.as.boolean ? 1 : 0)` : `${name}.as.number`
+    }
+  }
+
   if (isNullableScalarRuntimeExpression(expression, context)) {
     context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'nullable scalar values must be narrowed with ?? before scalar use in the current C backend slice', expression.loc))
 
@@ -4386,6 +4401,44 @@ function emitPreparedNullableNullCompareExpression(expression, context) {
     lines: value.lines,
     expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
   }
+}
+
+function resolveNullableScalarNullCheckNarrowing(expression, context) {
+  if (expression?.type !== 'BinaryExpression' || !['===', '!==', '==', '!='].includes(expression.operator)) {
+    return null
+  }
+
+  const nullable = expression.left?.type === 'NullLiteral' ? expression.right : expression.left
+  const maybeNull = expression.left?.type === 'NullLiteral' ? expression.left : expression.right
+
+  if (maybeNull?.type !== 'NullLiteral' || nullable?.type !== 'Reference' || nullable.path.length !== 1) {
+    return null
+  }
+
+  const name = nullable.path[0]
+
+  if (!context.nullableVariables.has(name) || !isNullableScalarType(context.variables.get(name))) {
+    return null
+  }
+
+  return {
+    name,
+    nonNullWhenTrue: ['!==', '!='].includes(expression.operator)
+  }
+}
+
+function isNarrowedNullableScalarReference(expression, context) {
+  return expression?.type === 'Reference'
+    && expression.path.length === 1
+    && context.narrowedNullableScalars.has(expression.path[0])
+    && context.nullableVariables.has(expression.path[0])
+    && isNullableScalarType(context.variables.get(expression.path[0]))
+}
+
+function clearNullableScalarNarrowing(name, context) {
+  context.narrowedNullableScalars.delete(name)
+
+  return []
 }
 
 function emitPreparedStringPredicateCall(expression, context) {
@@ -6979,6 +7032,7 @@ function withVariableScope(context, callback) {
   const previousBoxedVariables = context.boxedVariables
   const previousFunctionTypes = context.functionTypes
   const previousMapTypes = context.mapTypes
+  const previousNarrowedNullableScalars = context.narrowedNullableScalars
   const previousNullableVariables = context.nullableVariables
   const previousObjectShapes = context.objectShapes
   const previousRuntimeCallbacks = context.runtimeCallbacks
@@ -6990,6 +7044,7 @@ function withVariableScope(context, callback) {
   context.boxedVariables = new Set(previousBoxedVariables)
   context.functionTypes = new Map(previousFunctionTypes)
   context.mapTypes = new Map(previousMapTypes)
+  context.narrowedNullableScalars = new Set(previousNarrowedNullableScalars)
   context.nullableVariables = new Set(previousNullableVariables)
   context.objectShapes = new Map(previousObjectShapes)
   context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
@@ -7005,12 +7060,32 @@ function withVariableScope(context, callback) {
     context.boxedVariables = previousBoxedVariables
     context.functionTypes = previousFunctionTypes
     context.mapTypes = previousMapTypes
+    context.narrowedNullableScalars = previousNarrowedNullableScalars
     context.nullableVariables = previousNullableVariables
     context.objectShapes = previousObjectShapes
     context.runtimeCallbacks = previousRuntimeCallbacks
     context.runtimeArrayElementTypes = previousRuntimeArrayElementTypes
     context.setElementTypes = previousSetElementTypes
     context.runtimeStrings = previousRuntimeStrings
+  }
+}
+
+function withNullableScalarNarrowing(context, names, callback) {
+  if (names.length === 0) {
+    return callback()
+  }
+
+  const previous = context.narrowedNullableScalars
+  context.narrowedNullableScalars = new Set(previous)
+
+  for (const name of names) {
+    context.narrowedNullableScalars.add(name)
+  }
+
+  try {
+    return callback()
+  } finally {
+    context.narrowedNullableScalars = previous
   }
 }
 

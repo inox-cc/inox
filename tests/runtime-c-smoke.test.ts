@@ -3296,6 +3296,66 @@ export function main(): void {
   }
 })
 
+test('generated C nullable scalar branch narrowing compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-branch-narrowing-'))
+  const source = join(dir, 'nullable-scalar-branch-narrowing.c')
+  const output = join(dir, 'nullable-scalar-branch-narrowing')
+
+  try {
+    const result = compileSource(`function printScore(score: number | null, active: boolean | null): void {
+  if (score !== null) {
+    console.log(score + 1)
+  } else {
+    console.log(0)
+  }
+
+  if (active === null) {
+    console.log(false)
+  } else {
+    console.log(active)
+  }
+}
+
+export function main(): void {
+  printScore(4, true)
+  printScore(null, null)
+
+  let value: number | null = 5
+  if (value !== null) {
+    console.log(value)
+    value = null
+  }
+  console.log(value ?? 9)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '5\n1\n0\n0\n5\n9\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C nullable callback optional calls compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
