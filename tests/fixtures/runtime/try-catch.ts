@@ -1,4 +1,4 @@
-// @targets js
+// @targets js,c
 // @expect pass
 
 export function main(): void {

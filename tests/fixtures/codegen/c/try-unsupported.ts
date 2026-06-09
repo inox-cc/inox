@@ -4,7 +4,7 @@
 
 export function main(): void {
   try {
-    console.log('try')
+    return
   } finally {
     console.log('finally')
   }

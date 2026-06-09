@@ -260,6 +260,7 @@ function emitFunctionDeclaration(statement, baseContext) {
     `${emitFunctionHead(statement, context)} {`,
     ...emitReturnValueDeclarations(context).map(line => `  ${line}`),
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitErrorChannelDeclarations(context).map(line => `  ${line}`),
     ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
     ...bodyLines
   ]
@@ -1247,6 +1248,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   lines.push('  *out = ccjs_undefined_value();')
   lines.push(...bodyLines.map(line => `  ${line}`))
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
+  lines.push(...emitErrorChannelDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...statementLines.map(line => `  ${line}`))
   if (context.usedRuntimeCallbackCleanupGoto === true) {
@@ -1461,6 +1463,8 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     boxedValues: [],
     boxedVariables: new Set(),
     cleanupEnabled: true,
+    errorChannelUsed: false,
+    errorTargets: [],
     functionTypes: new Map(),
     mapTypes: new Map(),
     narrowedNullableScalars: new Set(),
@@ -1501,6 +1505,7 @@ function emitMainWrapper(entryProgram, baseContext) {
   bodyLines.push(...emitStatementList(body, context).map(line => `  ${line}`))
 
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
+  lines.push(...emitErrorChannelDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...bodyLines)
 
@@ -1652,13 +1657,11 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'TryStatement') {
-    context.diagnostics.push(diagnostic('CCJS_C_TRY', 'try/catch/finally is not supported by the current C backend slice', statement.loc))
-    return []
+    return emitTryStatement(statement, context)
   }
 
   if (statement.type === 'ThrowStatement') {
-    context.diagnostics.push(diagnostic('CCJS_C_THROW', 'throw is not supported by the current C backend slice', statement.loc))
-    return []
+    return emitThrowStatement(statement, context)
   }
 
   if (statement.type === 'BreakStatement') {
@@ -2078,6 +2081,167 @@ function emitSwitchCaseLabel(expression, context) {
   context.diagnostics.push(diagnostic('CCJS_C_SWITCH_CASE', 'C switch case labels must be numeric or boolean literals in the current backend slice', expression?.loc))
 
   return '0'
+}
+
+function emitTryStatement(statement, context) {
+  if (tryStatementHasUnsupportedControlFlow(statement)) {
+    context.diagnostics.push(diagnostic('CCJS_C_TRY', 'C try/catch/finally currently does not support return, break or continue inside the try region', statement.loc))
+    return []
+  }
+
+  registerErrorChannel(context)
+
+  const id = nextCName(context, 'ccjs_try')
+  const catchLabel = statement.handler == null ? null : `${id}_catch`
+  const finallyLabel = statement.finalizer == null ? null : `${id}_finally`
+  const endLabel = `${id}_end`
+  const throwTarget = catchLabel ?? finallyLabel
+  const lines = [
+    '{'
+  ]
+  const tryBody = withErrorTarget(context, throwTarget, () => withVariableScope(context, () => emitStatementBody(statement.block, context)))
+
+  lines.push(...tryBody.map(line => `  ${line}`))
+  lines.push(`  goto ${finallyLabel ?? endLabel};`)
+
+  if (statement.handler != null && catchLabel != null) {
+    const catchBody = withVariableScope(context, () => {
+      const body: string[] = []
+
+      if (statement.handler.param != null) {
+        context.variables.set(statement.handler.param, 'string')
+        context.runtimeStrings.add(statement.handler.param)
+        body.push(`ccjs_string* ${statement.handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
+      }
+
+      body.push(...emitStatementBody(statement.handler.body, context))
+
+      return body
+    })
+
+    lines.push(`${catchLabel}:`)
+    lines.push(`  if (ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0) ${emitFailureStatement(context)}`)
+    lines.push('  ccjs_error_active = 0;')
+    lines.push('  {')
+    lines.push(...catchBody.map(line => `    ${line}`))
+    lines.push('  }')
+    lines.push('  ccjs_release(ccjs_error);')
+    lines.push('  ccjs_error = ccjs_undefined_value();')
+  }
+
+  if (statement.finalizer != null && finallyLabel != null) {
+    const outerThrowTarget = currentErrorTarget(context)
+    const finalizerBody = withErrorTarget(context, outerThrowTarget, () => withVariableScope(context, () => emitStatementBody(statement.finalizer, context)))
+
+    lines.push(`${finallyLabel}:`)
+    lines.push(...finalizerBody.map(line => `  ${line}`))
+
+    if (outerThrowTarget != null) {
+      lines.push(`  if (ccjs_error_active) goto ${outerThrowTarget};`)
+    } else {
+      lines.push(`  if (ccjs_error_active) ${emitFailureStatement(context)}`)
+    }
+  }
+
+  lines.push(`${endLabel}:`)
+  lines.push('  ;')
+  lines.push('}')
+
+  return lines
+}
+
+function emitThrowStatement(statement, context) {
+  const target = currentErrorTarget(context)
+
+  if (target == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_THROW', 'uncaught throw is not supported by the current C backend slice', statement.loc))
+    return []
+  }
+
+  if (inferExpressionType(statement.argument, context) !== 'string') {
+    context.diagnostics.push(diagnostic('CCJS_C_THROW', 'C throw currently supports only string values in local try/catch regions', statement.loc))
+    return []
+  }
+
+  registerErrorChannel(context)
+
+  const value = emitCValueExpression(statement.argument, context)
+
+  return [
+    ...value.lines,
+    ...emitPrepareOwnedValueWrite('ccjs_error'),
+    `ccjs_error = ${value.expression};`,
+    emitRuntimeTypeCheck('ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0', context),
+    'ccjs_retain(ccjs_error);',
+    'ccjs_error_active = 1;',
+    `goto ${target};`
+  ]
+}
+
+function registerErrorChannel(context) {
+  context.errorChannelUsed = true
+  registerOwnedValue(context, 'ccjs_error')
+}
+
+function currentErrorTarget(context) {
+  return context.errorTargets.at(-1) ?? null
+}
+
+function withErrorTarget(context, target, callback) {
+  if (target == null) {
+    return callback()
+  }
+
+  context.errorTargets.push(target)
+
+  try {
+    return callback()
+  } finally {
+    context.errorTargets.pop()
+  }
+}
+
+function tryStatementHasUnsupportedControlFlow(statement) {
+  return statementHasUnsupportedTryControlFlow(statement.block)
+    || (statement.handler != null && statementHasUnsupportedTryControlFlow(statement.handler.body))
+    || (statement.finalizer != null && statementHasUnsupportedTryControlFlow(statement.finalizer))
+}
+
+function statementHasUnsupportedTryControlFlow(statement) {
+  if (statement == null) {
+    return false
+  }
+
+  if (statement.type === 'ReturnStatement' || statement.type === 'BreakStatement' || statement.type === 'ContinueStatement') {
+    return true
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return statement.body.some(item => statementHasUnsupportedTryControlFlow(item))
+  }
+
+  if (statement.type === 'IfStatement') {
+    return statementHasUnsupportedTryControlFlow(statement.consequent)
+      || (statement.alternate != null && statementHasUnsupportedTryControlFlow(statement.alternate))
+  }
+
+  if (statement.type === 'WhileStatement' || statement.type === 'ForOfStatement') {
+    return statementHasUnsupportedTryControlFlow(statement.body)
+  }
+
+  if (statement.type === 'ForStatement') {
+    return statementHasUnsupportedTryControlFlow(statement.body)
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    return statement.cases.some(item => item.consequent.some(child => statementHasUnsupportedTryControlFlow(child)))
+  }
+
+  if (statement.type === 'TryStatement') {
+    return tryStatementHasUnsupportedControlFlow(statement)
+  }
+
+  return false
 }
 
 function emitStatementBody(statement, context) {
@@ -6674,6 +6838,10 @@ function emitOwnedValueDeclarations(context) {
   return context.ownedValues.map(name => `ccjs_value ${name} = ccjs_undefined_value();`)
 }
 
+function emitErrorChannelDeclarations(context) {
+  return context.errorChannelUsed ? ['int ccjs_error_active = 0;'] : []
+}
+
 function emitBoxedValueDeclarations(context) {
   return context.boxedValues.map(name => isRuntimeBoxedValueType(context.boxedValueTypes.get(name))
     ? `ccjs_value* ${name} = 0;`
@@ -6858,7 +7026,7 @@ function statementUsesCRuntime(statement) {
   }
 
   if (statement.type === 'ThrowStatement') {
-    return expressionUsesCRuntime(statement.argument)
+    return true
   }
 
   if (statement.type === 'BlockStatement') {
@@ -6892,9 +7060,7 @@ function statementUsesCRuntime(statement) {
   }
 
   if (statement.type === 'TryStatement') {
-    return statementUsesCRuntime(statement.block)
-      || (statement.handler != null && statementUsesCRuntime(statement.handler.body))
-      || (statement.finalizer != null && statementUsesCRuntime(statement.finalizer))
+    return true
   }
 
   return false

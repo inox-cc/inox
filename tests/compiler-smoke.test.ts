@@ -2439,7 +2439,7 @@ export function main(): void {
   })
 })
 
-test('compiles throw and try catch finally to JS and rejects them for C', () => {
+test('compiles throw and try catch finally to JS and lowers local string throws to C error channel', () => {
   const source = `export function main(): void {
   try {
     throw 'boom'
@@ -2458,13 +2458,34 @@ test('compiles throw and try catch finally to JS and rejects them for C', () => 
   assert.match(js.code, /throw "boom"/)
   assert.match(js.code, /\} catch \(error\) \{/)
   assert.match(js.code, /\} finally \{/)
-  assertDiagnostic(source, 'CCJS_C_TRY', {
+
+  const c = compileSource(source, {
     target: 'c'
   })
+
+  assert.match(c.code, /ccjs_value ccjs_error = ccjs_undefined_value\(\);/)
+  assert.match(c.code, /int ccjs_error_active = 0;/)
+  assert.match(c.code, /ccjs_retain\(ccjs_error\);\n    ccjs_error_active = 1;\n    goto ccjs_try_\d+_catch;/)
+  assert.match(c.code, /ccjs_try_\d+_catch:\n    if \(ccjs_error\.tag != CCJS_TAG_STRING \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(c.code, /ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;/)
+  assert.match(c.code, /ccjs_release\(ccjs_error\);\n    ccjs_error = ccjs_undefined_value\(\);/)
+  assert.match(c.code, /ccjs_try_\d+_finally:/)
+  assert.match(c.code, /printf\("%s\\n", "finally"\);/)
+
   assertDiagnostic(`export function main(): void {
   throw 'boom'
 }
 `, 'CCJS_C_THROW', {
+    target: 'c'
+  })
+  assertDiagnostic(`export function main(): void {
+  try {
+    return
+  } finally {
+    console.log('finally')
+  }
+}
+`, 'CCJS_C_TRY', {
     target: 'c'
   })
 })

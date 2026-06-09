@@ -3880,6 +3880,50 @@ export function main(): void {
   }
 })
 
+test('generated C local string throw try catch finally compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-try-catch-finally-'))
+  const source = join(dir, 'try-catch-finally.c')
+  const output = join(dir, 'try-catch-finally')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  try {
+    throw 'boom'
+  } catch (error) {
+    console.log(\`caught \${error}\`)
+  } finally {
+    console.log('finally')
+  }
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'caught boom\nfinally\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
