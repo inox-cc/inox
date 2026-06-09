@@ -11,6 +11,7 @@ type LowerResolvedType = {
   mapKeyType: string | null
   mapValueType: string | null
   setElementType: string | null
+  returnShape?: AnyNode | null
   shape: AnyNode | null
   functionType: AnyNode | null
 }
@@ -53,6 +54,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       returnMapKeyType: returnType.mapKeyType,
       returnMapValueType: returnType.mapValueType,
       returnSetElementType: returnType.setElementType,
+      returnShape: returnType.shape,
       body: item.body.map(statement => lowerStatement(statement, context))
     }
   }
@@ -377,7 +379,8 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
         returnArrayElementType: returnType.arrayElementType,
         returnMapKeyType: returnType.mapKeyType,
         returnMapValueType: returnType.mapValueType,
-        returnSetElementType: returnType.setElementType
+        returnSetElementType: returnType.setElementType,
+        returnShape: returnType.shape
       }
     }
   }
@@ -621,6 +624,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
       setElementType: expression.setElementType ?? null,
+      shape: expression.shape ?? null,
       functionType: expression.functionType ?? null
     }
   }
@@ -634,7 +638,8 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       arrayElementType: expression.arrayElementType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
-      setElementType: expression.setElementType ?? null
+      setElementType: expression.setElementType ?? null,
+      shape: expression.shape ?? null
     }
   }
 

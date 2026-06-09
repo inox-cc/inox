@@ -744,7 +744,10 @@ export function main(): void {
 
   assert.match(result.code, /ccjs_value getName\(void\);/)
   assert.match(result.code, /ccjs_value getName\(void\) \{\n  ccjs_value ccjs_return = ccjs_undefined_value\(\);/)
-  assert.match(result.code, /ccjs_return = ccjs_value_\d+;\n  ccjs_retain\(ccjs_return\);\n  goto ccjs_cleanup;/)
+  assert.match(
+    result.code,
+    /ccjs_return = ccjs_value_\d+;\n  if \(ccjs_return\.tag != CCJS_TAG_STRING \|\| ccjs_return\.as\.ref == 0\) goto ccjs_cleanup;\n  ccjs_retain\(ccjs_return\);\n  goto ccjs_cleanup;/
+  )
   assert.match(result.code, /return ccjs_return;/)
   assert.match(result.code, /ccjs_value ccjs_value_\d+ = ccjs_undefined_value\(\);\n  ccjs_release\(ccjs_value_\d+\);\n  ccjs_value_\d+ = ccjs_undefined_value\(\);\n  ccjs_value_\d+ = getName\(\);/)
   assert.match(result.code, /const ccjs_string\* name = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
@@ -2374,6 +2377,47 @@ export function main(): void {
   assert.match(result.code, /ccjs_retain\(\(\*out\)\);/)
   assert.match(result.code, /ccjs_callback_call\(callback, 0, 0, &ccjs_optional_call_\d+\)/)
   assert.match(result.code, /ccjs_optional_call_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_optional_call_\d+\.as\.ref == 0/)
+})
+
+test('lowers C optional call results over nullable object callbacks', () => {
+  const result = compileSource(`type User = {
+  name: string,
+  id: number
+}
+type MakeUser = () => User;
+
+function getUser(): User {
+  return { name: 'Ada', id: 7 }
+}
+
+function printUser(callback: MakeUser | null): void {
+  const user: User | null = callback?.()
+  const name: string | null = user?.name
+  const id: number | null = user?.id
+  console.log(name ?? 'missing', id ?? 0)
+}
+
+export function main(): void {
+  printUser(getUser)
+  printUser(null)
+
+  const arrow: MakeUser | null = () => {
+    return { name: 'Grace', id: 9 }
+  }
+  printUser(arrow)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_value getUser\(void\) \{/)
+  assert.match(result.code, /static ccjs_status ccjs_callback_getUser_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/)
+  assert.match(result.code, /\*out = getUser\(\);/)
+  assert.match(result.code, /\(\*out\) = ccjs_object_\d+;/)
+  assert.match(result.code, /ccjs_callback_call\(callback, 0, 0, &ccjs_optional_call_\d+\)/)
+  assert.match(result.code, /ccjs_optional_call_\d+\.tag != CCJS_TAG_OBJECT \|\| ccjs_optional_call_\d+\.as\.ref == 0/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_optional_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 1, &ccjs_optional_value_\d+\)/)
 })
 
 test('compiles unsupported nullish coalescing to JS and rejects it for C', () => {

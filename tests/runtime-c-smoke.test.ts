@@ -3819,6 +3819,67 @@ export function main(): void {
   }
 })
 
+test('generated C nullable object callback optional call results compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-object-callback-optional-call-result-'))
+  const source = join(dir, 'nullable-object-callback-optional-call-result.c')
+  const output = join(dir, 'nullable-object-callback-optional-call-result')
+
+  try {
+    const result = compileSource(`type User = {
+  name: string,
+  id: number
+}
+type MakeUser = () => User;
+
+function getUser(): User {
+  return { name: 'Ada', id: 7 }
+}
+
+function printUser(callback: MakeUser | null): void {
+  const user: User | null = callback?.()
+  const name: string | null = user?.name
+  const id: number | null = user?.id
+  console.log(name ?? 'missing', id ?? 0)
+}
+
+export function main(): void {
+  printUser(getUser)
+  printUser(null)
+
+  const arrow: MakeUser | null = () => {
+    return { name: 'Grace', id: 9 }
+  }
+  printUser(arrow)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada 7\nmissing 0\nGrace 9\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

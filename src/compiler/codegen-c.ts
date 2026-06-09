@@ -212,6 +212,7 @@ function createBaseContext(diagnostics, functions) {
 
 function emitFunctionDeclaration(statement, baseContext) {
   const context = createFunctionContext(baseContext, statement.returnType, statement.returnNullable === true)
+  context.returnShape = statement.returnShape ?? null
 
   for (const [index, param] of statement.params.entries()) {
     if (isNullableScalarParam(param)) {
@@ -380,7 +381,7 @@ function isSupportedRuntimeCallbackType(functionType) {
 }
 
 function isSupportedRuntimeCallbackReturnType(returnType) {
-  return ['void', 'number', 'boolean', 'string'].includes(returnType)
+  return ['void', 'number', 'boolean', 'string', 'object'].includes(returnType)
 }
 
 function runtimeFunctionParamKey(functionName, index) {
@@ -1180,7 +1181,7 @@ function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
     lines.push(`  *out = ccjs_number_value(${call});`)
   } else if (wrapper.functionType.returnType === 'boolean') {
     lines.push(`  *out = ccjs_bool_value((${call}) != 0);`)
-  } else if (wrapper.functionType.returnType === 'string') {
+  } else if (isManagedRuntimeReturnType(wrapper.functionType.returnType)) {
     lines.push(`  *out = ${call};`)
   } else {
     lines.push(`  ${call};`)
@@ -1225,6 +1226,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   context.cleanupEnabled = false
   context.statusReturn = true
   context.runtimeCallbackReturnType = wrapper.functionType.returnType
+  context.runtimeCallbackReturnShape = wrapper.functionType.returnShape ?? null
   context.runtimeCallbackReturnOut = '(*out)'
   context.runtimeCallbackCleanupLabel = 'ccjs_callback_cleanup'
   const bodyLines: string[] = []
@@ -1275,7 +1277,7 @@ function emitRuntimeArrowCallbackStatementLines(wrapper, context) {
     ]
   }
 
-  if (wrapper.functionType.returnType === 'string') {
+  if (isManagedRuntimeReturnType(wrapper.functionType.returnType)) {
     if (!wrapper.expression.expressionBody) {
       return emitStatementList(wrapper.expression.body, context)
     }
@@ -1613,7 +1615,7 @@ function emitCReturnType(type, nullable = false) {
     return 'ccjs_value'
   }
 
-  if (type === 'string') {
+  if (isManagedRuntimeReturnType(type)) {
     return 'ccjs_value'
   }
 
@@ -1833,8 +1835,8 @@ function emitStatement(statement, context) {
       return emitNullableScalarReturnStatement(statement, context)
     }
 
-    if (context.returnType === 'string') {
-      return emitStringReturnStatement(statement, context)
+    if (isManagedRuntimeReturnType(context.returnType)) {
+      return emitRuntimeValueReturnStatement(statement, context)
     }
 
     if (context.returnType !== 'void') {
@@ -2320,11 +2322,11 @@ function emitPreparedForExpressionClause(expression, context) {
 }
 
 function isRuntimeCallbackReturnContext(context) {
-  return context.statusReturn === true && ['number', 'boolean', 'string'].includes(context.runtimeCallbackReturnType)
+  return context.statusReturn === true && ['number', 'boolean', 'string', 'object'].includes(context.runtimeCallbackReturnType)
 }
 
 function emitRuntimeCallbackReturnStatement(statement, context) {
-  const lines = context.runtimeCallbackReturnType === 'string'
+  const lines = isManagedRuntimeReturnType(context.runtimeCallbackReturnType)
     ? emitRuntimeCallbackRuntimeValueReturnLines(statement.argument, context)
     : emitRuntimeCallbackScalarReturnLines(statement.argument, context)
 
@@ -2360,7 +2362,7 @@ function emitRuntimeCallbackRuntimeValueReturnLines(argument, context) {
         lines: [],
         expression: 'ccjs_undefined_value()'
       }
-    : emitCValueExpression(argument, context)
+    : emitRuntimeReturnValueExpression(argument, context, context.runtimeCallbackReturnType, context.runtimeCallbackReturnShape)
 
   return [
     ...value.lines,
@@ -2370,19 +2372,33 @@ function emitRuntimeCallbackRuntimeValueReturnLines(argument, context) {
   ]
 }
 
-function emitStringReturnStatement(statement, context) {
+function isManagedRuntimeReturnType(valueType) {
+  return valueType === 'string' || valueType === 'object'
+}
+
+function emitRuntimeReturnValueExpression(argument, context, returnType, returnShape) {
+  if (returnType === 'object' && argument?.type === 'ObjectLiteral') {
+    return emitCObjectLiteralValueExpression(argument, context, returnShape)
+  }
+
+  return emitCValueExpression(argument, context)
+}
+
+function emitRuntimeValueReturnStatement(statement, context) {
   if (statement.argument == null) {
     context.usedCleanupGoto = true
 
     return ['goto ccjs_cleanup;']
   }
 
-  const value = emitCValueExpression(statement.argument, context)
+  const expectedTag = cRuntimeValueTag(context.returnType)
+  const value = emitRuntimeReturnValueExpression(statement.argument, context, context.returnType, context.returnShape)
   context.usedCleanupGoto = true
 
   return [
     ...value.lines,
     `ccjs_return = ${value.expression};`,
+    emitRuntimeValueCheck('ccjs_return', expectedTag, context),
     'ccjs_retain(ccjs_return);',
     'goto ccjs_cleanup;'
   ]
@@ -3428,6 +3444,22 @@ function emitCValueExpression(expression, context) {
         ...emitPrepareOwnedValueWrite(temp),
         `${temp} = ${call.expression};`,
         emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context)
+      ],
+      expression: temp
+    }
+  }
+
+  if (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'object') {
+    const temp = nextCName(context, 'ccjs_value')
+    registerOwnedValue(context, temp)
+    const call = emitPreparedCallExpression(expression, context)
+
+    return {
+      lines: [
+        ...call.lines,
+        ...emitPrepareOwnedValueWrite(temp),
+        `${temp} = ${call.expression};`,
+        emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_OBJECT || ${temp}.as.ref == 0`, context)
       ],
       expression: temp
     }
@@ -6627,7 +6659,7 @@ function emitReturnValueDeclarations(context) {
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
 
-  if (context.returnType === 'string') {
+  if (isManagedRuntimeReturnType(context.returnType)) {
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
 
@@ -6668,7 +6700,7 @@ function isRuntimeBoxedValueType(valueType) {
 }
 
 function emitCleanupReturn(context) {
-  if (context.returnType === 'string') {
+  if (isManagedRuntimeReturnType(context.returnType)) {
     return 'return ccjs_return;'
   }
 

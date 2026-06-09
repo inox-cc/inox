@@ -81,6 +81,7 @@ export type SymbolInfo = {
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
   returnSetElementType?: ValueType | null
+  returnShape?: any
   async?: boolean
   constructable?: boolean
   constructorParams?: AnyNode[]

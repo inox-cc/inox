@@ -236,6 +236,7 @@ class Checker {
           returnMapKeyType: returnInfo.mapKeyType,
           returnMapValueType: returnInfo.mapValueType,
           returnSetElementType: returnInfo.setElementType,
+          returnShape: returnInfo.shape,
           async: item.async,
           loc: item.loc
         }, item.loc)
@@ -562,6 +563,7 @@ class Checker {
       expression.mapKeyType = symbol.returnMapKeyType ?? null
       expression.mapValueType = symbol.returnMapValueType ?? null
       expression.setElementType = symbol.returnSetElementType ?? null
+      expression.shape = symbol.returnShape ?? null
 
       if (symbol.params != null) {
         if (symbol.params.length !== expression.args.length) {
@@ -1003,6 +1005,7 @@ class Checker {
     expression.mapKeyType = symbol.returnMapKeyType ?? null
     expression.mapValueType = symbol.returnMapValueType ?? null
     expression.setElementType = symbol.returnSetElementType ?? null
+    expression.shape = symbol.returnShape ?? null
 
     if (symbol.params == null) {
       return symbol.returnType ?? 'unknown'
@@ -1576,6 +1579,7 @@ class Checker {
         returnMapKeyType: symbol.functionType.returnMapKeyType,
         returnMapValueType: symbol.functionType.returnMapValueType,
         returnSetElementType: symbol.functionType.returnSetElementType,
+        returnShape: symbol.functionType.returnShape,
         loc: symbol.loc
       }
     }
@@ -1832,7 +1836,8 @@ class Checker {
             returnArrayElementType: returnInfo.arrayElementType,
             returnMapKeyType: returnInfo.mapKeyType,
             returnMapValueType: returnInfo.mapValueType,
-            returnSetElementType: returnInfo.setElementType
+            returnSetElementType: returnInfo.setElementType,
+            returnShape: returnInfo.shape
           },
           shape: null,
           arrayElementType: null,
