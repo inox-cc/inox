@@ -1293,6 +1293,59 @@ export function main(): void {
   }
 })
 
+test('generated C string length compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-length-'))
+  const source = join(dir, 'string-length.c')
+  const output = join(dir, 'string-length')
+
+  try {
+    const result = compileSource(`type User = {
+  name: string
+}
+
+function length(name: string): number {
+  return name.length
+}
+
+function getName(): string {
+  return 'Grace'
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  const name = user.name
+  const message = name + '!'
+  console.log('Ada'.length, length(name), user.name.length, getName().length, message.length)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3 3 3 5 4\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C time globals compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

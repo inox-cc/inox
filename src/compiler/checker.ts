@@ -578,10 +578,15 @@ class Checker {
   }
 
   checkMemberExpression(expression: AnyNode): ValueType {
+    const objectType = this.checkExpression(expression.object)
+
+    if (objectType === 'string' && expression.property === 'length') {
+      return 'number'
+    }
+
     const shape = this.resolveExpressionShape(expression.object)
 
     if (shape == null) {
-      this.checkExpression(expression.object)
       return 'unknown'
     }
 
@@ -596,11 +601,16 @@ class Checker {
   }
 
   checkMemberAssignment(expression: AnyNode): ValueType {
+    const targetType = this.checkExpression(expression.target.object)
     const shape = this.resolveExpressionShape(expression.target.object)
     const valueType = this.checkExpression(expression.value)
 
+    if (targetType === 'string' && expression.target.property === 'length') {
+      this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
+      return valueType
+    }
+
     if (shape == null) {
-      this.checkExpression(expression.target.object)
       return valueType
     }
 

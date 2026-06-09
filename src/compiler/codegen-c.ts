@@ -47,10 +47,10 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || programs.some(usesCCallbackRuntime)
   const needsRuntime = needsCallbackRuntime || programs.some(usesCRuntime)
   const needsTimeRuntime = programs.some(usesCTimeRuntime)
-  const needsStringCompare = programs.some(usesCStringCompare)
+  const needsStringHeader = programs.some(usesCStringHeader)
   reportUnsupportedClasses(programs, diagnostics)
   reportUnsupportedAsync(programs, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringCompare)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
   for (const wrapper of arrowCallbackWrappers) {
@@ -100,12 +100,12 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringCompare) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader) {
   const lines = [
     '#include <stdio.h>'
   ]
 
-  if (needsStringCompare) {
+  if (needsStringHeader) {
     lines.push('#include <string.h>')
   }
 
@@ -2523,6 +2523,16 @@ function emitStringLogValue(expression, context) {
 
 function emitNumberLogValue(expression, type, context) {
   if (isMemberAccessExpression(expression)) {
+    const stringLength = emitPreparedStringLengthExpression(expression, context)
+
+    if (stringLength != null) {
+      return {
+        lines: stringLength.lines,
+        format: '%g',
+        values: [`((double)${stringLength.expression})`]
+      }
+    }
+
     const length = resolveKnownArrayLength(expression, context)
 
     if (length != null) {
@@ -2736,6 +2746,12 @@ function emitPreparedNumberExpression(expression, context) {
   }
 
   if (isMemberAccessExpression(expression)) {
+    const stringLength = emitPreparedStringLengthExpression(expression, context)
+
+    if (stringLength != null) {
+      return stringLength
+    }
+
     const length = resolveKnownArrayLength(expression, context)
 
     if (length != null) {
@@ -2790,6 +2806,19 @@ function emitPreparedNumberExpression(expression, context) {
   }
 }
 
+function emitPreparedStringLengthExpression(expression, context) {
+  if (expression?.type !== 'MemberExpression' || expression.property !== 'length' || !isStringLengthObject(expression.object, context)) {
+    return null
+  }
+
+  const operand = emitPreparedStringBytesOperand(expression.object, context, 'ccjs_length_string')
+
+  return {
+    lines: operand.lines,
+    expression: operand.length
+  }
+}
+
 function emitPreparedStringCompareExpression(expression, context) {
   const left = emitPreparedStringBytesOperand(expression.left, context)
   const right = emitPreparedStringBytesOperand(expression.right, context)
@@ -2804,7 +2833,7 @@ function emitPreparedStringCompareExpression(expression, context) {
   }
 }
 
-function emitPreparedStringBytesOperand(expression, context) {
+function emitPreparedStringBytesOperand(expression, context, tempPrefix = 'ccjs_cmp_string') {
   if (expression?.type === 'StringLiteral') {
     return {
       lines: [],
@@ -2855,7 +2884,7 @@ function emitPreparedStringBytesOperand(expression, context) {
 
   if (inferExpressionType(expression, context) === 'string') {
     const value = emitCValueExpression(expression, context)
-    const string = nextCName(context, 'ccjs_cmp_string')
+    const string = nextCName(context, tempPrefix)
 
     return {
       lines: [
@@ -3277,6 +3306,10 @@ function inferExpressionType(expression, context) {
       return left === 'null' || left === 'unknown' ? inferExpressionType(expression.right, context) : left
     }
 
+    if (expression.operator === '+' && (inferExpressionType(expression.left, context) === 'string' || inferExpressionType(expression.right, context) === 'string')) {
+      return 'string'
+    }
+
     return 'number'
   }
 
@@ -3403,6 +3436,28 @@ function isStringConcatExpression(expression, context) {
 function isRuntimeProducedStringExpression(expression, context) {
   return (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string')
     || isStringConcatExpression(expression, context)
+}
+
+function isStringLengthObject(expression, context) {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.type === 'StringLiteral') {
+    return true
+  }
+
+  if (expression.type === 'TemplateLiteral') {
+    return true
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+
+    return context.variables.get(name) === 'string' || context.runtimeStrings.has(name)
+  }
+
+  return inferExpressionType(expression, context) === 'string'
 }
 
 function isMemberAccessExpression(expression) {
@@ -3725,6 +3780,10 @@ function usesCTimeRuntime(program) {
 
 function usesCStringCompare(program) {
   return program.body.some(item => itemUsesCStringCompare(item))
+}
+
+function usesCStringHeader(program) {
+  return usesCStringCompare(program) || nodeUsesCStringLength(program)
 }
 
 function itemUsesCRuntime(item) {
@@ -4205,6 +4264,40 @@ function expressionMayBeCStringCompareOperand(expression) {
   }
 
   return ['Reference', 'MemberExpression', 'IndexExpression', 'CallExpression'].includes(expression.type)
+}
+
+function nodeUsesCStringLength(node) {
+  if (node == null) {
+    return false
+  }
+
+  if (Array.isArray(node)) {
+    return node.some(item => nodeUsesCStringLength(item))
+  }
+
+  if (typeof node !== 'object') {
+    return false
+  }
+
+  if (node.type === 'MemberExpression' && node.property === 'length' && expressionMayBeCStringLengthOperand(node.object)) {
+    return true
+  }
+
+  return Object.entries(node)
+    .filter(([key]) => key !== 'loc')
+    .some(([, value]) => nodeUsesCStringLength(value))
+}
+
+function expressionMayBeCStringLengthOperand(expression) {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.valueType === 'string') {
+    return true
+  }
+
+  return ['StringLiteral', 'TemplateLiteral', 'Reference', 'MemberExpression', 'IndexExpression', 'CallExpression', 'BinaryExpression'].includes(expression.type)
 }
 
 function withVariableScope(context, callback) {

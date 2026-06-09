@@ -192,6 +192,35 @@ test('lowers C array length for known arrays', () => {
   assert.match(result.code, /printf\("%g %g\\n", \(\(double\)3\), \(\(double\)2\)\);/)
 })
 
+test('lowers C string length for literals and runtime strings', () => {
+  const result = compileSource(`type User = {
+  name: string
+}
+
+function length(name: string): number {
+  return name.length
+}
+
+function getName(): string {
+  return 'Grace'
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  const name = user.name
+  const message = name + '!'
+  console.log('Ada'.length, length(name), user.name.length, getName().length, message.length)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /#include <string\.h>/)
+  assert.match(result.code, /ccjs_return = name->len;/)
+  assert.match(result.code, /ccjs_string\* ccjs_length_string_\d+ = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /printf\("%g %g %g %g %g\\n", \(\(double\)3\), \(\(double\)length\(ccjs_value_\d+\)\), \(\(double\)ccjs_length_string_\d+->len\), \(\(double\)ccjs_length_string_\d+->len\), \(\(double\)message->len\)\);/)
+})
+
 test('lowers known C object field access to runtime calls', () => {
   const result = compileSource(`export function main(): void {
   const user = { score: 42, active: true }
@@ -1870,6 +1899,28 @@ export function main(): void {
   console.log(getValue())
 }
 `, 'CCJS_TYPE_MISMATCH')
+})
+
+test('checks string length as a readonly number field', () => {
+  const result = compileSource(`function length(name: string): number {
+  return name.length
+}
+
+export function main(): void {
+  const name = 'Ada'
+  console.log(length(name))
+}
+`, {
+    target: 'js'
+  })
+
+  assert.match(result.code, /return name\.length/)
+
+  assertDiagnostic(`export function main(): void {
+  const name = 'Ada'
+  name.length = 4
+}
+`, 'CCJS_ASSIGN_READONLY_FIELD')
 })
 
 test('checks typed object aliases and readonly fields', () => {
