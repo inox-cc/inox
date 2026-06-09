@@ -1,6 +1,6 @@
 // @targets c
-// @expect diagnostic
-// @diagnostic CCJS_C_FUNCTION_VALUE
+// @expect pass
+// @stdout typed
 
 type StringCallback = (value: string) => void;
 

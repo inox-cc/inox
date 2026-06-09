@@ -42,17 +42,28 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(programs)
   const baseContext = createBaseContext(diagnostics, functions)
-  const needsRuntime = programs.some(usesCRuntime)
+  baseContext.callbackWrappers = collectRuntimeCallbackWrappers(programs, baseContext)
+  const needsCallbackRuntime = baseContext.callbackWrappers.size > 0 || programs.some(usesCCallbackRuntime)
+  const needsRuntime = needsCallbackRuntime || programs.some(usesCRuntime)
   const needsTimeRuntime = programs.some(usesCTimeRuntime)
   reportUnsupportedClasses(programs, diagnostics)
   reportUnsupportedAsync(programs, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime)
 
   for (const item of functions) {
     lines.push(`${emitFunctionHead(item, baseContext)};`)
   }
 
+  for (const wrapper of baseContext.callbackWrappers.values()) {
+    lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)};`)
+  }
+
   if (functions.length > 0) {
+    lines.push('')
+  }
+
+  for (const wrapper of baseContext.callbackWrappers.values()) {
+    lines.push(...emitRuntimeCallbackWrapperDeclaration(wrapper, baseContext))
     lines.push('')
   }
 
@@ -70,7 +81,7 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -78,6 +89,9 @@ function emitCPrelude(needsRuntime, needsTimeRuntime) {
   if (needsRuntime) {
     lines.push('#include <stdlib.h>')
     lines.push('#include "ccjs/array.h"')
+    if (needsCallbackRuntime) {
+      lines.push('#include "ccjs/callback.h"')
+    }
     lines.push('#include "ccjs/object.h"')
     lines.push('#include "ccjs/string.h"')
   }
@@ -143,6 +157,7 @@ function reportUnsupportedAsync(programs, diagnostics) {
 
 function createBaseContext(diagnostics, functions) {
   return {
+    callbackWrappers: new Map(),
     diagnostics,
     functionNames: new Map(functions.map(item => [item.name, emitCFunctionName(item.name)])),
     functionParams: new Map(functions.map(item => [item.name, item.params])),
@@ -158,6 +173,16 @@ function emitFunctionDeclaration(statement, baseContext) {
     if (param.valueType === 'string') {
       context.variables.set(param.name, 'string')
       context.runtimeStrings.add(param.name)
+    } else if (param.valueType === 'object') {
+      context.variables.set(param.name, 'object')
+      registerObjectShape(context, param.name, param.shape)
+    } else if (param.valueType === 'function') {
+      context.variables.set(param.name, 'function')
+      context.functionTypes.set(param.name, param.functionType)
+
+      if (isRuntimeFunctionType(param.functionType)) {
+        context.runtimeCallbacks.add(param.name)
+      }
     } else {
       context.variables.set(param.name, param.valueType)
     }
@@ -165,7 +190,7 @@ function emitFunctionDeclaration(statement, baseContext) {
 
   const bodyLines: string[] = []
 
-  bodyLines.push(...emitStringParamPrelude(statement.params, context).map(line => `  ${line}`))
+  bodyLines.push(...emitRuntimeParamPrelude(statement.params, context).map(line => `  ${line}`))
 
   for (const item of statement.body) {
     bodyLines.push(...emitStatement(item, context).map(line => `  ${line}`))
@@ -198,8 +223,12 @@ function emitFunctionHead(statement, context) {
       return `ccjs_value ${emitCStringParamName(param.name)}`
     }
 
+    if (param.valueType === 'object') {
+      return `ccjs_value ${param.name}`
+    }
+
     if (param.valueType === 'function') {
-      return emitFunctionPointerParameter(param.name, param.functionType, context, param.loc)
+      return emitFunctionParameter(param.name, param.functionType, context, param.loc)
     }
 
     return `${emitCType(param.valueType)} ${param.name}`
@@ -208,9 +237,17 @@ function emitFunctionHead(statement, context) {
   return `${emitCReturnType(statement.returnType)} ${name}(${params === '' ? 'void' : params})`
 }
 
-function emitFunctionPointerParameter(name, functionType, context, loc) {
+function emitFunctionParameter(name, functionType, context, loc) {
   reportUnsupportedCFunctionType(functionType, context, loc)
 
+  if (isRuntimeFunctionType(functionType)) {
+    return `ccjs_value ${name}`
+  }
+
+  return emitFunctionPointerParameter(name, functionType)
+}
+
+function emitFunctionPointerParameter(name, functionType) {
   return `${emitFunctionPointerReturnType(functionType)} (*${name})(${emitFunctionPointerParams(functionType)})`
 }
 
@@ -225,11 +262,273 @@ function reportUnsupportedCFunctionType(functionType, context, loc) {
     return
   }
 
-  if (functionType.returnType === 'void' && functionType.params.every(param => ['number', 'boolean'].includes(param.valueType))) {
+  if (isPlainFunctionPointerType(functionType) || isRuntimeFunctionType(functionType)) {
     return
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'typed C callbacks currently support only void callbacks with number/boolean parameters', loc))
+  context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'typed C callbacks currently support only void callbacks with number/boolean/string/object parameters', loc))
+}
+
+function isPlainFunctionPointerType(functionType) {
+  return functionType == null
+    || (functionType.returnType === 'void' && functionType.params.every(param => ['number', 'boolean'].includes(param.valueType)))
+}
+
+function isRuntimeFunctionType(functionType) {
+  return functionType != null
+    && functionType.returnType === 'void'
+    && functionType.params.some(param => ['string', 'object'].includes(param.valueType))
+    && functionType.params.every(param => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
+}
+
+function collectRuntimeCallbackWrappers(programs, context) {
+  const wrappers = new Map()
+  const register = (expression, functionType) => {
+    if (!isRuntimeFunctionType(functionType) || expression?.type !== 'Reference' || expression.path.length !== 1) {
+      return
+    }
+
+    const target = expression.path[0]
+
+    if (!context.functionNames.has(target)) {
+      return
+    }
+
+    const key = runtimeCallbackWrapperKey(target, functionType)
+
+    if (wrappers.has(key)) {
+      return
+    }
+
+    wrappers.set(key, {
+      key,
+      name: `ccjs_callback_${emitCIdentifier(target)}_${wrappers.size}`,
+      target,
+      functionType
+    })
+  }
+  const visitStatement = statement => {
+    if (statement?.type === 'VariableDeclaration') {
+      register(statement.init, statement.functionType)
+      visitExpression(statement.init)
+      return
+    }
+
+    if (statement?.type === 'ExpressionStatement') {
+      visitExpression(statement.expression)
+      return
+    }
+
+    if (statement?.type === 'ReturnStatement') {
+      visitExpression(statement.argument)
+      return
+    }
+
+    if (statement?.type === 'BlockStatement') {
+      statement.body.forEach(visitStatement)
+      return
+    }
+
+    if (statement?.type === 'IfStatement') {
+      visitExpression(statement.condition)
+      visitStatement(statement.consequent)
+      visitStatement(statement.alternate)
+      return
+    }
+
+    if (statement?.type === 'WhileStatement') {
+      visitExpression(statement.condition)
+      visitStatement(statement.body)
+      return
+    }
+
+    if (statement?.type === 'ForStatement') {
+      if (statement.init?.type === 'VariableDeclaration') {
+        visitStatement(statement.init)
+      } else {
+        visitExpression(statement.init)
+      }
+
+      visitExpression(statement.test)
+      visitExpression(statement.update)
+      visitStatement(statement.body)
+      return
+    }
+
+    if (statement?.type === 'ForOfStatement') {
+      visitExpression(statement.iterable)
+      visitStatement(statement.body)
+      return
+    }
+
+    if (statement?.type === 'SwitchStatement') {
+      visitExpression(statement.discriminant)
+
+      for (const item of statement.cases) {
+        visitExpression(item.test)
+        item.consequent.forEach(visitStatement)
+      }
+    }
+  }
+  const visitExpression = expression => {
+    if (expression == null) {
+      return
+    }
+
+    if (expression.type === 'CallExpression') {
+      const params = resolveStaticFunctionParams(expression.callee, context)
+
+      for (const [index, arg] of expression.args.entries()) {
+        const param = params?.[index]
+
+        if (param?.valueType === 'function') {
+          register(arg, param.functionType)
+        }
+
+        visitExpression(arg)
+      }
+
+      visitExpression(expression.callee)
+      return
+    }
+
+    if (expression.type === 'AssignmentExpression') {
+      visitExpression(expression.target)
+      visitExpression(expression.value)
+      return
+    }
+
+    if (expression.type === 'BinaryExpression') {
+      visitExpression(expression.left)
+      visitExpression(expression.right)
+      return
+    }
+
+    if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
+      visitExpression(expression.argument)
+      return
+    }
+
+    if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+      visitExpression(expression.object)
+      return
+    }
+
+    if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
+      visitExpression(expression.object)
+      visitExpression(expression.index)
+      return
+    }
+
+    if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+      visitExpression(expression.callee)
+      expression.args.forEach(visitExpression)
+      return
+    }
+
+    if (expression.type === 'ArrayLiteral') {
+      expression.elements.forEach(visitExpression)
+      return
+    }
+
+    if (expression.type === 'ObjectLiteral') {
+      expression.properties.forEach(property => visitExpression(property.value))
+      return
+    }
+
+    if (expression.type === 'ArrowFunctionExpression') {
+      if (expression.expressionBody) {
+        visitExpression(expression.body)
+      } else {
+        expression.body.forEach(visitStatement)
+      }
+    }
+  }
+
+  for (const program of programs) {
+    for (const item of program.body) {
+      if (item.type === 'FunctionDeclaration') {
+        item.body.forEach(visitStatement)
+      } else {
+        visitStatement(item)
+      }
+    }
+  }
+
+  return wrappers
+}
+
+function resolveStaticFunctionParams(callee, context) {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  return context.functionParams.get(callee.path[0]) ?? null
+}
+
+function runtimeCallbackWrapperKey(target, functionType) {
+  return `${target}:${functionType.returnType}(${functionType.params.map(param => param.valueType).join(',')})`
+}
+
+function runtimeCallbackWrapperFor(target, functionType, context) {
+  return context.callbackWrappers.get(runtimeCallbackWrapperKey(target, functionType)) ?? null
+}
+
+function emitRuntimeCallbackWrapperHead(wrapper) {
+  return `static ccjs_status ${wrapper.name}(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out)`
+}
+
+function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
+  const lines = [
+    `${emitRuntimeCallbackWrapperHead(wrapper)} {`,
+    '  (void)context;',
+    `  if (out == 0 || arg_count != ${wrapper.functionType.params.length}${wrapper.functionType.params.length === 0 ? '' : ' || args == 0'}) return CCJS_ERR_TYPE;`,
+    '  *out = ccjs_undefined_value();'
+  ]
+  const args: string[] = []
+
+  for (const [index, param] of wrapper.functionType.params.entries()) {
+    lines.push(...emitRuntimeCallbackWrapperArgChecks(param, index).map(line => `  ${line}`))
+    args.push(emitRuntimeCallbackWrapperArg(param, index))
+  }
+
+  lines.push(`  ${context.functionNames.get(wrapper.target) ?? emitCFunctionName(wrapper.target)}(${args.join(', ')});`)
+  lines.push('  return CCJS_OK;')
+  lines.push('}')
+
+  return lines
+}
+
+function emitRuntimeCallbackWrapperArgChecks(param, index) {
+  if (param.valueType === 'string') {
+    return [`if (args[${index}].tag != CCJS_TAG_STRING || args[${index}].as.ref == 0) return CCJS_ERR_TYPE;`]
+  }
+
+  if (param.valueType === 'object') {
+    return [`if (args[${index}].tag != CCJS_TAG_OBJECT || args[${index}].as.ref == 0) return CCJS_ERR_TYPE;`]
+  }
+
+  if (param.valueType === 'number') {
+    return [`if (args[${index}].tag != CCJS_TAG_NUMBER) return CCJS_ERR_TYPE;`]
+  }
+
+  if (param.valueType === 'boolean') {
+    return [`if (args[${index}].tag != CCJS_TAG_BOOL) return CCJS_ERR_TYPE;`]
+  }
+
+  return []
+}
+
+function emitRuntimeCallbackWrapperArg(param, index) {
+  if (param.valueType === 'number') {
+    return `args[${index}].as.number`
+  }
+
+  if (param.valueType === 'boolean') {
+    return `(args[${index}].as.boolean ? 1 : 0)`
+  }
+
+  return `args[${index}]`
 }
 
 function emitFunctionPointerReturnType(functionType) {
@@ -249,8 +548,10 @@ function createFunctionContext(baseContext, returnType) {
     ...baseContext,
     arrayShapes: new Map(),
     cleanupEnabled: true,
+    functionTypes: new Map(),
     objectShapes: new Map(),
     ownedValues: [],
+    runtimeCallbacks: new Set(),
     runtimeStrings: new Set(),
     usedCleanupGoto: false,
     variables: new Map(),
@@ -303,18 +604,24 @@ function emitCStringParamName(name) {
   return `ccjs_param_${name}`
 }
 
-function emitStringParamPrelude(params, context) {
+function emitRuntimeParamPrelude(params, context) {
   return params.flatMap(param => {
-    if (param.valueType !== 'string') {
-      return []
+    if (param.valueType === 'string') {
+      const paramName = emitCStringParamName(param.name)
+
+      return [
+        emitRuntimeTypeCheck(`${paramName}.tag != CCJS_TAG_STRING || ${paramName}.as.ref == 0`, context),
+        `ccjs_string* ${param.name} = (ccjs_string*)${paramName}.as.ref;`
+      ]
     }
 
-    const paramName = emitCStringParamName(param.name)
+    if (param.valueType === 'object') {
+      return [
+        emitRuntimeTypeCheck(`${param.name}.tag != CCJS_TAG_OBJECT || ${param.name}.as.ref == 0`, context)
+      ]
+    }
 
-    return [
-      emitRuntimeTypeCheck(`${paramName}.tag != CCJS_TAG_STRING || ${paramName}.as.ref == 0`, context),
-      `ccjs_string* ${param.name} = (ccjs_string*)${paramName}.as.ref;`
-    ]
+    return []
   })
 }
 
@@ -420,10 +727,12 @@ function emitStatement(statement, context) {
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'CallExpression') {
     const call = emitPreparedCallExpression(statement.expression, context)
 
-    return [
-      ...call.lines,
-      `${call.expression};`
-    ]
+    return call.expression === ''
+      ? call.lines
+      : [
+          ...call.lines,
+          `${call.expression};`
+        ]
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
@@ -786,6 +1095,15 @@ function emitPreparedForVariableDeclaration(statement, context) {
 
   if (inferred === 'function') {
     context.variables.set(statement.name, 'function')
+    context.functionTypes.set(statement.name, statement.functionType)
+
+    if (isRuntimeFunctionType(statement.functionType)) {
+      return {
+        lines: emitRuntimeCallbackVariableDeclaration(statement, context),
+        expression: ''
+      }
+    }
+
     return {
       lines: [],
       expression: emitFunctionPointerVariable(statement.name, statement.init, context, statement.kind === 'const', statement.functionType, statement.loc)
@@ -916,6 +1234,13 @@ function emitVariableDeclaration(statement, context) {
 
   if (inferred === 'function') {
     context.variables.set(statement.name, 'function')
+    context.functionTypes.set(statement.name, statement.functionType)
+
+    if (isRuntimeFunctionType(statement.functionType)) {
+      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'runtime callback declarations need prepared statement lowering in the current C backend slice', statement.loc))
+      return `ccjs_value ${statement.name} = ccjs_undefined_value()`
+    }
+
     return emitFunctionPointerVariable(statement.name, statement.init, context, statement.kind === 'const', statement.functionType, statement.loc)
   }
 
@@ -944,6 +1269,12 @@ function emitScalarVariableDeclaration(statement, context) {
 
   if (inferred === 'function') {
     context.variables.set(statement.name, 'function')
+    context.functionTypes.set(statement.name, statement.functionType)
+
+    if (isRuntimeFunctionType(statement.functionType)) {
+      return emitRuntimeCallbackVariableDeclaration(statement, context)
+    }
+
     return [`${emitFunctionPointerVariable(statement.name, statement.init, context, statement.kind === 'const', statement.functionType, statement.loc)};`]
   }
 
@@ -1620,6 +1951,12 @@ function emitCallExpression(expression, context) {
 }
 
 function emitPreparedCallExpression(expression, context) {
+  const callbackType = resolveRuntimeCallbackCalleeType(expression.callee, context)
+
+  if (callbackType != null) {
+    return emitRuntimeCallbackCall(expression, callbackType, context)
+  }
+
   const params = resolveFunctionParams(expression.callee, context)
 
   if (params == null) {
@@ -1638,8 +1975,20 @@ function emitPreparedCallExpression(expression, context) {
 
       lines.push(...value.lines)
       args.push(value.expression)
+    } else if (params[index]?.valueType === 'object') {
+      const value = emitCValueExpression(arg, context)
+
+      lines.push(...value.lines)
+      args.push(value.expression)
     } else if (params[index]?.valueType === 'function') {
-      args.push(emitFunctionValueExpression(arg, context))
+      if (isRuntimeFunctionType(params[index].functionType)) {
+        const value = emitRuntimeCallbackValue(arg, params[index].functionType, context)
+
+        lines.push(...value.lines)
+        args.push(value.expression)
+      } else {
+        args.push(emitFunctionValueExpression(arg, context))
+      }
     } else {
       args.push(emitCExpression(arg, context))
     }
@@ -1698,6 +2047,111 @@ function emitFunctionValueExpression(expression, context) {
   context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'this function value is not supported by the current C backend slice', expression?.loc))
 
   return '0'
+}
+
+function resolveRuntimeCallbackCalleeType(callee, context) {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  const name = callee.path[0]
+
+  if (!context.runtimeCallbacks.has(name)) {
+    return null
+  }
+
+  const functionType = context.functionTypes.get(name)
+
+  return isRuntimeFunctionType(functionType) ? functionType : null
+}
+
+function emitRuntimeCallbackVariableDeclaration(statement, context) {
+  context.variables.set(statement.name, 'function')
+  context.functionTypes.set(statement.name, statement.functionType)
+  context.runtimeCallbacks.add(statement.name)
+  registerOwnedValue(context, statement.name)
+
+  return emitRuntimeCallbackValueInto(statement.init, statement.functionType, statement.name, context)
+}
+
+function emitRuntimeCallbackValue(expression, functionType, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1 && context.runtimeCallbacks.has(expression.path[0])) {
+    return {
+      lines: [],
+      expression: expression.path[0]
+    }
+  }
+
+  const temp = nextCName(context, 'ccjs_callback')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: emitRuntimeCallbackValueInto(expression, functionType, temp, context),
+    expression: temp
+  }
+}
+
+function emitRuntimeCallbackValueInto(expression, functionType, out, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1 && context.runtimeCallbacks.has(expression.path[0])) {
+    return [
+      ...emitPrepareOwnedValueWrite(out),
+      `${out} = ${expression.path[0]};`,
+      `ccjs_retain(${out});`
+    ]
+  }
+
+  if (expression?.type !== 'Reference' || expression.path.length !== 1 || !context.functionNames.has(expression.path[0])) {
+    context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'runtime C callbacks currently require a named non-capturing function', expression?.loc))
+    return [
+      ...emitPrepareOwnedValueWrite(out),
+      `${out} = ccjs_undefined_value();`
+    ]
+  }
+
+  const wrapper = runtimeCallbackWrapperFor(expression.path[0], functionType, context)
+
+  if (wrapper == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'runtime C callback wrapper was not generated for this function value', expression.loc))
+    return [
+      ...emitPrepareOwnedValueWrite(out),
+      `${out} = ccjs_undefined_value();`
+    ]
+  }
+
+  return [
+    ...emitPrepareOwnedValueWrite(out),
+    emitStatusCheck(`ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, 0, 0, &${out})`, context)
+  ]
+}
+
+function emitRuntimeCallbackCall(expression, functionType, context) {
+  const lines: string[] = []
+  const args: string[] = []
+
+  for (const arg of expression.args) {
+    const value = emitCValueExpression(arg, context)
+
+    lines.push(...value.lines)
+    args.push(value.expression)
+  }
+
+  const out = nextCName(context, 'ccjs_callback_out')
+  registerOwnedValue(context, out)
+  lines.push(...emitPrepareOwnedValueWrite(out))
+
+  if (args.length === 0) {
+    lines.push(emitStatusCheck(`ccjs_callback_call(${emitReference(expression.callee, context)}, 0, 0, &${out})`, context))
+  } else {
+    const argArray = nextCName(context, 'ccjs_callback_args')
+
+    lines.push(`ccjs_value ${argArray}[] = { ${args.join(', ')} };`)
+    lines.push(emitStatusCheck(`ccjs_callback_call(${emitReference(expression.callee, context)}, ${argArray}, ${args.length}, &${out})`, context))
+  }
+
+  return {
+    lines,
+    expression: ''
+  }
 }
 
 function resolveFunctionParams(callee, context) {
@@ -1913,6 +2367,17 @@ function updateKnownObjectMemberValueType(member, valueType, context) {
   }
 }
 
+function registerObjectShape(context, name, shape) {
+  if (shape?.fields == null) {
+    return
+  }
+
+  context.objectShapes.set(name, shape.fields.map(field => ({
+    name: field.name,
+    valueType: field.valueType
+  })))
+}
+
 function resolveKnownArrayIndex(expression, context) {
   if (expression?.type !== 'IndexExpression' || expression.object.type !== 'Reference' || expression.object.path.length !== 1 || expression.index.type !== 'NumberLiteral') {
     return null
@@ -2079,6 +2544,10 @@ function cStringLiteral(value) {
   return JSON.stringify(value)
 }
 
+function emitCIdentifier(value) {
+  return value.replaceAll(/[^A-Za-z0-9_]/g, '_')
+}
+
 function utf8ByteLength(value) {
   return Buffer.byteLength(value, 'utf8')
 }
@@ -2129,13 +2598,19 @@ function usesCRuntime(program) {
   return program.body.some(item => itemUsesCRuntime(item))
 }
 
+function usesCCallbackRuntime(program) {
+  return program.body.some(item => itemUsesCCallbackRuntime(item))
+}
+
 function usesCTimeRuntime(program) {
   return program.body.some(item => itemUsesCTimeRuntime(item))
 }
 
 function itemUsesCRuntime(item) {
   if (item.type === 'FunctionDeclaration') {
-    return item.returnType === 'string' || item.params.some(param => param.valueType === 'string') || item.body.some(statement => statementUsesCRuntime(statement))
+    return item.returnType === 'string'
+      || item.params.some(param => ['string', 'object'].includes(param.valueType) || (param.valueType === 'function' && isRuntimeFunctionType(param.functionType)))
+      || item.body.some(statement => statementUsesCRuntime(statement))
   }
 
   if (item.type === 'ClassDeclaration') {
@@ -2143,6 +2618,19 @@ function itemUsesCRuntime(item) {
   }
 
   return statementUsesCRuntime(item)
+}
+
+function itemUsesCCallbackRuntime(item) {
+  if (item.type === 'FunctionDeclaration') {
+    return item.params.some(param => param.valueType === 'function' && isRuntimeFunctionType(param.functionType))
+      || item.body.some(statement => statementUsesCCallbackRuntime(statement))
+  }
+
+  if (item.type === 'ClassDeclaration') {
+    return item.methods.some(method => method.body.some(statement => statementUsesCCallbackRuntime(statement)))
+  }
+
+  return statementUsesCCallbackRuntime(item)
 }
 
 function itemUsesCTimeRuntime(item) {
@@ -2159,7 +2647,7 @@ function itemUsesCTimeRuntime(item) {
 
 function statementUsesCRuntime(statement) {
   if (statement.type === 'VariableDeclaration') {
-    return expressionUsesCRuntime(statement.init)
+    return (statement.valueType === 'function' && isRuntimeFunctionType(statement.functionType)) || expressionUsesCRuntime(statement.init)
   }
 
   if (statement.type === 'ExpressionStatement') {
@@ -2198,6 +2686,52 @@ function statementUsesCRuntime(statement) {
   if (statement.type === 'SwitchStatement') {
     return expressionUsesCRuntime(statement.discriminant)
       || statement.cases.some(item => expressionUsesCRuntime(item.test) || item.consequent.some(child => statementUsesCRuntime(child)))
+  }
+
+  return false
+}
+
+function statementUsesCCallbackRuntime(statement) {
+  if (statement.type === 'VariableDeclaration') {
+    return (statement.valueType === 'function' && isRuntimeFunctionType(statement.functionType)) || expressionUsesCCallbackRuntime(statement.init)
+  }
+
+  if (statement.type === 'ExpressionStatement') {
+    return expressionUsesCCallbackRuntime(statement.expression)
+  }
+
+  if (statement.type === 'ReturnStatement') {
+    return expressionUsesCCallbackRuntime(statement.argument)
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return statement.body.some(item => statementUsesCCallbackRuntime(item))
+  }
+
+  if (statement.type === 'IfStatement') {
+    return expressionUsesCCallbackRuntime(statement.condition)
+      || statementUsesCCallbackRuntime(statement.consequent)
+      || (statement.alternate != null && statementUsesCCallbackRuntime(statement.alternate))
+  }
+
+  if (statement.type === 'WhileStatement') {
+    return expressionUsesCCallbackRuntime(statement.condition) || statementUsesCCallbackRuntime(statement.body)
+  }
+
+  if (statement.type === 'ForStatement') {
+    return (statement.init != null && (statement.init.type === 'VariableDeclaration' ? statementUsesCCallbackRuntime(statement.init) : expressionUsesCCallbackRuntime(statement.init)))
+      || expressionUsesCCallbackRuntime(statement.test)
+      || expressionUsesCCallbackRuntime(statement.update)
+      || statementUsesCCallbackRuntime(statement.body)
+  }
+
+  if (statement.type === 'ForOfStatement') {
+    return expressionUsesCCallbackRuntime(statement.iterable) || statementUsesCCallbackRuntime(statement.body)
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    return expressionUsesCCallbackRuntime(statement.discriminant)
+      || statement.cases.some(item => expressionUsesCCallbackRuntime(item.test) || item.consequent.some(child => statementUsesCCallbackRuntime(child)))
   }
 
   return false
@@ -2299,6 +2833,52 @@ function expressionUsesCRuntime(expression) {
   return false
 }
 
+function expressionUsesCCallbackRuntime(expression) {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    return expressionUsesCCallbackRuntime(expression.object)
+  }
+
+  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
+    return expressionUsesCCallbackRuntime(expression.object) || expressionUsesCCallbackRuntime(expression.index)
+  }
+
+  if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+    return expressionUsesCCallbackRuntime(expression.callee) || expression.args.some(arg => expressionUsesCCallbackRuntime(arg))
+  }
+
+  if (expression.type === 'AssignmentExpression') {
+    return expressionUsesCCallbackRuntime(expression.target) || expressionUsesCCallbackRuntime(expression.value)
+  }
+
+  if (expression.type === 'BinaryExpression') {
+    return expressionUsesCCallbackRuntime(expression.left) || expressionUsesCCallbackRuntime(expression.right)
+  }
+
+  if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
+    return expressionUsesCCallbackRuntime(expression.argument)
+  }
+
+  if (expression.type === 'ArrayLiteral') {
+    return expression.elements.some(element => expressionUsesCCallbackRuntime(element))
+  }
+
+  if (expression.type === 'ObjectLiteral') {
+    return expression.properties.some(property => expressionUsesCCallbackRuntime(property.value))
+  }
+
+  if (expression.type === 'ArrowFunctionExpression') {
+    return expression.expressionBody
+      ? expressionUsesCCallbackRuntime(expression.body)
+      : expression.body.some(statement => statementUsesCCallbackRuntime(statement))
+  }
+
+  return false
+}
+
 function expressionUsesCTimeRuntime(expression) {
   if (expression == null) {
     return false
@@ -2344,11 +2924,15 @@ function expressionUsesCTimeRuntime(expression) {
 function withVariableScope(context, callback) {
   const previous = context.variables
   const previousArrayShapes = context.arrayShapes
+  const previousFunctionTypes = context.functionTypes
   const previousObjectShapes = context.objectShapes
+  const previousRuntimeCallbacks = context.runtimeCallbacks
   const previousRuntimeStrings = context.runtimeStrings
   context.variables = new Map(previous)
   context.arrayShapes = new Map(previousArrayShapes)
+  context.functionTypes = new Map(previousFunctionTypes)
   context.objectShapes = new Map(previousObjectShapes)
+  context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
   context.runtimeStrings = new Set(previousRuntimeStrings)
 
   try {
@@ -2356,7 +2940,9 @@ function withVariableScope(context, callback) {
   } finally {
     context.variables = previous
     context.arrayShapes = previousArrayShapes
+    context.functionTypes = previousFunctionTypes
     context.objectShapes = previousObjectShapes
+    context.runtimeCallbacks = previousRuntimeCallbacks
     context.runtimeStrings = previousRuntimeStrings
   }
 }

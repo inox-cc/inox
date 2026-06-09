@@ -1043,8 +1043,8 @@ export function main(): void {
   assert.match(c.code, /void \(\*const callback\)\(double\) = hello;/)
 })
 
-test('rejects typed C callbacks with string parameters', () => {
-  assertDiagnostic(`type StringCallback = (value: string) => void;
+test('compiles typed callback aliases with string parameters through the C callback ABI', () => {
+  const source = `type StringCallback = (value: string) => void;
 
 function run(callback: StringCallback): void {
   callback('typed')
@@ -1058,9 +1058,49 @@ export function main(): void {
   const callback: StringCallback = hello
   run(callback)
 }
-`, 'CCJS_C_FUNCTION_VALUE', {
+`
+  const c = compileSource(source, {
     target: 'c'
   })
+
+  assert.match(c.code, /void run\(ccjs_value callback\);/)
+  assert.match(c.code, /static ccjs_status ccjs_callback_hello_0\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\);/)
+  assert.match(c.code, /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_hello_0, 0, 0, &callback\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /ccjs_value ccjs_callback_args_\d+\[\] = \{ ccjs_value_\d+ \};/)
+  assert.match(c.code, /if \(ccjs_callback_call\(callback, ccjs_callback_args_\d+, 1, &ccjs_callback_out_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+})
+
+test('compiles typed callback aliases with object parameters through the C callback ABI', () => {
+  const source = `type Person = {
+  name: string
+};
+
+type PersonCallback = (value: Person) => void;
+
+function run(callback: PersonCallback, person: Person): void {
+  callback(person)
+}
+
+function hello(value: Person): void {
+  console.log(value.name)
+}
+
+export function main(): void {
+  const person: Person = {
+    name: 'Ada'
+  }
+  const callback: PersonCallback = hello
+  run(callback, person)
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /void run\(ccjs_value callback, ccjs_value person\);/)
+  assert.match(c.code, /if \(args\[0\]\.tag != CCJS_TAG_OBJECT \|\| args\[0\]\.as\.ref == 0\) return CCJS_ERR_TYPE;/)
+  assert.match(c.code, /ccjs_value ccjs_callback_args_\d+\[\] = \{ person \};/)
+  assert.match(c.code, /if \(ccjs_object_get_known\(value, 0, &ccjs_log_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
 test('checks typed callback argument counts', () => {

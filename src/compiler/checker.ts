@@ -924,7 +924,19 @@ class Checker {
       if (shape.kind === 'function') {
         return {
           valueType: 'function',
-          functionType: shape,
+          functionType: {
+            ...shape,
+            params: shape.params.map(param => {
+              const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
+
+              return {
+                ...param,
+                valueType: paramInfo.valueType,
+                functionType: paramInfo.functionType,
+                shape: paramInfo.shape
+              }
+            })
+          },
           shape: null
         }
       }

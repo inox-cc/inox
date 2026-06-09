@@ -847,6 +847,111 @@ export function main(): void {
   }
 })
 
+test('generated C string callback aliases compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-callback-'))
+  const source = join(dir, 'string-callback.c')
+  const output = join(dir, 'string-callback')
+
+  try {
+    const result = compileSource(`type StringCallback = (value: string) => void;
+
+function run(callback: StringCallback): void {
+  callback('typed')
+}
+
+function hello(value: string): void {
+  console.log(value)
+}
+
+export function main(): void {
+  const callback: StringCallback = hello
+  run(callback)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'typed\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C object callback aliases compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-callback-'))
+  const source = join(dir, 'object-callback.c')
+  const output = join(dir, 'object-callback')
+
+  try {
+    const result = compileSource(`type Person = {
+  name: string
+};
+
+type PersonCallback = (value: Person) => void;
+
+function run(callback: PersonCallback, person: Person): void {
+  callback(person)
+}
+
+function hello(value: Person): void {
+  console.log(value.name)
+}
+
+export function main(): void {
+  const person: Person = {
+    name: 'Ada'
+  }
+  const callback: PersonCallback = hello
+  run(callback, person)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C time globals compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

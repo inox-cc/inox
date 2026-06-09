@@ -195,7 +195,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
 
   if (type?.kind === 'object') {
     return {
-      valueType: null,
+      valueType: 'object',
       shape: type,
       functionType: null
     }
@@ -205,7 +205,19 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
     return {
       valueType: 'function',
       shape: null,
-      functionType: type
+      functionType: {
+        ...type,
+        params: type.params.map(param => {
+          const declared = resolveDeclaredType(param.valueType, context)
+
+          return {
+            ...param,
+            valueType: declared.valueType ?? param.valueType,
+            shape: declared.shape,
+            functionType: declared.functionType
+          }
+        })
+      }
     }
   }
 
