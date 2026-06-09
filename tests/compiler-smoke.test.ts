@@ -2337,12 +2337,43 @@ export function main(): void {
   })
 
   assert.match(result.code, /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/)
-  assert.match(result.code, /\*out = ccjs_number_value\(\(doubled \+ bonus\)\);/)
-  assert.match(result.code, /\*out = ccjs_bool_value\(\(1\) != 0\);/)
+  assert.match(result.code, /\(\*out\) = ccjs_number_value\(\(doubled \+ bonus\)\);/)
+  assert.match(result.code, /\(\*out\) = ccjs_bool_value\(\(1\) != 0\);/)
   assert.match(result.code, /goto ccjs_callback_cleanup;/)
   assert.match(result.code, /ccjs_callback_cleanup:/)
   assert.match(result.code, /ccjs_callback_call\(score, ccjs_callback_args_\d+, 1, &ccjs_optional_call_\d+\)/)
   assert.match(result.code, /ccjs_callback_call\(ready, 0, 0, &ccjs_optional_call_\d+\)/)
+})
+
+test('lowers C optional call results over nullable string callbacks', () => {
+  const result = compileSource(`type Name = () => string;
+
+function getName(): string {
+  return 'Ada'
+}
+
+function printName(callback: Name | null): void {
+  const value: string | null = callback?.()
+  console.log(value ?? 'missing')
+}
+
+export function main(): void {
+  printName(getName)
+  printName(null)
+
+  const arrow: Name | null = () => 'Grace'
+  printName(arrow)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_callback_getName_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/)
+  assert.match(result.code, /\*out = getName\(\);/)
+  assert.match(result.code, /\(\*out\) = ccjs_value_\d+;/)
+  assert.match(result.code, /ccjs_retain\(\(\*out\)\);/)
+  assert.match(result.code, /ccjs_callback_call\(callback, 0, 0, &ccjs_optional_call_\d+\)/)
+  assert.match(result.code, /ccjs_optional_call_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_optional_call_\d+\.as\.ref == 0/)
 })
 
 test('compiles unsupported nullish coalescing to JS and rejects it for C', () => {

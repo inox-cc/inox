@@ -380,7 +380,7 @@ function isSupportedRuntimeCallbackType(functionType) {
 }
 
 function isSupportedRuntimeCallbackReturnType(returnType) {
-  return ['void', 'number', 'boolean'].includes(returnType)
+  return ['void', 'number', 'boolean', 'string'].includes(returnType)
 }
 
 function runtimeFunctionParamKey(functionName, index) {
@@ -1180,6 +1180,8 @@ function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
     lines.push(`  *out = ccjs_number_value(${call});`)
   } else if (wrapper.functionType.returnType === 'boolean') {
     lines.push(`  *out = ccjs_bool_value((${call}) != 0);`)
+  } else if (wrapper.functionType.returnType === 'string') {
+    lines.push(`  *out = ${call};`)
   } else {
     lines.push(`  ${call};`)
   }
@@ -1223,7 +1225,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   context.cleanupEnabled = false
   context.statusReturn = true
   context.runtimeCallbackReturnType = wrapper.functionType.returnType
-  context.runtimeCallbackReturnOut = '*out'
+  context.runtimeCallbackReturnOut = '(*out)'
   context.runtimeCallbackCleanupLabel = 'ccjs_callback_cleanup'
   const bodyLines: string[] = []
 
@@ -1271,6 +1273,14 @@ function emitRuntimeArrowCallbackStatementLines(wrapper, context) {
       ...value.lines,
       `*out = ${expression};`
     ]
+  }
+
+  if (wrapper.functionType.returnType === 'string') {
+    if (!wrapper.expression.expressionBody) {
+      return emitStatementList(wrapper.expression.body, context)
+    }
+
+    return emitRuntimeCallbackRuntimeValueReturnLines(wrapper.expression.body, context)
   }
 
   const statements = wrapper.expression.expressionBody
@@ -1815,8 +1825,8 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ReturnStatement') {
-    if (isRuntimeCallbackScalarReturnContext(context)) {
-      return emitRuntimeCallbackScalarReturnStatement(statement, context)
+    if (isRuntimeCallbackReturnContext(context)) {
+      return emitRuntimeCallbackReturnStatement(statement, context)
     }
 
     if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
@@ -2309,27 +2319,54 @@ function emitPreparedForExpressionClause(expression, context) {
   return emitPreparedNumberExpression(expression, context)
 }
 
-function isRuntimeCallbackScalarReturnContext(context) {
-  return context.statusReturn === true && (context.runtimeCallbackReturnType === 'number' || context.runtimeCallbackReturnType === 'boolean')
+function isRuntimeCallbackReturnContext(context) {
+  return context.statusReturn === true && ['number', 'boolean', 'string'].includes(context.runtimeCallbackReturnType)
 }
 
-function emitRuntimeCallbackScalarReturnStatement(statement, context) {
-  const value = statement.argument == null
-    ? {
-        lines: [],
-        expression: '0'
-      }
-    : emitPreparedNumberExpression(statement.argument, context)
-  const expression = context.runtimeCallbackReturnType === 'number'
-    ? `ccjs_number_value(${value.expression})`
-    : `ccjs_bool_value((${value.expression}) != 0)`
+function emitRuntimeCallbackReturnStatement(statement, context) {
+  const lines = context.runtimeCallbackReturnType === 'string'
+    ? emitRuntimeCallbackRuntimeValueReturnLines(statement.argument, context)
+    : emitRuntimeCallbackScalarReturnLines(statement.argument, context)
 
   context.usedRuntimeCallbackCleanupGoto = true
 
   return [
-    ...value.lines,
-    `${context.runtimeCallbackReturnOut} = ${expression};`,
+    ...lines,
     `goto ${context.runtimeCallbackCleanupLabel};`
+  ]
+}
+
+function emitRuntimeCallbackScalarReturnLines(argument, context) {
+  const value = argument == null
+    ? {
+        lines: [],
+        expression: '0'
+      }
+    : emitPreparedNumberExpression(argument, context)
+  const expression = context.runtimeCallbackReturnType === 'number'
+    ? `ccjs_number_value(${value.expression})`
+    : `ccjs_bool_value((${value.expression}) != 0)`
+
+  return [
+    ...value.lines,
+    `${context.runtimeCallbackReturnOut} = ${expression};`
+  ]
+}
+
+function emitRuntimeCallbackRuntimeValueReturnLines(argument, context) {
+  const expectedTag = cRuntimeValueTag(context.runtimeCallbackReturnType)
+  const value = argument == null
+    ? {
+        lines: [],
+        expression: 'ccjs_undefined_value()'
+      }
+    : emitCValueExpression(argument, context)
+
+  return [
+    ...value.lines,
+    `${context.runtimeCallbackReturnOut} = ${value.expression};`,
+    emitRuntimeValueCheck(context.runtimeCallbackReturnOut, expectedTag, context),
+    `ccjs_retain(${context.runtimeCallbackReturnOut});`
   ]
 }
 
@@ -2799,6 +2836,18 @@ function emitRuntimeNullableValueCheck(name, expectedTag, context) {
   ]
 }
 
+function emitRuntimeValueCheck(name, expectedTag, context) {
+  if (expectedTag == null) {
+    return ''
+  }
+
+  if (expectedTag === 'CCJS_TAG_BOOL' || expectedTag === 'CCJS_TAG_NUMBER') {
+    return emitRuntimeTypeCheck(`${name}.tag != ${expectedTag}`, context)
+  }
+
+  return emitRuntimeTypeCheck(`${name}.tag != ${expectedTag} || ${name}.as.ref == 0`, context)
+}
+
 function cRuntimeValueTag(valueType) {
   if (valueType === 'boolean') {
     return 'CCJS_TAG_BOOL'
@@ -3112,6 +3161,10 @@ function emitArrayVariableDeclaration(statement, context) {
 function emitCValueExpression(expression, context) {
   if (isNullishCoalescingExpression(expression)) {
     return emitCNullishCoalescingValueExpression(expression, context)
+  }
+
+  if (expression?.type === 'OptionalCallExpression' && isNullableRuntimeExpression(expression, context)) {
+    return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
   }
 
   if (isNullableScalarRuntimeExpression(expression, context)) {
@@ -5191,8 +5244,8 @@ function emitOptionalRuntimeCallbackCallValueExpression(expression, context) {
   const resultType = inferExpressionType(expression, context)
   const expectedTag = cRuntimeValueTag(resultType)
 
-  if (functionType == null || !isNullableScalarType(functionType.returnType) || expectedTag == null) {
-    context.diagnostics.push(diagnostic('CCJS_C_OPTIONAL_CHAINING', 'optional call results currently support nullable number/boolean runtime callbacks in the C backend', expression.loc))
+  if (functionType == null || !isRuntimeNullableType(functionType.returnType) || expectedTag == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_OPTIONAL_CHAINING', 'optional call results currently support nullable runtime callback results in the C backend', expression.loc))
 
     return {
       lines: [],
@@ -5230,7 +5283,7 @@ function emitOptionalRuntimeCallbackCallValueExpression(expression, context) {
     lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`, context)}`)
   }
 
-  lines.push(`  ${emitRuntimeTypeCheck(`${out}.tag != ${expectedTag}`, context)}`)
+  lines.push(`  ${emitRuntimeValueCheck(out, expectedTag, context)}`)
   lines.push('}')
 
   return {
@@ -5490,7 +5543,7 @@ function isNullableRuntimeExpression(expression, context) {
   if (expression?.type === 'OptionalCallExpression') {
     const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
 
-    return functionType != null && isNullableScalarType(functionType.returnType)
+    return functionType != null && isRuntimeNullableType(functionType.returnType)
   }
 
   if (isNullishCoalescingExpression(expression)) {

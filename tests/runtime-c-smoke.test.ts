@@ -3766,6 +3766,59 @@ export function main(): void {
   }
 })
 
+test('generated C nullable string callback optional call results compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-string-callback-optional-call-result-'))
+  const source = join(dir, 'nullable-string-callback-optional-call-result.c')
+  const output = join(dir, 'nullable-string-callback-optional-call-result')
+
+  try {
+    const result = compileSource(`type Name = () => string;
+
+function getName(): string {
+  return 'Ada'
+}
+
+function printName(callback: Name | null): void {
+  const value: string | null = callback?.()
+  console.log(value ?? 'missing')
+}
+
+export function main(): void {
+  printName(getName)
+  printName(null)
+
+  const arrow: Name | null = () => 'Grace'
+  printName(arrow)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\nmissing\nGrace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
