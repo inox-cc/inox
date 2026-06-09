@@ -1115,7 +1115,8 @@ test('compiles continue statements to JS and C', () => {
   })
 
   assert.match(js.code, /continue/)
-  assert.match(c.code, /continue;/)
+  assert.match(c.code, /goto ccjs_continue_\d+;/)
+  assert.match(c.code, /ccjs_continue_\d+:\n\s+;/)
 })
 
 test('prepares C string-argument calls in classic for clauses', () => {
@@ -1293,7 +1294,8 @@ test('compiles switch statements to JS and C', () => {
   assert.match(js.code, /break/)
   assert.match(c.code, /switch \(\(int\)code\) \{/)
   assert.match(c.code, /case \(int\)2: \{/)
-  assert.match(c.code, /break;/)
+  assert.match(c.code, /goto ccjs_break_\d+;/)
+  assert.match(c.code, /ccjs_break_\d+:\n\s+;/)
 })
 
 test('rejects dynamic C switch case labels with a stable diagnostic', () => {
@@ -2478,18 +2480,6 @@ test('compiles throw and try catch finally to JS and lowers local string throws 
 `, 'CCJS_C_THROW', {
     target: 'c'
   })
-  assertDiagnostic(`export function main(): void {
-  while (true) {
-    try {
-      break
-    } finally {
-      console.log('finally')
-    }
-  }
-}
-`, 'CCJS_C_TRY', {
-    target: 'c'
-  })
 })
 
 test('lowers C number return through finally before cleanup', () => {
@@ -2534,6 +2524,38 @@ export function main(): void {
   assert.match(result.code, /void stop\(void\) \{\n  int ccjs_return_active = 0;/)
   assert.match(result.code, /ccjs_return_active = 1;\n    goto ccjs_try_\d+_finally;/)
   assert.match(result.code, /ccjs_try_\d+_finally:\n    printf\("%s\\n", "finally"\);\n    if \(ccjs_error_active\) goto ccjs_cleanup;\n    if \(ccjs_return_active\) goto ccjs_cleanup;/)
+})
+
+test('lowers C break and continue through finally before loop flow', () => {
+  const result = compileSource(`export function main(): void {
+  let index = 0
+  while (index < 3) {
+    index = index + 1
+    try {
+      if (index === 1) {
+        continue
+      }
+      if (index === 2) {
+        break
+      }
+    } finally {
+      console.log(\`finally \${index}\`)
+    }
+    console.log(index)
+  }
+  console.log(index)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /int ccjs_break_active = 0;\n  int ccjs_continue_active = 0;/)
+  assert.match(result.code, /ccjs_continue_active = 1;\n\s+goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /ccjs_break_active = 1;\n\s+goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /if \(ccjs_break_active\) goto ccjs_break_\d+;/)
+  assert.match(result.code, /if \(ccjs_continue_active\) goto ccjs_continue_\d+;/)
+  assert.match(result.code, /ccjs_break_\d+:\n\s+if \(ccjs_break_active\) ccjs_break_active = 0;/)
+  assert.match(result.code, /ccjs_continue_\d+:\n\s+if \(ccjs_continue_active\) ccjs_continue_active = 0;/)
 })
 
 test('compiles Error objects to JS and rejects them for C', () => {

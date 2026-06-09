@@ -3980,6 +3980,59 @@ export function main(): void {
   }
 })
 
+test('generated C break and continue through finally compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-break-continue-finally-'))
+  const source = join(dir, 'break-continue-finally.c')
+  const output = join(dir, 'break-continue-finally')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  let index = 0
+  while (index < 4) {
+    index = index + 1
+    try {
+      if (index === 1) {
+        continue
+      }
+      if (index === 3) {
+        break
+      }
+    } finally {
+      console.log('finally', index)
+    }
+    console.log('body', index)
+  }
+  console.log('done', index)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'finally 1\nfinally 2\nbody 2\nfinally 3\ndone 3\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

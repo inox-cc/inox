@@ -259,6 +259,7 @@ function emitFunctionDeclaration(statement, baseContext) {
   const lines = [
     `${emitFunctionHead(statement, context)} {`,
     ...emitReturnValueDeclarations(context).map(line => `  ${line}`),
+    ...emitLoopFlowDeclarations(context).map(line => `  ${line}`),
     ...emitReturnFlowDeclarations(context).map(line => `  ${line}`),
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
     ...emitErrorChannelDeclarations(context).map(line => `  ${line}`),
@@ -1248,6 +1249,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   lines.push(`  if (out == 0 || arg_count != ${wrapper.functionType.params.length}${wrapper.functionType.params.length === 0 ? '' : ' || args == 0'}) return CCJS_ERR_TYPE;`)
   lines.push('  *out = ccjs_undefined_value();')
   lines.push(...bodyLines.map(line => `  ${line}`))
+  lines.push(...emitLoopFlowDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitReturnFlowDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitErrorChannelDeclarations(context).map(line => `  ${line}`))
@@ -1461,9 +1463,13 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
   return {
     ...baseContext,
     arrayShapes: new Map(),
+    breakFlowUsed: false,
+    breakTargets: [],
     boxedValueTypes: new Map(),
     boxedValues: [],
     boxedVariables: new Set(),
+    continueFlowUsed: false,
+    continueTargets: [],
     cleanupEnabled: true,
     errorChannelUsed: false,
     errorTargets: [],
@@ -1508,6 +1514,7 @@ function emitMainWrapper(entryProgram, baseContext) {
 
   bodyLines.push(...emitStatementList(body, context).map(line => `  ${line}`))
 
+  lines.push(...emitLoopFlowDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitReturnFlowDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitErrorChannelDeclarations(context).map(line => `  ${line}`))
@@ -1670,11 +1677,11 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'BreakStatement') {
-    return ['break;']
+    return emitBreakJump(context)
   }
 
   if (statement.type === 'ContinueStatement') {
-    return ['continue;']
+    return emitContinueJump(context)
   }
 
   if (statement.type === 'VariableDeclaration') {
@@ -1909,13 +1916,17 @@ function emitIfStatement(statement, context) {
 function emitWhileStatement(statement, context) {
   const condition = emitPreparedNumberExpression(statement.condition, context)
   const narrowing = resolveNullableScalarConditionNarrowing(statement.condition, context)
-  const body = withVariableScope(context, () => withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context)))
+  const breakLabel = nextCName(context, 'ccjs_break')
+  const continueLabel = nextCName(context, 'ccjs_continue')
+  const body = withBreakTarget(context, breakLabel, false, () => withContinueTarget(context, continueLabel, false, () => withVariableScope(context, () => withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context)))))
 
   if (condition.lines.length === 0) {
     return [
       `while (${condition.expression}) {`,
       ...body.map(line => `  ${line}`),
-      '}'
+      ...emitContinueTargetLabel(continueLabel, context),
+      '}',
+      ...emitBreakTargetLabel(breakLabel, context)
     ]
   }
 
@@ -1924,7 +1935,9 @@ function emitWhileStatement(statement, context) {
     ...condition.lines.map(line => `  ${line}`),
     `  if (!(${condition.expression})) break;`,
     ...body.map(line => `  ${line}`),
-    '}'
+    ...emitContinueTargetLabel(continueLabel, context),
+    '}',
+    ...emitBreakTargetLabel(breakLabel, context)
   ]
 }
 
@@ -1934,14 +1947,18 @@ function emitForStatement(statement, context) {
     const test = emitPreparedForExpressionClause(statement.test, context)
     const update = emitPreparedForExpressionClause(statement.update, context)
     const narrowing = resolveNullableScalarConditionNarrowing(statement.test, context)
-    const body = withVariableScope(context, () => withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context)))
+    const breakLabel = nextCName(context, 'ccjs_break')
+    const continueLabel = nextCName(context, 'ccjs_continue')
+    const body = withBreakTarget(context, breakLabel, false, () => withContinueTarget(context, continueLabel, false, () => withVariableScope(context, () => withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context)))))
     const needsPreparedLowering = init.lines.length > 0 || test.lines.length > 0 || update.lines.length > 0
 
     if (!needsPreparedLowering) {
       return [
         `for (${init.expression}; ${test.expression}; ${update.expression}) {`,
         ...body.map(line => `  ${line}`),
-        '}'
+        ...emitContinueTargetLabel(continueLabel, context),
+        '}',
+        ...emitBreakTargetLabel(breakLabel, context)
       ]
     }
 
@@ -1963,6 +1980,7 @@ function emitForStatement(statement, context) {
     }
 
     lines.push(...body.map(line => `    ${line}`))
+    lines.push(...emitContinueTargetLabel(continueLabel, context).map(line => `  ${line}`))
     lines.push(...update.lines.map(line => `    ${line}`))
 
     if (update.expression !== '') {
@@ -1970,6 +1988,7 @@ function emitForStatement(statement, context) {
     }
 
     lines.push('  }')
+    lines.push(...emitBreakTargetLabel(breakLabel, context).map(line => `  ${line}`))
     lines.push('}')
 
     return lines
@@ -2015,6 +2034,8 @@ function emitForOfStatement(statement, context) {
   const value = nextCName(context, 'ccjs_for_value')
   const length = runtimeArray == null ? `${array.elements.length}` : nextCName(context, 'ccjs_for_length')
   const arrayName = runtimeArray?.name ?? array.name
+  const breakLabel = nextCName(context, 'ccjs_break')
+  const continueLabel = nextCName(context, 'ccjs_continue')
   const loopValue = elementType === 'boolean'
     ? `((double)(${value}.as.boolean ? 1 : 0))`
     : `${value}.as.number`
@@ -2026,7 +2047,7 @@ function emitForOfStatement(statement, context) {
     if (elementType === 'string') {
       context.runtimeStrings.add(statement.name)
     }
-    const body = withVariableScope(context, () => emitStatementBody(statement.body, context))
+    const body = withBreakTarget(context, breakLabel, false, () => withContinueTarget(context, continueLabel, false, () => withVariableScope(context, () => emitStatementBody(statement.body, context))))
     const declaration = elementType === 'string'
       ? `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
       : `double ${statement.name} = ${loopValue};`
@@ -2049,7 +2070,9 @@ function emitForOfStatement(statement, context) {
       ...checks.map(line => `  ${line}`),
       `  ${declaration}`,
       ...body.map(line => `  ${line}`),
+      ...emitContinueTargetLabel(continueLabel, context),
       '}',
+      ...emitBreakTargetLabel(breakLabel, context),
       ...emitPrepareOwnedValueWrite(value)
     ]
   })
@@ -2057,6 +2080,7 @@ function emitForOfStatement(statement, context) {
 
 function emitSwitchStatement(statement, context) {
   const discriminant = emitPreparedNumberExpression(statement.discriminant, context)
+  const breakLabel = nextCName(context, 'ccjs_break')
   const lines = [
     ...discriminant.lines,
     `switch ((int)${discriminant.expression}) {`
@@ -2064,11 +2088,12 @@ function emitSwitchStatement(statement, context) {
 
   for (const item of statement.cases) {
     lines.push(item.test == null ? '  default: {' : `  case ${emitSwitchCaseLabel(item.test, context)}: {`)
-    lines.push(...withVariableScope(context, () => emitStatementList(item.consequent, context)).map(line => `    ${line}`))
+    lines.push(...withBreakTarget(context, breakLabel, false, () => withVariableScope(context, () => emitStatementList(item.consequent, context))).map(line => `    ${line}`))
     lines.push('  }')
   }
 
   lines.push('}')
+  lines.push(...emitBreakTargetLabel(breakLabel, context))
 
   return lines
 }
@@ -2093,7 +2118,7 @@ function emitSwitchCaseLabel(expression, context) {
 
 function emitTryStatement(statement, context) {
   if (tryStatementHasUnsupportedControlFlow(statement, context)) {
-    context.diagnostics.push(diagnostic('CCJS_C_TRY', 'C try/catch/finally currently supports return through finally, but not break or continue through finally', statement.loc))
+    context.diagnostics.push(diagnostic('CCJS_C_TRY', 'C try/catch/finally currently does not support return through finally inside runtime callback wrappers', statement.loc))
     return []
   }
 
@@ -2105,16 +2130,18 @@ function emitTryStatement(statement, context) {
   const endLabel = `${id}_end`
   const throwTarget = catchLabel ?? finallyLabel
   const outerReturnTarget = currentReturnTarget(context)
+  const outerBreakTarget = currentBreakTarget(context)
+  const outerContinueTarget = currentContinueTarget(context)
   const lines = [
     '{'
   ]
-  const tryBody = withErrorTarget(context, throwTarget, () => withReturnTarget(context, finallyLabel, () => withVariableScope(context, () => emitStatementBody(statement.block, context))))
+  const tryBody = withErrorTarget(context, throwTarget, () => withFinallyFlowTarget(context, finallyLabel, () => withVariableScope(context, () => emitStatementBody(statement.block, context))))
 
   lines.push(...tryBody.map(line => `  ${line}`))
   lines.push(`  goto ${finallyLabel ?? endLabel};`)
 
   if (statement.handler != null && catchLabel != null) {
-    const catchBody = withReturnTarget(context, finallyLabel, () => withVariableScope(context, () => {
+    const catchBody = withFinallyFlowTarget(context, finallyLabel, () => withVariableScope(context, () => {
       const body: string[] = []
 
       if (statement.handler.param != null) {
@@ -2140,7 +2167,7 @@ function emitTryStatement(statement, context) {
 
   if (statement.finalizer != null && finallyLabel != null) {
     const outerThrowTarget = currentErrorTarget(context)
-    const finalizerBody = withErrorTarget(context, outerThrowTarget, () => withVariableScope(context, () => emitStatementBody(statement.finalizer, context)))
+    const finalizerBody = withErrorTarget(context, outerThrowTarget, () => withReturnTarget(context, outerReturnTarget, () => withBreakTarget(context, outerBreakTarget?.label ?? null, outerBreakTarget?.throughFinally === true, () => withContinueTarget(context, outerContinueTarget?.label ?? null, outerContinueTarget?.throughFinally === true, () => withVariableScope(context, () => emitStatementBody(statement.finalizer, context))))))
 
     lines.push(`${finallyLabel}:`)
     lines.push(...finalizerBody.map(line => `  ${line}`))
@@ -2157,6 +2184,14 @@ function emitTryStatement(statement, context) {
       } else {
         lines.push(`  if (ccjs_return_active) ${emitReturnCleanupStatement(context)}`)
       }
+    }
+
+    if (context.breakFlowUsed && outerBreakTarget != null) {
+      lines.push(`  if (ccjs_break_active) goto ${outerBreakTarget.label};`)
+    }
+
+    if (context.continueFlowUsed && outerContinueTarget != null) {
+      lines.push(`  if (ccjs_continue_active) goto ${outerContinueTarget.label};`)
     }
   }
 
@@ -2202,6 +2237,114 @@ function registerErrorChannel(context) {
 
 function currentErrorTarget(context) {
   return context.errorTargets.at(-1) ?? null
+}
+
+function emitBreakJump(context) {
+  const target = currentBreakTarget(context)
+
+  if (target == null) {
+    return ['break;']
+  }
+
+  if (target.throughFinally) {
+    registerBreakFlow(context)
+
+    return [
+      'ccjs_break_active = 1;',
+      `goto ${target.label};`
+    ]
+  }
+
+  return [`goto ${target.label};`]
+}
+
+function emitContinueJump(context) {
+  const target = currentContinueTarget(context)
+
+  if (target == null) {
+    return ['continue;']
+  }
+
+  if (target.throughFinally) {
+    registerContinueFlow(context)
+
+    return [
+      'ccjs_continue_active = 1;',
+      `goto ${target.label};`
+    ]
+  }
+
+  return [`goto ${target.label};`]
+}
+
+function emitBreakTargetLabel(label, context) {
+  return [
+    `${label}:`,
+    ...(context.breakFlowUsed ? ['  if (ccjs_break_active) ccjs_break_active = 0;'] : []),
+    ';'
+  ]
+}
+
+function emitContinueTargetLabel(label, context) {
+  return [
+    `${label}:`,
+    ...(context.continueFlowUsed ? ['  if (ccjs_continue_active) ccjs_continue_active = 0;'] : []),
+    '  ;'
+  ]
+}
+
+function registerBreakFlow(context) {
+  context.breakFlowUsed = true
+}
+
+function registerContinueFlow(context) {
+  context.continueFlowUsed = true
+}
+
+function currentBreakTarget(context) {
+  return context.breakTargets.at(-1) ?? null
+}
+
+function currentContinueTarget(context) {
+  return context.continueTargets.at(-1) ?? null
+}
+
+function withBreakTarget(context, label, throughFinally, callback) {
+  if (label == null) {
+    return callback()
+  }
+
+  context.breakTargets.push({
+    label,
+    throughFinally
+  })
+
+  try {
+    return callback()
+  } finally {
+    context.breakTargets.pop()
+  }
+}
+
+function withContinueTarget(context, label, throughFinally, callback) {
+  if (label == null) {
+    return callback()
+  }
+
+  context.continueTargets.push({
+    label,
+    throughFinally
+  })
+
+  try {
+    return callback()
+  } finally {
+    context.continueTargets.pop()
+  }
+}
+
+function withFinallyFlowTarget(context, label, callback) {
+  return withReturnTarget(context, label, () => withBreakTarget(context, label, true, () => withContinueTarget(context, label, true, callback)))
 }
 
 function emitReturnJump(context) {
@@ -2323,10 +2466,6 @@ function statementHasReturnThroughFinally(statement) {
 function statementHasUnsupportedTryControlFlow(statement) {
   if (statement == null) {
     return false
-  }
-
-  if (statement.type === 'BreakStatement' || statement.type === 'ContinueStatement') {
-    return true
   }
 
   if (statement.type === 'BlockStatement') {
@@ -6942,6 +7081,13 @@ function emitReturnValueDeclarations(context) {
   }
 
   return []
+}
+
+function emitLoopFlowDeclarations(context) {
+  return [
+    ...(context.breakFlowUsed ? ['int ccjs_break_active = 0;'] : []),
+    ...(context.continueFlowUsed ? ['int ccjs_continue_active = 0;'] : [])
+  ]
 }
 
 function emitReturnFlowDeclarations(context) {
