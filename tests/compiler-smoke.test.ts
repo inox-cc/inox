@@ -1955,6 +1955,61 @@ export function main(): void {
   })
 })
 
+test('lowers C nullable scalar function params and returns', () => {
+  const result = compileSource(`function maybeScore(seed: number): number | null {
+  if (seed > 0) {
+    return seed + 1
+  }
+
+  return null
+}
+
+function printScore(score: number | null, active: boolean | null): void {
+  console.log(score ?? 0, active ?? false, score !== null, active === null)
+}
+
+export function main(): void {
+  const first = maybeScore(1)
+  const second: number | null = maybeScore(0)
+  printScore(first, true)
+  printScore(second, null)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_value maybeScore\(double seed\)/)
+  assert.match(result.code, /void printScore\(ccjs_value ccjs_param_score, ccjs_value ccjs_param_active\)/)
+  assert.match(result.code, /ccjs_value score = ccjs_param_score;/)
+  assert.match(result.code, /ccjs_param_score\.tag != CCJS_TAG_NULL && ccjs_param_score\.tag != CCJS_TAG_NUMBER/)
+  assert.match(result.code, /ccjs_return = ccjs_number_value\(\(seed \+ 1\)\);/)
+  assert.match(result.code, /ccjs_return = ccjs_null_value\(\);/)
+  assert.match(result.code, /ccjs_nullable_value_\d+ = maybeScore\(1\);/)
+  assert.match(result.code, /printScore\(first, ccjs_bool_value\(\(1\) != 0\)\);/)
+
+  assertDiagnostic(`function maybeScore(): number | null {
+  return null
+}
+
+export function main(): void {
+  console.log(maybeScore())
+}
+`, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`function maybeLog(callback: Function | null): void {
+  callback?.()
+}
+
+export function main(): void {
+  maybeLog(null)
+}
+`, 'CCJS_C_OPTIONAL_CHAINING', {
+    target: 'c'
+  })
+})
+
 test('compiles unsupported nullish coalescing to JS and rejects it for C', () => {
   const source = `function printValue(value: unknown): void {
   console.log(value ?? 'Ada')

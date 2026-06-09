@@ -3232,6 +3232,70 @@ export function main(): void {
   }
 })
 
+test('generated C nullable scalar function ABI compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-abi-'))
+  const source = join(dir, 'nullable-scalar-abi.c')
+  const output = join(dir, 'nullable-scalar-abi')
+
+  try {
+    const result = compileSource(`function maybeScore(seed: number): number | null {
+  if (seed > 0) {
+    return seed + 1
+  }
+
+  return null
+}
+
+function maybeActive(seed: number): boolean | null {
+  if (seed > 0) {
+    return true
+  }
+
+  return null
+}
+
+function printScore(score: number | null, active: boolean | null): void {
+  console.log(score ?? 0, active ?? false, score !== null, active === null)
+}
+
+export function main(): void {
+  const first = maybeScore(1)
+  const second: number | null = maybeScore(0)
+  let active: boolean | null = maybeActive(1)
+  printScore(first, active)
+  active = maybeActive(0)
+  printScore(second, active)
+  printScore(7 + 1, false)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2 1 1 0\n0 0 0 1\n8 0 1 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

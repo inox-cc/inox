@@ -211,10 +211,13 @@ function createBaseContext(diagnostics, functions) {
 }
 
 function emitFunctionDeclaration(statement, baseContext) {
-  const context = createFunctionContext(baseContext, statement.returnType)
+  const context = createFunctionContext(baseContext, statement.returnType, statement.returnNullable === true)
 
   for (const [index, param] of statement.params.entries()) {
-    if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean', 'string', 'object'].includes(param.valueType)) {
+    if (isNullableScalarParam(param)) {
+      context.variables.set(param.name, param.valueType)
+      context.nullableVariables.add(param.name)
+    } else if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean', 'string', 'object'].includes(param.valueType)) {
       context.variables.set(param.name, param.valueType)
       context.boxedVariables.add(param.name)
       registerBoxedValue(context, param.name, param.valueType)
@@ -275,6 +278,10 @@ function emitFunctionDeclaration(statement, baseContext) {
 function emitFunctionHead(statement, context) {
   const name = context.functionNames.get(statement.name) ?? emitCFunctionName(statement.name)
   const params = statement.params.map((param, index) => {
+    if (isNullableScalarParam(param)) {
+      return `ccjs_value ${emitCScalarParamName(param.name)}`
+    }
+
     if (param.valueType === 'string') {
       return `ccjs_value ${emitCStringParamName(param.name)}`
     }
@@ -302,7 +309,7 @@ function emitFunctionHead(statement, context) {
     return `${emitCType(param.valueType)} ${param.name}`
   }).join(', ')
 
-  return `${emitCReturnType(statement.returnType)} ${name}(${params === '' ? 'void' : params})`
+  return `${emitCReturnType(statement.returnType, statement.returnNullable === true)} ${name}(${params === '' ? 'void' : params})`
 }
 
 function emitFunctionParameter(name, functionType, context, loc) {
@@ -1366,7 +1373,7 @@ function emitFunctionPointerParams(functionType) {
   return functionType.params.map(param => emitCType(param.valueType)).join(', ')
 }
 
-function createFunctionContext(baseContext, returnType) {
+function createFunctionContext(baseContext, returnType, returnNullable = false) {
   return {
     ...baseContext,
     arrayShapes: new Map(),
@@ -1386,6 +1393,7 @@ function createFunctionContext(baseContext, returnType) {
     statusReturn: false,
     usedCleanupGoto: false,
     variables: new Map(),
+    returnNullable,
     returnType
   }
 }
@@ -1447,6 +1455,16 @@ function emitCObjectParamName(name) {
 
 function emitRuntimeParamPrelude(statement, context) {
   return statement.params.flatMap((param, index) => {
+    if (isNullableScalarParam(param)) {
+      const paramName = emitCScalarParamName(param.name)
+      const expectedTag = cRuntimeValueTag(param.valueType)
+
+      return [
+        ...emitRuntimeNullableValueCheck(paramName, expectedTag, context),
+        `ccjs_value ${param.name} = ${paramName};`
+      ]
+    }
+
     if (context.boxedMutableCaptureDeclarations.has(param) && ['string', 'object'].includes(param.valueType)) {
       const paramName = param.valueType === 'string' ? emitCStringParamName(param.name) : emitCObjectParamName(param.name)
       const tag = param.valueType === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
@@ -1509,7 +1527,11 @@ function emitCType(type) {
   return 'double'
 }
 
-function emitCReturnType(type) {
+function emitCReturnType(type, nullable = false) {
+  if (nullable && isNullableScalarType(type)) {
+    return 'ccjs_value'
+  }
+
   if (type === 'string') {
     return 'ccjs_value'
   }
@@ -1722,6 +1744,10 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ReturnStatement') {
+    if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
+      return emitNullableScalarReturnStatement(statement, context)
+    }
+
     if (context.returnType === 'string') {
       return emitStringReturnStatement(statement, context)
     }
@@ -1752,6 +1778,11 @@ function emitStatement(statement, context) {
     }
 
     return [`return ${emitCExpression(statement.argument, context)};`]
+  }
+
+  if (statement.type === 'ExpressionStatement' && statement.expression.type === 'OptionalCallExpression') {
+    context.diagnostics.push(diagnostic('CCJS_C_OPTIONAL_CHAINING', 'optional calls are not supported by the current C backend slice', statement.expression.loc))
+    return []
   }
 
   return []
@@ -2183,6 +2214,25 @@ function emitStringReturnStatement(statement, context) {
   ]
 }
 
+function emitNullableScalarReturnStatement(statement, context) {
+  const expectedTag = cRuntimeValueTag(context.returnType)
+  const value = statement.argument == null
+    ? {
+        lines: [],
+        expression: 'ccjs_null_value()'
+      }
+    : emitNullableScalarValueExpression(statement.argument, context)
+
+  context.usedCleanupGoto = true
+
+  return [
+    ...value.lines,
+    `ccjs_return = ${value.expression};`,
+    ...emitRuntimeNullableValueCheck('ccjs_return', expectedTag, context),
+    'goto ccjs_cleanup;'
+  ]
+}
+
 function emitRuntimeStringVariableDeclaration(statement, expression, context) {
   const value = emitCValueExpression(expression, context)
   const lines = [
@@ -2371,9 +2421,11 @@ function emitNullableRuntimeValueVariableDeclaration(statement, context) {
     ]
   }
 
-  const value = statement.init.type === 'ObjectLiteral'
-    ? emitCObjectLiteralValueExpression(statement.init, context, statement.shape)
-    : emitCValueExpression(statement.init, context)
+  const value = isNullableScalarType(valueType)
+    ? emitNullableScalarValueExpression(statement.init, context)
+    : statement.init.type === 'ObjectLiteral'
+      ? emitCObjectLiteralValueExpression(statement.init, context, statement.shape)
+      : emitCValueExpression(statement.init, context)
 
   return [
     ...value.lines,
@@ -2547,13 +2599,16 @@ function isNullableRuntimeValueAssignment(expression, context) {
 function emitNullableRuntimeValueAssignment(expression, context) {
   const name = expression.target.path[0]
   const expectedTag = cRuntimeValueTag(context.variables.get(name))
-  const value = expression.value.type === 'ObjectLiteral'
-    ? emitCObjectLiteralValueExpression(expression.value, context, context.objectShapes.get(name) == null
-        ? null
-        : {
-            fields: context.objectShapes.get(name)
-          })
-    : emitCValueExpression(expression.value, context)
+  const targetType = context.variables.get(name)
+  const value = isNullableScalarType(targetType)
+    ? emitNullableScalarValueExpression(expression.value, context)
+    : expression.value.type === 'ObjectLiteral'
+      ? emitCObjectLiteralValueExpression(expression.value, context, context.objectShapes.get(name) == null
+          ? null
+          : {
+              fields: context.objectShapes.get(name)
+            })
+      : emitCValueExpression(expression.value, context)
   const temp = nextCName(context, 'ccjs_nullable_value')
 
   return [
@@ -2633,6 +2688,18 @@ function cRuntimeValueTag(valueType) {
 
 function isRuntimeNullableType(valueType) {
   return cRuntimeValueTag(valueType) != null
+}
+
+function isNullableScalarType(valueType) {
+  return valueType === 'number' || valueType === 'boolean'
+}
+
+function isNullableScalarParam(param) {
+  return param?.nullable === true && isNullableScalarType(param.valueType)
+}
+
+function isNullableScalarRuntimeExpression(expression, context) {
+  return isNullableScalarType(inferExpressionType(expression, context)) && isNullableRuntimeExpression(expression, context)
 }
 
 function isBoxedRuntimeValueName(name, context) {
@@ -2896,6 +2963,10 @@ function emitArrayVariableDeclaration(statement, context) {
 function emitCValueExpression(expression, context) {
   if (isNullishCoalescingExpression(expression)) {
     return emitCNullishCoalescingValueExpression(expression, context)
+  }
+
+  if (isNullableScalarRuntimeExpression(expression, context)) {
+    return emitPreparedNullableScalarRuntimeValueExpression(expression, context)
   }
 
   if (isStringConversionCall(expression, context)) {
@@ -3165,6 +3236,81 @@ function emitCValueExpression(expression, context) {
   return {
     lines: [],
     expression: 'ccjs_undefined_value()'
+  }
+}
+
+function emitNullableScalarValueExpression(expression, context) {
+  if (expression?.type === 'NullLiteral') {
+    return {
+      lines: [],
+      expression: 'ccjs_null_value()'
+    }
+  }
+
+  if (isNullableScalarRuntimeExpression(expression, context)) {
+    return emitPreparedNullableScalarRuntimeValueExpression(expression, context)
+  }
+
+  const valueType = inferExpressionType(expression, context)
+
+  if (!isNullableScalarType(valueType)) {
+    context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'nullable scalar values currently support only number, boolean and null values in C', expression?.loc))
+
+    return {
+      lines: [],
+      expression: 'ccjs_null_value()'
+    }
+  }
+
+  const value = emitPreparedNumberExpression(expression, context)
+
+  return {
+    lines: value.lines,
+    expression: valueType === 'boolean'
+      ? `ccjs_bool_value((${value.expression}) != 0)`
+      : `ccjs_number_value(${value.expression})`
+  }
+}
+
+function emitPreparedNullableScalarRuntimeValueExpression(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1 && context.nullableVariables.has(expression.path[0]) && isNullableScalarType(context.variables.get(expression.path[0]))) {
+    return {
+      lines: [],
+      expression: expression.path[0]
+    }
+  }
+
+  if (expression?.type === 'OptionalMemberExpression') {
+    return emitCOptionalMemberValueExpression(expression, context)
+  }
+
+  if (expression?.type === 'OptionalIndexExpression') {
+    return emitCOptionalIndexValueExpression(expression, context)
+  }
+
+  if (expression?.type === 'CallExpression' && isNullableScalarRuntimeExpression(expression, context)) {
+    const valueType = inferExpressionType(expression, context)
+    const expectedTag = cRuntimeValueTag(valueType)
+    const call = emitPreparedCallExpression(expression, context)
+    const temp = nextCName(context, 'ccjs_nullable_value')
+    registerOwnedValue(context, temp)
+
+    return {
+      lines: [
+        ...call.lines,
+        ...emitPrepareOwnedValueWrite(temp),
+        `${temp} = ${call.expression};`,
+        ...emitRuntimeNullableValueCheck(temp, expectedTag, context)
+      ],
+      expression: temp
+    }
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'this nullable scalar expression is not supported by the current C backend slice', expression?.loc))
+
+  return {
+    lines: [],
+    expression: 'ccjs_null_value()'
   }
 }
 
@@ -3923,7 +4069,7 @@ function emitPreparedNumberExpression(expression, context) {
     }
   }
 
-  if (expression?.type === 'Reference' && expression.path.length === 1 && context.nullableVariables.has(expression.path[0]) && ['number', 'boolean'].includes(context.variables.get(expression.path[0]))) {
+  if (isNullableScalarRuntimeExpression(expression, context)) {
     context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'nullable scalar values must be narrowed with ?? before scalar use in the current C backend slice', expression.loc))
 
     return {
@@ -4387,7 +4533,12 @@ function emitPreparedCallExpression(expression, context) {
   const args: string[] = []
 
   for (const [index, arg] of expression.args.entries()) {
-    if (params[index]?.valueType === 'string') {
+    if (isNullableScalarParam(params[index])) {
+      const value = emitNullableScalarValueExpression(arg, context)
+
+      lines.push(...value.lines)
+      args.push(value.expression)
+    } else if (params[index]?.valueType === 'string') {
       const value = emitCValueExpression(arg, context)
 
       lines.push(...value.lines)
@@ -5990,6 +6141,10 @@ function shouldEmitCleanupLabel(context) {
 }
 
 function emitReturnValueDeclarations(context) {
+  if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
+    return ['ccjs_value ccjs_return = ccjs_undefined_value();']
+  }
+
   if (context.returnType === 'string') {
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
@@ -6126,7 +6281,8 @@ function usesCStringHeader(program) {
 function itemUsesCRuntime(item) {
   if (item.type === 'FunctionDeclaration') {
     return item.returnType === 'string'
-      || item.params.some(param => ['string', 'object'].includes(param.valueType) || (param.valueType === 'function' && isRuntimeFunctionType(param.functionType)))
+      || (item.returnNullable === true && isRuntimeNullableType(item.returnType))
+      || item.params.some(param => ['string', 'object'].includes(param.valueType) || isNullableScalarParam(param) || (param.valueType === 'function' && isRuntimeFunctionType(param.functionType)))
       || item.body.some(statement => statementUsesCRuntime(statement))
   }
 
