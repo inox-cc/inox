@@ -855,8 +855,12 @@ class Checker {
   }
 
   checkSwitchStatement(statement: AnyNode): void {
-    this.checkExpression(statement.discriminant)
+    const discriminantType = this.checkExpression(statement.discriminant)
     let hasDefault = false
+
+    if (!isSwitchableType(discriminantType)) {
+      this.report('CCJS_SWITCH_TYPE', `switch discriminant must be number, string or boolean, got ${discriminantType}`, statement.discriminant.loc)
+    }
 
     this.withBreakable(() => {
       for (const item of statement.cases) {
@@ -867,7 +871,11 @@ class Checker {
 
           hasDefault = true
         } else {
-          this.checkExpression(item.test)
+          const caseType = this.checkExpression(item.test)
+
+          if (!isMatchingSwitchCaseType(caseType, discriminantType)) {
+            this.report('CCJS_SWITCH_TYPE', `switch case type ${caseType} does not match discriminant type ${discriminantType}`, item.test.loc)
+          }
         }
 
         this.withScope(() => {
@@ -1064,6 +1072,14 @@ function isAssignableType(actual: ValueType | null | undefined, expected: ValueT
   }
 
   return actual === expected
+}
+
+function isSwitchableType(type: ValueType): boolean {
+  return ['boolean', 'number', 'string', 'unknown'].includes(type)
+}
+
+function isMatchingSwitchCaseType(actual: ValueType, expected: ValueType): boolean {
+  return actual === 'unknown' || expected === 'unknown' || actual === expected
 }
 
 function isBuiltinValueType(name: string): boolean {

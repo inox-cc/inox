@@ -1717,6 +1717,26 @@ test('rejects duplicate switch default branches', () => {
 `, 'CCJS_DUPLICATE_DEFAULT')
 })
 
+test('rejects switch type mismatches', () => {
+  assertDiagnostic(`export function main(): void {
+  switch (1) {
+    case 'one':
+      console.log('bad')
+  }
+}
+`, 'CCJS_SWITCH_TYPE')
+
+  assertDiagnostic(`export function main(): void {
+  const value = { code: 1 }
+
+  switch (value) {
+    default:
+      console.log('bad')
+  }
+}
+`, 'CCJS_SWITCH_TYPE')
+})
+
 test('rejects await outside async functions', () => {
   assertDiagnostic(`export function main(): void {
   const value = await Promise.resolve(1)
