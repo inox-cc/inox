@@ -1841,7 +1841,8 @@ function emitIfStatement(statement, context) {
 
 function emitWhileStatement(statement, context) {
   const condition = emitPreparedNumberExpression(statement.condition, context)
-  const body = withVariableScope(context, () => emitStatementBody(statement.body, context))
+  const narrowing = resolveNullableScalarConditionNarrowing(statement.condition, context)
+  const body = withVariableScope(context, () => withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context)))
 
   if (condition.lines.length === 0) {
     return [
@@ -1865,7 +1866,8 @@ function emitForStatement(statement, context) {
     const init = emitPreparedForInitializer(statement.init, context)
     const test = emitPreparedForExpressionClause(statement.test, context)
     const update = emitPreparedForExpressionClause(statement.update, context)
-    const body = withVariableScope(context, () => emitStatementBody(statement.body, context))
+    const narrowing = resolveNullableScalarConditionNarrowing(statement.test, context)
+    const body = withVariableScope(context, () => withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context)))
     const needsPreparedLowering = init.lines.length > 0 || test.lines.length > 0 || update.lines.length > 0
 
     if (!needsPreparedLowering) {

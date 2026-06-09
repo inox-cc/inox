@@ -2152,6 +2152,52 @@ export function main(): void {
   })
 })
 
+test('narrows C nullable scalar values inside loop bodies', () => {
+  const result = compileSource(`function printLoop(score: number | null, active: boolean | null): void {
+  while (score !== null && score > 0) {
+    console.log(score + 1)
+    score = null
+  }
+
+  for (let index = 0; active !== null && index < 1; index = index + 1) {
+    console.log(active)
+    active = null
+  }
+}
+
+export function main(): void {
+  printLoop(2, true)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /score\.as\.number > 0/)
+  assert.match(result.code, /\(score\.as\.number \+ 1\)/)
+  assert.match(result.code, /\(active\.as\.boolean \? 1 : 0\)/)
+
+  assertDiagnostic(`export function main(): void {
+  let score: number | null = 1
+  while (score !== null) {
+    score = null
+    console.log(score)
+  }
+}
+`, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`export function main(): void {
+  const score: number | null = 1
+  while (score === null) {
+    console.log(score)
+  }
+}
+`, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+})
+
 test('lowers C optional calls over nullable callbacks', () => {
   const result = compileSource(`type Named = (name: string) => void;
 

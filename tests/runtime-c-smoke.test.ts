@@ -3475,6 +3475,57 @@ export function main(): void {
   }
 })
 
+test('generated C nullable scalar loop narrowing compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-loop-narrowing-'))
+  const source = join(dir, 'nullable-scalar-loop-narrowing.c')
+  const output = join(dir, 'nullable-scalar-loop-narrowing')
+
+  try {
+    const result = compileSource(`function printLoop(score: number | null, active: boolean | null): void {
+  while (score !== null && score > 0) {
+    console.log(score)
+    score = score - 1
+  }
+
+  for (let index = 0; active !== null && index < 2; index = index + 1) {
+    console.log(active)
+    active = null
+  }
+}
+
+export function main(): void {
+  printLoop(2, true)
+  printLoop(null, null)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2\n1\n1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C nullable callback optional calls compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
