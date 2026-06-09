@@ -1098,6 +1098,106 @@ export function main(): void {
   }
 })
 
+test('generated C mutable string callback captures compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-mutable-string-callback-'))
+  const source = join(dir, 'mutable-string-callback.c')
+  const output = join(dir, 'mutable-string-callback')
+
+  try {
+    const result = compileSource(`function run(callback: Function): void {
+  callback()
+}
+
+export function main(): void {
+  let label = 'start'
+  const callback: Function = () => {
+    label = label + '!'
+    console.log(label)
+  }
+  run(callback)
+  console.log(label)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'start!\nstart!\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C mutable object callback captures compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-mutable-object-callback-'))
+  const source = join(dir, 'mutable-object-callback.c')
+  const output = join(dir, 'mutable-object-callback')
+
+  try {
+    const result = compileSource(`type Person = {
+  name: string
+}
+
+function run(callback: Function): void {
+  callback()
+}
+
+export function main(): void {
+  let person: Person = { name: 'Ada' }
+  const callback: Function = () => {
+    person.name = 'Grace'
+    console.log(person.name)
+  }
+  run(callback)
+  console.log(person.name)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Grace\nGrace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C typed callback aliases compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

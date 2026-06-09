@@ -1780,20 +1780,41 @@ export function main(): void {
   assert.match(c.code, /if \(seed != 0\) ccjs_default_free\(0, seed, sizeof\(double\), _Alignof\(double\)\);/)
 })
 
-test('rejects unsupported mutable string C callback captures with a stable diagnostic', () => {
-  assertDiagnostic(`function run(callback: Function): void {
+test('boxes mutable string and object C callback captures', () => {
+  const source = `type Person = {
+  name: string
+}
+
+function run(callback: Function): void {
   callback()
 }
 
 export function main(): void {
   let label = 'captured'
-  run(() => {
-    console.log(label)
-  })
+  let person: Person = { name: 'Ada' }
+  const callback: Function = () => {
+    label = label + '!'
+    person.name = label
+    console.log(label, person.name)
+  }
+  run(callback)
+  console.log(label, person.name)
 }
-`, 'CCJS_C_FUNCTION_VALUE', {
+`
+  const c = compileSource(source, {
     target: 'c'
   })
+
+  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n  ccjs_value\* label;\n  ccjs_value\* person;\n\} ccjs_callback_context_\d+;/)
+  assert.match(c.code, /ccjs_value\* label = 0;/)
+  assert.match(c.code, /ccjs_value\* person = 0;/)
+  assert.match(c.code, /ccjs_value\* label = captured->label;/)
+  assert.match(c.code, /ccjs_value\* person = captured->person;/)
+  assert.match(c.code, /ccjs_value ccjs_box_value_\d+ = ccjs_value_\d+;/)
+  assert.match(c.code, /ccjs_retain\(ccjs_box_value_\d+\);\n  ccjs_release\(\*label\);\n  \*label = ccjs_box_value_\d+;/)
+  assert.match(c.code, /ccjs_object_set_known\(\(\*person\), 0, \(\*label\)\)/)
+  assert.match(c.code, /if \(label != 0\) \{\n    ccjs_release\(\*label\);\n    ccjs_default_free\(0, label, sizeof\(ccjs_value\), _Alignof\(ccjs_value\)\);\n  \}/)
+  assert.match(c.code, /if \(person != 0\) \{\n    ccjs_release\(\*person\);\n    ccjs_default_free\(0, person, sizeof\(ccjs_value\), _Alignof\(ccjs_value\)\);\n  \}/)
 })
 
 test('compiles simple optional object member and index access to C', () => {

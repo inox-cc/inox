@@ -208,7 +208,15 @@ function emitFunctionDeclaration(statement, baseContext) {
   const context = createFunctionContext(baseContext, statement.returnType)
 
   for (const [index, param] of statement.params.entries()) {
-    if (param.valueType === 'string') {
+    if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean', 'string', 'object'].includes(param.valueType)) {
+      context.variables.set(param.name, param.valueType)
+      context.boxedVariables.add(param.name)
+      registerBoxedValue(context, param.name, param.valueType)
+
+      if (param.valueType === 'object') {
+        registerObjectShape(context, param.name, param.shape)
+      }
+    } else if (param.valueType === 'string') {
       context.variables.set(param.name, 'string')
       context.runtimeStrings.add(param.name)
     } else if (param.valueType === 'object') {
@@ -223,10 +231,6 @@ function emitFunctionDeclaration(statement, baseContext) {
       if (runtimeFunctionType != null) {
         context.runtimeCallbacks.add(param.name)
       }
-    } else if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean'].includes(param.valueType)) {
-      context.variables.set(param.name, param.valueType)
-      context.boxedVariables.add(param.name)
-      registerBoxedValue(context, param.name)
     } else {
       context.variables.set(param.name, param.valueType)
     }
@@ -270,6 +274,10 @@ function emitFunctionHead(statement, context) {
     }
 
     if (param.valueType === 'object') {
+      if (context.boxedMutableCaptureDeclarations.has(param)) {
+        return `ccjs_value ${emitCObjectParamName(param.name)}`
+      }
+
       return `ccjs_value ${param.name}`
     }
 
@@ -475,7 +483,7 @@ function collectCallbackWrappers(programs, context) {
     const captures = collectArrowCaptures(expression, scopes, context)
 
     for (const capture of captures) {
-      if (capture.mutable && ['number', 'boolean'].includes(capture.valueType) && capture.declaration != null) {
+      if (capture.mutable && ['number', 'boolean', 'string', 'object'].includes(capture.valueType) && capture.declaration != null) {
         context.boxedMutableCaptureDeclarations.add(capture.declaration)
       }
     }
@@ -1208,6 +1216,13 @@ function emitRuntimeArrowCallbackContextLocals(wrapper, context) {
 
     if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
       context.boxedVariables.add(capture.name)
+
+      if (capture.valueType === 'object') {
+        registerObjectShape(context, capture.name, capture.shape)
+      }
+
+      lines.push(`${emitRuntimeArrowCaptureCType(capture)} ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+      continue
     }
 
     if (isRetainedRuntimeArrowCapture(capture)) {
@@ -1265,8 +1280,14 @@ function emitRuntimeArrowCallbackParamPrelude(wrapper, context) {
 }
 
 function emitRuntimeArrowCaptureCType(capture) {
-  if (capture.mutable && ['number', 'boolean'].includes(capture.valueType)) {
-    return 'double*'
+  if (capture.mutable) {
+    if (['number', 'boolean'].includes(capture.valueType)) {
+      return 'double*'
+    }
+
+    if (['string', 'object'].includes(capture.valueType)) {
+      return 'ccjs_value*'
+    }
   }
 
   if (isRetainedRuntimeArrowCapture(capture)) {
@@ -1285,12 +1306,12 @@ function emitRuntimeArrowCaptureField(capture) {
 }
 
 function isRetainedRuntimeArrowCapture(capture) {
-  return capture.runtimeManaged === true && ['string', 'object'].includes(capture.valueType)
+  return capture.runtimeManaged === true && ['string', 'object'].includes(capture.valueType) && !capture.mutable
 }
 
 function isSupportedMutableRuntimeArrowCapture(capture, context) {
   return capture.mutable
-    && ['number', 'boolean'].includes(capture.valueType)
+    && ['number', 'boolean', 'string', 'object'].includes(capture.valueType)
     && capture.declaration != null
     && context.boxedMutableCaptureDeclarations.has(capture.declaration)
 }
@@ -1343,6 +1364,7 @@ function createFunctionContext(baseContext, returnType) {
   return {
     ...baseContext,
     arrayShapes: new Map(),
+    boxedValueTypes: new Map(),
     boxedValues: [],
     boxedVariables: new Set(),
     cleanupEnabled: true,
@@ -1410,8 +1432,25 @@ function emitCScalarParamName(name) {
   return `ccjs_param_${name}`
 }
 
+function emitCObjectParamName(name) {
+  return `ccjs_param_${name}`
+}
+
 function emitRuntimeParamPrelude(statement, context) {
   return statement.params.flatMap((param, index) => {
+    if (context.boxedMutableCaptureDeclarations.has(param) && ['string', 'object'].includes(param.valueType)) {
+      const paramName = param.valueType === 'string' ? emitCStringParamName(param.name) : emitCObjectParamName(param.name)
+      const tag = param.valueType === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
+
+      return [
+        emitRuntimeTypeCheck(`${paramName}.tag != ${tag} || ${paramName}.as.ref == 0`, context),
+        `${param.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`,
+        `if (${param.name} == 0) ${emitFailureStatement(context)}`,
+        `*${param.name} = ${paramName};`,
+        `ccjs_retain(*${param.name});`
+      ]
+    }
+
     if (param.valueType === 'string') {
       const paramName = emitCStringParamName(param.name)
 
@@ -1518,6 +1557,10 @@ function emitStatement(statement, context) {
 
   if (statement.type === 'VariableDeclaration') {
     if (statement.init?.type === 'ObjectLiteral') {
+      if (context.boxedMutableCaptureDeclarations.has(statement)) {
+        return emitBoxedObjectVariableDeclaration(statement, context)
+      }
+
       return emitObjectVariableDeclaration(statement, context)
     }
 
@@ -1593,6 +1636,10 @@ function emitStatement(statement, context) {
     }
 
     const valueType = inferExpressionType(statement.expression.value, context)
+
+    if (isBoxedRuntimeValueAssignment(statement.expression, context)) {
+      return emitBoxedRuntimeValueAssignment(statement.expression, context)
+    }
 
     if (valueType === 'number' || valueType === 'boolean') {
       const value = emitPreparedNumberExpression(statement.expression.value, context)
@@ -1937,6 +1984,10 @@ function emitPreparedForVariableDeclaration(statement, context) {
   context.variables.set(statement.name, inferred)
 
   if (inferred === 'string') {
+    if (context.boxedMutableCaptureDeclarations.has(statement)) {
+      return emitBoxedRuntimeValueVariableDeclaration(statement, statement.init, context)
+    }
+
     const runtimeString = resolveRuntimeStringReference(statement.init, context)
 
     if (runtimeString != null) {
@@ -2090,6 +2141,10 @@ function emitVariableDeclaration(statement, context) {
   context.variables.set(statement.name, inferred)
 
   if (inferred === 'string') {
+    if (context.boxedMutableCaptureDeclarations.has(statement)) {
+      return emitBoxedRuntimeValueVariableDeclaration(statement, statement.init, context)
+    }
+
     const runtimeString = resolveRuntimeStringReference(statement.init, context)
 
     if (runtimeString != null) {
@@ -2130,6 +2185,10 @@ function emitScalarVariableDeclaration(statement, context) {
   context.variables.set(statement.name, inferred)
 
   if (inferred === 'string') {
+    if (context.boxedMutableCaptureDeclarations.has(statement)) {
+      return emitBoxedRuntimeValueVariableDeclaration(statement, statement.init, context)
+    }
+
     const runtimeString = resolveRuntimeStringReference(statement.init, context)
 
     if (runtimeString != null) {
@@ -2185,8 +2244,9 @@ function emitScalarVariableDeclaration(statement, context) {
 
 function emitBoxedScalarVariableDeclaration(statement, context) {
   const value = emitPreparedNumberExpression(statement.init, context)
+  const inferred = inferExpressionType(statement.init, context)
 
-  registerBoxedValue(context, statement.name)
+  registerBoxedValue(context, statement.name, inferred)
   context.boxedVariables.add(statement.name)
 
   return [
@@ -2197,12 +2257,119 @@ function emitBoxedScalarVariableDeclaration(statement, context) {
   ]
 }
 
+function emitBoxedRuntimeValueVariableDeclaration(statement, expression, context) {
+  const valueType = inferExpressionType(expression, context)
+  const value = emitCValueExpression(expression, context)
+  const tag = valueType === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
+
+  registerBoxedValue(context, statement.name, valueType)
+  context.boxedVariables.add(statement.name)
+  context.variables.set(statement.name, valueType)
+
+  return [
+    ...value.lines,
+    `${statement.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`,
+    `if (${statement.name} == 0) ${emitFailureStatement(context)}`,
+    `*${statement.name} = ${value.expression};`,
+    emitRuntimeTypeCheck(`(*${statement.name}).tag != ${tag} || (*${statement.name}).as.ref == 0`, context),
+    `ccjs_retain(*${statement.name});`
+  ]
+}
+
+function isBoxedRuntimeValueAssignment(expression, context) {
+  return expression.target?.type === 'Reference'
+    && expression.target.path.length === 1
+    && isBoxedRuntimeValueName(expression.target.path[0], context)
+}
+
+function emitBoxedRuntimeValueAssignment(expression, context) {
+  const name = expression.target.path[0]
+  const expected = context.variables.get(name)
+  const value = emitCValueExpression(expression.value, context)
+  const temp = nextCName(context, 'ccjs_box_value')
+  const tag = expected === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
+
+  return [
+    ...value.lines,
+    `ccjs_value ${temp} = ${value.expression};`,
+    emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context),
+    `ccjs_retain(${temp});`,
+    `ccjs_release(*${name});`,
+    `*${name} = ${temp};`
+  ]
+}
+
+function isBoxedRuntimeValueName(name, context) {
+  return context.boxedVariables.has(name) && isRuntimeBoxedValueType(context.variables.get(name))
+}
+
+function isBoxedRuntimeStringName(name, context) {
+  return context.boxedVariables.has(name) && context.variables.get(name) === 'string'
+}
+
+function isBoxedRuntimeStringReference(expression, context) {
+  return expression?.type === 'Reference'
+    && expression.path.length === 1
+    && isBoxedRuntimeStringName(expression.path[0], context)
+}
+
+function emitBoxedObjectVariableDeclaration(statement, context) {
+  const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
+  const fieldsName = `${shapeName}_fields`
+  const fields = statement.shape?.fields ?? statement.init.properties.map(property => ({
+    name: property.key,
+    readonly: false,
+    valueType: inferExpressionType(property.value, context)
+  }))
+  const properties = new Map<string, AnyNode>(statement.init.properties.map(property => [property.key, property]))
+  const lines = [
+    `static const ccjs_field_info ${fieldsName}[] = {`
+  ]
+
+  for (const field of fields) {
+    lines.push(`  { ${cStringLiteral(field.name)}, ${field.readonly ? 'CCJS_FIELD_READONLY' : '0'} },`)
+  }
+
+  lines.push('};')
+  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`  ${fields.length},`)
+  lines.push(`  ${fieldsName}`)
+  lines.push('};')
+  registerBoxedValue(context, statement.name, 'object')
+  context.boxedVariables.add(statement.name)
+  context.variables.set(statement.name, 'object')
+  context.objectShapes.set(statement.name, fields.map(field => ({
+    name: field.name,
+    valueType: field.valueType,
+    arrayElementType: field.arrayElementType
+  })))
+  lines.push(`${statement.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`)
+  lines.push(`if (${statement.name} == 0) ${emitFailureStatement(context)}`)
+  lines.push(`*${statement.name} = ccjs_undefined_value();`)
+  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, ${statement.name})`, context))
+
+  for (const [index, field] of fields.entries()) {
+    const property = properties.get(field.name)
+
+    if (property == null) {
+      context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
+      continue
+    }
+
+    const value = emitCValueExpression(property.value, context)
+    lines.push(...value.lines)
+    lines.push(emitStatusCheck(`ccjs_object_init_known(*${statement.name}, ${index}, ${value.expression})`, context))
+  }
+
+  return lines
+}
+
 function emitKnownObjectMemberVariableDeclaration(statement, member, context) {
-  return emitObjectMemberVariableDeclaration(statement, member, context, temp => `ccjs_object_get_known(${member.objectName}, ${member.index}, &${temp})`)
+  return emitObjectMemberVariableDeclaration(statement, member, context, temp => `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`)
 }
 
 function emitDynamicObjectMemberVariableDeclaration(statement, member, context) {
-  return emitObjectMemberVariableDeclaration(statement, member, context, temp => `ccjs_object_get(${member.objectName}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, &${temp})`)
+  return emitObjectMemberVariableDeclaration(statement, member, context, temp => `ccjs_object_get(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, &${temp})`)
 }
 
 function emitObjectMemberVariableDeclaration(statement, member, context, emitGetCall) {
@@ -2271,7 +2438,7 @@ function emitKnownObjectMemberAssignment(expression, member, context) {
 
   return [
     ...value.lines,
-    emitStatusCheck(`ccjs_object_set_known(${member.objectName}, ${member.index}, ${value.expression})`, context)
+    emitStatusCheck(`ccjs_object_set_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, ${value.expression})`, context)
   ]
 }
 
@@ -2283,7 +2450,7 @@ function emitDynamicObjectMemberAssignment(expression, member, context) {
 
   return [
     ...value.lines,
-    emitStatusCheck(`ccjs_object_set(${member.objectName}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, ${value.expression})`, context)
+    emitStatusCheck(`ccjs_object_set(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, ${value.expression})`, context)
   ]
 }
 
@@ -2418,6 +2585,17 @@ function emitCValueExpression(expression, context) {
     const name = expression.path.join('_')
     const type = context.variables.get(name)
 
+    if (isBoxedRuntimeValueName(name, context)) {
+      const tag = type === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
+
+      return {
+        lines: [
+          emitRuntimeTypeCheck(`(*${name}).tag != ${tag} || (*${name}).as.ref == 0`, context)
+        ],
+        expression: `(*${name})`
+      }
+    }
+
     if (type === 'string' && context.runtimeStrings.has(name)) {
       const temp = nextCName(context, 'ccjs_value')
 
@@ -2463,7 +2641,7 @@ function emitCValueExpression(expression, context) {
       return {
         lines: [
           ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(`ccjs_object_get_known(${member.objectName}, ${member.index}, &${temp})`, context),
+          emitStatusCheck(`ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`, context),
           emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_ARRAY || ${temp}.as.ref == 0`, context)
         ],
         expression: temp
@@ -2477,7 +2655,7 @@ function emitCValueExpression(expression, context) {
       return {
         lines: [
           ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(`ccjs_object_get_known(${member.objectName}, ${member.index}, &${temp})`, context),
+          emitStatusCheck(`ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`, context),
           emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context)
         ],
         expression: temp
@@ -2541,7 +2719,7 @@ function emitCValueExpression(expression, context) {
       return {
         lines: [
           ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(`ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context),
+          emitStatusCheck(`ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context),
           emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_ARRAY || ${temp}.as.ref == 0`, context)
         ],
         expression: temp
@@ -2555,7 +2733,7 @@ function emitCValueExpression(expression, context) {
       return {
         lines: [
           ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(`ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context),
+          emitStatusCheck(`ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context),
           emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context)
         ],
         expression: temp
@@ -2886,13 +3064,28 @@ function parseTemplatePlaceholder(value, loc, context) {
 
 function emitStringLogValue(expression, context) {
   if (expression?.type === 'Reference') {
-    const name = emitReference(expression, context)
+    const name = expression.path.join('_')
 
-    if (context.runtimeStrings.has(name)) {
+    if (isBoxedRuntimeStringName(name, context)) {
+      const string = nextCName(context, 'ccjs_log_string')
+
+      return {
+        lines: [
+          emitRuntimeTypeCheck(`(*${name}).tag != CCJS_TAG_STRING || (*${name}).as.ref == 0`, context),
+          `ccjs_string* ${string} = (ccjs_string*)(*${name}).as.ref;`
+        ],
+        format: '%.*s',
+        values: [`(int)${string}->len`, `${string}->bytes`]
+      }
+    }
+
+    const reference = emitReference(expression, context)
+
+    if (context.runtimeStrings.has(reference)) {
       return {
         lines: [],
         format: '%.*s',
-        values: [`(int)${name}->len`, `${name}->bytes`]
+        values: [`(int)${reference}->len`, `${reference}->bytes`]
       }
     }
   }
@@ -2901,7 +3094,7 @@ function emitStringLogValue(expression, context) {
     const member = resolveKnownObjectMember(expression, context)
 
     if (member?.valueType === 'string') {
-      return emitRuntimeStringLogValue(temp => `ccjs_object_get_known(${member.objectName}, ${member.index}, &${temp})`, context)
+      return emitRuntimeStringLogValue(temp => `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`, context)
     }
   }
 
@@ -2915,7 +3108,7 @@ function emitStringLogValue(expression, context) {
     const field = resolveKnownObjectIndex(expression, context)
 
     if (field?.valueType === 'string') {
-      return emitRuntimeStringLogValue(temp => `ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
+      return emitRuntimeStringLogValue(temp => `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
     }
 
     const runtimeElement = resolveRuntimeArrayIndex(expression, context)
@@ -2996,7 +3189,7 @@ function emitNumberLogValue(expression, type, context) {
     const member = resolveKnownObjectMember(expression, context)
 
     if (member != null && ['number', 'boolean'].includes(member.valueType)) {
-      return emitRuntimeNumberLogValue(member.valueType, temp => `ccjs_object_get_known(${member.objectName}, ${member.index}, &${temp})`, context)
+      return emitRuntimeNumberLogValue(member.valueType, temp => `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`, context)
     }
   }
 
@@ -3010,7 +3203,7 @@ function emitNumberLogValue(expression, type, context) {
     const field = resolveKnownObjectIndex(expression, context)
 
     if (field != null && ['number', 'boolean'].includes(field.valueType)) {
-      return emitRuntimeNumberLogValue(field.valueType, temp => `ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
+      return emitRuntimeNumberLogValue(field.valueType, temp => `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
     }
 
     const runtimeElement = resolveRuntimeArrayIndex(expression, context)
@@ -3227,7 +3420,7 @@ function emitPreparedNumberExpression(expression, context) {
     const member = resolveKnownObjectMember(expression, context)
 
     if (member != null && ['number', 'boolean'].includes(member.valueType)) {
-      return emitPreparedRuntimeNumberValue(member.valueType, temp => `ccjs_object_get_known(${member.objectName}, ${member.index}, &${temp})`, context)
+      return emitPreparedRuntimeNumberValue(member.valueType, temp => `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`, context)
     }
   }
 
@@ -3241,7 +3434,7 @@ function emitPreparedNumberExpression(expression, context) {
     const field = resolveKnownObjectIndex(expression, context)
 
     if (field != null && ['number', 'boolean'].includes(field.valueType)) {
-      return emitPreparedRuntimeNumberValue(field.valueType, temp => `ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
+      return emitPreparedRuntimeNumberValue(field.valueType, temp => `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
     }
 
     const runtimeElement = resolveRuntimeArrayIndex(expression, context)
@@ -3351,21 +3544,36 @@ function emitPreparedStringBytesOperand(expression, context, tempPrefix = 'ccjs_
   }
 
   if (expression?.type === 'Reference' && expression.path.length === 1) {
-    const name = emitReference(expression, context)
+    const name = expression.path[0]
 
     if (context.variables.get(name) === 'string') {
-      if (context.runtimeStrings.has(name)) {
+      if (isBoxedRuntimeStringName(name, context)) {
+        const string = nextCName(context, tempPrefix)
+
+        return {
+          lines: [
+            emitRuntimeTypeCheck(`(*${name}).tag != CCJS_TAG_STRING || (*${name}).as.ref == 0`, context),
+            `ccjs_string* ${string} = (ccjs_string*)(*${name}).as.ref;`
+          ],
+          bytes: `${string}->bytes`,
+          length: `${string}->len`
+        }
+      }
+
+      const reference = emitReference(expression, context)
+
+      if (context.runtimeStrings.has(reference)) {
         return {
           lines: [],
-          bytes: `${name}->bytes`,
-          length: `${name}->len`
+          bytes: `${reference}->bytes`,
+          length: `${reference}->len`
         }
       }
 
       return {
         lines: [],
-        bytes: name,
-        length: `strlen(${name})`
+        bytes: reference,
+        length: `strlen(${reference})`
       }
     }
   }
@@ -3683,7 +3891,7 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
   lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
 
   for (const capture of wrapper.captures) {
-    lines.push(...emitRuntimeArrowCaptureStoreLines(capture, contextName))
+    lines.push(...emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
   }
 
   lines.push(`if (ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, ${contextName}, ${wrapper.finalizerName}, &${out}) != CCJS_OK) {`)
@@ -3694,8 +3902,14 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
   return lines
 }
 
-function emitRuntimeArrowCaptureStoreLines(capture, contextName) {
+function emitRuntimeArrowCaptureStoreLines(capture, contextName, context) {
   const field = `${contextName}->${emitRuntimeArrowCaptureField(capture)}`
+
+  if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
+    return [
+      `${field} = ${capture.name};`
+    ]
+  }
 
   if (isRetainedRuntimeArrowCapture(capture)) {
     if (capture.valueType === 'string') {
@@ -3962,6 +4176,7 @@ function isStringConcatExpression(expression, context) {
 function isRuntimeProducedStringExpression(expression, context) {
   return (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string')
     || isStringConcatExpression(expression, context)
+    || isBoxedRuntimeStringReference(expression, context)
 }
 
 function isStringConversionCall(expression, context) {
@@ -4074,6 +4289,10 @@ function resolveKnownObjectMember(expression, context) {
     valueType: fields[index].valueType,
     arrayElementType: fields[index].arrayElementType
   }
+}
+
+function emitObjectValueReference(name, context) {
+  return context.boxedVariables.has(name) && context.variables.get(name) === 'object' ? `(*${name})` : name
 }
 
 function resolveKnownObjectIndex(expression, context) {
@@ -4356,10 +4575,12 @@ function registerOwnedValue(context, name) {
   }
 }
 
-function registerBoxedValue(context, name) {
+function registerBoxedValue(context, name, valueType = 'number') {
   if (!context.boxedValues.includes(name)) {
     context.boxedValues.push(name)
   }
+
+  context.boxedValueTypes.set(name, valueType)
 }
 
 function emitPrepareOwnedValueWrite(name) {
@@ -4391,7 +4612,9 @@ function emitOwnedValueDeclarations(context) {
 }
 
 function emitBoxedValueDeclarations(context) {
-  return context.boxedValues.map(name => `double* ${name} = 0;`)
+  return context.boxedValues.map(name => isRuntimeBoxedValueType(context.boxedValueTypes.get(name))
+    ? `ccjs_value* ${name} = 0;`
+    : `double* ${name} = 0;`)
 }
 
 function emitOwnedValueCleanup(context) {
@@ -4399,7 +4622,18 @@ function emitOwnedValueCleanup(context) {
 }
 
 function emitBoxedValueCleanup(context) {
-  return context.boxedValues.toReversed().map(name => `if (${name} != 0) ccjs_default_free(0, ${name}, sizeof(double), _Alignof(double));`)
+  return context.boxedValues.toReversed().flatMap(name => isRuntimeBoxedValueType(context.boxedValueTypes.get(name))
+    ? [
+        `if (${name} != 0) {`,
+        `  ccjs_release(*${name});`,
+        `  ccjs_default_free(0, ${name}, sizeof(ccjs_value), _Alignof(ccjs_value));`,
+        '}'
+      ]
+    : [`if (${name} != 0) ccjs_default_free(0, ${name}, sizeof(double), _Alignof(double));`])
+}
+
+function isRuntimeBoxedValueType(valueType) {
+  return ['string', 'object'].includes(valueType)
 }
 
 function emitCleanupReturn(context) {
