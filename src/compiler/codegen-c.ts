@@ -426,6 +426,9 @@ function collectCallbackWrappers(programs, context) {
   }
   const hasCaptures = (expression, scopes) => expression?.type === 'ArrowFunctionExpression'
     && collectArrowCaptures(expression, scopes, context).length > 0
+  const shouldPromotePlainFunctionExpression = (expression, functionType, scopes) => isPlainFunctionPointerType(functionType)
+    && isSupportedRuntimeCallbackType(functionType)
+    && hasCaptures(expression, scopes)
   const registerNamed = (expression, functionType) => {
     if (expression?.type !== 'Reference' || expression.path.length !== 1) {
       return
@@ -521,6 +524,7 @@ function collectCallbackWrappers(programs, context) {
       valueType,
       functionType: statement.functionType,
       shape: statement.shape,
+      runtimeCallback: isRuntimeFunctionType(statement.functionType) || shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes),
       runtimeManaged: isRuntimeManagedCaptureBinding(statement, scopes, valueType),
       mutable: statement.kind === 'let'
     })
@@ -600,7 +604,12 @@ function collectCallbackWrappers(programs, context) {
   }
   const visitStatement = (statement, scopes) => {
     if (statement?.type === 'VariableDeclaration') {
-      register(statement.init, statement.functionType, scopes)
+      if (shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes)) {
+        registerRuntime(statement.init, statement.functionType, scopes)
+      } else {
+        register(statement.init, statement.functionType, scopes)
+      }
+
       visitExpression(statement.init, scopes)
       declareVariable(scopes.at(-1), statement, scopes)
       return
@@ -707,10 +716,14 @@ function collectCallbackWrappers(programs, context) {
               scopes
             })
 
-            if (hasCaptures(arg, scopes)) {
-              markRuntimeFunctionParam(expression.callee, index, param.functionType, context)
+              const argInfo = arg.type === 'Reference' && arg.path.length === 1
+                ? lookup(arg.path[0], scopes)
+                : null
+
+              if (hasCaptures(arg, scopes) || argInfo?.runtimeCallback === true) {
+                markRuntimeFunctionParam(expression.callee, index, param.functionType, context)
+              }
             }
-          }
         }
 
         visitExpression(arg, scopes)
@@ -2040,7 +2053,7 @@ function emitVariableDeclaration(statement, context) {
     context.variables.set(statement.name, 'function')
     context.functionTypes.set(statement.name, statement.functionType)
 
-    if (isRuntimeFunctionType(statement.functionType)) {
+    if (isRuntimeFunctionType(statement.functionType) || isRuntimeArrowCallbackExpression(statement.init, context)) {
       context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'runtime callback declarations need prepared statement lowering in the current C backend slice', statement.loc))
       return `ccjs_value ${statement.name} = ccjs_undefined_value()`
     }
@@ -2078,10 +2091,14 @@ function emitScalarVariableDeclaration(statement, context) {
   }
 
   if (inferred === 'function') {
-    context.variables.set(statement.name, 'function')
-    context.functionTypes.set(statement.name, statement.functionType)
+    const runtimeFunctionType = isRuntimeArrowCallbackExpression(statement.init, context)
+      ? normalizeFunctionType(statement.functionType)
+      : null
 
-    if (isRuntimeFunctionType(statement.functionType)) {
+    context.variables.set(statement.name, 'function')
+    context.functionTypes.set(statement.name, runtimeFunctionType ?? statement.functionType)
+
+    if (isRuntimeFunctionType(statement.functionType) || runtimeFunctionType != null) {
       return emitRuntimeCallbackVariableDeclaration(statement, context)
     }
 
@@ -3482,13 +3499,19 @@ function resolveRuntimeCallbackCalleeType(callee, context) {
   return isSupportedRuntimeCallbackType(functionType) ? normalizeFunctionType(functionType) : null
 }
 
+function isRuntimeArrowCallbackExpression(expression, context) {
+  return context.callbackArrowWrappers.get(expression)?.kind === 'arrow'
+}
+
 function emitRuntimeCallbackVariableDeclaration(statement, context) {
+  const functionType = normalizeFunctionType(statement.functionType)
+
   context.variables.set(statement.name, 'function')
-  context.functionTypes.set(statement.name, statement.functionType)
+  context.functionTypes.set(statement.name, functionType)
   context.runtimeCallbacks.add(statement.name)
   registerOwnedValue(context, statement.name)
 
-  return emitRuntimeCallbackValueInto(statement.init, statement.functionType, statement.name, context)
+  return emitRuntimeCallbackValueInto(statement.init, functionType, statement.name, context)
 }
 
 function emitRuntimeCallbackValue(expression, functionType, context) {

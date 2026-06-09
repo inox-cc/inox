@@ -945,6 +945,64 @@ export function main(): void {
   }
 })
 
+test('generated C captured callback variables compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-captured-callback-variable-'))
+  const source = join(dir, 'captured-callback-variable.c')
+  const output = join(dir, 'captured-callback-variable')
+
+  try {
+    const result = compileSource(`type NumberCallback = (value: number) => void;
+
+function run(callback: Function): void {
+  callback()
+}
+
+function runNumber(callback: NumberCallback): void {
+  callback(7)
+}
+
+export function main(): void {
+  const label = 'direct'
+  const offset = 5
+  const callback: Function = () => {
+    console.log(label)
+  }
+  const numberCallback: NumberCallback = (value: number) => {
+    console.log(value + offset)
+  }
+  callback()
+  run(callback)
+  runNumber(numberCallback)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'direct\ndirect\n12\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C typed callback aliases compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

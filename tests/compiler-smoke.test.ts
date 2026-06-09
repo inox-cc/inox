@@ -1686,6 +1686,44 @@ export function main(): void {
   assert.match(c.code, /double offset = captured->offset;/)
 })
 
+test('promotes captured C callback variables to runtime callbacks', () => {
+  const source = `type NumberCallback = (value: number) => void;
+
+function run(callback: Function): void {
+  callback()
+}
+
+function runNumber(callback: NumberCallback): void {
+  callback(7)
+}
+
+export function main(): void {
+  const label = 'captured'
+  const offset = 5
+  const callback: Function = () => {
+    console.log(label)
+  }
+  const numberCallback: NumberCallback = (value: number) => {
+    console.log(value + offset)
+  }
+  callback()
+  run(callback)
+  runNumber(numberCallback)
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /void run\(ccjs_value callback\);/)
+  assert.match(c.code, /void runNumber\(ccjs_value callback\);/)
+  assert.match(c.code, /ccjs_value callback = ccjs_undefined_value\(\);/)
+  assert.match(c.code, /ccjs_value numberCallback = ccjs_undefined_value\(\);/)
+  assert.match(c.code, /if \(ccjs_callback_call\(callback, 0, 0, &ccjs_callback_out_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /run\(callback\);/)
+  assert.match(c.code, /runNumber\(numberCallback\);/)
+})
+
 test('rejects mutable plain C callback captures with a stable diagnostic', () => {
   assertDiagnostic(`function run(callback: Function): void {
   callback()
