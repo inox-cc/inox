@@ -1997,13 +1997,54 @@ export function main(): void {
 `, 'CCJS_C_NULLISH', {
     target: 'c'
   })
+})
 
-  assertDiagnostic(`function maybeLog(callback: Function | null): void {
+test('lowers C optional calls over nullable callbacks', () => {
+  const result = compileSource(`type Named = (name: string) => void;
+
+function maybeLog(callback: Function | null): void {
   callback?.()
 }
 
+function maybeNamed(callback: Named | null): void {
+  callback?.('Ada')
+}
+
+function hello(): void {
+  console.log('hello')
+}
+
+function named(name: string): void {
+  console.log(name)
+}
+
 export function main(): void {
+  const callback: Function | null = hello
+  callback?.()
   maybeLog(null)
+  maybeLog(hello)
+
+  let namedCallback: Named | null = null
+  namedCallback?.('skip')
+  namedCallback = named
+  namedCallback?.('Grace')
+  maybeNamed(named)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /void maybeLog\(ccjs_value callback\)/)
+  assert.match(result.code, /void maybeNamed\(ccjs_value callback\)/)
+  assert.match(result.code, /if \(callback\.tag != CCJS_TAG_NULL\) \{/)
+  assert.match(result.code, /ccjs_callback_call\(callback, 0, 0, &ccjs_callback_out_\d+\)/)
+  assert.match(result.code, /ccjs_callback_call\(namedCallback, ccjs_callback_args_\d+, 1, &ccjs_callback_out_\d+\)/)
+  assert.match(result.code, /maybeLog\(ccjs_null_value\(\)\);/)
+  assert.match(result.code, /namedCallback = ccjs_nullable_value_\d+;/)
+
+  assertDiagnostic(`export function main(): void {
+  const value = 1
+  value?.()
 }
 `, 'CCJS_C_OPTIONAL_CHAINING', {
     target: 'c'

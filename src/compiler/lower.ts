@@ -616,10 +616,12 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       callee: lowerExpression(expression.callee, context),
       args: expression.args.map(arg => lowerExpression(arg, context)),
       valueType: expression.valueType ?? 'unknown',
+      nullable: expression.nullable === true,
       arrayElementType: expression.arrayElementType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
-      setElementType: expression.setElementType ?? null
+      setElementType: expression.setElementType ?? null,
+      functionType: expression.functionType ?? null
     }
   }
 

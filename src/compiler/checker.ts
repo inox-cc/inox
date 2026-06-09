@@ -546,12 +546,38 @@ class Checker {
 
     if (expression.type === 'OptionalCallExpression') {
       this.checkExpression(expression.callee)
+      const argTypes = expression.args.map(arg => this.checkExpression(arg))
+      const symbol = this.getCallableSymbol(expression.callee)
 
-      for (const arg of expression.args) {
-        this.checkExpression(arg)
+      if (symbol == null) {
+        expression.valueType = 'unknown'
+        expression.nullable = true
+
+        return expression.valueType
       }
 
-      return 'unknown'
+      expression.valueType = symbol.returnType ?? 'unknown'
+      expression.nullable = true
+      expression.arrayElementType = symbol.returnArrayElementType ?? null
+      expression.mapKeyType = symbol.returnMapKeyType ?? null
+      expression.mapValueType = symbol.returnMapValueType ?? null
+      expression.setElementType = symbol.returnSetElementType ?? null
+
+      if (symbol.params != null) {
+        if (symbol.params.length !== expression.args.length) {
+          const name = expression.callee.type === 'Reference' ? expression.callee.path[0] : 'callable'
+
+          this.report('CCJS_ARG_COUNT', `function ${name} expects ${symbol.params.length} argument(s), got ${expression.args.length}`, expression.loc)
+        }
+
+        for (const [index, param] of symbol.params.entries()) {
+          if (index < argTypes.length) {
+            this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true)
+          }
+        }
+      }
+
+      return expression.valueType
     }
 
     if (expression.type === 'NewExpression') {

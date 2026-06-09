@@ -237,6 +237,10 @@ function emitFunctionDeclaration(statement, baseContext) {
       context.variables.set(param.name, 'function')
       context.functionTypes.set(param.name, runtimeFunctionType ?? param.functionType)
 
+      if (param.nullable === true) {
+        context.nullableVariables.add(param.name)
+      }
+
       if (runtimeFunctionType != null) {
         context.runtimeCallbacks.add(param.name)
       }
@@ -366,6 +370,10 @@ function isRuntimeFunctionType(functionType) {
     && functionType.params.every(param => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
 }
 
+function isNullableFunctionType(valueType, nullable) {
+  return valueType === 'function' && nullable === true
+}
+
 function isSupportedRuntimeCallbackType(functionType) {
   const normalized = normalizeFunctionType(functionType)
 
@@ -398,6 +406,10 @@ function resolveFunctionParameterRuntimeType(functionName, index, param, context
     return promoted
   }
 
+  if (isNullableFunctionType(param.valueType, param.nullable)) {
+    return normalizeFunctionType(param.functionType)
+  }
+
   return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
 }
 
@@ -412,6 +424,10 @@ function resolveRuntimeFunctionArgumentType(callee, index, param, context) {
     if (promoted != null) {
       return promoted
     }
+  }
+
+  if (isNullableFunctionType(param.valueType, param.nullable)) {
+    return normalizeFunctionType(param.functionType)
   }
 
   return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
@@ -549,6 +565,7 @@ function collectCallbackWrappers(programs, context) {
         valueType: param.valueType,
         declaration: param,
         functionType: param.functionType,
+        nullable: param.nullable === true,
         shape: param.shape,
         runtimeManaged: ['string', 'object'].includes(param.valueType),
         mutable: true
@@ -565,8 +582,9 @@ function collectCallbackWrappers(programs, context) {
       valueType,
       functionType: statement.functionType,
       declaration: statement,
+      nullable: statement.nullable === true,
       shape: statement.shape,
-      runtimeCallback: isRuntimeFunctionType(statement.functionType) || shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes),
+      runtimeCallback: isNullableFunctionType(valueType, statement.nullable) || isRuntimeFunctionType(statement.functionType) || shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes),
       runtimeManaged: isRuntimeManagedCaptureBinding(statement, scopes, valueType),
       mutable: statement.kind === 'let'
     })
@@ -646,7 +664,9 @@ function collectCallbackWrappers(programs, context) {
   }
   const visitStatement = (statement, scopes) => {
     if (statement?.type === 'VariableDeclaration') {
-      if (shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes)) {
+      if (isNullableFunctionType(statement.valueType, statement.nullable)) {
+        registerRuntime(statement.init, statement.functionType, scopes)
+      } else if (shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes)) {
         registerRuntime(statement.init, statement.functionType, scopes)
       } else {
         register(statement.init, statement.functionType, scopes)
@@ -747,7 +767,9 @@ function collectCallbackWrappers(programs, context) {
         const param = params?.[index]
 
         if (param?.valueType === 'function') {
-          if (isRuntimeFunctionType(param.functionType)) {
+          if (isNullableFunctionType(param.valueType, param.nullable)) {
+            registerRuntime(arg, param.functionType, scopes)
+          } else if (isRuntimeFunctionType(param.functionType)) {
             registerRuntime(arg, param.functionType, scopes)
           } else {
             pendingPlainFunctionArgs.push({
@@ -776,6 +798,14 @@ function collectCallbackWrappers(programs, context) {
     }
 
     if (expression.type === 'AssignmentExpression') {
+      const targetInfo = expression.target?.type === 'Reference' && expression.target.path.length === 1
+        ? lookup(expression.target.path[0], scopes)
+        : null
+
+      if (isNullableFunctionType(targetInfo?.valueType, targetInfo?.nullable)) {
+        registerRuntime(expression.value, targetInfo.functionType, scopes)
+      }
+
       visitExpression(expression.target, scopes)
       visitExpression(expression.value, scopes)
       return
@@ -1494,6 +1524,10 @@ function emitRuntimeParamPrelude(statement, context) {
     }
 
     if (param.valueType === 'function' && resolveFunctionParameterRuntimeType(statement.name, index, param, context) != null) {
+      if (param.nullable === true) {
+        return emitRuntimeNullableValueCheck(param.name, 'CCJS_TAG_FUNCTION', context)
+      }
+
       return [
         emitRuntimeTypeCheck(`${param.name}.tag != CCJS_TAG_FUNCTION || ${param.name}.as.ref == 0`, context)
       ]
@@ -1781,8 +1815,7 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'OptionalCallExpression') {
-    context.diagnostics.push(diagnostic('CCJS_C_OPTIONAL_CHAINING', 'optional calls are not supported by the current C backend slice', statement.expression.loc))
-    return []
+    return emitOptionalRuntimeCallbackCallExpression(statement.expression, context)
   }
 
   return []
@@ -2412,6 +2445,9 @@ function emitNullableRuntimeValueVariableDeclaration(statement, context) {
     })
   } else if (valueType === 'set') {
     context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
+  } else if (valueType === 'function') {
+    context.functionTypes.set(statement.name, normalizeFunctionType(statement.functionType))
+    context.runtimeCallbacks.add(statement.name)
   }
 
   if (statement.init == null || statement.init.type === 'NullLiteral') {
@@ -2423,6 +2459,8 @@ function emitNullableRuntimeValueVariableDeclaration(statement, context) {
 
   const value = isNullableScalarType(valueType)
     ? emitNullableScalarValueExpression(statement.init, context)
+    : valueType === 'function'
+      ? emitNullableFunctionValueExpression(statement.init, statement.functionType, context)
     : statement.init.type === 'ObjectLiteral'
       ? emitCObjectLiteralValueExpression(statement.init, context, statement.shape)
       : emitCValueExpression(statement.init, context)
@@ -2602,6 +2640,8 @@ function emitNullableRuntimeValueAssignment(expression, context) {
   const targetType = context.variables.get(name)
   const value = isNullableScalarType(targetType)
     ? emitNullableScalarValueExpression(expression.value, context)
+    : targetType === 'function'
+      ? emitNullableFunctionValueExpression(expression.value, context.functionTypes.get(name), context)
     : expression.value.type === 'ObjectLiteral'
       ? emitCObjectLiteralValueExpression(expression.value, context, context.objectShapes.get(name) == null
           ? null
@@ -2673,6 +2713,10 @@ function cRuntimeValueTag(valueType) {
 
   if (valueType === 'array') {
     return 'CCJS_TAG_ARRAY'
+  }
+
+  if (valueType === 'function') {
+    return 'CCJS_TAG_FUNCTION'
   }
 
   if (valueType === 'map') {
@@ -3312,6 +3356,24 @@ function emitPreparedNullableScalarRuntimeValueExpression(expression, context) {
     lines: [],
     expression: 'ccjs_null_value()'
   }
+}
+
+function emitNullableFunctionValueExpression(expression, functionType, context) {
+  if (expression?.type === 'NullLiteral') {
+    return {
+      lines: [],
+      expression: 'ccjs_null_value()'
+    }
+  }
+
+  if (expression?.type === 'Reference' && expression.path.length === 1 && context.nullableVariables.has(expression.path[0]) && context.variables.get(expression.path[0]) === 'function') {
+    return {
+      lines: [],
+      expression: expression.path[0]
+    }
+  }
+
+  return emitRuntimeCallbackValue(expression, normalizeFunctionType(functionType), context)
 }
 
 function emitCArrayLiteralValueExpression(expression, context) {
@@ -4538,6 +4600,11 @@ function emitPreparedCallExpression(expression, context) {
 
       lines.push(...value.lines)
       args.push(value.expression)
+    } else if (isNullableFunctionType(params[index]?.valueType, params[index]?.nullable)) {
+      const value = emitNullableFunctionValueExpression(arg, params[index]?.functionType, context)
+
+      lines.push(...value.lines)
+      args.push(value.expression)
     } else if (params[index]?.valueType === 'string') {
       const value = emitCValueExpression(arg, context)
 
@@ -4814,6 +4881,46 @@ function emitRuntimeCallbackCall(expression, functionType, context) {
     lines,
     expression: ''
   }
+}
+
+function emitOptionalRuntimeCallbackCallExpression(expression, context) {
+  const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
+
+  if (functionType == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_OPTIONAL_CHAINING', 'optional calls currently require a nullable runtime callback value in the C backend', expression.loc))
+    return []
+  }
+
+  const callee = emitReference(expression.callee, context)
+  const lines: string[] = [
+    `if (${callee}.tag != CCJS_TAG_NULL) {`,
+    `  ${emitRuntimeTypeCheck(`${callee}.tag != CCJS_TAG_FUNCTION || ${callee}.as.ref == 0`, context)}`
+  ]
+  const args: string[] = []
+
+  for (const arg of expression.args) {
+    const value = emitCValueExpression(arg, context)
+
+    lines.push(...value.lines.map(line => `  ${line}`))
+    args.push(value.expression)
+  }
+
+  const out = nextCName(context, 'ccjs_callback_out')
+  registerOwnedValue(context, out)
+  lines.push(...emitPrepareOwnedValueWrite(out).map(line => `  ${line}`))
+
+  if (args.length === 0) {
+    lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, 0, 0, &${out})`, context)}`)
+  } else {
+    const argArray = nextCName(context, 'ccjs_callback_args')
+
+    lines.push(`  ccjs_value ${argArray}[] = { ${args.join(', ')} };`)
+    lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`, context)}`)
+  }
+
+  lines.push('}')
+
+  return lines
 }
 
 function resolveFunctionParams(callee, context) {
@@ -6282,7 +6389,7 @@ function itemUsesCRuntime(item) {
   if (item.type === 'FunctionDeclaration') {
     return item.returnType === 'string'
       || (item.returnNullable === true && isRuntimeNullableType(item.returnType))
-      || item.params.some(param => ['string', 'object'].includes(param.valueType) || isNullableScalarParam(param) || (param.valueType === 'function' && isRuntimeFunctionType(param.functionType)))
+      || item.params.some(param => ['string', 'object'].includes(param.valueType) || isNullableScalarParam(param) || isNullableFunctionType(param.valueType, param.nullable) || (param.valueType === 'function' && isRuntimeFunctionType(param.functionType)))
       || item.body.some(statement => statementUsesCRuntime(statement))
   }
 
@@ -6295,7 +6402,7 @@ function itemUsesCRuntime(item) {
 
 function itemUsesCCallbackRuntime(item) {
   if (item.type === 'FunctionDeclaration') {
-    return item.params.some(param => param.valueType === 'function' && isRuntimeFunctionType(param.functionType))
+    return item.params.some(param => param.valueType === 'function' && (param.nullable === true || isRuntimeFunctionType(param.functionType)))
       || item.body.some(statement => statementUsesCCallbackRuntime(statement))
   }
 
@@ -6388,7 +6495,7 @@ function statementUsesCRuntime(statement) {
 
 function statementUsesCCallbackRuntime(statement) {
   if (statement.type === 'VariableDeclaration') {
-    return (statement.valueType === 'function' && isRuntimeFunctionType(statement.functionType)) || expressionUsesCCallbackRuntime(statement.init)
+    return (statement.valueType === 'function' && (statement.nullable === true || isRuntimeFunctionType(statement.functionType))) || expressionUsesCCallbackRuntime(statement.init)
   }
 
   if (statement.type === 'ExpressionStatement') {
@@ -6637,7 +6744,11 @@ function expressionUsesCCallbackRuntime(expression) {
     return expressionUsesCCallbackRuntime(expression.object) || expressionUsesCCallbackRuntime(expression.index)
   }
 
-  if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+  if (expression.type === 'OptionalCallExpression') {
+    return true
+  }
+
+  if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
     return expressionUsesCCallbackRuntime(expression.callee) || expression.args.some(arg => expressionUsesCCallbackRuntime(arg))
   }
 
