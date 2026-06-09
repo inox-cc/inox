@@ -498,6 +498,14 @@ test('ccjs file runs nullish coalescing', async () => {
   assert.equal(result.stderr, '')
 })
 
+test('ccjs file runs try catch finally', async () => {
+  const result = await runCli(['tests/fixtures/runtime/try-catch.ts'])
+
+  assert.equal(result.code, 0)
+  assert.equal(result.stdout, 'caught boom\nfinally\n')
+  assert.equal(result.stderr, '')
+})
+
 test('ccjs file runs simple classes', async () => {
   const result = await runCli(['tests/fixtures/runtime/class.ts'])
 

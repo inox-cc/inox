@@ -123,6 +123,21 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
     }
   }
 
+  if (statement.type === 'TryStatement') {
+    return {
+      type: 'TryStatement',
+      block: lowerStatement(statement.block, context),
+      handler: statement.handler == null
+        ? null
+        : {
+            ...statement.handler,
+            body: lowerStatement(statement.handler.body, context)
+          },
+      finalizer: statement.finalizer == null ? null : lowerStatement(statement.finalizer, context),
+      loc: statement.loc
+    }
+  }
+
   if (statement.type === 'BreakStatement' || statement.type === 'ContinueStatement') {
     return statement
   }
@@ -156,6 +171,14 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
     return {
       type: 'ReturnStatement',
       argument: statement.argument == null ? null : lowerExpression(statement.argument, context),
+      loc: statement.loc
+    }
+  }
+
+  if (statement.type === 'ThrowStatement') {
+    return {
+      type: 'ThrowStatement',
+      argument: lowerExpression(statement.argument, context),
       loc: statement.loc
     }
   }

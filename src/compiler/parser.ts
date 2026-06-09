@@ -391,6 +391,10 @@ class Parser {
       return this.parseSwitchStatement(this.previous())
     }
 
+    if (this.matchKeyword('try')) {
+      return this.parseTryStatement(this.previous())
+    }
+
     if (this.matchKeyword('break')) {
       const token = this.previous()
       this.matchValue(';')
@@ -407,6 +411,18 @@ class Parser {
 
       return {
         type: 'ContinueStatement',
+        loc: locFromToken(token)
+      }
+    }
+
+    if (this.matchKeyword('throw')) {
+      const token = this.previous()
+      const argument = this.parseExpression()
+      this.matchValue(';')
+
+      return {
+        type: 'ThrowStatement',
+        argument,
         loc: locFromToken(token)
       }
     }
@@ -469,6 +485,62 @@ class Parser {
       condition,
       consequent,
       alternate,
+      loc: locFromToken(start)
+    }
+  }
+
+  parseTryStatement(start: Token): AnyNode {
+    const block = {
+      type: 'BlockStatement',
+      body: this.parseBlock(),
+      loc: locFromToken(start)
+    }
+    let handler: AnyNode | null = null
+    let finalizer: AnyNode | null = null
+
+    if (this.matchKeyword('catch')) {
+      const token = this.previous()
+      let param: string | null = null
+      let paramLoc: SourceLocation | null = null
+
+      if (this.matchValue('(')) {
+        const paramToken = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected catch binding name')
+        param = paramToken.value
+        paramLoc = locFromToken(paramToken)
+        this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after catch binding')
+      }
+
+      handler = {
+        type: 'CatchClause',
+        param,
+        paramLoc,
+        body: {
+          type: 'BlockStatement',
+          body: this.parseBlock(),
+          loc: locFromToken(token)
+        },
+        loc: locFromToken(token)
+      }
+    }
+
+    if (this.matchKeyword('finally')) {
+      const token = this.previous()
+      finalizer = {
+        type: 'BlockStatement',
+        body: this.parseBlock(),
+        loc: locFromToken(token)
+      }
+    }
+
+    if (handler == null && finalizer == null) {
+      this.report('CCJS_EXPECTED_TRY_HANDLER', 'try must be followed by catch or finally', start)
+    }
+
+    return {
+      type: 'TryStatement',
+      block,
+      handler,
+      finalizer,
       loc: locFromToken(start)
     }
   }

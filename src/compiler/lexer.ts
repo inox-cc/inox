@@ -6,6 +6,7 @@ const keywords = new Set([
   'await',
   'break',
   'case',
+  'catch',
   'class',
   'const',
   'constructor',
@@ -13,6 +14,7 @@ const keywords = new Set([
   'default',
   'export',
   'false',
+  'finally',
   'for',
   'function',
   'from',
@@ -29,7 +31,9 @@ const keywords = new Set([
   'switch',
   'this',
   'true',
+  'throw',
   'type',
+  'try',
   'var',
   'while'
 ])

@@ -170,6 +170,10 @@ function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[
     return emitSwitchStatement(statement, options)
   }
 
+  if (statement.type === 'TryStatement') {
+    return emitTryStatement(statement, options)
+  }
+
   if (statement.type === 'BreakStatement') {
     return ['break']
   }
@@ -190,6 +194,10 @@ function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[
 
   if (statement.type === 'ReturnStatement') {
     return [statement.argument == null ? 'return' : `return ${emitExpression(statement.argument)}`]
+  }
+
+  if (statement.type === 'ThrowStatement') {
+    return [`throw ${emitExpression(statement.argument)}`]
   }
 
   return []
@@ -252,6 +260,27 @@ function emitSwitchStatement(statement: AnyNode, options: JsEmitOptions = {}): s
   return lines
 }
 
+function emitTryStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
+  const lines = [
+    'try {',
+    ...indent(emitStatementBody(statement.block, options))
+  ]
+
+  if (statement.handler != null) {
+    lines.push(statement.handler.param == null ? '} catch {' : `} catch (${statement.handler.param}) {`)
+    lines.push(...indent(emitStatementBody(statement.handler.body, options)))
+  }
+
+  if (statement.finalizer != null) {
+    lines.push('} finally {')
+    lines.push(...indent(emitStatementBody(statement.finalizer, options)))
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
 function emitStatementBody(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   if (statement.type === 'BlockStatement') {
     return statement.body.flatMap(item => emitStatement(item, options))
@@ -302,6 +331,10 @@ function statementUsesReferenceName(statement: AnyNode, name: string): boolean {
     return statement.argument != null && expressionUsesReferenceName(statement.argument, name)
   }
 
+  if (statement.type === 'ThrowStatement') {
+    return expressionUsesReferenceName(statement.argument, name)
+  }
+
   if (statement.type === 'BlockStatement') {
     return statement.body.some(item => statementUsesReferenceName(item, name))
   }
@@ -330,6 +363,12 @@ function statementUsesReferenceName(statement: AnyNode, name: string): boolean {
   if (statement.type === 'SwitchStatement') {
     return expressionUsesReferenceName(statement.discriminant, name)
       || statement.cases.some(item => (item.test != null && expressionUsesReferenceName(item.test, name)) || item.consequent.some(child => statementUsesReferenceName(child, name)))
+  }
+
+  if (statement.type === 'TryStatement') {
+    return statementUsesReferenceName(statement.block, name)
+      || (statement.handler != null && statementUsesReferenceName(statement.handler.body, name))
+      || (statement.finalizer != null && statementUsesReferenceName(statement.finalizer, name))
   }
 
   return false

@@ -324,6 +324,11 @@ function collectRuntimeCallbackWrappers(programs, context) {
       return
     }
 
+    if (statement?.type === 'ThrowStatement') {
+      visitExpression(statement.argument)
+      return
+    }
+
     if (statement?.type === 'BlockStatement') {
       statement.body.forEach(visitStatement)
       return
@@ -368,6 +373,12 @@ function collectRuntimeCallbackWrappers(programs, context) {
         visitExpression(item.test)
         item.consequent.forEach(visitStatement)
       }
+    }
+
+    if (statement?.type === 'TryStatement') {
+      visitStatement(statement.block)
+      visitStatement(statement.handler?.body)
+      visitStatement(statement.finalizer)
     }
   }
   const visitExpression = expression => {
@@ -676,6 +687,16 @@ function emitStatement(statement, context) {
 
   if (statement.type === 'SwitchStatement') {
     return emitSwitchStatement(statement, context)
+  }
+
+  if (statement.type === 'TryStatement') {
+    context.diagnostics.push(diagnostic('CCJS_C_TRY', 'try/catch/finally is not supported by the current C backend slice', statement.loc))
+    return []
+  }
+
+  if (statement.type === 'ThrowStatement') {
+    context.diagnostics.push(diagnostic('CCJS_C_THROW', 'throw is not supported by the current C backend slice', statement.loc))
+    return []
   }
 
   if (statement.type === 'BreakStatement') {
@@ -2720,6 +2741,10 @@ function statementUsesCRuntime(statement) {
     return expressionUsesCRuntime(statement.argument)
   }
 
+  if (statement.type === 'ThrowStatement') {
+    return expressionUsesCRuntime(statement.argument)
+  }
+
   if (statement.type === 'BlockStatement') {
     return statement.body.some(item => statementUsesCRuntime(item))
   }
@@ -2750,6 +2775,12 @@ function statementUsesCRuntime(statement) {
       || statement.cases.some(item => expressionUsesCRuntime(item.test) || item.consequent.some(child => statementUsesCRuntime(child)))
   }
 
+  if (statement.type === 'TryStatement') {
+    return statementUsesCRuntime(statement.block)
+      || (statement.handler != null && statementUsesCRuntime(statement.handler.body))
+      || (statement.finalizer != null && statementUsesCRuntime(statement.finalizer))
+  }
+
   return false
 }
 
@@ -2763,6 +2794,10 @@ function statementUsesCCallbackRuntime(statement) {
   }
 
   if (statement.type === 'ReturnStatement') {
+    return expressionUsesCCallbackRuntime(statement.argument)
+  }
+
+  if (statement.type === 'ThrowStatement') {
     return expressionUsesCCallbackRuntime(statement.argument)
   }
 
@@ -2796,6 +2831,12 @@ function statementUsesCCallbackRuntime(statement) {
       || statement.cases.some(item => expressionUsesCCallbackRuntime(item.test) || item.consequent.some(child => statementUsesCCallbackRuntime(child)))
   }
 
+  if (statement.type === 'TryStatement') {
+    return statementUsesCCallbackRuntime(statement.block)
+      || (statement.handler != null && statementUsesCCallbackRuntime(statement.handler.body))
+      || (statement.finalizer != null && statementUsesCCallbackRuntime(statement.finalizer))
+  }
+
   return false
 }
 
@@ -2809,6 +2850,10 @@ function statementUsesCTimeRuntime(statement) {
   }
 
   if (statement.type === 'ReturnStatement') {
+    return expressionUsesCTimeRuntime(statement.argument)
+  }
+
+  if (statement.type === 'ThrowStatement') {
     return expressionUsesCTimeRuntime(statement.argument)
   }
 
@@ -2840,6 +2885,12 @@ function statementUsesCTimeRuntime(statement) {
   if (statement.type === 'SwitchStatement') {
     return expressionUsesCTimeRuntime(statement.discriminant)
       || statement.cases.some(item => expressionUsesCTimeRuntime(item.test) || item.consequent.some(child => statementUsesCTimeRuntime(child)))
+  }
+
+  if (statement.type === 'TryStatement') {
+    return statementUsesCTimeRuntime(statement.block)
+      || (statement.handler != null && statementUsesCTimeRuntime(statement.handler.body))
+      || (statement.finalizer != null && statementUsesCTimeRuntime(statement.finalizer))
   }
 
   return false

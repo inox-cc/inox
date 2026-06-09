@@ -1212,6 +1212,36 @@ export function main(): void {
   })
 })
 
+test('compiles throw and try catch finally to JS and rejects them for C', () => {
+  const source = `export function main(): void {
+  try {
+    throw 'boom'
+  } catch (error) {
+    console.log(\`caught \${error}\`)
+  } finally {
+    console.log('finally')
+  }
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+
+  assert.match(js.code, /try \{/)
+  assert.match(js.code, /throw "boom"/)
+  assert.match(js.code, /\} catch \(error\) \{/)
+  assert.match(js.code, /\} finally \{/)
+  assertDiagnostic(source, 'CCJS_C_TRY', {
+    target: 'c'
+  })
+  assertDiagnostic(`export function main(): void {
+  throw 'boom'
+}
+`, 'CCJS_C_THROW', {
+    target: 'c'
+  })
+})
+
 test('compiles simple classes to JS and rejects them for C', () => {
   const source = `class User {
   constructor(name: string) {

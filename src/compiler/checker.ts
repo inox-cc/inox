@@ -334,6 +334,11 @@ class Checker {
       return
     }
 
+    if (statement.type === 'TryStatement') {
+      this.checkTryStatement(statement)
+      return
+    }
+
     if (statement.type === 'BreakStatement') {
       if (this.breakDepth === 0) {
         this.report('CCJS_BREAK_OUTSIDE', 'break can only be used inside a loop or switch', statement.loc)
@@ -347,6 +352,11 @@ class Checker {
         this.report('CCJS_CONTINUE_OUTSIDE', 'continue can only be used inside a loop', statement.loc)
       }
 
+      return
+    }
+
+    if (statement.type === 'ThrowStatement') {
+      this.checkExpression(statement.argument)
       return
     }
 
@@ -387,6 +397,29 @@ class Checker {
     if (statement.type === 'ReturnStatement') {
       const actual = statement.argument == null ? 'void' : this.checkExpression(statement.argument)
       this.checkAssignableType(actual, this.currentReturnType, statement.loc)
+    }
+  }
+
+  checkTryStatement(statement: AnyNode): void {
+    this.checkStatement(statement.block)
+
+    if (statement.handler != null) {
+      this.withScope(() => {
+        if (statement.handler.param != null) {
+          this.declare(statement.handler.param, {
+            kind: 'catch',
+            mutable: false,
+            valueType: 'unknown',
+            loc: statement.handler.paramLoc
+          }, statement.handler.paramLoc)
+        }
+
+        this.checkStatement(statement.handler.body)
+      })
+    }
+
+    if (statement.finalizer != null) {
+      this.checkStatement(statement.finalizer)
     }
   }
 
