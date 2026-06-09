@@ -34,3 +34,14 @@ var value = 1
 
   assert.deepEqual(result.failures, [])
 })
+
+test('accepts stdout metadata for pass fixtures', () => {
+  const result = validateFixtureMetadata(`// @targets c
+// @expect pass
+// @stdout hello
+
+console.log('hello')
+`)
+
+  assert.deepEqual(result.failures, [])
+})
