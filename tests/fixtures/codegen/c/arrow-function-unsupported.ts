@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_C_FUNCTION_VALUE
+// @diagnostic CCJS_C_ARRAY_METHOD
 
 export function main(): void {
   const values = [3, 1, 2]

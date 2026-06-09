@@ -759,6 +759,12 @@ class Checker {
       return stringMethodType
     }
 
+    const arrayMethodType = this.checkArrayMethodCall(expression)
+
+    if (arrayMethodType != null) {
+      return arrayMethodType
+    }
+
     const calleeType = this.checkExpression(expression.callee)
     const argTypes = expression.args.map(arg => this.checkExpression(arg))
     const symbol = this.getCallableSymbol(expression.callee)
@@ -782,6 +788,124 @@ class Checker {
     }
 
     return symbol.returnType ?? 'unknown'
+  }
+
+  checkArrayMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || !isArrayMethod(expression.callee.property)) {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+
+    if (objectType !== 'array') {
+      return null
+    }
+
+    const elementType = this.resolveExpressionArrayElementType(expression.callee.object) ?? 'unknown'
+
+    expression.valueType = 'array'
+    expression.arrayElementType = elementType
+
+    if (expression.callee.property === 'sort') {
+      if (expression.args.length > 1) {
+        this.report('CCJS_ARG_COUNT', `array.sort expects 0 or 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      if (expression.args[0] != null) {
+        this.checkArrayCallback(expression.args[0], [
+          { name: 'left', valueType: elementType },
+          { name: 'right', valueType: elementType }
+        ], 'number')
+      }
+
+      for (const arg of expression.args.slice(1)) {
+        this.checkExpression(arg)
+      }
+
+      return 'array'
+    }
+
+    if (expression.args.length !== 1) {
+      this.report('CCJS_ARG_COUNT', `array.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    if (expression.callee.property === 'filter') {
+      if (expression.args[0] != null) {
+        this.checkArrayCallback(expression.args[0], [
+          { name: 'value', valueType: elementType },
+          { name: 'index', valueType: 'number' }
+        ], 'boolean')
+      }
+
+      for (const arg of expression.args.slice(1)) {
+        this.checkExpression(arg)
+      }
+
+      return 'array'
+    }
+
+    const mappedType = expression.args[0] == null
+      ? 'unknown'
+      : this.checkArrayCallback(expression.args[0], [
+          { name: 'value', valueType: elementType },
+          { name: 'index', valueType: 'number' }
+        ])
+
+    expression.arrayElementType = mappedType
+
+    for (const arg of expression.args.slice(1)) {
+      this.checkExpression(arg)
+    }
+
+    return 'array'
+  }
+
+  checkArrayCallback(expression: AnyNode, params: Array<{ name: string, valueType: ValueType }>, returnType?: ValueType): ValueType {
+    if (expression.type !== 'ArrowFunctionExpression') {
+      const callbackType = this.checkExpression(expression)
+
+      this.checkAssignableType(callbackType, 'function', expression.loc)
+
+      return 'unknown'
+    }
+
+    if (expression.params.length > params.length) {
+      this.report('CCJS_ARG_COUNT', `array callback expects at most ${params.length} parameter(s), got ${expression.params.length}`, expression.loc)
+    }
+
+    let actualReturnType: ValueType = 'unknown'
+
+    this.withScope(() => {
+      for (const [index, param] of expression.params.entries()) {
+        const expected = params[index]?.valueType ?? 'unknown'
+        const actual = param.valueType === 'unknown' ? expected : param.valueType
+
+        if (param.valueType !== 'unknown') {
+          this.checkAssignableType(expected, param.valueType, param.loc)
+        }
+
+        param.valueType = actual
+
+        this.declare(param.name, {
+          kind: 'param',
+          mutable: true,
+          valueType: actual,
+          loc: param.loc
+        }, param.loc)
+      }
+
+      if (expression.expressionBody) {
+        actualReturnType = this.checkExpression(expression.body)
+      } else {
+        this.checkStatements(expression.body)
+      }
+    })
+
+    if (returnType != null) {
+      this.checkAssignableType(actualReturnType, returnType, expression.loc)
+    }
+
+    return actualReturnType
   }
 
   checkStringConversionCall(expression: AnyNode): ValueType | null {
@@ -1259,6 +1383,10 @@ class Checker {
       return expression.arrayElementType ?? null
     }
 
+    if (expression.type === 'CallExpression') {
+      return expression.arrayElementType ?? null
+    }
+
     if (expression.type === 'Reference' && expression.path.length === 1) {
       return this.scope.resolve(expression.path[0])?.arrayElementType ?? null
     }
@@ -1373,6 +1501,10 @@ function isEqualityOperator(operator: string): boolean {
 
 function isStringPredicateMethod(name: string): boolean {
   return ['includes', 'startsWith', 'endsWith'].includes(name)
+}
+
+function isArrayMethod(name: string): boolean {
+  return ['sort', 'filter', 'map'].includes(name)
 }
 
 function isEqualityComparableType(left: ValueType, right: ValueType): boolean {

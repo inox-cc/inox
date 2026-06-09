@@ -35,6 +35,12 @@ const cStringPredicateMethods = new Set([
   'endsWith'
 ])
 
+const cArrayMethods = new Set([
+  'sort',
+  'filter',
+  'map'
+])
+
 export function emitC(program: ProgramNode): string {
   return emitCUnit([program], program)
 }
@@ -1961,6 +1967,11 @@ function emitScalarVariableDeclaration(statement, context) {
     return [`${emitFunctionPointerVariable(statement.name, statement.init, context, statement.kind === 'const', statement.functionType, statement.loc)};`]
   }
 
+  if (isArrayMethodCall(statement.init)) {
+    context.diagnostics.push(diagnostic('CCJS_C_ARRAY_METHOD', 'array methods are not supported by the current C backend slice', statement.loc))
+    return [`double ${statement.name} = 0;`]
+  }
+
   if (!['number', 'boolean'].includes(inferred)) {
     context.diagnostics.push(diagnostic(cUnsupportedExpressionCode(inferred), 'this expression is not supported by the current C backend slice', statement.loc))
     return [`double ${statement.name} = 0;`]
@@ -3758,6 +3769,12 @@ function isStringPredicateCall(expression, context) {
   }
 
   return isStringLengthObject(expression.callee.object, context) && inferExpressionType(expression.args[0], context) === 'string'
+}
+
+function isArrayMethodCall(expression) {
+  return expression?.type === 'CallExpression'
+    && expression.callee.type === 'MemberExpression'
+    && cArrayMethods.has(expression.callee.property)
 }
 
 function cStringPredicateHelperName(method) {

@@ -1827,7 +1827,7 @@ test('compiles arrow functions and chain calls to JS and rejects them for C', ()
   assert.match(js.code, /\(left, right\) => \(left - right\)/)
   assert.match(js.code, /value => \(value > 1\)/)
   assert.match(js.code, /value => \(value \* 2\)/)
-  assertDiagnostic(source, 'CCJS_C_FUNCTION_VALUE', {
+  assertDiagnostic(source, 'CCJS_C_ARRAY_METHOD', {
     target: 'c'
   })
 })
@@ -2236,6 +2236,61 @@ export function main(): void {
   assertDiagnostic(`export function main(): void {
   const values: number[] = ['Ada']
   console.log(values.length)
+}
+`, 'CCJS_TYPE_MISMATCH')
+})
+
+test('checks Array sort filter map as typed chain calls', () => {
+  const result = compileSource(`export function main(): void {
+  const values: number[] = [3, 1, 2]
+  const result = values.sort((left, right) => left - right).filter((value, index) => value > index).map(value => value + 1)
+  console.log(result.length)
+}
+`, {
+    target: 'js'
+  })
+  const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+  const resultDeclaration = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'result')
+  assert.ok(resultDeclaration)
+  const sortCall = resultDeclaration.init.callee.object.callee.object
+  const filterCall = resultDeclaration.init.callee.object
+  const mapCall = resultDeclaration.init
+
+  assert.equal(resultDeclaration.valueType, 'array')
+  assert.equal(resultDeclaration.arrayElementType, 'number')
+  assert.equal(sortCall.args[0].params[0].valueType, 'number')
+  assert.equal(sortCall.args[0].params[1].valueType, 'number')
+  assert.equal(filterCall.args[0].params[0].valueType, 'number')
+  assert.equal(filterCall.args[0].params[1].valueType, 'number')
+  assert.equal(mapCall.args[0].params[0].valueType, 'number')
+  assert.match(result.code, /\.sort\(\(left, right\) => \(left - right\)\)\.filter\(\(value, index\) => \(value > index\)\)\.map\(value => \(value \+ 1\)\)/)
+
+  const mapped = compileSource(`export function main(): void {
+  const values: number[] = [1]
+  const names = values.map(value => String(value))
+  console.log(names[0])
+}
+`, {
+    target: 'js'
+  })
+  const mappedMain = mapped.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(mappedMain)
+  const names = mappedMain.body.find(item => item.type === 'VariableDeclaration' && item.name === 'names')
+  assert.ok(names)
+
+  assert.equal(names.valueType, 'array')
+  assert.equal(names.arrayElementType, 'string')
+
+  assertDiagnostic(`export function main(): void {
+  const values: number[] = [1]
+  values.filter(value => value + 1)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const values: number[] = [1]
+  values.sort((left: string, right: string) => 0)
 }
 `, 'CCJS_TYPE_MISMATCH')
 })

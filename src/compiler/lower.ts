@@ -422,7 +422,8 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       ...expression,
       callee: lowerExpression(expression.callee, context),
       args: expression.args.map(arg => lowerExpression(arg, context)),
-      valueType: 'unknown'
+      valueType: expression.valueType ?? 'unknown',
+      arrayElementType: expression.arrayElementType ?? null
     }
   }
 
@@ -431,7 +432,8 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       ...expression,
       callee: lowerExpression(expression.callee, context),
       args: expression.args.map(arg => lowerExpression(arg, context)),
-      valueType: 'unknown'
+      valueType: expression.valueType ?? 'unknown',
+      arrayElementType: expression.arrayElementType ?? null
     }
   }
 
