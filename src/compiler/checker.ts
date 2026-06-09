@@ -189,9 +189,13 @@ class Checker {
 
     for (const item of this.program.body) {
       if (item.type === 'ImportDeclaration') {
+        if (item.typeOnly) {
+          continue
+        }
+
         for (const specifier of item.specifiers) {
           this.declare(specifier.local, {
-            kind: item.typeOnly ? 'type import' : 'import',
+            kind: 'import',
             mutable: false,
             valueType: 'unknown',
             loc: specifier.loc

@@ -1417,6 +1417,40 @@ export function main(): void {
   }
 })
 
+test('compiles static ESM type imports before checking modules', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-type-imports-'))
+
+  try {
+    await writeFile(join(dir, 'types.ts'), `export type User = {
+  readonly name: string
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import type { User as Person } from './types.ts'
+
+export function main(): void {
+  const user: Person = { name: 'Ada' }
+  console.log(user.name)
+}
+`)
+
+    const js = await compileFile(join(dir, 'main.ts'), {
+      target: 'js'
+    })
+    const c = await compileFile(join(dir, 'main.ts'), {
+      target: 'c'
+    })
+
+    assert.match(js.code, /const user = \{ name: "Ada" \}/)
+    assert.match(c.code, /static const ccjs_field_info ccjs_shape_user_\d+_fields\[\]/)
+    assert.match(c.code, /ccjs_object_get_known\(user, 0, &ccjs_log_value_\d+\)/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('accepts valid TypeScript source files as canonical input', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-modules-'))
 

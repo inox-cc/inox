@@ -56,12 +56,9 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
     modules.set(path, module)
 
     const importAliasDeclarations = new Map<number, AnyNode[]>()
+    const importTypeDeclarations = new Map<number, AnyNode[]>()
 
     for (const [importIndex, item] of module.imports.entries()) {
-      if (item.typeOnly) {
-        continue
-      }
-
       if (!isRelativeSpecifier(item.source)) {
         diagnostics.push(diagnostic('CCJS_UNSUPPORTED_IMPORT_SOURCE', `only relative imports are implemented, got ${item.source}`, item.loc))
         continue
@@ -80,10 +77,28 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
       }
 
       const aliases: AnyNode[] = []
+      const types: AnyNode[] = []
 
       for (const specifier of item.specifiers) {
-        if (!importedModule.exports.has(specifier.imported)) {
+        const exported = importedModule.exports.get(specifier.imported)
+
+        if (exported == null) {
           diagnostics.push(diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc))
+          continue
+        }
+
+        if (item.typeOnly) {
+          if (exported.type !== 'TypeAliasDeclaration') {
+            diagnostics.push(diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export type ${specifier.imported}`, specifier.loc))
+            continue
+          }
+
+          types.push(createTypeImportDeclaration(specifier, exported))
+          continue
+        }
+
+        if (exported.type === 'TypeAliasDeclaration') {
+          diagnostics.push(diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} exports ${specifier.imported} as a type; use import type`, specifier.loc))
           continue
         }
 
@@ -99,10 +114,14 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
       if (aliases.length > 0) {
         importAliasDeclarations.set(importIndex, aliases)
       }
+
+      if (types.length > 0) {
+        importTypeDeclarations.set(importIndex, types)
+      }
     }
 
-    const checked = checkProgram(ast)
-    module.hir = insertImportAliasDeclarations(lowerProgram(checked.ast), importAliasDeclarations)
+    const checked = checkProgram(insertImportSyntheticDeclarations(ast, importTypeDeclarations))
+    module.hir = insertImportSyntheticDeclarations(lowerProgram(checked.ast), importAliasDeclarations)
     visiting.delete(path)
     order.push(module)
 
@@ -119,8 +138,8 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
   }
 }
 
-function insertImportAliasDeclarations(program: ProgramNode, aliasesByImport: Map<number, AnyNode[]>): ProgramNode {
-  if (aliasesByImport.size === 0) {
+function insertImportSyntheticDeclarations(program: ProgramNode, declarationsByImport: Map<number, AnyNode[]>): ProgramNode {
+  if (declarationsByImport.size === 0) {
     return program
   }
 
@@ -131,7 +150,7 @@ function insertImportAliasDeclarations(program: ProgramNode, aliasesByImport: Ma
     body.push(item)
 
     if (item.type === 'ImportDeclaration') {
-      body.push(...(aliasesByImport.get(importIndex) ?? []))
+      body.push(...(declarationsByImport.get(importIndex) ?? []))
       importIndex += 1
     }
   }
@@ -167,6 +186,40 @@ function createImportAliasDeclaration(specifier: AnyNode, importedProgram: Progr
       loc: specifier.loc,
       valueType: exported.valueType ?? 'unknown'
     }
+  }
+}
+
+function createTypeImportDeclaration(specifier: AnyNode, exported: AnyNode): AnyNode {
+  return {
+    ...exported,
+    exported: false,
+    name: specifier.local,
+    loc: specifier.loc,
+    valueType: cloneTypeAliasValue(exported.valueType)
+  }
+}
+
+function cloneTypeAliasValue(valueType: AnyNode): AnyNode {
+  if (valueType?.kind === 'object') {
+    return {
+      ...valueType,
+      fields: valueType.fields.map(field => ({
+        ...field
+      }))
+    }
+  }
+
+  if (valueType?.kind === 'function') {
+    return {
+      ...valueType,
+      params: valueType.params.map(param => ({
+        ...param
+      }))
+    }
+  }
+
+  return {
+    ...valueType
   }
 }
 
@@ -218,7 +271,7 @@ export function collectExports(ast: ProgramNode): Map<string, AnyNode> {
   const exports = new Map<string, AnyNode>()
 
   for (const item of ast.body) {
-    if ((item.type === 'FunctionDeclaration' || item.type === 'VariableDeclaration') && item.exported) {
+    if ((item.type === 'FunctionDeclaration' || item.type === 'VariableDeclaration' || item.type === 'TypeAliasDeclaration') && item.exported) {
       exports.set(item.name, item)
     }
   }

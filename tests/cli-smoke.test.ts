@@ -293,6 +293,21 @@ test('ccjs run --target c runs a module graph with import aliases', async t => {
   assert.equal(result.stderr, '')
 })
 
+test('ccjs run --target c runs a module graph with type imports', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const result = await runCli(['run', 'tests/fixtures/modules/type-import/main.ts', '--target', 'c'])
+
+  assert.equal(result.code, 0)
+  assert.equal(result.stdout, 'Ada\n')
+  assert.equal(result.stderr, '')
+})
+
 test('ccjs run --target c --keep keeps temporary C artifacts', async t => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -369,6 +384,14 @@ test('ccjs file runs a module graph with import aliases', async () => {
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'from alias\n')
+  assert.equal(result.stderr, '')
+})
+
+test('ccjs file runs a module graph with type imports', async () => {
+  const result = await runCli(['tests/fixtures/modules/type-import/main.ts'])
+
+  assert.equal(result.code, 0)
+  assert.equal(result.stdout, 'Ada\n')
   assert.equal(result.stderr, '')
 })
 
