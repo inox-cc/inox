@@ -880,6 +880,21 @@ test('compiles for of loops over inline array literals to C', () => {
   assert.match(c.code, /double value = ccjs_for_value_\d+\.as\.number;/)
 })
 
+test('compiles for of loops over inline string array literals to C', () => {
+  const c = compileSource(`export function main(): void {
+  for (const name of ['Ada', 'Grace']) {
+    console.log(name)
+  }
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /ccjs_array_new\(&ccjs_default_allocator, 2, &ccjs_for_array_\d+\)/)
+  assert.match(c.code, /ccjs_string\* name = \(ccjs_string\*\)ccjs_for_value_\d+\.as\.ref;/)
+  assert.match(c.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
+})
+
 test('compiles switch statements to JS and C', () => {
   const source = `export function main(): void {
   const code = 2
