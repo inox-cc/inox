@@ -3725,7 +3725,7 @@ function emitPreparedStringLengthExpression(expression, context) {
 
   return {
     lines: operand.lines,
-    expression: operand.length
+    expression: `((double)${operand.length})`
   }
 }
 
@@ -4543,7 +4543,7 @@ function emitArrayMapVariableDeclaration(statement, mapped, context) {
 }
 
 function emitPreparedArraySortCallExpression(expression, context) {
-  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'sort' || expression.args.length !== 0) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'sort' || expression.args.length > 1) {
     return null
   }
 
@@ -4553,10 +4553,67 @@ function emitPreparedArraySortCallExpression(expression, context) {
     return null
   }
 
+  if (expression.args.length === 1) {
+    return emitPreparedArrayComparatorSortCallExpression(expression, receiver, context)
+  }
+
   return {
     lines: [
       ...receiver.lines,
       emitStatusCheck(`ccjs_array_sort(${receiver.expression})`, context)
+    ],
+    expression: receiver.expression,
+    elementType: receiver.elementType
+  }
+}
+
+function emitPreparedArrayComparatorSortCallExpression(expression, receiver, context) {
+  const callback = expression.args[0]
+
+  if (callback?.type !== 'ArrowFunctionExpression' || !callback.expressionBody || callback.params.length > 2 || !['number', 'boolean', 'string'].includes(receiver.elementType)) {
+    return null
+  }
+
+  const length = nextCName(context, 'ccjs_sort_length')
+  const index = nextCName(context, 'ccjs_sort_index')
+  const scan = nextCName(context, 'ccjs_sort_scan')
+  const left = nextCName(context, 'ccjs_sort_left')
+  const right = nextCName(context, 'ccjs_sort_right')
+  const compare = nextCName(context, 'ccjs_sort_compare')
+
+  registerOwnedValue(context, left)
+  registerOwnedValue(context, right)
+
+  const body = withVariableScope(context, () => {
+    const input = emitPreparedArraySortComparatorInput(callback, receiver, left, right, context)
+    const result = emitPreparedNumberExpression(callback.body, context)
+
+    return [
+      ...input,
+      ...result.lines,
+      `double ${compare} = ${result.expression};`,
+      `if (!(${compare} > 0)) break;`,
+      emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan} - 1, ${right})`, context),
+      emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan}, ${left})`, context)
+    ]
+  })
+
+  return {
+    lines: [
+      ...receiver.lines,
+      `size_t ${length} = 0;`,
+      emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context),
+      `for (size_t ${index} = 1; ${index} < ${length}; ${index} += 1) {`,
+      `  for (size_t ${scan} = ${index}; ${scan} > 0; ${scan} -= 1) {`,
+      ...emitPrepareOwnedValueWrite(left).map(line => `    ${line}`),
+      `    ${emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${scan} - 1, &${left})`, context)}`,
+      ...emitPrepareOwnedValueWrite(right).map(line => `    ${line}`),
+      `    ${emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${scan}, &${right})`, context)}`,
+      ...body.map(line => `    ${line}`),
+      '  }',
+      '}',
+      ...emitPrepareOwnedValueWrite(right),
+      ...emitPrepareOwnedValueWrite(left)
     ],
     expression: receiver.expression,
     elementType: receiver.elementType
@@ -4733,7 +4790,59 @@ function emitPreparedArrayMapValue(expression, valueType, context) {
   }
 }
 
+function emitPreparedArraySortComparatorInput(callback, receiver, left, right, context) {
+  const lines: string[] = []
+  const leftParam = callback.params[0]
+  const rightParam = callback.params[1]
+
+  if (leftParam != null) {
+    lines.push(...emitPreparedArraySortComparatorParam(leftParam.name, receiver.elementType, left, context))
+  }
+
+  if (rightParam != null) {
+    lines.push(...emitPreparedArraySortComparatorParam(rightParam.name, receiver.elementType, right, context))
+  }
+
+  return lines
+}
+
+function emitPreparedArraySortComparatorParam(name, elementType, value, context) {
+  context.variables.set(name, elementType)
+
+  if (elementType === 'string') {
+    context.runtimeStrings.add(name)
+    return [
+      emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context),
+      `ccjs_string* ${name} = (ccjs_string*)${value}.as.ref;`
+    ]
+  }
+
+  if (elementType === 'boolean') {
+    return [
+      emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context),
+      `double ${name} = (${value}.as.boolean ? 1 : 0);`
+    ]
+  }
+
+  return [
+    emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context),
+    `double ${name} = ${value}.as.number;`
+  ]
+}
+
 function emitPreparedArrayReceiver(expression, context) {
+  if (expression?.type === 'ArrayLiteral') {
+    const value = emitCArrayLiteralValueExpression(expression, context)
+
+    return {
+      lines: value.lines,
+      expression: value.expression,
+      elementType: resolveForOfElementType(expression.elements.map(element => ({
+        valueType: inferExpressionType(element, context)
+      })))
+    }
+  }
+
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 

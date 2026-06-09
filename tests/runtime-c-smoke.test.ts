@@ -2085,6 +2085,61 @@ test('generated C Array.sort without comparator compiles and runs with runtime s
   }
 })
 
+test('generated C Array.sort comparator callbacks compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-sort-callback-'))
+  const source = join(dir, 'array-sort-callback.c')
+  const output = join(dir, 'array-sort-callback')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = [3, 1, 2]
+  values.sort((left, right) => left - right)
+  console.log(values[0], values[1], values[2])
+
+  const desc = [1, 3, 2]
+  const sortedDesc = desc.sort((left, right) => right - left)
+  console.log(sortedDesc[0], sortedDesc[1], sortedDesc[2])
+
+  const names = ['bbb', 'a', 'cc']
+  names.sort((left, right) => left.length - right.length)
+  console.log(names[0], names[1], names[2])
+
+  const flags = [true, false, true]
+  flags.sort((left, right) => left - right)
+  console.log(flags[0], flags[1], flags[2])
+
+  const chained = [5, 1, 4, 2].filter(value => value > 1).sort((left, right) => left - right).map(value => value * 10)
+  console.log(chained.length, chained[0], chained[1], chained[2])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 2 3\n3 2 1\na cc bbb\n0 1 1\n3 20 40 50\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C Array.filter expression callbacks compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

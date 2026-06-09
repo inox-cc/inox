@@ -344,9 +344,9 @@ export function main(): void {
   })
 
   assert.match(result.code, /#include <string\.h>/)
-  assert.match(result.code, /ccjs_return = name->len;/)
+  assert.match(result.code, /ccjs_return = \(\(double\)name->len\);/)
   assert.match(result.code, /ccjs_string\* ccjs_length_string_\d+ = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
-  assert.match(result.code, /printf\("%g %g %g %g %g\\n", \(\(double\)3\), \(\(double\)length\(ccjs_value_\d+\)\), \(\(double\)ccjs_length_string_\d+->len\), \(\(double\)ccjs_length_string_\d+->len\), \(\(double\)message->len\)\);/)
+  assert.match(result.code, /printf\("%g %g %g %g %g\\n", \(\(double\)\(\(double\)3\)\), \(\(double\)length\(ccjs_value_\d+\)\), \(\(double\)\(\(double\)ccjs_length_string_\d+->len\)\), \(\(double\)\(\(double\)ccjs_length_string_\d+->len\)\), \(\(double\)\(\(double\)message->len\)\)\);/)
 })
 
 test('lowers C string predicate methods for literals and runtime strings', () => {
@@ -1979,7 +1979,7 @@ export async function main(): void {
   })
 })
 
-test('compiles arrow functions and chain calls to JS and rejects them for C', () => {
+test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]
   const result = values.sort((left: number, right: number) => left - right).filter(value => value > 1).map(value => value * 2)
@@ -1993,9 +1993,13 @@ test('compiles arrow functions and chain calls to JS and rejects them for C', ()
   assert.match(js.code, /\(left, right\) => \(left - right\)/)
   assert.match(js.code, /value => \(value > 1\)/)
   assert.match(js.code, /value => \(value \* 2\)/)
-  assertDiagnostic(source, 'CCJS_C_ARRAY_METHOD', {
+  const c = compileSource(source, {
     target: 'c'
   })
+
+  assert.match(c.code, /ccjs_array_set\(values, ccjs_sort_scan_\d+ - 1, ccjs_sort_right_\d+\)/)
+  assert.match(c.code, /ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
+  assert.match(c.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value/)
 })
 
 test('injects Node fs prelude when fs is referenced', () => {
