@@ -6,6 +6,9 @@ type ResolvedTypeInfo = {
   functionType: AnyNode | null
   shape: ObjectShapeInfo | null
   arrayElementType: ValueType | null
+  mapKeyType: ValueType | null
+  mapValueType: ValueType | null
+  setElementType: ValueType | null
 }
 
 const globals = new Map<string, SymbolInfo>([
@@ -226,6 +229,9 @@ class Checker {
           params: item.params.map(param => this.resolveParam(param)),
           returnType: returnInfo.valueType,
           returnArrayElementType: returnInfo.arrayElementType,
+          returnMapKeyType: returnInfo.mapKeyType,
+          returnMapValueType: returnInfo.mapValueType,
+          returnSetElementType: returnInfo.setElementType,
           async: item.async,
           loc: item.loc
         }, item.loc)
@@ -250,6 +256,9 @@ class Checker {
       ...param,
       valueType: paramInfo.valueType,
       arrayElementType: paramInfo.arrayElementType,
+      mapKeyType: paramInfo.mapKeyType,
+      mapValueType: paramInfo.mapValueType,
+      setElementType: paramInfo.setElementType,
       functionType: paramInfo.functionType,
       shape: paramInfo.shape
     }
@@ -278,6 +287,9 @@ class Checker {
             mutable: true,
             valueType: paramInfo.valueType,
             arrayElementType: paramInfo.arrayElementType,
+            mapKeyType: paramInfo.mapKeyType,
+            mapValueType: paramInfo.mapValueType,
+            setElementType: paramInfo.setElementType,
             functionType: paramInfo.functionType,
             shape: paramInfo.shape,
             loc: param.loc
@@ -387,6 +399,13 @@ class Checker {
       const initType = statement.init == null ? 'unknown' : this.checkExpression(statement.init)
       const valueType = declared?.valueType ?? initType
       const arrayElementType = declared?.arrayElementType ?? this.resolveExpressionArrayElementType(statement.init)
+      const mapType = declared?.valueType === 'map'
+        ? {
+            key: declared.mapKeyType,
+            value: declared.mapValueType
+          }
+        : this.resolveExpressionMapType(statement.init)
+      const setElementType = declared?.valueType === 'set' ? declared.setElementType : this.resolveExpressionSetElementType(statement.init)
 
       if (declared?.shape != null && statement.init?.type === 'ObjectLiteral') {
         this.checkObjectLiteralAgainstShape(statement.init, declared.shape)
@@ -397,6 +416,9 @@ class Checker {
         mutable: statement.kind === 'let',
         valueType,
         arrayElementType,
+        mapKeyType: mapType?.key ?? null,
+        mapValueType: mapType?.value ?? null,
+        setElementType,
         functionType: declared?.functionType ?? null,
         shape: declared?.shape ?? null,
         loc: statement.loc
@@ -407,6 +429,22 @@ class Checker {
 
         if (declared.valueType === 'array' && declared.arrayElementType != null) {
           this.checkAssignableType(this.resolveExpressionArrayElementType(statement.init), declared.arrayElementType, statement.loc)
+        }
+
+        if (declared.valueType === 'map') {
+          const actual = this.resolveExpressionMapType(statement.init)
+
+          if (declared.mapKeyType != null) {
+            this.checkAssignableType(actual?.key, declared.mapKeyType, statement.loc)
+          }
+
+          if (declared.mapValueType != null) {
+            this.checkAssignableType(actual?.value, declared.mapValueType, statement.loc)
+          }
+        }
+
+        if (declared.valueType === 'set' && declared.setElementType != null) {
+          this.checkAssignableType(this.resolveExpressionSetElementType(statement.init), declared.setElementType, statement.loc)
         }
       }
 
@@ -610,6 +648,10 @@ class Checker {
       return 'number'
     }
 
+    if ((objectType === 'map' || objectType === 'set') && expression.property === 'size') {
+      return 'number'
+    }
+
     const shape = this.resolveExpressionShape(expression.object)
 
     if (shape == null) {
@@ -641,6 +683,11 @@ class Checker {
       return valueType
     }
 
+    if ((targetType === 'map' || targetType === 'set') && expression.target.property === 'size') {
+      this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field size', expression.target.loc)
+      return valueType
+    }
+
     if (shape == null) {
       return valueType
     }
@@ -661,6 +708,22 @@ class Checker {
 
     if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
       this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
+    }
+
+    if (fieldType.valueType === 'map') {
+      const actual = this.resolveExpressionMapType(expression.value)
+
+      if (fieldType.mapKeyType != null) {
+        this.checkAssignableType(actual?.key, fieldType.mapKeyType, expression.value.loc)
+      }
+
+      if (fieldType.mapValueType != null) {
+        this.checkAssignableType(actual?.value, fieldType.mapValueType, expression.value.loc)
+      }
+    }
+
+    if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
+      this.checkAssignableType(this.resolveExpressionSetElementType(expression.value), fieldType.setElementType, expression.value.loc)
     }
 
     return valueType
@@ -731,6 +794,22 @@ class Checker {
       this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
     }
 
+    if (fieldType.valueType === 'map') {
+      const actual = this.resolveExpressionMapType(expression.value)
+
+      if (fieldType.mapKeyType != null) {
+        this.checkAssignableType(actual?.key, fieldType.mapKeyType, expression.value.loc)
+      }
+
+      if (fieldType.mapValueType != null) {
+        this.checkAssignableType(actual?.value, fieldType.mapValueType, expression.value.loc)
+      }
+    }
+
+    if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
+      this.checkAssignableType(this.resolveExpressionSetElementType(expression.value), fieldType.setElementType, expression.value.loc)
+    }
+
     return valueType
   }
 
@@ -765,6 +844,12 @@ class Checker {
       return arrayMethodType
     }
 
+    const collectionMethodType = this.checkCollectionMethodCall(expression)
+
+    if (collectionMethodType != null) {
+      return collectionMethodType
+    }
+
     const calleeType = this.checkExpression(expression.callee)
     const argTypes = expression.args.map(arg => this.checkExpression(arg))
     const symbol = this.getCallableSymbol(expression.callee)
@@ -772,6 +857,12 @@ class Checker {
     if (symbol == null) {
       return calleeType === 'function' ? 'unknown' : 'unknown'
     }
+
+    expression.valueType = symbol.returnType ?? 'unknown'
+    expression.arrayElementType = symbol.returnArrayElementType ?? null
+    expression.mapKeyType = symbol.returnMapKeyType ?? null
+    expression.mapValueType = symbol.returnMapValueType ?? null
+    expression.setElementType = symbol.returnSetElementType ?? null
 
     if (symbol.params == null) {
       return symbol.returnType ?? 'unknown'
@@ -788,6 +879,105 @@ class Checker {
     }
 
     return symbol.returnType ?? 'unknown'
+  }
+
+  checkCollectionMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression') {
+      return null
+    }
+
+    const property = expression.callee.property
+    const objectType = this.checkExpression(expression.callee.object)
+
+    if (objectType === 'map' && isMapMethod(property)) {
+      const mapType = this.resolveExpressionMapType(expression.callee.object) ?? {
+        key: 'unknown',
+        value: 'unknown'
+      }
+
+      if (property === 'clear') {
+        this.checkCollectionArgCount(expression, 'map.clear', 0)
+        expression.valueType = 'void'
+        return 'void'
+      }
+
+      if (property === 'get' || property === 'has' || property === 'delete') {
+        this.checkCollectionArgCount(expression, `map.${property}`, 1)
+
+        if (expression.args[0] != null) {
+          this.checkAssignableType(this.checkExpression(expression.args[0]), mapType.key, expression.args[0].loc)
+        }
+
+        for (const arg of expression.args.slice(1)) {
+          this.checkExpression(arg)
+        }
+
+        if (property === 'get') {
+          expression.valueType = mapType.value ?? 'unknown'
+          return mapType.value ?? 'unknown'
+        }
+
+        expression.valueType = 'boolean'
+        return 'boolean'
+      }
+
+      this.checkCollectionArgCount(expression, 'map.set', 2)
+
+      if (expression.args[0] != null) {
+        this.checkAssignableType(this.checkExpression(expression.args[0]), mapType.key, expression.args[0].loc)
+      }
+
+      if (expression.args[1] != null) {
+        this.checkAssignableType(this.checkExpression(expression.args[1]), mapType.value, expression.args[1].loc)
+      }
+
+      for (const arg of expression.args.slice(2)) {
+        this.checkExpression(arg)
+      }
+
+      expression.valueType = 'map'
+      expression.mapKeyType = mapType.key
+      expression.mapValueType = mapType.value
+
+      return 'map'
+    }
+
+    if (objectType === 'set' && isSetMethod(property)) {
+      const elementType = this.resolveExpressionSetElementType(expression.callee.object) ?? 'unknown'
+
+      if (property === 'clear') {
+        this.checkCollectionArgCount(expression, 'set.clear', 0)
+        expression.valueType = 'void'
+        return 'void'
+      }
+
+      this.checkCollectionArgCount(expression, `set.${property}`, 1)
+
+      if (expression.args[0] != null) {
+        this.checkAssignableType(this.checkExpression(expression.args[0]), elementType, expression.args[0].loc)
+      }
+
+      for (const arg of expression.args.slice(1)) {
+        this.checkExpression(arg)
+      }
+
+      if (property === 'add') {
+        expression.valueType = 'set'
+        expression.setElementType = elementType
+        return 'set'
+      }
+
+      expression.valueType = 'boolean'
+      return 'boolean'
+    }
+
+    return null
+  }
+
+  checkCollectionArgCount(expression: AnyNode, name: string, expected: number): void {
+    if (expression.args.length !== expected) {
+      this.report('CCJS_ARG_COUNT', `${name} expects ${expected} argument(s), got ${expression.args.length}`, expression.loc)
+    }
   }
 
   checkArrayMethodCall(expression: AnyNode): ValueType | null {
@@ -1003,6 +1193,19 @@ class Checker {
       return 'object'
     }
 
+    if (expression.callee.path[0] === 'Map') {
+      expression.valueType = 'map'
+      expression.mapKeyType = 'unknown'
+      expression.mapValueType = 'unknown'
+      return 'map'
+    }
+
+    if (expression.callee.path[0] === 'Set') {
+      expression.valueType = 'set'
+      expression.setElementType = 'unknown'
+      return 'set'
+    }
+
     const symbol = this.scope.resolve(expression.callee.path[0]) ?? globals.get(expression.callee.path[0])
 
     if (symbol?.kind !== 'class' && !symbol?.constructable) {
@@ -1032,10 +1235,18 @@ class Checker {
   checkArrowFunctionExpression(expression: AnyNode): void {
     this.withScope(() => {
       for (const param of expression.params) {
+        const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
+
         this.declare(param.name, {
           kind: 'param',
           mutable: true,
-          valueType: param.valueType,
+          valueType: paramInfo.valueType,
+          arrayElementType: paramInfo.arrayElementType,
+          mapKeyType: paramInfo.mapKeyType,
+          mapValueType: paramInfo.mapValueType,
+          setElementType: paramInfo.setElementType,
+          functionType: paramInfo.functionType,
+          shape: paramInfo.shape,
           loc: param.loc
         }, param.loc)
       }
@@ -1074,6 +1285,10 @@ class Checker {
             kind: 'param',
             mutable: true,
             valueType: paramInfo.valueType,
+            arrayElementType: paramInfo.arrayElementType,
+            mapKeyType: paramInfo.mapKeyType,
+            mapValueType: paramInfo.mapValueType,
+            setElementType: paramInfo.setElementType,
             functionType: paramInfo.functionType,
             shape: paramInfo.shape,
             loc: param.loc
@@ -1107,6 +1322,22 @@ class Checker {
 
       if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
         this.checkAssignableType(this.resolveExpressionArrayElementType(property.value), fieldType.arrayElementType, property.loc)
+      }
+
+      if (fieldType.valueType === 'map') {
+        const actual = this.resolveExpressionMapType(property.value)
+
+        if (fieldType.mapKeyType != null) {
+          this.checkAssignableType(actual?.key, fieldType.mapKeyType, property.loc)
+        }
+
+        if (fieldType.mapValueType != null) {
+          this.checkAssignableType(actual?.value, fieldType.mapValueType, property.loc)
+        }
+      }
+
+      if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
+        this.checkAssignableType(this.resolveExpressionSetElementType(property.value), fieldType.setElementType, property.loc)
       }
     }
 
@@ -1146,6 +1377,10 @@ class Checker {
         valueType: 'function',
         params: symbol.functionType.params,
         returnType: symbol.functionType.returnType,
+        returnArrayElementType: symbol.functionType.returnArrayElementType,
+        returnMapKeyType: symbol.functionType.returnMapKeyType,
+        returnMapValueType: symbol.functionType.returnMapValueType,
+        returnSetElementType: symbol.functionType.returnSetElementType,
         loc: symbol.loc
       }
     }
@@ -1287,7 +1522,10 @@ class Checker {
         valueType: 'unknown',
         functionType: null,
         shape: null,
-        arrayElementType: null
+        arrayElementType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        setElementType: null
       }
     }
 
@@ -1300,7 +1538,43 @@ class Checker {
         valueType: 'array',
         functionType: null,
         shape: null,
-        arrayElementType: elementInfo?.valueType ?? 'unknown'
+        arrayElementType: elementInfo?.valueType ?? 'unknown',
+        mapKeyType: null,
+        mapValueType: null,
+        setElementType: null
+      }
+    }
+
+    const mapTypeNames = mapTypeNamesFromTypeName(name)
+
+    if (name === 'map' || mapTypeNames != null) {
+      const keyInfo = mapTypeNames == null ? null : this.resolveDeclaredType(mapTypeNames.key, loc)
+      const valueInfo = mapTypeNames == null ? null : this.resolveDeclaredType(mapTypeNames.value, loc)
+
+      return {
+        valueType: 'map',
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        mapKeyType: keyInfo?.valueType ?? 'unknown',
+        mapValueType: valueInfo?.valueType ?? 'unknown',
+        setElementType: null
+      }
+    }
+
+    const setElementTypeName = setElementTypeNameFromTypeName(name)
+
+    if (name === 'set' || setElementTypeName != null) {
+      const elementInfo = setElementTypeName == null ? null : this.resolveDeclaredType(setElementTypeName, loc)
+
+      return {
+        valueType: 'set',
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        setElementType: elementInfo?.valueType ?? 'unknown'
       }
     }
 
@@ -1309,7 +1583,10 @@ class Checker {
         valueType: name,
         functionType: null,
         shape: null,
-        arrayElementType: null
+        arrayElementType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        setElementType: null
       }
     }
 
@@ -1317,6 +1594,8 @@ class Checker {
 
     if (shape != null) {
       if (shape.kind === 'function') {
+        const returnInfo = this.resolveDeclaredType(shape.returnType, loc)
+
         return {
           valueType: 'function',
           functionType: {
@@ -1328,13 +1607,24 @@ class Checker {
                 ...param,
                 valueType: paramInfo.valueType,
                 arrayElementType: paramInfo.arrayElementType,
+                mapKeyType: paramInfo.mapKeyType,
+                mapValueType: paramInfo.mapValueType,
+                setElementType: paramInfo.setElementType,
                 functionType: paramInfo.functionType,
                 shape: paramInfo.shape
               }
-            })
+            }),
+            returnType: returnInfo.valueType,
+            returnArrayElementType: returnInfo.arrayElementType,
+            returnMapKeyType: returnInfo.mapKeyType,
+            returnMapValueType: returnInfo.mapValueType,
+            returnSetElementType: returnInfo.setElementType
           },
           shape: null,
-          arrayElementType: null
+          arrayElementType: null,
+          mapKeyType: null,
+          mapValueType: null,
+          setElementType: null
         }
       }
 
@@ -1342,7 +1632,10 @@ class Checker {
         valueType: 'object',
         functionType: null,
         shape: this.resolveObjectShape(shape),
-        arrayElementType: null
+        arrayElementType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        setElementType: null
       }
     }
 
@@ -1352,7 +1645,10 @@ class Checker {
       valueType: 'unknown',
       functionType: null,
       shape: null,
-      arrayElementType: null
+      arrayElementType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      setElementType: null
     }
   }
 
@@ -1367,6 +1663,9 @@ class Checker {
           declaredType: field.valueType,
           valueType: fieldInfo.valueType,
           arrayElementType: fieldInfo.arrayElementType,
+          mapKeyType: fieldInfo.mapKeyType,
+          mapValueType: fieldInfo.mapValueType,
+          setElementType: fieldInfo.setElementType,
           functionType: fieldInfo.functionType,
           shape: fieldInfo.shape
         }
@@ -1403,6 +1702,90 @@ class Checker {
       const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
 
       return field?.arrayElementType ?? null
+    }
+
+    return null
+  }
+
+  resolveExpressionMapType(expression: AnyNode | null | undefined): { key: ValueType | null, value: ValueType | null } | null {
+    if (expression == null) {
+      return null
+    }
+
+    if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+      return expression.valueType === 'map'
+        ? {
+            key: expression.mapKeyType ?? null,
+            value: expression.mapValueType ?? null
+          }
+        : null
+    }
+
+    if (expression.type === 'Reference' && expression.path.length === 1) {
+      const symbol = this.scope.resolve(expression.path[0])
+
+      return symbol?.valueType === 'map'
+        ? {
+            key: symbol.mapKeyType ?? null,
+            value: symbol.mapValueType ?? null
+          }
+        : null
+    }
+
+    if (expression.type === 'MemberExpression') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+
+      return field?.valueType === 'map'
+        ? {
+            key: field.mapKeyType ?? null,
+            value: field.mapValueType ?? null
+          }
+        : null
+    }
+
+    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+
+      return field?.valueType === 'map'
+        ? {
+            key: field.mapKeyType ?? null,
+            value: field.mapValueType ?? null
+          }
+        : null
+    }
+
+    return null
+  }
+
+  resolveExpressionSetElementType(expression: AnyNode | null | undefined): ValueType | null {
+    if (expression == null) {
+      return null
+    }
+
+    if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+      return expression.valueType === 'set' ? expression.setElementType ?? null : null
+    }
+
+    if (expression.type === 'Reference' && expression.path.length === 1) {
+      const symbol = this.scope.resolve(expression.path[0])
+
+      return symbol?.valueType === 'set' ? symbol.setElementType ?? null : null
+    }
+
+    if (expression.type === 'MemberExpression') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+
+      return field?.valueType === 'set' ? field.setElementType ?? null : null
+    }
+
+    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+
+      return field?.valueType === 'set' ? field.setElementType ?? null : null
     }
 
     return null
@@ -1507,6 +1890,14 @@ function isArrayMethod(name: string): boolean {
   return ['sort', 'filter', 'map'].includes(name)
 }
 
+function isMapMethod(name: string): boolean {
+  return ['clear', 'delete', 'get', 'has', 'set'].includes(name)
+}
+
+function isSetMethod(name: string): boolean {
+  return ['add', 'clear', 'delete', 'has'].includes(name)
+}
+
 function isEqualityComparableType(left: ValueType, right: ValueType): boolean {
   if (left === 'unknown' || right === 'unknown') {
     return true
@@ -1535,6 +1926,53 @@ function arrayElementTypeNameFromTypeName(name: string): string | null {
   const match = /^array<(.+)>$/.exec(name)
 
   return match?.[1] ?? null
+}
+
+function mapTypeNamesFromTypeName(name: string): { key: string, value: string } | null {
+  const match = /^map<(.+)>$/.exec(name)
+
+  if (match == null) {
+    return null
+  }
+
+  const args = splitGenericArgs(match[1])
+
+  return args.length === 2
+    ? {
+        key: args[0],
+        value: args[1]
+      }
+    : null
+}
+
+function setElementTypeNameFromTypeName(name: string): string | null {
+  const match = /^set<(.+)>$/.exec(name)
+  const args = match == null ? [] : splitGenericArgs(match[1])
+
+  return args.length === 1 ? args[0] : null
+}
+
+function splitGenericArgs(value: string): string[] {
+  const args: string[] = []
+  let depth = 0
+  let start = 0
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+
+    if (char === '<') {
+      depth += 1
+    } else if (char === '>') {
+      depth -= 1
+    } else if (char === ',' && depth === 0) {
+      args.push(value.slice(start, index))
+      start = index + 1
+    }
+  }
+
+  args.push(value.slice(start))
+
+  return args.map(arg => arg.trim()).filter(Boolean)
 }
 
 function commonArrayElementType(types: ValueType[]): ValueType {

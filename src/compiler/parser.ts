@@ -1223,9 +1223,22 @@ class Parser {
 
   parseTypeAnnotation(values: string[]): string {
     const parts: string[] = []
+    let genericDepth = 0
 
-    while (!this.is('eof') && !values.includes(this.current().value)) {
-      parts.push(this.current().value)
+    while (!this.is('eof')) {
+      const token = this.current()
+
+      if (genericDepth === 0 && values.includes(token.value)) {
+        break
+      }
+
+      if (token.value === '<') {
+        genericDepth += 1
+      } else if (token.value === '>' && genericDepth > 0) {
+        genericDepth -= 1
+      }
+
+      parts.push(token.value)
       this.advance()
     }
 
@@ -1417,12 +1430,36 @@ function normalizeTypeName(name: string): string {
     return `array<${normalizeTypeName(arrayMatch[1])}>`
   }
 
+  const mapMatch = /^Map<(.+)>$/.exec(name)
+
+  if (mapMatch != null) {
+    const args = splitGenericArgs(mapMatch[1])
+
+    return args.length === 2 ? `map<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>` : 'map'
+  }
+
+  const setMatch = /^Set<(.+)>$/.exec(name)
+
+  if (setMatch != null) {
+    const args = splitGenericArgs(setMatch[1])
+
+    return args.length === 1 ? `set<${normalizeTypeName(args[0])}>` : 'set'
+  }
+
   if (['number', 'string', 'boolean', 'void', 'null', 'unknown'].includes(name)) {
     return name
   }
 
   if (name === 'Array' || name === 'array') {
     return 'array'
+  }
+
+  if (name === 'Map' || name === 'map') {
+    return 'map'
+  }
+
+  if (name === 'Set' || name === 'set') {
+    return 'set'
   }
 
   if (name === 'Function' || name === 'function') {
@@ -1434,4 +1471,27 @@ function normalizeTypeName(name: string): string {
   }
 
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : 'unknown'
+}
+
+function splitGenericArgs(value: string): string[] {
+  const args: string[] = []
+  let depth = 0
+  let start = 0
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+
+    if (char === '<') {
+      depth += 1
+    } else if (char === '>') {
+      depth -= 1
+    } else if (char === ',' && depth === 0) {
+      args.push(value.slice(start, index))
+      start = index + 1
+    }
+  }
+
+  args.push(value.slice(start))
+
+  return args.map(arg => arg.trim()).filter(Boolean)
 }

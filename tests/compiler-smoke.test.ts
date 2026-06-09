@@ -2440,6 +2440,79 @@ test('checks Array sort filter map as typed chain calls', () => {
 `, 'CCJS_TYPE_MISMATCH')
 })
 
+test('checks Map and Set generic methods as typed chain calls', () => {
+  const result = compileSource(`function makeScores(): Map<string, number> {
+  return new Map()
+}
+
+function makeNames(): Set<string> {
+  return new Set()
+}
+
+export function main(): void {
+  const scores = makeScores()
+  const score = scores.set('Ada', 7).get('Ada')
+  const hasAda = scores.has('Ada')
+  const removed = scores.delete('Ada')
+  const names = makeNames()
+  const hasName = names.add('Ada').has('Ada')
+  console.log(score, hasAda, removed, hasName, scores.size, names.size)
+}
+`, {
+    target: 'js'
+  })
+  const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+  const scores = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'scores')
+  const score = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'score')
+  const hasAda = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'hasAda')
+  const removed = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'removed')
+  const names = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'names')
+  const hasName = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'hasName')
+  assert.ok(scores)
+  assert.ok(score)
+  assert.ok(hasAda)
+  assert.ok(removed)
+  assert.ok(names)
+  assert.ok(hasName)
+
+  assert.equal(scores.valueType, 'map')
+  assert.equal(scores.mapKeyType, 'string')
+  assert.equal(scores.mapValueType, 'number')
+  assert.equal(score.valueType, 'number')
+  assert.equal(hasAda.valueType, 'boolean')
+  assert.equal(removed.valueType, 'boolean')
+  assert.equal(names.valueType, 'set')
+  assert.equal(names.setElementType, 'string')
+  assert.equal(hasName.valueType, 'boolean')
+  assert.match(result.code, /\.set\("Ada", 7\)\.get\("Ada"\)/)
+  assert.match(result.code, /\.add\("Ada"\)\.has\("Ada"\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const scores: Map<string, number> = new Map()
+  scores.get(1)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const scores: Map<string, number> = new Map()
+  scores.set('Ada', '7')
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const names: Set<string> = new Set()
+  names.add(1)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const scores: Map<string, number> = new Map()
+  scores.size = 1
+}
+`, 'CCJS_ASSIGN_READONLY_FIELD')
+})
+
 test('checks string predicate methods as boolean calls', () => {
   const result = compileSource(`function hasAda(name: string): boolean {
   return name.includes('Ada') && name.startsWith('A') && name.endsWith('a')

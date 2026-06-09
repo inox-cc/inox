@@ -7,6 +7,9 @@ type LowerContext = {
 type LowerResolvedType = {
   valueType: string | null
   arrayElementType: string | null
+  mapKeyType: string | null
+  mapValueType: string | null
+  setElementType: string | null
   shape: AnyNode | null
   functionType: AnyNode | null
 }
@@ -45,6 +48,9 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       params: item.params.map(param => lowerParam(param, context)),
       returnType: returnType.valueType ?? item.returnType,
       returnArrayElementType: returnType.arrayElementType,
+      returnMapKeyType: returnType.mapKeyType,
+      returnMapValueType: returnType.mapValueType,
+      returnSetElementType: returnType.setElementType,
       body: item.body.map(statement => lowerStatement(statement, context))
     }
   }
@@ -155,6 +161,7 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
   if (statement.type === 'VariableDeclaration') {
     const init = statement.init == null ? null : lowerExpression(statement.init, context)
     const declared = resolveDeclaredType(statement.declaredType, context)
+    const inferredMapType = inferMapType(init)
 
     return {
       type: 'VariableDeclaration',
@@ -166,6 +173,9 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       shape: declared.shape,
       functionType: declared.functionType,
       arrayElementType: declared.arrayElementType ?? inferArrayElementType(init),
+      mapKeyType: declared.mapKeyType ?? inferredMapType?.key ?? null,
+      mapValueType: declared.mapValueType ?? inferredMapType?.value ?? null,
+      setElementType: declared.setElementType ?? inferSetElementType(init),
       valueType: declared.valueType ?? statement.declaredType ?? init?.valueType ?? 'unknown',
       init
     }
@@ -212,6 +222,9 @@ function lowerParam(param: AnyNode, context: LowerContext): AnyNode {
     ...param,
     valueType: declared.valueType ?? param.valueType,
     arrayElementType: declared.arrayElementType,
+    mapKeyType: declared.mapKeyType,
+    mapValueType: declared.mapValueType,
+    setElementType: declared.setElementType,
     functionType: declared.functionType,
     shape: declared.shape
   }
@@ -222,6 +235,9 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
     return {
       valueType: null,
       arrayElementType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      setElementType: null,
       shape: null,
       functionType: null
     }
@@ -235,6 +251,42 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
     return {
       valueType: 'array',
       arrayElementType: elementType?.valueType ?? 'unknown',
+      mapKeyType: null,
+      mapValueType: null,
+      setElementType: null,
+      shape: null,
+      functionType: null
+    }
+  }
+
+  const mapTypeNames = mapTypeNamesFromTypeName(name)
+
+  if (name === 'map' || mapTypeNames != null) {
+    const keyType = mapTypeNames == null ? null : resolveDeclaredType(mapTypeNames.key, context)
+    const valueType = mapTypeNames == null ? null : resolveDeclaredType(mapTypeNames.value, context)
+
+    return {
+      valueType: 'map',
+      arrayElementType: null,
+      mapKeyType: keyType?.valueType ?? 'unknown',
+      mapValueType: valueType?.valueType ?? 'unknown',
+      setElementType: null,
+      shape: null,
+      functionType: null
+    }
+  }
+
+  const setElementTypeName = setElementTypeNameFromTypeName(name)
+
+  if (name === 'set' || setElementTypeName != null) {
+    const elementType = setElementTypeName == null ? null : resolveDeclaredType(setElementTypeName, context)
+
+    return {
+      valueType: 'set',
+      arrayElementType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      setElementType: elementType?.valueType ?? 'unknown',
       shape: null,
       functionType: null
     }
@@ -244,6 +296,9 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
     return {
       valueType: name,
       arrayElementType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      setElementType: null,
       shape: null,
       functionType: null
     }
@@ -255,15 +310,23 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
     return {
       valueType: 'object',
       arrayElementType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      setElementType: null,
       shape: resolveObjectShape(type, context),
       functionType: null
     }
   }
 
   if (type?.kind === 'function') {
+    const returnType = resolveDeclaredType(type.returnType, context)
+
     return {
       valueType: 'function',
       arrayElementType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      setElementType: null,
       shape: null,
       functionType: {
         ...type,
@@ -274,11 +337,17 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
             ...param,
             valueType: declared.valueType ?? param.valueType,
             arrayElementType: declared.arrayElementType,
+            mapKeyType: declared.mapKeyType,
+            mapValueType: declared.mapValueType,
+            setElementType: declared.setElementType,
             shape: declared.shape,
             functionType: declared.functionType
           }
         }),
-        returnArrayElementType: resolveDeclaredType(type.returnType, context).arrayElementType
+        returnArrayElementType: returnType.arrayElementType,
+        returnMapKeyType: returnType.mapKeyType,
+        returnMapValueType: returnType.mapValueType,
+        returnSetElementType: returnType.setElementType
       }
     }
   }
@@ -286,6 +355,9 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
   return {
     valueType: null,
     arrayElementType: null,
+    mapKeyType: null,
+    mapValueType: null,
+    setElementType: null,
     shape: null,
     functionType: null
   }
@@ -302,6 +374,9 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
         declaredType: field.valueType,
         valueType: declared.valueType ?? field.valueType,
         arrayElementType: declared.arrayElementType,
+        mapKeyType: declared.mapKeyType,
+        mapValueType: declared.mapValueType,
+        setElementType: declared.setElementType,
         shape: declared.shape,
         functionType: declared.functionType
       }
@@ -313,10 +388,78 @@ function inferArrayElementType(expression: AnyNode | null): string | null {
   return expression?.valueType === 'array' ? expression.arrayElementType ?? null : null
 }
 
+function inferMapType(expression: AnyNode | null): { key: string | null, value: string | null } | null {
+  return expression?.valueType === 'map'
+    ? {
+        key: expression.mapKeyType ?? null,
+        value: expression.mapValueType ?? null
+      }
+    : null
+}
+
+function inferSetElementType(expression: AnyNode | null): string | null {
+  return expression?.valueType === 'set' ? expression.setElementType ?? null : null
+}
+
 function arrayElementTypeNameFromTypeName(name: string): string | null {
   const match = /^array<(.+)>$/.exec(name)
 
   return match?.[1] ?? null
+}
+
+function mapTypeNamesFromTypeName(name: string): { key: string, value: string } | null {
+  const match = /^map<(.+)>$/.exec(name)
+
+  if (match == null) {
+    return null
+  }
+
+  const args = splitGenericArgs(match[1])
+
+  return args.length === 2
+    ? {
+        key: args[0],
+        value: args[1]
+      }
+    : {
+        key: 'unknown',
+        value: 'unknown'
+      }
+}
+
+function setElementTypeNameFromTypeName(name: string): string | null {
+  const match = /^set<(.+)>$/.exec(name)
+
+  if (match == null) {
+    return null
+  }
+
+  const args = splitGenericArgs(match[1])
+
+  return args.length === 1 ? args[0] : null
+}
+
+function splitGenericArgs(value: string): string[] {
+  const args: string[] = []
+  let depth = 0
+  let start = 0
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+
+    if (char === '<') {
+      depth += 1
+    } else if (char === '>') {
+      depth -= 1
+    } else if (char === ',' && depth === 0) {
+      args.push(value.slice(start, index))
+      start = index + 1
+    }
+  }
+
+  args.push(value.slice(start))
+
+  return args.map(arg => arg.trim()).filter(Boolean)
 }
 
 function commonArrayElementType(types: string[]): string {
@@ -423,7 +566,10 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       callee: lowerExpression(expression.callee, context),
       args: expression.args.map(arg => lowerExpression(arg, context)),
       valueType: expression.valueType ?? 'unknown',
-      arrayElementType: expression.arrayElementType ?? null
+      arrayElementType: expression.arrayElementType ?? null,
+      mapKeyType: expression.mapKeyType ?? null,
+      mapValueType: expression.mapValueType ?? null,
+      setElementType: expression.setElementType ?? null
     }
   }
 
@@ -433,7 +579,10 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       callee: lowerExpression(expression.callee, context),
       args: expression.args.map(arg => lowerExpression(arg, context)),
       valueType: expression.valueType ?? 'unknown',
-      arrayElementType: expression.arrayElementType ?? null
+      arrayElementType: expression.arrayElementType ?? null,
+      mapKeyType: expression.mapKeyType ?? null,
+      mapValueType: expression.mapValueType ?? null,
+      setElementType: expression.setElementType ?? null
     }
   }
 
@@ -442,7 +591,11 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       ...expression,
       callee: lowerExpression(expression.callee, context),
       args: expression.args.map(arg => lowerExpression(arg, context)),
-      valueType: 'object'
+      valueType: expression.valueType ?? 'object',
+      arrayElementType: expression.arrayElementType ?? null,
+      mapKeyType: expression.mapKeyType ?? null,
+      mapValueType: expression.mapValueType ?? null,
+      setElementType: expression.setElementType ?? null
     }
   }
 
