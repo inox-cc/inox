@@ -2084,6 +2084,53 @@ export function main(): void {
 `, 'CCJS_ASSIGN_READONLY_FIELD')
 })
 
+test('keeps array element types for T[] and Array<T>', () => {
+  const result = compileSource(`function firstNumber(values: number[]): number {
+  return values[0]
+}
+
+function firstName(values: Array<string>): string {
+  return values[0]
+}
+
+export function main(): void {
+  const values: number[] = [1, 2, 3]
+  const names: Array<string> = ['Ada']
+  console.log(firstNumber(values), firstName(names))
+}
+`, {
+    target: 'js'
+  })
+  const firstNumber = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'firstNumber')
+  const firstName = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'firstName')
+  const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(firstNumber)
+  assert.ok(firstName)
+  assert.ok(main)
+  const [values, names] = main.body.filter(item => item.type === 'VariableDeclaration')
+
+  assert.equal(firstNumber.params[0].valueType, 'array')
+  assert.equal(firstNumber.params[0].arrayElementType, 'number')
+  assert.equal(firstName.params[0].valueType, 'array')
+  assert.equal(firstName.params[0].arrayElementType, 'string')
+  assert.equal(values.valueType, 'array')
+  assert.equal(values.arrayElementType, 'number')
+  assert.equal(names.valueType, 'array')
+  assert.equal(names.arrayElementType, 'string')
+  assert.match(result.code, /return values\[0\]/)
+
+  assertDiagnostic(`function first(values: number[]): string {
+  return values[0]
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const values: number[] = ['Ada']
+  console.log(values.length)
+}
+`, 'CCJS_TYPE_MISMATCH')
+})
+
 test('checks string predicate methods as boolean calls', () => {
   const result = compileSource(`function hasAda(name: string): boolean {
   return name.includes('Ada') && name.startsWith('A') && name.endsWith('a')

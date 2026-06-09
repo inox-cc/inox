@@ -1407,8 +1407,22 @@ function locFromToken(token: SourceLocation): SourceLocation {
 }
 
 function normalizeTypeName(name: string): string {
+  if (name.endsWith('[]')) {
+    return `array<${normalizeTypeName(name.slice(0, -2))}>`
+  }
+
+  const arrayMatch = /^Array<(.+)>$/.exec(name)
+
+  if (arrayMatch != null) {
+    return `array<${normalizeTypeName(arrayMatch[1])}>`
+  }
+
   if (['number', 'string', 'boolean', 'void', 'null', 'unknown'].includes(name)) {
     return name
+  }
+
+  if (name === 'Array' || name === 'array') {
+    return 'array'
   }
 
   if (name === 'Function' || name === 'function') {
@@ -1417,10 +1431,6 @@ function normalizeTypeName(name: string): string {
 
   if (name === 'any') {
     return 'unknown'
-  }
-
-  if (name.endsWith('[]')) {
-    return 'array'
   }
 
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : 'unknown'

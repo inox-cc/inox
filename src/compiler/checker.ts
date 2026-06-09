@@ -1,6 +1,13 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, ProgramNode, SourceLocation, SymbolInfo, TypeAliasInfo, ValueType } from './types.ts'
 
+type ResolvedTypeInfo = {
+  valueType: ValueType
+  functionType: AnyNode | null
+  shape: ObjectShapeInfo | null
+  arrayElementType: ValueType | null
+}
+
 const globals = new Map<string, SymbolInfo>([
   ['console', {
     kind: 'global',
@@ -210,12 +217,15 @@ class Checker {
       }
 
       if (item.type === 'FunctionDeclaration') {
+        const returnInfo = this.resolveDeclaredType(item.returnType, item.loc)
+
         this.declare(item.name, {
           kind: 'function',
           mutable: false,
           valueType: 'function',
           params: item.params.map(param => this.resolveParam(param)),
-          returnType: this.resolveDeclaredType(item.returnType, item.loc).valueType,
+          returnType: returnInfo.valueType,
+          returnArrayElementType: returnInfo.arrayElementType,
           async: item.async,
           loc: item.loc
         }, item.loc)
@@ -239,6 +249,7 @@ class Checker {
     return {
       ...param,
       valueType: paramInfo.valueType,
+      arrayElementType: paramInfo.arrayElementType,
       functionType: paramInfo.functionType,
       shape: paramInfo.shape
     }
@@ -256,7 +267,7 @@ class Checker {
     if (item.type === 'FunctionDeclaration') {
       this.withScope(() => {
         const previousReturnType = this.currentReturnType
-        this.currentReturnType = item.returnType
+        this.currentReturnType = this.resolveDeclaredType(item.returnType, item.loc).valueType
         const previousAsyncDepth = this.asyncDepth
         this.asyncDepth = item.async ? this.asyncDepth + 1 : this.asyncDepth
 
@@ -266,6 +277,7 @@ class Checker {
             kind: 'param',
             mutable: true,
             valueType: paramInfo.valueType,
+            arrayElementType: paramInfo.arrayElementType,
             functionType: paramInfo.functionType,
             shape: paramInfo.shape,
             loc: param.loc
@@ -374,6 +386,7 @@ class Checker {
       const declared = statement.declaredType == null ? null : this.resolveDeclaredType(statement.declaredType, statement.loc)
       const initType = statement.init == null ? 'unknown' : this.checkExpression(statement.init)
       const valueType = declared?.valueType ?? initType
+      const arrayElementType = declared?.arrayElementType ?? this.resolveExpressionArrayElementType(statement.init)
 
       if (declared?.shape != null && statement.init?.type === 'ObjectLiteral') {
         this.checkObjectLiteralAgainstShape(statement.init, declared.shape)
@@ -383,6 +396,7 @@ class Checker {
         kind: statement.kind,
         mutable: statement.kind === 'let',
         valueType,
+        arrayElementType,
         functionType: declared?.functionType ?? null,
         shape: declared?.shape ?? null,
         loc: statement.loc
@@ -390,6 +404,10 @@ class Checker {
 
       if (declared != null && statement.init != null) {
         this.checkAssignableType(initType, declared.valueType, statement.loc)
+
+        if (declared.valueType === 'array' && declared.arrayElementType != null) {
+          this.checkAssignableType(this.resolveExpressionArrayElementType(statement.init), declared.arrayElementType, statement.loc)
+        }
       }
 
       return
@@ -523,9 +541,13 @@ class Checker {
     }
 
     if (expression.type === 'ArrayLiteral') {
+      const elementTypes: ValueType[] = []
+
       for (const element of expression.elements) {
-        this.checkExpression(element)
+        elementTypes.push(this.checkExpression(element))
       }
+
+      expression.arrayElementType = commonArrayElementType(elementTypes)
 
       return 'array'
     }
@@ -601,7 +623,7 @@ class Checker {
       return 'unknown'
     }
 
-    return this.resolveDeclaredType(field.valueType, field.loc).valueType
+    return field.valueType ?? this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc).valueType
   }
 
   checkMemberAssignment(expression: AnyNode): ValueType {
@@ -634,15 +656,26 @@ class Checker {
       this.report('CCJS_ASSIGN_READONLY_FIELD', `cannot assign to readonly field ${expression.target.property}`, expression.target.loc)
     }
 
-    this.checkAssignableType(valueType, this.resolveDeclaredType(field.valueType, field.loc).valueType, expression.value.loc)
+    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc)
+
+    if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
+      this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
+    }
 
     return valueType
   }
 
   checkIndexExpression(expression: AnyNode): ValueType {
     if (expression.index.type !== 'StringLiteral') {
-      this.checkExpression(expression.object)
-      this.checkExpression(expression.index)
+      const objectType = this.checkExpression(expression.object)
+      const indexType = this.checkExpression(expression.index)
+
+      if (objectType === 'array') {
+        this.checkAssignableType(indexType, 'number', expression.index.loc)
+        return this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
+      }
+
       return 'unknown'
     }
 
@@ -661,7 +694,7 @@ class Checker {
       return 'unknown'
     }
 
-    return this.resolveDeclaredType(field.valueType, field.loc).valueType
+    return field.valueType ?? this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc).valueType
   }
 
   checkIndexAssignment(expression: AnyNode): ValueType {
@@ -691,7 +724,12 @@ class Checker {
       this.report('CCJS_ASSIGN_READONLY_FIELD', `cannot assign to readonly field ${expression.target.index.value}`, expression.target.loc)
     }
 
-    this.checkAssignableType(valueType, this.resolveDeclaredType(field.valueType, field.loc).valueType, expression.value.loc)
+    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc)
+
+    if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
+      this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
+    }
 
     return valueType
   }
@@ -938,7 +976,14 @@ class Checker {
         continue
       }
 
-      this.checkAssignableType(this.checkExpression(property.value), this.resolveDeclaredType(field.valueType, field.loc).valueType, property.loc)
+      const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+      const propertyType = this.checkExpression(property.value)
+
+      this.checkAssignableType(propertyType, fieldType.valueType, property.loc)
+
+      if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
+        this.checkAssignableType(this.resolveExpressionArrayElementType(property.value), fieldType.arrayElementType, property.loc)
+      }
     }
 
     for (const property of expression.properties) {
@@ -1020,13 +1065,16 @@ class Checker {
   }
 
   checkForOfStatement(statement: AnyNode): void {
-    this.checkExpression(statement.iterable)
+    const iterableType = this.checkExpression(statement.iterable)
+    const elementType = iterableType === 'array'
+      ? this.resolveExpressionArrayElementType(statement.iterable) ?? 'unknown'
+      : 'unknown'
 
     this.withScope(() => {
       this.declare(statement.name, {
         kind: statement.kind,
         mutable: statement.kind === 'let',
-        valueType: 'unknown',
+        valueType: elementType,
         loc: statement.nameLoc
       }, statement.nameLoc)
 
@@ -1109,12 +1157,26 @@ class Checker {
     }
   }
 
-  resolveDeclaredType(name: string | null | undefined, loc: SourceLocation): { valueType: ValueType, functionType: AnyNode | null, shape: ObjectShapeInfo | null } {
+  resolveDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
     if (name == null || name === 'unknown') {
       return {
         valueType: 'unknown',
         functionType: null,
-        shape: null
+        shape: null,
+        arrayElementType: null
+      }
+    }
+
+    const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
+
+    if (name === 'array' || arrayElementTypeName != null) {
+      const elementInfo = arrayElementTypeName == null ? null : this.resolveDeclaredType(arrayElementTypeName, loc)
+
+      return {
+        valueType: 'array',
+        functionType: null,
+        shape: null,
+        arrayElementType: elementInfo?.valueType ?? 'unknown'
       }
     }
 
@@ -1122,7 +1184,8 @@ class Checker {
       return {
         valueType: name,
         functionType: null,
-        shape: null
+        shape: null,
+        arrayElementType: null
       }
     }
 
@@ -1140,19 +1203,22 @@ class Checker {
               return {
                 ...param,
                 valueType: paramInfo.valueType,
+                arrayElementType: paramInfo.arrayElementType,
                 functionType: paramInfo.functionType,
                 shape: paramInfo.shape
               }
             })
           },
-          shape: null
+          shape: null,
+          arrayElementType: null
         }
       }
 
       return {
         valueType: 'object',
         functionType: null,
-        shape
+        shape: this.resolveObjectShape(shape),
+        arrayElementType: null
       }
     }
 
@@ -1161,8 +1227,57 @@ class Checker {
     return {
       valueType: 'unknown',
       functionType: null,
-      shape: null
+      shape: null,
+      arrayElementType: null
     }
+  }
+
+  resolveObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
+    return {
+      ...shape,
+      fields: shape.fields.map(field => {
+        const fieldInfo = this.resolveDeclaredType(field.valueType, field.loc)
+
+        return {
+          ...field,
+          declaredType: field.valueType,
+          valueType: fieldInfo.valueType,
+          arrayElementType: fieldInfo.arrayElementType,
+          functionType: fieldInfo.functionType,
+          shape: fieldInfo.shape
+        }
+      })
+    }
+  }
+
+  resolveExpressionArrayElementType(expression: AnyNode | null | undefined): ValueType | null {
+    if (expression == null) {
+      return null
+    }
+
+    if (expression.type === 'ArrayLiteral') {
+      return expression.arrayElementType ?? null
+    }
+
+    if (expression.type === 'Reference' && expression.path.length === 1) {
+      return this.scope.resolve(expression.path[0])?.arrayElementType ?? null
+    }
+
+    if (expression.type === 'MemberExpression') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+
+      return field?.arrayElementType ?? null
+    }
+
+    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+
+      return field?.arrayElementType ?? null
+    }
+
+    return null
   }
 
   declare(name: string, symbol: SymbolInfo, loc: SourceLocation): void {
@@ -1207,7 +1322,7 @@ class Checker {
     }
   }
 
-  checkAssignableType(actual: ValueType, expected: ValueType, loc: SourceLocation): void {
+  checkAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, loc: SourceLocation): void {
     if (!isAssignableType(actual, expected)) {
       this.report('CCJS_TYPE_MISMATCH', `cannot assign ${actual} to ${expected}`, loc)
     }
@@ -1282,6 +1397,22 @@ function isSwitchableType(type: ValueType): boolean {
 
 function isMatchingSwitchCaseType(actual: ValueType, expected: ValueType): boolean {
   return actual === 'unknown' || expected === 'unknown' || actual === expected
+}
+
+function arrayElementTypeNameFromTypeName(name: string): string | null {
+  const match = /^array<(.+)>$/.exec(name)
+
+  return match?.[1] ?? null
+}
+
+function commonArrayElementType(types: ValueType[]): ValueType {
+  const [first] = types
+
+  if (first == null) {
+    return 'unknown'
+  }
+
+  return types.every(type => type === first) ? first : 'unknown'
 }
 
 function isBuiltinValueType(name: string): boolean {

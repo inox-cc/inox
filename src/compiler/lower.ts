@@ -4,6 +4,13 @@ type LowerContext = {
   types: Map<string, AnyNode>
 }
 
+type LowerResolvedType = {
+  valueType: string | null
+  arrayElementType: string | null
+  shape: AnyNode | null
+  functionType: AnyNode | null
+}
+
 export function lowerProgram(ast: ProgramNode): ProgramNode {
   const context = {
     types: collectTypes(ast)
@@ -27,6 +34,8 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
   }
 
   if (item.type === 'FunctionDeclaration') {
+    const returnType = resolveDeclaredType(item.returnType, context)
+
     return {
       type: 'FunctionDeclaration',
       exported: item.exported,
@@ -34,7 +43,8 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       name: item.name,
       loc: item.loc,
       params: item.params.map(param => lowerParam(param, context)),
-      returnType: item.returnType,
+      returnType: returnType.valueType ?? item.returnType,
+      returnArrayElementType: returnType.arrayElementType,
       body: item.body.map(statement => lowerStatement(statement, context))
     }
   }
@@ -155,6 +165,7 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       declaredType: statement.declaredType,
       shape: declared.shape,
       functionType: declared.functionType,
+      arrayElementType: declared.arrayElementType ?? inferArrayElementType(init),
       valueType: declared.valueType ?? statement.declaredType ?? init?.valueType ?? 'unknown',
       init
     }
@@ -200,15 +211,39 @@ function lowerParam(param: AnyNode, context: LowerContext): AnyNode {
   return {
     ...param,
     valueType: declared.valueType ?? param.valueType,
+    arrayElementType: declared.arrayElementType,
     functionType: declared.functionType,
     shape: declared.shape
   }
 }
 
-function resolveDeclaredType(name: string | null | undefined, context: LowerContext): { valueType: string | null, shape: AnyNode | null, functionType: AnyNode | null } {
+function resolveDeclaredType(name: string | null | undefined, context: LowerContext): LowerResolvedType {
   if (name == null) {
     return {
       valueType: null,
+      arrayElementType: null,
+      shape: null,
+      functionType: null
+    }
+  }
+
+  const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
+
+  if (name === 'array' || arrayElementTypeName != null) {
+    const elementType = arrayElementTypeName == null ? null : resolveDeclaredType(arrayElementTypeName, context)
+
+    return {
+      valueType: 'array',
+      arrayElementType: elementType?.valueType ?? 'unknown',
+      shape: null,
+      functionType: null
+    }
+  }
+
+  if (isBuiltinValueType(name)) {
+    return {
+      valueType: name,
+      arrayElementType: null,
       shape: null,
       functionType: null
     }
@@ -219,7 +254,8 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
   if (type?.kind === 'object') {
     return {
       valueType: 'object',
-      shape: type,
+      arrayElementType: null,
+      shape: resolveObjectShape(type, context),
       functionType: null
     }
   }
@@ -227,6 +263,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
   if (type?.kind === 'function') {
     return {
       valueType: 'function',
+      arrayElementType: null,
       shape: null,
       functionType: {
         ...type,
@@ -236,19 +273,64 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
           return {
             ...param,
             valueType: declared.valueType ?? param.valueType,
+            arrayElementType: declared.arrayElementType,
             shape: declared.shape,
             functionType: declared.functionType
           }
-        })
+        }),
+        returnArrayElementType: resolveDeclaredType(type.returnType, context).arrayElementType
       }
     }
   }
 
   return {
     valueType: null,
+    arrayElementType: null,
     shape: null,
     functionType: null
   }
+}
+
+function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
+  return {
+    ...shape,
+    fields: shape.fields.map(field => {
+      const declared = resolveDeclaredType(field.valueType, context)
+
+      return {
+        ...field,
+        declaredType: field.valueType,
+        valueType: declared.valueType ?? field.valueType,
+        arrayElementType: declared.arrayElementType,
+        shape: declared.shape,
+        functionType: declared.functionType
+      }
+    })
+  }
+}
+
+function inferArrayElementType(expression: AnyNode | null): string | null {
+  return expression?.valueType === 'array' ? expression.arrayElementType ?? null : null
+}
+
+function arrayElementTypeNameFromTypeName(name: string): string | null {
+  const match = /^array<(.+)>$/.exec(name)
+
+  return match?.[1] ?? null
+}
+
+function commonArrayElementType(types: string[]): string {
+  const [first] = types
+
+  if (first == null) {
+    return 'unknown'
+  }
+
+  return types.every(type => type === first) ? first : 'unknown'
+}
+
+function isBuiltinValueType(name: string): boolean {
+  return ['array', 'boolean', 'function', 'null', 'number', 'object', 'string', 'void'].includes(name)
 }
 
 function lowerExpression(expression: AnyNode, context: LowerContext = { types: new Map() }): AnyNode {
@@ -410,9 +492,12 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
   }
 
   if (expression.type === 'ArrayLiteral') {
+    const elements = expression.elements.map(element => lowerExpression(element, context))
+
     return {
       ...expression,
-      elements: expression.elements.map(element => lowerExpression(element, context)),
+      elements,
+      arrayElementType: commonArrayElementType(elements.map(element => element.valueType)),
       valueType: 'array'
     }
   }

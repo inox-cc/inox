@@ -56,8 +56,10 @@ export type SymbolInfo = {
   kind: string
   mutable?: boolean
   valueType: ValueType
+  arrayElementType?: ValueType | null
   params?: AnyNode[]
   returnType?: ValueType
+  returnArrayElementType?: ValueType | null
   async?: boolean
   constructable?: boolean
   constructorParams?: AnyNode[]
