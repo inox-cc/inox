@@ -3074,6 +3074,48 @@ test('generated C runtime string local propagation compiles and runs with runtim
   }
 })
 
+test('generated C nullable string nullish coalescing compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-string-nullish-'))
+  const source = join(dir, 'nullable-string-nullish.c')
+  const output = join(dir, 'nullable-string-nullish')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  let name: string | null = null
+  console.log(name ?? 'Ada', name === null)
+  name = 'Grace'
+  const display = name ?? 'Ada'
+  console.log(display, name !== null)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada 1\nGrace 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C runtime string assignment references compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

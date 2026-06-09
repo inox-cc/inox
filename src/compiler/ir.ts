@@ -51,6 +51,10 @@ function visitNode(node: unknown, features: Set<IrFeature>): void {
 }
 
 function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
+  if (node.nullable === true) {
+    features.add('runtime-values')
+  }
+
   if (node.type === 'FunctionDeclaration' || node.type === 'MethodDefinition') {
     recordCallableSignatureFeatures(node, features)
   }

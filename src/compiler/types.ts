@@ -69,12 +69,14 @@ export type SymbolInfo = {
   kind: string
   mutable?: boolean
   valueType: ValueType
+  nullable?: boolean
   arrayElementType?: ValueType | null
   mapKeyType?: ValueType | null
   mapValueType?: ValueType | null
   setElementType?: ValueType | null
   params?: AnyNode[]
   returnType?: ValueType
+  returnNullable?: boolean
   returnArrayElementType?: ValueType | null
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null

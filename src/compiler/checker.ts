@@ -3,6 +3,7 @@ import type { AnyNode, Diagnostic, ObjectShapeInfo, ProgramNode, SourceLocation,
 
 type ResolvedTypeInfo = {
   valueType: ValueType
+  nullable: boolean
   functionType: AnyNode | null
   shape: ObjectShapeInfo | null
   arrayElementType: ValueType | null
@@ -173,6 +174,7 @@ class Checker {
   breakDepth: number
   continueDepth: number
   currentReturnType: ValueType
+  currentReturnNullable: boolean
   asyncDepth: number
 
   constructor(program: ProgramNode) {
@@ -183,6 +185,7 @@ class Checker {
     this.breakDepth = 0
     this.continueDepth = 0
     this.currentReturnType = 'void'
+    this.currentReturnNullable = false
     this.asyncDepth = 0
   }
 
@@ -228,6 +231,7 @@ class Checker {
           valueType: 'function',
           params: item.params.map(param => this.resolveParam(param)),
           returnType: returnInfo.valueType,
+          returnNullable: returnInfo.nullable,
           returnArrayElementType: returnInfo.arrayElementType,
           returnMapKeyType: returnInfo.mapKeyType,
           returnMapValueType: returnInfo.mapValueType,
@@ -242,7 +246,7 @@ class Checker {
           kind: 'class',
           mutable: false,
           valueType: 'class',
-          constructorParams: item.methods.find(method => method.name === 'constructor')?.params ?? [],
+          constructorParams: item.methods.find(method => method.name === 'constructor')?.params.map(param => this.resolveParam(param)) ?? [],
           loc: item.loc
         }, item.loc)
       }
@@ -255,6 +259,7 @@ class Checker {
     return {
       ...param,
       valueType: paramInfo.valueType,
+      nullable: paramInfo.nullable,
       arrayElementType: paramInfo.arrayElementType,
       mapKeyType: paramInfo.mapKeyType,
       mapValueType: paramInfo.mapValueType,
@@ -276,7 +281,10 @@ class Checker {
     if (item.type === 'FunctionDeclaration') {
       this.withScope(() => {
         const previousReturnType = this.currentReturnType
-        this.currentReturnType = this.resolveDeclaredType(item.returnType, item.loc).valueType
+        const returnInfo = this.resolveDeclaredType(item.returnType, item.loc)
+        this.currentReturnType = returnInfo.valueType
+        const previousReturnNullable = this.currentReturnNullable
+        this.currentReturnNullable = returnInfo.nullable
         const previousAsyncDepth = this.asyncDepth
         this.asyncDepth = item.async ? this.asyncDepth + 1 : this.asyncDepth
 
@@ -286,6 +294,7 @@ class Checker {
             kind: 'param',
             mutable: true,
             valueType: paramInfo.valueType,
+            nullable: paramInfo.nullable,
             arrayElementType: paramInfo.arrayElementType,
             mapKeyType: paramInfo.mapKeyType,
             mapValueType: paramInfo.mapValueType,
@@ -300,6 +309,7 @@ class Checker {
           this.checkStatements(item.body)
         } finally {
           this.currentReturnType = previousReturnType
+          this.currentReturnNullable = previousReturnNullable
           this.asyncDepth = previousAsyncDepth
         }
       })
@@ -415,6 +425,7 @@ class Checker {
         kind: statement.kind,
         mutable: statement.kind === 'let',
         valueType,
+        nullable: declared?.nullable ?? false,
         arrayElementType,
         mapKeyType: mapType?.key ?? null,
         mapValueType: mapType?.value ?? null,
@@ -425,7 +436,7 @@ class Checker {
       }, statement.loc)
 
       if (declared != null && statement.init != null) {
-        this.checkAssignableType(initType, declared.valueType, statement.loc)
+        this.checkAssignableType(initType, declared.valueType, statement.loc, declared.nullable)
 
         if (declared.valueType === 'array' && declared.arrayElementType != null) {
           this.checkAssignableType(this.resolveExpressionArrayElementType(statement.init), declared.arrayElementType, statement.loc)
@@ -458,7 +469,7 @@ class Checker {
 
     if (statement.type === 'ReturnStatement') {
       const actual = statement.argument == null ? 'void' : this.checkExpression(statement.argument)
-      this.checkAssignableType(actual, this.currentReturnType, statement.loc)
+      this.checkAssignableType(actual, this.currentReturnType, statement.loc, this.currentReturnNullable)
     }
   }
 
@@ -511,7 +522,10 @@ class Checker {
     }
 
     if (expression.type === 'Reference') {
-      return this.resolveReference(expression)?.valueType ?? 'unknown'
+      const symbol = this.resolveReference(expression)
+      expression.nullable = symbol?.nullable === true
+
+      return symbol?.valueType ?? 'unknown'
     }
 
     if (expression.type === 'MemberExpression') {
@@ -620,7 +634,7 @@ class Checker {
     }
 
     if (symbol != null) {
-      this.checkAssignableType(valueType, symbol.valueType, expression.value.loc)
+      this.checkAssignableType(valueType, symbol.valueType, expression.value.loc, symbol.nullable === true)
     }
 
     return valueType
@@ -629,12 +643,22 @@ class Checker {
   checkBinaryExpression(expression: AnyNode): ValueType {
     const left = this.checkExpression(expression.left)
     const right = this.checkExpression(expression.right)
+    const nullableEquality = isEqualityOperator(expression.operator)
+      && ((left === 'null' && this.expressionCanBeNull(expression.right)) || (right === 'null' && this.expressionCanBeNull(expression.left)))
 
-    if (isEqualityOperator(expression.operator) && !isEqualityComparableType(left, right)) {
+    if (isEqualityOperator(expression.operator) && !nullableEquality && !isEqualityComparableType(left, right)) {
       this.report('CCJS_TYPE_MISMATCH', `cannot compare ${left} and ${right} with ${expression.operator}`, expression.loc)
     }
 
-    return inferBinaryExpressionType(expression.operator, left, right)
+    const valueType = inferBinaryExpressionType(expression.operator, left, right)
+    expression.valueType = valueType
+    expression.nullable = expression.operator === '??' && this.expressionCanBeNull(expression.right)
+
+    return valueType
+  }
+
+  expressionCanBeNull(expression: AnyNode): boolean {
+    return expression?.type === 'NullLiteral' || expression?.nullable === true
   }
 
   checkMemberExpression(expression: AnyNode): ValueType {
@@ -665,7 +689,10 @@ class Checker {
       return 'unknown'
     }
 
-    return field.valueType ?? this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc).valueType
+    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    expression.nullable = field.nullable === true || fieldType.nullable
+
+    return field.valueType ?? fieldType.valueType
   }
 
   checkMemberAssignment(expression: AnyNode): ValueType {
@@ -704,7 +731,7 @@ class Checker {
     }
 
     const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
-    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc)
+    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, fieldType.nullable)
 
     if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
       this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
@@ -757,7 +784,10 @@ class Checker {
       return 'unknown'
     }
 
-    return field.valueType ?? this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc).valueType
+    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    expression.nullable = field.nullable === true || fieldType.nullable
+
+    return field.valueType ?? fieldType.valueType
   }
 
   checkIndexAssignment(expression: AnyNode): ValueType {
@@ -788,7 +818,7 @@ class Checker {
     }
 
     const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
-    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc)
+    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, fieldType.nullable)
 
     if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
       this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
@@ -859,6 +889,7 @@ class Checker {
     }
 
     expression.valueType = symbol.returnType ?? 'unknown'
+    expression.nullable = symbol.returnNullable === true
     expression.arrayElementType = symbol.returnArrayElementType ?? null
     expression.mapKeyType = symbol.returnMapKeyType ?? null
     expression.mapValueType = symbol.returnMapValueType ?? null
@@ -874,7 +905,7 @@ class Checker {
 
     for (const [index, param] of symbol.params.entries()) {
       if (index < argTypes.length) {
-        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc)
+        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true)
       }
     }
 
@@ -1225,7 +1256,7 @@ class Checker {
 
     for (const [index, param] of constructorParams.entries()) {
       if (index < argTypes.length) {
-        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc)
+        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true)
       }
     }
 
@@ -1241,6 +1272,7 @@ class Checker {
           kind: 'param',
           mutable: true,
           valueType: paramInfo.valueType,
+          nullable: paramInfo.nullable,
           arrayElementType: paramInfo.arrayElementType,
           mapKeyType: paramInfo.mapKeyType,
           mapValueType: paramInfo.mapValueType,
@@ -1270,7 +1302,10 @@ class Checker {
       methodNames.add(method.name)
       this.withScope(() => {
         const previousReturnType = this.currentReturnType
-        this.currentReturnType = method.returnType
+        const methodReturnInfo = this.resolveDeclaredType(method.returnType, method.loc)
+        this.currentReturnType = methodReturnInfo.valueType
+        const previousReturnNullable = this.currentReturnNullable
+        this.currentReturnNullable = methodReturnInfo.nullable
 
         this.declare('this', {
           kind: 'this',
@@ -1285,6 +1320,7 @@ class Checker {
             kind: 'param',
             mutable: true,
             valueType: paramInfo.valueType,
+            nullable: paramInfo.nullable,
             arrayElementType: paramInfo.arrayElementType,
             mapKeyType: paramInfo.mapKeyType,
             mapValueType: paramInfo.mapValueType,
@@ -1299,6 +1335,7 @@ class Checker {
           this.checkStatements(method.body)
         } finally {
           this.currentReturnType = previousReturnType
+          this.currentReturnNullable = previousReturnNullable
         }
       })
     }
@@ -1318,7 +1355,7 @@ class Checker {
       const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
       const propertyType = this.checkExpression(property.value)
 
-      this.checkAssignableType(propertyType, fieldType.valueType, property.loc)
+      this.checkAssignableType(propertyType, fieldType.valueType, property.loc, fieldType.nullable)
 
       if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
         this.checkAssignableType(this.resolveExpressionArrayElementType(property.value), fieldType.arrayElementType, property.loc)
@@ -1377,6 +1414,7 @@ class Checker {
         valueType: 'function',
         params: symbol.functionType.params,
         returnType: symbol.functionType.returnType,
+        returnNullable: symbol.functionType.returnNullable,
         returnArrayElementType: symbol.functionType.returnArrayElementType,
         returnMapKeyType: symbol.functionType.returnMapKeyType,
         returnMapValueType: symbol.functionType.returnMapValueType,
@@ -1520,12 +1558,24 @@ class Checker {
     if (name == null || name === 'unknown') {
       return {
         valueType: 'unknown',
+        nullable: false,
         functionType: null,
         shape: null,
         arrayElementType: null,
         mapKeyType: null,
         mapValueType: null,
         setElementType: null
+      }
+    }
+
+    const nullableTypeName = nullableTypeNameFromTypeName(name)
+
+    if (nullableTypeName != null) {
+      const inner = this.resolveDeclaredType(nullableTypeName, loc)
+
+      return {
+        ...inner,
+        nullable: true
       }
     }
 
@@ -1536,6 +1586,7 @@ class Checker {
 
       return {
         valueType: 'array',
+        nullable: false,
         functionType: null,
         shape: null,
         arrayElementType: elementInfo?.valueType ?? 'unknown',
@@ -1553,6 +1604,7 @@ class Checker {
 
       return {
         valueType: 'map',
+        nullable: false,
         functionType: null,
         shape: null,
         arrayElementType: null,
@@ -1569,6 +1621,7 @@ class Checker {
 
       return {
         valueType: 'set',
+        nullable: false,
         functionType: null,
         shape: null,
         arrayElementType: null,
@@ -1581,6 +1634,7 @@ class Checker {
     if (isBuiltinValueType(name)) {
       return {
         valueType: name,
+        nullable: false,
         functionType: null,
         shape: null,
         arrayElementType: null,
@@ -1598,6 +1652,7 @@ class Checker {
 
         return {
           valueType: 'function',
+          nullable: false,
           functionType: {
             ...shape,
             params: shape.params.map(param => {
@@ -1606,6 +1661,7 @@ class Checker {
               return {
                 ...param,
                 valueType: paramInfo.valueType,
+                nullable: paramInfo.nullable,
                 arrayElementType: paramInfo.arrayElementType,
                 mapKeyType: paramInfo.mapKeyType,
                 mapValueType: paramInfo.mapValueType,
@@ -1615,6 +1671,7 @@ class Checker {
               }
             }),
             returnType: returnInfo.valueType,
+            returnNullable: returnInfo.nullable,
             returnArrayElementType: returnInfo.arrayElementType,
             returnMapKeyType: returnInfo.mapKeyType,
             returnMapValueType: returnInfo.mapValueType,
@@ -1630,6 +1687,7 @@ class Checker {
 
       return {
         valueType: 'object',
+        nullable: false,
         functionType: null,
         shape: this.resolveObjectShape(shape),
         arrayElementType: null,
@@ -1643,6 +1701,7 @@ class Checker {
 
     return {
       valueType: 'unknown',
+      nullable: false,
       functionType: null,
       shape: null,
       arrayElementType: null,
@@ -1662,6 +1721,7 @@ class Checker {
           ...field,
           declaredType: field.valueType,
           valueType: fieldInfo.valueType,
+          nullable: fieldInfo.nullable,
           arrayElementType: fieldInfo.arrayElementType,
           mapKeyType: fieldInfo.mapKeyType,
           mapValueType: fieldInfo.mapValueType,
@@ -1833,8 +1893,8 @@ class Checker {
     }
   }
 
-  checkAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, loc: SourceLocation): void {
-    if (!isAssignableType(actual, expected)) {
+  checkAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, loc: SourceLocation, expectedNullable = false): void {
+    if (!isAssignableType(actual, expected, expectedNullable)) {
       this.report('CCJS_TYPE_MISMATCH', `cannot assign ${actual} to ${expected}`, loc)
     }
   }
@@ -1906,9 +1966,13 @@ function isEqualityComparableType(left: ValueType, right: ValueType): boolean {
   return ['boolean', 'number', 'string', 'null'].includes(left) && left === right
 }
 
-function isAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined): boolean {
+function isAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, expectedNullable = false): boolean {
   if (actual == null || expected == null || actual === 'unknown' || expected === 'unknown') {
     return true
+  }
+
+  if (actual === 'null') {
+    return expected === 'null' || expectedNullable
   }
 
   return actual === expected
@@ -1924,6 +1988,12 @@ function isMatchingSwitchCaseType(actual: ValueType, expected: ValueType): boole
 
 function arrayElementTypeNameFromTypeName(name: string): string | null {
   const match = /^array<(.+)>$/.exec(name)
+
+  return match?.[1] ?? null
+}
+
+function nullableTypeNameFromTypeName(name: string): string | null {
+  const match = /^nullable<(.+)>$/.exec(name)
 
   return match?.[1] ?? null
 }

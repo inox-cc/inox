@@ -203,6 +203,7 @@ function createBaseContext(diagnostics, functions) {
     diagnostics,
     functionNames: new Map(functions.map(item => [item.name, emitCFunctionName(item.name)])),
     functionParams: new Map(functions.map(item => [item.name, item.params])),
+    functionReturnNullables: new Map(functions.map(item => [item.name, item.returnNullable === true])),
     functionReturnTypes: new Map(functions.map(item => [item.name, item.returnType])),
     runtimeFunctionParams: new Map(),
     nextId: 0
@@ -1375,6 +1376,7 @@ function createFunctionContext(baseContext, returnType) {
     cleanupEnabled: true,
     functionTypes: new Map(),
     mapTypes: new Map(),
+    nullableVariables: new Set(),
     objectShapes: new Map(),
     ownedValues: [],
     runtimeCallbacks: new Set(),
@@ -1585,6 +1587,10 @@ function emitStatement(statement, context) {
       return emitArraySortVariableDeclaration(statement, arraySortCall, context)
     }
 
+    if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
+      return emitNullableRuntimeValueVariableDeclaration(statement, context)
+    }
+
     if (statement.init?.type === 'ObjectLiteral') {
       if (context.boxedMutableCaptureDeclarations.has(statement)) {
         return emitBoxedObjectVariableDeclaration(statement, context)
@@ -1694,6 +1700,10 @@ function emitStatement(statement, context) {
     }
 
     const valueType = inferExpressionType(statement.expression.value, context)
+
+    if (isNullableRuntimeValueAssignment(statement.expression, context)) {
+      return emitNullableRuntimeValueAssignment(statement.expression, context)
+    }
 
     if (isBoxedRuntimeValueAssignment(statement.expression, context)) {
       return emitBoxedRuntimeValueAssignment(statement.expression, context)
@@ -2020,6 +2030,13 @@ function emitPreparedForVariableDeclaration(statement, context) {
     }
   }
 
+  if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
+    return {
+      lines: emitNullableRuntimeValueVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
   if (statement.init?.type === 'ObjectLiteral') {
     return {
       lines: emitObjectVariableDeclaration(statement, context),
@@ -2326,7 +2343,50 @@ function emitObjectVariableDeclaration(statement, context) {
   return lines
 }
 
+function emitNullableRuntimeValueVariableDeclaration(statement, context) {
+  const valueType = statement.valueType
+  const expectedTag = cRuntimeValueTag(valueType)
+
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, valueType)
+  context.nullableVariables.add(statement.name)
+
+  if (valueType === 'object') {
+    registerObjectShape(context, statement.name, statement.shape)
+  } else if (valueType === 'array') {
+    context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType ?? 'unknown')
+  } else if (valueType === 'map') {
+    context.mapTypes.set(statement.name, {
+      key: statement.mapKeyType ?? 'unknown',
+      value: statement.mapValueType ?? 'unknown'
+    })
+  } else if (valueType === 'set') {
+    context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
+  }
+
+  if (statement.init == null || statement.init.type === 'NullLiteral') {
+    return [
+      ...emitPrepareOwnedValueWrite(statement.name),
+      `${statement.name} = ccjs_null_value();`
+    ]
+  }
+
+  const value = emitCValueExpression(statement.init, context)
+
+  return [
+    ...value.lines,
+    ...emitPrepareOwnedValueWrite(statement.name),
+    `${statement.name} = ${value.expression};`,
+    ...emitRuntimeNullableValueCheck(statement.name, expectedTag, context),
+    `ccjs_retain(${statement.name});`
+  ]
+}
+
 function emitVariableDeclaration(statement, context) {
+  if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
+    return emitNullableRuntimeValueVariableDeclaration(statement, context).join('\n')
+  }
+
   const inferred = inferExpressionType(statement.init, context)
   context.variables.set(statement.name, inferred)
 
@@ -2371,6 +2431,10 @@ function emitVariableDeclaration(statement, context) {
 }
 
 function emitScalarVariableDeclaration(statement, context) {
+  if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
+    return emitNullableRuntimeValueVariableDeclaration(statement, context)
+  }
+
   const inferred = inferExpressionType(statement.init, context)
   context.variables.set(statement.name, inferred)
 
@@ -2472,6 +2536,28 @@ function isBoxedRuntimeValueAssignment(expression, context) {
     && isBoxedRuntimeValueName(expression.target.path[0], context)
 }
 
+function isNullableRuntimeValueAssignment(expression, context) {
+  return expression.target?.type === 'Reference'
+    && expression.target.path.length === 1
+    && context.nullableVariables.has(expression.target.path[0])
+}
+
+function emitNullableRuntimeValueAssignment(expression, context) {
+  const name = expression.target.path[0]
+  const expectedTag = cRuntimeValueTag(context.variables.get(name))
+  const value = emitCValueExpression(expression.value, context)
+  const temp = nextCName(context, 'ccjs_nullable_value')
+
+  return [
+    ...value.lines,
+    `ccjs_value ${temp} = ${value.expression};`,
+    ...emitRuntimeNullableValueCheck(temp, expectedTag, context),
+    `ccjs_retain(${temp});`,
+    `ccjs_release(${name});`,
+    `${name} = ${temp};`
+  ]
+}
+
 function emitBoxedRuntimeValueAssignment(expression, context) {
   const name = expression.target.path[0]
   const expected = context.variables.get(name)
@@ -2487,6 +2573,44 @@ function emitBoxedRuntimeValueAssignment(expression, context) {
     `ccjs_release(*${name});`,
     `*${name} = ${temp};`
   ]
+}
+
+function emitRuntimeNullableValueCheck(name, expectedTag, context) {
+  if (expectedTag == null) {
+    return []
+  }
+
+  return [
+    emitRuntimeTypeCheck(`${name}.tag != CCJS_TAG_NULL && (${name}.tag != ${expectedTag} || ${name}.as.ref == 0)`, context)
+  ]
+}
+
+function cRuntimeValueTag(valueType) {
+  if (valueType === 'string') {
+    return 'CCJS_TAG_STRING'
+  }
+
+  if (valueType === 'object') {
+    return 'CCJS_TAG_OBJECT'
+  }
+
+  if (valueType === 'array') {
+    return 'CCJS_TAG_ARRAY'
+  }
+
+  if (valueType === 'map') {
+    return 'CCJS_TAG_MAP'
+  }
+
+  if (valueType === 'set') {
+    return 'CCJS_TAG_SET'
+  }
+
+  return null
+}
+
+function isRuntimeNullableType(valueType) {
+  return cRuntimeValueTag(valueType) != null
 }
 
 function isBoxedRuntimeValueName(name, context) {
@@ -2748,6 +2872,10 @@ function emitArrayVariableDeclaration(statement, context) {
 }
 
 function emitCValueExpression(expression, context) {
+  if (isNullishCoalescingExpression(expression)) {
+    return emitCNullishCoalescingValueExpression(expression, context)
+  }
+
   if (isStringConversionCall(expression, context)) {
     return emitCStringConversionValueExpression(expression, context)
   }
@@ -2805,6 +2933,13 @@ function emitCValueExpression(expression, context) {
   if (expression?.type === 'Reference') {
     const name = expression.path.join('_')
     const type = context.variables.get(name)
+
+    if (context.nullableVariables.has(name)) {
+      return {
+        lines: [],
+        expression: name
+      }
+    }
 
     if (isBoxedRuntimeValueName(name, context)) {
       const tag = type === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
@@ -3015,6 +3150,41 @@ function emitCArrayLiteralValueExpression(expression, context) {
 
   return {
     lines,
+    expression: temp
+  }
+}
+
+function emitCNullishCoalescingValueExpression(expression, context) {
+  if (!canLowerCNullishCoalescingExpression(expression, context)) {
+    context.diagnostics.push(diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
+  const left = emitCValueExpression(expression.left, context)
+  const right = emitCValueExpression(expression.right, context)
+  const temp = nextCName(context, 'ccjs_value')
+  const expectedTag = cRuntimeValueTag(inferExpressionType(expression, context))
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...left.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      `if (${left.expression}.tag == CCJS_TAG_NULL) {`,
+      ...right.lines.map(line => `  ${line}`),
+      `  ${temp} = ${right.expression};`,
+      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map(line => `  ${line}`),
+      `  ccjs_retain(${temp});`,
+      '} else {',
+      `  ${temp} = ${left.expression};`,
+      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map(line => `  ${line}`),
+      `  ccjs_retain(${temp});`,
+      '}'
+    ],
     expression: temp
   }
 }
@@ -3391,6 +3561,21 @@ function emitStringLogValue(expression, context) {
     }
   }
 
+  if (isNullishCoalescingExpression(expression) && canLowerCNullishCoalescingExpression(expression, context)) {
+    const value = emitCValueExpression(expression, context)
+    const string = nextCName(context, 'ccjs_log_string')
+
+    return {
+      lines: [
+        ...value.lines,
+        emitRuntimeTypeCheck(`${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`, context),
+        `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`
+      ],
+      format: '%.*s',
+      values: [`(int)${string}->len`, `${string}->bytes`]
+    }
+  }
+
   return {
     lines: [],
     format: '%s',
@@ -3595,6 +3780,11 @@ function emitPreparedNumberExpression(expression, context) {
 
     const leftType = inferExpressionType(expression.left, context)
     const rightType = inferExpressionType(expression.right, context)
+    const nullableNullCompare = emitPreparedNullableNullCompareExpression(expression, context)
+
+    if (nullableNullCompare != null) {
+      return nullableNullCompare
+    }
 
     if (['===', '!==', '==', '!='].includes(expression.operator) && leftType === 'string' && rightType === 'string') {
       return emitPreparedStringCompareExpression(expression, context)
@@ -3742,6 +3932,27 @@ function emitPreparedStringCompareExpression(expression, context) {
       ...left.lines,
       ...right.lines
     ],
+    expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
+  }
+}
+
+function emitPreparedNullableNullCompareExpression(expression, context) {
+  if (!['===', '!==', '==', '!='].includes(expression.operator)) {
+    return null
+  }
+
+  const nullable = expression.left?.type === 'NullLiteral' ? expression.right : expression.left
+  const maybeNull = expression.left?.type === 'NullLiteral' ? expression.left : expression.right
+
+  if (maybeNull?.type !== 'NullLiteral' || !isNullableRuntimeExpression(nullable, context)) {
+    return null
+  }
+
+  const value = emitCValueExpression(nullable, context)
+  const equals = `(${value.expression}.tag == CCJS_TAG_NULL)`
+
+  return {
+    lines: value.lines,
     expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
   }
 }
@@ -4448,6 +4659,33 @@ function isNullishCoalescingExpression(expression) {
   return expression?.type === 'BinaryExpression' && expression.operator === '??'
 }
 
+function canLowerCNullishCoalescingExpression(expression, context) {
+  if (!isNullishCoalescingExpression(expression)) {
+    return false
+  }
+
+  const resultType = inferExpressionType(expression, context)
+
+  return isRuntimeNullableType(resultType)
+    && (inferExpressionType(expression.left, context) === 'null' || isNullableRuntimeExpression(expression.left, context))
+}
+
+function isNullableRuntimeExpression(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    return context.nullableVariables.has(expression.path[0])
+  }
+
+  if (expression?.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
+    return context.functionReturnNullables.get(expression.callee.path[0]) === true
+  }
+
+  if (isNullishCoalescingExpression(expression)) {
+    return false
+  }
+
+  return expression?.nullable === true && isRuntimeNullableType(inferExpressionType(expression, context))
+}
+
 function isStringConcatExpression(expression, context) {
   return expression?.type === 'BinaryExpression'
     && expression.operator === '+'
@@ -4458,6 +4696,7 @@ function isStringConcatExpression(expression, context) {
 function isRuntimeProducedStringExpression(expression, context) {
   return (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string')
     || isStringConcatExpression(expression, context)
+    || (isNullishCoalescingExpression(expression) && canLowerCNullishCoalescingExpression(expression, context))
     || isBoxedRuntimeStringReference(expression, context)
 }
 
@@ -6220,6 +6459,7 @@ function withVariableScope(context, callback) {
   const previousBoxedVariables = context.boxedVariables
   const previousFunctionTypes = context.functionTypes
   const previousMapTypes = context.mapTypes
+  const previousNullableVariables = context.nullableVariables
   const previousObjectShapes = context.objectShapes
   const previousRuntimeCallbacks = context.runtimeCallbacks
   const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
@@ -6230,6 +6470,7 @@ function withVariableScope(context, callback) {
   context.boxedVariables = new Set(previousBoxedVariables)
   context.functionTypes = new Map(previousFunctionTypes)
   context.mapTypes = new Map(previousMapTypes)
+  context.nullableVariables = new Set(previousNullableVariables)
   context.objectShapes = new Map(previousObjectShapes)
   context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
   context.runtimeArrayElementTypes = new Map(previousRuntimeArrayElementTypes)
@@ -6244,6 +6485,7 @@ function withVariableScope(context, callback) {
     context.boxedVariables = previousBoxedVariables
     context.functionTypes = previousFunctionTypes
     context.mapTypes = previousMapTypes
+    context.nullableVariables = previousNullableVariables
     context.objectShapes = previousObjectShapes
     context.runtimeCallbacks = previousRuntimeCallbacks
     context.runtimeArrayElementTypes = previousRuntimeArrayElementTypes

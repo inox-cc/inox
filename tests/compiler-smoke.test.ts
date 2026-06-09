@@ -1879,7 +1879,27 @@ export function main(): void {
   })
 })
 
-test('compiles nullish coalescing to JS and rejects it for C', () => {
+test('lowers C nullable string nullish coalescing', () => {
+  const result = compileSource(`export function main(): void {
+  const missing: string | null = null
+  const present: string | null = 'Grace'
+  console.log(missing ?? 'Ada', present ?? 'Ada', missing === null, present !== null)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.equal(result.hir.body[0].body[0].nullable, true)
+  assert.deepEqual(result.ir.features, [
+    'runtime-values',
+    'string-bytes'
+  ])
+  assert.match(result.code, /ccjs_null_value\(\)/)
+  assert.match(result.code, /if \(missing\.tag == CCJS_TAG_NULL\) \{/)
+  assert.match(result.code, /present\.tag == CCJS_TAG_NULL/)
+})
+
+test('compiles unsupported nullish coalescing to JS and rejects it for C', () => {
   const source = `function printValue(value: unknown): void {
   console.log(value ?? 'Ada')
 }

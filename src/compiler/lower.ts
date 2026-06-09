@@ -6,6 +6,7 @@ type LowerContext = {
 
 type LowerResolvedType = {
   valueType: string | null
+  nullable: boolean
   arrayElementType: string | null
   mapKeyType: string | null
   mapValueType: string | null
@@ -47,6 +48,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       loc: item.loc,
       params: item.params.map(param => lowerParam(param, context)),
       returnType: returnType.valueType ?? item.returnType,
+      returnNullable: returnType.nullable,
       returnArrayElementType: returnType.arrayElementType,
       returnMapKeyType: returnType.mapKeyType,
       returnMapValueType: returnType.mapValueType,
@@ -61,14 +63,19 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       exported: item.exported,
       name: item.name,
       loc: item.loc,
-      methods: item.methods.map(method => ({
-        type: 'MethodDefinition',
-        name: method.name,
-        loc: method.loc,
-        params: method.params.map(param => lowerParam(param, context)),
-        returnType: method.returnType,
-        body: method.body.map(statement => lowerStatement(statement, context))
-      }))
+      methods: item.methods.map(method => {
+        const returnType = resolveDeclaredType(method.returnType, context)
+
+        return {
+          type: 'MethodDefinition',
+          name: method.name,
+          loc: method.loc,
+          params: method.params.map(param => lowerParam(param, context)),
+          returnType: returnType.valueType ?? method.returnType,
+          returnNullable: returnType.nullable,
+          body: method.body.map(statement => lowerStatement(statement, context))
+        }
+      })
     }
   }
 
@@ -170,6 +177,7 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       name: statement.name,
       loc: statement.loc,
       declaredType: statement.declaredType,
+      nullable: declared.nullable,
       shape: declared.shape,
       functionType: declared.functionType,
       arrayElementType: declared.arrayElementType ?? inferArrayElementType(init),
@@ -221,6 +229,7 @@ function lowerParam(param: AnyNode, context: LowerContext): AnyNode {
   return {
     ...param,
     valueType: declared.valueType ?? param.valueType,
+    nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
@@ -234,12 +243,24 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
   if (name == null) {
     return {
       valueType: null,
+      nullable: false,
       arrayElementType: null,
       mapKeyType: null,
       mapValueType: null,
       setElementType: null,
       shape: null,
       functionType: null
+    }
+  }
+
+  const nullableTypeName = nullableTypeNameFromTypeName(name)
+
+  if (nullableTypeName != null) {
+    const inner = resolveDeclaredType(nullableTypeName, context)
+
+    return {
+      ...inner,
+      nullable: true
     }
   }
 
@@ -250,6 +271,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
 
     return {
       valueType: 'array',
+      nullable: false,
       arrayElementType: elementType?.valueType ?? 'unknown',
       mapKeyType: null,
       mapValueType: null,
@@ -267,6 +289,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
 
     return {
       valueType: 'map',
+      nullable: false,
       arrayElementType: null,
       mapKeyType: keyType?.valueType ?? 'unknown',
       mapValueType: valueType?.valueType ?? 'unknown',
@@ -283,6 +306,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
 
     return {
       valueType: 'set',
+      nullable: false,
       arrayElementType: null,
       mapKeyType: null,
       mapValueType: null,
@@ -295,6 +319,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
   if (isBuiltinValueType(name)) {
     return {
       valueType: name,
+      nullable: false,
       arrayElementType: null,
       mapKeyType: null,
       mapValueType: null,
@@ -309,6 +334,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
   if (type?.kind === 'object') {
     return {
       valueType: 'object',
+      nullable: false,
       arrayElementType: null,
       mapKeyType: null,
       mapValueType: null,
@@ -323,6 +349,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
 
     return {
       valueType: 'function',
+      nullable: false,
       arrayElementType: null,
       mapKeyType: null,
       mapValueType: null,
@@ -336,6 +363,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
           return {
             ...param,
             valueType: declared.valueType ?? param.valueType,
+            nullable: declared.nullable,
             arrayElementType: declared.arrayElementType,
             mapKeyType: declared.mapKeyType,
             mapValueType: declared.mapValueType,
@@ -344,6 +372,8 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
             functionType: declared.functionType
           }
         }),
+        returnType: returnType.valueType ?? type.returnType,
+        returnNullable: returnType.nullable,
         returnArrayElementType: returnType.arrayElementType,
         returnMapKeyType: returnType.mapKeyType,
         returnMapValueType: returnType.mapValueType,
@@ -354,6 +384,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
 
   return {
     valueType: null,
+    nullable: false,
     arrayElementType: null,
     mapKeyType: null,
     mapValueType: null,
@@ -373,6 +404,7 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
         ...field,
         declaredType: field.valueType,
         valueType: declared.valueType ?? field.valueType,
+        nullable: declared.nullable,
         arrayElementType: declared.arrayElementType,
         mapKeyType: declared.mapKeyType,
         mapValueType: declared.mapValueType,
@@ -403,6 +435,12 @@ function inferSetElementType(expression: AnyNode | null): string | null {
 
 function arrayElementTypeNameFromTypeName(name: string): string | null {
   const match = /^array<(.+)>$/.exec(name)
+
+  return match?.[1] ?? null
+}
+
+function nullableTypeNameFromTypeName(name: string): string | null {
+  const match = /^nullable<(.+)>$/.exec(name)
 
   return match?.[1] ?? null
 }

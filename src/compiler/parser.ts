@@ -1420,6 +1420,17 @@ function locFromToken(token: SourceLocation): SourceLocation {
 }
 
 function normalizeTypeName(name: string): string {
+  const unionArgs = splitUnionArgs(name)
+
+  if (unionArgs.length > 1) {
+    const normalized = unionArgs.map(arg => normalizeTypeName(arg))
+    const withoutNull = normalized.filter(arg => arg !== 'null')
+
+    return normalized.length === 2 && withoutNull.length === 1
+      ? `nullable<${withoutNull[0]}>`
+      : 'unknown'
+  }
+
   if (name.endsWith('[]')) {
     return `array<${normalizeTypeName(name.slice(0, -2))}>`
   }
@@ -1486,6 +1497,29 @@ function splitGenericArgs(value: string): string[] {
     } else if (char === '>') {
       depth -= 1
     } else if (char === ',' && depth === 0) {
+      args.push(value.slice(start, index))
+      start = index + 1
+    }
+  }
+
+  args.push(value.slice(start))
+
+  return args.map(arg => arg.trim()).filter(Boolean)
+}
+
+function splitUnionArgs(value: string): string[] {
+  const args: string[] = []
+  let depth = 0
+  let start = 0
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+
+    if (char === '<') {
+      depth += 1
+    } else if (char === '>') {
+      depth -= 1
+    } else if (char === '|' && depth === 0) {
       args.push(value.slice(start, index))
       start = index + 1
     }
