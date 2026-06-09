@@ -1174,6 +1174,7 @@ function createFunctionContext(baseContext, returnType) {
     objectShapes: new Map(),
     ownedValues: [],
     runtimeCallbacks: new Set(),
+    runtimeArrayElementTypes: new Map(),
     runtimeStrings: new Set(),
     statusReturn: false,
     usedCleanupGoto: false,
@@ -1968,6 +1969,10 @@ function emitDynamicObjectMemberVariableDeclaration(statement, member, context) 
 }
 
 function emitObjectMemberVariableDeclaration(statement, member, context, emitGetCall) {
+  if (member.valueType === 'array') {
+    return emitObjectArrayMemberVariableDeclaration(statement, member, context, emitGetCall)
+  }
+
   if (member.valueType === 'string') {
     return emitObjectStringMemberVariableDeclaration(statement, member, context, emitGetCall)
   }
@@ -1986,6 +1991,21 @@ function emitObjectMemberVariableDeclaration(statement, member, context, emitGet
   ]
 
   context.variables.set(statement.name, member.valueType)
+
+  return lines
+}
+
+function emitObjectArrayMemberVariableDeclaration(statement, member, context, emitGetCall) {
+  registerOwnedValue(context, statement.name)
+
+  const lines = [
+    ...emitPrepareOwnedValueWrite(statement.name),
+    emitStatusCheck(emitGetCall(statement.name), context),
+    emitRuntimeTypeCheck(`${statement.name}.tag != CCJS_TAG_ARRAY || ${statement.name}.as.ref == 0`, context)
+  ]
+
+  context.variables.set(statement.name, 'array')
+  context.runtimeArrayElementTypes.set(statement.name, member.arrayElementType ?? 'unknown')
 
   return lines
 }
@@ -3901,6 +3921,10 @@ function resolveRuntimeArrayIndex(expression, context) {
 }
 
 function resolveRuntimeArrayElementType(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    return context.runtimeArrayElementTypes.get(expression.path[0]) ?? null
+  }
+
   if (expression?.type === 'MemberExpression') {
     const member = resolveKnownObjectMember(expression, context)
 
@@ -4752,12 +4776,14 @@ function withVariableScope(context, callback) {
   const previousFunctionTypes = context.functionTypes
   const previousObjectShapes = context.objectShapes
   const previousRuntimeCallbacks = context.runtimeCallbacks
+  const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
   const previousRuntimeStrings = context.runtimeStrings
   context.variables = new Map(previous)
   context.arrayShapes = new Map(previousArrayShapes)
   context.functionTypes = new Map(previousFunctionTypes)
   context.objectShapes = new Map(previousObjectShapes)
   context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
+  context.runtimeArrayElementTypes = new Map(previousRuntimeArrayElementTypes)
   context.runtimeStrings = new Set(previousRuntimeStrings)
 
   try {
@@ -4768,6 +4794,7 @@ function withVariableScope(context, callback) {
     context.functionTypes = previousFunctionTypes
     context.objectShapes = previousObjectShapes
     context.runtimeCallbacks = previousRuntimeCallbacks
+    context.runtimeArrayElementTypes = previousRuntimeArrayElementTypes
     context.runtimeStrings = previousRuntimeStrings
   }
 }

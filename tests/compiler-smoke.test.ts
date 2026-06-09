@@ -236,6 +236,30 @@ export function main(): void {
   assert.match(result.code, /printf\("%g %g %\.\*s\\n", ccjs_log_value_\d+\.as\.number, \(\(double\)\(ccjs_log_value_\d+\.as\.boolean \? 1 : 0\)\), \(int\)name->len, name->bytes\);/)
 })
 
+test('lowers C runtime array locals from object fields', () => {
+  const result = compileSource(`type Box = {
+  values: number[],
+  names: string[]
+}
+
+export function main(): void {
+  const box: Box = { values: [1, 2, 3], names: ['Ada'] }
+  const values = box.values
+  const names = box.names
+  console.log(values[1], names[0])
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_object_get_known\(box, 0, &values\)/)
+  assert.match(result.code, /values\.tag != CCJS_TAG_ARRAY/)
+  assert.match(result.code, /ccjs_object_get_known\(box, 1, &names\)/)
+  assert.match(result.code, /names\.tag != CCJS_TAG_ARRAY/)
+  assert.match(result.code, /ccjs_array_get\(values, 1, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(names, 0, &ccjs_log_value_\d+\)/)
+})
+
 test('lowers C string length for literals and runtime strings', () => {
   const result = compileSource(`type User = {
   name: string
