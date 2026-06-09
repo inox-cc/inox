@@ -1169,14 +1169,35 @@ function run(callback: NumberCallback): void {
   })
 })
 
-test('rejects inline C callback values with a stable diagnostic', () => {
-  assertDiagnostic(`function run(callback: Function): void {
+test('compiles non-capturing inline C callback values to plain functions', () => {
+  const source = `function run(callback: Function): void {
   callback()
 }
 
 export function main(): void {
   run(() => {
     console.log('inline')
+  })
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /static void ccjs_callback_arrow_\d+\(void\);/)
+  assert.match(c.code, /static void ccjs_callback_arrow_\d+\(void\) \{\n  printf\("%s\\n", "inline"\);/)
+  assert.match(c.code, /run\(ccjs_callback_arrow_\d+\);/)
+})
+
+test('rejects capturing plain C callback values with a stable diagnostic', () => {
+  assertDiagnostic(`function run(callback: Function): void {
+  callback()
+}
+
+export function main(): void {
+  const label = 'captured'
+  run(() => {
+    console.log(label)
   })
 }
 `, 'CCJS_C_FUNCTION_VALUE', {

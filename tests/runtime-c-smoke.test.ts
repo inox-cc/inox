@@ -846,6 +846,50 @@ export function main(): void {
   }
 })
 
+test('generated C non-capturing inline callback values compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-inline-pointer-callback-'))
+  const source = join(dir, 'inline-pointer-callback.c')
+  const output = join(dir, 'inline-pointer-callback')
+
+  try {
+    const result = compileSource(`function run(callback: Function): void {
+  callback()
+}
+
+export function main(): void {
+  run(() => {
+    console.log('inline')
+  })
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'inline\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C typed callback aliases compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

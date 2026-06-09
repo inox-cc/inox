@@ -1,14 +1,13 @@
 // @targets c
-// @expect diagnostic
-// @diagnostic CCJS_C_FUNCTION_VALUE
+// @expect pass
+// @stdout inline
 
 function run(callback: Function): void {
   callback()
 }
 
 export function main(): void {
-  const label = 'inline'
   run(() => {
-    console.log(label)
+    console.log('inline')
   })
 }

@@ -43,8 +43,8 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(programs)
   const baseContext = createBaseContext(diagnostics, functions)
-  baseContext.callbackWrappers = collectRuntimeCallbackWrappers(programs, baseContext)
-  const needsCallbackRuntime = baseContext.callbackWrappers.size > 0 || programs.some(usesCCallbackRuntime)
+  baseContext.callbackWrappers = collectCallbackWrappers(programs, baseContext)
+  const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || programs.some(usesCCallbackRuntime)
   const needsRuntime = needsCallbackRuntime || programs.some(usesCRuntime)
   const needsTimeRuntime = programs.some(usesCTimeRuntime)
   reportUnsupportedClasses(programs, diagnostics)
@@ -62,6 +62,11 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   }
 
   for (const wrapper of baseContext.callbackWrappers.values()) {
+    if (wrapper.kind === 'plain-arrow') {
+      lines.push(`${emitPlainArrowCallbackWrapperHead(wrapper)};`)
+      continue
+    }
+
     if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
       lines.push(`static void ${wrapper.finalizerName}(void* context);`)
     }
@@ -74,7 +79,9 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null) {
   }
 
   for (const wrapper of baseContext.callbackWrappers.values()) {
-    lines.push(...emitRuntimeCallbackWrapperDeclaration(wrapper, baseContext))
+    lines.push(...(wrapper.kind === 'plain-arrow'
+      ? emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext)
+      : emitRuntimeCallbackWrapperDeclaration(wrapper, baseContext)))
     lines.push('')
   }
 
@@ -293,9 +300,14 @@ function isRuntimeFunctionType(functionType) {
     && functionType.params.every(param => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
 }
 
-function collectRuntimeCallbackWrappers(programs, context) {
+function collectCallbackWrappers(programs, context) {
   const wrappers = new Map()
   const register = (expression, functionType, scopes) => {
+    if (isPlainFunctionPointerType(functionType) && expression?.type === 'ArrowFunctionExpression') {
+      registerPlainArrow(expression, functionType, scopes)
+      return
+    }
+
     if (!isRuntimeFunctionType(functionType)) {
       return
     }
@@ -348,6 +360,30 @@ function collectRuntimeCallbackWrappers(programs, context) {
       expression,
       functionType,
       captures: collectArrowCaptures(expression, scopes, context)
+    }
+
+    wrappers.set(key, wrapper)
+    context.callbackArrowWrappers.set(expression, wrapper)
+  }
+  const registerPlainArrow = (expression, functionType, scopes) => {
+    if (context.callbackArrowWrappers.has(expression)) {
+      return
+    }
+
+    const captures = collectArrowCaptures(expression, scopes, context)
+
+    if (captures.length > 0) {
+      return
+    }
+
+    const index = wrappers.size
+    const key = `plain-arrow:${index}`
+    const wrapper = {
+      kind: 'plain-arrow',
+      key,
+      name: `ccjs_callback_arrow_${index}`,
+      expression,
+      functionType
     }
 
     wrappers.set(key, wrapper)
@@ -764,6 +800,60 @@ function runtimeCallbackWrapperFor(target, functionType, context) {
 
 function emitRuntimeCallbackWrapperHead(wrapper) {
   return `static ccjs_status ${wrapper.name}(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out)`
+}
+
+function isRuntimeCallbackWrapper(wrapper) {
+  return wrapper.kind !== 'plain-arrow'
+}
+
+function emitPlainArrowCallbackWrapperHead(wrapper) {
+  return `static ${emitFunctionPointerReturnType(wrapper.functionType)} ${wrapper.name}(${emitPlainArrowCallbackParams(wrapper)})`
+}
+
+function emitPlainArrowCallbackParams(wrapper) {
+  const params = wrapper.functionType?.params ?? []
+
+  if (params.length === 0) {
+    return 'void'
+  }
+
+  return params.map((param, index) => `${emitCType(param.valueType)} ${plainArrowCallbackParamName(wrapper, index)}`).join(', ')
+}
+
+function emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext) {
+  const context = createFunctionContext(baseContext, wrapper.functionType?.returnType ?? 'void')
+  context.cleanupEnabled = false
+
+  for (const [index, param] of (wrapper.functionType?.params ?? []).entries()) {
+    context.variables.set(plainArrowCallbackParamName(wrapper, index), param.valueType)
+  }
+
+  const statements = wrapper.expression.expressionBody
+    ? [{
+        type: 'ExpressionStatement',
+        expression: wrapper.expression.body
+      }]
+    : wrapper.expression.body
+  const statementLines = statements.flatMap(statement => emitStatement(statement, context))
+  const lines = [
+    `${emitPlainArrowCallbackWrapperHead(wrapper)} {`,
+    ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
+    ...statementLines.map(line => `  ${line}`)
+  ]
+
+  if (shouldEmitCleanupLabel(context)) {
+    lines.push('ccjs_cleanup:')
+    lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(`  ${emitCleanupReturn(context)}`)
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function plainArrowCallbackParamName(wrapper, index) {
+  return wrapper.expression.params[index]?.name ?? `ccjs_arg_${index}`
 }
 
 function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
@@ -2474,7 +2564,13 @@ function emitCallee(callee, context) {
 
 function emitFunctionValueExpression(expression, context) {
   if (expression?.type === 'ArrowFunctionExpression') {
-    context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'inline or capturing callbacks are not supported by the current C backend slice; use a named function with a supported callback signature', expression.loc))
+    const wrapper = context.callbackArrowWrappers.get(expression)
+
+    if (wrapper?.kind === 'plain-arrow') {
+      return wrapper.name
+    }
+
+    context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing or unsupported inline callbacks are not supported by the current C backend slice; use a named function or a non-capturing inline callback with a supported signature', expression.loc))
 
     return '0'
   }
