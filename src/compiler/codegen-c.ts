@@ -2116,8 +2116,8 @@ function emitCollectionVariableDeclaration(statement, context) {
     return [`double ${statement.name} = 0;`]
   }
 
-  if (statement.init.args.length !== 0) {
-    context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'C collection constructors currently support only empty new Map() and new Set()', statement.init.loc))
+  if (statement.init.args.length > 1) {
+    context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'C collection constructors currently support at most one array literal iterable', statement.init.loc))
   }
 
   registerOwnedValue(context, statement.name)
@@ -2129,19 +2129,78 @@ function emitCollectionVariableDeclaration(statement, context) {
       value: statement.mapValueType ?? 'unknown'
     })
 
-    return [
+    const lines = [
       ...emitPrepareOwnedValueWrite(statement.name),
       emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context)
     ]
+
+    lines.push(...emitMapConstructorEntries(statement.name, statement.init.args[0], context, statement.init.loc))
+
+    return lines
   }
 
   context.variables.set(statement.name, 'set')
   context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
 
-  return [
+  const lines = [
     ...emitPrepareOwnedValueWrite(statement.name),
     emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context)
   ]
+
+  lines.push(...emitSetConstructorValues(statement.name, statement.init.args[0], context, statement.init.loc))
+
+  return lines
+}
+
+function emitMapConstructorEntries(name, expression, context, loc) {
+  if (expression == null) {
+    return []
+  }
+
+  if (expression.type !== 'ArrayLiteral') {
+    context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'C Map constructor currently supports only array literal entries', expression.loc ?? loc))
+    return []
+  }
+
+  const lines: string[] = []
+
+  for (const entry of expression.elements) {
+    if (entry.type !== 'ArrayLiteral' || entry.elements.length !== 2) {
+      context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'C Map constructor entries must be [key, value] array literals', entry.loc ?? loc))
+      continue
+    }
+
+    const key = emitCValueExpression(entry.elements[0], context)
+    const value = emitCValueExpression(entry.elements[1], context)
+
+    lines.push(...key.lines)
+    lines.push(...value.lines)
+    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+  }
+
+  return lines
+}
+
+function emitSetConstructorValues(name, expression, context, loc) {
+  if (expression == null) {
+    return []
+  }
+
+  if (expression.type !== 'ArrayLiteral') {
+    context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'C Set constructor currently supports only array literal values', expression.loc ?? loc))
+    return []
+  }
+
+  const lines: string[] = []
+
+  for (const element of expression.elements) {
+    const value = emitCValueExpression(element, context)
+
+    lines.push(...value.lines)
+    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
+  }
+
+  return lines
 }
 
 function emitObjectVariableDeclaration(statement, context) {
