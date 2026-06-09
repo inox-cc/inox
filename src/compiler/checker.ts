@@ -19,6 +19,12 @@ const globals = new Map<string, SymbolInfo>([
     valueType: 'object',
     constructable: true
   }],
+  ['Error', {
+    kind: 'global',
+    mutable: false,
+    valueType: 'object',
+    constructable: true
+  }],
   ['performance', {
     kind: 'global',
     mutable: false,

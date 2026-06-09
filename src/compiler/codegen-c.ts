@@ -5,6 +5,7 @@ const cJsGlobalRoots = new Set([
   'Array',
   'Buffer',
   'Date',
+  'Error',
   'Int8Array',
   'Int16Array',
   'Int32Array',

@@ -1242,6 +1242,30 @@ test('compiles throw and try catch finally to JS and rejects them for C', () => 
   })
 })
 
+test('compiles Error objects to JS and rejects them for C', () => {
+  const source = `export function main(): void {
+  try {
+    throw new Error('boom')
+  } catch (error) {
+    console.log(error.message)
+  }
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+
+  assert.match(js.code, /throw new Error\("boom"\)/)
+  assert.match(js.code, /console\.log\(error\.message\)/)
+  assertDiagnostic(`export function main(): void {
+  const error = new Error('boom')
+  console.log(error)
+}
+`, 'CCJS_C_JS_GLOBAL', {
+    target: 'c'
+  })
+})
+
 test('compiles simple classes to JS and rejects them for C', () => {
   const source = `class User {
   constructor(name: string) {
