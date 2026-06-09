@@ -127,7 +127,9 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, need
     if (needsCallbackRuntime) {
       lines.push('#include "ccjs/callback.h"')
     }
+    lines.push('#include "ccjs/map.h"')
     lines.push('#include "ccjs/object.h"')
+    lines.push('#include "ccjs/set.h"')
     lines.push('#include "ccjs/string.h"')
   }
 
@@ -1369,10 +1371,12 @@ function createFunctionContext(baseContext, returnType) {
     boxedVariables: new Set(),
     cleanupEnabled: true,
     functionTypes: new Map(),
+    mapTypes: new Map(),
     objectShapes: new Map(),
     ownedValues: [],
     runtimeCallbacks: new Set(),
     runtimeArrayElementTypes: new Map(),
+    setElementTypes: new Map(),
     runtimeStrings: new Set(),
     statusReturn: false,
     usedCleanupGoto: false,
@@ -1556,6 +1560,10 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'VariableDeclaration') {
+    if (isCollectionConstructorExpression(statement.init)) {
+      return emitCollectionVariableDeclaration(statement, context)
+    }
+
     if (statement.init?.type === 'ObjectLiteral') {
       if (context.boxedMutableCaptureDeclarations.has(statement)) {
         return emitBoxedObjectVariableDeclaration(statement, context)
@@ -1602,6 +1610,12 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'CallExpression') {
+    const collectionCall = emitPreparedCollectionCallExpression(statement.expression, context)
+
+    if (collectionCall != null) {
+      return collectionCall.lines
+    }
+
     const call = emitPreparedCallExpression(statement.expression, context)
 
     return call.expression === ''
@@ -1928,6 +1942,13 @@ function emitPreparedForInitializer(init, context) {
 }
 
 function emitPreparedForVariableDeclaration(statement, context) {
+  if (isCollectionConstructorExpression(statement.init)) {
+    return {
+      lines: emitCollectionVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
   if (statement.init?.type === 'ObjectLiteral') {
     return {
       lines: emitObjectVariableDeclaration(statement, context),
@@ -2085,6 +2106,42 @@ function emitRuntimeStringVariableDeclaration(statement, expression, context) {
   context.runtimeStrings.add(statement.name)
 
   return lines
+}
+
+function emitCollectionVariableDeclaration(statement, context) {
+  const constructor = collectionConstructorName(statement.init)
+
+  if (constructor == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'this collection constructor is not supported by the current C backend slice', statement.loc))
+    return [`double ${statement.name} = 0;`]
+  }
+
+  if (statement.init.args.length !== 0) {
+    context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'C collection constructors currently support only empty new Map() and new Set()', statement.init.loc))
+  }
+
+  registerOwnedValue(context, statement.name)
+
+  if (constructor === 'Map') {
+    context.variables.set(statement.name, 'map')
+    context.mapTypes.set(statement.name, {
+      key: statement.mapKeyType ?? 'unknown',
+      value: statement.mapValueType ?? 'unknown'
+    })
+
+    return [
+      ...emitPrepareOwnedValueWrite(statement.name),
+      emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context)
+    ]
+  }
+
+  context.variables.set(statement.name, 'set')
+  context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
+
+  return [
+    ...emitPrepareOwnedValueWrite(statement.name),
+    emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context)
+  ]
 }
 
 function emitObjectVariableDeclaration(statement, context) {
@@ -2616,6 +2673,13 @@ function emitCValueExpression(expression, context) {
       }
     }
 
+    if (type === 'map' || type === 'set') {
+      return {
+        lines: [],
+        expression: name
+      }
+    }
+
     if (type === 'number') {
       return {
         lines: [],
@@ -2742,6 +2806,12 @@ function emitCValueExpression(expression, context) {
   }
 
   if (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') {
+    const collectionCall = emitPreparedCollectionCallExpression(expression, context)
+
+    if (collectionCall != null) {
+      return collectionCall
+    }
+
     const temp = nextCName(context, 'ccjs_value')
     registerOwnedValue(context, temp)
     const call = emitPreparedCallExpression(expression, context)
@@ -3401,6 +3471,12 @@ function emitPreparedNumberExpression(expression, context) {
       return emitPreparedStringPredicateCall(expression, context)
     }
 
+    const collectionCall = emitPreparedCollectionCallExpression(expression, context)
+
+    if (collectionCall != null) {
+      return collectionCall
+    }
+
     return emitPreparedCallExpression(expression, context)
   }
 
@@ -3415,6 +3491,12 @@ function emitPreparedNumberExpression(expression, context) {
 
     if (length != null) {
       return length
+    }
+
+    const collectionSize = emitPreparedCollectionSizeExpression(expression, context)
+
+    if (collectionSize != null) {
+      return collectionSize
     }
 
     const member = resolveKnownObjectMember(expression, context)
@@ -3664,6 +3746,12 @@ function emitCallExpression(expression, context) {
 }
 
 function emitPreparedCallExpression(expression, context) {
+  const collectionCall = emitPreparedCollectionCallExpression(expression, context)
+
+  if (collectionCall != null) {
+    return collectionCall
+  }
+
   const callbackType = resolveRuntimeCallbackCalleeType(expression.callee, context)
 
   if (callbackType != null) {
@@ -3974,6 +4062,14 @@ function inferExpressionType(expression, context) {
     return 'number'
   }
 
+  if (expression?.type === 'NewExpression' && collectionConstructorName(expression) === 'Map') {
+    return 'map'
+  }
+
+  if (expression?.type === 'NewExpression' && collectionConstructorName(expression) === 'Set') {
+    return 'set'
+  }
+
   if (isStringConversionCall(expression, context)) {
     return 'string'
   }
@@ -4153,6 +4249,10 @@ function cUnsupportedExpressionCode(type) {
     return 'CCJS_C_JS_GLOBAL'
   }
 
+  if (type === 'map' || type === 'set') {
+    return 'CCJS_C_COLLECTION'
+  }
+
   return 'CCJS_C_UNSUPPORTED_EXPR'
 }
 
@@ -4215,6 +4315,201 @@ function isArrayMethodCall(expression) {
   return expression?.type === 'CallExpression'
     && expression.callee.type === 'MemberExpression'
     && cArrayMethods.has(expression.callee.property)
+}
+
+function isCollectionConstructorExpression(expression) {
+  return collectionConstructorName(expression) != null
+}
+
+function collectionConstructorName(expression) {
+  if (expression?.type !== 'NewExpression' || expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return null
+  }
+
+  return ['Map', 'Set'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
+}
+
+function emitPreparedCollectionCallExpression(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
+    return null
+  }
+
+  const object = expression.callee.object
+
+  if (object.type !== 'Reference' || object.path.length !== 1) {
+    return null
+  }
+
+  const name = object.path[0]
+  const type = context.variables.get(name)
+
+  if (type === 'map') {
+    return emitPreparedMapMethodCall(name, expression, context)
+  }
+
+  if (type === 'set') {
+    return emitPreparedSetMethodCall(name, expression, context)
+  }
+
+  return null
+}
+
+function emitPreparedMapMethodCall(name, expression, context) {
+  const method = expression.callee.property
+
+  if (method === 'clear') {
+    return {
+      lines: [
+        emitStatusCheck(`ccjs_map_clear(${name})`, context)
+      ],
+      expression: ''
+    }
+  }
+
+  if (method === 'set') {
+    const key = emitCValueExpression(expression.args[0], context)
+    const value = emitCValueExpression(expression.args[1], context)
+
+    return {
+      lines: [
+        ...key.lines,
+        ...value.lines,
+        emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context)
+      ],
+      expression: name
+    }
+  }
+
+  if (method === 'get') {
+    const key = emitCValueExpression(expression.args[0], context)
+    const valueType = inferExpressionType(expression, context)
+    const out = nextCName(context, 'ccjs_map_value')
+    registerOwnedValue(context, out)
+
+    const lines = [
+      ...key.lines,
+      ...emitPrepareOwnedValueWrite(out),
+      emitStatusCheck(`ccjs_map_get(${name}, ${key.expression}, &${out})`, context)
+    ]
+
+    if (valueType === 'number') {
+      lines.push(emitRuntimeTypeCheck(`${out}.tag != CCJS_TAG_NUMBER`, context))
+      return {
+        lines,
+        expression: `${out}.as.number`
+      }
+    }
+
+    if (valueType === 'boolean') {
+      lines.push(emitRuntimeTypeCheck(`${out}.tag != CCJS_TAG_BOOL`, context))
+      return {
+        lines,
+        expression: `(${out}.as.boolean ? 1 : 0)`
+      }
+    }
+
+    if (valueType === 'string') {
+      lines.push(emitRuntimeTypeCheck(`${out}.tag != CCJS_TAG_STRING || ${out}.as.ref == 0`, context))
+    }
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  if (method === 'has' || method === 'delete') {
+    const key = emitCValueExpression(expression.args[0], context)
+    const out = nextCName(context, `ccjs_map_${method}`)
+    const helper = method === 'has' ? 'ccjs_map_has' : 'ccjs_map_delete'
+
+    return {
+      lines: [
+        ...key.lines,
+        `bool ${out} = false;`,
+        emitStatusCheck(`${helper}(${name}, ${key.expression}, &${out})`, context)
+      ],
+      expression: `(${out} ? 1 : 0)`
+    }
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', `Map.${method} is not supported by the current C backend slice`, expression.loc))
+
+  return {
+    lines: [],
+    expression: '0'
+  }
+}
+
+function emitPreparedSetMethodCall(name, expression, context) {
+  const method = expression.callee.property
+
+  if (method === 'clear') {
+    return {
+      lines: [
+        emitStatusCheck(`ccjs_set_clear(${name})`, context)
+      ],
+      expression: ''
+    }
+  }
+
+  if (method === 'add') {
+    const value = emitCValueExpression(expression.args[0], context)
+
+    return {
+      lines: [
+        ...value.lines,
+        emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context)
+      ],
+      expression: name
+    }
+  }
+
+  if (method === 'has' || method === 'delete') {
+    const value = emitCValueExpression(expression.args[0], context)
+    const out = nextCName(context, `ccjs_set_${method}`)
+    const helper = method === 'has' ? 'ccjs_set_has' : 'ccjs_set_delete'
+
+    return {
+      lines: [
+        ...value.lines,
+        `bool ${out} = false;`,
+        emitStatusCheck(`${helper}(${name}, ${value.expression}, &${out})`, context)
+      ],
+      expression: `(${out} ? 1 : 0)`
+    }
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', `Set.${method} is not supported by the current C backend slice`, expression.loc))
+
+  return {
+    lines: [],
+    expression: '0'
+  }
+}
+
+function emitPreparedCollectionSizeExpression(expression, context) {
+  if (expression?.type !== 'MemberExpression' || expression.property !== 'size' || expression.object.type !== 'Reference' || expression.object.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.object.path[0]
+  const type = context.variables.get(name)
+
+  if (type !== 'map' && type !== 'set') {
+    return null
+  }
+
+  const out = nextCName(context, `ccjs_${type}_size`)
+  const helper = type === 'map' ? 'ccjs_map_size' : 'ccjs_set_size'
+
+  return {
+    lines: [
+      `size_t ${out} = 0;`,
+      emitStatusCheck(`${helper}(${name}, &${out})`, context)
+    ],
+    expression: out
+  }
 }
 
 function cStringPredicateHelperName(method) {
@@ -5009,6 +5304,10 @@ function expressionUsesCRuntime(expression) {
     return false
   }
 
+  if (expression.type === 'NewExpression' && collectionConstructorName(expression) != null) {
+    return true
+  }
+
   if (expression.type === 'ObjectLiteral') {
     return true
   }
@@ -5026,6 +5325,10 @@ function expressionUsesCRuntime(expression) {
   }
 
   if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+    if (expression.type === 'CallExpression' && isCollectionMethodCallName(expression)) {
+      return true
+    }
+
     if (expression.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1 && expression.callee.path[0] === 'String') {
       return true
     }
@@ -5217,6 +5520,11 @@ function expressionMayBeCStringCompareOperand(expression) {
   return ['Reference', 'MemberExpression', 'IndexExpression', 'CallExpression'].includes(expression.type)
 }
 
+function isCollectionMethodCallName(expression) {
+  return expression.callee.type === 'MemberExpression'
+    && ['add', 'clear', 'delete', 'get', 'has', 'set'].includes(expression.callee.property)
+}
+
 function nodeUsesCStringLength(node) {
   if (node == null) {
     return false
@@ -5304,17 +5612,21 @@ function withVariableScope(context, callback) {
   const previousArrayShapes = context.arrayShapes
   const previousBoxedVariables = context.boxedVariables
   const previousFunctionTypes = context.functionTypes
+  const previousMapTypes = context.mapTypes
   const previousObjectShapes = context.objectShapes
   const previousRuntimeCallbacks = context.runtimeCallbacks
   const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
+  const previousSetElementTypes = context.setElementTypes
   const previousRuntimeStrings = context.runtimeStrings
   context.variables = new Map(previous)
   context.arrayShapes = new Map(previousArrayShapes)
   context.boxedVariables = new Set(previousBoxedVariables)
   context.functionTypes = new Map(previousFunctionTypes)
+  context.mapTypes = new Map(previousMapTypes)
   context.objectShapes = new Map(previousObjectShapes)
   context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
   context.runtimeArrayElementTypes = new Map(previousRuntimeArrayElementTypes)
+  context.setElementTypes = new Map(previousSetElementTypes)
   context.runtimeStrings = new Set(previousRuntimeStrings)
 
   try {
@@ -5324,9 +5636,11 @@ function withVariableScope(context, callback) {
     context.arrayShapes = previousArrayShapes
     context.boxedVariables = previousBoxedVariables
     context.functionTypes = previousFunctionTypes
+    context.mapTypes = previousMapTypes
     context.objectShapes = previousObjectShapes
     context.runtimeCallbacks = previousRuntimeCallbacks
     context.runtimeArrayElementTypes = previousRuntimeArrayElementTypes
+    context.setElementTypes = previousSetElementTypes
     context.runtimeStrings = previousRuntimeStrings
   }
 }

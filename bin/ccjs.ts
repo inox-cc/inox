@@ -30,6 +30,8 @@ const cRuntimeSources = [
   'runtime/c/src/strings/string.c',
   'runtime/c/src/objects/object.c',
   'runtime/c/src/arrays/array.c',
+  'runtime/c/src/collections/map.c',
+  'runtime/c/src/collections/set.c',
   'runtime/c/src/time/time.c'
 ].map(file => join(repoRoot, file))
 const configFileNames = ['ccjs.config.json', 'ccjs.json']

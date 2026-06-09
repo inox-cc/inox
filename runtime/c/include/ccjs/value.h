@@ -24,14 +24,18 @@ typedef enum ccjs_tag {
   CCJS_TAG_STRING,
   CCJS_TAG_OBJECT,
   CCJS_TAG_ARRAY,
-  CCJS_TAG_FUNCTION
+  CCJS_TAG_FUNCTION,
+  CCJS_TAG_MAP,
+  CCJS_TAG_SET
 } ccjs_tag;
 
 typedef enum ccjs_ref_kind {
   CCJS_REF_STRING,
   CCJS_REF_OBJECT,
   CCJS_REF_ARRAY,
-  CCJS_REF_FUNCTION
+  CCJS_REF_FUNCTION,
+  CCJS_REF_MAP,
+  CCJS_REF_SET
 } ccjs_ref_kind;
 
 typedef struct ccjs_ref {
@@ -90,7 +94,9 @@ static inline bool ccjs_is_ref_value(ccjs_value value) {
   return value.tag == CCJS_TAG_STRING
     || value.tag == CCJS_TAG_OBJECT
     || value.tag == CCJS_TAG_ARRAY
-    || value.tag == CCJS_TAG_FUNCTION;
+    || value.tag == CCJS_TAG_FUNCTION
+    || value.tag == CCJS_TAG_MAP
+    || value.tag == CCJS_TAG_SET;
 }
 
 void ccjs_retain(ccjs_value value);

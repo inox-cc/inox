@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_C_JS_GLOBAL
+// @diagnostic CCJS_C_COLLECTION
 
 export function main(): void {
   const values = new Set([1, 2])

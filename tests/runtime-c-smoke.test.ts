@@ -89,6 +89,8 @@ int main(void) {
       'runtime/c/src/strings/string.c',
       'runtime/c/src/objects/object.c',
       'runtime/c/src/arrays/array.c',
+      'runtime/c/src/collections/map.c',
+      'runtime/c/src/collections/set.c',
       'runtime/c/src/time/time.c',
       '-o',
       output
@@ -100,6 +102,100 @@ int main(void) {
 
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, 'Ada 42 7\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('C runtime Map and Set helpers compile and run', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collections-runtime-'))
+  const source = join(dir, 'collections-runtime.c')
+  const output = join(dir, 'collections-runtime')
+
+  try {
+    await writeFile(source, `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/map.h"
+#include "ccjs/set.h"
+#include "ccjs/string.h"
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_value map = ccjs_undefined_value();
+  ccjs_value set = ccjs_undefined_value();
+  ccjs_value key = ccjs_undefined_value();
+  ccjs_value value = ccjs_undefined_value();
+  ccjs_value found = ccjs_undefined_value();
+  bool has = false;
+  bool removed = false;
+  size_t size = 0;
+
+  if (ccjs_map_new(&allocator, &map) != CCJS_OK) return 1;
+  if (ccjs_set_new(&allocator, &set) != CCJS_OK) return 1;
+  if (ccjs_string_from_literal(&allocator, "Ada", 3, &key) != CCJS_OK) return 1;
+
+  value = ccjs_number_value(7);
+  if (ccjs_map_set(map, key, value) != CCJS_OK) return 1;
+  if (ccjs_map_get(map, key, &found) != CCJS_OK) return 1;
+  if (ccjs_map_has(map, key, &has) != CCJS_OK) return 1;
+  if (ccjs_map_delete(map, key, &removed) != CCJS_OK) return 1;
+  if (ccjs_map_size(map, &size) != CCJS_OK) return 1;
+  printf("%.0f %d %d %zu\\n", found.as.number, has ? 1 : 0, removed ? 1 : 0, size);
+  ccjs_release(found);
+
+  if (ccjs_set_add(set, key) != CCJS_OK) return 1;
+  if (ccjs_set_has(set, key, &has) != CCJS_OK) return 1;
+  if (ccjs_set_delete(set, key, &removed) != CCJS_OK) return 1;
+  if (ccjs_set_size(set, &size) != CCJS_OK) return 1;
+  printf("%d %d %zu\\n", has ? 1 : 0, removed ? 1 : 0, size);
+
+  ccjs_release(key);
+  ccjs_release(set);
+  ccjs_release(map);
+
+  return 0;
+}
+`)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7 1 1 0\n1 1 0\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -3302,6 +3398,57 @@ export function main(): void {
   }
 })
 
+test('generated C Map and Set methods compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collections-'))
+  const source = join(dir, 'collections.c')
+  const output = join(dir, 'collections')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const scores: Map<string, number> = new Map()
+  scores.set('Ada', 7)
+  const score = scores.get('Ada')
+  const hadAda = scores.has('Ada')
+  const removed = scores.delete('Ada')
+  const hasAda = scores.has('Ada')
+  console.log(score, hadAda, removed, hasAda, scores.size)
+
+  const names: Set<string> = new Set()
+  names.add('Ada')
+  const hadName = names.has('Ada')
+  const removedName = names.delete('Ada')
+  const hasName = names.has('Ada')
+  console.log(hadName, removedName, hasName, names.size)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7 1 1 0 0\n1 1 0 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 function compileRuntimeProgram(source: string, output: string): Promise<CommandResult> {
   return runCommand('cc', [
     '-Iruntime/c/include',
@@ -3312,6 +3459,8 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
     'runtime/c/src/strings/string.c',
     'runtime/c/src/objects/object.c',
     'runtime/c/src/arrays/array.c',
+    'runtime/c/src/collections/map.c',
+    'runtime/c/src/collections/set.c',
     'runtime/c/src/time/time.c',
     '-o',
     output

@@ -1,6 +1,8 @@
 #include "ccjs/array.h"
 #include "ccjs/callback.h"
+#include "ccjs/map.h"
 #include "ccjs/object.h"
+#include "ccjs/set.h"
 #include "ccjs/value.h"
 
 void ccjs_retain(ccjs_value value) {
@@ -44,6 +46,10 @@ void ccjs_release(ccjs_value value) {
     if (callback->finalizer != 0) {
       callback->finalizer(callback->context);
     }
+  } else if (value.as.ref->kind == CCJS_REF_MAP) {
+    ccjs_map_dispose((ccjs_map*)value.as.ref);
+  } else if (value.as.ref->kind == CCJS_REF_SET) {
+    ccjs_set_dispose((ccjs_set*)value.as.ref);
   }
 
   if (allocator != 0 && allocator->free != 0) {

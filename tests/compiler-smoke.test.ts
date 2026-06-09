@@ -2060,8 +2060,8 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
 }
 `,
     `export function main(): void {
-  const values = new Set([1, 2])
-  console.log(values)
+  const promise = Promise.resolve(1)
+  console.log(promise)
 }
 `
   ]) {
