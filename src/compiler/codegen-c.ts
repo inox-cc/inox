@@ -2100,6 +2100,10 @@ function emitArrayVariableDeclaration(statement, context) {
 }
 
 function emitCValueExpression(expression, context) {
+  if (isStringConversionCall(expression, context)) {
+    return emitCStringConversionValueExpression(expression, context)
+  }
+
   if (isStringTrimCall(expression, context)) {
     return emitCStringTrimValueExpression(expression, context)
   }
@@ -2273,6 +2277,40 @@ function emitCStringConcatValueExpression(expression, context) {
       ...right.lines,
       ...emitPrepareOwnedValueWrite(temp),
       emitStatusCheck(`ccjs_string_concat_parts(&ccjs_default_allocator, ${left.bytes}, ${left.length}, ${right.bytes}, ${right.length}, &${temp})`, context)
+    ],
+    expression: temp
+  }
+}
+
+function emitCStringConversionValueExpression(expression, context) {
+  const [arg] = expression.args
+  const type = inferExpressionType(arg, context)
+  const temp = nextCName(context, 'ccjs_value')
+  registerOwnedValue(context, temp)
+
+  if (type === 'string') {
+    const value = emitPreparedStringBytesOperand(arg, context, 'ccjs_string_conversion')
+
+    return {
+      lines: [
+        ...value.lines,
+        ...emitPrepareOwnedValueWrite(temp),
+        emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`, context)
+      ],
+      expression: temp
+    }
+  }
+
+  const value = emitPreparedNumberExpression(arg, context)
+  const helper = type === 'boolean'
+    ? `ccjs_string_from_bool(&ccjs_default_allocator, (${value.expression}) != 0, &${temp})`
+    : `ccjs_string_from_number(&ccjs_default_allocator, ${value.expression}, &${temp})`
+
+  return {
+    lines: [
+      ...value.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(helper, context)
     ],
     expression: temp
   }
@@ -3330,6 +3368,10 @@ function inferExpressionType(expression, context) {
     return 'number'
   }
 
+  if (isStringConversionCall(expression, context)) {
+    return 'string'
+  }
+
   if (isStringTrimCall(expression, context)) {
     return 'string'
   }
@@ -3519,6 +3561,14 @@ function isStringConcatExpression(expression, context) {
 function isRuntimeProducedStringExpression(expression, context) {
   return (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string')
     || isStringConcatExpression(expression, context)
+}
+
+function isStringConversionCall(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'Reference' || expression.callee.path.length !== 1 || expression.callee.path[0] !== 'String' || expression.args.length !== 1) {
+    return false
+  }
+
+  return ['boolean', 'number', 'string'].includes(inferExpressionType(expression.args[0], context))
 }
 
 function isStringTrimCall(expression, context) {
@@ -3902,7 +3952,7 @@ function usesCStringCompare(program) {
 }
 
 function usesCStringHeader(program) {
-  return usesCStringCompare(program) || nodeUsesCStringLength(program) || nodeUsesCStringMethodCall(program)
+  return usesCStringCompare(program) || nodeUsesCStringLength(program) || nodeUsesCStringMethodCall(program) || nodeUsesCStringConversion(program)
 }
 
 function itemUsesCRuntime(item) {
@@ -4202,6 +4252,10 @@ function expressionUsesCRuntime(expression) {
   }
 
   if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+    if (expression.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1 && expression.callee.path[0] === 'String') {
+      return true
+    }
+
     if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' && isCStringRuntimeMethodName(expression.callee.property)) {
       return true
     }
@@ -4431,6 +4485,28 @@ function nodeUsesCStringMethodCall(node) {
   return Object.entries(node)
     .filter(([key]) => key !== 'loc')
     .some(([, value]) => nodeUsesCStringMethodCall(value))
+}
+
+function nodeUsesCStringConversion(node) {
+  if (node == null) {
+    return false
+  }
+
+  if (Array.isArray(node)) {
+    return node.some(item => nodeUsesCStringConversion(item))
+  }
+
+  if (typeof node !== 'object') {
+    return false
+  }
+
+  if (node.type === 'CallExpression' && node.callee.type === 'Reference' && node.callee.path.length === 1 && node.callee.path[0] === 'String') {
+    return true
+  }
+
+  return Object.entries(node)
+    .filter(([key]) => key !== 'loc')
+    .some(([, value]) => nodeUsesCStringConversion(value))
 }
 
 function expressionMayBeCStringLengthOperand(expression) {

@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 #include "ccjs/string.h"
 
@@ -28,6 +29,27 @@ ccjs_status ccjs_string_from_literal(ccjs_allocator* allocator, const char* byte
   out->as.ref = &string->header;
 
   return CCJS_OK;
+}
+
+ccjs_status ccjs_string_from_bool(ccjs_allocator* allocator, bool value, ccjs_value* out) {
+  return value
+    ? ccjs_string_from_literal(allocator, "true", 4, out)
+    : ccjs_string_from_literal(allocator, "false", 5, out);
+}
+
+ccjs_status ccjs_string_from_number(ccjs_allocator* allocator, double value, ccjs_value* out) {
+  char buffer[64];
+  const int len = snprintf(buffer, sizeof(buffer), "%.17g", value);
+
+  if (len < 0 || (size_t)len >= sizeof(buffer)) {
+    if (out != 0) {
+      *out = ccjs_undefined_value();
+    }
+
+    return CCJS_ERR_TYPE;
+  }
+
+  return ccjs_string_from_literal(allocator, buffer, (size_t)len, out);
 }
 
 ccjs_status ccjs_string_concat_parts(

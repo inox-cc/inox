@@ -13,6 +13,8 @@ typedef struct ccjs_string {
 } ccjs_string;
 
 ccjs_status ccjs_string_from_literal(ccjs_allocator* allocator, const char* bytes, size_t len, ccjs_value* out);
+ccjs_status ccjs_string_from_bool(ccjs_allocator* allocator, bool value, ccjs_value* out);
+ccjs_status ccjs_string_from_number(ccjs_allocator* allocator, double value, ccjs_value* out);
 ccjs_status ccjs_string_concat_parts(
   ccjs_allocator* allocator,
   const char* left_bytes,

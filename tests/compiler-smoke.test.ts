@@ -310,6 +310,37 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_trim_parts\(&ccjs_default_allocator, message->bytes, message->len, &ccjs_value_\d+\)/)
 })
 
+test('lowers C String conversion for string number and boolean values', () => {
+  const result = compileSource(`type User = {
+  name: string
+}
+
+function label(value: number): string {
+  return String(value)
+}
+
+function flag(value: boolean): string {
+  return String(value)
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  const name = user.name
+  const local = 'Ada'
+  console.log(String('Ada'), String(local), String(name), label(42), flag(true), String(false), String(name).length)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "Ada", 3, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, local, strlen\(local\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, name->bytes, name->len, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_from_number\(&ccjs_default_allocator, value, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_from_bool\(&ccjs_default_allocator, \(value\) != 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_from_bool\(&ccjs_default_allocator, \(0\) != 0, &ccjs_value_\d+\)/)
+})
+
 test('lowers known C object field access to runtime calls', () => {
   const result = compileSource(`export function main(): void {
   const user = { score: 42, active: true }
@@ -2085,6 +2116,31 @@ export function main(): void {
   name.trim(1)
 }
 `, 'CCJS_ARG_COUNT')
+})
+
+test('checks String conversion as a typed string call', () => {
+  const result = compileSource(`function label(value: number): string {
+  return String(value)
+}
+
+export function main(): void {
+  console.log(label(42), String(true), String('Ada'))
+}
+`, {
+    target: 'js'
+  })
+
+  assert.match(result.code, /return String\(value\)/)
+
+  assertDiagnostic(`export function main(): void {
+  String()
+}
+`, 'CCJS_ARG_COUNT')
+
+  assertDiagnostic(`export function main(): void {
+  String({ name: 'Ada' })
+}
+`, 'CCJS_TYPE_MISMATCH')
 })
 
 test('checks typed object aliases and readonly fields', () => {
