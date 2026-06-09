@@ -1,0 +1,87 @@
+import { emitC, emitCBundle } from './codegen-c.ts'
+import { emitJs, emitJsBundle, emitTs } from './codegen-js.ts'
+import { checkProgram } from './checker.ts'
+import { tokenize } from './lexer.ts'
+import { lowerProgram } from './lower.ts'
+import { buildModuleGraph } from './module-graph.ts'
+import { parse } from './parser.ts'
+import type { CompileOptions, FileCompileResult, SourceCompileResult } from './types.ts'
+
+export function compileSource(source: string, options: CompileOptions = {}): SourceCompileResult {
+  const target = options.target ?? 'js'
+  const tokens = tokenize(source)
+  const ast = parse(tokens)
+  const checked = checkProgram(ast)
+  const hir = lowerProgram(checked.ast)
+
+  if (target === 'c') {
+    return {
+      target,
+      ast: checked.ast,
+      hir,
+      code: emitC(hir)
+    }
+  }
+
+  if (target === 'ts') {
+    return {
+      target,
+      ast: checked.ast,
+      hir,
+      code: emitTs(hir, {
+        callMain: options.callMain
+      })
+    }
+  }
+
+  if (target === 'js') {
+    return {
+      target,
+      ast: checked.ast,
+      hir,
+      code: emitJs(hir, {
+        callMain: options.callMain
+      })
+    }
+  }
+
+  throw new Error(`Unsupported target ${target}`)
+}
+
+export async function compileFile(entry: string, options: CompileOptions = {}): Promise<FileCompileResult> {
+  const target = options.target ?? 'js'
+
+  if (target === 'c') {
+    const graph = await buildModuleGraph(entry)
+
+    return {
+      target,
+      graph,
+      code: emitCBundle(graph)
+    }
+  }
+
+  const graph = await buildModuleGraph(entry)
+
+  if (target === 'js') {
+    return {
+      target,
+      graph,
+      code: emitJsBundle(graph, {
+        callMain: options.callMain
+      })
+    }
+  }
+
+  if (target === 'ts') {
+    return {
+      target,
+      graph,
+      code: emitJsBundle(graph, {
+        callMain: options.callMain
+      })
+    }
+  }
+
+  throw new Error(`Unsupported target ${target}`)
+}

@@ -1,0 +1,24 @@
+{
+  "name": "ccjs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "ccjs": "./bin/ccjs.ts"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "test:fixtures": "node scripts/test-fixtures.ts",
+    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3"
+  }
+}

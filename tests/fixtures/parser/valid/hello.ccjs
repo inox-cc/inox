@@ -1,0 +1,6 @@
+// @targets ts
+// @expect pass
+
+export function main(): void {
+  console.log('hello')
+}

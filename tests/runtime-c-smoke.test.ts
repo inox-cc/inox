@@ -1,0 +1,1778 @@
+import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import test from 'node:test'
+import { compileSource } from '../src/compiler/index.ts'
+
+type CommandResult = {
+  code: number
+  stdout: string
+  stderr: string
+}
+
+test('C runtime value/object/array skeleton compiles and runs', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-'))
+  const source = join(dir, 'runtime-smoke.c')
+  const output = join(dir, 'runtime-smoke')
+
+  try {
+    await writeFile(source, `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/array.h"
+#include "ccjs/object.h"
+#include "ccjs/string.h"
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_field_info fields[] = {
+    { "name", 0 },
+    { "score", 0 }
+  };
+  ccjs_shape shape = { 2, fields };
+  ccjs_value user;
+  ccjs_value name;
+  ccjs_value score;
+  ccjs_value array;
+  ccjs_value first;
+
+  if (ccjs_object_new(&allocator, &shape, &user) != CCJS_OK) return 1;
+  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 2;
+  if (ccjs_object_set_known(user, 0, name) != CCJS_OK) return 3;
+  if (ccjs_object_set(user, "score", 5, ccjs_number_value(42)) != CCJS_OK) return 4;
+  if (ccjs_object_get(user, "score", 5, &score) != CCJS_OK) return 5;
+  if (ccjs_array_new(&allocator, 1, &array) != CCJS_OK) return 6;
+  if (ccjs_array_set(array, 0, ccjs_number_value(7)) != CCJS_OK) return 7;
+  if (ccjs_array_get(array, 0, &first) != CCJS_OK) return 8;
+
+  ccjs_string* string = (ccjs_string*)name.as.ref;
+  printf("%.*s %.0f %.0f\\n", (int)string->len, string->bytes, score.as.number, first.as.number);
+  return 0;
+}
+`)
+
+    const compile = await runCommand('cc', [
+      '-Iruntime/c/include',
+      source,
+      'runtime/c/src/core/value.c',
+      'runtime/c/src/core/allocator.c',
+      'runtime/c/src/strings/string.c',
+      'runtime/c/src/objects/object.c',
+      'runtime/c/src/arrays/array.c',
+      'runtime/c/src/time/time.c',
+      '-o',
+      output
+    ])
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada 42 7\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('C runtime release frees nested object and array references', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-release-'))
+  const source = join(dir, 'release-smoke.c')
+  const output = join(dir, 'release-smoke')
+
+  try {
+    await writeFile(source, `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/array.h"
+#include "ccjs/object.h"
+#include "ccjs/string.h"
+
+typedef struct counters {
+  int allocs;
+  int frees;
+} counters;
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)align;
+  counters* state = (counters*)user;
+  state->allocs += 1;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)size;
+  (void)align;
+  counters* state = (counters*)user;
+  state->frees += 1;
+  free(ptr);
+}
+
+int main(void) {
+  counters state = { 0, 0 };
+  ccjs_allocator allocator = { &state, test_alloc, test_realloc, test_free };
+  ccjs_field_info fields[] = {
+    { "name", 0 },
+    { "items", 0 }
+  };
+  ccjs_shape shape = { 2, fields };
+  ccjs_value name;
+  ccjs_value array;
+  ccjs_value user;
+
+  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 1;
+  if (ccjs_array_new(&allocator, 1, &array) != CCJS_OK) return 2;
+  if (ccjs_array_set(array, 0, name) != CCJS_OK) return 3;
+  if (ccjs_object_new(&allocator, &shape, &user) != CCJS_OK) return 4;
+  if (ccjs_object_init_known(user, 0, name) != CCJS_OK) return 5;
+  if (ccjs_object_init_known(user, 1, array) != CCJS_OK) return 6;
+
+  ccjs_release(name);
+  ccjs_release(array);
+  ccjs_release(user);
+
+  printf("%d %d %d\\n", state.allocs, state.frees, state.allocs - state.frees);
+  return 0;
+}
+`)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '4 4 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('C runtime time adapter keeps Date.now on monotonic delta', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-time-runtime-'))
+  const source = join(dir, 'time-runtime.c')
+  const output = join(dir, 'time-runtime')
+
+  try {
+    await writeFile(source, `#include <stdio.h>
+#include "ccjs/time.h"
+
+typedef struct clock_state {
+  double mono;
+  double wall;
+  int wall_reads;
+} clock_state;
+
+static ccjs_number monotonic_now(void* user) {
+  clock_state* state = (clock_state*)user;
+  return state->mono;
+}
+
+static ccjs_number wall_now(void* user) {
+  clock_state* state = (clock_state*)user;
+  state->wall_reads += 1;
+  return state->wall;
+}
+
+int main(void) {
+  clock_state state = { 100, 1000, 0 };
+  ccjs_time_adapter adapter = { &state, monotonic_now, wall_now };
+
+  ccjs_time_set_adapter(adapter);
+
+  double p0 = ccjs_performance_now();
+  state.mono = 125;
+  double date1 = ccjs_date_now();
+  state.wall = 5000;
+  state.mono = 150;
+  double date2 = ccjs_date_now();
+  ccjs_time_resync_wall_clock();
+  state.mono = 175;
+  double date3 = ccjs_date_now();
+
+  printf("%.0f %.0f %.0f %.0f %d\\n", p0, date1, date2, date3, state.wall_reads);
+  return 0;
+}
+`)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '0 1025 1050 5025 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C object literal lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-'))
+  const source = join(dir, 'object-literal.c')
+  const output = join(dir, 'object-literal')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { name: 'Ada', score: 42 }
+  console.log('ok')
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'ok\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C early return runs through cleanup label with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-early-return-cleanup-'))
+  const source = join(dir, 'early-return-cleanup.c')
+  const output = join(dir, 'early-return-cleanup')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { name: 'Ada' }
+  return
+  console.log('unreachable')
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C top-level wrapper cleanup compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-wrapper-cleanup-'))
+  const source = join(dir, 'wrapper-cleanup.c')
+  const output = join(dir, 'wrapper-cleanup')
+
+  try {
+    const result = compileSource(`const user = { name: 'Ada' }
+console.log('ok')
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'ok\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C number return cleanup compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-number-return-cleanup-'))
+  const source = join(dir, 'number-return-cleanup.c')
+  const output = join(dir, 'number-return-cleanup')
+
+  try {
+    const result = compileSource(`function getScore(): number {
+  const user = { score: 42 }
+  const score = user.score
+  return score
+}
+
+export function main(): void {
+  console.log(getScore())
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C prepared for clauses compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-prepared-'))
+  const source = join(dir, 'for-prepared.c')
+  const output = join(dir, 'for-prepared')
+
+  try {
+    const result = compileSource(`function start(label: string): number {
+  return 0
+}
+
+function keepGoing(index: number, label: string): boolean {
+  return index < 3
+}
+
+function nextIndex(index: number, label: string): number {
+  return index + 1
+}
+
+export function main(): void {
+  let total = 0
+
+  for (let index = start('start'); keepGoing(index, 'limit'); index = nextIndex(index, 'step')) {
+    total = total + index
+  }
+
+  console.log(total)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C string-returning for initializer compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-string-init-'))
+  const source = join(dir, 'for-string-init.c')
+  const output = join(dir, 'for-string-init')
+
+  try {
+    const result = compileSource(`function getName(): string {
+  return 'Ada'
+}
+
+export function main(): void {
+  let index = 0
+
+  for (const name = getName(); index < 1; index = index + 1) {
+    console.log(name)
+  }
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C prepared conditions compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-prepared-conditions-'))
+  const source = join(dir, 'prepared-conditions.c')
+  const output = join(dir, 'prepared-conditions')
+
+  try {
+    const result = compileSource(`function isReady(label: string): boolean {
+  return true
+}
+
+function keepGoing(index: number, label: string): boolean {
+  return index < 2
+}
+
+function choose(label: string): number {
+  return 2
+}
+
+export function main(): void {
+  let index = 0
+
+  if (isReady('if')) {
+    index = index + 1
+  }
+
+  while (keepGoing(index, 'while')) {
+    index = index + 1
+  }
+
+  switch (choose('switch')) {
+    case 2:
+      index = index + 1
+      break
+    default:
+      break
+  }
+
+  console.log(index)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C prepared scalar assignment compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-prepared-assignment-'))
+  const source = join(dir, 'prepared-assignment.c')
+  const output = join(dir, 'prepared-assignment')
+
+  try {
+    const result = compileSource(`function nextIndex(index: number, label: string): number {
+  return index + 1
+}
+
+export function main(): void {
+  let index = 0
+  index = nextIndex(index, 'step')
+  console.log(index)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C named callback values compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-callback-'))
+  const source = join(dir, 'callback.c')
+  const output = join(dir, 'callback')
+
+  try {
+    const result = compileSource(`function run(callback: Function): void {
+  callback()
+}
+
+function hello(): void {
+  console.log('callback')
+}
+
+export function main(): void {
+  const callback: Function = hello
+  run(callback)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'callback\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C typed callback aliases compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-typed-callback-'))
+  const source = join(dir, 'typed-callback.c')
+  const output = join(dir, 'typed-callback')
+
+  try {
+    const result = compileSource(`type NumberCallback = (value: number) => void;
+
+function run(callback: NumberCallback): void {
+  callback(7)
+}
+
+function hello(value: number): void {
+  console.log(value)
+}
+
+export function main(): void {
+  const callback: NumberCallback = hello
+  run(callback)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C time globals compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-time-globals-'))
+  const source = join(dir, 'time-globals.c')
+  const output = join(dir, 'time-globals')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const started = Date.now()
+  const elapsed = performance.now()
+  console.log(started >= 0, elapsed >= 0)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C array literal lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-'))
+  const source = join(dir, 'array-literal.c')
+  const output = join(dir, 'array-literal')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = [1, 2, 3]
+  console.log('ok')
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'ok\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C array length lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-length-'))
+  const source = join(dir, 'array-length.c')
+  const output = join(dir, 'array-length')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = [1, 2, 3]
+  console.log(values.length, [4, 5].length)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C for of array lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-array-'))
+  const source = join(dir, 'for-of-array.c')
+  const output = join(dir, 'for-of-array')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = [1, 2, 3]
+  let total = 0
+
+  for (const value of values) {
+    total = total + value
+  }
+
+  console.log(total)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '6\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C inline for of array lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-inline-array-'))
+  const source = join(dir, 'for-of-inline-array.c')
+  const output = join(dir, 'for-of-inline-array')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  let total = 0
+
+  for (const value of [1, 2, 3]) {
+    total = total + value
+  }
+
+  console.log(total)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '6\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C object field access lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-field-'))
+  const source = join(dir, 'object-field.c')
+  const output = join(dir, 'object-field')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { score: 42, active: true }
+  const score = user.score
+  const active = user.active
+  console.log(score, active)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C string object field access lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-string-field-'))
+  const source = join(dir, 'object-string-field.c')
+  const output = join(dir, 'object-string-field')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { name: 'Ada', score: 42 }
+  const name = user.name
+  console.log(name)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C object field assignment lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-field-assignment-'))
+  const source = join(dir, 'object-field-assignment.c')
+  const output = join(dir, 'object-field-assignment')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { score: 1, active: false, name: 'Ada' }
+  user.score = 42
+  user.active = true
+  user.name = 'Grace'
+  const score = user.score
+  const active = user.active
+  const name = user.name
+  console.log(score, active, name)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 1 Grace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C string index object field reads compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-index-field-'))
+  const source = join(dir, 'object-index-field.c')
+  const output = join(dir, 'object-index-field')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { score: 42, active: true, name: 'Ada' }
+  const score = user['score']
+  const active = user['active']
+  const name = user['name']
+  console.log(score, active, name)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 1 Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C string index object field assignments compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-index-assignment-'))
+  const source = join(dir, 'object-index-assignment.c')
+  const output = join(dir, 'object-index-assignment')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { score: 1, active: false, name: 'Ada' }
+  user['score'] = 42
+  user['active'] = true
+  user['name'] = 'Grace'
+  const score = user['score']
+  const active = user['active']
+  const name = user['name']
+  console.log(score, active, name)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 1 Grace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C array index access lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-index-'))
+  const source = join(dir, 'array-index.c')
+  const output = join(dir, 'array-index')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = [42, true]
+  const score = values[0]
+  const active = values[1]
+  console.log(score, active)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C array index assignment lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-assignment-'))
+  const source = join(dir, 'array-assignment.c')
+  const output = join(dir, 'array-assignment')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = [1, false]
+  values[0] = 42
+  values[1] = true
+  const score = values[0]
+  const active = values[1]
+  console.log(score, active)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C string array index reads compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-array-'))
+  const source = join(dir, 'string-array.c')
+  const output = join(dir, 'string-array')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = ['Ada']
+  values[0] = 'Grace'
+  const name = values[0]
+  console.log(name)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Grace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C runtime string local propagation compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-local-'))
+  const source = join(dir, 'runtime-string-local.c')
+  const output = join(dir, 'runtime-string-local')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { name: 'Ada' }
+  const name = user.name
+  const again = name
+  console.log(again)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C runtime string assignment references compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-assignment-'))
+  const source = join(dir, 'runtime-string-assignment.c')
+  const output = join(dir, 'runtime-string-assignment')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const source = { name: 'Ada' }
+  const name = source.name
+  const target = { name: 'Bob' }
+  const values = ['Grace']
+  target.name = name
+  values[0] = name
+  const objectName = target.name
+  const arrayName = values[0]
+  console.log(objectName, arrayName)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C string-returning assignment calls compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-return-assignment-'))
+  const source = join(dir, 'string-return-assignment.c')
+  const output = join(dir, 'string-return-assignment')
+
+  try {
+    const result = compileSource(`function getName(): string {
+  return 'Ada'
+}
+
+export function main(): void {
+  const target = { name: 'Bob' }
+  const values = ['Grace']
+  target.name = getName()
+  values[0] = getName()
+  console.log(target.name, values[0])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C runtime string params compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-params-'))
+  const source = join(dir, 'runtime-string-params.c')
+  const output = join(dir, 'runtime-string-params')
+
+  try {
+    const result = compileSource(`function greet(name: string): void {
+  console.log(name)
+}
+
+function echo(name: string): string {
+  return name
+}
+
+export function main(): void {
+  const user = { name: 'Ada' }
+  greet('Ada')
+  greet(user.name)
+  console.log(echo(user.name))
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\nAda\nAda\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C prepared string args in number expressions compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-prepared-number-calls-'))
+  const source = join(dir, 'prepared-number-calls.c')
+  const output = join(dir, 'prepared-number-calls')
+
+  try {
+    const result = compileSource(`function length(name: string): number {
+  return 3
+}
+
+export function main(): void {
+  const user = { name: 'Ada' }
+  const total = length('Ada') + length(user.name)
+  console.log(length(user.name), total)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3 6\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C runtime string return compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-return-'))
+  const source = join(dir, 'runtime-string-return.c')
+  const output = join(dir, 'runtime-string-return')
+
+  try {
+    const result = compileSource(`function getName(): string {
+  const user = { name: 'Ada' }
+  return user.name
+}
+
+export function main(): void {
+  const name = getName()
+  console.log(name)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C runtime string index returns compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-index-return-'))
+  const source = join(dir, 'runtime-string-index-return.c')
+  const output = join(dir, 'runtime-string-index-return')
+
+  try {
+    const result = compileSource(`function getObjectName(): string {
+  const user = { name: 'Ada' }
+  return user['name']
+}
+
+function getArrayName(): string {
+  const values = ['Grace']
+  return values[0]
+}
+
+export function main(): void {
+  console.log(getObjectName(), getArrayName())
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada Grace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C direct console log string return compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-direct-string-return-log-'))
+  const source = join(dir, 'direct-string-return-log.c')
+  const output = join(dir, 'direct-string-return-log')
+
+  try {
+    const result = compileSource(`function getName(): string {
+  return 'Ada'
+}
+
+export function main(): void {
+  console.log(getName())
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C direct console log member and index expressions compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-direct-console-'))
+  const source = join(dir, 'direct-console.c')
+  const output = join(dir, 'direct-console')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { score: 42, active: true, name: 'Ada' }
+  const values = [7, false, 'Grace']
+  console.log(user.score, user.active, user.name, user['name'], values[0], values[1], values[2])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 1 Ada Ada 7 0 Grace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C typed object shape lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-typed-object-'))
+  const source = join(dir, 'typed-object.c')
+  const output = join(dir, 'typed-object')
+
+  try {
+    const result = compileSource(`type User = {
+  readonly id: number,
+  name: string
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada', id: 42 }
+  const id = user.id
+  console.log(id)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+function compileRuntimeProgram(source: string, output: string): Promise<CommandResult> {
+  return runCommand('cc', [
+    '-Iruntime/c/include',
+    source,
+    'runtime/c/src/core/value.c',
+    'runtime/c/src/core/allocator.c',
+    'runtime/c/src/strings/string.c',
+    'runtime/c/src/objects/object.c',
+    'runtime/c/src/arrays/array.c',
+    'runtime/c/src/time/time.c',
+    '-o',
+    output
+  ])
+}
+
+function runCommand(command: string, args: string[]): Promise<CommandResult> {
+  return new Promise(resolve => {
+    const child = spawn(command, args, {
+      cwd: new URL('..', import.meta.url),
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    let stdout = ''
+    let stderr = ''
+
+    child.stdout.on('data', chunk => {
+      stdout += chunk
+    })
+
+    child.stderr.on('data', chunk => {
+      stderr += chunk
+    })
+
+    child.on('error', error => {
+      resolve({
+        code: 127,
+        stdout,
+        stderr: error.message
+      })
+    })
+    child.on('exit', code => {
+      resolve({
+        code: code ?? 1,
+        stdout,
+        stderr
+      })
+    })
+  })
+}
