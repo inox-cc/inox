@@ -607,6 +607,24 @@ test('lowers direct C console.log member and index expressions', () => {
   assert.match(result.code, /printf\("%g %g %\.\*s %\.\*s %g %g %\.\*s\\n"/)
 })
 
+test('lowers known C member and index reads inside scalar expressions', () => {
+  const result = compileSource(`export function main(): void {
+  const user = { score: 7, active: true }
+  const values = [3, true]
+  const total = user.score + values[0]
+  const same = user.active === values[1]
+  console.log(total, same)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_expr_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_expr_value_\d+\)/)
+  assert.match(result.code, /const double total = \(ccjs_expr_value_\d+\.as\.number \+ ccjs_expr_value_\d+\.as\.number\);/)
+  assert.match(result.code, /const double same = \(\(ccjs_expr_value_\d+\.as\.boolean \? 1 : 0\) == \(ccjs_expr_value_\d+\.as\.boolean \? 1 : 0\)\);/)
+})
+
 test('compiles if else blocks to JS and C', () => {
   const source = `export function main(): void {
   let text = 'no'

@@ -2565,14 +2565,33 @@ function emitPreparedNumberExpression(expression, context) {
   }
 
   if (isMemberAccessExpression(expression)) {
+    const length = resolveKnownArrayLength(expression, context)
+
+    if (length != null) {
+      return {
+        lines: [],
+        expression: length
+      }
+    }
+
     const member = resolveKnownObjectMember(expression, context)
 
     if (member != null && ['number', 'boolean'].includes(member.valueType)) {
-      context.diagnostics.push(diagnostic('CCJS_C_UNSUPPORTED_EXPR', 'object field access must be assigned before it can be used by the current C backend slice', expression.loc))
-      return {
-        lines: [],
-        expression: '0'
-      }
+      return emitPreparedRuntimeNumberValue(member.valueType, temp => `ccjs_object_get_known(${member.objectName}, ${member.index}, &${temp})`, context)
+    }
+  }
+
+  if (isIndexAccessExpression(expression)) {
+    const element = resolveKnownArrayIndex(expression, context)
+
+    if (element != null && ['number', 'boolean'].includes(element.valueType)) {
+      return emitPreparedRuntimeNumberValue(element.valueType, temp => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context)
+    }
+
+    const field = resolveKnownObjectIndex(expression, context)
+
+    if (field != null && ['number', 'boolean'].includes(field.valueType)) {
+      return emitPreparedRuntimeNumberValue(field.valueType, temp => `ccjs_object_get(${field.objectName}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context)
     }
   }
 
@@ -2597,6 +2616,19 @@ function emitPreparedNumberExpression(expression, context) {
   return {
     lines: [],
     expression: '0'
+  }
+}
+
+function emitPreparedRuntimeNumberValue(valueType, emitGetCall, context) {
+  const value = nextCName(context, 'ccjs_expr_value')
+  registerOwnedValue(context, value)
+
+  return {
+    lines: [
+      ...emitPrepareOwnedValueWrite(value),
+      emitStatusCheck(emitGetCall(value), context)
+    ],
+    expression: valueType === 'boolean' ? `(${value}.as.boolean ? 1 : 0)` : `${value}.as.number`
   }
 }
 

@@ -2207,6 +2207,48 @@ test('generated C direct console log member and index expressions compile and ru
   }
 })
 
+test('generated C member and index reads inside scalar expressions compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-scalar-member-expr-'))
+  const source = join(dir, 'scalar-member-expr.c')
+  const output = join(dir, 'scalar-member-expr')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const user = { score: 7, active: true }
+  const values = [3, true]
+  const total = user.score + values[0]
+  const same = user.active === values[1]
+  console.log(total, same)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '10 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C optional object member and index access compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
