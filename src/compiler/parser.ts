@@ -1504,6 +1504,14 @@ function normalizeTypeName(name: string): string {
     return args.length === 1 ? `set<${normalizeTypeName(args[0])}>` : 'set'
   }
 
+  const promiseMatch = /^Promise<(.+)>$/.exec(name)
+
+  if (promiseMatch != null) {
+    const args = splitGenericArgs(promiseMatch[1])
+
+    return args.length === 1 ? `promise<${normalizeTypeName(args[0])}>` : 'promise'
+  }
+
   if (['number', 'string', 'boolean', 'void', 'null', 'unknown'].includes(name)) {
     return name
   }
@@ -1518,6 +1526,10 @@ function normalizeTypeName(name: string): string {
 
   if (name === 'Set' || name === 'set') {
     return 'set'
+  }
+
+  if (name === 'Promise' || name === 'promise') {
+    return 'promise'
   }
 
   if (name === 'Function' || name === 'function') {

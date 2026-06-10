@@ -26,6 +26,7 @@ export type ProgramNode = AnyNode & {
 
 export type IrFeature =
   | 'array-pop-null'
+  | 'async-runtime'
   | 'callback-values'
   | 'clocks'
   | 'collections'
@@ -36,6 +37,7 @@ export type IrFeature =
   | 'string-bytes'
 
 export type IrRuntimeRequirement =
+  | 'async-runtime'
   | 'callback-values'
   | 'clocks'
   | 'collections'
@@ -62,6 +64,7 @@ export type IrFunctionDeclaration = {
   returnArrayElementDeclaredType?: string | null
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
+  returnPromiseValueType?: ValueType | null
   returnSetElementType?: ValueType | null
   returnShape?: any
   loc?: SourceLocation
@@ -116,6 +119,7 @@ export type ValueType =
   | 'null'
   | 'number'
   | 'object'
+  | 'promise'
   | 'string'
   | 'unknown'
   | 'void'
@@ -145,6 +149,7 @@ export type SymbolInfo = {
   arrayElementDeclaredType?: string | null
   mapKeyType?: ValueType | null
   mapValueType?: ValueType | null
+  promiseValueType?: ValueType | null
   setElementType?: ValueType | null
   params?: AnyNode[]
   returnType?: ValueType
@@ -153,6 +158,7 @@ export type SymbolInfo = {
   returnArrayElementDeclaredType?: string | null
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
+  returnPromiseValueType?: ValueType | null
   returnSetElementType?: ValueType | null
   returnShape?: any
   async?: boolean

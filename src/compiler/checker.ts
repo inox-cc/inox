@@ -10,6 +10,7 @@ type ResolvedTypeInfo = {
   arrayElementDeclaredType: string | null
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
+  promiseValueType?: ValueType | null
   setElementType: ValueType | null
 }
 
@@ -176,6 +177,7 @@ class Checker {
   continueDepth: number
   currentReturnType: ValueType
   currentReturnNullable: boolean
+  currentReturnPromiseValueType: ValueType | null
   asyncDepth: number
 
   constructor(program: ProgramNode) {
@@ -187,6 +189,7 @@ class Checker {
     this.continueDepth = 0
     this.currentReturnType = 'void'
     this.currentReturnNullable = false
+    this.currentReturnPromiseValueType = null
     this.asyncDepth = 0
   }
 
@@ -237,6 +240,7 @@ class Checker {
           returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
           returnMapKeyType: returnInfo.mapKeyType,
           returnMapValueType: returnInfo.mapValueType,
+          returnPromiseValueType: returnInfo.promiseValueType ?? null,
           returnSetElementType: returnInfo.setElementType,
           returnShape: returnInfo.shape,
           async: item.async,
@@ -267,6 +271,7 @@ class Checker {
       arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
       mapKeyType: paramInfo.mapKeyType,
       mapValueType: paramInfo.mapValueType,
+      promiseValueType: paramInfo.promiseValueType ?? null,
       setElementType: paramInfo.setElementType,
       functionType: paramInfo.functionType,
       shape: paramInfo.shape
@@ -289,6 +294,8 @@ class Checker {
         this.currentReturnType = returnInfo.valueType
         const previousReturnNullable = this.currentReturnNullable
         this.currentReturnNullable = returnInfo.nullable
+        const previousReturnPromiseValueType = this.currentReturnPromiseValueType
+        this.currentReturnPromiseValueType = returnInfo.promiseValueType ?? null
         const previousAsyncDepth = this.asyncDepth
         this.asyncDepth = item.async ? this.asyncDepth + 1 : this.asyncDepth
 
@@ -303,6 +310,7 @@ class Checker {
             arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
             mapKeyType: paramInfo.mapKeyType,
             mapValueType: paramInfo.mapValueType,
+            promiseValueType: paramInfo.promiseValueType ?? null,
             setElementType: paramInfo.setElementType,
             functionType: paramInfo.functionType,
             shape: paramInfo.shape,
@@ -315,6 +323,7 @@ class Checker {
         } finally {
           this.currentReturnType = previousReturnType
           this.currentReturnNullable = previousReturnNullable
+          this.currentReturnPromiseValueType = previousReturnPromiseValueType
           this.asyncDepth = previousAsyncDepth
         }
       })
@@ -422,6 +431,7 @@ class Checker {
           }
         : this.resolveExpressionMapType(statement.init)
       const setElementType = declared?.valueType === 'set' ? declared.setElementType : this.resolveExpressionSetElementType(statement.init)
+      const promiseValueType = declared?.valueType === 'promise' ? declared.promiseValueType ?? null : this.resolveExpressionPromiseValueType(statement.init)
 
       if (declared?.shape != null && statement.init?.type === 'ObjectLiteral') {
         this.checkObjectLiteralAgainstShape(statement.init, declared.shape)
@@ -436,6 +446,7 @@ class Checker {
         arrayElementDeclaredType,
         mapKeyType: mapType?.key ?? null,
         mapValueType: mapType?.value ?? null,
+        promiseValueType,
         setElementType,
         functionType: declared?.functionType ?? null,
         shape: declared?.shape ?? null,
@@ -464,6 +475,10 @@ class Checker {
         if (declared.valueType === 'set' && declared.setElementType != null) {
           this.checkAssignableType(this.resolveExpressionSetElementType(statement.init), declared.setElementType, statement.loc)
         }
+
+        if (declared.valueType === 'promise' && declared.promiseValueType != null) {
+          this.checkAssignableType(this.resolveExpressionPromiseValueType(statement.init), declared.promiseValueType, statement.loc)
+        }
       }
 
       return
@@ -477,6 +492,10 @@ class Checker {
     if (statement.type === 'ReturnStatement') {
       const actual = statement.argument == null ? 'void' : this.checkExpression(statement.argument)
       this.checkAssignableType(actual, this.currentReturnType, statement.loc, this.currentReturnNullable, this.expressionCanBeNull(statement.argument))
+
+      if (this.currentReturnType === 'promise' && this.currentReturnPromiseValueType != null) {
+        this.checkAssignableType(this.resolveExpressionPromiseValueType(statement.argument), this.currentReturnPromiseValueType, statement.loc)
+      }
     }
   }
 
@@ -569,6 +588,7 @@ class Checker {
       expression.arrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
       expression.mapKeyType = symbol.returnMapKeyType ?? null
       expression.mapValueType = symbol.returnMapValueType ?? null
+      expression.promiseValueType = symbol.returnPromiseValueType ?? null
       expression.setElementType = symbol.returnSetElementType ?? null
       expression.shape = symbol.returnShape ?? null
 
@@ -668,6 +688,10 @@ class Checker {
 
     if (symbol != null) {
       this.checkAssignableType(valueType, symbol.valueType, expression.value.loc, symbol.nullable === true, this.expressionCanBeNull(expression.value))
+
+      if (symbol.valueType === 'promise' && symbol.promiseValueType != null) {
+        this.checkAssignableType(this.resolveExpressionPromiseValueType(expression.value), symbol.promiseValueType, expression.value.loc)
+      }
     }
 
     return valueType
@@ -731,6 +755,7 @@ class Checker {
     expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
     expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
     expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
+    expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
     expression.setElementType = field.setElementType ?? fieldType.setElementType
     expression.shape = field.shape ?? fieldType.shape
 
@@ -766,6 +791,7 @@ class Checker {
     expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
     expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
     expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
+    expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
     expression.setElementType = field.setElementType ?? fieldType.setElementType
     expression.shape = field.shape ?? fieldType.shape
 
@@ -830,6 +856,10 @@ class Checker {
       this.checkAssignableType(this.resolveExpressionSetElementType(expression.value), fieldType.setElementType, expression.value.loc)
     }
 
+    if (fieldType.valueType === 'promise' && fieldType.promiseValueType != null) {
+      this.checkAssignableType(this.resolveExpressionPromiseValueType(expression.value), fieldType.promiseValueType, expression.value.loc)
+    }
+
     return valueType
   }
 
@@ -885,6 +915,7 @@ class Checker {
     expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
     expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
     expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
+    expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
     expression.setElementType = field.setElementType ?? fieldType.setElementType
     expression.shape = field.shape ?? fieldType.shape
 
@@ -939,6 +970,7 @@ class Checker {
     expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
     expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
     expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
+    expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
     expression.setElementType = field.setElementType ?? fieldType.setElementType
     expression.shape = field.shape ?? fieldType.shape
 
@@ -1011,6 +1043,10 @@ class Checker {
       this.checkAssignableType(this.resolveExpressionSetElementType(expression.value), fieldType.setElementType, expression.value.loc)
     }
 
+    if (fieldType.valueType === 'promise' && fieldType.promiseValueType != null) {
+      this.checkAssignableType(this.resolveExpressionPromiseValueType(expression.value), fieldType.promiseValueType, expression.value.loc)
+    }
+
     return valueType
   }
 
@@ -1051,6 +1087,12 @@ class Checker {
       return collectionMethodType
     }
 
+    const promiseStaticType = this.checkPromiseStaticCall(expression)
+
+    if (promiseStaticType != null) {
+      return promiseStaticType
+    }
+
     const calleeType = this.checkExpression(expression.callee)
     const argTypes = expression.args.map(arg => this.checkExpression(arg))
     const symbol = this.getCallableSymbol(expression.callee)
@@ -1065,6 +1107,7 @@ class Checker {
     expression.arrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
     expression.mapKeyType = symbol.returnMapKeyType ?? null
     expression.mapValueType = symbol.returnMapValueType ?? null
+    expression.promiseValueType = symbol.returnPromiseValueType ?? null
     expression.setElementType = symbol.returnSetElementType ?? null
     expression.shape = symbol.returnShape ?? null
 
@@ -1083,6 +1126,29 @@ class Checker {
     }
 
     return symbol.returnType ?? 'unknown'
+  }
+
+  checkPromiseStaticCall(expression: AnyNode): ValueType | null {
+    const method = promiseStaticMethodName(expression.callee)
+
+    if (method == null) {
+      return null
+    }
+
+    if (this.scope.resolve('Promise') != null) {
+      return null
+    }
+
+    if (expression.args.length > 1) {
+      this.report('CCJS_ARG_COUNT', `function Promise.${method} expects at most 1 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+
+    expression.valueType = 'promise'
+    expression.promiseValueType = method === 'resolve' ? argTypes[0] ?? 'void' : 'unknown'
+
+    return 'promise'
   }
 
   checkCollectionMethodCall(expression: AnyNode): ValueType | null {
@@ -1539,6 +1605,7 @@ class Checker {
               arrayElementDeclaredType: expected.arrayElementDeclaredType ?? null,
               mapKeyType: expected.mapKeyType ?? null,
               mapValueType: expected.mapValueType ?? null,
+              promiseValueType: expected.promiseValueType ?? null,
               setElementType: expected.setElementType ?? null,
               functionType: expected.functionType ?? null,
               shape: expected.shape ?? null
@@ -1558,6 +1625,7 @@ class Checker {
         param.arrayElementDeclaredType = paramInfo.arrayElementDeclaredType
         param.mapKeyType = paramInfo.mapKeyType
         param.mapValueType = paramInfo.mapValueType
+        param.promiseValueType = paramInfo.promiseValueType ?? null
         param.setElementType = paramInfo.setElementType
         param.functionType = paramInfo.functionType
         param.shape = paramInfo.shape
@@ -1571,6 +1639,7 @@ class Checker {
           arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
           mapKeyType: paramInfo.mapKeyType,
           mapValueType: paramInfo.mapValueType,
+          promiseValueType: paramInfo.promiseValueType ?? null,
           setElementType: paramInfo.setElementType,
           functionType: paramInfo.functionType,
           shape: paramInfo.shape,
@@ -1583,6 +1652,10 @@ class Checker {
 
         if (functionType != null) {
           this.checkAssignableType(actualReturnType, functionType.returnType, expression.body.loc, functionType.returnNullable === true, this.expressionCanBeNull(expression.body))
+
+          if (functionType.returnType === 'promise' && functionType.returnPromiseValueType != null) {
+            this.checkAssignableType(this.resolveExpressionPromiseValueType(expression.body), functionType.returnPromiseValueType, expression.body.loc)
+          }
         }
       } else {
         if (functionType == null) {
@@ -1592,14 +1665,17 @@ class Checker {
 
         const previousReturnType = this.currentReturnType
         const previousReturnNullable = this.currentReturnNullable
+        const previousReturnPromiseValueType = this.currentReturnPromiseValueType
 
         try {
           this.currentReturnType = functionType.returnType
           this.currentReturnNullable = functionType.returnNullable === true
+          this.currentReturnPromiseValueType = functionType.returnPromiseValueType ?? null
           this.checkStatements(expression.body)
         } finally {
           this.currentReturnType = previousReturnType
           this.currentReturnNullable = previousReturnNullable
+          this.currentReturnPromiseValueType = previousReturnPromiseValueType
         }
       }
     })
@@ -1610,6 +1686,7 @@ class Checker {
     expression.returnArrayElementType = functionType?.returnArrayElementType ?? expression.body?.arrayElementType ?? null
     expression.returnMapKeyType = functionType?.returnMapKeyType ?? expression.body?.mapKeyType ?? null
     expression.returnMapValueType = functionType?.returnMapValueType ?? expression.body?.mapValueType ?? null
+    expression.returnPromiseValueType = functionType?.returnPromiseValueType ?? expression.body?.promiseValueType ?? null
     expression.returnSetElementType = functionType?.returnSetElementType ?? expression.body?.setElementType ?? null
   }
 
@@ -1628,6 +1705,8 @@ class Checker {
         this.currentReturnType = methodReturnInfo.valueType
         const previousReturnNullable = this.currentReturnNullable
         this.currentReturnNullable = methodReturnInfo.nullable
+        const previousReturnPromiseValueType = this.currentReturnPromiseValueType
+        this.currentReturnPromiseValueType = methodReturnInfo.promiseValueType ?? null
 
         this.declare('this', {
           kind: 'this',
@@ -1647,6 +1726,7 @@ class Checker {
             arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
             mapKeyType: paramInfo.mapKeyType,
             mapValueType: paramInfo.mapValueType,
+            promiseValueType: paramInfo.promiseValueType ?? null,
             setElementType: paramInfo.setElementType,
             functionType: paramInfo.functionType,
             shape: paramInfo.shape,
@@ -1659,6 +1739,7 @@ class Checker {
         } finally {
           this.currentReturnType = previousReturnType
           this.currentReturnNullable = previousReturnNullable
+          this.currentReturnPromiseValueType = previousReturnPromiseValueType
         }
       })
     }
@@ -1698,6 +1779,10 @@ class Checker {
 
       if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
         this.checkAssignableType(this.resolveExpressionSetElementType(property.value), fieldType.setElementType, property.loc)
+      }
+
+      if (fieldType.valueType === 'promise' && fieldType.promiseValueType != null) {
+        this.checkAssignableType(this.resolveExpressionPromiseValueType(property.value), fieldType.promiseValueType, property.loc)
       }
     }
 
@@ -1742,6 +1827,7 @@ class Checker {
         returnArrayElementDeclaredType: symbol.functionType.returnArrayElementDeclaredType,
         returnMapKeyType: symbol.functionType.returnMapKeyType,
         returnMapValueType: symbol.functionType.returnMapValueType,
+        returnPromiseValueType: symbol.functionType.returnPromiseValueType,
         returnSetElementType: symbol.functionType.returnSetElementType,
         returnShape: symbol.functionType.returnShape,
         loc: symbol.loc
@@ -1953,6 +2039,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        promiseValueType: null,
         setElementType: null
       }
     }
@@ -1982,6 +2069,7 @@ class Checker {
         arrayElementDeclaredType: arrayElementTypeName ?? null,
         mapKeyType: null,
         mapValueType: null,
+        promiseValueType: null,
         setElementType: null
       }
     }
@@ -2001,6 +2089,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: keyInfo?.valueType ?? 'unknown',
         mapValueType: valueInfo?.valueType ?? 'unknown',
+        promiseValueType: null,
         setElementType: null
       }
     }
@@ -2019,7 +2108,27 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        promiseValueType: null,
         setElementType: elementInfo?.valueType ?? 'unknown'
+      }
+    }
+
+    const promiseValueTypeName = promiseValueTypeNameFromTypeName(name)
+
+    if (name === 'promise' || promiseValueTypeName != null) {
+      const valueInfo = promiseValueTypeName == null ? null : this.resolveDeclaredType(promiseValueTypeName, loc)
+
+      return {
+        valueType: 'promise',
+        nullable: false,
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: valueInfo?.valueType ?? 'unknown',
+        setElementType: null
       }
     }
 
@@ -2033,6 +2142,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        promiseValueType: null,
         setElementType: null
       }
     }
@@ -2060,6 +2170,7 @@ class Checker {
                 arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
                 mapKeyType: paramInfo.mapKeyType,
                 mapValueType: paramInfo.mapValueType,
+                promiseValueType: paramInfo.promiseValueType ?? null,
                 setElementType: paramInfo.setElementType,
                 functionType: paramInfo.functionType,
                 shape: paramInfo.shape
@@ -2072,6 +2183,7 @@ class Checker {
             returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
             returnMapKeyType: returnInfo.mapKeyType,
             returnMapValueType: returnInfo.mapValueType,
+            returnPromiseValueType: returnInfo.promiseValueType ?? null,
             returnSetElementType: returnInfo.setElementType,
             returnShape: returnInfo.shape
           },
@@ -2080,6 +2192,7 @@ class Checker {
           arrayElementDeclaredType: null,
           mapKeyType: null,
           mapValueType: null,
+          promiseValueType: null,
           setElementType: null
         }
       }
@@ -2093,6 +2206,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        promiseValueType: null,
         setElementType: null
       }
     }
@@ -2108,6 +2222,7 @@ class Checker {
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
+      promiseValueType: null,
       setElementType: null
     }
   }
@@ -2127,6 +2242,7 @@ class Checker {
           arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
           mapKeyType: fieldInfo.mapKeyType,
           mapValueType: fieldInfo.mapValueType,
+          promiseValueType: fieldInfo.promiseValueType ?? null,
           setElementType: fieldInfo.setElementType,
           functionType: fieldInfo.functionType,
           shape: fieldInfo.shape
@@ -2280,6 +2396,38 @@ class Checker {
       const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
 
       return field?.valueType === 'set' ? field.setElementType ?? null : null
+    }
+
+    return null
+  }
+
+  resolveExpressionPromiseValueType(expression: AnyNode | null | undefined): ValueType | null {
+    if (expression == null) {
+      return null
+    }
+
+    if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+      return expression.valueType === 'promise' ? expression.promiseValueType ?? null : null
+    }
+
+    if (expression.type === 'Reference' && expression.path.length === 1) {
+      const symbol = this.scope.resolve(expression.path[0])
+
+      return symbol?.valueType === 'promise' ? symbol.promiseValueType ?? null : null
+    }
+
+    if (expression.type === 'MemberExpression') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+
+      return field?.valueType === 'promise' ? field.promiseValueType ?? null : null
+    }
+
+    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+
+      return field?.valueType === 'promise' ? field.promiseValueType ?? null : null
     }
 
     return null
@@ -2464,6 +2612,13 @@ function setElementTypeNameFromTypeName(name: string): string | null {
   return args.length === 1 ? args[0] : null
 }
 
+function promiseValueTypeNameFromTypeName(name: string): string | null {
+  const match = /^promise<(.+)>$/.exec(name)
+  const args = match == null ? [] : splitGenericArgs(match[1])
+
+  return args.length === 1 ? args[0] : null
+}
+
 function splitGenericArgs(value: string): string[] {
   const args: string[] = []
   let depth = 0
@@ -2498,5 +2653,15 @@ function commonArrayElementType(types: ValueType[]): ValueType {
 }
 
 function isBuiltinValueType(name: string): boolean {
-  return ['array', 'boolean', 'function', 'null', 'number', 'object', 'string', 'void'].includes(name)
+  return ['array', 'boolean', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(name)
+}
+
+function promiseStaticMethodName(callee: AnyNode): string | null {
+  if (callee.type !== 'MemberExpression' || !['resolve', 'reject'].includes(callee.property)) {
+    return null
+  }
+
+  return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'Promise'
+    ? callee.property
+    : null
 }

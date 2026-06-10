@@ -223,6 +223,7 @@ function collectFunctionDeclarations(program: ProgramNode, topLevelItems: IrTopL
       ...(item.returnArrayElementDeclaredType == null ? {} : { returnArrayElementDeclaredType: item.returnArrayElementDeclaredType }),
       ...(item.returnMapKeyType == null ? {} : { returnMapKeyType: item.returnMapKeyType }),
       ...(item.returnMapValueType == null ? {} : { returnMapValueType: item.returnMapValueType }),
+      ...(item.returnPromiseValueType == null ? {} : { returnPromiseValueType: item.returnPromiseValueType }),
       ...(item.returnSetElementType == null ? {} : { returnSetElementType: item.returnSetElementType }),
       ...(item.returnShape == null ? {} : { returnShape: item.returnShape }),
       loc: item.loc
@@ -630,6 +631,10 @@ function visitNode(node: unknown, features: Set<IrFeature>): void {
 function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
   if (node.nullable === true) {
     features.add('runtime-values')
+  }
+
+  if (node.valueType === 'promise' || node.returnType === 'promise') {
+    features.add('async-runtime')
   }
 
   if (node.type === 'FunctionDeclaration' || node.type === 'MethodDefinition') {

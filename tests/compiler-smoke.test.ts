@@ -1992,6 +1992,29 @@ test('drives C runtime prelude from target-neutral IR requirements', () => {
   assert.doesNotMatch(withoutRuntimeRequirements, /#include "ccjs\/time\.h"/)
 })
 
+test('drives C async runtime headers from target-neutral IR requirements', () => {
+  const result = compileSource(`export function main(): void {
+  console.log('ok')
+}
+`, {
+    target: 'c'
+  })
+  const code = emitCFromIr({
+    ...result.ir,
+    runtimeRequirements: ['async-runtime']
+  })
+  const withoutAsyncRuntime = emitCFromIr({
+    ...result.ir,
+    runtimeRequirements: []
+  })
+
+  assert.match(code, /#include "ccjs\/loop\.h"/)
+  assert.match(code, /#include "ccjs\/promise\.h"/)
+  assert.match(code, /static ccjs_allocator ccjs_default_allocator = \{/)
+  assert.doesNotMatch(withoutAsyncRuntime, /#include "ccjs\/loop\.h"/)
+  assert.doesNotMatch(withoutAsyncRuntime, /#include "ccjs\/promise\.h"/)
+})
+
 test('drives C collection headers from target-neutral IR requirements', () => {
   const stringOnly = compileSource(`export function main(): void {
   const text = String(7)
@@ -4820,6 +4843,57 @@ export function main(): void {
 `, 'CCJS_C_COLLECTION', {
     target: 'c'
   })
+})
+
+test('tracks Promise generic metadata through checker, IR and TS emission', () => {
+  const result = compileSource(`function makeValue(): Promise<number> {
+  return Promise.resolve(7)
+}
+
+export function main(): void {
+  const value: Promise<number> = Promise.resolve(1)
+  const inferred = Promise.resolve('ok')
+  console.log(value, inferred)
+}
+`, {
+    target: 'ts'
+  })
+  const aliasResult = compileSource(`type Loader = () => Promise<string>
+`, {
+    target: 'ts'
+  })
+  const makeValue = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'makeValue')
+  const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const value = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'value')
+  const inferred = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'inferred')
+  const makeValueDeclaration = result.ir.functionDeclarations.find(item => item.name === 'makeValue')
+
+  assert.ok(makeValue)
+  assert.ok(value)
+  assert.ok(inferred)
+  assert.equal(makeValue.returnType, 'promise')
+  assert.equal(makeValue.returnPromiseValueType, 'number')
+  assert.equal(makeValueDeclaration?.returnPromiseValueType, 'number')
+  assert.equal(value.valueType, 'promise')
+  assert.equal(value.promiseValueType, 'number')
+  assert.equal(inferred.valueType, 'promise')
+  assert.equal(inferred.promiseValueType, 'string')
+  assert.deepEqual(result.ir.features, [
+    'async-runtime'
+  ])
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'async-runtime'
+  ])
+  assert.match(result.code, /function makeValue\(\): Promise<number> \{/)
+  assert.match(result.code, /const value: Promise<number> = Promise\.resolve\(1\)/)
+  assert.match(result.code, /const inferred: Promise<string> = Promise\.resolve\("ok"\)/)
+  assert.match(aliasResult.code, /type Loader = \(\) => Promise<string>/)
+
+  assertDiagnostic(`export function main(): void {
+  const value: Promise<number> = Promise.resolve('nope')
+  console.log(value)
+}
+`, 'CCJS_TYPE_MISMATCH')
 })
 
 test('compiles C collection values across function boundaries', () => {

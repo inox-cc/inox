@@ -11,6 +11,7 @@ type LowerResolvedType = {
   arrayElementDeclaredType: string | null
   mapKeyType: string | null
   mapValueType: string | null
+  promiseValueType?: string | null
   setElementType: string | null
   returnShape?: AnyNode | null
   shape: AnyNode | null
@@ -56,6 +57,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
       returnMapKeyType: returnType.mapKeyType,
       returnMapValueType: returnType.mapValueType,
+      returnPromiseValueType: returnType.promiseValueType ?? null,
       returnSetElementType: returnType.setElementType,
       returnShape: returnType.shape,
       body: item.body.map(statement => lowerStatement(statement, context))
@@ -83,6 +85,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
           returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
           returnMapKeyType: returnType.mapKeyType,
           returnMapValueType: returnType.mapValueType,
+          returnPromiseValueType: returnType.promiseValueType ?? null,
           returnSetElementType: returnType.setElementType,
           body: method.body.map(statement => lowerStatement(statement, context))
         }
@@ -144,6 +147,7 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       arrayElementDeclaredType: statement.arrayElementDeclaredType ?? null,
       mapKeyType: statement.mapKeyType ?? null,
       mapValueType: statement.mapValueType ?? null,
+      promiseValueType: statement.promiseValueType ?? null,
       setElementType: statement.setElementType ?? null,
       functionType: statement.functionType ?? null,
       shape: statement.shape ?? null,
@@ -206,6 +210,7 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       arrayElementDeclaredType: declared.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init),
       mapKeyType: declared.mapKeyType ?? inferredMapType?.key ?? null,
       mapValueType: declared.mapValueType ?? inferredMapType?.value ?? null,
+      promiseValueType: declared.promiseValueType ?? inferPromiseValueType(init),
       setElementType: declared.setElementType ?? inferSetElementType(init),
       valueType: declared.valueType ?? statement.declaredType ?? init?.valueType ?? 'unknown',
       init
@@ -258,6 +263,7 @@ function lowerParam(param: AnyNode, context: LowerContext): AnyNode {
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
+    promiseValueType: declared.promiseValueType ?? null,
     setElementType: declared.setElementType,
     functionType: declared.functionType,
     shape: declared.shape
@@ -273,6 +279,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
+      promiseValueType: null,
       setElementType: null,
       shape: null,
       functionType: null
@@ -302,6 +309,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       arrayElementDeclaredType: arrayElementTypeName ?? null,
       mapKeyType: null,
       mapValueType: null,
+      promiseValueType: null,
       setElementType: null,
       shape: null,
       functionType: null
@@ -321,6 +329,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       arrayElementDeclaredType: null,
       mapKeyType: keyType?.valueType ?? 'unknown',
       mapValueType: valueType?.valueType ?? 'unknown',
+      promiseValueType: null,
       setElementType: null,
       shape: null,
       functionType: null
@@ -339,7 +348,27 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
+      promiseValueType: null,
       setElementType: elementType?.valueType ?? 'unknown',
+      shape: null,
+      functionType: null
+    }
+  }
+
+  const promiseValueTypeName = promiseValueTypeNameFromTypeName(name)
+
+  if (name === 'promise' || promiseValueTypeName != null) {
+    const valueType = promiseValueTypeName == null ? null : resolveDeclaredType(promiseValueTypeName, context)
+
+    return {
+      valueType: 'promise',
+      nullable: false,
+      arrayElementType: null,
+      arrayElementDeclaredType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      promiseValueType: valueType?.valueType ?? 'unknown',
+      setElementType: null,
       shape: null,
       functionType: null
     }
@@ -353,6 +382,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
+      promiseValueType: null,
       setElementType: null,
       shape: null,
       functionType: null
@@ -369,6 +399,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
+      promiseValueType: null,
       setElementType: null,
       shape: resolveObjectShape(type, context),
       functionType: null
@@ -385,6 +416,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
+      promiseValueType: null,
       setElementType: null,
       shape: null,
       functionType: {
@@ -400,6 +432,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
             arrayElementDeclaredType: declared.arrayElementDeclaredType,
             mapKeyType: declared.mapKeyType,
             mapValueType: declared.mapValueType,
+            promiseValueType: declared.promiseValueType ?? null,
             setElementType: declared.setElementType,
             shape: declared.shape,
             functionType: declared.functionType
@@ -411,6 +444,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
         returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
         returnMapKeyType: returnType.mapKeyType,
         returnMapValueType: returnType.mapValueType,
+        returnPromiseValueType: returnType.promiseValueType ?? null,
         returnSetElementType: returnType.setElementType,
         returnShape: returnType.shape
       }
@@ -424,6 +458,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
     arrayElementDeclaredType: null,
     mapKeyType: null,
     mapValueType: null,
+    promiseValueType: null,
     setElementType: null,
     shape: null,
     functionType: null
@@ -445,6 +480,7 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
         arrayElementDeclaredType: declared.arrayElementDeclaredType,
         mapKeyType: declared.mapKeyType,
         mapValueType: declared.mapValueType,
+        promiseValueType: declared.promiseValueType ?? null,
         setElementType: declared.setElementType,
         shape: declared.shape,
         functionType: declared.functionType
@@ -474,6 +510,10 @@ function inferMapType(expression: AnyNode | null): { key: string | null, value: 
 
 function inferSetElementType(expression: AnyNode | null): string | null {
   return expression?.valueType === 'set' ? expression.setElementType ?? null : null
+}
+
+function inferPromiseValueType(expression: AnyNode | null): string | null {
+  return expression?.valueType === 'promise' ? expression.promiseValueType ?? null : null
 }
 
 function arrayElementTypeNameFromTypeName(name: string): string | null {
@@ -520,6 +560,18 @@ function setElementTypeNameFromTypeName(name: string): string | null {
   return args.length === 1 ? args[0] : null
 }
 
+function promiseValueTypeNameFromTypeName(name: string): string | null {
+  const match = /^promise<(.+)>$/.exec(name)
+
+  if (match == null) {
+    return null
+  }
+
+  const args = splitGenericArgs(match[1])
+
+  return args.length === 1 ? args[0] : null
+}
+
 function splitGenericArgs(value: string): string[] {
   const args: string[] = []
   let depth = 0
@@ -554,7 +606,7 @@ function commonArrayElementType(types: string[]): string {
 }
 
 function isBuiltinValueType(name: string): boolean {
-  return ['array', 'boolean', 'function', 'null', 'number', 'object', 'string', 'void'].includes(name)
+  return ['array', 'boolean', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(name)
 }
 
 function lowerExpression(expression: AnyNode, context: LowerContext = { types: new Map() }): AnyNode {
@@ -627,6 +679,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
+      promiseValueType: expression.promiseValueType ?? null,
       setElementType: expression.setElementType ?? null,
       shape: expression.shape ?? null
     }
@@ -642,6 +695,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
+      promiseValueType: expression.promiseValueType ?? null,
       setElementType: expression.setElementType ?? null,
       shape: expression.shape ?? null
     }
@@ -658,6 +712,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
+      promiseValueType: expression.promiseValueType ?? null,
       setElementType: expression.setElementType ?? null,
       shape: expression.shape ?? null
     }
@@ -674,6 +729,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
+      promiseValueType: expression.promiseValueType ?? null,
       setElementType: expression.setElementType ?? null,
       shape: expression.shape ?? null,
       functionType: expression.functionType ?? null
@@ -690,6 +746,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
+      promiseValueType: expression.promiseValueType ?? null,
       setElementType: expression.setElementType ?? null,
       shape: expression.shape ?? null
     }
@@ -705,6 +762,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
+      promiseValueType: expression.promiseValueType ?? null,
       setElementType: expression.setElementType ?? null
     }
   }

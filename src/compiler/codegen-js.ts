@@ -231,6 +231,7 @@ function emitReturnTypeAnnotation(node: AnyNode, options: JsEmitOptions = {}): s
     arrayElementType: node.returnArrayElementType,
     mapKeyType: node.returnMapKeyType,
     mapValueType: node.returnMapValueType,
+    promiseValueType: node.returnPromiseValueType,
     nullable: node.returnNullable,
     setElementType: node.returnSetElementType
   })}` : ''
@@ -279,6 +280,16 @@ function emitTsBaseType(valueType: string | null | undefined, metadata: AnyNode)
 
   if (setType.length === 1) {
     return `Set<${emitTsValueType(setType[0])}>`
+  }
+
+  if (valueType === 'promise') {
+    return `Promise<${emitTsValueType(metadata.promiseValueType ?? 'unknown')}>`
+  }
+
+  const promiseType = genericTypeArgs(valueType, 'promise')
+
+  if (promiseType.length === 1) {
+    return `Promise<${emitTsValueType(promiseType[0])}>`
   }
 
   if (valueType === 'function') {
@@ -358,8 +369,17 @@ function emitTypeAlias(statement: AnyNode, options: JsEmitOptions = {}): string[
     const params = valueType.params
       .map(param => `${param.name}: ${emitTsValueType(param.valueType, param)}`)
       .join(', ')
+    const returnType = emitTsValueType(valueType.returnType, {
+      ...valueType,
+      arrayElementType: valueType.returnArrayElementType,
+      mapKeyType: valueType.returnMapKeyType,
+      mapValueType: valueType.returnMapValueType,
+      nullable: valueType.returnNullable,
+      promiseValueType: valueType.returnPromiseValueType,
+      setElementType: valueType.returnSetElementType
+    })
 
-    return [`${prefix}(${params}) => ${emitTsValueType(valueType.returnType, valueType)}`]
+    return [`${prefix}(${params}) => ${returnType}`]
   }
 
   return [`${prefix}unknown`]
@@ -681,6 +701,7 @@ function emitArrowReturnTypeAnnotation(expression: AnyNode, options: JsEmitOptio
     arrayElementType: expression.returnArrayElementType,
     mapKeyType: expression.returnMapKeyType,
     mapValueType: expression.returnMapValueType,
+    promiseValueType: expression.returnPromiseValueType,
     nullable: expression.returnNullable,
     setElementType: expression.returnSetElementType
   })

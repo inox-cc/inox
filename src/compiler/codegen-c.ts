@@ -41,14 +41,15 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || runtimeRequirements.has('callback-values')
+  const needsAsyncRuntime = runtimeRequirements.has('async-runtime')
   const needsCollectionRuntime = runtimeRequirements.has('collections')
   const needsObjectRuntime = runtimeRequirements.has('objects')
-  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || runtimeRequirements.has('managed-values')
+  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || runtimeRequirements.has('managed-values')
   const needsTimeRuntime = runtimeRequirements.has('clocks')
   const needsStringHeader = runtimeRequirements.has('string-bytes')
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
   for (const wrapper of arrowCallbackWrappers) {
@@ -98,7 +99,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -111,6 +112,10 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, need
     lines.push('#include <stdlib.h>')
     if (needsCollectionRuntime) {
       lines.push('#include "ccjs/array.h"')
+    }
+    if (needsAsyncRuntime) {
+      lines.push('#include "ccjs/loop.h"')
+      lines.push('#include "ccjs/promise.h"')
     }
     if (needsCallbackRuntime) {
       lines.push('#include "ccjs/callback.h"')
