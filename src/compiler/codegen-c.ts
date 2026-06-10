@@ -1,5 +1,5 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
+import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, findIrEntryProgram, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
 
@@ -28,8 +28,8 @@ export function emitCBundle(graph: ModuleGraph): string {
 }
 
 export function emitCBundleFromIrModules(irModules: IrModuleRecord[], entry: string): string {
-  const irPrograms = irModules.map(module => module.ir)
-  const entryIr = irModules.find(module => module.path === entry)?.ir ?? null
+  const irPrograms = collectIrPrograms(irModules)
+  const entryIr = findIrEntryProgram(irModules, entry)
 
   return emitCUnit(irPrograms, entryIr)
 }

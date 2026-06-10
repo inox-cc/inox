@@ -7,7 +7,7 @@ import { emitC, emitCBundle, emitCBundleFromIrModules, emitCFromIr } from '../sr
 import { emitJs, emitJsBundle, emitJsBundleFromIrModules, emitJsFromIr, emitTs, emitTsBundle, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
-import { collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords } from '../src/compiler/ir.ts'
+import { collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 
 test('compiles exported main to runnable JS', () => {
@@ -3682,6 +3682,8 @@ export function main(): void {
       callMain: false
     })
     const irModules = collectIrModuleRecords(result.graph)
+    const libEntry = irModules.find(module => module.ir.functionDeclarations.some(item => item.name === 'greet'))?.path ?? ''
+    assert.notEqual(libEntry, '')
     const js = emitJsBundleFromIrModules(irModules, result.graph.entry, {
       callMain: false
     })
@@ -3689,7 +3691,12 @@ export function main(): void {
       callMain: false
     })
     const c = emitCBundleFromIrModules(irModules, result.graph.entry)
+    const jsWithLibEntry = emitJsBundleFromIrModules(irModules, libEntry)
+    const cWithLibEntry = emitCBundleFromIrModules(irModules, libEntry)
 
+    assert.deepEqual(collectIrPrograms(irModules), irModules.map(module => module.ir))
+    assert.equal(findIrEntryProgram(irModules, result.graph.entry)?.functionDeclarations.some(item => item.name === 'main'), true)
+    assert.equal(findIrEntryProgram(irModules, libEntry)?.functionDeclarations.some(item => item.name === 'greet'), true)
     assert.match(js, /function greet\(\) \{/)
     assert.match(js, /function main\(\) \{/)
     assert.doesNotMatch(js, /const ccjsMainResult/)
@@ -3698,6 +3705,8 @@ export function main(): void {
     assert.match(c, /void greet\(void\);/)
     assert.match(c, /void ccjs_main\(void\);/)
     assert.match(c, /int main\(void\) \{\n  ccjs_main\(\);/)
+    assert.doesNotMatch(jsWithLibEntry, /const ccjsMainResult = main\(\)/)
+    assert.doesNotMatch(cWithLibEntry, /int main\(void\) \{\n  ccjs_main\(\);/)
   } finally {
     await rm(dir, {
       recursive: true,

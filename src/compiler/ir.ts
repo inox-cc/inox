@@ -69,6 +69,14 @@ export function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
   })
 }
 
+export function collectIrPrograms(records: IrModuleRecord[]): IrProgram[] {
+  return records.map(record => record.ir)
+}
+
+export function findIrEntryProgram(records: IrModuleRecord[], entry: string): IrProgram | null {
+  return records.find(record => record.path === entry)?.ir ?? null
+}
+
 export function hasIrFeature(program: IrProgram, feature: IrFeature): boolean {
   return program.features.includes(feature)
 }
