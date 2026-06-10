@@ -1,34 +1,6 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionEffects, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
+import { collectIrFunctionEffects, collectIrGlobalUsages, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
-
-const cJsGlobalRoots = new Set([
-  'Array',
-  'Buffer',
-  'Date',
-  'Error',
-  'Int8Array',
-  'Int16Array',
-  'Int32Array',
-  'JSON',
-  'Map',
-  'Math',
-  'Promise',
-  'Set',
-  'Uint8Array',
-  'Uint16Array',
-  'Uint32Array',
-  'fetch',
-  'fs',
-  'http',
-  'performance',
-  'clearTimeout',
-  'clearInterval',
-  'clearImmediate',
-  'setTimeout',
-  'setInterval',
-  'setImmediate'
-])
 
 const cStringPredicateMethods = new Set([
   'includes',
@@ -58,7 +30,8 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, ir
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(programs)
   const functionEffects = collectIrFunctionEffects(irPrograms)
-  const baseContext = createBaseContext(diagnostics, functions, functionEffects)
+  const jsGlobalRoots = new Set(collectIrGlobalUsages(irPrograms).map(usage => usage.root))
+  const baseContext = createBaseContext(diagnostics, functions, functionEffects, jsGlobalRoots)
   baseContext.callbackWrappers = collectCallbackWrappers(programs, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || irPrograms.some(program => hasIrRuntimeRequirement(program, 'callback-values'))
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || irPrograms.some(program => hasIrRuntimeRequirement(program, 'managed-values'))
@@ -211,7 +184,7 @@ function reportUnsupportedCSyntaxFeatures(irPrograms: IrProgram[], diagnostics: 
   }
 }
 
-function createBaseContext(diagnostics, functions, functionEffects: IrFunctionEffect[]) {
+function createBaseContext(diagnostics, functions, functionEffects: IrFunctionEffect[], jsGlobalRoots: Set<string>) {
   const throwing = createThrowingFunctionInfo(functions, functionEffects)
 
   return {
@@ -224,6 +197,7 @@ function createBaseContext(diagnostics, functions, functionEffects: IrFunctionEf
     functionParams: new Map(functions.map(item => [item.name, item.params])),
     functionReturnNullables: new Map(functions.map(item => [item.name, item.returnNullable === true])),
     functionReturnTypes: new Map(functions.map(item => [item.name, item.returnType])),
+    jsGlobalRoots,
     runtimeFunctionParams: new Map(),
     throwingFunctions: throwing.throwingFunctions,
     nextId: 0
@@ -959,7 +933,7 @@ function collectArrowCaptures(expression, outerScopes, context) {
 
     const name = reference.path[0]
 
-    if (lookup(name, localScopes) != null || context.functionNames.has(name) || isCJsGlobalRoot(name)) {
+    if (lookup(name, localScopes) != null || context.functionNames.has(name) || isCJsGlobalRoot(name, context)) {
       return
     }
 
@@ -5752,7 +5726,7 @@ function emitCallee(callee, context) {
   }
 
   if (callee.type === 'Reference' && callee.path.length === 1) {
-    if (isCJsGlobalRoot(callee.path[0])) {
+    if (isCJsGlobalRoot(callee.path[0], context)) {
       context.diagnostics.push(diagnostic('CCJS_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', callee.loc))
       return '_'
     }
@@ -5760,7 +5734,7 @@ function emitCallee(callee, context) {
     return context.functionNames.get(callee.path[0]) ?? callee.path[0]
   }
 
-  if (usesCJsGlobal(callee)) {
+  if (usesCJsGlobal(callee, context)) {
     context.diagnostics.push(diagnostic('CCJS_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', callee.loc))
     return '_'
   }
@@ -6124,11 +6098,11 @@ function inferExpressionType(expression, context) {
     return 'boolean'
   }
 
-  if (expression?.type === 'CallExpression' && usesCJsGlobal(expression.callee)) {
+  if (expression?.type === 'CallExpression' && usesCJsGlobal(expression.callee, context)) {
     return 'js-global'
   }
 
-  if (expression?.type === 'NewExpression' && usesCJsGlobal(expression.callee)) {
+  if (expression?.type === 'NewExpression' && usesCJsGlobal(expression.callee, context)) {
     return 'js-global'
   }
 
@@ -6145,7 +6119,7 @@ function inferExpressionType(expression, context) {
   }
 
   if (expression?.type === 'Reference') {
-    return context.variables.get(expression.path.join('.')) ?? (context.functionNames.has(expression.path[0]) ? 'function' : (isCJsGlobalRoot(expression.path[0]) ? 'js-global' : 'number'))
+    return context.variables.get(expression.path.join('.')) ?? (context.functionNames.has(expression.path[0]) ? 'function' : (isCJsGlobalRoot(expression.path[0], context) ? 'js-global' : 'number'))
   }
 
   if (expression?.type === 'ArrowFunctionExpression') {
@@ -7591,10 +7565,10 @@ function utf8ByteLength(value) {
   return Buffer.byteLength(value, 'utf8')
 }
 
-function usesCJsGlobal(expression) {
+function usesCJsGlobal(expression, context) {
   const root = rootReferenceName(expression)
 
-  return root != null && isCJsGlobalRoot(root)
+  return root != null && isCJsGlobalRoot(root, context)
 }
 
 function cTimeRuntimeCallName(callee) {
@@ -7613,8 +7587,8 @@ function cTimeRuntimeCallName(callee) {
   return null
 }
 
-function isCJsGlobalRoot(name) {
-  return cJsGlobalRoots.has(name)
+function isCJsGlobalRoot(name, context) {
+  return context.jsGlobalRoots.has(name)
 }
 
 function rootReferenceName(expression) {

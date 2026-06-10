@@ -53,6 +53,11 @@ export type IrSyntaxFeatureUsage = {
   loc?: SourceLocation
 }
 
+export type IrGlobalUsage = {
+  root: string
+  loc?: SourceLocation
+}
+
 export type IrProgram = {
   type: 'IrProgram'
   version: 1
@@ -60,6 +65,7 @@ export type IrProgram = {
   runtimeRequirements: IrRuntimeRequirement[]
   functionEffects: IrFunctionEffect[]
   syntaxFeatures: IrSyntaxFeatureUsage[]
+  globalUsages: IrGlobalUsage[]
   body: AnyNode[]
 }
 

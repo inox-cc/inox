@@ -1388,6 +1388,7 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
   assert.equal(result.ir.version, 1)
   assert.deepEqual(result.ir.runtimeRequirements, [])
   assert.deepEqual(result.ir.syntaxFeatures, [])
+  assert.deepEqual(result.ir.globalUsages, [])
   assert.deepEqual(result.ir.functionEffects, [
     {
       name: 'main',
@@ -1421,6 +1422,7 @@ test('collects target-neutral IR feature requirements', () => {
     'managed-values',
     'string-bytes'
   ])
+  assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['Date'])
   assert.match(result.code, /#include "ccjs\/time\.h"/)
 })
 
@@ -2889,6 +2891,21 @@ test('lowers Date.now and performance.now to the C time runtime', () => {
 })
 
 test('reports JS stdlib globals with a stable C diagnostic', () => {
+  const usages = compileSource(`export function main(): void {
+  const text = fs.readFile('/tmp/value.txt', 'utf8')
+  const parsed = Date.parse('2026-06-09T00:00:00Z')
+  const server = http.createServer((request, response) => {
+    response.end('ok')
+  })
+  const promise = Promise.resolve(parsed)
+  console.log(text, server, promise)
+}
+`, {
+    target: 'js'
+  })
+
+  assert.deepEqual([...new Set(usages.ir.globalUsages.map(usage => usage.root))].sort(), ['Date', 'Promise', 'fs', 'http'])
+
   for (const source of [
     `export function main(): void {
   const text = fs.readFile('/tmp/value.txt', 'utf8')
@@ -2941,6 +2958,7 @@ export function main(): void {
     assert.equal(result.graph.modules.every(module => module.hir?.type === 'HirProgram'), true)
     assert.equal(result.graph.modules.every(module => module.ir?.type === 'IrProgram'), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.syntaxFeatures)), true)
+    assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.globalUsages)), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.functionEffects)), true)
   } finally {
     await rm(dir, {

@@ -1,4 +1,32 @@
-import type { AnyNode, IrFeature, IrFunctionEffect, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, ProgramNode } from './types.ts'
+import type { AnyNode, IrFeature, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, ProgramNode } from './types.ts'
+
+const jsStdGlobalRoots = new Set([
+  'Array',
+  'Buffer',
+  'Date',
+  'Error',
+  'Int8Array',
+  'Int16Array',
+  'Int32Array',
+  'JSON',
+  'Map',
+  'Math',
+  'Promise',
+  'Set',
+  'Uint8Array',
+  'Uint16Array',
+  'Uint32Array',
+  'fetch',
+  'fs',
+  'http',
+  'performance',
+  'clearTimeout',
+  'clearInterval',
+  'clearImmediate',
+  'setTimeout',
+  'setInterval',
+  'setImmediate'
+])
 
 export function lowerHirToIr(program: ProgramNode): IrProgram {
   const features = collectIrFeatures(program)
@@ -10,6 +38,7 @@ export function lowerHirToIr(program: ProgramNode): IrProgram {
     runtimeRequirements: collectRuntimeRequirements(features),
     functionEffects: collectIrFunctionEffects([{ body: program.body }]),
     syntaxFeatures: collectSyntaxFeatureUsages(program),
+    globalUsages: collectGlobalUsages(program),
     body: program.body
   }
 }
@@ -24,6 +53,10 @@ export function hasIrRuntimeRequirement(program: IrProgram, requirement: IrRunti
 
 export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[] }>): IrFunctionEffect[] {
   return collectFunctionEffects(programs.flatMap(program => program.body.filter(item => item.type === 'FunctionDeclaration')))
+}
+
+export function collectIrGlobalUsages(programs: Array<{ globalUsages: IrGlobalUsage[] }>): IrGlobalUsage[] {
+  return programs.flatMap(program => program.globalUsages)
 }
 
 function collectIrFeatures(program: ProgramNode): IrFeature[] {
@@ -54,6 +87,48 @@ function collectSyntaxFeatureUsages(program: ProgramNode): IrSyntaxFeatureUsage[
   visitSyntaxFeatureUsage(program, usages)
 
   return usages
+}
+
+function collectGlobalUsages(program: ProgramNode): IrGlobalUsage[] {
+  const usages: IrGlobalUsage[] = []
+
+  visitGlobalUsage(program, usages)
+
+  return usages
+}
+
+function visitGlobalUsage(node: unknown, usages: IrGlobalUsage[]): void {
+  if (node == null) {
+    return
+  }
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      visitGlobalUsage(item, usages)
+    }
+    return
+  }
+
+  if (typeof node !== 'object') {
+    return
+  }
+
+  const item = node as AnyNode
+
+  if (item.type === 'Reference' && item.path.length > 0 && jsStdGlobalRoots.has(item.path[0])) {
+    usages.push({
+      root: item.path[0],
+      loc: item.loc
+    })
+  }
+
+  for (const [key, value] of Object.entries(item)) {
+    if (key === 'loc' || key === 'shape') {
+      continue
+    }
+
+    visitGlobalUsage(value, usages)
+  }
 }
 
 function visitSyntaxFeatureUsage(node: unknown, usages: IrSyntaxFeatureUsage[]): void {
