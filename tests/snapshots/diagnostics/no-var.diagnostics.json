@@ -1,0 +1,12 @@
+{
+  "target": "ts",
+  "diagnostics": [
+    {
+      "code": "CCJS_NO_VAR",
+      "message": "`var` is not supported; use `let` or `const`",
+      "line": 1,
+      "column": 5,
+      "severity": "error"
+    }
+  ]
+}

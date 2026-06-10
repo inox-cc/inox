@@ -14,7 +14,8 @@
     "test:fixtures": "node scripts/test-fixtures.ts",
     "test:ir-snapshots": "node scripts/test-ir-snapshots.ts",
     "test:codegen-snapshots": "node scripts/test-codegen-snapshots.ts",
-    "test:snapshots": "npm run test:ir-snapshots && npm run test:codegen-snapshots",
+    "test:diagnostic-snapshots": "node scripts/test-diagnostic-snapshots.ts",
+    "test:snapshots": "npm run test:ir-snapshots && npm run test:codegen-snapshots && npm run test:diagnostic-snapshots",
     "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:snapshots"
   },
   "engines": {
