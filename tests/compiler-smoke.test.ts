@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { emitC } from '../src/compiler/codegen-c.ts'
+import { emitC, emitCBundle } from '../src/compiler/codegen-c.ts'
 import { emitJs, emitJsBundle } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
@@ -3316,6 +3316,46 @@ export function main(): void {
     assert.match(code, /function greet\(\)/)
     assert.match(code, /function main\(\)/)
     assert.match(code, /const ccjsMainResult = main\(\)/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('drives C bundle functions and main wrapper from stored target-neutral IR programs', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-bundle-ir-'))
+
+  try {
+    await writeFile(join(dir, 'lib.ts'), `export function greet(): void {
+  console.log('from lib')
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import { greet } from './lib.ts'
+
+export function main(): void {
+  greet()
+}
+`)
+
+    const result = await compileFile(join(dir, 'main.ts'), {
+      target: 'c'
+    })
+    const graph = {
+      ...result.graph,
+      modules: result.graph.modules.map(module => ({
+        ...module,
+        hir: null
+      }))
+    }
+    const code = emitCBundle(graph)
+
+    assert.match(code, /void greet\(void\);/)
+    assert.match(code, /void ccjs_main\(void\);/)
+    assert.match(code, /void greet\(void\) \{/)
+    assert.match(code, /void ccjs_main\(void\) \{\n  greet\(\);/)
+    assert.match(code, /int main\(void\) \{\n  ccjs_main\(\);/)
   } finally {
     await rm(dir, {
       recursive: true,

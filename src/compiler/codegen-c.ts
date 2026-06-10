@@ -20,10 +20,22 @@ export function emitC(program: ProgramNode, ir: IrProgram = lowerHirToIr(program
 
 export function emitCBundle(graph: ModuleGraph): string {
   const entryModule = graph.modules.find(module => module.path === graph.entry)
-  const irPrograms = graph.modules.flatMap(module => module.hir == null ? [] : [module.ir ?? lowerHirToIr(module.hir)])
-  const entryIr = entryModule?.hir == null ? null : entryModule.ir ?? lowerHirToIr(entryModule.hir)
+  const irPrograms = graph.modules.flatMap(module => {
+    const ir = moduleRecordIr(module)
+
+    return ir == null ? [] : [ir]
+  })
+  const entryIr = entryModule == null ? null : moduleRecordIr(entryModule)
 
   return emitCUnit(irPrograms, entryIr)
+}
+
+function moduleRecordIr(module: ModuleGraph['modules'][number]): IrProgram | null {
+  if (module.ir != null) {
+    return module.ir
+  }
+
+  return module.hir == null ? null : lowerHirToIr(module.hir)
 }
 
 function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
