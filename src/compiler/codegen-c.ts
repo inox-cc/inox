@@ -1632,6 +1632,7 @@ function emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext) {
   context.runtimeCallbackReturnType = wrapper.returnType
   context.runtimeCallbackReturnShape = wrapper.returnShape ?? null
   context.runtimeCallbackReturnOut = '(*out)'
+  context.runtimeCallbackCleanupLabel = 'ccjs_promise_callback_cleanup'
   const bodyLines = emitPromiseChainCallbackParamPrelude(wrapper, context)
   const statementLines = emitPromiseChainCallbackStatementLines(wrapper, context)
   const lines = [
@@ -1640,9 +1641,13 @@ function emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext) {
     '  if (out == 0) return CCJS_ERR_TYPE;',
     '  *out = ccjs_undefined_value();',
     ...bodyLines.map(line => `  ${line}`),
+    ...emitLoopFlowDeclarations(context).map(line => `  ${line}`),
+    ...emitReturnFlowDeclarations(context).map(line => `  ${line}`),
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitErrorChannelDeclarations(context).map(line => `  ${line}`),
     ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
     ...statementLines.map(line => `  ${line}`),
+    ...(context.usedRuntimeCallbackCleanupGoto === true ? [`${context.runtimeCallbackCleanupLabel}:`] : []),
     ...emitOwnedValueCleanup(context).map(line => `  ${line}`),
     ...emitBoxedValueCleanup(context).map(line => `  ${line}`),
     '  return CCJS_OK;',
@@ -1702,6 +1707,10 @@ function emitPromiseChainCallbackStatementLines(wrapper, context) {
 
   if (body == null) {
     return []
+  }
+
+  if (body.kind === 'statement-list') {
+    return emitStatementList(body.statements, context)
   }
 
   const prefixLines = emitStatementList(body.prefixStatements, context)
@@ -3811,10 +3820,19 @@ function emitPreparedForExpressionClause(expression, context) {
 }
 
 function isRuntimeCallbackReturnContext(context) {
-  return context.statusReturn === true && ['number', 'boolean', 'string', 'object'].includes(context.runtimeCallbackReturnType)
+  return context.statusReturn === true
+    && (
+      context.runtimeCallbackReturnType === 'void'
+      || ['number', 'boolean'].includes(context.runtimeCallbackReturnType)
+      || isManagedRuntimeReturnType(context.runtimeCallbackReturnType)
+    )
 }
 
 function emitRuntimeCallbackReturnStatement(statement, context) {
+  if (context.runtimeCallbackReturnType === 'void') {
+    return emitReturnJump(context)
+  }
+
   const lines = isManagedRuntimeReturnType(context.runtimeCallbackReturnType)
     ? emitRuntimeCallbackRuntimeValueReturnLines(statement.argument, context)
     : emitRuntimeCallbackScalarReturnLines(statement.argument, context)
@@ -7060,7 +7078,7 @@ function emitPreparedPromiseMethodExpression(expression, context, options: { out
   const wrapper = callback == null ? null : context.promiseChainArrowWrappers.get(callback)
 
   if (wrapper == null) {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'Promise.then/catch currently supports only non-capturing expression-body, single-return block-body or straight-line block-body arrow callbacks in C', expression.loc))
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'Promise.then/catch currently supports only non-capturing expression-body, single-return block-body, straight-line block-body or simple if/return block-body arrow callbacks in C', expression.loc))
 
     return {
       lines: [],
@@ -8669,6 +8687,7 @@ function resolvePromiseChainArrowBody(callback) {
 
   if (callback.expressionBody) {
     return {
+      kind: 'prepared-return',
       prefixStatements: [],
       returnExpression: callback.body
     }
@@ -8692,18 +8711,47 @@ function resolvePromiseChainArrowBody(callback) {
 
   const prefixStatements = statements.slice(0, -1)
 
-  if (!prefixStatements.every(isStraightLinePromiseCallbackStatement)) {
+  if (prefixStatements.every(isStraightLinePromiseCallbackStatement)) {
+    return {
+      kind: 'prepared-return',
+      prefixStatements,
+      returnExpression: returnStatement.argument ?? null
+    }
+  }
+
+  if (!statements.every(isPromiseChainCallbackStatement)) {
     return null
   }
 
   return {
-    prefixStatements,
-    returnExpression: returnStatement.argument ?? null
+    kind: 'statement-list',
+    statements
   }
 }
 
 function isStraightLinePromiseCallbackStatement(statement) {
   return statement?.type === 'VariableDeclaration' || statement?.type === 'ExpressionStatement'
+}
+
+function isPromiseChainCallbackStatement(statement) {
+  if (statement == null) {
+    return false
+  }
+
+  if (isStraightLinePromiseCallbackStatement(statement) || statement.type === 'ReturnStatement') {
+    return true
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return statement.body.every(isPromiseChainCallbackStatement)
+  }
+
+  if (statement.type !== 'IfStatement') {
+    return false
+  }
+
+  return isPromiseChainCallbackStatement(statement.consequent)
+    && (statement.alternate == null || isPromiseChainCallbackStatement(statement.alternate))
 }
 
 function emitPreparedArrayCallbackInput(callback, receiver, value, index, context) {

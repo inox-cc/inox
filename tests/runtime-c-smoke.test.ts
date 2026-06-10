@@ -1523,6 +1523,13 @@ export async function main(): Promise<void> {
 
     return doubled
   })
+  const branchDoubled = Promise.resolve(7).then(value => {
+    if (value > 5) {
+      return value * 2
+    }
+
+    return value
+  })
   const failedNumber: Promise<number> = Promise.reject('number fail')
   const recoveredNumber = failedNumber.catch(error => 95)
   const blockRecoveredNumber = failedNumber.catch(error => {
@@ -1532,6 +1539,13 @@ export async function main(): Promise<void> {
     const recovered = 97
 
     return recovered
+  })
+  const branchRecoveredNumber = failedNumber.catch(error => {
+    if (1 === 1) {
+      return 98
+    }
+
+    return 0
   })
   const chainedNumber = Promise.resolve(1)
     .then(value => value + 1)
@@ -1548,9 +1562,11 @@ export async function main(): Promise<void> {
   console.log(await doubled)
   console.log(await blockDoubled)
   console.log(await multiDoubled)
+  console.log(await branchDoubled)
   console.log(await recoveredNumber)
   console.log(await blockRecoveredNumber)
   console.log(await multiRecoveredNumber)
+  console.log(await branchRecoveredNumber)
   console.log(await chainedNumber)
   console.log(await loadedTextPromise)
 
@@ -1606,7 +1622,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n3\n3\ndone\ndone\n4\n8\n15\n12\n95\n96\n97\n3\nloaded\nfail\nplain fail\nError stored error\nasync fail\nasync number fail\nasync fail\n')
+    assert.equal(run.stdout, 'ok\n2\n3\n3\ndone\ndone\n4\n8\n15\n12\n14\n95\n96\n97\n98\n3\nloaded\nfail\nplain fail\nError stored error\nasync fail\nasync number fail\nasync fail\n')
   } finally {
     await rm(dir, {
       recursive: true,
