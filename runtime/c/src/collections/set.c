@@ -1,94 +1,156 @@
-#include <string.h>
+#include "ccjs/hash.h"
 #include "ccjs/set.h"
-#include "ccjs/string.h"
 
-static bool ccjs_set_value_equal(ccjs_value left, ccjs_value right) {
-  if (left.tag != right.tag) {
-    return false;
+static void ccjs_set_init_entries(ccjs_set_entry* entries, size_t cap) {
+  for (size_t index = 0; index < cap; index += 1) {
+    entries[index].value = ccjs_undefined_value();
+    entries[index].hash = 0;
+    entries[index].state = CCJS_SET_SLOT_EMPTY;
   }
-
-  if (left.tag == CCJS_TAG_STRING) {
-    if (left.as.ref == 0 || right.as.ref == 0) {
-      return left.as.ref == right.as.ref;
-    }
-
-    ccjs_string* left_string = (ccjs_string*)left.as.ref;
-    ccjs_string* right_string = (ccjs_string*)right.as.ref;
-
-    return left_string->len == right_string->len
-      && memcmp(left_string->bytes, right_string->bytes, left_string->len) == 0;
-  }
-
-  if (left.tag == CCJS_TAG_NUMBER) {
-    return left.as.number == right.as.number;
-  }
-
-  if (left.tag == CCJS_TAG_BOOL) {
-    return left.as.boolean == right.as.boolean;
-  }
-
-  if (left.tag == CCJS_TAG_NULL || left.tag == CCJS_TAG_UNDEFINED) {
-    return true;
-  }
-
-  return left.as.ref == right.as.ref;
 }
 
-static ccjs_status ccjs_set_find(ccjs_set* set, ccjs_value value, size_t* index, bool* found) {
+static ccjs_status ccjs_set_insert_existing(ccjs_set_entry* entries, size_t cap, ccjs_value value, uint64_t hash) {
+  if (entries == 0 || cap == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  size_t mask = cap - 1;
+  size_t index = (size_t)hash & mask;
+
+  for (size_t probe = 0; probe < cap; probe += 1) {
+    ccjs_set_entry* entry = &entries[index];
+
+    if (entry->state != CCJS_SET_SLOT_OCCUPIED) {
+      entry->value = value;
+      entry->hash = hash;
+      entry->state = CCJS_SET_SLOT_OCCUPIED;
+      return CCJS_OK;
+    }
+
+    index = (index + 1) & mask;
+  }
+
+  return CCJS_ERR_TYPE;
+}
+
+static ccjs_status ccjs_set_rehash(ccjs_set* set, size_t next_cap) {
+  if (set == 0 || set->header.allocator == 0 || set->header.allocator->alloc == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_allocator* allocator = set->header.allocator;
+  ccjs_set_entry* entries = allocator->alloc(
+    allocator->user,
+    sizeof(ccjs_set_entry) * next_cap,
+    _Alignof(ccjs_set_entry)
+  );
+
+  if (entries == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  ccjs_set_init_entries(entries, next_cap);
+
+  for (size_t index = 0; index < set->cap; index += 1) {
+    ccjs_set_entry* entry = &set->entries[index];
+
+    if (entry->state != CCJS_SET_SLOT_OCCUPIED) {
+      continue;
+    }
+
+    ccjs_status status = ccjs_set_insert_existing(entries, next_cap, entry->value, entry->hash);
+
+    if (status != CCJS_OK) {
+      if (allocator->free != 0) {
+        allocator->free(allocator->user, entries, sizeof(ccjs_set_entry) * next_cap, _Alignof(ccjs_set_entry));
+      }
+
+      return status;
+    }
+  }
+
+  if (allocator->free != 0 && set->entries != 0) {
+    allocator->free(
+      allocator->user,
+      set->entries,
+      sizeof(ccjs_set_entry) * set->cap,
+      _Alignof(ccjs_set_entry)
+    );
+  }
+
+  set->entries = entries;
+  set->cap = next_cap;
+  set->tombstones = 0;
+
+  return CCJS_OK;
+}
+
+static ccjs_status ccjs_set_reserve(ccjs_set* set, size_t min_len) {
+  if (set == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (set->cap > 0 && (set->len + set->tombstones + 1) * 4 < set->cap * 3 && min_len * 2 <= set->cap) {
+    return CCJS_OK;
+  }
+
+  size_t next_cap = set->cap == 0 ? 8 : set->cap;
+
+  while (next_cap < min_len * 2 || next_cap < 8) {
+    next_cap *= 2;
+  }
+
+  if (next_cap == set->cap && set->tombstones > 0) {
+    return ccjs_set_rehash(set, next_cap);
+  }
+
+  return ccjs_set_rehash(set, next_cap);
+}
+
+static ccjs_status ccjs_set_find(ccjs_set* set, ccjs_value value, uint64_t hash, size_t* index, bool* found) {
   if (set == 0 || index == 0 || found == 0) {
     return CCJS_ERR_TYPE;
   }
 
-  for (size_t current = 0; current < set->len; current += 1) {
-    if (ccjs_set_value_equal(set->items[current], value)) {
+  if (set->cap == 0) {
+    *index = 0;
+    *found = false;
+    return CCJS_OK;
+  }
+
+  size_t mask = set->cap - 1;
+  size_t current = (size_t)hash & mask;
+  size_t first_tombstone = (size_t)-1;
+
+  for (size_t probe = 0; probe < set->cap; probe += 1) {
+    ccjs_set_entry* entry = &set->entries[current];
+
+    if (entry->state == CCJS_SET_SLOT_EMPTY) {
+      *index = first_tombstone == (size_t)-1 ? current : first_tombstone;
+      *found = false;
+      return CCJS_OK;
+    }
+
+    if (entry->state == CCJS_SET_SLOT_TOMBSTONE) {
+      if (first_tombstone == (size_t)-1) {
+        first_tombstone = current;
+      }
+    } else if (entry->hash == hash && ccjs_hash_value_equal(entry->value, value)) {
       *index = current;
       *found = true;
       return CCJS_OK;
     }
+
+    current = (current + 1) & mask;
   }
 
-  *index = set->len;
-  *found = false;
-
-  return CCJS_OK;
-}
-
-static ccjs_status ccjs_set_reserve(ccjs_set* set, size_t min_cap) {
-  if (set == 0 || set->header.allocator == 0 || set->header.allocator->realloc == 0) {
-    return CCJS_ERR_TYPE;
-  }
-
-  if (set->cap >= min_cap) {
+  if (first_tombstone != (size_t)-1) {
+    *index = first_tombstone;
+    *found = false;
     return CCJS_OK;
   }
 
-  size_t next_cap = set->cap == 0 ? 4 : set->cap * 2;
-
-  while (next_cap < min_cap) {
-    next_cap *= 2;
-  }
-
-  ccjs_allocator* allocator = set->header.allocator;
-  ccjs_value* items = allocator->realloc(
-    allocator->user,
-    set->items,
-    sizeof(ccjs_value) * set->cap,
-    sizeof(ccjs_value) * next_cap,
-    _Alignof(ccjs_value)
-  );
-
-  if (items == 0) {
-    return CCJS_ERR_OOM;
-  }
-
-  for (size_t index = set->cap; index < next_cap; index += 1) {
-    items[index] = ccjs_undefined_value();
-  }
-
-  set->items = items;
-  set->cap = next_cap;
-
-  return CCJS_OK;
+  return CCJS_ERR_TYPE;
 }
 
 ccjs_status ccjs_set_add(ccjs_value set, ccjs_value value) {
@@ -97,11 +159,10 @@ ccjs_status ccjs_set_add(ccjs_value set, ccjs_value value) {
   }
 
   ccjs_set* instance = (ccjs_set*)set.as.ref;
-  size_t index = 0;
-  bool found = false;
-  ccjs_status status = ccjs_set_find(instance, value, &index, &found);
+  uint64_t hash = 0;
+  ccjs_status status = ccjs_hash_value(value, &hash);
 
-  if (status != CCJS_OK || found) {
+  if (status != CCJS_OK) {
     return status;
   }
 
@@ -111,8 +172,24 @@ ccjs_status ccjs_set_add(ccjs_value set, ccjs_value value) {
     return status;
   }
 
+  size_t index = 0;
+  bool found = false;
+  status = ccjs_set_find(instance, value, hash, &index, &found);
+
+  if (status != CCJS_OK || found) {
+    return status;
+  }
+
+  ccjs_set_entry* entry = &instance->entries[index];
+
+  if (entry->state == CCJS_SET_SLOT_TOMBSTONE) {
+    instance->tombstones -= 1;
+  }
+
   ccjs_retain(value);
-  instance->items[instance->len] = value;
+  entry->value = value;
+  entry->hash = hash;
+  entry->state = CCJS_SET_SLOT_OCCUPIED;
   instance->len += 1;
 
   return CCJS_OK;
@@ -125,12 +202,20 @@ ccjs_status ccjs_set_clear(ccjs_value set) {
 
   ccjs_set* instance = (ccjs_set*)set.as.ref;
 
-  for (size_t index = 0; index < instance->len; index += 1) {
-    ccjs_release(instance->items[index]);
-    instance->items[index] = ccjs_undefined_value();
+  for (size_t index = 0; index < instance->cap; index += 1) {
+    ccjs_set_entry* entry = &instance->entries[index];
+
+    if (entry->state == CCJS_SET_SLOT_OCCUPIED) {
+      ccjs_release(entry->value);
+    }
+
+    entry->value = ccjs_undefined_value();
+    entry->hash = 0;
+    entry->state = CCJS_SET_SLOT_EMPTY;
   }
 
   instance->len = 0;
+  instance->tombstones = 0;
 
   return CCJS_OK;
 }
@@ -141,9 +226,16 @@ ccjs_status ccjs_set_delete(ccjs_value set, ccjs_value value, bool* out) {
   }
 
   ccjs_set* instance = (ccjs_set*)set.as.ref;
+  uint64_t hash = 0;
+  ccjs_status status = ccjs_hash_value(value, &hash);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
   size_t index = 0;
   bool found = false;
-  ccjs_status status = ccjs_set_find(instance, value, &index, &found);
+  status = ccjs_set_find(instance, value, hash, &index, &found);
 
   if (status != CCJS_OK) {
     return status;
@@ -154,15 +246,13 @@ ccjs_status ccjs_set_delete(ccjs_value set, ccjs_value value, bool* out) {
     return CCJS_OK;
   }
 
-  ccjs_release(instance->items[index]);
-  size_t last = instance->len - 1;
-
-  if (index != last) {
-    instance->items[index] = instance->items[last];
-  }
-
-  instance->items[last] = ccjs_undefined_value();
+  ccjs_set_entry* entry = &instance->entries[index];
+  ccjs_release(entry->value);
+  entry->value = ccjs_undefined_value();
+  entry->hash = 0;
+  entry->state = CCJS_SET_SLOT_TOMBSTONE;
   instance->len -= 1;
+  instance->tombstones += 1;
   *out = true;
 
   return CCJS_OK;
@@ -173,16 +263,20 @@ void ccjs_set_dispose(ccjs_set* set) {
     return;
   }
 
-  for (size_t index = 0; index < set->len; index += 1) {
-    ccjs_release(set->items[index]);
+  for (size_t index = 0; index < set->cap; index += 1) {
+    ccjs_set_entry* entry = &set->entries[index];
+
+    if (entry->state == CCJS_SET_SLOT_OCCUPIED) {
+      ccjs_release(entry->value);
+    }
   }
 
-  if (set->header.allocator != 0 && set->header.allocator->free != 0 && set->items != 0) {
+  if (set->header.allocator != 0 && set->header.allocator->free != 0 && set->entries != 0) {
     set->header.allocator->free(
       set->header.allocator->user,
-      set->items,
-      sizeof(ccjs_value) * set->cap,
-      _Alignof(ccjs_value)
+      set->entries,
+      sizeof(ccjs_set_entry) * set->cap,
+      _Alignof(ccjs_set_entry)
     );
   }
 }
@@ -193,9 +287,16 @@ ccjs_status ccjs_set_has(ccjs_value set, ccjs_value value, bool* out) {
   }
 
   ccjs_set* instance = (ccjs_set*)set.as.ref;
+  uint64_t hash = 0;
+  ccjs_status status = ccjs_hash_value(value, &hash);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
   size_t index = 0;
 
-  return ccjs_set_find(instance, value, &index, out);
+  return ccjs_set_find(instance, value, hash, &index, out);
 }
 
 ccjs_status ccjs_set_new(ccjs_allocator* allocator, ccjs_value* out) {
@@ -218,7 +319,8 @@ ccjs_status ccjs_set_new(ccjs_allocator* allocator, ccjs_value* out) {
   set->header.allocator = allocator;
   set->len = 0;
   set->cap = 0;
-  set->items = 0;
+  set->tombstones = 0;
+  set->entries = 0;
 
   out->tag = CCJS_TAG_SET;
   out->as.ref = &set->header;

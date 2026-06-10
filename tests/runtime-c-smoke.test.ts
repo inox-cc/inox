@@ -155,31 +155,61 @@ int main(void) {
   ccjs_value map = ccjs_undefined_value();
   ccjs_value set = ccjs_undefined_value();
   ccjs_value key = ccjs_undefined_value();
+  ccjs_value same_key = ccjs_undefined_value();
   ccjs_value value = ccjs_undefined_value();
   ccjs_value found = ccjs_undefined_value();
   bool has = false;
   bool removed = false;
   size_t size = 0;
+  size_t set_size = 0;
 
   if (ccjs_map_new(&allocator, &map) != CCJS_OK) return 1;
   if (ccjs_set_new(&allocator, &set) != CCJS_OK) return 1;
   if (ccjs_string_from_literal(&allocator, "Ada", 3, &key) != CCJS_OK) return 1;
+  if (ccjs_string_from_literal(&allocator, "Ada", 3, &same_key) != CCJS_OK) return 1;
 
   value = ccjs_number_value(7);
   if (ccjs_map_set(map, key, value) != CCJS_OK) return 1;
-  if (ccjs_map_get(map, key, &found) != CCJS_OK) return 1;
-  if (ccjs_map_has(map, key, &has) != CCJS_OK) return 1;
-  if (ccjs_map_delete(map, key, &removed) != CCJS_OK) return 1;
+  if (ccjs_map_get(map, same_key, &found) != CCJS_OK) return 1;
+  if (ccjs_map_has(map, same_key, &has) != CCJS_OK) return 1;
+  if (ccjs_map_delete(map, same_key, &removed) != CCJS_OK) return 1;
   if (ccjs_map_size(map, &size) != CCJS_OK) return 1;
   printf("%.0f %d %d %zu\\n", found.as.number, has ? 1 : 0, removed ? 1 : 0, size);
   ccjs_release(found);
+  found = ccjs_undefined_value();
 
   if (ccjs_set_add(set, key) != CCJS_OK) return 1;
-  if (ccjs_set_has(set, key, &has) != CCJS_OK) return 1;
-  if (ccjs_set_delete(set, key, &removed) != CCJS_OK) return 1;
+  if (ccjs_set_has(set, same_key, &has) != CCJS_OK) return 1;
+  if (ccjs_set_delete(set, same_key, &removed) != CCJS_OK) return 1;
   if (ccjs_set_size(set, &size) != CCJS_OK) return 1;
   printf("%d %d %zu\\n", has ? 1 : 0, removed ? 1 : 0, size);
 
+  for (size_t index = 0; index < 40; index += 1) {
+    if (ccjs_map_set(map, ccjs_number_value((double)index), ccjs_number_value((double)(index * 10))) != CCJS_OK) return 1;
+    if (ccjs_set_add(set, ccjs_number_value((double)index)) != CCJS_OK) return 1;
+  }
+
+  for (size_t index = 0; index < 20; index += 1) {
+    if (ccjs_map_delete(map, ccjs_number_value((double)index), &removed) != CCJS_OK) return 1;
+    if (!removed) return 1;
+    if (ccjs_set_delete(set, ccjs_number_value((double)index), &removed) != CCJS_OK) return 1;
+    if (!removed) return 1;
+  }
+
+  for (size_t index = 20; index < 40; index += 1) {
+    if (ccjs_map_get(map, ccjs_number_value((double)index), &found) != CCJS_OK) return 1;
+    if (found.tag != CCJS_TAG_NUMBER || found.as.number != (double)(index * 10)) return 1;
+    if (ccjs_set_has(set, ccjs_number_value((double)index), &has) != CCJS_OK) return 1;
+    if (!has) return 1;
+    ccjs_release(found);
+    found = ccjs_undefined_value();
+  }
+
+  if (ccjs_map_size(map, &size) != CCJS_OK) return 1;
+  if (ccjs_set_size(set, &set_size) != CCJS_OK) return 1;
+  printf("%zu %zu\\n", size, set_size);
+
+  ccjs_release(same_key);
   ccjs_release(key);
   ccjs_release(set);
   ccjs_release(map);
@@ -195,7 +225,7 @@ int main(void) {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '7 1 1 0\n1 1 0\n')
+    assert.equal(run.stdout, '7 1 1 0\n1 1 0\n20 20\n')
   } finally {
     await rm(dir, {
       recursive: true,

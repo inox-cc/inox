@@ -21,6 +21,7 @@ const requiredFiles: string[] = [
   'runtime/c/include/ccjs/allocator.h',
   'runtime/c/include/ccjs/array.h',
   'runtime/c/include/ccjs/callback.h',
+  'runtime/c/include/ccjs/hash.h',
   'runtime/c/include/ccjs/map.h',
   'runtime/c/include/ccjs/object.h',
   'runtime/c/include/ccjs/set.h',

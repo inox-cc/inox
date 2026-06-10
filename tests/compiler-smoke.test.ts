@@ -3317,6 +3317,31 @@ export function main(): void {
   scores.size = 1
 }
 `, 'CCJS_ASSIGN_READONLY_FIELD')
+
+  assertDiagnostic(`type User = {
+  name: string
+}
+
+export function main(): void {
+  const users: Map<User, number> = new Map()
+  console.log(users.size)
+}
+`, 'CCJS_C_COLLECTION', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`type User = {
+  name: string
+}
+
+export function main(): void {
+  const users: Set<User> = new Set()
+  const user: User = { name: 'Ada' }
+  users.add(user)
+}
+`, 'CCJS_C_COLLECTION', {
+    target: 'c'
+  })
 })
 
 test('checks string predicate methods as boolean calls', () => {

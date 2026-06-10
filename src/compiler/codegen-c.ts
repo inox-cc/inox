@@ -3227,6 +3227,18 @@ function emitRuntimeStringVariableDeclaration(statement, expression, context) {
   return lines
 }
 
+function reportCCollectionHashability(valueType, subject, loc, context) {
+  if (valueType == null || valueType === 'unknown' || isCCollectionHashableType(valueType)) {
+    return
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', `${subject} must be hashable in the current C backend slice`, loc))
+}
+
+function isCCollectionHashableType(valueType) {
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
+}
+
 function emitCollectionVariableDeclaration(statement, context) {
   const constructor = collectionConstructorName(statement.init)
 
@@ -3247,6 +3259,7 @@ function emitCollectionVariableDeclaration(statement, context) {
       key: statement.mapKeyType ?? 'unknown',
       value: statement.mapValueType ?? 'unknown'
     })
+    reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
 
     const lines = [
       ...emitPrepareOwnedValueWrite(statement.name),
@@ -3260,6 +3273,7 @@ function emitCollectionVariableDeclaration(statement, context) {
 
   context.variables.set(statement.name, 'set')
   context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
+  reportCCollectionHashability(statement.setElementType, 'Set values', statement.loc, context)
 
   const lines = [
     ...emitPrepareOwnedValueWrite(statement.name),
@@ -3291,6 +3305,7 @@ function emitMapConstructorEntries(name, expression, context, loc) {
 
     const key = emitCValueExpression(entry.elements[0], context)
     const value = emitCValueExpression(entry.elements[1], context)
+    reportCCollectionHashability(inferExpressionType(entry.elements[0], context), 'Map keys', entry.elements[0].loc ?? entry.loc ?? loc, context)
 
     lines.push(...key.lines)
     lines.push(...value.lines)
@@ -3314,6 +3329,7 @@ function emitSetConstructorValues(name, expression, context, loc) {
 
   for (const element of expression.elements) {
     const value = emitCValueExpression(element, context)
+    reportCCollectionHashability(inferExpressionType(element, context), 'Set values', element.loc ?? loc, context)
 
     lines.push(...value.lines)
     lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
@@ -7087,6 +7103,7 @@ function emitPreparedMapMethodCall(name, expression, context) {
   }
 
   if (method === 'set') {
+    reportCCollectionHashability(inferExpressionType(expression.args[0], context), 'Map keys', expression.args[0]?.loc ?? expression.loc, context)
     const key = emitCValueExpression(expression.args[0], context)
     const value = emitCValueExpression(expression.args[1], context)
 
@@ -7101,6 +7118,7 @@ function emitPreparedMapMethodCall(name, expression, context) {
   }
 
   if (method === 'get') {
+    reportCCollectionHashability(inferExpressionType(expression.args[0], context), 'Map keys', expression.args[0]?.loc ?? expression.loc, context)
     const key = emitCValueExpression(expression.args[0], context)
     const valueType = inferExpressionType(expression, context)
     const out = nextCName(context, 'ccjs_map_value')
@@ -7139,6 +7157,7 @@ function emitPreparedMapMethodCall(name, expression, context) {
   }
 
   if (method === 'has' || method === 'delete') {
+    reportCCollectionHashability(inferExpressionType(expression.args[0], context), 'Map keys', expression.args[0]?.loc ?? expression.loc, context)
     const key = emitCValueExpression(expression.args[0], context)
     const out = nextCName(context, `ccjs_map_${method}`)
     const helper = method === 'has' ? 'ccjs_map_has' : 'ccjs_map_delete'
@@ -7174,6 +7193,7 @@ function emitPreparedSetMethodCall(name, expression, context) {
   }
 
   if (method === 'add') {
+    reportCCollectionHashability(inferExpressionType(expression.args[0], context), 'Set values', expression.args[0]?.loc ?? expression.loc, context)
     const value = emitCValueExpression(expression.args[0], context)
 
     return {
@@ -7186,6 +7206,7 @@ function emitPreparedSetMethodCall(name, expression, context) {
   }
 
   if (method === 'has' || method === 'delete') {
+    reportCCollectionHashability(inferExpressionType(expression.args[0], context), 'Set values', expression.args[0]?.loc ?? expression.loc, context)
     const value = emitCValueExpression(expression.args[0], context)
     const out = nextCName(context, `ccjs_set_${method}`)
     const helper = method === 'has' ? 'ccjs_set_has' : 'ccjs_set_delete'

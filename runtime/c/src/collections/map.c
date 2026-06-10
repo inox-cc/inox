@@ -1,78 +1,48 @@
-#include <string.h>
+#include "ccjs/hash.h"
 #include "ccjs/map.h"
-#include "ccjs/string.h"
 
-static bool ccjs_map_key_equal(ccjs_value left, ccjs_value right) {
-  if (left.tag != right.tag) {
-    return false;
+static void ccjs_map_init_entries(ccjs_map_entry* entries, size_t cap) {
+  for (size_t index = 0; index < cap; index += 1) {
+    entries[index].key = ccjs_undefined_value();
+    entries[index].value = ccjs_undefined_value();
+    entries[index].hash = 0;
+    entries[index].state = CCJS_MAP_SLOT_EMPTY;
   }
-
-  if (left.tag == CCJS_TAG_STRING) {
-    if (left.as.ref == 0 || right.as.ref == 0) {
-      return left.as.ref == right.as.ref;
-    }
-
-    ccjs_string* left_string = (ccjs_string*)left.as.ref;
-    ccjs_string* right_string = (ccjs_string*)right.as.ref;
-
-    return left_string->len == right_string->len
-      && memcmp(left_string->bytes, right_string->bytes, left_string->len) == 0;
-  }
-
-  if (left.tag == CCJS_TAG_NUMBER) {
-    return left.as.number == right.as.number;
-  }
-
-  if (left.tag == CCJS_TAG_BOOL) {
-    return left.as.boolean == right.as.boolean;
-  }
-
-  if (left.tag == CCJS_TAG_NULL || left.tag == CCJS_TAG_UNDEFINED) {
-    return true;
-  }
-
-  return left.as.ref == right.as.ref;
 }
 
-static ccjs_status ccjs_map_find(ccjs_map* map, ccjs_value key, size_t* index, bool* found) {
-  if (map == 0 || index == 0 || found == 0) {
+static ccjs_status ccjs_map_insert_existing(ccjs_map_entry* entries, size_t cap, ccjs_value key, ccjs_value value, uint64_t hash) {
+  if (entries == 0 || cap == 0) {
     return CCJS_ERR_TYPE;
   }
 
-  for (size_t current = 0; current < map->len; current += 1) {
-    if (ccjs_map_key_equal(map->entries[current].key, key)) {
-      *index = current;
-      *found = true;
+  size_t mask = cap - 1;
+  size_t index = (size_t)hash & mask;
+
+  for (size_t probe = 0; probe < cap; probe += 1) {
+    ccjs_map_entry* entry = &entries[index];
+
+    if (entry->state != CCJS_MAP_SLOT_OCCUPIED) {
+      entry->key = key;
+      entry->value = value;
+      entry->hash = hash;
+      entry->state = CCJS_MAP_SLOT_OCCUPIED;
       return CCJS_OK;
     }
+
+    index = (index + 1) & mask;
   }
 
-  *index = map->len;
-  *found = false;
-
-  return CCJS_OK;
+  return CCJS_ERR_TYPE;
 }
 
-static ccjs_status ccjs_map_reserve(ccjs_map* map, size_t min_cap) {
-  if (map == 0 || map->header.allocator == 0 || map->header.allocator->realloc == 0) {
+static ccjs_status ccjs_map_rehash(ccjs_map* map, size_t next_cap) {
+  if (map == 0 || map->header.allocator == 0 || map->header.allocator->alloc == 0) {
     return CCJS_ERR_TYPE;
-  }
-
-  if (map->cap >= min_cap) {
-    return CCJS_OK;
-  }
-
-  size_t next_cap = map->cap == 0 ? 4 : map->cap * 2;
-
-  while (next_cap < min_cap) {
-    next_cap *= 2;
   }
 
   ccjs_allocator* allocator = map->header.allocator;
-  ccjs_map_entry* entries = allocator->realloc(
+  ccjs_map_entry* entries = allocator->alloc(
     allocator->user,
-    map->entries,
-    sizeof(ccjs_map_entry) * map->cap,
     sizeof(ccjs_map_entry) * next_cap,
     _Alignof(ccjs_map_entry)
   );
@@ -81,15 +51,108 @@ static ccjs_status ccjs_map_reserve(ccjs_map* map, size_t min_cap) {
     return CCJS_ERR_OOM;
   }
 
-  for (size_t index = map->cap; index < next_cap; index += 1) {
-    entries[index].key = ccjs_undefined_value();
-    entries[index].value = ccjs_undefined_value();
+  ccjs_map_init_entries(entries, next_cap);
+
+  for (size_t index = 0; index < map->cap; index += 1) {
+    ccjs_map_entry* entry = &map->entries[index];
+
+    if (entry->state != CCJS_MAP_SLOT_OCCUPIED) {
+      continue;
+    }
+
+    ccjs_status status = ccjs_map_insert_existing(entries, next_cap, entry->key, entry->value, entry->hash);
+
+    if (status != CCJS_OK) {
+      if (allocator->free != 0) {
+        allocator->free(allocator->user, entries, sizeof(ccjs_map_entry) * next_cap, _Alignof(ccjs_map_entry));
+      }
+
+      return status;
+    }
+  }
+
+  if (allocator->free != 0 && map->entries != 0) {
+    allocator->free(
+      allocator->user,
+      map->entries,
+      sizeof(ccjs_map_entry) * map->cap,
+      _Alignof(ccjs_map_entry)
+    );
   }
 
   map->entries = entries;
   map->cap = next_cap;
+  map->tombstones = 0;
 
   return CCJS_OK;
+}
+
+static ccjs_status ccjs_map_reserve(ccjs_map* map, size_t min_len) {
+  if (map == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (map->cap > 0 && (map->len + map->tombstones + 1) * 4 < map->cap * 3 && min_len * 2 <= map->cap) {
+    return CCJS_OK;
+  }
+
+  size_t next_cap = map->cap == 0 ? 8 : map->cap;
+
+  while (next_cap < min_len * 2 || next_cap < 8) {
+    next_cap *= 2;
+  }
+
+  if (next_cap == map->cap && map->tombstones > 0) {
+    return ccjs_map_rehash(map, next_cap);
+  }
+
+  return ccjs_map_rehash(map, next_cap);
+}
+
+static ccjs_status ccjs_map_find(ccjs_map* map, ccjs_value key, uint64_t hash, size_t* index, bool* found) {
+  if (map == 0 || index == 0 || found == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (map->cap == 0) {
+    *index = 0;
+    *found = false;
+    return CCJS_OK;
+  }
+
+  size_t mask = map->cap - 1;
+  size_t current = (size_t)hash & mask;
+  size_t first_tombstone = (size_t)-1;
+
+  for (size_t probe = 0; probe < map->cap; probe += 1) {
+    ccjs_map_entry* entry = &map->entries[current];
+
+    if (entry->state == CCJS_MAP_SLOT_EMPTY) {
+      *index = first_tombstone == (size_t)-1 ? current : first_tombstone;
+      *found = false;
+      return CCJS_OK;
+    }
+
+    if (entry->state == CCJS_MAP_SLOT_TOMBSTONE) {
+      if (first_tombstone == (size_t)-1) {
+        first_tombstone = current;
+      }
+    } else if (entry->hash == hash && ccjs_hash_value_equal(entry->key, key)) {
+      *index = current;
+      *found = true;
+      return CCJS_OK;
+    }
+
+    current = (current + 1) & mask;
+  }
+
+  if (first_tombstone != (size_t)-1) {
+    *index = first_tombstone;
+    *found = false;
+    return CCJS_OK;
+  }
+
+  return CCJS_ERR_TYPE;
 }
 
 ccjs_status ccjs_map_new(ccjs_allocator* allocator, ccjs_value* out) {
@@ -112,6 +175,7 @@ ccjs_status ccjs_map_new(ccjs_allocator* allocator, ccjs_value* out) {
   map->header.allocator = allocator;
   map->len = 0;
   map->cap = 0;
+  map->tombstones = 0;
   map->entries = 0;
 
   out->tag = CCJS_TAG_MAP;
@@ -127,14 +191,22 @@ ccjs_status ccjs_map_clear(ccjs_value map) {
 
   ccjs_map* instance = (ccjs_map*)map.as.ref;
 
-  for (size_t index = 0; index < instance->len; index += 1) {
-    ccjs_release(instance->entries[index].key);
-    ccjs_release(instance->entries[index].value);
-    instance->entries[index].key = ccjs_undefined_value();
-    instance->entries[index].value = ccjs_undefined_value();
+  for (size_t index = 0; index < instance->cap; index += 1) {
+    ccjs_map_entry* entry = &instance->entries[index];
+
+    if (entry->state == CCJS_MAP_SLOT_OCCUPIED) {
+      ccjs_release(entry->key);
+      ccjs_release(entry->value);
+    }
+
+    entry->key = ccjs_undefined_value();
+    entry->value = ccjs_undefined_value();
+    entry->hash = 0;
+    entry->state = CCJS_MAP_SLOT_EMPTY;
   }
 
   instance->len = 0;
+  instance->tombstones = 0;
 
   return CCJS_OK;
 }
@@ -145,9 +217,16 @@ ccjs_status ccjs_map_delete(ccjs_value map, ccjs_value key, bool* out) {
   }
 
   ccjs_map* instance = (ccjs_map*)map.as.ref;
+  uint64_t hash = 0;
+  ccjs_status status = ccjs_hash_value(key, &hash);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
   size_t index = 0;
   bool found = false;
-  ccjs_status status = ccjs_map_find(instance, key, &index, &found);
+  status = ccjs_map_find(instance, key, hash, &index, &found);
 
   if (status != CCJS_OK) {
     return status;
@@ -158,18 +237,15 @@ ccjs_status ccjs_map_delete(ccjs_value map, ccjs_value key, bool* out) {
     return CCJS_OK;
   }
 
-  ccjs_release(instance->entries[index].key);
-  ccjs_release(instance->entries[index].value);
-
-  size_t last = instance->len - 1;
-
-  if (index != last) {
-    instance->entries[index] = instance->entries[last];
-  }
-
-  instance->entries[last].key = ccjs_undefined_value();
-  instance->entries[last].value = ccjs_undefined_value();
+  ccjs_map_entry* entry = &instance->entries[index];
+  ccjs_release(entry->key);
+  ccjs_release(entry->value);
+  entry->key = ccjs_undefined_value();
+  entry->value = ccjs_undefined_value();
+  entry->hash = 0;
+  entry->state = CCJS_MAP_SLOT_TOMBSTONE;
   instance->len -= 1;
+  instance->tombstones += 1;
   *out = true;
 
   return CCJS_OK;
@@ -180,9 +256,13 @@ void ccjs_map_dispose(ccjs_map* map) {
     return;
   }
 
-  for (size_t index = 0; index < map->len; index += 1) {
-    ccjs_release(map->entries[index].key);
-    ccjs_release(map->entries[index].value);
+  for (size_t index = 0; index < map->cap; index += 1) {
+    ccjs_map_entry* entry = &map->entries[index];
+
+    if (entry->state == CCJS_MAP_SLOT_OCCUPIED) {
+      ccjs_release(entry->key);
+      ccjs_release(entry->value);
+    }
   }
 
   if (map->header.allocator != 0 && map->header.allocator->free != 0 && map->entries != 0) {
@@ -201,9 +281,16 @@ ccjs_status ccjs_map_get(ccjs_value map, ccjs_value key, ccjs_value* out) {
   }
 
   ccjs_map* instance = (ccjs_map*)map.as.ref;
+  uint64_t hash = 0;
+  ccjs_status status = ccjs_hash_value(key, &hash);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
   size_t index = 0;
   bool found = false;
-  ccjs_status status = ccjs_map_find(instance, key, &index, &found);
+  status = ccjs_map_find(instance, key, hash, &index, &found);
 
   if (status != CCJS_OK) {
     return status;
@@ -226,9 +313,16 @@ ccjs_status ccjs_map_has(ccjs_value map, ccjs_value key, bool* out) {
   }
 
   ccjs_map* instance = (ccjs_map*)map.as.ref;
+  uint64_t hash = 0;
+  ccjs_status status = ccjs_hash_value(key, &hash);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
   size_t index = 0;
 
-  return ccjs_map_find(instance, key, &index, out);
+  return ccjs_map_find(instance, key, hash, &index, out);
 }
 
 ccjs_status ccjs_map_set(ccjs_value map, ccjs_value key, ccjs_value value) {
@@ -237,19 +331,11 @@ ccjs_status ccjs_map_set(ccjs_value map, ccjs_value key, ccjs_value value) {
   }
 
   ccjs_map* instance = (ccjs_map*)map.as.ref;
-  size_t index = 0;
-  bool found = false;
-  ccjs_status status = ccjs_map_find(instance, key, &index, &found);
+  uint64_t hash = 0;
+  ccjs_status status = ccjs_hash_value(key, &hash);
 
   if (status != CCJS_OK) {
     return status;
-  }
-
-  if (found) {
-    ccjs_retain(value);
-    ccjs_release(instance->entries[index].value);
-    instance->entries[index].value = value;
-    return CCJS_OK;
   }
 
   status = ccjs_map_reserve(instance, instance->len + 1);
@@ -258,10 +344,33 @@ ccjs_status ccjs_map_set(ccjs_value map, ccjs_value key, ccjs_value value) {
     return status;
   }
 
+  size_t index = 0;
+  bool found = false;
+  status = ccjs_map_find(instance, key, hash, &index, &found);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  ccjs_map_entry* entry = &instance->entries[index];
+
+  if (found) {
+    ccjs_retain(value);
+    ccjs_release(entry->value);
+    entry->value = value;
+    return CCJS_OK;
+  }
+
+  if (entry->state == CCJS_MAP_SLOT_TOMBSTONE) {
+    instance->tombstones -= 1;
+  }
+
   ccjs_retain(key);
   ccjs_retain(value);
-  instance->entries[instance->len].key = key;
-  instance->entries[instance->len].value = value;
+  entry->key = key;
+  entry->value = value;
+  entry->hash = hash;
+  entry->state = CCJS_MAP_SLOT_OCCUPIED;
   instance->len += 1;
 
   return CCJS_OK;

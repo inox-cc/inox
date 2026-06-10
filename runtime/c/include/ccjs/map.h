@@ -3,18 +3,28 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "ccjs/allocator.h"
 #include "ccjs/value.h"
+
+typedef enum ccjs_map_slot_state {
+  CCJS_MAP_SLOT_EMPTY,
+  CCJS_MAP_SLOT_OCCUPIED,
+  CCJS_MAP_SLOT_TOMBSTONE
+} ccjs_map_slot_state;
 
 typedef struct ccjs_map_entry {
   ccjs_value key;
   ccjs_value value;
+  uint64_t hash;
+  ccjs_map_slot_state state;
 } ccjs_map_entry;
 
 typedef struct ccjs_map {
   ccjs_ref header;
   size_t len;
   size_t cap;
+  size_t tombstones;
   ccjs_map_entry* entries;
 } ccjs_map;
 
