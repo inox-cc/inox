@@ -1114,6 +1114,10 @@ function getPromise(): Promise<number> {
   return Promise.resolve(4)
 }
 
+function failPromise(): Promise<string> {
+  return Promise.reject('plain fail')
+}
+
 async function failText(): Promise<string> {
   throw 'async fail'
 }
@@ -1132,6 +1136,12 @@ export async function main(): Promise<void> {
 
   try {
     await Promise.reject('fail')
+  } catch (error) {
+    console.log(error)
+  }
+
+  try {
+    await failPromise()
   } catch (error) {
     console.log(error)
   }
@@ -1156,7 +1166,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n3\ndone\n4\nfail\nasync fail\n')
+    assert.equal(run.stdout, 'ok\n2\n3\ndone\n4\nfail\nplain fail\nasync fail\n')
   } finally {
     await rm(dir, {
       recursive: true,

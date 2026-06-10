@@ -3711,6 +3711,38 @@ export async function main(): Promise<void> {
   assert.match(result.code, /if \(ccjs_promise_get_result\(ccjs_promise_\d+, &ccjs_await_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
+test('lowers plain Promise helpers over rejection and fs to C', () => {
+  const result = compileSource(`function failPromise(): Promise<string> {
+  return Promise.reject('plain fail')
+}
+
+function loadText(): Promise<string> {
+  return fs.readFile('/tmp/value.txt', 'utf8')
+}
+
+export async function main(): Promise<void> {
+  try {
+    await failPromise()
+  } catch (error) {
+    console.log(error)
+  }
+
+  const text = await loadText()
+  console.log(text)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_promise\* failPromise\(ccjs_loop\* ccjs_loop\);/)
+  assert.match(result.code, /if \(ccjs_promise_rejected\(ccjs_loop, ccjs_value_\d+, &ccjs_return\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_promise\* loadText\(ccjs_loop\* ccjs_loop\);/)
+  assert.match(result.code, /if \(ccjs_fs_read_file\(ccjs_loop, "\/tmp\/value\.txt", 14, &ccjs_return\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_promise_\d+ = failPromise\(&ccjs_loop\);/)
+  assert.match(result.code, /goto ccjs_try_\d+_catch;/)
+  assert.match(result.code, /ccjs_promise_\d+ = loadText\(&ccjs_loop\);/)
+})
+
 test('lowers first C async await slice over Promise.resolve and fs promises', () => {
   const result = compileSource(`export async function main(): Promise<void> {
   const promise = Promise.resolve(2)
