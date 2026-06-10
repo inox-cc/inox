@@ -7,7 +7,7 @@ import { emitC, emitCBundle } from '../src/compiler/codegen-c.ts'
 import { emitJs, emitJsBundle, emitTs, emitTsBundle } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
-import { collectIrFunctionEffects, collectIrLocalThrowValueTypes, collectIrModuleRecords } from '../src/compiler/ir.ts'
+import { collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords } from '../src/compiler/ir.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 
 test('compiles exported main to runnable JS', () => {
@@ -3394,6 +3394,40 @@ test('injects Node http prelude when http is referenced', () => {
   assert.doesNotMatch(withoutGlobalUsage, /import \* as http from 'node:http'/)
 })
 
+test('drives JS Node prelude from stored target-neutral IR global roots', () => {
+  const result = compileSource(`export function main(): void {
+  console.log('ok')
+}
+`, {
+    target: 'js'
+  })
+  const globalUsages = [
+    {
+      root: 'http',
+      path: ['http', 'createServer']
+    },
+    {
+      root: 'fs',
+      path: ['fs', 'writeFile']
+    },
+    {
+      root: 'fs',
+      path: ['fs', 'readFile']
+    }
+  ]
+  const code = emitJs(result.hir, {}, {
+    ...result.ir,
+    globalUsages
+  })
+
+  assert.deepEqual(result.ir.globalUsages, [])
+  assert.deepEqual(collectIrGlobalRoots([{
+    globalUsages
+  }]), ['fs', 'http'])
+  assert.match(code, /import \* as fs from 'node:fs\/promises'/)
+  assert.match(code, /import \* as http from 'node:http'/)
+})
+
 test('lowers Date.now and performance.now to the C time runtime', () => {
   const result = compileSource(`export function main(): void {
   const started = Date.now()
@@ -3465,6 +3499,14 @@ test('drives C JS global diagnostics from target-neutral IR global usages', () =
   })
 
   assert.deepEqual(result.ir.globalUsages, [])
+  assert.deepEqual(collectIrGlobalRoots([{
+    globalUsages: [
+      {
+        root: 'fetch',
+        path: ['fetch']
+      }
+    ]
+  }]), ['fetch'])
   assert.throws(() => emitC(result.hir, {
     ...result.ir,
     globalUsages: [

@@ -108,6 +108,10 @@ export function collectIrGlobalUsages(programs: Array<{ globalUsages: IrGlobalUs
   return programs.flatMap(program => program.globalUsages)
 }
 
+export function collectIrGlobalRoots(programs: Array<{ globalUsages: IrGlobalUsage[] }>): string[] {
+  return [...new Set(collectIrGlobalUsages(programs).map(usage => usage.root))].sort()
+}
+
 export function collectIrFunctionDeclarations(programs: Array<{ functionDeclarations: IrFunctionDeclaration[] }>): IrFunctionDeclaration[] {
   return programs.flatMap(program => program.functionDeclarations)
 }

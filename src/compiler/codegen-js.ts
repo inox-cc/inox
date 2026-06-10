@@ -1,4 +1,4 @@
-import { collectIrGlobalUsages, collectIrModuleRecords, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
+import { collectIrGlobalRoots, collectIrModuleRecords, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
 import type { AnyNode, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
 
 type JsEmitOptions = {
@@ -96,7 +96,7 @@ function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {
 
 function emitJsPrelude(programs: IrProgram[]): string[] {
   const lines: string[] = []
-  const globalRoots = new Set(collectIrGlobalUsages(programs).map(usage => usage.root))
+  const globalRoots = new Set(collectIrGlobalRoots(programs))
 
   if (globalRoots.has('fs')) {
     lines.push('import * as fs from \'node:fs/promises\'')
