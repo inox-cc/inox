@@ -297,7 +297,7 @@ ccjs_status ccjs_map_get(ccjs_value map, ccjs_value key, ccjs_value* out) {
   }
 
   if (!found) {
-    *out = ccjs_undefined_value();
+    *out = ccjs_null_value();
     return CCJS_OK;
   }
 

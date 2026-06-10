@@ -96,6 +96,7 @@ function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {
 
 function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): string[] {
   const lines: string[] = []
+  const helperLines: string[] = []
   const globalRoots = new Set(collectIrGlobalRoots(programs))
 
   if (globalRoots.has('fs')) {
@@ -107,11 +108,23 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
   }
 
   if (programs.some(program => hasIrFeature(program, 'array-pop-null'))) {
+    helperLines.push(...emitArrayPopHelper(options))
+  }
+
+  if (programs.some(program => hasIrFeature(program, 'map-get-null'))) {
+    if (helperLines.length > 0) {
+      helperLines.push('')
+    }
+
+    helperLines.push(...emitMapGetHelper(options))
+  }
+
+  if (helperLines.length > 0) {
     if (lines.length > 0) {
       lines.push('')
     }
 
-    lines.push(...emitArrayPopHelper(options))
+    lines.push(...helperLines)
   }
 
   return lines
@@ -127,6 +140,20 @@ function emitArrayPopHelper(options: JsEmitOptions): string[] {
     : [
         'function ccjsArrayPop(array) {',
         '  return array.length === 0 ? null : array.pop()',
+        '}'
+      ]
+}
+
+function emitMapGetHelper(options: JsEmitOptions): string[] {
+  return options.emitTypes === true
+    ? [
+        'function ccjsMapGet<K, V>(map: Map<K, V>, key: K): V | null {',
+        '  return map.has(key) ? map.get(key)! : null',
+        '}'
+      ]
+    : [
+        'function ccjsMapGet(map, key) {',
+        '  return map.has(key) ? map.get(key) : null',
         '}'
       ]
 }
@@ -534,6 +561,10 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
       return `ccjsArrayPop(${emitExpression(expression.callee.object, options)})`
     }
 
+    if (isMapGetCall(expression)) {
+      return `ccjsMapGet(${emitExpression(expression.callee.object, options)}, ${emitExpression(expression.args[0], options)})`
+    }
+
     return `${emitExpression(expression.callee, options)}(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
   }
 
@@ -634,6 +665,14 @@ function isArrayPopCall(expression: AnyNode): boolean {
     && expression.callee.type === 'MemberExpression'
     && expression.callee.property === 'pop'
     && expression.args.length === 0
+}
+
+function isMapGetCall(expression: AnyNode): boolean {
+  return expression.type === 'CallExpression'
+    && expression.callee.type === 'MemberExpression'
+    && expression.callee.property === 'get'
+    && expression.nullable === true
+    && expression.args.length === 1
 }
 
 function indent(lines: string[]): string[] {

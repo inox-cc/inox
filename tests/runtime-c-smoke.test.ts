@@ -184,6 +184,10 @@ int main(void) {
   printf("%.0f %d %d %zu\\n", found.as.number, has ? 1 : 0, removed ? 1 : 0, size);
   ccjs_release(found);
   found = ccjs_undefined_value();
+  if (ccjs_map_get(map, same_key, &found) != CCJS_OK) return 1;
+  if (found.tag != CCJS_TAG_NULL) return 1;
+  ccjs_release(found);
+  found = ccjs_undefined_value();
 
   if (ccjs_set_add(set, key) != CCJS_OK) return 1;
   if (ccjs_set_has(set, same_key, &has) != CCJS_OK) return 1;
@@ -4895,11 +4899,12 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
     const result = compileSource(`export function main(): void {
   const scores: Map<string, number> = new Map()
   scores.set('Ada', 7)
-  const score = scores.get('Ada')
+  const score = scores.get('Ada') ?? 0
+  const missing = scores.get('Grace') ?? 9
   const hadAda = scores.has('Ada')
   const removed = scores.delete('Ada')
   const hasAda = scores.has('Ada')
-  console.log(score, hadAda, removed, hasAda, scores.size)
+  console.log(score, missing, hadAda, removed, hasAda, scores.size)
 
   const names: Set<string> = new Set()
   names.add('Ada')
@@ -4921,7 +4926,7 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '7 1 1 0 0\n1 1 0 0\n')
+    assert.equal(run.stdout, '7 9 1 1 0 0\n1 1 0 0\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -4945,7 +4950,7 @@ test('generated C Map and Set method chains compile and run with runtime sources
   try {
     const result = compileSource(`export function main(): void {
   const scores: Map<string, number> = new Map()
-  const score = scores.set('Ada', 7).get('Ada')
+  const score = scores.set('Ada', 7).get('Ada') ?? 0
   const hasScore = scores.set('Grace', 9).has('Grace')
 
   const names: Set<string> = new Set()
@@ -4992,8 +4997,10 @@ test('generated C Map and Set array literal constructors compile and run with ru
     const result = compileSource(`export function main(): void {
   const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
   const names: Set<string> = new Set(['Ada', 'Grace'])
+  const adaScore = scores.get('Ada') ?? 0
+  const graceScore = scores.get('Grace') ?? 0
 
-  console.log(scores.get('Ada'), scores.get('Grace'), names.has('Ada'), names.has('Grace'), scores.size, names.size)
+  console.log(adaScore, graceScore, names.has('Ada'), names.has('Grace'), scores.size, names.size)
 }
 `, {
       target: 'c'
@@ -5041,8 +5048,9 @@ export function main(): void {
   const bag: Bag = { scores, names }
   const bagScores = bag.scores
   const bagNames = bag['names']
+  const adaScore = bagScores.get('Ada') ?? 0
 
-  console.log(bagScores.get('Ada'), bagNames.has('Ada'), bagScores.size, bagNames.size)
+  console.log(adaScore, bagNames.has('Ada'), bagScores.size, bagNames.size)
 }
 `, {
       target: 'c'

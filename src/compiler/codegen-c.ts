@@ -6968,34 +6968,16 @@ function emitPreparedMapMethodCall(name, expression, context) {
     reportCCollectionHashability(inferExpressionType(expression.args[0], context), 'Map keys', expression.args[0]?.loc ?? expression.loc, context)
     const key = emitCValueExpression(expression.args[0], context)
     const valueType = inferExpressionType(expression, context)
+    const expectedTag = cRuntimeValueTag(valueType)
     const out = nextCName(context, 'ccjs_map_value')
     registerOwnedValue(context, out)
 
     const lines = [
       ...key.lines,
       ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_map_get(${name}, ${key.expression}, &${out})`, context)
+      emitStatusCheck(`ccjs_map_get(${name}, ${key.expression}, &${out})`, context),
+      ...emitRuntimeNullableValueCheck(out, expectedTag, context)
     ]
-
-    if (valueType === 'number') {
-      lines.push(emitRuntimeTypeCheck(`${out}.tag != CCJS_TAG_NUMBER`, context))
-      return {
-        lines,
-        expression: `${out}.as.number`
-      }
-    }
-
-    if (valueType === 'boolean') {
-      lines.push(emitRuntimeTypeCheck(`${out}.tag != CCJS_TAG_BOOL`, context))
-      return {
-        lines,
-        expression: `(${out}.as.boolean ? 1 : 0)`
-      }
-    }
-
-    if (valueType === 'string') {
-      lines.push(emitRuntimeTypeCheck(`${out}.tag != CCJS_TAG_STRING || ${out}.as.ref == 0`, context))
-    }
 
     return {
       lines,

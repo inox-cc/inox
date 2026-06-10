@@ -4336,7 +4336,8 @@ function makeNames(): Set<string> {
 
 export function main(): void {
   const scores = makeScores()
-  const score = scores.set('Ada', 7).get('Ada')
+  const maybeScore = scores.set('Ada', 7).get('Ada')
+  const score = maybeScore ?? 0
   const hasAda = scores.has('Ada')
   const removed = scores.delete('Ada')
   const names = makeNames()
@@ -4347,14 +4348,24 @@ export function main(): void {
     target: 'js'
   })
   const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const ts = compileSource(`export function main(): void {
+  const scores: Map<string, number> = new Map()
+  const maybeScore: number | null = scores.get('Ada')
+  console.log(maybeScore ?? 0)
+}
+`, {
+    target: 'ts'
+  })
   assert.ok(main)
   const scores = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'scores')
+  const maybeScore = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'maybeScore')
   const score = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'score')
   const hasAda = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'hasAda')
   const removed = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'removed')
   const names = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'names')
   const hasName = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'hasName')
   assert.ok(scores)
+  assert.ok(maybeScore)
   assert.ok(score)
   assert.ok(hasAda)
   assert.ok(removed)
@@ -4364,14 +4375,33 @@ export function main(): void {
   assert.equal(scores.valueType, 'map')
   assert.equal(scores.mapKeyType, 'string')
   assert.equal(scores.mapValueType, 'number')
+  assert.equal(maybeScore.valueType, 'number')
+  assert.equal(maybeScore.nullable, true)
   assert.equal(score.valueType, 'number')
   assert.equal(hasAda.valueType, 'boolean')
   assert.equal(removed.valueType, 'boolean')
   assert.equal(names.valueType, 'set')
   assert.equal(names.setElementType, 'string')
   assert.equal(hasName.valueType, 'boolean')
-  assert.match(result.code, /\.set\("Ada", 7\)\.get\("Ada"\)/)
+  assert.deepEqual(result.ir.features, [
+    'map-get-null',
+    'runtime-values'
+  ])
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'managed-values'
+  ])
+  assert.match(result.code, /function ccjsMapGet\(map, key\) \{/)
+  assert.match(result.code, /const maybeScore = ccjsMapGet\(scores\.set\("Ada", 7\), "Ada"\)/)
+  assert.match(ts.code, /function ccjsMapGet<K, V>\(map: Map<K, V>, key: K\): V \| null \{/)
+  assert.match(ts.code, /const maybeScore: number \| null = ccjsMapGet\(scores, "Ada"\)/)
   assert.match(result.code, /\.add\("Ada"\)\.has\("Ada"\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const scores: Map<string, number> = new Map()
+  const score: number = scores.get('Ada')
+  console.log(score)
+}
+`, 'CCJS_TYPE_MISMATCH')
 
   assertDiagnostic(`export function main(): void {
   const scores: Map<string, number> = new Map()

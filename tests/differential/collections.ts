@@ -13,7 +13,7 @@ export function main(): void {
     total = total + value
   }
 
-  const adaScore = scores.get('Ada')
+  const adaScore = scores.get('Ada') ?? 0
 
   if (scores.has('Ada') && names.has('Grace') && scores.size === 3 && names.size === 2) {
     console.log(`collections ${total} ${adaScore}`)

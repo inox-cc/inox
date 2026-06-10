@@ -28,6 +28,7 @@ export type IrFeature =
   | 'array-pop-null'
   | 'callback-values'
   | 'clocks'
+  | 'map-get-null'
   | 'runtime-values'
   | 'string-bytes'
 

@@ -142,7 +142,7 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
   for (const feature of features) {
     if (feature === 'runtime-values') {
       requirements.add('managed-values')
-    } else if (feature === 'array-pop-null') {
+    } else if (feature === 'array-pop-null' || feature === 'map-get-null') {
       continue
     } else {
       requirements.add(feature)
@@ -676,12 +676,18 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
 
   const arrayMethod = arrayMethodCallName(expression)
 
-  if (collectionMethodCallName(expression) != null || arrayMethod != null) {
+  const collectionMethod = collectionMethodCallName(expression)
+
+  if (collectionMethod != null || arrayMethod != null) {
     features.add('runtime-values')
   }
 
   if (arrayMethod === 'pop') {
     features.add('array-pop-null')
+  }
+
+  if (collectionMethod === 'get' && expression.nullable === true) {
+    features.add('map-get-null')
   }
 
   if (isStringConversionCall(expression)) {

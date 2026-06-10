@@ -1087,6 +1087,7 @@ class Checker {
 
         if (property === 'get') {
           expression.valueType = mapType.value ?? 'unknown'
+          expression.nullable = true
           return mapType.value ?? 'unknown'
         }
 
