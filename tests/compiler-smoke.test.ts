@@ -3753,6 +3753,31 @@ test('lowers awaited rejected promises into C try catch', () => {
   assert.match(result.code, /goto ccjs_try_\d+_catch;/)
 })
 
+test('lowers awaited throwing async helpers through the C error channel', () => {
+  const result = compileSource(`async function failText(): Promise<string> {
+  throw 'async fail'
+}
+
+export async function main(): Promise<void> {
+  try {
+    const value = await failText()
+    console.log(value)
+  } catch (error) {
+    console.log(error)
+  }
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_status failText\(ccjs_value\* ccjs_out, ccjs_value\* ccjs_error_out\);/)
+  assert.match(result.code, /ccjs_value ccjs_call_result_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(result.code, /ccjs_status ccjs_call_status_\d+ = failText\(&ccjs_call_result_\d+, &ccjs_error\);/)
+  assert.doesNotMatch(result.code, /double ccjs_call_result_\d+ = 0;\n\s+ccjs_status ccjs_call_status_\d+ = failText/)
+  assert.match(result.code, /if \(ccjs_call_status_\d+ == CCJS_ERR_THROW\) \{/)
+  assert.match(result.code, /goto ccjs_try_\d+_catch;/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]

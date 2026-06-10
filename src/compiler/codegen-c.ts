@@ -6235,8 +6235,9 @@ function emitCAsyncFunctionAwaitExpression(expression, context) {
 
 function emitPreparedThrowingCallExpression(expression, args, preparedLines, context) {
   const name = expression.callee.path[0]
-  const returnType = context.functionReturnTypes.get(name) ?? 'void'
-  const returnNullable = context.functionReturnNullables.get(name) === true
+  const returnInfo = resolveCFunctionCallReturnInfo(name, context)
+  const returnType = returnInfo.returnType
+  const returnNullable = returnInfo.returnNullable
   const callArgs = [...args]
   const lines: string[] = [...preparedLines]
   let result = ''
@@ -6270,6 +6271,22 @@ function emitPreparedThrowingCallExpression(expression, args, preparedLines, con
   return {
     lines,
     expression: result
+  }
+}
+
+function resolveCFunctionCallReturnInfo(name, context) {
+  const returnType = context.functionReturnTypes.get(name) ?? 'void'
+
+  if (context.functionAsyncFlags.get(name) === true && returnType === 'promise') {
+    return {
+      returnType: context.functionReturnPromiseValueTypes.get(name) ?? 'void',
+      returnNullable: false
+    }
+  }
+
+  return {
+    returnType,
+    returnNullable: context.functionReturnNullables.get(name) === true
   }
 }
 
