@@ -1,6 +1,6 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrFunctionEffects, collectIrGlobalUsages, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionEffect, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
+import type { AnyNode, Diagnostic, IrFunctionEffect, IrGlobalUsage, IrProgram, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
 
 const cStringPredicateMethods = new Set([
   'includes',
@@ -31,7 +31,8 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, ir
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(programs, irPrograms)
   const functionEffects = collectIrFunctionEffects(irPrograms)
-  const jsGlobalRoots = new Set(collectIrGlobalUsages(irPrograms).map(usage => usage.root))
+  const globalUsages = collectIrGlobalUsages(irPrograms)
+  const jsGlobalRoots = new Set(globalUsages.map(usage => usage.root))
   const baseContext = createBaseContext(diagnostics, functions, functionEffects, jsGlobalRoots)
   baseContext.callbackWrappers = collectCallbackWrappers(programs, irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || irPrograms.some(program => hasIrRuntimeRequirement(program, 'callback-values'))
@@ -39,6 +40,7 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, ir
   const needsTimeRuntime = irPrograms.some(program => hasIrRuntimeRequirement(program, 'clocks'))
   const needsStringHeader = irPrograms.some(program => hasIrRuntimeRequirement(program, 'string-bytes'))
   reportUnsupportedCSyntaxFeatures(irPrograms, diagnostics)
+  reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
   const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
@@ -183,6 +185,40 @@ function reportUnsupportedCSyntaxFeatures(irPrograms: IrProgram[], diagnostics: 
       diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', usage.loc))
     }
   }
+}
+
+function reportUnsupportedCGlobalUsages(globalUsages: IrGlobalUsage[], diagnostics: Diagnostic[]) {
+  for (const usage of globalUsages) {
+    if (!isSupportedCGlobalUsage(usage)) {
+      reportCJsGlobalDiagnostic(diagnostics, usage.loc)
+    }
+  }
+}
+
+function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
+  const path = usage.path.join('.')
+
+  return path === 'Date.now'
+    || path === 'performance.now'
+    || path === 'Error'
+    || path === 'Map'
+    || path === 'Set'
+}
+
+function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc?: SourceLocation) {
+  if (diagnostics.some(item => item.code === 'CCJS_C_JS_GLOBAL' && sameLocation(item, loc))) {
+    return
+  }
+
+  diagnostics.push(diagnostic('CCJS_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', loc))
+}
+
+function sameLocation(left: SourceLocation | undefined, right: SourceLocation | undefined): boolean {
+  if (left == null || right == null) {
+    return left == null && right == null
+  }
+
+  return left.line === right.line && left.column === right.column
 }
 
 function createBaseContext(diagnostics, functions, functionEffects: IrFunctionEffect[], jsGlobalRoots: Set<string>) {
@@ -5541,7 +5577,7 @@ function emitCExpression(expression, context) {
   }
 
   if (type === 'js-global') {
-    context.diagnostics.push(diagnostic('CCJS_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', expression?.loc))
+    reportCJsGlobalDiagnostic(context.diagnostics, expression?.loc)
     return '0'
   }
 
@@ -5736,7 +5772,7 @@ function emitCallee(callee, context) {
 
   if (callee.type === 'Reference' && callee.path.length === 1) {
     if (isCJsGlobalRoot(callee.path[0], context)) {
-      context.diagnostics.push(diagnostic('CCJS_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', callee.loc))
+      reportCJsGlobalDiagnostic(context.diagnostics, callee.loc)
       return '_'
     }
 
@@ -5744,7 +5780,7 @@ function emitCallee(callee, context) {
   }
 
   if (usesCJsGlobal(callee, context)) {
-    context.diagnostics.push(diagnostic('CCJS_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', callee.loc))
+    reportCJsGlobalDiagnostic(context.diagnostics, callee.loc)
     return '_'
   }
 

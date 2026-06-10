@@ -62,6 +62,7 @@ export type IrSyntaxFeatureUsage = {
 
 export type IrGlobalUsage = {
   root: string
+  path: string[]
   loc?: SourceLocation
 }
 

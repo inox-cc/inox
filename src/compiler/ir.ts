@@ -175,9 +175,37 @@ function visitGlobalUsage(node: unknown, usages: IrGlobalUsage[]): void {
 
   const item = node as AnyNode
 
+  if (item.type === 'MemberExpression' || item.type === 'OptionalMemberExpression') {
+    const path = globalUsagePath(item)
+
+    if (path != null) {
+      usages.push({
+        root: path[0],
+        path,
+        loc: item.loc
+      })
+      return
+    }
+  }
+
+  if (item.type === 'IndexExpression' || item.type === 'OptionalIndexExpression') {
+    const path = globalUsagePath(item.object)
+
+    if (path != null) {
+      usages.push({
+        root: path[0],
+        path,
+        loc: item.loc
+      })
+      visitGlobalUsage(item.index, usages)
+      return
+    }
+  }
+
   if (item.type === 'Reference' && item.path.length > 0 && jsStdGlobalRoots.has(item.path[0])) {
     usages.push({
       root: item.path[0],
+      path: item.path,
       loc: item.loc
     })
   }
@@ -189,6 +217,20 @@ function visitGlobalUsage(node: unknown, usages: IrGlobalUsage[]): void {
 
     visitGlobalUsage(value, usages)
   }
+}
+
+function globalUsagePath(expression: AnyNode | null | undefined): string[] | null {
+  if (expression?.type === 'Reference' && expression.path.length > 0 && jsStdGlobalRoots.has(expression.path[0])) {
+    return expression.path
+  }
+
+  if (expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression') {
+    const objectPath = globalUsagePath(expression.object)
+
+    return objectPath == null ? null : [...objectPath, expression.property]
+  }
+
+  return null
 }
 
 function visitSyntaxFeatureUsage(node: unknown, usages: IrSyntaxFeatureUsage[]): void {

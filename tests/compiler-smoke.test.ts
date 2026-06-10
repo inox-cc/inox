@@ -1497,6 +1497,7 @@ test('collects target-neutral IR feature requirements', () => {
     'string-bytes'
   ])
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['Date'])
+  assert.deepEqual(result.ir.globalUsages.map(usage => usage.path.join('.')), ['Date.now'])
   assert.match(result.code, /#include "ccjs\/time\.h"/)
 })
 
@@ -2968,6 +2969,7 @@ test('injects Node fs prelude when fs is referenced', () => {
 
   assert.match(result.code, /import \* as fs from 'node:fs\/promises'/)
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['fs', 'fs'])
+  assert.deepEqual(result.ir.globalUsages.map(usage => usage.path.join('.')), ['fs.writeFile', 'fs.readFile'])
 
   const withoutGlobalUsage = emitJs(result.hir, {}, {
     ...result.ir,
@@ -2990,6 +2992,7 @@ test('injects Node http prelude when http is referenced', () => {
 
   assert.match(result.code, /import \* as http from 'node:http'/)
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['http'])
+  assert.deepEqual(result.ir.globalUsages.map(usage => usage.path.join('.')), ['http.createServer'])
 
   const withoutGlobalUsage = emitJs(result.hir, {}, {
     ...result.ir,
@@ -3029,6 +3032,7 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
   })
 
   assert.deepEqual([...new Set(usages.ir.globalUsages.map(usage => usage.root))].sort(), ['Date', 'Promise', 'fs', 'http'])
+  assert.deepEqual(usages.ir.globalUsages.map(usage => usage.path.join('.')).sort(), ['Date.parse', 'Promise.resolve', 'fs.readFile', 'http.createServer'])
 
   for (const source of [
     `export function main(): void {
@@ -3058,6 +3062,37 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
       target: 'c'
     })
   }
+})
+
+test('drives C JS global diagnostics from target-neutral IR global usages', () => {
+  const result = compileSource(`export function main(): void {
+  console.log('ok')
+}
+`, {
+    target: 'js'
+  })
+
+  assert.deepEqual(result.ir.globalUsages, [])
+  assert.throws(() => emitC(result.hir, {
+    ...result.ir,
+    globalUsages: [
+      {
+        root: 'fetch',
+        path: ['fetch'],
+        loc: {
+          line: 1,
+          column: 1
+        }
+      }
+    ]
+  }), (error) => {
+    if (!(error instanceof CompileError)) {
+      return false
+    }
+
+    assert.equal(error.diagnostics[0]?.code, 'CCJS_C_JS_GLOBAL')
+    return true
+  })
 })
 
 test('module graph stores HIR and IR per module', async () => {
