@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { emitC, emitCBundle, emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c.ts'
-import { emitJs, emitJsBundle, emitJsBundleFromIrModules, emitJsFromIr, emitTs, emitTsBundle, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
+import { emitCBundle, emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c.ts'
+import { emitJsBundle, emitJsBundleFromIrModules, emitJsFromIr, emitTsBundle, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
 import { collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
@@ -1492,9 +1492,9 @@ test('drives JS and C main wrappers from target-neutral IR function declarations
   }
 
   assert.match(js.code, /const ccjsMainResult = main\(\)/)
-  assert.doesNotMatch(emitJs(js.hir, {}, withoutMainDeclaration), /const ccjsMainResult = main\(\)/)
+  assert.doesNotMatch(emitJsFromIr(withoutMainDeclaration), /const ccjsMainResult = main\(\)/)
   assert.match(c.code, /int main\(void\) \{\n  ccjs_main\(\);/)
-  assert.doesNotMatch(emitC(c.hir, {
+  assert.doesNotMatch(emitCFromIr({
     ...c.ir,
     functionDeclarations: []
   }), /int main\(void\) \{\n  ccjs_main\(\);/)
@@ -1518,18 +1518,18 @@ console.log(name)
   assert.deepEqual(js.ir.topLevelItems.map(item => item.kind), ['statement', 'statement'])
   assert.match(js.code, /const name = "Ada"/)
   assert.match(js.code, /console\.log\(name\)/)
-  assert.doesNotMatch(emitJs(js.hir, {}, withoutTopLevelItems), /const name/)
-  assert.doesNotMatch(emitJs(js.hir, {}, withoutTopLevelItems), /console\.log/)
-  assert.doesNotMatch(emitJs(js.hir, {}, {
+  assert.doesNotMatch(emitJsFromIr(withoutTopLevelItems), /const name/)
+  assert.doesNotMatch(emitJsFromIr(withoutTopLevelItems), /console\.log/)
+  assert.doesNotMatch(emitJsFromIr({
     ...js.ir,
     body: []
   }), /const name/)
   assert.match(c.code, /printf\("%s\\n", name\);/)
-  assert.doesNotMatch(emitC(c.hir, {
+  assert.doesNotMatch(emitCFromIr({
     ...c.ir,
     topLevelItems: []
   }), /printf/)
-  assert.doesNotMatch(emitC(c.hir, {
+  assert.doesNotMatch(emitCFromIr({
     ...c.ir,
     body: []
   }), /printf/)
@@ -1558,12 +1558,12 @@ export function main(): void {
   assert.deepEqual(ts.ir.topLevelItems.map(item => item.kind), ['type', 'function'])
   assert.match(ts.code, /type User = \{/)
   assert.match(ts.code, /export function main\(\): void \{/)
-  assert.doesNotMatch(emitTs(ts.hir, {
+  assert.doesNotMatch(emitTsFromIr(withoutTypeItems, {
     callMain: false
-  }, withoutTypeItems), /type User = \{/)
-  assert.match(emitTs(ts.hir, {
+  }), /type User = \{/)
+  assert.match(emitTsFromIr(withoutTypeItems, {
     callMain: false
-  }, withoutTypeItems), /export function main\(\): void \{/)
+  }), /export function main\(\): void \{/)
 })
 
 test('drives C function collection from target-neutral IR body', () => {
@@ -1581,7 +1581,7 @@ export function main(): void {
   assert.match(result.code, /void greet\(void\) \{/)
   assert.match(result.code, /void ccjs_main\(void\) \{/)
 
-  const withoutIrBodyFunctions = emitC(result.hir, {
+  const withoutIrBodyFunctions = emitCFromIr({
     ...result.ir,
     body: []
   })
@@ -1682,7 +1682,7 @@ export function main(): void {
         }
       : item)
   }
-  const code = emitC(result.hir, withThrowingEffect)
+  const code = emitCFromIr(withThrowingEffect)
 
   assert.deepEqual(result.ir.functionEffects.find(item => item.name === 'ok'), {
     name: 'ok',
@@ -1736,11 +1736,11 @@ test('drives C runtime prelude from target-neutral IR requirements', () => {
     target: 'c'
   })
 
-  const code = emitC(result.hir, {
+  const code = emitCFromIr({
     ...result.ir,
     features: []
   })
-  const withoutRuntimeRequirements = emitC(result.hir, {
+  const withoutRuntimeRequirements = emitCFromIr({
     ...result.ir,
     runtimeRequirements: []
   })
@@ -1766,7 +1766,7 @@ test('drives C unsupported syntax diagnostics from stored target-neutral IR synt
     target: 'c'
   })
 
-  assert.throws(() => emitC(result.hir, {
+  assert.throws(() => emitCFromIr({
     ...result.ir,
     syntaxFeatures: [{
       feature: 'class' as const,
@@ -1897,7 +1897,7 @@ export function main(): void {
   assert.match(result.code, /void greet\(ccjs_value ccjs_param_value\) \{\n  if \(ccjs_param_value\.tag != CCJS_TAG_STRING \|\| ccjs_param_value\.as\.ref == 0\) goto ccjs_cleanup;/)
   assert.match(result.code, /greet\(ccjs_value_\d+\);/)
 
-  const withoutParamMetadata = emitC(result.hir, {
+  const withoutParamMetadata = emitCFromIr({
     ...result.ir,
     functionDeclarations: result.ir.functionDeclarations.map(item => item.name === 'greet'
       ? {
@@ -1927,7 +1927,7 @@ export function main(): void {
   assert.match(result.code, /double getScore\(void\) \{/)
   assert.match(result.code, /ccjs_return = 7;/)
 
-  const withNullableReturnMetadata = emitC(result.hir, {
+  const withNullableReturnMetadata = emitCFromIr({
     ...result.ir,
     functionDeclarations: result.ir.functionDeclarations.map(item => item.name === 'getScore'
       ? {
@@ -2073,7 +2073,7 @@ export function main(): void {
 
   assert.match(result.code, /static ccjs_status ccjs_callback_hello_0\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\);/)
   const mainIndex = result.ir.body.findIndex(item => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const withoutMainBodyCallbacks = emitC(result.hir, {
+  const withoutMainBodyCallbacks = emitCFromIr({
     ...result.ir,
     body: result.ir.body.map((item, index) => index === mainIndex
       ? {
@@ -2084,7 +2084,7 @@ export function main(): void {
   })
 
   assert.doesNotMatch(withoutMainBodyCallbacks, /ccjs_callback_hello_0/)
-  assert.doesNotMatch(emitC(result.hir, {
+  assert.doesNotMatch(emitCFromIr({
     ...result.ir,
     body: []
   }), /ccjs_callback_hello_0/)
@@ -3378,7 +3378,7 @@ test('injects Node fs prelude when fs is referenced', () => {
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['fs', 'fs'])
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.path.join('.')), ['fs.writeFile', 'fs.readFile'])
 
-  const withoutGlobalUsage = emitJs(result.hir, {}, {
+  const withoutGlobalUsage = emitJsFromIr({
     ...result.ir,
     globalUsages: []
   })
@@ -3401,7 +3401,7 @@ test('injects Node http prelude when http is referenced', () => {
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['http'])
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.path.join('.')), ['http.createServer'])
 
-  const withoutGlobalUsage = emitJs(result.hir, {}, {
+  const withoutGlobalUsage = emitJsFromIr({
     ...result.ir,
     globalUsages: []
   })
@@ -3430,7 +3430,7 @@ test('drives JS Node prelude from stored target-neutral IR global roots', () => 
       path: ['fs', 'readFile']
     }
   ]
-  const code = emitJs(result.hir, {}, {
+  const code = emitJsFromIr({
     ...result.ir,
     globalUsages
   })
@@ -3522,7 +3522,7 @@ test('drives C JS global diagnostics from target-neutral IR global usages', () =
       }
     ]
   }]), ['fetch'])
-  assert.throws(() => emitC(result.hir, {
+  assert.throws(() => emitCFromIr({
     ...result.ir,
     globalUsages: [
       {
@@ -3577,7 +3577,7 @@ export function main(): void {
   ])
   assert.equal((result.code.match(/CCJS_FIELD_READONLY/g) ?? []).length, 1)
 
-  const withoutReturnShape = emitC(result.hir, {
+  const withoutReturnShape = emitCFromIr({
     ...result.ir,
     functionDeclarations: result.ir.functionDeclarations.map(item => item.name === 'getUser'
       ? {

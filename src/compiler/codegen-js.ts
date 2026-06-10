@@ -1,15 +1,11 @@
-import { collectIrGlobalRoots, collectIrModuleRecords, collectIrPrograms, findIrEntryProgram, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
+import { collectIrGlobalRoots, collectIrModuleRecords, collectIrPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
-import type { AnyNode, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
+import type { AnyNode, IrProgram, ModuleGraph } from './types.ts'
 
 type JsEmitOptions = {
   callMain?: boolean
   emitTypes?: boolean
   stripExports?: boolean
-}
-
-export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string {
-  return emitJsFromIr(ir, options)
 }
 
 export function emitJsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string {
@@ -30,10 +26,6 @@ export function emitJsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string
   }
 
   return `${lines.join('\n')}\n`
-}
-
-export function emitTs(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string {
-  return emitTsFromIr(ir, options)
 }
 
 export function emitTsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string {

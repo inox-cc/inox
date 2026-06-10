@@ -1,7 +1,7 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, findIrEntryProgram, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
+import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, ModuleGraph, SourceLocation } from './types.ts'
 
 const cStringPredicateMethods = new Set([
   'includes',
@@ -14,10 +14,6 @@ const cArrayMethods = new Set([
   'filter',
   'map'
 ])
-
-export function emitC(program: ProgramNode, ir: IrProgram = lowerHirToIr(program)): string {
-  return emitCFromIr(ir)
-}
 
 export function emitCFromIr(ir: IrProgram): string {
   return emitCUnit([ir], ir)
