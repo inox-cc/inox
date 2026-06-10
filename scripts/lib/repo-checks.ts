@@ -41,6 +41,8 @@ const requiredFiles: string[] = [
   'src/compiler/lexer.ts',
   'src/compiler/lower.ts',
   'src/compiler/parser.ts',
+  'scripts/lib/snapshot-runner.ts',
+  'scripts/test-codegen-snapshots.ts',
   'scripts/test-ir-snapshots.ts',
   'tests/README.md'
 ]
@@ -56,6 +58,7 @@ const requiredFixtureDirs: string[] = [
   'tests/fixtures/runtime',
   'tests/fixtures/diagnostics',
   'tests/fixtures/capabilities',
+  'tests/snapshots/codegen',
   'tests/snapshots/ir'
 ]
 

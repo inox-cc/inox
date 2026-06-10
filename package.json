@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
     "test:fixtures": "node scripts/test-fixtures.ts",
-    "test:snapshots": "node scripts/test-ir-snapshots.ts",
+    "test:ir-snapshots": "node scripts/test-ir-snapshots.ts",
+    "test:codegen-snapshots": "node scripts/test-codegen-snapshots.ts",
+    "test:snapshots": "npm run test:ir-snapshots && npm run test:codegen-snapshots",
     "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:snapshots"
   },
   "engines": {

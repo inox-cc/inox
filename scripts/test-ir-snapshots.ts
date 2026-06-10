@@ -1,8 +1,8 @@
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join, relative } from 'node:path'
+import { join } from 'node:path'
 import { compileSource } from '../src/compiler/index.ts'
 import type { AnyNode, IrFunctionDeclaration, IrGlobalUsage, IrProgram, IrSyntaxFeatureUsage, IrTopLevelItem, SourceLocation } from '../src/compiler/types.ts'
 import { rootDir } from './lib/repo-checks.ts'
+import { runSnapshotSuite } from './lib/snapshot-runner.ts'
 
 type IrSnapshot = {
   version: number
@@ -91,60 +91,27 @@ type SnapshotField = {
   loc?: SourceLocation
 }
 
-type NodeError = Error & {
-  code?: string
-}
-
 const snapshotRoot = join(rootDir, 'tests/snapshots/ir')
 const update = process.argv.includes('--update')
-const files = await findSnapshotSources(snapshotRoot)
-const failures: string[] = []
 
-for (const file of files) {
-  await checkSnapshot(file)
-}
+await runSnapshotSuite({
+  title: 'IR snapshot checks',
+  root: snapshotRoot,
+  sourceSuffix: '.ts',
+  update,
+  updateCommand: 'node scripts/test-ir-snapshots.ts --update',
+  createOutputs: ({ path, source }) => {
+    const ir = compileSource(source, {
+      target: 'ts',
+      callMain: false
+    }).ir
 
-if (failures.length > 0) {
-  console.error(['IR snapshot checks failed', ...failures.map(failure => `- ${failure}`)].join('\n'))
-  process.exitCode = 1
-} else {
-  const action = update ? 'updated' : 'passed'
-
-  console.log(`IR snapshot checks ${action} (${files.length} snapshot${files.length === 1 ? '' : 's'})`)
-}
-
-async function checkSnapshot(file: string): Promise<void> {
-  const rel = relative(rootDir, file)
-  const source = await readFile(file, 'utf8')
-  const actual = `${JSON.stringify(createIrSnapshot(compileSource(source, {
-    target: 'ts',
-    callMain: false
-  }).ir), null, 2)}\n`
-  const snapshotFile = file.replace(/\.ts$/, '.ir.json')
-
-  if (update) {
-    await mkdir(dirname(snapshotFile), {
-      recursive: true
-    })
-    await writeFile(snapshotFile, actual)
-    return
+    return [{
+      path: path.replace(/\.ts$/, '.ir.json'),
+      content: `${JSON.stringify(createIrSnapshot(ir), null, 2)}\n`
+    }]
   }
-
-  try {
-    const expected = await readFile(snapshotFile, 'utf8')
-
-    if (expected !== actual) {
-      failures.push(`${rel}: snapshot mismatch; run node scripts/test-ir-snapshots.ts --update`)
-    }
-  } catch (error) {
-    if (isNodeError(error) && error.code === 'ENOENT') {
-      failures.push(`${rel}: missing ${relative(rootDir, snapshotFile)}; run node scripts/test-ir-snapshots.ts --update`)
-      return
-    }
-
-    throw error
-  }
-}
+})
 
 function createIrSnapshot(ir: IrProgram): IrSnapshot {
   return {
@@ -282,27 +249,4 @@ function withLocation<T extends Record<string, unknown>>(value: T, loc: SourceLo
     ...value,
     loc
   }
-}
-
-async function findSnapshotSources(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, {
-    withFileTypes: true
-  })
-  const files: string[] = []
-
-  for (const entry of entries) {
-    const path = join(dir, entry.name)
-
-    if (entry.isDirectory()) {
-      files.push(...await findSnapshotSources(path))
-    } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
-      files.push(path)
-    }
-  }
-
-  return files.sort()
-}
-
-function isNodeError(error: unknown): error is NodeError {
-  return error instanceof Error && 'code' in error
 }
