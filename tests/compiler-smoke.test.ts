@@ -1484,6 +1484,30 @@ console.log(name)
   }), /printf/)
 })
 
+test('drives C function collection from target-neutral IR body', () => {
+  const result = compileSource(`function greet(): void {
+  console.log('hello')
+}
+
+export function main(): void {
+  greet()
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /void greet\(void\) \{/)
+  assert.match(result.code, /void ccjs_main\(void\) \{/)
+
+  const withoutIrBodyFunctions = emitC(result.hir, {
+    ...result.ir,
+    body: []
+  })
+
+  assert.doesNotMatch(withoutIrBodyFunctions, /void greet\(void\) \{/)
+  assert.doesNotMatch(withoutIrBodyFunctions, /void ccjs_main\(void\) \{/)
+})
+
 test('collects target-neutral IR feature requirements', () => {
   const result = compileSource(`export function main(): void {
   const values = [1, 2, 3]

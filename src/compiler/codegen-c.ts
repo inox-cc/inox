@@ -29,7 +29,7 @@ export function emitCBundle(graph: ModuleGraph): string {
 
 function emitCUnit(programs: ProgramNode[], irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program)), entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
   const diagnostics: Diagnostic[] = []
-  const functions = collectFunctions(programs, irPrograms)
+  const functions = collectFunctions(irPrograms)
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
   const functionEffects = collectIrFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
@@ -152,8 +152,8 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, need
   return lines
 }
 
-function collectFunctions(programs: ProgramNode[], irPrograms: IrProgram[]) {
-  return programs.flatMap((program, index) => collectIrTopLevelNodes(irPrograms[index] ?? lowerHirToIr(program), 'function'))
+function collectFunctions(irPrograms: IrProgram[]) {
+  return irPrograms.flatMap(program => collectIrTopLevelNodes(program, 'function'))
 }
 
 function createThrowingFunctionInfo(functionDeclarations: IrFunctionDeclaration[], functionEffects: IrFunctionEffect[]) {
