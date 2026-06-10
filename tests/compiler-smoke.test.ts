@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { emitC } from '../src/compiler/codegen-c.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
@@ -1385,6 +1386,7 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
   assert.equal(count.valueType, 'number')
   assert.equal(result.ir.type, 'IrProgram')
   assert.equal(result.ir.version, 1)
+  assert.deepEqual(result.ir.runtimeRequirements, [])
   assert.deepEqual(result.ir.body, result.hir.body)
 })
 
@@ -1406,7 +1408,37 @@ test('collects target-neutral IR feature requirements', () => {
     'runtime-values',
     'string-bytes'
   ])
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'clocks',
+    'managed-values',
+    'string-bytes'
+  ])
   assert.match(result.code, /#include "ccjs\/time\.h"/)
+})
+
+test('drives C runtime prelude from target-neutral IR requirements', () => {
+  const result = compileSource(`export function main(): void {
+  const values = ['Ada']
+  const now = Date.now()
+  console.log(values[0], now, 'Ada' === values[0])
+}
+`, {
+    target: 'c'
+  })
+
+  const code = emitC(result.hir, {
+    ...result.ir,
+    features: []
+  })
+
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'clocks',
+    'managed-values',
+    'string-bytes'
+  ])
+  assert.match(code, /#include <string\.h>/)
+  assert.match(code, /#include "ccjs\/array\.h"/)
+  assert.match(code, /#include "ccjs\/time\.h"/)
 })
 
 test('keeps function signatures in HIR and compiles typed calls', () => {

@@ -1,10 +1,13 @@
-import type { AnyNode, IrFeature, IrProgram, ProgramNode } from './types.ts'
+import type { AnyNode, IrFeature, IrProgram, IrRuntimeRequirement, ProgramNode } from './types.ts'
 
 export function lowerHirToIr(program: ProgramNode): IrProgram {
+  const features = collectIrFeatures(program)
+
   return {
     type: 'IrProgram',
     version: 1,
-    features: collectIrFeatures(program),
+    features,
+    runtimeRequirements: collectRuntimeRequirements(features),
     body: program.body
   }
 }
@@ -13,12 +16,30 @@ export function hasIrFeature(program: IrProgram, feature: IrFeature): boolean {
   return program.features.includes(feature)
 }
 
+export function hasIrRuntimeRequirement(program: IrProgram, requirement: IrRuntimeRequirement): boolean {
+  return program.runtimeRequirements.includes(requirement)
+}
+
 function collectIrFeatures(program: ProgramNode): IrFeature[] {
   const features = new Set<IrFeature>()
 
   visitNode(program, features)
 
   return [...features].sort()
+}
+
+function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement[] {
+  const requirements = new Set<IrRuntimeRequirement>()
+
+  for (const feature of features) {
+    if (feature === 'runtime-values') {
+      requirements.add('managed-values')
+    } else {
+      requirements.add(feature)
+    }
+  }
+
+  return [...requirements].sort()
 }
 
 function visitNode(node: unknown, features: Set<IrFeature>): void {
@@ -59,8 +80,12 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     recordCallableSignatureFeatures(node, features)
   }
 
-  if (node.type === 'VariableDeclaration' && node.valueType === 'function' && isRuntimeFunctionType(node.functionType)) {
+  if (node.type === 'VariableDeclaration' && node.valueType === 'function' && (node.nullable === true || isRuntimeFunctionType(node.functionType))) {
     features.add('callback-values')
+    features.add('runtime-values')
+  }
+
+  if (node.type === 'ThrowStatement' || node.type === 'TryStatement') {
     features.add('runtime-values')
   }
 
@@ -68,12 +93,17 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     features.add('runtime-values')
   }
 
-  if (node.type === 'NewExpression' && collectionConstructorName(node) != null) {
+  if (node.type === 'NewExpression' && runtimeConstructorName(node) != null) {
     features.add('runtime-values')
   }
 
-  if (node.type === 'CallExpression') {
+  if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression') {
     recordCallFeatures(node, features)
+  }
+
+  if (node.type === 'OptionalCallExpression') {
+    features.add('callback-values')
+    features.add('runtime-values')
   }
 
   if (node.type === 'BinaryExpression') {
@@ -92,7 +122,7 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
 }
 
 function recordCallableSignatureFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  if (node.returnType === 'string') {
+  if (node.returnType === 'string' || node.returnNullable === true) {
     features.add('runtime-values')
   }
 
@@ -101,7 +131,7 @@ function recordCallableSignatureFeatures(node: AnyNode, features: Set<IrFeature>
       features.add('runtime-values')
     }
 
-    if (param.valueType === 'function' && isRuntimeFunctionType(param.functionType)) {
+    if (param.valueType === 'function' && (param.nullable === true || isRuntimeFunctionType(param.functionType))) {
       features.add('callback-values')
     }
   }
@@ -127,12 +157,12 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
   }
 }
 
-function collectionConstructorName(expression: AnyNode): string | null {
+function runtimeConstructorName(expression: AnyNode): string | null {
   if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
     return null
   }
 
-  return ['Map', 'Set'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
+  return ['Error', 'Map', 'Set'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
 }
 
 function collectionMethodCallName(expression: AnyNode): string | null {

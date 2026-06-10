@@ -30,10 +30,17 @@ export type IrFeature =
   | 'runtime-values'
   | 'string-bytes'
 
+export type IrRuntimeRequirement =
+  | 'callback-values'
+  | 'clocks'
+  | 'managed-values'
+  | 'string-bytes'
+
 export type IrProgram = {
   type: 'IrProgram'
   version: 1
   features: IrFeature[]
+  runtimeRequirements: IrRuntimeRequirement[]
   body: AnyNode[]
 }
 
