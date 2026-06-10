@@ -1,4 +1,4 @@
-import { collectIrFeatureRequirements, collectIrGlobalRoots, collectIrPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
+import { collectIrFeatureRequirements, collectIrGlobalRoots, collectIrPrograms, collectIrTopLevelNodeEntries, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, IrProgram } from './types.ts'
 
@@ -73,21 +73,19 @@ export function emitTsBundleFromIrModules(irModules: IrModuleRecord[], entry: st
 function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {
   const lines: string[] = []
 
-  for (const topLevelItem of ir.topLevelItems) {
-    const item = ir.body[topLevelItem.index]
-
-    if (item == null || topLevelItem.kind === 'import') {
+  for (const entry of collectIrTopLevelNodeEntries(ir)) {
+    if (entry.kind === 'import') {
       continue
     }
 
-    if (topLevelItem.kind === 'type') {
-      lines.push(...emitTypeAlias(item, options))
-    } else if (topLevelItem.kind === 'function') {
-      lines.push(...emitFunction(item, options))
-    } else if (topLevelItem.kind === 'class') {
-      lines.push(...emitClass(item, options))
+    if (entry.kind === 'type') {
+      lines.push(...emitTypeAlias(entry.node, options))
+    } else if (entry.kind === 'function') {
+      lines.push(...emitFunction(entry.node, options))
+    } else if (entry.kind === 'class') {
+      lines.push(...emitClass(entry.node, options))
     } else {
-      lines.push(...emitStatement(item, options))
+      lines.push(...emitStatement(entry.node, options))
     }
   }
 

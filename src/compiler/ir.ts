@@ -38,6 +38,11 @@ type IrLocalThrowValueTypeOptions = {
   functionThrowValueTypes?: ReadonlyMap<string, readonly IrThrowValueType[]>
 }
 
+type IrTopLevelNodeEntry = {
+  kind: IrTopLevelItemKind
+  node: AnyNode
+}
+
 export function lowerHirToIr(program: ProgramNode): IrProgram {
   const features = collectIrFeatures(program)
   const topLevelItems = collectTopLevelItems(program)
@@ -86,7 +91,7 @@ export function hasIrRuntimeRequirement(program: IrProgram, requirement: IrRunti
 }
 
 export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[], topLevelItems: IrTopLevelItem[] }>): IrFunctionEffect[] {
-  return collectFunctionEffects(programs.flatMap(program => collectTopLevelNodes(program, 'function')))
+  return collectFunctionEffects(programs.flatMap(program => collectIrTopLevelNodes(program, 'function')))
 }
 
 export function collectIrStoredFunctionEffects(programs: Array<{ functionEffects: IrFunctionEffect[] }>): IrFunctionEffect[] {
@@ -128,8 +133,23 @@ export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, 
   return program?.functionDeclarations.some(item => item.name === name) === true
 }
 
+export function collectIrTopLevelNodeEntries(program: { body: AnyNode[], topLevelItems: IrTopLevelItem[] }): IrTopLevelNodeEntry[] {
+  return program.topLevelItems.flatMap(item => {
+    const node = program.body[item.index]
+
+    return node == null
+      ? []
+      : [{
+          kind: item.kind,
+          node
+        }]
+  })
+}
+
 export function collectIrTopLevelNodes(program: { body: AnyNode[], topLevelItems: IrTopLevelItem[] }, kind: IrTopLevelItemKind): AnyNode[] {
-  return collectTopLevelNodes(program, kind)
+  return collectIrTopLevelNodeEntries(program)
+    .filter(item => item.kind === kind)
+    .map(item => item.node)
 }
 
 export function collectIrTopLevelNodesFromPrograms(programs: Array<{ body: AnyNode[], topLevelItems: IrTopLevelItem[] }>, kind: IrTopLevelItemKind): AnyNode[] {
@@ -194,15 +214,8 @@ function topLevelItemKind(item: AnyNode): IrTopLevelItemKind {
   return 'statement'
 }
 
-function collectTopLevelNodes(program: { body: AnyNode[], topLevelItems: IrTopLevelItem[] }, kind: IrTopLevelItemKind): AnyNode[] {
-  return program.topLevelItems
-    .filter(item => item.kind === kind)
-    .map(item => program.body[item.index])
-    .filter((item): item is AnyNode => item != null)
-}
-
 function collectFunctionDeclarations(program: ProgramNode, topLevelItems: IrTopLevelItem[]): IrFunctionDeclaration[] {
-  return collectTopLevelNodes({
+  return collectIrTopLevelNodes({
     body: program.body,
     topLevelItems
   }, 'function')

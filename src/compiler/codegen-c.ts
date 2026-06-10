@@ -1,5 +1,5 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, collectIrTopLevelNodesFromPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
+import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodeEntries, collectIrTopLevelNodes, collectIrTopLevelNodesFromPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, SourceLocation } from './types.ts'
 
@@ -977,19 +977,13 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
   for (const ir of irPrograms) {
     const topLevelScope = new Map()
 
-    for (const topLevelItem of ir.topLevelItems) {
-      const item = ir.body[topLevelItem.index]
-
-      if (item == null) {
-        continue
-      }
-
-      if (topLevelItem.kind === 'function') {
+    for (const item of collectIrTopLevelNodeEntries(ir)) {
+      if (item.kind === 'function') {
         const scope = new Map()
-        declareParams(scope, item.params)
-        item.body.forEach(statement => visitStatement(statement, [topLevelScope, scope]))
-      } else if (topLevelItem.kind === 'statement') {
-        visitStatement(item, [topLevelScope])
+        declareParams(scope, item.node.params)
+        item.node.body.forEach(statement => visitStatement(statement, [topLevelScope, scope]))
+      } else if (item.kind === 'statement') {
+        visitStatement(item.node, [topLevelScope])
       }
     }
   }

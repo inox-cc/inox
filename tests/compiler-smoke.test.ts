@@ -7,7 +7,7 @@ import { emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c
 import { emitJsBundleFromIrModules, emitJsFromIr, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
-import { collectIrFeatureRequirements, collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrTopLevelNodesFromPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
+import { collectIrFeatureRequirements, collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrTopLevelNodeEntries, collectIrTopLevelNodesFromPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 
 test('compiles exported main to runnable JS', () => {
@@ -1655,6 +1655,36 @@ console.log(name)
     ...c.ir,
     body: []
   }), /printf/)
+})
+
+test('collects IR top-level node entries from stored metadata', () => {
+  const result = compileSource(`type User = {
+  name: string
+}
+
+export function greet(): void {
+  console.log('hi')
+}
+
+const count = 1
+`, {
+    target: 'js'
+  })
+  const entries = collectIrTopLevelNodeEntries(result.ir)
+
+  assert.deepEqual(entries.map(entry => `${entry.kind}:${entry.node.type}`), [
+    'type:TypeAliasDeclaration',
+    'function:FunctionDeclaration',
+    'statement:VariableDeclaration'
+  ])
+  assert.deepEqual(collectIrTopLevelNodeEntries({
+    ...result.ir,
+    body: []
+  }), [])
+  assert.deepEqual(collectIrTopLevelNodeEntries({
+    ...result.ir,
+    topLevelItems: []
+  }), [])
 })
 
 test('drives TS type alias emission from target-neutral IR top-level type items', () => {
