@@ -4597,6 +4597,101 @@ export function main(): void {
   })
 })
 
+test('compiles C collection values across function boundaries', () => {
+  const result = compileSource(`function makeNums(): number[] {
+  const nums = [2, 3, 5]
+
+  return nums
+}
+
+function sumNums(nums: number[]): number {
+  let total = 0
+
+  for (const value of nums) {
+    total = total + value
+  }
+
+  return total
+}
+
+function makeScores(): Map<string, number> {
+  const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+
+  return scores
+}
+
+function totalScores(scores: Map<string, number>): number {
+  let total = 0
+
+  for (const entry of scores.set('Alan', 5)) {
+    total = total + entry.value
+  }
+
+  return total
+}
+
+function makeSeen(): Set<string> {
+  const seen: Set<string> = new Set(['Ada'])
+  seen.add('Grace')
+
+  return seen
+}
+
+function seenCount(seen: Set<string>): number {
+  let count = 0
+
+  if (seen.has('Ada')) {
+    count = count + 1
+  }
+
+  if (seen.has('Grace')) {
+    count = count + 1
+  }
+
+  return count
+}
+
+export function main(): void {
+  const nums = makeNums()
+  const scores = makeScores()
+  const seen = makeSeen()
+  const sumFromNums = sumNums(nums)
+  const sumFromCall = sumNums(makeNums())
+  const totalFromScores = totalScores(scores)
+  const totalFromCall = totalScores(makeScores())
+  const seenFromSeen = seenCount(seen)
+  const seenSizeFromCall = makeSeen().size
+
+  console.log(sumFromNums, sumFromCall, totalFromScores, totalFromCall, scores.size, seenFromSeen, seenSizeFromCall)
+}
+`, {
+    target: 'c'
+  })
+  const makeNums = result.ir.functionDeclarations.find(item => item.name === 'makeNums')
+  const makeScores = result.ir.functionDeclarations.find(item => item.name === 'makeScores')
+  const makeSeen = result.ir.functionDeclarations.find(item => item.name === 'makeSeen')
+
+  assert.equal(makeNums?.returnType, 'array')
+  assert.equal(makeNums?.returnArrayElementType, 'number')
+  assert.equal(makeScores?.returnType, 'map')
+  assert.equal(makeScores?.returnMapKeyType, 'string')
+  assert.equal(makeScores?.returnMapValueType, 'number')
+  assert.equal(makeSeen?.returnType, 'set')
+  assert.equal(makeSeen?.returnSetElementType, 'string')
+  assert.match(result.code, /ccjs_value makeNums\(void\);/)
+  assert.match(result.code, /double sumNums\(ccjs_value nums\);/)
+  assert.match(result.code, /if \(nums\.tag != CCJS_TAG_ARRAY \|\| nums\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_value makeScores\(void\);/)
+  assert.match(result.code, /double totalScores\(ccjs_value scores\);/)
+  assert.match(result.code, /if \(scores\.tag != CCJS_TAG_MAP \|\| scores\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_value makeSeen\(void\);/)
+  assert.match(result.code, /double seenCount\(ccjs_value seen\);/)
+  assert.match(result.code, /if \(seen\.tag != CCJS_TAG_SET \|\| seen\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_array_len\(nums, &ccjs_for_length_\d+\)/)
+  assert.match(result.code, /ccjs_map\* ccjs_for_map_\d+ = \(ccjs_map\*\)scores\.as\.ref;/)
+  assert.match(result.code, /ccjs_set_has\(seen, ccjs_value_\d+, &ccjs_set_has_\d+\)/)
+})
+
 test('checks Map bracket syntax as typed get and set sugar', () => {
   const result = compileSource(`export function main(): void {
   const headers: Map<string, string> = new Map()

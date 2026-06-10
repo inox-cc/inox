@@ -5175,6 +5175,107 @@ test('generated C Map and Set method chains compile and run with runtime sources
   }
 })
 
+test('generated C collection values cross function boundaries with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-boundaries-'))
+  const source = join(dir, 'collection-boundaries.c')
+  const output = join(dir, 'collection-boundaries')
+
+  try {
+    const result = compileSource(`function makeNums(): number[] {
+  const nums = [2, 3, 5]
+
+  return nums
+}
+
+function sumNums(nums: number[]): number {
+  let total = 0
+
+  for (const value of nums) {
+    total = total + value
+  }
+
+  return total
+}
+
+function makeScores(): Map<string, number> {
+  const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+
+  return scores
+}
+
+function totalScores(scores: Map<string, number>): number {
+  let total = 0
+
+  for (const entry of scores.set('Alan', 5)) {
+    total = total + entry.value
+  }
+
+  return total
+}
+
+function makeSeen(): Set<string> {
+  const seen: Set<string> = new Set(['Ada'])
+  seen.add('Grace')
+
+  return seen
+}
+
+function seenCount(seen: Set<string>): number {
+  let count = 0
+
+  if (seen.has('Ada')) {
+    count = count + 1
+  }
+
+  if (seen.has('Grace')) {
+    count = count + 1
+  }
+
+  return count
+}
+
+export function main(): void {
+  const nums = makeNums()
+  const scores = makeScores()
+  const seen = makeSeen()
+  const sumFromNums = sumNums(nums)
+  const sumFromCall = sumNums(makeNums())
+  const totalFromScores = totalScores(scores)
+  const totalFromCall = totalScores(makeScores())
+  const seenFromSeen = seenCount(seen)
+  const seenSizeFromCall = makeSeen().size
+
+  console.log(sumFromNums, sumFromCall, totalFromScores, totalFromCall, scores.size, seenFromSeen, seenSizeFromCall)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '10 10 21 21 3 2 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C Map and Set array literal constructors compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

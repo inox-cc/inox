@@ -200,6 +200,11 @@ function collectFunctionDeclarations(program: ProgramNode, topLevelItems: IrTopL
       params: item.params,
       returnType: item.returnType,
       returnNullable: item.returnNullable === true,
+      ...(item.returnArrayElementType == null ? {} : { returnArrayElementType: item.returnArrayElementType }),
+      ...(item.returnArrayElementDeclaredType == null ? {} : { returnArrayElementDeclaredType: item.returnArrayElementDeclaredType }),
+      ...(item.returnMapKeyType == null ? {} : { returnMapKeyType: item.returnMapKeyType }),
+      ...(item.returnMapValueType == null ? {} : { returnMapValueType: item.returnMapValueType }),
+      ...(item.returnSetElementType == null ? {} : { returnSetElementType: item.returnSetElementType }),
       ...(item.returnShape == null ? {} : { returnShape: item.returnShape }),
       loc: item.loc
     }))

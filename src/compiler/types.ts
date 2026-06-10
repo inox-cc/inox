@@ -54,6 +54,11 @@ export type IrFunctionDeclaration = {
   params: AnyNode[]
   returnType: string
   returnNullable: boolean
+  returnArrayElementType?: ValueType | null
+  returnArrayElementDeclaredType?: string | null
+  returnMapKeyType?: ValueType | null
+  returnMapValueType?: ValueType | null
+  returnSetElementType?: ValueType | null
   returnShape?: any
   loc?: SourceLocation
 }

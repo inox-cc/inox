@@ -241,8 +241,15 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
     functionThrowValueTypes: throwing.functionThrowValueTypes,
     functionNames: new Map(functionDeclarations.map(item => [item.name, emitCFunctionName(item.name)])),
     functionParams: new Map(functionDeclarations.map(item => [item.name, item.params])),
+    functionReturnArrayElementTypes: new Map(functionDeclarations.map(item => [item.name, item.returnArrayElementType ?? null])),
+    functionReturnArrayElementDeclaredTypes: new Map(functionDeclarations.map(item => [item.name, item.returnArrayElementDeclaredType ?? null])),
+    functionReturnMapTypes: new Map(functionDeclarations.map(item => [item.name, {
+      key: item.returnMapKeyType ?? null,
+      value: item.returnMapValueType ?? null
+    }])),
     functionReturnNullables: new Map(functionDeclarations.map(item => [item.name, item.returnNullable === true])),
     functionReturnShapes: new Map(functionDeclarations.map(item => [item.name, item.returnShape ?? null])),
+    functionReturnSetElementTypes: new Map(functionDeclarations.map(item => [item.name, item.returnSetElementType ?? null])),
     functionReturnTypes: new Map(functionDeclarations.map(item => [item.name, item.returnType])),
     jsGlobalRoots,
     runtimeFunctionParams: new Map(),
@@ -301,6 +308,18 @@ function emitFunctionDeclaration(statement, baseContext) {
     } else if (param.valueType === 'object') {
       context.variables.set(param.name, 'object')
       registerObjectShape(context, param.name, param.shape)
+    } else if (param.valueType === 'array') {
+      context.variables.set(param.name, 'array')
+      context.runtimeArrayElementTypes.set(param.name, param.arrayElementType ?? 'unknown')
+    } else if (param.valueType === 'map') {
+      context.variables.set(param.name, 'map')
+      context.mapTypes.set(param.name, {
+        key: param.mapKeyType ?? 'unknown',
+        value: param.mapValueType ?? 'unknown'
+      })
+    } else if (param.valueType === 'set') {
+      context.variables.set(param.name, 'set')
+      context.setElementTypes.set(param.name, param.setElementType ?? 'unknown')
     } else if (param.valueType === 'function') {
       const runtimeFunctionType = resolveFunctionParameterRuntimeType(statement.name, index, param, context)
 
@@ -372,6 +391,10 @@ function emitFunctionHead(statement, context) {
         return `ccjs_value ${emitCObjectParamName(param.name)}`
       }
 
+      return `ccjs_value ${param.name}`
+    }
+
+    if (param.valueType === 'array' || param.valueType === 'map' || param.valueType === 'set') {
       return `ccjs_value ${param.name}`
     }
 
@@ -1709,6 +1732,14 @@ function emitRuntimeParamPrelude(statement, context) {
       ]
     }
 
+    if (param.valueType === 'array' || param.valueType === 'map' || param.valueType === 'set') {
+      const tag = cRuntimeValueTag(param.valueType)
+
+      return [
+        emitRuntimeTypeCheck(`${param.name}.tag != ${tag} || ${param.name}.as.ref == 0`, context)
+      ]
+    }
+
     if (param.valueType === 'function' && resolveFunctionParameterRuntimeType(statement.name, index, param, context) != null) {
       if (param.nullable === true) {
         return emitRuntimeNullableValueCheck(param.name, 'CCJS_TAG_FUNCTION', context)
@@ -1736,8 +1767,8 @@ function emitCType(type) {
     return 'void'
   }
 
-  if (type === 'string') {
-    return 'char*'
+  if (isManagedRuntimeReturnType(type)) {
+    return 'ccjs_value'
   }
 
   if (type === 'function') {
@@ -1897,6 +1928,10 @@ function emitStatement(statement, context) {
       if (field != null) {
         return emitDynamicObjectMemberVariableDeclaration(statement, field, context)
       }
+    }
+
+    if (isRuntimeValueLocalExpression(statement.init, context)) {
+      return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
     }
 
     if (statement.init?.type === 'CallExpression' && inferExpressionType(statement.init, context) === 'string') {
@@ -2911,6 +2946,13 @@ function emitPreparedForVariableDeclaration(statement, context) {
     }
   }
 
+  if (isRuntimeValueLocalExpression(statement.init, context)) {
+    return {
+      lines: emitRuntimeValueVariableDeclaration(statement, statement.init, context),
+      expression: ''
+    }
+  }
+
   const inferred = inferExpressionType(statement.init, context)
   context.variables.set(statement.name, inferred)
 
@@ -3037,7 +3079,11 @@ function emitRuntimeCallbackRuntimeValueReturnLines(argument, context) {
 }
 
 function isManagedRuntimeReturnType(valueType) {
-  return valueType === 'string' || valueType === 'object'
+  return valueType === 'string'
+    || valueType === 'object'
+    || valueType === 'array'
+    || valueType === 'map'
+    || valueType === 'set'
 }
 
 function emitRuntimeReturnValueExpression(argument, context, returnType, returnShape) {
@@ -3093,6 +3139,53 @@ function emitRuntimeStringVariableDeclaration(statement, expression, context) {
   context.runtimeStrings.add(statement.name)
 
   return lines
+}
+
+function emitRuntimeValueVariableDeclaration(statement, expression, context) {
+  const valueType = inferExpressionType(expression, context)
+  const expectedTag = cRuntimeValueTag(valueType)
+  const value = valueType === 'object' && expression?.type === 'ObjectLiteral'
+    ? emitCObjectLiteralValueExpression(expression, context, statement.shape)
+    : emitCValueExpression(expression, context)
+
+  registerOwnedValue(context, statement.name)
+  registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
+
+  return [
+    ...value.lines,
+    ...emitPrepareOwnedValueWrite(statement.name),
+    `${statement.name} = ${value.expression};`,
+    emitRuntimeValueCheck(statement.name, expectedTag, context),
+    `ccjs_retain(${statement.name});`
+  ]
+}
+
+function registerRuntimeValueMetadata(name, valueType, declaration, expression, context) {
+  context.variables.set(name, valueType)
+
+  if (valueType === 'object') {
+    registerObjectShape(context, name, declaration.shape ?? expression?.shape ?? null)
+  } else if (valueType === 'array') {
+    context.runtimeArrayElementTypes.set(name, declaration.arrayElementType ?? resolveRuntimeArrayElementType(expression, context) ?? expression?.arrayElementType ?? 'unknown')
+  } else if (valueType === 'map') {
+    const mapType = resolveRuntimeMapType(expression, context)
+
+    context.mapTypes.set(name, {
+      key: declaration.mapKeyType ?? mapType?.key ?? expression?.mapKeyType ?? 'unknown',
+      value: declaration.mapValueType ?? mapType?.value ?? expression?.mapValueType ?? 'unknown'
+    })
+  } else if (valueType === 'set') {
+    context.setElementTypes.set(name, declaration.setElementType ?? resolveRuntimeSetElementType(expression, context) ?? expression?.setElementType ?? 'unknown')
+  }
+}
+
+function isRuntimeValueLocalExpression(expression, context) {
+  const valueType = inferExpressionType(expression, context)
+
+  return valueType === 'object'
+    || valueType === 'array'
+    || valueType === 'map'
+    || valueType === 'set'
 }
 
 function reportCCollectionHashability(valueType, subject, loc, context) {
@@ -3313,6 +3406,10 @@ function emitVariableDeclaration(statement, context) {
 
   if (isErrorConstructorExpression(statement.init)) {
     return emitErrorObjectVariableDeclaration(statement, context).join('\n')
+  }
+
+  if (isRuntimeValueLocalExpression(statement.init, context) && statement.init?.type !== 'ObjectLiteral' && statement.init?.type !== 'ArrayLiteral') {
+    return emitRuntimeValueVariableDeclaration(statement, statement.init, context).join('\n')
   }
 
   const inferred = inferExpressionType(statement.init, context)
@@ -4128,7 +4225,8 @@ function emitCValueExpression(expression, context) {
     }
   }
 
-  if (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') {
+  if (expression?.type === 'CallExpression' && isManagedRuntimeReturnType(inferExpressionType(expression, context))) {
+    const valueType = inferExpressionType(expression, context)
     const collectionCall = emitPreparedCollectionCallExpression(expression, context)
 
     if (collectionCall != null) {
@@ -4136,6 +4234,7 @@ function emitCValueExpression(expression, context) {
     }
 
     const temp = nextCName(context, 'ccjs_value')
+    const tag = cRuntimeValueTag(valueType)
     registerOwnedValue(context, temp)
     const call = emitPreparedCallExpression(expression, context)
 
@@ -4144,23 +4243,7 @@ function emitCValueExpression(expression, context) {
         ...call.lines,
         ...emitPrepareOwnedValueWrite(temp),
         `${temp} = ${call.expression};`,
-        emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context)
-      ],
-      expression: temp
-    }
-  }
-
-  if (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'object') {
-    const temp = nextCName(context, 'ccjs_value')
-    registerOwnedValue(context, temp)
-    const call = emitPreparedCallExpression(expression, context)
-
-    return {
-      lines: [
-        ...call.lines,
-        ...emitPrepareOwnedValueWrite(temp),
-        `${temp} = ${call.expression};`,
-        emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_OBJECT || ${temp}.as.ref == 0`, context)
+        emitRuntimeValueCheck(temp, tag, context)
       ],
       expression: temp
     }
@@ -5742,6 +5825,11 @@ function emitPreparedCallExpression(expression, context) {
 
       lines.push(...value.lines)
       args.push(value.expression)
+    } else if (params[index]?.valueType === 'array' || params[index]?.valueType === 'map' || params[index]?.valueType === 'set') {
+      const value = emitCValueExpression(arg, context)
+
+      lines.push(...value.lines)
+      args.push(value.expression)
     } else if (params[index]?.valueType === 'function') {
       const runtimeFunctionType = resolveRuntimeFunctionArgumentType(expression.callee, index, params[index], context)
 
@@ -7105,13 +7193,21 @@ function emitPreparedCollectionReceiver(expression, context) {
 
     const call = emitPreparedCollectionCallExpression(expression, context)
 
-    return call == null || call.expression === ''
-      ? null
-      : {
-          type: valueType,
-          lines: call.lines,
-          expression: call.expression
-        }
+    if (call != null && call.expression !== '') {
+      return {
+        type: valueType,
+        lines: call.lines,
+        expression: call.expression
+      }
+    }
+
+    const value = emitCValueExpression(expression, context)
+
+    return {
+      type: valueType,
+      lines: value.lines,
+      expression: value.expression
+    }
   }
 
   if (isMemberAccessExpression(expression) || isIndexAccessExpression(expression)) {
@@ -7558,6 +7654,14 @@ function resolveRuntimeArrayElementType(expression, context) {
     return context.runtimeArrayElementTypes.get(expression.path[0]) ?? null
   }
 
+  if (expression?.type === 'CallExpression') {
+    const functionReturn = resolveFunctionReturnNameFromCall(expression)
+
+    return expression.valueType === 'array'
+      ? expression.arrayElementType ?? (functionReturn == null ? null : context.functionReturnArrayElementTypes.get(functionReturn)) ?? 'unknown'
+      : null
+  }
+
   if (expression?.type === 'MemberExpression') {
     const member = resolveKnownObjectMember(expression, context)
 
@@ -7579,7 +7683,11 @@ function resolveRuntimeSetElementType(expression, context) {
   }
 
   if (expression?.type === 'CallExpression' || expression?.type === 'NewExpression') {
-    return expression.valueType === 'set' ? expression.setElementType ?? 'unknown' : null
+    const functionReturn = expression.type === 'CallExpression' ? resolveFunctionReturnNameFromCall(expression) : null
+
+    return expression.valueType === 'set'
+      ? expression.setElementType ?? (functionReturn == null ? null : context.functionReturnSetElementTypes.get(functionReturn)) ?? 'unknown'
+      : null
   }
 
   if (expression?.type === 'MemberExpression') {
@@ -7603,10 +7711,13 @@ function resolveRuntimeMapType(expression, context) {
   }
 
   if (expression?.type === 'CallExpression' || expression?.type === 'NewExpression') {
+    const functionReturn = expression.type === 'CallExpression' ? resolveFunctionReturnNameFromCall(expression) : null
+    const functionReturnMap = functionReturn == null ? null : context.functionReturnMapTypes.get(functionReturn) ?? null
+
     return expression.valueType === 'map'
       ? {
-          key: expression.mapKeyType ?? 'unknown',
-          value: expression.mapValueType ?? 'unknown'
+          key: expression.mapKeyType ?? functionReturnMap?.key ?? 'unknown',
+          value: expression.mapValueType ?? functionReturnMap?.value ?? 'unknown'
         }
       : null
   }
@@ -7634,6 +7745,12 @@ function resolveRuntimeMapType(expression, context) {
   }
 
   return null
+}
+
+function resolveFunctionReturnNameFromCall(expression) {
+  return expression?.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1
+    ? expression.callee.path[0]
+    : null
 }
 
 function emitPreparedRuntimeArrayIndexValue(expression, element, context, prefix = 'ccjs_array_item') {
