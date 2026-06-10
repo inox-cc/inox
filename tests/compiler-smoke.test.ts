@@ -1346,6 +1346,52 @@ export function main(): void {
   assert.match(c.code, /ccjs_string\* name = \(ccjs_string\*\)ccjs_for_value_\d+\.as\.ref;/)
 })
 
+test('compiles for of loops over Map values as MapEntry objects', () => {
+  const source = `type Bag = {
+  scores: Map<string, number>
+}
+
+export function main(): void {
+  const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+  const bag: Bag = { scores }
+  let total = 0
+  let letters = 0
+
+  for (const entry of bag['scores'].set('Alan', 5)) {
+    total = total + entry.value
+    letters = letters + entry.key.length
+  }
+
+  console.log(total, letters)
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+  const ts = compileSource(source, {
+    target: 'ts',
+    callMain: false
+  })
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(js.code, /for \(const ccjsMapEntry_entry of bag\["scores"\]\.set\("Alan", 5\)\) \{/)
+  assert.match(js.code, /const entry = \{ key: ccjsMapEntry_entry\[0\], value: ccjsMapEntry_entry\[1\] \}/)
+  assert.match(ts.code, /for \(const ccjsMapEntry_entry of bag\["scores"\]\.set\("Alan", 5\)\) \{/)
+  assert.doesNotThrow(() => compileSource(ts.code, {
+    target: 'js',
+    callMain: false
+  }))
+  assert.match(c.code, /ccjs_map\* ccjs_for_map_\d+ = \(ccjs_map\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(c.code, /CCJS_MAP_SLOT_OCCUPIED/)
+  assert.match(c.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_map_entry_\d+, &entry\)/)
+  assert.match(c.code, /ccjs_object_init_known\(entry, 0, ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.key\)/)
+  assert.match(c.code, /ccjs_object_init_known\(entry, 1, ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.value\)/)
+  assert.match(c.code, /ccjs_object_get_known\(entry, 1, &ccjs_(?:expr_)?value_\d+\)/)
+  assert.match(c.code, /ccjs_object_get_known\(entry, 0, &ccjs_(?:expr_)?value_\d+\)/)
+})
+
 test('rejects unsupported C for of iterables with a stable diagnostic', () => {
   assertDiagnostic(`export function main(): void {
   const user = { name: 'Ada' }

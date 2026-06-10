@@ -1760,19 +1760,27 @@ class Checker {
 
   checkForOfStatement(statement: AnyNode): void {
     const iterableType = this.checkExpression(statement.iterable)
+    const mapEntryShape = iterableType === 'map'
+      ? this.createMapEntryShape(this.resolveExpressionMapType(statement.iterable), statement.nameLoc)
+      : null
     const elementType = iterableType === 'array'
       ? this.resolveExpressionArrayElementType(statement.iterable) ?? 'unknown'
       : iterableType === 'set'
         ? this.resolveExpressionSetElementType(statement.iterable) ?? 'unknown'
-        : 'unknown'
+        : iterableType === 'map'
+          ? 'object'
+          : 'unknown'
     const elementDeclaredType = iterableType === 'array'
       ? this.resolveExpressionArrayElementDeclaredType(statement.iterable) ?? elementType
       : iterableType === 'set'
         ? elementType
-        : 'unknown'
+        : iterableType === 'map'
+          ? 'object'
+          : 'unknown'
     const declared = statement.declaredType == null ? null : this.resolveDeclaredType(statement.declaredType, statement.nameLoc)
     const valueType = declared?.valueType ?? elementType
     const inferredDeclaredType = declared == null ? elementDeclaredType : statement.declaredType
+    const shape = declared?.shape ?? mapEntryShape
 
     statement.valueType = valueType
     statement.nullable = declared?.nullable === true
@@ -1783,7 +1791,7 @@ class Checker {
     statement.mapValueType = declared?.mapValueType ?? null
     statement.setElementType = declared?.setElementType ?? null
     statement.functionType = declared?.functionType ?? null
-    statement.shape = declared?.shape ?? null
+    statement.shape = shape
 
     if (declared != null) {
       this.checkAssignableType(elementType, declared.valueType, statement.nameLoc, declared.nullable)
@@ -1801,7 +1809,7 @@ class Checker {
         mapValueType: declared?.mapValueType ?? null,
         setElementType: declared?.setElementType ?? null,
         functionType: declared?.functionType ?? null,
-        shape: declared?.shape ?? null,
+        shape,
         loc: statement.nameLoc
       }, statement.nameLoc)
 
@@ -1809,6 +1817,28 @@ class Checker {
         this.checkScopedBody(statement.body)
       })
     })
+  }
+
+  createMapEntryShape(mapType: { key: ValueType | null, value: ValueType | null } | null, loc: SourceLocation): ObjectShapeInfo {
+    return {
+      kind: 'object',
+      fields: [
+        {
+          name: 'key',
+          readonly: true,
+          declaredType: mapType?.key ?? 'unknown',
+          valueType: mapType?.key ?? 'unknown',
+          loc
+        },
+        {
+          name: 'value',
+          readonly: true,
+          declaredType: mapType?.value ?? 'unknown',
+          valueType: mapType?.value ?? 'unknown',
+          loc
+        }
+      ]
+    }
   }
 
   checkSwitchStatement(statement: AnyNode): void {

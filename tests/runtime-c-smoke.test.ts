@@ -2869,6 +2869,70 @@ export function main(): void {
   }
 })
 
+test('generated C for of Map lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-map-'))
+  const source = join(dir, 'for-of-map.c')
+  const output = join(dir, 'for-of-map')
+
+  try {
+    const result = compileSource(`type Bag = {
+  scores: Map<string, number>
+}
+
+export function main(): void {
+  const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+  const bag: Bag = { scores }
+  let total = 0
+  let letters = 0
+  let ada = 0
+  let grace = 0
+  let alan = 0
+
+  for (const entry of bag['scores'].set('Alan', 5)) {
+    total = total + entry.value
+    letters = letters + entry.key.length
+    if (entry.key === 'Ada') {
+      ada = entry.value
+    }
+    if (entry.key === 'Grace') {
+      grace = entry.value
+    }
+    if (entry.key === 'Alan') {
+      alan = entry.value
+    }
+  }
+
+  console.log(total, letters, ada, grace, alan)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '21 12 7 9 5\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C inline for of array lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

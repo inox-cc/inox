@@ -467,11 +467,28 @@ function emitForStatement(statement: AnyNode, options: JsEmitOptions = {}): stri
 }
 
 function emitForOfStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
+  if (isMapForOfStatement(statement)) {
+    const entry = `ccjsMapEntry_${statement.name}`
+
+    return [
+      `for (const ${entry} of ${emitExpression(statement.iterable, options)}) {`,
+      ...indent([
+        `${statement.kind} ${statement.name} = { key: ${entry}[0], value: ${entry}[1] }`,
+        ...emitStatementBody(statement.body, options)
+      ]),
+      '}'
+    ]
+  }
+
   return [
     `for (${statement.kind} ${statement.name} of ${emitExpression(statement.iterable, options)}) {`,
     ...indent(emitStatementBody(statement.body, options)),
     '}'
   ]
+}
+
+function isMapForOfStatement(statement: AnyNode): boolean {
+  return statement.type === 'ForOfStatement' && statement.iterable?.valueType === 'map'
 }
 
 function emitSwitchStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {

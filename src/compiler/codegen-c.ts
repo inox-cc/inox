@@ -2168,6 +2168,7 @@ function emitForOfStatement(statement, context) {
   const setup: string[] = []
   let array: any = resolveKnownForOfArray(statement.iterable, context)
   let runtimeArray: any = null
+  let runtimeMap: any = null
   let runtimeSet: any = null
 
   if (array == null && statement.iterable?.type === 'ArrayLiteral') {
@@ -2189,6 +2190,14 @@ function emitForOfStatement(statement, context) {
   }
 
   if (array == null && runtimeArray == null) {
+    runtimeMap = resolveRuntimeForOfMap(statement.iterable, context)
+  }
+
+  if (runtimeMap != null) {
+    return emitRuntimeMapForOfStatement(statement, runtimeMap, context)
+  }
+
+  if (array == null && runtimeArray == null) {
     runtimeSet = resolveRuntimeForOfSet(statement.iterable, context)
   }
 
@@ -2197,7 +2206,7 @@ function emitForOfStatement(statement, context) {
   }
 
   if (array == null && runtimeArray == null) {
-    context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports arrays and Set values', statement.loc))
+    context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports arrays, Map values and Set values', statement.loc))
     return []
   }
 
@@ -2252,6 +2261,67 @@ function emitForOfStatement(statement, context) {
       '}',
       ...emitBreakTargetLabel(breakLabel, context),
       ...emitPrepareOwnedValueWrite(value)
+    ]
+  })
+}
+
+function emitRuntimeMapForOfStatement(statement, runtimeMap, context) {
+  const keyType = runtimeMap.keyType ?? 'unknown'
+  const valueType = runtimeMap.valueType ?? 'unknown'
+
+  if (!['number', 'boolean', 'string'].includes(keyType) || !['number', 'boolean', 'string'].includes(valueType)) {
+    context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports only Map entries with number/boolean/string keys and values', statement.loc))
+    return []
+  }
+
+  const index = nextCName(context, 'ccjs_for_map_index')
+  const map = nextCName(context, 'ccjs_for_map')
+  const shapeName = nextCName(context, 'ccjs_shape_map_entry')
+  const fieldsName = `${shapeName}_fields`
+  const breakLabel = nextCName(context, 'ccjs_break')
+  const continueLabel = nextCName(context, 'ccjs_continue')
+  const fields = [
+    {
+      name: 'key',
+      readonly: true,
+      valueType: keyType
+    },
+    {
+      name: 'value',
+      readonly: true,
+      valueType
+    }
+  ]
+
+  registerOwnedValue(context, statement.name)
+
+  return withVariableScope(context, () => {
+    context.variables.set(statement.name, 'object')
+    context.objectShapes.set(statement.name, fields)
+    const body = withBreakTarget(context, breakLabel, false, () => withContinueTarget(context, continueLabel, false, () => withVariableScope(context, () => emitStatementBody(statement.body, context))))
+
+    return [
+      `static const ccjs_field_info ${fieldsName}[] = {`,
+      '  { "key", CCJS_FIELD_READONLY },',
+      '  { "value", CCJS_FIELD_READONLY },',
+      '};',
+      `static const ccjs_shape ${shapeName} = {`,
+      '  2,',
+      `  ${fieldsName}`,
+      '};',
+      ...runtimeMap.lines,
+      `ccjs_map* ${map} = (ccjs_map*)${runtimeMap.name}.as.ref;`,
+      `for (size_t ${index} = 0; ${index} < ${map}->cap; ${index} += 1) {`,
+      `  if (${map}->entries[${index}].state != CCJS_MAP_SLOT_OCCUPIED) continue;`,
+      ...emitPrepareOwnedValueWrite(statement.name).map(line => `  ${line}`),
+      `  ${emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`, context)}`,
+      `  ${emitStatusCheck(`ccjs_object_init_known(${statement.name}, 0, ${map}->entries[${index}].key)`, context)}`,
+      `  ${emitStatusCheck(`ccjs_object_init_known(${statement.name}, 1, ${map}->entries[${index}].value)`, context)}`,
+      ...body.map(line => `  ${line}`),
+      ...emitContinueTargetLabel(continueLabel, context),
+      '}',
+      ...emitBreakTargetLabel(breakLabel, context),
+      ...emitPrepareOwnedValueWrite(statement.name)
     ]
   })
 }
@@ -7527,6 +7597,45 @@ function resolveRuntimeSetElementType(expression, context) {
   return null
 }
 
+function resolveRuntimeMapType(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    return context.mapTypes.get(expression.path[0]) ?? null
+  }
+
+  if (expression?.type === 'CallExpression' || expression?.type === 'NewExpression') {
+    return expression.valueType === 'map'
+      ? {
+          key: expression.mapKeyType ?? 'unknown',
+          value: expression.mapValueType ?? 'unknown'
+        }
+      : null
+  }
+
+  if (expression?.type === 'MemberExpression') {
+    const member = resolveKnownObjectMember(expression, context)
+
+    return member?.valueType === 'map'
+      ? {
+          key: member.mapKeyType ?? 'unknown',
+          value: member.mapValueType ?? 'unknown'
+        }
+      : null
+  }
+
+  if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    const field = resolveKnownObjectIndex(expression, context)
+
+    return field?.valueType === 'map'
+      ? {
+          key: field.mapKeyType ?? 'unknown',
+          value: field.mapValueType ?? 'unknown'
+        }
+      : null
+  }
+
+  return null
+}
+
 function emitPreparedRuntimeArrayIndexValue(expression, element, context, prefix = 'ccjs_array_item') {
   const array = emitCValueExpression(expression.object, context)
   const value = nextCName(context, prefix)
@@ -7645,6 +7754,27 @@ function resolveRuntimeForOfSet(expression, context) {
   return {
     name: receiver.expression,
     elementType,
+    lines: receiver.lines
+  }
+}
+
+function resolveRuntimeForOfMap(expression, context) {
+  const mapType = resolveRuntimeMapType(expression, context)
+
+  if (mapType == null) {
+    return null
+  }
+
+  const receiver = emitPreparedCollectionReceiver(expression, context)
+
+  if (receiver == null || receiver.type !== 'map') {
+    return null
+  }
+
+  return {
+    name: receiver.expression,
+    keyType: mapType.key,
+    valueType: mapType.value,
     lines: receiver.lines
   }
 }
