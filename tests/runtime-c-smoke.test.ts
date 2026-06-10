@@ -117,6 +117,93 @@ int main(void) {
   }
 })
 
+test('C runtime binary bytes value compiles and runs', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-binary-runtime-'))
+  const source = join(dir, 'binary-runtime.c')
+  const output = join(dir, 'binary-runtime')
+
+  try {
+    await writeFile(source, `#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/binary.h"
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  uint8_t data[] = { 1, 2, 3, 4 };
+  ccjs_value bytes = ccjs_undefined_value();
+  ccjs_value slice = ccjs_undefined_value();
+  size_t len = 0;
+  size_t slice_len = 0;
+  uint8_t first = 0;
+  uint8_t changed = 0;
+  uint8_t slice_first = 0;
+  uint8_t slice_second = 0;
+  uint8_t slice_third = 0;
+
+  if (ccjs_bytes_from_data(&allocator, data, 4, &bytes) != CCJS_OK) return 1;
+  if (ccjs_bytes_len(bytes, &len) != CCJS_OK) return 2;
+  if (ccjs_bytes_get(bytes, 0, &first) != CCJS_OK) return 3;
+  if (ccjs_bytes_set(bytes, 2, 9) != CCJS_OK) return 4;
+  if (ccjs_bytes_get(bytes, 2, &changed) != CCJS_OK) return 5;
+  if (ccjs_bytes_slice(bytes, 1, 4, &slice) != CCJS_OK) return 6;
+  if (ccjs_bytes_len(slice, &slice_len) != CCJS_OK) return 7;
+  if (ccjs_bytes_get(slice, 0, &slice_first) != CCJS_OK) return 8;
+  if (ccjs_bytes_get(slice, 1, &slice_second) != CCJS_OK) return 9;
+  if (ccjs_bytes_get(slice, 2, &slice_third) != CCJS_OK) return 10;
+
+  printf("%zu %u %u %zu %u %u %u\\n", len, first, changed, slice_len, slice_first, slice_second, slice_third);
+
+  ccjs_release(slice);
+  ccjs_release(bytes);
+  return 0;
+}
+`)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '4 1 9 3 2 9 4\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('C runtime Map and Set helpers compile and run', async t => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6308,6 +6395,7 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
     'runtime/c/src/core/value.c',
     'runtime/c/src/core/allocator.c',
     'runtime/c/src/core/callback.c',
+    'runtime/c/src/binary/binary.c',
     'runtime/c/src/async/loop.c',
     'runtime/c/src/async/promise.c',
     'runtime/c/src/strings/string.c',

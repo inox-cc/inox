@@ -1,4 +1,5 @@
 #include "ccjs/array.h"
+#include "ccjs/binary.h"
 #include "ccjs/callback.h"
 #include "ccjs/map.h"
 #include "ccjs/object.h"
