@@ -5327,10 +5327,16 @@ test('checks Promise then catch as typed chain calls', () => {
 test('lowers Promise then catch chains to C runtime promises', () => {
   const result = compileSource(`export async function main(): Promise<void> {
   const doubled = Promise.resolve(4).then(value => value * 2)
+  const blockDoubled = Promise.resolve(5).then(value => {
+    return value * 3
+  })
   const failed: Promise<number> = Promise.reject('fail')
   const recovered = failed.catch(error => 95)
+  const blockRecovered = failed.catch(error => {
+    return 96
+  })
 
-  console.log(await doubled, await recovered)
+  console.log(await doubled, await blockDoubled, await recovered, await blockRecovered)
 }
 `, {
     target: 'c'
@@ -5339,9 +5345,14 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   assert.match(result.code, /static ccjs_status ccjs_promise_chain_arrow_\d+\(void\* context, ccjs_value ccjs_value_input, ccjs_value\* out\);/)
   assert.match(result.code, /static ccjs_status ccjs_promise_chain_arrow_\d+\(void\* context, ccjs_value ccjs_value_input, ccjs_value\* out\) \{\n  \(void\)context;\n  if \(out == 0\) return CCJS_ERR_TYPE;\n  \*out = ccjs_undefined_value\(\);\n  if \(ccjs_value_input\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n  double value = ccjs_value_input\.as\.number;/)
   assert.match(result.code, /\*out = ccjs_number_value\(\(value \* 2\)\);/)
+  assert.match(result.code, /\*out = ccjs_number_value\(\(value \* 3\)\);/)
+  assert.match(result.code, /\*out = ccjs_number_value\(96\);/)
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &doubled\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &blockDoubled\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &recovered\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &blockRecovered\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /while \(ccjs_promise_get_state\(doubled\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
+  assert.match(result.code, /while \(ccjs_promise_get_state\(blockDoubled\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
   assert.match(result.code, /while \(ccjs_promise_get_state\(recovered\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
 })
 
