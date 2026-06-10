@@ -31,7 +31,6 @@ export function emitTs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
 }
 
 export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {
-  const programs = graph.modules.map(module => module.hir).filter((program): program is ProgramNode => program != null)
   const irPrograms = graph.modules.flatMap(module => module.hir == null ? [] : [module.ir ?? lowerHirToIr(module.hir)])
   const entryModule = graph.modules.find(module => module.path === graph.entry)
   const entryIr = entryModule?.hir == null ? null : entryModule.ir ?? lowerHirToIr(entryModule.hir)

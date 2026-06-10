@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { emitC } from '../src/compiler/codegen-c.ts'
-import { emitJs } from '../src/compiler/codegen-js.ts'
+import { emitJs, emitJsBundle } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
@@ -3278,6 +3278,49 @@ export function main(): void {
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.syntaxFeatures)), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.globalUsages)), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.functionEffects)), true)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('drives JS bundle body and main wrapper from target-neutral IR programs', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-js-bundle-ir-'))
+
+  try {
+    await writeFile(join(dir, 'lib.ts'), `export function greet(): void {
+  console.log('from lib')
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import { greet } from './lib.ts'
+
+export function main(): void {
+  greet()
+}
+`)
+
+    const result = await compileFile(join(dir, 'main.ts'), {
+      target: 'js'
+    })
+    const graph = {
+      ...result.graph,
+      modules: result.graph.modules.map(module => ({
+        ...module,
+        hir: module.hir == null
+          ? null
+          : {
+              ...module.hir,
+              body: []
+            }
+      }))
+    }
+    const code = emitJsBundle(graph)
+
+    assert.match(code, /function greet\(\)/)
+    assert.match(code, /function main\(\)/)
+    assert.match(code, /const ccjsMainResult = main\(\)/)
   } finally {
     await rm(dir, {
       recursive: true,
