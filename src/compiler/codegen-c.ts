@@ -1,5 +1,5 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionEffects, collectIrGlobalUsages, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
+import { collectIrFunctionEffects, collectIrGlobalUsages, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
 
 const cStringPredicateMethods = new Set([
@@ -29,7 +29,7 @@ export function emitCBundle(graph: ModuleGraph): string {
 
 function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program)), entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
   const diagnostics: Diagnostic[] = []
-  const functions = collectFunctions(programs)
+  const functions = collectFunctions(programs, irPrograms)
   const functionEffects = collectIrFunctionEffects(irPrograms)
   const jsGlobalRoots = new Set(collectIrGlobalUsages(irPrograms).map(usage => usage.root))
   const baseContext = createBaseContext(diagnostics, functions, functionEffects, jsGlobalRoots)
@@ -149,8 +149,8 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, need
   return lines
 }
 
-function collectFunctions(programs) {
-  return programs.flatMap(program => program.body.filter(item => item.type === 'FunctionDeclaration'))
+function collectFunctions(programs: ProgramNode[], irPrograms: IrProgram[]) {
+  return programs.flatMap((program, index) => collectIrTopLevelNodes(irPrograms[index] ?? lowerHirToIr(program), 'function'))
 }
 
 function createThrowingFunctionInfo(functions: AnyNode[], functionEffects: IrFunctionEffect[]) {
@@ -1546,7 +1546,9 @@ function emitMainWrapper(entryProgram, entryIrProgram, baseContext) {
     ]
   }
 
-  const body = entryProgram?.body.filter(item => item.type !== 'FunctionDeclaration' && item.type !== 'ImportDeclaration') ?? []
+  const body = entryProgram == null
+    ? []
+    : collectIrTopLevelNodes(entryIrProgram ?? lowerHirToIr(entryProgram), 'statement')
   const bodyLines: string[] = []
   const lines = [
     'int main(void) {'

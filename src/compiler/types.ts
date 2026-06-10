@@ -65,11 +65,24 @@ export type IrGlobalUsage = {
   loc?: SourceLocation
 }
 
+export type IrTopLevelItemKind =
+  | 'class'
+  | 'function'
+  | 'import'
+  | 'statement'
+
+export type IrTopLevelItem = {
+  kind: IrTopLevelItemKind
+  index: number
+  loc?: SourceLocation
+}
+
 export type IrProgram = {
   type: 'IrProgram'
   version: 1
   features: IrFeature[]
   runtimeRequirements: IrRuntimeRequirement[]
+  topLevelItems: IrTopLevelItem[]
   functionDeclarations: IrFunctionDeclaration[]
   functionEffects: IrFunctionEffect[]
   syntaxFeatures: IrSyntaxFeatureUsage[]

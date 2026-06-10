@@ -13,9 +13,7 @@ export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
     lines.push('')
   }
 
-  for (const item of program.body) {
-    lines.push(...emitTopLevelItem(item))
-  }
+  lines.push(...emitProgramBody(program, {}, ir))
 
   if (hasIrFunctionDeclaration(ir, 'main') && options.callMain !== false) {
     lines.push('')
@@ -49,9 +47,11 @@ export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): s
     }
 
     lines.push(`// ${module.path}`)
+    const ir = module.ir ?? lowerHirToIr(module.hir)
+
     lines.push(...emitProgramBody(module.hir, {
       stripExports: true
-    }))
+    }, ir))
     lines.push('')
   }
 
@@ -65,11 +65,23 @@ export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): s
   return `${lines.join('\n')}\n`
 }
 
-function emitProgramBody(program: ProgramNode, options: JsEmitOptions = {}): string[] {
+function emitProgramBody(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string[] {
   const lines: string[] = []
 
-  for (const item of program.body) {
-    lines.push(...emitTopLevelItem(item, options))
+  for (const topLevelItem of ir.topLevelItems) {
+    const item = ir.body[topLevelItem.index] ?? program.body[topLevelItem.index]
+
+    if (item == null || topLevelItem.kind === 'import') {
+      continue
+    }
+
+    if (topLevelItem.kind === 'function') {
+      lines.push(...emitFunction(item, options))
+    } else if (topLevelItem.kind === 'class') {
+      lines.push(...emitClass(item, options))
+    } else {
+      lines.push(...emitStatement(item, options))
+    }
   }
 
   return lines
@@ -88,22 +100,6 @@ function emitJsPrelude(programs: IrProgram[]): string[] {
   }
 
   return lines
-}
-
-function emitTopLevelItem(item: AnyNode, options: JsEmitOptions = {}): string[] {
-  if (item.type === 'ImportDeclaration') {
-    return []
-  }
-
-  if (item.type === 'FunctionDeclaration') {
-    return emitFunction(item, options)
-  }
-
-  if (item.type === 'ClassDeclaration') {
-    return emitClass(item, options)
-  }
-
-  return emitStatement(item, options)
 }
 
 function emitFunction(node: AnyNode, options: JsEmitOptions = {}): string[] {

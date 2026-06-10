@@ -1,4 +1,4 @@
-import type { AnyNode, IrFeature, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, ProgramNode } from './types.ts'
+import type { AnyNode, IrFeature, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, IrTopLevelItem, IrTopLevelItemKind, ProgramNode } from './types.ts'
 
 const jsStdGlobalRoots = new Set([
   'Array',
@@ -30,14 +30,16 @@ const jsStdGlobalRoots = new Set([
 
 export function lowerHirToIr(program: ProgramNode): IrProgram {
   const features = collectIrFeatures(program)
+  const topLevelItems = collectTopLevelItems(program)
 
   return {
     type: 'IrProgram',
     version: 1,
     features,
     runtimeRequirements: collectRuntimeRequirements(features),
-    functionDeclarations: collectFunctionDeclarations(program),
-    functionEffects: collectIrFunctionEffects([{ body: program.body }]),
+    topLevelItems,
+    functionDeclarations: collectFunctionDeclarations(program, topLevelItems),
+    functionEffects: collectIrFunctionEffects([{ body: program.body, topLevelItems }]),
     syntaxFeatures: collectSyntaxFeatureUsages(program),
     globalUsages: collectGlobalUsages(program),
     body: program.body
@@ -52,8 +54,8 @@ export function hasIrRuntimeRequirement(program: IrProgram, requirement: IrRunti
   return program.runtimeRequirements.includes(requirement)
 }
 
-export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[] }>): IrFunctionEffect[] {
-  return collectFunctionEffects(programs.flatMap(program => program.body.filter(item => item.type === 'FunctionDeclaration')))
+export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[], topLevelItems?: IrTopLevelItem[] }>): IrFunctionEffect[] {
+  return collectFunctionEffects(programs.flatMap(program => collectTopLevelNodes(program, 'function')))
 }
 
 export function collectIrGlobalUsages(programs: Array<{ globalUsages: IrGlobalUsage[] }>): IrGlobalUsage[] {
@@ -62,6 +64,10 @@ export function collectIrGlobalUsages(programs: Array<{ globalUsages: IrGlobalUs
 
 export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, name: string): boolean {
   return program?.functionDeclarations.some(item => item.name === name) === true
+}
+
+export function collectIrTopLevelNodes(program: { body: AnyNode[], topLevelItems: IrTopLevelItem[] }, kind: IrTopLevelItemKind): AnyNode[] {
+  return collectTopLevelNodes(program, kind)
 }
 
 function collectIrFeatures(program: ProgramNode): IrFeature[] {
@@ -86,9 +92,47 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
   return [...requirements].sort()
 }
 
-function collectFunctionDeclarations(program: ProgramNode): IrFunctionDeclaration[] {
-  return program.body
-    .filter((item): item is AnyNode & { name: string } => item.type === 'FunctionDeclaration')
+function collectTopLevelItems(program: ProgramNode): IrTopLevelItem[] {
+  return program.body.map((item, index) => ({
+    kind: topLevelItemKind(item),
+    index,
+    loc: item.loc
+  }))
+}
+
+function topLevelItemKind(item: AnyNode): IrTopLevelItemKind {
+  if (item.type === 'ImportDeclaration') {
+    return 'import'
+  }
+
+  if (item.type === 'FunctionDeclaration') {
+    return 'function'
+  }
+
+  if (item.type === 'ClassDeclaration') {
+    return 'class'
+  }
+
+  return 'statement'
+}
+
+function collectTopLevelNodes(program: { body: AnyNode[], topLevelItems?: IrTopLevelItem[] }, kind: IrTopLevelItemKind): AnyNode[] {
+  if (program.topLevelItems == null) {
+    return program.body.filter(item => topLevelItemKind(item) === kind)
+  }
+
+  return program.topLevelItems
+    .filter(item => item.kind === kind)
+    .map(item => program.body[item.index])
+    .filter((item): item is AnyNode => item != null)
+}
+
+function collectFunctionDeclarations(program: ProgramNode, topLevelItems: IrTopLevelItem[]): IrFunctionDeclaration[] {
+  return collectTopLevelNodes({
+    body: program.body,
+    topLevelItems
+  }, 'function')
+    .filter((item): item is AnyNode & { name: string } => typeof item.name === 'string')
     .map(item => ({
       name: item.name,
       exported: item.exported === true,
