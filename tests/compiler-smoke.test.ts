@@ -1655,6 +1655,40 @@ export function main(): void {
   assert.match(c.code, /if \(ccjs_callback_call\(callback, ccjs_callback_args_\d+, 1, &ccjs_callback_out_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
+test('drives C callback wrapper collection from target-neutral IR top-level items', () => {
+  const source = `type StringCallback = (value: string) => void;
+
+function run(callback: StringCallback): void {
+  callback('typed')
+}
+
+function hello(value: string): void {
+  console.log(value)
+}
+
+export function main(): void {
+  const callback: StringCallback = hello
+  run(callback)
+}
+`
+  const result = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_callback_hello_0\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\);/)
+  assert.throws(() => emitC(result.hir, {
+    ...result.ir,
+    topLevelItems: result.ir.topLevelItems.filter(item => result.ir.body[item.index]?.name !== 'run')
+  }), (error) => {
+    if (!(error instanceof CompileError)) {
+      return false
+    }
+
+    assert.equal(error.diagnostics[0]?.code, 'CCJS_C_FUNCTION_VALUE')
+    return true
+  })
+})
+
 test('compiles typed callback aliases with object parameters through the C callback ABI', () => {
   const source = `type Person = {
   name: string

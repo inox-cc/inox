@@ -33,7 +33,7 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, ir
   const functionEffects = collectIrFunctionEffects(irPrograms)
   const jsGlobalRoots = new Set(collectIrGlobalUsages(irPrograms).map(usage => usage.root))
   const baseContext = createBaseContext(diagnostics, functions, functionEffects, jsGlobalRoots)
-  baseContext.callbackWrappers = collectCallbackWrappers(programs, baseContext)
+  baseContext.callbackWrappers = collectCallbackWrappers(programs, irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || irPrograms.some(program => hasIrRuntimeRequirement(program, 'callback-values'))
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || irPrograms.some(program => hasIrRuntimeRequirement(program, 'managed-values'))
   const needsTimeRuntime = irPrograms.some(program => hasIrRuntimeRequirement(program, 'clocks'))
@@ -454,7 +454,7 @@ function resolveRuntimeFunctionArgumentType(callee, index, param, context) {
   return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
 }
 
-function collectCallbackWrappers(programs, context) {
+function collectCallbackWrappers(programs: ProgramNode[], irPrograms: IrProgram[], context) {
   const wrappers = new Map()
   const pendingPlainFunctionArgs: any[] = []
   const register = (expression, functionType, scopes) => {
@@ -875,15 +875,22 @@ function collectCallbackWrappers(programs, context) {
     }
   }
 
-  for (const program of programs) {
+  for (const [programIndex, program] of programs.entries()) {
+    const ir = irPrograms[programIndex] ?? lowerHirToIr(program)
     const topLevelScope = new Map()
 
-    for (const item of program.body) {
-      if (item.type === 'FunctionDeclaration') {
+    for (const topLevelItem of ir.topLevelItems) {
+      const item = ir.body[topLevelItem.index] ?? program.body[topLevelItem.index]
+
+      if (item == null) {
+        continue
+      }
+
+      if (topLevelItem.kind === 'function') {
         const scope = new Map()
         declareParams(scope, item.params)
         item.body.forEach(statement => visitStatement(statement, [topLevelScope, scope]))
-      } else {
+      } else if (topLevelItem.kind === 'statement') {
         visitStatement(item, [topLevelScope])
       }
     }
