@@ -7078,7 +7078,7 @@ function emitPreparedPromiseMethodExpression(expression, context, options: { out
   const wrapper = callback == null ? null : context.promiseChainArrowWrappers.get(callback)
 
   if (wrapper == null) {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'Promise.then/catch currently supports only non-capturing expression-body, single-return block-body, straight-line block-body or simple if/return block-body arrow callbacks in C', expression.loc))
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'Promise.then/catch currently supports only non-capturing expression-body, single-return block-body, straight-line block-body or simple control-flow block-body arrow callbacks in C', expression.loc))
 
     return {
       lines: [],
@@ -8746,12 +8746,20 @@ function isPromiseChainCallbackStatement(statement) {
     return statement.body.every(isPromiseChainCallbackStatement)
   }
 
+  if (statement.type === 'SwitchStatement') {
+    return isPromiseChainCallbackSwitchStatement(statement)
+  }
+
   if (statement.type !== 'IfStatement') {
     return false
   }
 
   return isPromiseChainCallbackStatement(statement.consequent)
     && (statement.alternate == null || isPromiseChainCallbackStatement(statement.alternate))
+}
+
+function isPromiseChainCallbackSwitchStatement(statement) {
+  return statement.cases.every(item => item.consequent.every(isPromiseChainCallbackStatement))
 }
 
 function emitPreparedArrayCallbackInput(callback, receiver, value, index, context) {

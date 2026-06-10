@@ -5358,6 +5358,29 @@ test('checks Promise then catch as typed chain calls', () => {
   assert.equal(branchPromise?.promiseValueType, 'number')
   assert.match(branchStatement.code, /const promise: Promise<number> = Promise\.resolve\(1\)\.then\(\(value: number\): number => \{/)
 
+  const switchStatement = compileSource(`export function main(): void {
+  const promise = Promise.resolve(2).then(value => {
+    switch (value) {
+      case 2:
+        return value
+      default:
+        return 0
+    }
+
+    return 1
+  })
+
+  console.log(promise)
+}
+`, {
+    target: 'ts'
+  })
+  const switchMain = switchStatement.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const switchPromise = switchMain?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'promise')
+
+  assert.equal(switchPromise?.promiseValueType, 'number')
+  assert.match(switchStatement.code, /const promise: Promise<number> = Promise\.resolve\(2\)\.then\(\(value: number\): number => \{/)
+
   assertDiagnostic(`export function main(): void {
   const source: Promise<number> = Promise.resolve(2)
   source.then((value: string) => value)
@@ -5396,6 +5419,16 @@ test('lowers Promise then catch chains to C runtime promises', () => {
 
     return value
   })
+  const switchDoubled = Promise.resolve(2).then(value => {
+    switch (value) {
+      case 2:
+        return value * 10
+      default:
+        return 0
+    }
+
+    return value
+  })
   const failed: Promise<number> = Promise.reject('fail')
   const recovered = failed.catch(error => 95)
   const blockRecovered = failed.catch(error => {
@@ -5414,7 +5447,7 @@ test('lowers Promise then catch chains to C runtime promises', () => {
     return 0
   })
 
-  console.log(await doubled, await blockDoubled, await multiDoubled, await branchDoubled, await recovered, await blockRecovered, await multiRecovered, await branchRecovered)
+  console.log(await doubled, await blockDoubled, await multiDoubled, await branchDoubled, await switchDoubled, await recovered, await blockRecovered, await multiRecovered, await branchRecovered)
 }
 `, {
     target: 'c'
@@ -5428,6 +5461,7 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   assert.match(result.code, /\*out = ccjs_number_value\(doubled\);/)
   assert.match(result.code, /if \(\(value > 5\)\) \{\n    \(\*out\) = ccjs_number_value\(\(value \* 2\)\);\n    goto ccjs_promise_callback_cleanup;\n  \}/)
   assert.match(result.code, /\(\*out\) = ccjs_number_value\(value\);\n  goto ccjs_promise_callback_cleanup;\nccjs_promise_callback_cleanup:/)
+  assert.match(result.code, /switch \(\(int\)value\) \{\n    case \(int\)2: \{\n      \(\*out\) = ccjs_number_value\(\(value \* 10\)\);\n      goto ccjs_promise_callback_cleanup;/)
   assert.match(result.code, /\*out = ccjs_number_value\(96\);/)
   assert.match(result.code, /const double recovered = 97;/)
   assert.match(result.code, /\*out = ccjs_number_value\(recovered\);/)
@@ -5436,6 +5470,7 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &blockDoubled\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &multiDoubled\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &branchDoubled\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &switchDoubled\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &recovered\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &blockRecovered\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &multiRecovered\) != CCJS_OK\) goto ccjs_cleanup;/)
