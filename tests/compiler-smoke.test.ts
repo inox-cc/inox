@@ -7,7 +7,7 @@ import { emitC, emitCBundle } from '../src/compiler/codegen-c.ts'
 import { emitJs, emitJsBundle } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
-import { collectIrModuleRecords } from '../src/compiler/ir.ts'
+import { collectIrFunctionEffects, collectIrModuleRecords } from '../src/compiler/ir.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 
 test('compiles exported main to runnable JS', () => {
@@ -1535,6 +1535,30 @@ test('collects target-neutral IR feature requirements', () => {
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['Date'])
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.path.join('.')), ['Date.now'])
   assert.match(result.code, /#include "ccjs\/time\.h"/)
+})
+
+test('drives IR function effect collection from top-level item metadata', () => {
+  const result = compileSource(`function fail(): void {
+  throw 'nope'
+}
+
+const label = 'ok'
+console.log(label)
+`, {
+    target: 'js'
+  })
+
+  assert.deepEqual(result.ir.functionEffects, [
+    {
+      name: 'fail',
+      throws: true,
+      throwValueTypes: ['string']
+    }
+  ])
+  assert.deepEqual(collectIrFunctionEffects([{
+    body: result.ir.body,
+    topLevelItems: []
+  }]), [])
 })
 
 test('drives C runtime prelude from target-neutral IR requirements', () => {

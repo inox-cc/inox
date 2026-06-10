@@ -72,7 +72,7 @@ export function hasIrRuntimeRequirement(program: IrProgram, requirement: IrRunti
   return program.runtimeRequirements.includes(requirement)
 }
 
-export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[], topLevelItems?: IrTopLevelItem[] }>): IrFunctionEffect[] {
+export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[], topLevelItems: IrTopLevelItem[] }>): IrFunctionEffect[] {
   return collectFunctionEffects(programs.flatMap(program => collectTopLevelNodes(program, 'function')))
 }
 
@@ -146,11 +146,7 @@ function topLevelItemKind(item: AnyNode): IrTopLevelItemKind {
   return 'statement'
 }
 
-function collectTopLevelNodes(program: { body: AnyNode[], topLevelItems?: IrTopLevelItem[] }, kind: IrTopLevelItemKind): AnyNode[] {
-  if (program.topLevelItems == null) {
-    return program.body.filter(item => topLevelItemKind(item) === kind)
-  }
-
+function collectTopLevelNodes(program: { body: AnyNode[], topLevelItems: IrTopLevelItem[] }, kind: IrTopLevelItemKind): AnyNode[] {
   return program.topLevelItems
     .filter(item => item.kind === kind)
     .map(item => program.body[item.index])
