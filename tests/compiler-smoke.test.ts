@@ -3884,6 +3884,27 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
 })
 
+test('lowers async task frame direct return values to C', () => {
+  const result = compileSource(`async function addLater(input: number, delta: number): Promise<number> {
+  const value = await Promise.resolve(input)
+
+  return value + delta
+}
+
+export async function main(): Promise<void> {
+  console.log(await addLater(2, 4))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /typedef struct ccjs_async_task_addLater_frame \{/)
+  assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(input\)\);/)
+  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
+  assert.doesNotMatch(result.code, /return Promise\.resolve/)
+  assert.doesNotMatch(result.code, /addLater\(2, 4\)/)
+})
+
 test('lowers awaited plain Promise-returning calls to C', () => {
   const result = compileSource(`function getPromise(): Promise<number> {
   return Promise.resolve(2)

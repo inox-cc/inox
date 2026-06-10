@@ -178,6 +178,7 @@ class Checker {
   currentReturnType: ValueType
   currentReturnNullable: boolean
   currentReturnPromiseValueType: ValueType | null
+  currentReturnAsync: boolean
   asyncDepth: number
 
   constructor(program: ProgramNode) {
@@ -190,6 +191,7 @@ class Checker {
     this.currentReturnType = 'void'
     this.currentReturnNullable = false
     this.currentReturnPromiseValueType = null
+    this.currentReturnAsync = false
     this.asyncDepth = 0
   }
 
@@ -296,6 +298,8 @@ class Checker {
         this.currentReturnNullable = returnInfo.nullable
         const previousReturnPromiseValueType = this.currentReturnPromiseValueType
         this.currentReturnPromiseValueType = returnInfo.promiseValueType ?? null
+        const previousReturnAsync = this.currentReturnAsync
+        this.currentReturnAsync = item.async === true
         const previousAsyncDepth = this.asyncDepth
         this.asyncDepth = item.async ? this.asyncDepth + 1 : this.asyncDepth
 
@@ -324,6 +328,7 @@ class Checker {
           this.currentReturnType = previousReturnType
           this.currentReturnNullable = previousReturnNullable
           this.currentReturnPromiseValueType = previousReturnPromiseValueType
+          this.currentReturnAsync = previousReturnAsync
           this.asyncDepth = previousAsyncDepth
         }
       })
@@ -502,6 +507,17 @@ class Checker {
 
     if (statement.type === 'ReturnStatement') {
       const actual = statement.argument == null ? 'void' : this.checkExpression(statement.argument)
+
+      if (this.currentReturnAsync && this.currentReturnType === 'promise' && this.currentReturnPromiseValueType != null) {
+        if (actual === 'promise') {
+          this.checkAssignableType(this.resolveExpressionPromiseValueType(statement.argument), this.currentReturnPromiseValueType, statement.loc)
+        } else {
+          this.checkAssignableType(actual, this.currentReturnPromiseValueType, statement.loc, false, this.expressionCanBeNull(statement.argument))
+        }
+
+        return
+      }
+
       this.checkAssignableType(actual, this.currentReturnType, statement.loc, this.currentReturnNullable, this.expressionCanBeNull(statement.argument))
 
       if (this.currentReturnType === 'promise' && this.currentReturnPromiseValueType != null) {
@@ -2138,16 +2154,19 @@ class Checker {
         const previousReturnType = this.currentReturnType
         const previousReturnNullable = this.currentReturnNullable
         const previousReturnPromiseValueType = this.currentReturnPromiseValueType
+        const previousReturnAsync = this.currentReturnAsync
 
         try {
           this.currentReturnType = functionType.returnType
           this.currentReturnNullable = functionType.returnNullable === true
           this.currentReturnPromiseValueType = functionType.returnPromiseValueType ?? null
+          this.currentReturnAsync = false
           this.checkStatements(expression.body)
         } finally {
           this.currentReturnType = previousReturnType
           this.currentReturnNullable = previousReturnNullable
           this.currentReturnPromiseValueType = previousReturnPromiseValueType
+          this.currentReturnAsync = previousReturnAsync
         }
       }
     })
@@ -2179,6 +2198,8 @@ class Checker {
         this.currentReturnNullable = methodReturnInfo.nullable
         const previousReturnPromiseValueType = this.currentReturnPromiseValueType
         this.currentReturnPromiseValueType = methodReturnInfo.promiseValueType ?? null
+        const previousReturnAsync = this.currentReturnAsync
+        this.currentReturnAsync = false
 
         this.declare('this', {
           kind: 'this',
@@ -2212,6 +2233,7 @@ class Checker {
           this.currentReturnType = previousReturnType
           this.currentReturnNullable = previousReturnNullable
           this.currentReturnPromiseValueType = previousReturnPromiseValueType
+          this.currentReturnAsync = previousReturnAsync
         }
       })
     }
@@ -2952,16 +2974,19 @@ class Checker {
     const previousReturnType = this.currentReturnType
     const previousReturnNullable = this.currentReturnNullable
     const previousReturnPromiseValueType = this.currentReturnPromiseValueType
+    const previousReturnAsync = this.currentReturnAsync
 
     try {
       this.currentReturnType = returnType
       this.currentReturnNullable = returnNullable
       this.currentReturnPromiseValueType = returnPromiseValueType
+      this.currentReturnAsync = false
       callback()
     } finally {
       this.currentReturnType = previousReturnType
       this.currentReturnNullable = previousReturnNullable
       this.currentReturnPromiseValueType = previousReturnPromiseValueType
+      this.currentReturnAsync = previousReturnAsync
     }
   }
 

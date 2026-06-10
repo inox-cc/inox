@@ -501,7 +501,7 @@ function resolveAsyncTaskWrapperBody(statement, context) {
     return null
   }
 
-  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument)
+  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, context)
 
   if (returnExpression == null) {
     return null
@@ -567,12 +567,16 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(expression, context) {
     && context.promiseChainArrowWrappers.has(callback)
 }
 
-function resolveAsyncTaskReturnValueExpression(expression) {
-  if (expression?.type !== 'CallExpression' || cPromiseRuntimeCallName(expression.callee) !== 'resolve') {
-    return null
+function resolveAsyncTaskReturnValueExpression(expression, returnType, context) {
+  if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'resolve') {
+    return expression.args[0] ?? null
   }
 
-  return expression.args[0] ?? null
+  if ((returnType === 'number' || returnType === 'boolean') && inferExpressionType(expression, context) === returnType) {
+    return expression
+  }
+
+  return null
 }
 
 function emitAsyncTaskFrameType(wrapper) {
