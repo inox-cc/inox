@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "features": [
+    "runtime-values"
+  ],
+  "runtimeRequirements": [
+    "managed-values"
+  ],
+  "topLevelItems": [
+    {
+      "kind": "type",
+      "index": 0,
+      "loc": {
+        "line": 1,
+        "column": 6
+      }
+    },
+    {
+      "kind": "function",
+      "index": 1,
+      "loc": {
+        "line": 6,
+        "column": 10
+      }
+    },
+    {
+      "kind": "function",
+      "index": 2,
+      "loc": {
+        "line": 10,
+        "column": 17
+      }
+    }
+  ],
+  "functionDeclarations": [
+    {
+      "name": "greet",
+      "exported": false,
+      "async": false,
+      "params": [
+        {
+          "name": "user",
+          "declaredType": "User",
+          "valueType": "object",
+          "nullable": false,
+          "shape": {
+            "kind": "object",
+            "fields": [
+              {
+                "name": "id",
+                "readonly": true,
+                "declaredType": "number",
+                "valueType": "number",
+                "nullable": false,
+                "loc": {
+                  "line": 2,
+                  "column": 12
+                }
+              },
+              {
+                "name": "name",
+                "readonly": false,
+                "declaredType": "string",
+                "valueType": "string",
+                "nullable": false,
+                "loc": {
+                  "line": 3,
+                  "column": 3
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "returnType": "void",
+      "returnNullable": false,
+      "loc": {
+        "line": 6,
+        "column": 10
+      }
+    },
+    {
+      "name": "main",
+      "exported": true,
+      "async": false,
+      "params": [],
+      "returnType": "void",
+      "returnNullable": false,
+      "loc": {
+        "line": 10,
+        "column": 17
+      }
+    }
+  ],
+  "functionEffects": [
+    {
+      "name": "greet",
+      "throws": false,
+      "throwValueTypes": []
+    },
+    {
+      "name": "main",
+      "throws": false,
+      "throwValueTypes": []
+    }
+  ],
+  "syntaxFeatures": [],
+  "globalUsages": [],
+  "bodySummary": [
+    {
+      "index": 0,
+      "type": "TypeAliasDeclaration",
+      "name": "User",
+      "exported": false,
+      "fields": [
+        {
+          "name": "id",
+          "readonly": true,
+          "valueType": "number",
+          "loc": {
+            "line": 2,
+            "column": 12
+          }
+        },
+        {
+          "name": "name",
+          "readonly": false,
+          "valueType": "string",
+          "loc": {
+            "line": 3,
+            "column": 3
+          }
+        }
+      ],
+      "loc": {
+        "line": 1,
+        "column": 6
+      }
+    },
+    {
+      "index": 1,
+      "type": "FunctionDeclaration",
+      "name": "greet",
+      "exported": false,
+      "async": false,
+      "loc": {
+        "line": 6,
+        "column": 10
+      }
+    },
+    {
+      "index": 2,
+      "type": "FunctionDeclaration",
+      "name": "main",
+      "exported": true,
+      "async": false,
+      "loc": {
+        "line": 10,
+        "column": 17
+      }
+    }
+  ]
+}

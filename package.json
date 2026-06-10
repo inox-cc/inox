@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
     "test:fixtures": "node scripts/test-fixtures.ts",
-    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures"
+    "test:snapshots": "node scripts/test-ir-snapshots.ts",
+    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:snapshots"
   },
   "engines": {
     "node": ">=24"

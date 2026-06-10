@@ -41,6 +41,7 @@ const requiredFiles: string[] = [
   'src/compiler/lexer.ts',
   'src/compiler/lower.ts',
   'src/compiler/parser.ts',
+  'scripts/test-ir-snapshots.ts',
   'tests/README.md'
 ]
 
@@ -54,7 +55,8 @@ const requiredFixtureDirs: string[] = [
   'tests/fixtures/codegen/c',
   'tests/fixtures/runtime',
   'tests/fixtures/diagnostics',
-  'tests/fixtures/capabilities'
+  'tests/fixtures/capabilities',
+  'tests/snapshots/ir'
 ]
 
 export async function collectRepoChecks(): Promise<string[]> {
