@@ -1913,6 +1913,7 @@ test('drives C collection headers from target-neutral IR requirements', () => {
   ])
   assert.doesNotMatch(stringOnly.code, /#include "ccjs\/array\.h"/)
   assert.doesNotMatch(stringOnly.code, /#include "ccjs\/map\.h"/)
+  assert.doesNotMatch(stringOnly.code, /#include "ccjs\/object\.h"/)
   assert.doesNotMatch(stringOnly.code, /#include "ccjs\/set\.h"/)
   assert.deepEqual(arrayResult.ir.runtimeRequirements, [
     'collections',
@@ -1925,6 +1926,47 @@ test('drives C collection headers from target-neutral IR requirements', () => {
   assert.doesNotMatch(withoutCollections, /#include "ccjs\/array\.h"/)
   assert.doesNotMatch(withoutCollections, /#include "ccjs\/map\.h"/)
   assert.doesNotMatch(withoutCollections, /#include "ccjs\/set\.h"/)
+})
+
+test('drives C object headers from target-neutral IR requirements', () => {
+  const objectResult = compileSource(`type User = {
+  name: string
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  console.log(user.name)
+}
+`, {
+    target: 'c'
+  })
+  const mapEntryResult = compileSource(`export function main(): void {
+  const scores: Map<string, number> = new Map([['Ada', 7]])
+
+  for (const entry of scores) {
+    console.log(entry.key, entry.value)
+  }
+}
+`, {
+    target: 'c'
+  })
+  const withoutObjects = emitCFromIr({
+    ...objectResult.ir,
+    runtimeRequirements: objectResult.ir.runtimeRequirements.filter(item => item !== 'objects')
+  })
+
+  assert.deepEqual(objectResult.ir.runtimeRequirements, [
+    'managed-values',
+    'objects'
+  ])
+  assert.match(objectResult.code, /#include "ccjs\/object\.h"/)
+  assert.doesNotMatch(withoutObjects, /#include "ccjs\/object\.h"/)
+  assert.deepEqual(mapEntryResult.ir.runtimeRequirements, [
+    'collections',
+    'managed-values',
+    'objects'
+  ])
+  assert.match(mapEntryResult.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_map_entry_\d+, &entry\)/)
 })
 
 test('drives C unsupported syntax diagnostics from stored target-neutral IR syntax features', () => {

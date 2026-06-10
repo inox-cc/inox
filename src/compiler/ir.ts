@@ -145,6 +145,9 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
     } else if (feature === 'collections') {
       requirements.add('collections')
       requirements.add('managed-values')
+    } else if (feature === 'objects') {
+      requirements.add('managed-values')
+      requirements.add('objects')
     } else if (feature === 'array-pop-null' || feature === 'map-get-null' || feature === 'map-index-set') {
       continue
     } else {
@@ -633,6 +636,15 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     features.add('runtime-values')
   }
 
+  if (node.type === 'ObjectLiteral') {
+    features.add('objects')
+  }
+
+  if (node.type === 'ForOfStatement' && node.shape?.kind === 'object') {
+    features.add('objects')
+    features.add('runtime-values')
+  }
+
   if (node.type === 'ArrayLiteral') {
     features.add('collections')
   }
@@ -642,6 +654,8 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
 
     if (collectionConstructorName(node) != null) {
       features.add('collections')
+    } else if (objectConstructorName(node) != null) {
+      features.add('objects')
     }
   }
 
@@ -659,6 +673,16 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     features.add('collections')
     features.add('runtime-values')
     features.add('map-index-set')
+  }
+
+  if (node.type === 'AssignmentExpression' && isObjectFieldExpression(node.target)) {
+    features.add('objects')
+    features.add('runtime-values')
+  }
+
+  if (isObjectFieldExpression(node)) {
+    features.add('objects')
+    features.add('runtime-values')
   }
 
   if (node.type === 'OptionalCallExpression') {
@@ -744,6 +768,24 @@ function collectionConstructorName(expression: AnyNode): string | null {
   }
 
   return ['Map', 'Set'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
+}
+
+function objectConstructorName(expression: AnyNode): string | null {
+  if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return null
+  }
+
+  return expression.callee.path[0] === 'Error' ? expression.callee.path[0] : null
+}
+
+function isObjectFieldExpression(expression: AnyNode | null | undefined): boolean {
+  if (expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression') {
+    return expression.object?.shape?.kind === 'object'
+  }
+
+  return (expression?.type === 'IndexExpression' || expression?.type === 'OptionalIndexExpression')
+    && expression.object?.shape?.kind === 'object'
+    && expression.collectionKind !== 'map'
 }
 
 function collectionMethodCallName(expression: AnyNode): string | null {

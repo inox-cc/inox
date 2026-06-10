@@ -42,12 +42,13 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || hasRuntimeRequirement(runtimeRequirements, 'callback-values')
   const needsCollectionRuntime = hasRuntimeRequirement(runtimeRequirements, 'collections')
-  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || needsCollectionRuntime || hasRuntimeRequirement(runtimeRequirements, 'managed-values')
+  const needsObjectRuntime = hasRuntimeRequirement(runtimeRequirements, 'objects')
+  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || hasRuntimeRequirement(runtimeRequirements, 'managed-values')
   const needsTimeRuntime = hasRuntimeRequirement(runtimeRequirements, 'clocks')
   const needsStringHeader = hasRuntimeRequirement(runtimeRequirements, 'string-bytes')
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
   for (const wrapper of arrowCallbackWrappers) {
@@ -97,7 +98,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -117,7 +118,9 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, need
     if (needsCollectionRuntime) {
       lines.push('#include "ccjs/map.h"')
     }
-    lines.push('#include "ccjs/object.h"')
+    if (needsObjectRuntime) {
+      lines.push('#include "ccjs/object.h"')
+    }
     if (needsCollectionRuntime) {
       lines.push('#include "ccjs/set.h"')
     }

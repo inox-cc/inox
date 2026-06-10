@@ -1,10 +1,12 @@
 {
   "version": 1,
   "features": [
+    "objects",
     "runtime-values"
   ],
   "runtimeRequirements": [
-    "managed-values"
+    "managed-values",
+    "objects"
   ],
   "topLevelItems": [
     {

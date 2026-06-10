@@ -31,6 +31,7 @@ export type IrFeature =
   | 'collections'
   | 'map-index-set'
   | 'map-get-null'
+  | 'objects'
   | 'runtime-values'
   | 'string-bytes'
 
@@ -39,6 +40,7 @@ export type IrRuntimeRequirement =
   | 'clocks'
   | 'collections'
   | 'managed-values'
+  | 'objects'
   | 'string-bytes'
 
 export type IrThrowValueType = 'error' | 'other' | 'string'
