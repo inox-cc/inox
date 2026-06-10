@@ -553,6 +553,159 @@ int main(void) {
   }
 })
 
+test('C runtime Promise chains fulfillment and rejection recovery', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-promise-chain-runtime-'))
+  const source = join(dir, 'promise-chain-runtime.c')
+  const output = join(dir, 'promise-chain-runtime')
+
+  try {
+    await writeFile(source, `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/promise.h"
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+typedef struct test_log {
+  int count;
+  int finalized;
+  int values[8];
+} test_log;
+
+static void push_value(test_log* log, ccjs_value value) {
+  log->values[log->count] = (int)value.as.number;
+  log->count += 1;
+}
+
+static ccjs_status double_value(void* context, ccjs_value value, ccjs_value* out) {
+  if (value.tag != CCJS_TAG_NUMBER || out == 0) return CCJS_ERR_TYPE;
+
+  push_value((test_log*)context, value);
+  *out = ccjs_number_value(value.as.number * 2);
+  return CCJS_OK;
+}
+
+static ccjs_status recover_value(void* context, ccjs_value value, ccjs_value* out) {
+  if (value.tag != CCJS_TAG_NUMBER || out == 0) return CCJS_ERR_TYPE;
+
+  push_value((test_log*)context, value);
+  *out = ccjs_number_value(value.as.number + 90);
+  return CCJS_OK;
+}
+
+static ccjs_status observe_value(void* context, ccjs_value value) {
+  if (value.tag != CCJS_TAG_NUMBER) return CCJS_ERR_TYPE;
+
+  push_value((test_log*)context, value);
+  return CCJS_OK;
+}
+
+static void finalize_chain(void* context) {
+  ((test_log*)context)->finalized += 1;
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_loop loop;
+  ccjs_promise* fulfilled = 0;
+  ccjs_promise* doubled = 0;
+  ccjs_promise* rejected = 0;
+  ccjs_promise* recovered = 0;
+  ccjs_promise* rejected_factory = 0;
+  ccjs_promise* propagated = 0;
+  ccjs_value result = ccjs_undefined_value();
+  int propagated_value = 0;
+  test_log log = { 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 } };
+
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
+
+  if (ccjs_promise_new(&loop, &fulfilled) != CCJS_OK) return 2;
+  if (ccjs_promise_chain(fulfilled, double_value, 0, &log, finalize_chain, &doubled) != CCJS_OK) return 3;
+  if (ccjs_promise_then(doubled, observe_value, 0, &log, 0) != CCJS_OK) return 4;
+  if (ccjs_promise_resolve(fulfilled, ccjs_number_value(4)) != CCJS_OK) return 5;
+  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 6;
+  if (log.count != 2 || log.values[0] != 4 || log.values[1] != 8 || log.finalized != 1) return 7;
+  if (ccjs_promise_get_result(doubled, &result) != CCJS_OK) return 8;
+  if (result.as.number != 8) return 9;
+  ccjs_release(result);
+  result = ccjs_undefined_value();
+
+  if (ccjs_promise_new(&loop, &rejected) != CCJS_OK) return 10;
+  if (ccjs_promise_catch(rejected, recover_value, &log, finalize_chain, &recovered) != CCJS_OK) return 11;
+  if (ccjs_promise_then(recovered, observe_value, 0, &log, 0) != CCJS_OK) return 12;
+  if (ccjs_promise_reject(rejected, ccjs_number_value(5)) != CCJS_OK) return 13;
+  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 14;
+  if (log.count != 4 || log.values[2] != 5 || log.values[3] != 95 || log.finalized != 2) return 15;
+  if (ccjs_promise_get_result(recovered, &result) != CCJS_OK) return 16;
+  if (result.as.number != 95) return 17;
+  ccjs_release(result);
+  result = ccjs_undefined_value();
+
+  if (ccjs_promise_rejected(&loop, ccjs_number_value(6), &rejected_factory) != CCJS_OK) return 18;
+  if (ccjs_promise_chain(rejected_factory, 0, 0, &log, finalize_chain, &propagated) != CCJS_OK) return 19;
+  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 20;
+  if (ccjs_promise_get_state(propagated) != CCJS_PROMISE_REJECTED) return 21;
+  if (ccjs_promise_get_result(propagated, &result) != CCJS_OK) return 22;
+  if (result.as.number != 6) return 23;
+  propagated_value = (int)result.as.number;
+  ccjs_release(result);
+  result = ccjs_undefined_value();
+  if (log.finalized != 3) return 24;
+
+  ccjs_promise_release(propagated);
+  ccjs_promise_release(rejected_factory);
+  ccjs_promise_release(recovered);
+  ccjs_promise_release(rejected);
+  ccjs_promise_release(doubled);
+  ccjs_promise_release(fulfilled);
+  ccjs_loop_dispose(&loop);
+
+  printf("%d %d %d %d %d %d %d\\n", log.count, log.values[0], log.values[1], log.values[2], log.values[3], log.finalized, propagated_value);
+  return 0;
+}
+`)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '4 4 8 5 95 3 6\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('C runtime loop polls immediates and timers by turn', async t => {
   const probe = await runCommand('cc', ['--version'])
 
