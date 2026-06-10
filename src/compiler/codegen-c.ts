@@ -709,8 +709,16 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
   const wrappers = new Map()
   const pendingPlainFunctionArgs: any[] = []
   const register = (expression, functionType, scopes) => {
-    if (isPlainFunctionPointerType(functionType) && expression?.type === 'ArrowFunctionExpression') {
+    const arrowNeedsEventLoop = expression?.type === 'ArrowFunctionExpression'
+      && functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions)
+
+    if (isPlainFunctionPointerType(functionType) && expression?.type === 'ArrowFunctionExpression' && !arrowNeedsEventLoop) {
       registerPlainArrow(expression, functionType, scopes)
+      return
+    }
+
+    if (arrowNeedsEventLoop && isSupportedRuntimeCallbackType(functionType)) {
+      registerRuntime(expression, functionType, scopes)
       return
     }
 
@@ -797,6 +805,7 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
       finalizerName: `ccjs_callback_context_${index}_finalize`,
       expression,
       functionType,
+      needsEventLoop: functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions),
       captures
     }
 
@@ -1775,9 +1784,10 @@ function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
     return emitRuntimeArrowCallbackWrapperDeclaration(wrapper, context)
   }
 
+  const targetTakesEventLoop = functionTakesEventLoopParam(wrapper.target, context)
   const lines = [
     `${emitRuntimeCallbackWrapperHead(wrapper)} {`,
-    '  (void)context;',
+    targetTakesEventLoop ? '  if (context == 0) return CCJS_ERR_TYPE;' : '  (void)context;',
     `  if (out == 0 || arg_count != ${wrapper.functionType.params.length}${wrapper.functionType.params.length === 0 ? '' : ' || args == 0'}) return CCJS_ERR_TYPE;`,
     '  *out = ccjs_undefined_value();'
   ]
@@ -1788,7 +1798,8 @@ function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
     args.push(emitRuntimeCallbackWrapperArg(param, index))
   }
 
-  const call = `${context.functionNames.get(wrapper.target) ?? emitCFunctionName(wrapper.target)}(${args.join(', ')})`
+  const callArgs = targetTakesEventLoop ? ['(ccjs_loop*)context', ...args] : args
+  const call = `${context.functionNames.get(wrapper.target) ?? emitCFunctionName(wrapper.target)}(${callArgs.join(', ')})`
 
   if (wrapper.functionType.returnType === 'number') {
     lines.push(`  *out = ccjs_number_value(${call});`)
@@ -1807,12 +1818,13 @@ function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
 }
 
 function isRuntimeArrowCallbackWrapperWithContext(wrapper) {
-  return wrapper.kind === 'arrow' && wrapper.captures.length > 0
+  return wrapper.kind === 'arrow' && (wrapper.captures.length > 0 || wrapper.needsEventLoop === true)
 }
 
 function emitRuntimeArrowCallbackContextType(wrapper) {
   return [
     `typedef struct ${wrapper.contextTypeName} {`,
+    ...(wrapper.needsEventLoop === true ? ['  ccjs_loop* ccjs_loop;'] : []),
     ...wrapper.captures.map(capture => `  ${emitRuntimeArrowCaptureCType(capture)} ${emitRuntimeArrowCaptureField(capture)};`),
     `} ${wrapper.contextTypeName};`
   ]
@@ -1920,6 +1932,13 @@ function emitRuntimeArrowCallbackContextLocals(wrapper, context) {
     `${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)context;`
   ]
 
+  if (wrapper.needsEventLoop === true) {
+    context.eventLoopUsed = true
+    context.externalEventLoop = true
+    lines.push('if (captured->ccjs_loop == 0) return CCJS_ERR_TYPE;')
+    lines.push('ccjs_loop* ccjs_loop = captured->ccjs_loop;')
+  }
+
   for (const capture of wrapper.captures) {
     context.variables.set(capture.name, capture.valueType)
 
@@ -2005,6 +2024,10 @@ function emitRuntimeArrowCaptureCType(capture) {
 
   if (capture.valueType === 'string') {
     return 'char*'
+  }
+
+  if (capture.valueType === 'timer') {
+    return 'ccjs_timer_handle*'
   }
 
   return 'double'
@@ -7695,14 +7718,6 @@ function emitRuntimeCallbackValueInto(expression, functionType, out, context) {
     ]
   }
 
-  if (functionTakesEventLoopParam(expression.path[0], context)) {
-    context.diagnostics.push(diagnostic('CCJS_C_TIMER_CALLBACK', 'timer callbacks that schedule timers need callback loop capture and are not supported by the current C backend slice', expression.loc))
-    return [
-      ...emitPrepareOwnedValueWrite(out),
-      `${out} = ccjs_undefined_value();`
-    ]
-  }
-
   const wrapper = runtimeCallbackWrapperFor(expression.path[0], functionType, context)
 
   if (wrapper == null) {
@@ -7713,9 +7728,17 @@ function emitRuntimeCallbackValueInto(expression, functionType, out, context) {
     ]
   }
 
+  const callbackContext = functionTakesEventLoopParam(expression.path[0], context)
+    ? emitEventLoopReference(context)
+    : '0'
+
+  if (callbackContext !== '0') {
+    registerEventLoop(context)
+  }
+
   return [
     ...emitPrepareOwnedValueWrite(out),
-    emitStatusCheck(`ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, 0, 0, &${out})`, context)
+    emitStatusCheck(`ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, ${callbackContext}, 0, &${out})`, context)
   ]
 }
 
@@ -7729,12 +7752,12 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
       context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing this mutable binding in C callbacks requires unsupported boxed closure storage', wrapper.expression.loc))
     }
 
-    if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
-      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing C callbacks currently support only const number/boolean/string/object bindings', wrapper.expression.loc))
+    if (!['number', 'boolean', 'string', 'object', 'timer'].includes(capture.valueType)) {
+      context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'capturing C callbacks currently support only const number/boolean/string/object/timer bindings', wrapper.expression.loc))
     }
   }
 
-  if (wrapper.captures.length === 0) {
+  if (!isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
     lines.push(emitStatusCheck(`ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, 0, 0, &${out})`, context))
     return lines
   }
@@ -7743,6 +7766,11 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
 
   lines.push(`${wrapper.contextTypeName}* ${contextName} = ccjs_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`)
   lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
+
+  if (wrapper.needsEventLoop === true) {
+    registerEventLoop(context)
+    lines.push(`${contextName}->ccjs_loop = ${emitEventLoopReference(context)};`)
+  }
 
   for (const capture of wrapper.captures) {
     lines.push(...emitRuntimeArrowCaptureStoreLines(capture, contextName, context))

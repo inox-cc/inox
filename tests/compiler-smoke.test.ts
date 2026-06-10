@@ -6021,9 +6021,13 @@ function schedule(): void {
   clearInterval(interval)
 }
 
+function scheduleLater(): void {
+  setTimeout(onTimeout, 1)
+}
+
 export function main(): void {
   schedule()
-  const immediate = setImmediate(onImmediate)
+  const immediate = setImmediate(scheduleLater)
   clearImmediate(immediate)
 }
 `, {
@@ -6053,6 +6057,8 @@ export function main(): void {
   assert.match(result.code, /ccjs_loop_clear_timer\(timeout\);/)
   assert.match(result.code, /ccjs_loop_clear_timer\(interval\);/)
   assert.match(result.code, /ccjs_loop_clear_timer\(immediate\);/)
+  assert.match(result.code, /scheduleLater\(\(ccjs_loop\*\)context\);/)
+  assert.match(result.code, /ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_scheduleLater_\d+, ccjs_loop, 0, &ccjs_callback_\d+\)/)
   assert.match(result.code, /ccjs_main\(&ccjs_loop\);/)
   assert.match(result.code, /while \(ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
   assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_loop\.now_ms \+ 1\)/)
@@ -6068,17 +6074,6 @@ export function main(): void {
   clearTimeout(1)
 }
 `, 'CCJS_TYPE_MISMATCH', {
-    target: 'c'
-  })
-
-  assertDiagnostic(`function again(): void {
-  setTimeout(() => {}, 1)
-}
-
-export function main(): void {
-  setTimeout(again, 1)
-}
-`, 'CCJS_C_TIMER_CALLBACK', {
     target: 'c'
   })
 })
