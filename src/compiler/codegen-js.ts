@@ -1,4 +1,4 @@
-import { collectIrFeatureRequirements, collectIrGlobalRoots, collectIrPrograms, collectIrTopLevelNodeEntries, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
+import { collectIrFeatureRequirements, collectIrGlobalRoots, collectIrGlobalUsages, collectIrPrograms, collectIrTopLevelNodeEntries, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, IrProgram } from './types.ts'
 
@@ -96,10 +96,18 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
   const lines: string[] = []
   const helperLines: string[] = []
   const globalRoots = new Set(collectIrGlobalRoots(programs))
+  const globalUsages = collectIrGlobalUsages(programs)
+  const fsUsagePaths = new Set(globalUsages.filter(usage => usage.root === 'fs').map(usage => usage.path.join('.')))
   const features = new Set(collectIrFeatureRequirements(programs))
+  const needsFsSync = [...fsUsagePaths].some(isFsSyncUsagePath)
+  const needsFsPromises = [...fsUsagePaths].some(isFsPromiseUsagePath)
 
-  if (globalRoots.has('fs')) {
+  if (needsFsPromises || (globalRoots.has('fs') && !needsFsSync)) {
     lines.push('import * as fs from \'node:fs/promises\'')
+  }
+
+  if (needsFsSync) {
+    lines.push('import * as ccjsFsSync from \'node:fs\'')
   }
 
   if (globalRoots.has('http')) {
@@ -135,6 +143,14 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
   }
 
   return lines
+}
+
+function isFsPromiseUsagePath(path: string): boolean {
+  return ['fs.readFile', 'fs.readFileBytes', 'fs.readDir', 'fs.writeFile', 'fs.writeFileBytes'].includes(path)
+}
+
+function isFsSyncUsagePath(path: string): boolean {
+  return ['fs.readFileBytesSync', 'fs.readFileSync', 'fs.readDirSync', 'fs.writeFileBytesSync', 'fs.writeFileSync'].includes(path)
 }
 
 function emitArrayPopHelper(options: JsEmitOptions): string[] {
@@ -625,10 +641,10 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   if (expression.type === 'CallExpression') {
-    const fsBytesCall = emitFsBytesCallExpression(expression, options)
+    const fsRuntimeCall = emitFsRuntimeCallExpression(expression, options)
 
-    if (fsBytesCall != null) {
-      return fsBytesCall
+    if (fsRuntimeCall != null) {
+      return fsRuntimeCall
     }
 
     if (isArrayPopCall(expression)) {
@@ -754,13 +770,33 @@ function isMapGetCall(expression: AnyNode): boolean {
     && expression.args.length === 1
 }
 
-function emitFsBytesCallExpression(expression: AnyNode, options: JsEmitOptions): string | null {
+function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions): string | null {
   if (expression.fsRuntimeMethod === 'readFileBytes') {
     return `fs.readFile(${emitExpression(expression.args[0], options)})`
   }
 
   if (expression.fsRuntimeMethod === 'writeFileBytes') {
     return `fs.writeFile(${emitExpression(expression.args[0], options)}, ${emitExpression(expression.args[1], options)})`
+  }
+
+  if (expression.fsRuntimeMethod === 'readFileSync') {
+    return `ccjsFsSync.readFileSync(${emitExpression(expression.args[0], options)}, 'utf8')`
+  }
+
+  if (expression.fsRuntimeMethod === 'readFileBytesSync') {
+    return `ccjsFsSync.readFileSync(${emitExpression(expression.args[0], options)})`
+  }
+
+  if (expression.fsRuntimeMethod === 'readDirSync') {
+    return `ccjsFsSync.readdirSync(${emitExpression(expression.args[0], options)})`
+  }
+
+  if (expression.fsRuntimeMethod === 'writeFileSync') {
+    return `ccjsFsSync.writeFileSync(${emitExpression(expression.args[0], options)}, ${emitExpression(expression.args[1], options)}, 'utf8')`
+  }
+
+  if (expression.fsRuntimeMethod === 'writeFileBytesSync') {
+    return `ccjsFsSync.writeFileSync(${emitExpression(expression.args[0], options)}, ${emitExpression(expression.args[1], options)})`
   }
 
   return null

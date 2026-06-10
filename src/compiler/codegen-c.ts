@@ -233,9 +233,14 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     || path === 'Promise.reject'
     || path === 'fs.readFile'
     || path === 'fs.readFileBytes'
+    || path === 'fs.readFileBytesSync'
+    || path === 'fs.readFileSync'
     || path === 'fs.readDir'
+    || path === 'fs.readDirSync'
     || path === 'fs.writeFile'
     || path === 'fs.writeFileBytes'
+    || path === 'fs.writeFileBytesSync'
+    || path === 'fs.writeFileSync'
     || path === 'Map'
     || path === 'Set'
 }
@@ -2423,6 +2428,12 @@ function emitStatement(statement, context) {
       return fsCall.lines
     }
 
+    const fsSyncCall = emitPreparedFsSyncStatementExpression(statement.expression, context)
+
+    if (fsSyncCall != null) {
+      return fsSyncCall.lines
+    }
+
     const promise = emitPreparedPromiseStaticExpression(statement.expression, context)
 
     if (promise != null) {
@@ -4596,6 +4607,12 @@ function emitCValueExpression(expression, context) {
     return emitCAwaitValueExpression(expression, context)
   }
 
+  const fsSyncValue = emitPreparedFsSyncValueExpression(expression, context)
+
+  if (fsSyncValue != null) {
+    return fsSyncValue
+  }
+
   const arrayPopCall = emitPreparedArrayPopCallExpression(expression, context)
 
   if (arrayPopCall != null) {
@@ -6612,6 +6629,74 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
   }
 }
 
+function emitPreparedFsSyncValueExpression(expression, context) {
+  const method = cFsRuntimeCallName(expression?.callee)
+
+  if (method == null || !['readFileBytesSync', 'readFileSync', 'readDirSync'].includes(method)) {
+    return null
+  }
+
+  const valueType = inferExpressionType(expression, context)
+  const expectedTag = cRuntimeValueTag(valueType)
+
+  if (expectedTag == null) {
+    return null
+  }
+
+  const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
+  const out = nextCName(context, 'ccjs_fs_value')
+  registerOwnedValue(context, out)
+  const call = method === 'readFileSync'
+    ? `ccjs_fs_read_file_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+    : method === 'readFileBytesSync'
+      ? `ccjs_fs_read_file_bytes_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+      : `ccjs_fs_read_dir_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+
+  return {
+    lines: [
+      ...path.lines,
+      ...emitPrepareOwnedValueWrite(out),
+      emitStatusCheck(call, context),
+      emitRuntimeValueCheck(out, expectedTag, context)
+    ],
+    expression: out
+  }
+}
+
+function emitPreparedFsSyncStatementExpression(expression, context) {
+  const method = cFsRuntimeCallName(expression?.callee)
+
+  if (method == null || !['writeFileBytesSync', 'writeFileSync'].includes(method)) {
+    return null
+  }
+
+  const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
+  const lines = [
+    ...path.lines
+  ]
+
+  if (method === 'writeFileBytesSync') {
+    const bytes = emitCValueExpression(expression.args[1], context)
+
+    lines.push(...bytes.lines)
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(emitStatusCheck(`ccjs_fs_write_file_bytes_sync(${path.bytes}, ${path.length}, ${bytes.expression})`, context))
+
+    return {
+      lines
+    }
+  }
+
+  const bytes = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+
+  lines.push(...bytes.lines)
+  lines.push(emitStatusCheck(`ccjs_fs_write_file_sync(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`, context))
+
+  return {
+    lines
+  }
+}
+
 function emitPreparedPromiseStaticExpression(expression, context, options: { out?: string, owned?: boolean } = {}) {
   const method = cPromiseRuntimeCallName(expression?.callee)
 
@@ -7542,8 +7627,10 @@ function inferExpressionType(expression, context) {
     return 'number'
   }
 
-  if (expression?.type === 'CallExpression' && cFsRuntimeCallName(expression.callee) != null && expression.valueType === 'promise') {
-    return 'promise'
+  if (expression?.type === 'CallExpression' && cFsRuntimeCallName(expression.callee) != null) {
+    return expression.valueType === 'promise'
+      ? 'promise'
+      : expression.valueType ?? 'unknown'
   }
 
   if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) != null && expression.valueType === 'promise') {
@@ -9502,7 +9589,7 @@ function cFsRuntimeCallName(callee) {
     return null
   }
 
-  return ['readFile', 'readFileBytes', 'readDir', 'writeFile', 'writeFileBytes'].includes(callee.property) ? callee.property : null
+  return ['readFile', 'readFileBytes', 'readFileBytesSync', 'readFileSync', 'readDir', 'readDirSync', 'writeFile', 'writeFileBytes', 'writeFileBytesSync', 'writeFileSync'].includes(callee.property) ? callee.property : null
 }
 
 function cPromiseRuntimeCallName(callee) {

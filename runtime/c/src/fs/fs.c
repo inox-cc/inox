@@ -146,6 +146,16 @@ ccjs_status ccjs_fs_write_file_sync(const char* path, size_t path_len, const cha
 #endif
 }
 
+ccjs_status ccjs_fs_write_file_bytes_sync(const char* path, size_t path_len, ccjs_value bytes) {
+  if (bytes.tag != CCJS_TAG_BYTES || bytes.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_bytes* data = (ccjs_bytes*)bytes.as.ref;
+
+  return ccjs_fs_write_file_sync(path, path_len, (const char*)data->bytes, data->len);
+}
+
 ccjs_status ccjs_fs_read_file(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
   return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_FILE, path, path_len, 0, 0, out);
 }
@@ -170,6 +180,10 @@ ccjs_status ccjs_fs_write_file(
 }
 
 ccjs_status ccjs_fs_write_file_bytes(ccjs_loop* loop, const char* path, size_t path_len, ccjs_value bytes, ccjs_promise** out) {
+  if (out != 0) {
+    *out = 0;
+  }
+
   if (bytes.tag != CCJS_TAG_BYTES || bytes.as.ref == 0) {
     return CCJS_ERR_TYPE;
   }

@@ -1340,6 +1340,64 @@ test('generated C fs binary helpers copy hosted bytes', async t => {
   }
 })
 
+test('generated C fs sync helpers copy hosted files and read entries', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-sync-'))
+  const entriesDir = join(dir, 'entries')
+  const textInput = join(dir, 'input.txt')
+  const textCopied = join(dir, 'copied.txt')
+  const bytesInput = join(dir, 'input.bin')
+  const bytesCopied = join(dir, 'copied.bin')
+  const source = join(dir, 'fs-sync.c')
+  const output = join(dir, 'fs-sync')
+  const data = Buffer.from([5, 4, 3, 2, 1, 0, 255])
+
+  try {
+    await mkdir(entriesDir)
+    await writeFile(join(entriesDir, 'beta.txt'), '')
+    await writeFile(join(entriesDir, 'alpha.txt'), '')
+    await writeFile(textInput, 'sync text')
+    await writeFile(bytesInput, data)
+
+    const result = compileSource(`export function main(): void {
+  const text = fs.readFileSync(${JSON.stringify(textInput)})
+  fs.writeFileSync(${JSON.stringify(textCopied)}, text)
+  const bytes = fs.readFileBytesSync(${JSON.stringify(bytesInput)})
+  fs.writeFileBytesSync(${JSON.stringify(bytesCopied)}, bytes)
+  const entries = fs.readDirSync(${JSON.stringify(entriesDir)})
+  const names = entries.sort()
+  console.log(names[0], names[1])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'alpha.txt beta.txt\n')
+    assert.equal(await readFile(textCopied, 'utf8'), 'sync text')
+    assert.deepEqual(await readFile(bytesCopied), data)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async await over settled promises compiles and runs', async t => {
   const probe = await runCommand('cc', ['--version'])
 

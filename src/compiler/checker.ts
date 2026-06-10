@@ -1175,6 +1175,70 @@ class Checker {
 
     expression.fsRuntimeMethod = method
 
+    if (method === 'readFileSync') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function fs.readFileSync expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+
+      expression.valueType = 'string'
+
+      return 'string'
+    }
+
+    if (method === 'readFileBytesSync') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function fs.readFileBytesSync expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+
+      expression.valueType = 'bytes'
+
+      return 'bytes'
+    }
+
+    if (method === 'readDirSync') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function fs.readDirSync expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+
+      expression.valueType = 'array'
+      expression.arrayElementType = 'string'
+      expression.arrayElementDeclaredType = 'string'
+
+      return 'array'
+    }
+
+    if (method === 'writeFileSync') {
+      if (expression.args.length !== 2) {
+        this.report('CCJS_ARG_COUNT', `function fs.writeFileSync expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsStringArg(expression, 1)
+
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
+    if (method === 'writeFileBytesSync') {
+      if (expression.args.length !== 2) {
+        this.report('CCJS_ARG_COUNT', `function fs.writeFileBytesSync expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsBytesArg(expression, 1)
+
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
     if (method === 'readFile') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report('CCJS_ARG_COUNT', `function fs.readFile expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
@@ -2957,7 +3021,7 @@ function promiseStaticMethodName(callee: AnyNode): string | null {
 }
 
 function fsRuntimeMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'MemberExpression' || !['readFile', 'readFileBytes', 'readDir', 'writeFile', 'writeFileBytes'].includes(callee.property)) {
+  if (callee.type !== 'MemberExpression' || !['readFile', 'readFileBytes', 'readFileBytesSync', 'readFileSync', 'readDir', 'readDirSync', 'writeFile', 'writeFileBytes', 'writeFileBytesSync', 'writeFileSync'].includes(callee.property)) {
     return null
   }
 

@@ -3997,6 +3997,59 @@ test('maps fs binary helpers to Buffer-compatible TS and C runtime calls', () =>
 `, 'CCJS_TYPE_MISMATCH')
 })
 
+test('maps fs sync helpers to Node fs and C runtime calls', () => {
+  const ts = compileSource(`export function main(): void {
+  const text = fs.readFileSync('/tmp/value.txt')
+  const bytes: Buffer = fs.readFileBytesSync('/tmp/value.bin')
+  const entries = fs.readDirSync('/tmp')
+  fs.writeFileSync('/tmp/out.txt', text)
+  fs.writeFileBytesSync('/tmp/out.bin', bytes)
+  console.log(entries[0])
+}
+`, {
+    target: 'ts'
+  })
+
+  assert.doesNotMatch(ts.code, /node:fs\/promises/)
+  assert.match(ts.code, /import \* as ccjsFsSync from 'node:fs'/)
+  assert.match(ts.code, /const text: string = ccjsFsSync\.readFileSync\("\/tmp\/value\.txt", 'utf8'\)/)
+  assert.match(ts.code, /const bytes: Buffer = ccjsFsSync\.readFileSync\("\/tmp\/value\.bin"\)/)
+  assert.match(ts.code, /const entries: string\[\] = ccjsFsSync\.readdirSync\("\/tmp"\)/)
+  assert.match(ts.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.txt", text, 'utf8'\)/)
+  assert.match(ts.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.bin", bytes\)/)
+
+  const c = compileSource(`export function main(): void {
+  const text = fs.readFileSync('/tmp/value.txt')
+  const bytes = fs.readFileBytesSync('/tmp/value.bin')
+  const entries = fs.readDirSync('/tmp')
+  fs.writeFileSync('/tmp/out.txt', text)
+  fs.writeFileBytesSync('/tmp/out.bin', bytes)
+  console.log(entries.length)
+}
+`, {
+    target: 'c'
+  })
+  const main = c.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const text = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'text')
+  const bytes = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'bytes')
+  const entries = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'entries')
+
+  assert.equal(text?.valueType, 'string')
+  assert.equal(bytes?.valueType, 'bytes')
+  assert.equal(entries?.valueType, 'array')
+  assert.equal(entries?.arrayElementType, 'string')
+  assert.match(c.code, /if \(ccjs_fs_read_file_sync\(&ccjs_default_allocator, "\/tmp\/value\.txt", 14, &ccjs_fs_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /if \(ccjs_fs_read_file_bytes_sync\(&ccjs_default_allocator, "\/tmp\/value\.bin", 14, &ccjs_fs_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /if \(ccjs_fs_read_dir_sync\(&ccjs_default_allocator, "\/tmp", 4, &ccjs_fs_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /if \(ccjs_fs_write_file_sync\("\/tmp\/out\.txt", 12, text->bytes, text->len\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /if \(ccjs_fs_write_file_bytes_sync\("\/tmp\/out\.bin", 12, bytes\) != CCJS_OK\) goto ccjs_cleanup;/)
+
+  assertDiagnostic(`export function main(): void {
+  fs.writeFileBytesSync('/tmp/out.bin', 'text')
+}
+`, 'CCJS_TYPE_MISMATCH')
+})
+
 test('injects Node http prelude when http is referenced', () => {
   const result = compileSource(`export function main(): void {
   const server = http.createServer((request, response) => {
