@@ -3662,6 +3662,46 @@ export function main(): void {
   }
 })
 
+test('does not rebuild IR module records from legacy HIR fallback', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ir-module-no-hir-fallback-'))
+
+  try {
+    await writeFile(join(dir, 'lib.ts'), `export function greet(): void {
+  console.log('from lib')
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import { greet } from './lib.ts'
+
+export function main(): void {
+  greet()
+}
+`)
+
+    const result = await compileFile(join(dir, 'main.ts'), {
+      target: 'js'
+    })
+    const graph = {
+      ...result.graph,
+      modules: result.graph.modules.map((module, index) => index === 0
+        ? {
+            ...module,
+            ir: null
+          }
+        : module)
+    }
+    const irModules = collectIrModuleRecords(graph)
+
+    assert.equal(irModules.length, result.graph.modules.length - 1)
+    assert.deepEqual(irModules.map(module => module.path), result.graph.modules.slice(1).map(module => module.path))
+    assert.deepEqual(irModules.flatMap(module => module.ir.functionDeclarations.map(item => item.name)), ['main'])
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('emits JS TS and C bundles directly from target-neutral IR module records', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-bundle-ir-entrypoints-'))
 

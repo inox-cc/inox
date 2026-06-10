@@ -57,16 +57,12 @@ export function lowerHirToIr(program: ProgramNode): IrProgram {
 }
 
 export function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
-  return graph.modules.flatMap(module => {
-    const ir = moduleRecordIr(module)
-
-    return ir == null
-      ? []
-      : [{
-          path: module.path,
-          ir
-        }]
-  })
+  return graph.modules.flatMap(module => module.ir == null
+    ? []
+    : [{
+        path: module.path,
+        ir: module.ir
+      }])
 }
 
 export function collectIrPrograms(records: IrModuleRecord[]): IrProgram[] {
@@ -130,14 +126,6 @@ export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, 
 
 export function collectIrTopLevelNodes(program: { body: AnyNode[], topLevelItems: IrTopLevelItem[] }, kind: IrTopLevelItemKind): AnyNode[] {
   return collectTopLevelNodes(program, kind)
-}
-
-function moduleRecordIr(module: ModuleGraph['modules'][number]): IrProgram | null {
-  if (module.ir != null) {
-    return module.ir
-  }
-
-  return module.hir == null ? null : lowerHirToIr(module.hir)
 }
 
 function collectIrFeatures(program: ProgramNode): IrFeature[] {
