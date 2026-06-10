@@ -12,12 +12,13 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
     "test:fixtures": "node scripts/test-fixtures.ts",
+    "test:capabilities": "node scripts/test-capabilities.ts",
     "test:ir-snapshots": "node scripts/test-ir-snapshots.ts",
     "test:codegen-snapshots": "node scripts/test-codegen-snapshots.ts",
     "test:diagnostic-snapshots": "node scripts/test-diagnostic-snapshots.ts",
     "test:snapshots": "npm run test:ir-snapshots && npm run test:codegen-snapshots && npm run test:diagnostic-snapshots",
     "test:differential": "node scripts/test-differential.ts",
-    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:snapshots && npm run test:differential"
+    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:capabilities && npm run test:snapshots && npm run test:differential"
   },
   "engines": {
     "node": ">=24"

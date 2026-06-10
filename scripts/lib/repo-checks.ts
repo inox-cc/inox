@@ -43,6 +43,7 @@ const requiredFiles: string[] = [
   'src/compiler/parser.ts',
   'scripts/lib/run-command.ts',
   'scripts/lib/snapshot-runner.ts',
+  'scripts/test-capabilities.ts',
   'scripts/test-codegen-snapshots.ts',
   'scripts/test-diagnostic-snapshots.ts',
   'scripts/test-differential.ts',

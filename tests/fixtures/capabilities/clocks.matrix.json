@@ -1,0 +1,13 @@
+{
+  "targets": {
+    "js": {
+      "expect": "pass"
+    },
+    "ts": {
+      "expect": "pass"
+    },
+    "c": {
+      "expect": "pass"
+    }
+  }
+}
