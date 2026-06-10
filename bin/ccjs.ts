@@ -27,11 +27,14 @@ const cRuntimeSources = [
   'runtime/c/src/core/value.c',
   'runtime/c/src/core/allocator.c',
   'runtime/c/src/core/callback.c',
+  'runtime/c/src/async/loop.c',
+  'runtime/c/src/async/promise.c',
   'runtime/c/src/strings/string.c',
   'runtime/c/src/objects/object.c',
   'runtime/c/src/arrays/array.c',
   'runtime/c/src/collections/map.c',
   'runtime/c/src/collections/set.c',
+  'runtime/c/src/fs/fs.c',
   'runtime/c/src/time/time.c'
 ].map(file => join(repoRoot, file))
 const configFileNames = ['ccjs.config.json', 'ccjs.json']

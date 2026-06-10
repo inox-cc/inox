@@ -400,6 +400,43 @@ test('ccjs run --target c builds and runs a temporary native executable', async 
   assert.equal(result.stderr, '')
 })
 
+test('ccjs run --target c runs fs globals through hosted fallback', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-cli-'))
+  const entry = join(dir, 'main.ts')
+  const file = join(dir, 'value.txt')
+
+  try {
+    await writeFile(entry, `async function loadText(): Promise<string> {
+  return fs.readFile(${JSON.stringify(file)}, 'utf8')
+}
+
+export async function main(): Promise<void> {
+  await fs.writeFile(${JSON.stringify(file)}, 'hello c fs')
+  const text = await loadText()
+  console.log(text)
+}
+`)
+
+    const result = await runCli(['run', entry, '--target', 'c'])
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, 'hello c fs\n')
+    assert.equal(result.stderr, '')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs run --target c runs a module graph with import aliases', async t => {
   const probe = await runCommand('cc', ['--version'])
 
