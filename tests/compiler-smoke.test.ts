@@ -3860,6 +3860,30 @@ export async function main(): Promise<void> {
   assert.match(result.code, /if \(ccjs_async_task_flip_start\(&ccjs_loop, 1, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
+test('lowers async task frame await over local Promise chains to C', () => {
+  const result = compileSource(`async function addChain(input: number, delta: number): Promise<number> {
+  const pending = Promise.resolve(input).then(value => value + 2)
+  const value = await pending
+
+  return Promise.resolve(value + delta)
+}
+
+export async function main(): Promise<void> {
+  console.log(await addChain(2, 4))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_promise_chain_arrow_\d+\(void\* context, ccjs_value ccjs_value_input, ccjs_value\* out\);/)
+  assert.match(result.code, /ccjs_promise\* ccjs_async_task_source_\d+ = 0;/)
+  assert.match(result.code, /status = ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(input\), &ccjs_async_task_source_\d+\);/)
+  assert.match(result.code, /status = ccjs_promise_chain\(ccjs_async_task_source_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &frame->awaited\);/)
+  assert.match(result.code, /ccjs_promise_release\(ccjs_async_task_source_\d+\);/)
+  assert.match(result.code, /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_addChain_resume, ccjs_async_task_addChain_reject, frame, ccjs_async_task_addChain_finalize\);/)
+  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
+})
+
 test('lowers awaited plain Promise-returning calls to C', () => {
   const result = compileSource(`function getPromise(): Promise<number> {
   return Promise.resolve(2)
