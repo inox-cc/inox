@@ -1,5 +1,5 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionEffects, collectIrGlobalUsages, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
+import { collectIrFunctionEffects, collectIrGlobalUsages, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
 
 const cStringPredicateMethods = new Set([
@@ -15,18 +15,19 @@ const cArrayMethods = new Set([
 ])
 
 export function emitC(program: ProgramNode, ir: IrProgram = lowerHirToIr(program)): string {
-  return emitCUnit([program], program, [ir])
+  return emitCUnit([program], program, [ir], ir)
 }
 
 export function emitCBundle(graph: ModuleGraph): string {
   const entryModule = graph.modules.find(module => module.path === graph.entry)
   const programs = graph.modules.map(module => module.hir).filter((program): program is ProgramNode => program != null)
   const irPrograms = graph.modules.flatMap(module => module.hir == null ? [] : [module.ir ?? lowerHirToIr(module.hir)])
+  const entryIr = entryModule?.hir == null ? null : entryModule.ir ?? lowerHirToIr(entryModule.hir)
 
-  return emitCUnit(programs, entryModule?.hir ?? graph.modules.at(-1)?.hir ?? null, irPrograms)
+  return emitCUnit(programs, entryModule?.hir ?? graph.modules.at(-1)?.hir ?? null, irPrograms, entryIr)
 }
 
-function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program))) {
+function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program)), entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(programs)
   const functionEffects = collectIrFunctionEffects(irPrograms)
@@ -79,7 +80,7 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, ir
     lines.push('')
   }
 
-  lines.push(...emitMainWrapper(entryProgram, baseContext))
+  lines.push(...emitMainWrapper(entryProgram, entryIrProgram, baseContext))
 
   if (diagnostics.length > 0) {
     throw new CompileError(diagnostics)
@@ -1533,11 +1534,10 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
   }
 }
 
-function emitMainWrapper(entryProgram, baseContext) {
+function emitMainWrapper(entryProgram, entryIrProgram, baseContext) {
   const context = createFunctionContext(baseContext, 'number')
-  const main = entryProgram?.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
 
-  if (main != null) {
+  if (hasIrFunctionDeclaration(entryIrProgram, 'main')) {
     return [
       'int main(void) {',
       '  ccjs_main();',

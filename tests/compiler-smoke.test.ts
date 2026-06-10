@@ -1388,6 +1388,17 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
   assert.equal(result.ir.type, 'IrProgram')
   assert.equal(result.ir.version, 1)
   assert.deepEqual(result.ir.runtimeRequirements, [])
+  assert.deepEqual(result.ir.functionDeclarations, [
+    {
+      name: 'main',
+      exported: true,
+      async: false,
+      loc: {
+        line: 1,
+        column: 17
+      }
+    }
+  ])
   assert.deepEqual(result.ir.syntaxFeatures, [])
   assert.deepEqual(result.ir.globalUsages, [])
   assert.deepEqual(result.ir.functionEffects, [
@@ -1398,6 +1409,31 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
     }
   ])
   assert.deepEqual(result.ir.body, result.hir.body)
+})
+
+test('drives JS and C main wrappers from target-neutral IR function declarations', () => {
+  const source = `export function main(): void {
+  console.log('hello')
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+  const c = compileSource(source, {
+    target: 'c'
+  })
+  const withoutMainDeclaration = {
+    ...js.ir,
+    functionDeclarations: []
+  }
+
+  assert.match(js.code, /const ccjsMainResult = main\(\)/)
+  assert.doesNotMatch(emitJs(js.hir, {}, withoutMainDeclaration), /const ccjsMainResult = main\(\)/)
+  assert.match(c.code, /int main\(void\) \{\n  ccjs_main\(\);/)
+  assert.doesNotMatch(emitC(c.hir, {
+    ...c.ir,
+    functionDeclarations: []
+  }), /int main\(void\) \{\n  ccjs_main\(\);/)
 })
 
 test('collects target-neutral IR feature requirements', () => {
@@ -2974,6 +3010,7 @@ export function main(): void {
 
     assert.equal(result.graph.modules.every(module => module.hir?.type === 'HirProgram'), true)
     assert.equal(result.graph.modules.every(module => module.ir?.type === 'IrProgram'), true)
+    assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.functionDeclarations)), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.syntaxFeatures)), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.globalUsages)), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.functionEffects)), true)

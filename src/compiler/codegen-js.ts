@@ -1,4 +1,4 @@
-import { collectIrGlobalUsages, lowerHirToIr } from './ir.ts'
+import { collectIrGlobalUsages, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
 import type { AnyNode, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
 
 type JsEmitOptions = {
@@ -17,7 +17,7 @@ export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
     lines.push(...emitTopLevelItem(item))
   }
 
-  if (hasMain(program) && options.callMain !== false) {
+  if (hasIrFunctionDeclaration(ir, 'main') && options.callMain !== false) {
     lines.push('')
     lines.push('const ccjsMainResult = main()')
     lines.push('if (ccjsMainResult && typeof ccjsMainResult.then === \'function\') {')
@@ -35,6 +35,8 @@ export function emitTs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
 export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {
   const programs = graph.modules.map(module => module.hir).filter((program): program is ProgramNode => program != null)
   const irPrograms = graph.modules.flatMap(module => module.hir == null ? [] : [module.ir ?? lowerHirToIr(module.hir)])
+  const entryModule = graph.modules.find(module => module.path === graph.entry)
+  const entryIr = entryModule?.hir == null ? null : entryModule.ir ?? lowerHirToIr(entryModule.hir)
   const lines: string[] = emitJsPrelude(irPrograms)
 
   if (lines.length > 0) {
@@ -53,9 +55,7 @@ export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): s
     lines.push('')
   }
 
-  const entryModule = graph.modules.find(module => module.path === graph.entry)
-
-  if (entryModule?.hir != null && hasMain(entryModule.hir) && options.callMain !== false) {
+  if (hasIrFunctionDeclaration(entryIr, 'main') && options.callMain !== false) {
     lines.push('const ccjsMainResult = main()')
     lines.push('if (ccjsMainResult && typeof ccjsMainResult.then === \'function\') {')
     lines.push('  await ccjsMainResult')
@@ -423,8 +423,4 @@ function emitObjectKey(key: string): string {
 
 function indent(lines: string[]): string[] {
   return lines.map(line => `  ${line}`)
-}
-
-function hasMain(program: ProgramNode): boolean {
-  return program.body.some(item => item.type === 'FunctionDeclaration' && item.name === 'main')
 }

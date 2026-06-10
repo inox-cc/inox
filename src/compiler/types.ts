@@ -44,6 +44,13 @@ export type IrFunctionEffect = {
   throwValueTypes: IrThrowValueType[]
 }
 
+export type IrFunctionDeclaration = {
+  name: string
+  exported: boolean
+  async: boolean
+  loc?: SourceLocation
+}
+
 export type IrSyntaxFeature =
   | 'async-function'
   | 'class'
@@ -63,6 +70,7 @@ export type IrProgram = {
   version: 1
   features: IrFeature[]
   runtimeRequirements: IrRuntimeRequirement[]
+  functionDeclarations: IrFunctionDeclaration[]
   functionEffects: IrFunctionEffect[]
   syntaxFeatures: IrSyntaxFeatureUsage[]
   globalUsages: IrGlobalUsage[]

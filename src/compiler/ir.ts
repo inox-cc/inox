@@ -1,4 +1,4 @@
-import type { AnyNode, IrFeature, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, ProgramNode } from './types.ts'
+import type { AnyNode, IrFeature, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, ProgramNode } from './types.ts'
 
 const jsStdGlobalRoots = new Set([
   'Array',
@@ -36,6 +36,7 @@ export function lowerHirToIr(program: ProgramNode): IrProgram {
     version: 1,
     features,
     runtimeRequirements: collectRuntimeRequirements(features),
+    functionDeclarations: collectFunctionDeclarations(program),
     functionEffects: collectIrFunctionEffects([{ body: program.body }]),
     syntaxFeatures: collectSyntaxFeatureUsages(program),
     globalUsages: collectGlobalUsages(program),
@@ -59,6 +60,10 @@ export function collectIrGlobalUsages(programs: Array<{ globalUsages: IrGlobalUs
   return programs.flatMap(program => program.globalUsages)
 }
 
+export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, name: string): boolean {
+  return program?.functionDeclarations.some(item => item.name === name) === true
+}
+
 function collectIrFeatures(program: ProgramNode): IrFeature[] {
   const features = new Set<IrFeature>()
 
@@ -79,6 +84,17 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
   }
 
   return [...requirements].sort()
+}
+
+function collectFunctionDeclarations(program: ProgramNode): IrFunctionDeclaration[] {
+  return program.body
+    .filter((item): item is AnyNode & { name: string } => item.type === 'FunctionDeclaration')
+    .map(item => ({
+      name: item.name,
+      exported: item.exported === true,
+      async: item.async === true,
+      loc: item.loc
+    }))
 }
 
 function collectSyntaxFeatureUsages(program: ProgramNode): IrSyntaxFeatureUsage[] {
