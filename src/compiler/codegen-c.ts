@@ -234,6 +234,7 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
     functionNames: new Map(functionDeclarations.map(item => [item.name, emitCFunctionName(item.name)])),
     functionParams: new Map(functionDeclarations.map(item => [item.name, item.params])),
     functionReturnNullables: new Map(functionDeclarations.map(item => [item.name, item.returnNullable === true])),
+    functionReturnShapes: new Map(functionDeclarations.map(item => [item.name, item.returnShape ?? null])),
     functionReturnTypes: new Map(functionDeclarations.map(item => [item.name, item.returnType])),
     jsGlobalRoots,
     runtimeFunctionParams: new Map(),
@@ -244,7 +245,7 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
 
 function emitFunctionDeclaration(statement, baseContext) {
   const context = createFunctionContext(baseContext, statement.returnType, statement.returnNullable === true)
-  context.returnShape = statement.returnShape ?? null
+  context.returnShape = context.functionReturnShapes.get(statement.name) ?? null
   context.throwingFunction = isThrowingFunctionName(statement.name, context)
   context.functionReturnOut = 'ccjs_out'
   context.functionErrorOut = 'ccjs_error_out'

@@ -3137,6 +3137,52 @@ test('drives C JS global diagnostics from target-neutral IR global usages', () =
   })
 })
 
+test('drives C function return object shapes from target-neutral IR declarations', () => {
+  const result = compileSource(`type User = {
+  readonly id: number,
+  name: string
+}
+
+function getUser(): User {
+  return { id: 7, name: 'Ada' }
+}
+
+export function main(): void {
+  console.log('ok')
+}
+`, {
+    target: 'c'
+  })
+  const getUser = result.ir.functionDeclarations.find(item => item.name === 'getUser')
+
+  assert.deepEqual(getUser?.returnShape?.fields.map(field => ({
+    name: field.name,
+    readonly: field.readonly
+  })), [
+    {
+      name: 'id',
+      readonly: true
+    },
+    {
+      name: 'name',
+      readonly: false
+    }
+  ])
+  assert.equal((result.code.match(/CCJS_FIELD_READONLY/g) ?? []).length, 1)
+
+  const withoutReturnShape = emitC(result.hir, {
+    ...result.ir,
+    functionDeclarations: result.ir.functionDeclarations.map(item => item.name === 'getUser'
+      ? {
+          ...item,
+          returnShape: undefined
+        }
+      : item)
+  })
+
+  assert.equal((withoutReturnShape.match(/CCJS_FIELD_READONLY/g) ?? []).length, 0)
+})
+
 test('module graph stores HIR and IR per module', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
 
