@@ -2805,6 +2805,70 @@ test('generated C for of string array lowering compiles and runs with runtime so
   }
 })
 
+test('generated C for of Set lowering compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-set-'))
+  const source = join(dir, 'for-of-set.c')
+  const output = join(dir, 'for-of-set')
+
+  try {
+    const result = compileSource(`type Bag = {
+  names: Set<string>
+}
+
+export function main(): void {
+  const values: Set<number> = new Set([1, 2, 3])
+  const names: Set<string> = new Set(['Ada', 'Grace'])
+  const bag: Bag = { names }
+  let total = 0
+  let letters = 0
+  let sawAda = 0
+  let sawGrace = 0
+
+  for (const value of values.add(4)) {
+    total = total + value
+  }
+
+  for (const name of bag.names) {
+    letters = letters + name.length
+    if (name === 'Ada') {
+      sawAda = 1
+    }
+    if (name === 'Grace') {
+      sawGrace = 1
+    }
+  }
+
+  console.log(total, letters, sawAda, sawGrace)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '10 8 1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C inline for of array lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

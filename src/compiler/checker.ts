@@ -1762,10 +1762,14 @@ class Checker {
     const iterableType = this.checkExpression(statement.iterable)
     const elementType = iterableType === 'array'
       ? this.resolveExpressionArrayElementType(statement.iterable) ?? 'unknown'
-      : 'unknown'
+      : iterableType === 'set'
+        ? this.resolveExpressionSetElementType(statement.iterable) ?? 'unknown'
+        : 'unknown'
     const elementDeclaredType = iterableType === 'array'
       ? this.resolveExpressionArrayElementDeclaredType(statement.iterable) ?? elementType
-      : 'unknown'
+      : iterableType === 'set'
+        ? elementType
+        : 'unknown'
     const declared = statement.declaredType == null ? null : this.resolveDeclaredType(statement.declaredType, statement.nameLoc)
     const valueType = declared?.valueType ?? elementType
     const inferredDeclaredType = declared == null ? elementDeclaredType : statement.declaredType

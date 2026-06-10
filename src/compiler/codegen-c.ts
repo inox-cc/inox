@@ -2168,6 +2168,7 @@ function emitForOfStatement(statement, context) {
   const setup: string[] = []
   let array: any = resolveKnownForOfArray(statement.iterable, context)
   let runtimeArray: any = null
+  let runtimeSet: any = null
 
   if (array == null && statement.iterable?.type === 'ArrayLiteral') {
     const name = nextCName(context, 'ccjs_for_array')
@@ -2188,7 +2189,15 @@ function emitForOfStatement(statement, context) {
   }
 
   if (array == null && runtimeArray == null) {
-    context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports only local array variables and array literals', statement.loc))
+    runtimeSet = resolveRuntimeForOfSet(statement.iterable, context)
+  }
+
+  if (runtimeSet != null) {
+    return emitRuntimeSetForOfStatement(statement, runtimeSet, context)
+  }
+
+  if (array == null && runtimeArray == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports arrays and Set values', statement.loc))
     return []
   }
 
@@ -2236,6 +2245,59 @@ function emitForOfStatement(statement, context) {
       `for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`,
       ...emitPrepareOwnedValueWrite(value).map(line => `  ${line}`),
       `  ${emitStatusCheck(`ccjs_array_get(${arrayName}, ${index}, &${value})`, context)}`,
+      ...checks.map(line => `  ${line}`),
+      `  ${declaration}`,
+      ...body.map(line => `  ${line}`),
+      ...emitContinueTargetLabel(continueLabel, context),
+      '}',
+      ...emitBreakTargetLabel(breakLabel, context),
+      ...emitPrepareOwnedValueWrite(value)
+    ]
+  })
+}
+
+function emitRuntimeSetForOfStatement(statement, runtimeSet, context) {
+  const elementType = runtimeSet.elementType
+
+  if (!['number', 'boolean', 'string'].includes(elementType)) {
+    context.diagnostics.push(diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports only uniform number/boolean/string Set values', statement.loc))
+    return []
+  }
+
+  const index = nextCName(context, 'ccjs_for_set_index')
+  const set = nextCName(context, 'ccjs_for_set')
+  const value = nextCName(context, 'ccjs_for_value')
+  const breakLabel = nextCName(context, 'ccjs_break')
+  const continueLabel = nextCName(context, 'ccjs_continue')
+  const loopValue = elementType === 'boolean'
+    ? `((double)(${value}.as.boolean ? 1 : 0))`
+    : `${value}.as.number`
+
+  registerOwnedValue(context, value)
+
+  return withVariableScope(context, () => {
+    context.variables.set(statement.name, elementType)
+    if (elementType === 'string') {
+      context.runtimeStrings.add(statement.name)
+    }
+    const body = withBreakTarget(context, breakLabel, false, () => withContinueTarget(context, continueLabel, false, () => withVariableScope(context, () => emitStatementBody(statement.body, context))))
+    const declaration = elementType === 'string'
+      ? `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
+      : `double ${statement.name} = ${loopValue};`
+    const checks = elementType === 'string'
+      ? [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context)]
+      : elementType === 'boolean'
+        ? [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context)]
+        : [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context)]
+
+    return [
+      ...runtimeSet.lines,
+      `ccjs_set* ${set} = (ccjs_set*)${runtimeSet.name}.as.ref;`,
+      `for (size_t ${index} = 0; ${index} < ${set}->cap; ${index} += 1) {`,
+      `  if (${set}->entries[${index}].state != CCJS_SET_SLOT_OCCUPIED) continue;`,
+      ...emitPrepareOwnedValueWrite(value).map(line => `  ${line}`),
+      `  ${value} = ${set}->entries[${index}].value;`,
+      `  ccjs_retain(${value});`,
       ...checks.map(line => `  ${line}`),
       `  ${declaration}`,
       ...body.map(line => `  ${line}`),
@@ -7441,6 +7503,30 @@ function resolveRuntimeArrayElementType(expression, context) {
   return null
 }
 
+function resolveRuntimeSetElementType(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    return context.setElementTypes.get(expression.path[0]) ?? null
+  }
+
+  if (expression?.type === 'CallExpression' || expression?.type === 'NewExpression') {
+    return expression.valueType === 'set' ? expression.setElementType ?? 'unknown' : null
+  }
+
+  if (expression?.type === 'MemberExpression') {
+    const member = resolveKnownObjectMember(expression, context)
+
+    return member?.valueType === 'set' ? member.setElementType ?? 'unknown' : null
+  }
+
+  if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    const field = resolveKnownObjectIndex(expression, context)
+
+    return field?.valueType === 'set' ? field.setElementType ?? 'unknown' : null
+  }
+
+  return null
+}
+
 function emitPreparedRuntimeArrayIndexValue(expression, element, context, prefix = 'ccjs_array_item') {
   const array = emitCValueExpression(expression.object, context)
   const value = nextCName(context, prefix)
@@ -7540,6 +7626,26 @@ function resolveRuntimeForOfArray(expression, context) {
     name: value.expression,
     elementType,
     lines: value.lines
+  }
+}
+
+function resolveRuntimeForOfSet(expression, context) {
+  const elementType = resolveRuntimeSetElementType(expression, context)
+
+  if (elementType == null) {
+    return null
+  }
+
+  const receiver = emitPreparedCollectionReceiver(expression, context)
+
+  if (receiver == null || receiver.type !== 'set') {
+    return null
+  }
+
+  return {
+    name: receiver.expression,
+    elementType,
+    lines: receiver.lines
   }
 }
 

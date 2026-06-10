@@ -1298,6 +1298,54 @@ test('compiles for of loops over string arrays to C', () => {
   assert.match(c.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
 
+test('compiles for of loops over Set values to JS TS and C', () => {
+  const source = `type Bag = {
+  names: Set<string>
+}
+
+export function main(): void {
+  const values: Set<number> = new Set([1, 2, 3])
+  const names: Set<string> = new Set(['Ada', 'Grace'])
+  const bag: Bag = { names }
+  let total = 0
+  let letters = 0
+
+  for (const value of values.add(4)) {
+    total = total + value
+  }
+
+  for (const name of bag['names']) {
+    letters = letters + name.length
+  }
+
+  console.log(total, letters)
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+  const ts = compileSource(source, {
+    target: 'ts',
+    callMain: false
+  })
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(js.code, /for \(const value of values\.add\(4\)\) \{/)
+  assert.match(ts.code, /const values: Set<number> = new Set\(\[1, 2, 3\]\)/)
+  assert.doesNotThrow(() => compileSource(ts.code, {
+    target: 'js',
+    callMain: false
+  }))
+  assert.match(c.code, /ccjs_set_add\(values, ccjs_number_value\(4\)\)/)
+  assert.match(c.code, /ccjs_set\* ccjs_for_set_\d+ = \(ccjs_set\*\)values\.as\.ref;/)
+  assert.match(c.code, /CCJS_SET_SLOT_OCCUPIED/)
+  assert.match(c.code, /ccjs_for_value_\d+ = ccjs_for_set_\d+->entries\[ccjs_for_set_index_\d+\]\.value;/)
+  assert.match(c.code, /ccjs_object_get\(bag, "names", 5, &ccjs_value_\d+\)/)
+  assert.match(c.code, /ccjs_string\* name = \(ccjs_string\*\)ccjs_for_value_\d+\.as\.ref;/)
+})
+
 test('rejects unsupported C for of iterables with a stable diagnostic', () => {
   assertDiagnostic(`export function main(): void {
   const user = { name: 'Ada' }
