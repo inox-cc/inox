@@ -1688,6 +1688,52 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame preserves parameters across resume', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-params-'))
+  const source = join(dir, 'async-task-frame-params.c')
+  const output = join(dir, 'async-task-frame-params')
+
+  try {
+    const result = compileSource(`async function addLater(input: number, delta: number): Promise<number> {
+  const value = await Promise.resolve(input)
+
+  return Promise.resolve(value + delta)
+}
+
+export async function main(): Promise<void> {
+  console.log(await addLater(2, 4))
+  const promise = addLater(5, 6)
+  console.log(await promise)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '6\n11\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C object literal lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
