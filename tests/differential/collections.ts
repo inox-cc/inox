@@ -9,6 +9,10 @@ export function main(): void {
   scores.set('Linus', 8)
   names.add('Grace').add('Linus')
   names.delete('Linus')
+  const scratchScores: Map<string, number> = new Map([['Temp', 1]])
+  scratchScores.clear()
+  const scratchNames: Set<string> = new Set(['Temp'])
+  scratchNames.clear()
 
   for (const value of selected) {
     total = total + value
@@ -16,7 +20,7 @@ export function main(): void {
 
   const adaScore = scores['Ada'] ?? 0
 
-  if (scores.has('Ada') && names.has('Grace') && scores.size === 3 && names.size === 2) {
+  if (scores.has('Ada') && names.has('Grace') && scores.size === 3 && names.size === 2 && scratchScores.size === 0 && !scratchNames.has('Temp')) {
     console.log(`collections ${total} ${adaScore}`)
   } else {
     console.log('bad')

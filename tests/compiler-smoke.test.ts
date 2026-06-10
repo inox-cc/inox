@@ -4340,9 +4340,11 @@ export function main(): void {
   const score = maybeScore ?? 0
   const hasAda = scores.has('Ada')
   const removed = scores.delete('Ada')
+  const clearedScores = scores.clear()
   const names = makeNames()
   const hasName = names.add('Ada').has('Ada')
-  console.log(score, hasAda, removed, hasName, scores.size, names.size)
+  const clearedNames = names.clear()
+  console.log(score, hasAda, removed, clearedScores, hasName, clearedNames, scores.size, names.size)
 }
 `, {
     target: 'js'
@@ -4362,15 +4364,19 @@ export function main(): void {
   const score = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'score')
   const hasAda = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'hasAda')
   const removed = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'removed')
+  const clearedScores = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'clearedScores')
   const names = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'names')
   const hasName = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'hasName')
+  const clearedNames = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'clearedNames')
   assert.ok(scores)
   assert.ok(maybeScore)
   assert.ok(score)
   assert.ok(hasAda)
   assert.ok(removed)
+  assert.ok(clearedScores)
   assert.ok(names)
   assert.ok(hasName)
+  assert.ok(clearedNames)
 
   assert.equal(scores.valueType, 'map')
   assert.equal(scores.mapKeyType, 'string')
@@ -4380,9 +4386,11 @@ export function main(): void {
   assert.equal(score.valueType, 'number')
   assert.equal(hasAda.valueType, 'boolean')
   assert.equal(removed.valueType, 'boolean')
+  assert.equal(clearedScores.valueType, 'void')
   assert.equal(names.valueType, 'set')
   assert.equal(names.setElementType, 'string')
   assert.equal(hasName.valueType, 'boolean')
+  assert.equal(clearedNames.valueType, 'void')
   assert.deepEqual(result.ir.features, [
     'map-get-null',
     'runtime-values'
@@ -4395,6 +4403,8 @@ export function main(): void {
   assert.match(ts.code, /function ccjsMapGet<K, V>\(map: Map<K, V>, key: K\): V \| null \{/)
   assert.match(ts.code, /const maybeScore: number \| null = ccjsMapGet\(scores, "Ada"\)/)
   assert.match(result.code, /\.add\("Ada"\)\.has\("Ada"\)/)
+  assert.match(result.code, /const clearedScores = scores\.clear\(\)/)
+  assert.match(result.code, /const clearedNames = names\.clear\(\)/)
 
   assertDiagnostic(`export function main(): void {
   const scores: Map<string, number> = new Map()
@@ -4426,6 +4436,18 @@ export function main(): void {
   scores.size = 1
 }
 `, 'CCJS_ASSIGN_READONLY_FIELD')
+
+  assertDiagnostic(`export function main(): void {
+  const scores: Map<string, number> = new Map()
+  scores.clear('Ada')
+}
+`, 'CCJS_ARG_COUNT')
+
+  assertDiagnostic(`export function main(): void {
+  const names: Set<string> = new Set()
+  names.clear('Ada')
+}
+`, 'CCJS_ARG_COUNT')
 
   assertDiagnostic(`type User = {
   name: string

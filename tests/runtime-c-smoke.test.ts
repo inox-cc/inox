@@ -220,6 +220,17 @@ int main(void) {
   if (ccjs_set_size(set, &set_size) != CCJS_OK) return 1;
   printf("%zu %zu\\n", size, set_size);
 
+  if (ccjs_map_clear(map) != CCJS_OK) return 1;
+  if (ccjs_set_clear(set) != CCJS_OK) return 1;
+  if (ccjs_map_get(map, ccjs_number_value(20), &found) != CCJS_OK) return 1;
+  if (found.tag != CCJS_TAG_NULL) return 1;
+  ccjs_release(found);
+  found = ccjs_undefined_value();
+  if (ccjs_set_has(set, ccjs_number_value(20), &has) != CCJS_OK) return 1;
+  if (ccjs_map_size(map, &size) != CCJS_OK) return 1;
+  if (ccjs_set_size(set, &set_size) != CCJS_OK) return 1;
+  printf("%d %zu %zu\\n", has ? 1 : 0, size, set_size);
+
   ccjs_release(same_key);
   ccjs_release(key);
   ccjs_release(set);
@@ -236,7 +247,7 @@ int main(void) {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '7 1 1 0\n1 1 0\n20 20\n')
+    assert.equal(run.stdout, '7 1 1 0\n1 1 0\n20 20\n0 0 0\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -4905,6 +4916,9 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
   const removed = scores.delete('Ada')
   const hasAda = scores.has('Ada')
   console.log(score, missing, hadAda, removed, hasAda, scores.size)
+  scores.set('Grace', 9)
+  scores.clear()
+  console.log(scores.get('Grace') ?? 11, scores.has('Grace'), scores.size)
 
   const names: Set<string> = new Set()
   names.add('Ada')
@@ -4912,6 +4926,9 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
   const removedName = names.delete('Ada')
   const hasName = names.has('Ada')
   console.log(hadName, removedName, hasName, names.size)
+  names.add('Grace')
+  names.clear()
+  console.log(names.has('Grace'), names.size)
 }
 `, {
       target: 'c'
@@ -4926,7 +4943,7 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '7 9 1 1 0 0\n1 1 0 0\n')
+    assert.equal(run.stdout, '7 9 1 1 0 0\n11 0 0\n1 1 0 0\n0 0\n')
   } finally {
     await rm(dir, {
       recursive: true,
