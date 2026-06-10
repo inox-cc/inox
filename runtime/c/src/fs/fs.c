@@ -1,0 +1,240 @@
+#include <string.h>
+#include "ccjs/fs.h"
+
+typedef enum ccjs_fs_request_kind {
+  CCJS_FS_REQUEST_READ_FILE,
+  CCJS_FS_REQUEST_WRITE_FILE
+} ccjs_fs_request_kind;
+
+typedef struct ccjs_fs_request {
+  ccjs_loop* loop;
+  ccjs_promise* promise;
+  ccjs_fs_request_kind kind;
+  char* path;
+  size_t path_len;
+  char* bytes;
+  size_t byte_len;
+} ccjs_fs_request;
+
+static ccjs_fs_adapter ccjs_fs_active_adapter = { 0, 0, 0 };
+
+static ccjs_status ccjs_fs_copy_bytes(ccjs_allocator* allocator, const char* bytes, size_t len, char** out);
+static ccjs_status ccjs_fs_queue_request(
+  ccjs_loop* loop,
+  ccjs_fs_request_kind kind,
+  const char* path,
+  size_t path_len,
+  const char* bytes,
+  size_t byte_len,
+  ccjs_promise** out
+);
+static ccjs_status ccjs_fs_run_request(void* context);
+static ccjs_status ccjs_fs_reject_status(ccjs_promise* promise, ccjs_status status);
+static void ccjs_fs_request_finalizer(void* context);
+
+void ccjs_fs_set_adapter(ccjs_fs_adapter adapter) {
+  ccjs_fs_active_adapter = adapter;
+}
+
+ccjs_fs_adapter ccjs_fs_get_adapter(void) {
+  return ccjs_fs_active_adapter;
+}
+
+void ccjs_fs_clear_adapter(void) {
+  ccjs_fs_adapter adapter = { 0, 0, 0 };
+  ccjs_fs_active_adapter = adapter;
+}
+
+ccjs_status ccjs_fs_read_file_sync(ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+  if (out != 0) {
+    *out = ccjs_undefined_value();
+  }
+
+  if (allocator == 0 || allocator->alloc == 0 || out == 0 || (path == 0 && path_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (ccjs_fs_active_adapter.read_file == 0) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  return ccjs_fs_active_adapter.read_file(ccjs_fs_active_adapter.user, allocator, path, path_len, out);
+}
+
+ccjs_status ccjs_fs_write_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
+  if ((path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (ccjs_fs_active_adapter.write_file == 0) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  return ccjs_fs_active_adapter.write_file(ccjs_fs_active_adapter.user, path, path_len, bytes, byte_len);
+}
+
+ccjs_status ccjs_fs_read_file(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_FILE, path, path_len, 0, 0, out);
+}
+
+ccjs_status ccjs_fs_write_file(
+  ccjs_loop* loop,
+  const char* path,
+  size_t path_len,
+  const char* bytes,
+  size_t byte_len,
+  ccjs_promise** out
+) {
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, bytes, byte_len, out);
+}
+
+static ccjs_status ccjs_fs_copy_bytes(ccjs_allocator* allocator, const char* bytes, size_t len, char** out) {
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = 0;
+
+  if (bytes == 0 && len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (allocator == 0 || allocator->alloc == 0 || len == ((size_t)-1)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* copy = allocator->alloc(allocator->user, len + 1, _Alignof(char));
+
+  if (copy == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  if (len != 0) {
+    memcpy(copy, bytes, len);
+  }
+
+  copy[len] = '\0';
+  *out = copy;
+
+  return CCJS_OK;
+}
+
+static ccjs_status ccjs_fs_queue_request(
+  ccjs_loop* loop,
+  ccjs_fs_request_kind kind,
+  const char* path,
+  size_t path_len,
+  const char* bytes,
+  size_t byte_len,
+  ccjs_promise** out
+) {
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = 0;
+
+  if (loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || (path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_promise* promise = 0;
+  ccjs_status status = ccjs_promise_new(loop, &promise);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  ccjs_fs_request* request = loop->allocator->alloc(loop->allocator->user, sizeof(ccjs_fs_request), _Alignof(ccjs_fs_request));
+
+  if (request == 0) {
+    ccjs_promise_release(promise);
+    return CCJS_ERR_OOM;
+  }
+
+  request->loop = loop;
+  request->promise = promise;
+  request->kind = kind;
+  request->path = 0;
+  request->path_len = path_len;
+  request->bytes = 0;
+  request->byte_len = byte_len;
+  ccjs_promise_retain(promise);
+
+  status = ccjs_fs_copy_bytes(loop->allocator, path, path_len, &request->path);
+
+  if (status == CCJS_OK && kind == CCJS_FS_REQUEST_WRITE_FILE) {
+    status = ccjs_fs_copy_bytes(loop->allocator, bytes, byte_len, &request->bytes);
+  }
+
+  if (status == CCJS_OK) {
+    status = ccjs_loop_queue_immediate(loop, ccjs_fs_run_request, request, ccjs_fs_request_finalizer, 0);
+  }
+
+  if (status != CCJS_OK) {
+    ccjs_fs_request_finalizer(request);
+    ccjs_promise_release(promise);
+    return status;
+  }
+
+  *out = promise;
+
+  return CCJS_OK;
+}
+
+static ccjs_status ccjs_fs_run_request(void* context) {
+  ccjs_fs_request* request = (ccjs_fs_request*)context;
+
+  if (request == 0 || request->loop == 0 || request->promise == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_READ_FILE) {
+    ccjs_value result = ccjs_undefined_value();
+    ccjs_status status = ccjs_fs_read_file_sync(request->loop->allocator, request->path, request->path_len, &result);
+
+    if (status != CCJS_OK) {
+      return ccjs_fs_reject_status(request->promise, status);
+    }
+
+    ccjs_status resolve_status = ccjs_promise_resolve(request->promise, result);
+    ccjs_release(result);
+
+    return resolve_status;
+  }
+
+  ccjs_status status = ccjs_fs_write_file_sync(request->path, request->path_len, request->bytes, request->byte_len);
+
+  if (status != CCJS_OK) {
+    return ccjs_fs_reject_status(request->promise, status);
+  }
+
+  return ccjs_promise_resolve(request->promise, ccjs_undefined_value());
+}
+
+static ccjs_status ccjs_fs_reject_status(ccjs_promise* promise, ccjs_status status) {
+  ccjs_status reject_status = ccjs_promise_reject(promise, ccjs_number_value((ccjs_number)status));
+
+  return reject_status == CCJS_OK ? CCJS_OK : reject_status;
+}
+
+static void ccjs_fs_request_finalizer(void* context) {
+  ccjs_fs_request* request = (ccjs_fs_request*)context;
+
+  if (request == 0 || request->loop == 0 || request->loop->allocator == 0 || request->loop->allocator->free == 0) {
+    return;
+  }
+
+  ccjs_allocator* allocator = request->loop->allocator;
+
+  if (request->path != 0) {
+    allocator->free(allocator->user, request->path, request->path_len + 1, _Alignof(char));
+  }
+
+  if (request->bytes != 0) {
+    allocator->free(allocator->user, request->bytes, request->byte_len + 1, _Alignof(char));
+  }
+
+  ccjs_promise_release(request->promise);
+  allocator->free(allocator->user, request, sizeof(ccjs_fs_request), _Alignof(ccjs_fs_request));
+}

@@ -14,7 +14,8 @@ typedef enum ccjs_status {
   CCJS_ERR_TYPE,
   CCJS_ERR_THROW,
   CCJS_ERR_FIELD,
-  CCJS_ERR_READONLY
+  CCJS_ERR_READONLY,
+  CCJS_ERR_UNSUPPORTED
 } ccjs_status;
 
 typedef enum ccjs_tag {
