@@ -47,6 +47,7 @@ const requiredFiles: string[] = [
   'scripts/test-codegen-snapshots.ts',
   'scripts/test-diagnostic-snapshots.ts',
   'scripts/test-differential.ts',
+  'scripts/test-hir-snapshots.ts',
   'scripts/test-ir-snapshots.ts',
   'tests/README.md'
 ]
@@ -65,6 +66,7 @@ const requiredFixtureDirs: string[] = [
   'tests/differential',
   'tests/snapshots/codegen',
   'tests/snapshots/diagnostics',
+  'tests/snapshots/hir',
   'tests/snapshots/ir'
 ]
 
