@@ -455,6 +455,104 @@ int main(void) {
   }
 })
 
+test('C runtime Promise microtasks settle asynchronously', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-promise-runtime-'))
+  const source = join(dir, 'promise-runtime.c')
+  const output = join(dir, 'promise-runtime')
+
+  try {
+    await writeFile(source, `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/promise.h"
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+typedef struct test_log {
+  int count;
+  int values[4];
+} test_log;
+
+static ccjs_status on_value(void* context, ccjs_value value) {
+  test_log* log = (test_log*)context;
+  log->values[log->count] = (int)value.as.number;
+  log->count += 1;
+  return CCJS_OK;
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_loop loop;
+  ccjs_promise* promise = 0;
+  test_log log = { 0, { 0, 0, 0, 0 } };
+  ccjs_value result;
+
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
+  if (ccjs_promise_new(&loop, &promise) != CCJS_OK) return 2;
+  if (ccjs_promise_then(promise, on_value, 0, &log, 0) != CCJS_OK) return 3;
+  if (ccjs_promise_then(promise, on_value, 0, &log, 0) != CCJS_OK) return 4;
+  if (log.count != 0) return 5;
+  if (ccjs_promise_resolve(promise, ccjs_number_value(7)) != CCJS_OK) return 6;
+  if (log.count != 0) return 7;
+  if (ccjs_loop_pending_microtasks(&loop) != 2) return 8;
+  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 9;
+  if (log.count != 2 || log.values[0] != 7 || log.values[1] != 7) return 10;
+  if (ccjs_promise_get_result(promise, &result) != CCJS_OK) return 11;
+  if (result.as.number != 7) return 12;
+  if (ccjs_promise_then(promise, on_value, 0, &log, 0) != CCJS_OK) return 13;
+  if (log.count != 2) return 14;
+  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 15;
+  if (log.count != 3 || log.values[2] != 7) return 16;
+
+  ccjs_release(result);
+  ccjs_promise_release(promise);
+  ccjs_loop_dispose(&loop);
+  printf("%d %d %d %d\\n", log.count, log.values[0], log.values[1], log.values[2]);
+  return 0;
+}
+`)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3 7 7 7\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('C runtime time adapter keeps Date.now on monotonic delta', async t => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5492,6 +5590,8 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
     'runtime/c/src/core/value.c',
     'runtime/c/src/core/allocator.c',
     'runtime/c/src/core/callback.c',
+    'runtime/c/src/async/loop.c',
+    'runtime/c/src/async/promise.c',
     'runtime/c/src/strings/string.c',
     'runtime/c/src/objects/object.c',
     'runtime/c/src/arrays/array.c',
