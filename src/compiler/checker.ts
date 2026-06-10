@@ -1115,6 +1115,12 @@ class Checker {
       return promiseMethodType
     }
 
+    const timerHandleMethodType = this.checkTimerHandleMethodCall(expression)
+
+    if (timerHandleMethodType != null) {
+      return timerHandleMethodType
+    }
+
     const fsType = this.checkFsCall(expression)
 
     if (fsType != null) {
@@ -1478,6 +1484,27 @@ class Checker {
     expression.returnPromiseValueType = returnPromiseValueType
 
     return actualReturnType
+  }
+
+  checkTimerHandleMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || !isTimerHandleMethod(expression.callee.property)) {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+
+    if (objectType !== 'timer') {
+      return null
+    }
+
+    for (const arg of expression.args) {
+      this.checkExpression(arg)
+    }
+
+    this.report('CCJS_TIMER_REF_UNREF', 'timer handle ref() and unref() are not supported in the MVP; timer handles are referenced by default', expression.loc)
+    expression.valueType = 'void'
+
+    return 'void'
   }
 
   checkCollectionMethodCall(expression: AnyNode): ValueType | null {
@@ -3125,6 +3152,10 @@ function timerRuntimeMethodName(callee: AnyNode): string | null {
 
 function timerClearMethodName(method: string): string | null {
   return ['clearImmediate', 'clearInterval', 'clearTimeout'].includes(method) ? method : null
+}
+
+function isTimerHandleMethod(method: string): boolean {
+  return ['ref', 'unref'].includes(method)
 }
 
 function timerCallbackFunctionType(): AnyNode {

@@ -6076,6 +6076,18 @@ export function main(): void {
 `, 'CCJS_TYPE_MISMATCH', {
     target: 'c'
   })
+
+  assertDiagnostic(`export function main(): void {
+  const timeout = setTimeout(() => {}, 1)
+  timeout.unref()
+}
+`, 'CCJS_TIMER_REF_UNREF')
+
+  assertDiagnostic(`export function main(): void {
+  const interval = setInterval(() => {}, 1)
+  interval.ref()
+}
+`, 'CCJS_TIMER_REF_UNREF')
 })
 
 test('rejects unknown imported exports', async () => {
