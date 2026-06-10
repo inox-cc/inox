@@ -339,21 +339,21 @@ function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[
   }
 
   if (statement.type === 'VariableDeclaration') {
-    const init = statement.init == null ? '' : ` = ${emitExpression(statement.init)}`
+    const init = statement.init == null ? '' : ` = ${emitExpression(statement.init, options)}`
     const exported = statement.exported && !options.stripExports
     return [`${exported ? 'export ' : ''}${statement.kind} ${statement.name}${emitVariableTypeAnnotation(statement, options)}${init}`]
   }
 
   if (statement.type === 'ExpressionStatement') {
-    return [`${emitExpression(statement.expression)}`]
+    return [`${emitExpression(statement.expression, options)}`]
   }
 
   if (statement.type === 'ReturnStatement') {
-    return [statement.argument == null ? 'return' : `return ${emitExpression(statement.argument)}`]
+    return [statement.argument == null ? 'return' : `return ${emitExpression(statement.argument, options)}`]
   }
 
   if (statement.type === 'ThrowStatement') {
-    return [`throw ${emitExpression(statement.argument)}`]
+    return [`throw ${emitExpression(statement.argument, options)}`]
   }
 
   return []
@@ -361,7 +361,7 @@ function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[
 
 function emitIfStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   const lines = [
-    `if (${emitExpression(statement.condition)}) {`,
+    `if (${emitExpression(statement.condition, options)}) {`,
     ...indent(emitStatementBody(statement.consequent, options))
   ]
 
@@ -379,7 +379,7 @@ function emitIfStatement(statement: AnyNode, options: JsEmitOptions = {}): strin
 
 function emitWhileStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   return [
-    `while (${emitExpression(statement.condition)}) {`,
+    `while (${emitExpression(statement.condition, options)}) {`,
     ...indent(emitStatementBody(statement.body, options)),
     '}'
   ]
@@ -387,7 +387,7 @@ function emitWhileStatement(statement: AnyNode, options: JsEmitOptions = {}): st
 
 function emitForStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   return [
-    `for (${emitForInitializer(statement.init)}; ${statement.test == null ? '' : emitExpression(statement.test)}; ${statement.update == null ? '' : emitExpression(statement.update)}) {`,
+    `for (${emitForInitializer(statement.init, options)}; ${statement.test == null ? '' : emitExpression(statement.test, options)}; ${statement.update == null ? '' : emitExpression(statement.update, options)}) {`,
     ...indent(emitStatementBody(statement.body, options)),
     '}'
   ]
@@ -395,7 +395,7 @@ function emitForStatement(statement: AnyNode, options: JsEmitOptions = {}): stri
 
 function emitForOfStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   return [
-    `for (${statement.kind} ${statement.name} of ${emitExpression(statement.iterable)}) {`,
+    `for (${statement.kind} ${statement.name} of ${emitExpression(statement.iterable, options)}) {`,
     ...indent(emitStatementBody(statement.body, options)),
     '}'
   ]
@@ -403,11 +403,11 @@ function emitForOfStatement(statement: AnyNode, options: JsEmitOptions = {}): st
 
 function emitSwitchStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   const lines = [
-    `switch (${emitExpression(statement.discriminant)}) {`
+    `switch (${emitExpression(statement.discriminant, options)}) {`
   ]
 
   for (const item of statement.cases) {
-    lines.push(item.test == null ? '  default:' : `  case ${emitExpression(item.test)}:`)
+    lines.push(item.test == null ? '  default:' : `  case ${emitExpression(item.test, options)}:`)
     lines.push(...item.consequent.flatMap(statement => indent(indent(emitStatement(statement, options)))))
   }
 
@@ -445,20 +445,20 @@ function emitStatementBody(statement: AnyNode, options: JsEmitOptions = {}): str
   return emitStatement(statement, options)
 }
 
-function emitForInitializer(init: AnyNode | null): string {
+function emitForInitializer(init: AnyNode | null, options: JsEmitOptions = {}): string {
   if (init == null) {
     return ''
   }
 
   if (init.type === 'VariableDeclaration') {
-    const value = init.init == null ? '' : ` = ${emitExpression(init.init)}`
-    return `${init.kind} ${init.name}${value}`
+    const value = init.init == null ? '' : ` = ${emitExpression(init.init, options)}`
+    return `${init.kind} ${init.name}${emitVariableTypeAnnotation(init, options)}${value}`
   }
 
-  return emitExpression(init)
+  return emitExpression(init, options)
 }
 
-function emitExpression(expression: AnyNode): string {
+function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): string {
   if (expression.type === 'StringLiteral') {
     return JSON.stringify(expression.value)
   }
@@ -488,70 +488,99 @@ function emitExpression(expression: AnyNode): string {
   }
 
   if (expression.type === 'MemberExpression') {
-    return `${emitExpression(expression.object)}.${expression.property}`
+    return `${emitExpression(expression.object, options)}.${expression.property}`
   }
 
   if (expression.type === 'IndexExpression') {
-    return `${emitExpression(expression.object)}[${emitExpression(expression.index)}]`
+    return `${emitExpression(expression.object, options)}[${emitExpression(expression.index, options)}]`
   }
 
   if (expression.type === 'OptionalMemberExpression') {
-    return `${emitExpression(expression.object)}?.${expression.property}`
+    return `${emitExpression(expression.object, options)}?.${expression.property}`
   }
 
   if (expression.type === 'OptionalIndexExpression') {
-    return `${emitExpression(expression.object)}?.[${emitExpression(expression.index)}]`
+    return `${emitExpression(expression.object, options)}?.[${emitExpression(expression.index, options)}]`
   }
 
   if (expression.type === 'OptionalCallExpression') {
-    return `${emitExpression(expression.callee)}?.(${expression.args.map(emitExpression).join(', ')})`
+    return `${emitExpression(expression.callee, options)}?.(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.type === 'CallExpression') {
-    return `${emitExpression(expression.callee)}(${expression.args.map(emitExpression).join(', ')})`
+    return `${emitExpression(expression.callee, options)}(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.type === 'NewExpression') {
-    return `new ${emitExpression(expression.callee)}(${expression.args.map(emitExpression).join(', ')})`
+    return `new ${emitExpression(expression.callee, options)}(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.type === 'AwaitExpression') {
-    return `await ${emitExpression(expression.argument)}`
+    return `await ${emitExpression(expression.argument, options)}`
   }
 
   if (expression.type === 'ArrowFunctionExpression') {
-    const params = expression.params.length === 1
-      ? expression.params[0].name
-      : `(${expression.params.map(param => param.name).join(', ')})`
+    const params = emitArrowFunctionParams(expression, options)
+    const returnType = emitArrowReturnTypeAnnotation(expression, options)
 
     if (expression.expressionBody) {
-      return `${params} => ${emitExpression(expression.body)}`
+      return `${params}${returnType} => ${emitExpression(expression.body, options)}`
     }
 
-    return `${params} => {\n${indent(expression.body.flatMap(statement => emitStatement(statement))).join('\n')}\n}`
+    return `${params}${returnType} => {\n${indent(expression.body.flatMap(statement => emitStatement(statement, options))).join('\n')}\n}`
   }
 
   if (expression.type === 'AssignmentExpression') {
-    return `${emitExpression(expression.target)} = ${emitExpression(expression.value)}`
+    return `${emitExpression(expression.target, options)} = ${emitExpression(expression.value, options)}`
   }
 
   if (expression.type === 'BinaryExpression') {
-    return `(${emitExpression(expression.left)} ${emitJsOperator(expression.operator)} ${emitExpression(expression.right)})`
+    return `(${emitExpression(expression.left, options)} ${emitJsOperator(expression.operator)} ${emitExpression(expression.right, options)})`
   }
 
   if (expression.type === 'UnaryExpression') {
-    return `(${expression.operator}${emitExpression(expression.argument)})`
+    return `(${expression.operator}${emitExpression(expression.argument, options)})`
   }
 
   if (expression.type === 'ArrayLiteral') {
-    return `[${expression.elements.map(emitExpression).join(', ')}]`
+    return `[${expression.elements.map(element => emitExpression(element, options)).join(', ')}]`
   }
 
   if (expression.type === 'ObjectLiteral') {
-    return `{ ${expression.properties.map(emitObjectProperty).join(', ')} }`
+    return `{ ${expression.properties.map(property => emitObjectProperty(property, options)).join(', ')} }`
   }
 
   return 'undefined'
+}
+
+function emitArrowFunctionParams(expression: AnyNode, options: JsEmitOptions = {}): string {
+  if (options.emitTypes !== true) {
+    return expression.params.length === 1
+      ? expression.params[0].name
+      : `(${expression.params.map(param => param.name).join(', ')})`
+  }
+
+  return `(${expression.params.map(param => {
+    const type = emitTsValueType(param.declaredType ?? param.valueType, param)
+
+    return type === 'unknown' ? param.name : `${param.name}: ${type}`
+  }).join(', ')})`
+}
+
+function emitArrowReturnTypeAnnotation(expression: AnyNode, options: JsEmitOptions = {}): string {
+  if (options.emitTypes !== true) {
+    return ''
+  }
+
+  const type = emitTsValueType(expression.declaredReturnType ?? expression.returnType, {
+    arrayElementType: expression.returnArrayElementType,
+    mapKeyType: expression.returnMapKeyType,
+    mapValueType: expression.returnMapValueType,
+    nullable: expression.returnNullable,
+    setElementType: expression.returnSetElementType
+  })
+
+  return type === 'unknown' ? '' : `: ${type}`
 }
 
 function emitJsOperator(operator: string): string {
@@ -566,8 +595,8 @@ function emitJsOperator(operator: string): string {
   return operator
 }
 
-function emitObjectProperty(property: AnyNode): string {
-  return `${emitObjectKey(property.key)}: ${emitExpression(property.value)}`
+function emitObjectProperty(property: AnyNode, options: JsEmitOptions = {}): string {
+  return `${emitObjectKey(property.key)}: ${emitExpression(property.value, options)}`
 }
 
 function emitObjectKey(key: string): string {

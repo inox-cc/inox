@@ -1673,8 +1673,9 @@ export function main(): void {
   const names = ['Ada']
   const scores: Map<string, number> = new Map()
   const user: User = { id: 1, name: 'Ada' }
+  const formatter: Formatter = (user, bag) => user.name + bag.names[0]
   let maybe: string | null = null
-  console.log(greeter.greet(user), render(user).name, total, names[0], scores.has('Ada'), maybe)
+  console.log(greeter.greet(user), formatter(user, { names, scores, tags: new Set(), nickname: null }), render(user).name, total, names[0], scores.has('Ada'), maybe)
 }
 `
   const js = compileSource(source, {
@@ -1698,6 +1699,7 @@ export function main(): void {
   assert.match(ts.code, /const names: string\[\] = \["Ada"\]/)
   assert.match(ts.code, /const scores: Map<string, number> = new Map\(\)/)
   assert.match(ts.code, /const user: User = \{ id: 1, name: "Ada" \}/)
+  assert.match(ts.code, /const formatter: Formatter = \(user: User, bag: Bag\): string => \(user\.name \+ bag\.names\[0\]\)/)
   assert.match(ts.code, /let maybe: string \| null = null/)
 })
 
@@ -3179,6 +3181,13 @@ test('compiles arrow functions and chain calls to JS and C', () => {
   assert.match(js.code, /\(left, right\) => \(left - right\)/)
   assert.match(js.code, /value => \(value > 1\)/)
   assert.match(js.code, /value => \(value \* 2\)/)
+  const ts = compileSource(source, {
+    target: 'ts'
+  })
+
+  assert.match(ts.code, /\.sort\(\(left: number, right: number\): number => \(left - right\)\)/)
+  assert.match(ts.code, /\.filter\(\(value: number\): boolean => \(value > 1\)\)/)
+  assert.match(ts.code, /\.map\(\(value: number\): number => \(value \* 2\)\)/)
   const c = compileSource(source, {
     target: 'c'
   })
@@ -4405,9 +4414,12 @@ test('compiles a static ESM module graph to typed TS bundle', async () => {
 `)
     await writeFile(join(dir, 'lib.ts'), `import type { User as Person } from './types.ts'
 
+type Formatter = (user: Person) => string
+
+const label: Formatter = user => user.name
+
 export function greet(user: Person): void {
-  const label: string = user.name
-  console.log(label)
+  console.log(label(user))
 }
 `)
     await writeFile(join(dir, 'main.ts'), `import type { User } from './types.ts'
@@ -4426,8 +4438,9 @@ export function main(): void {
     assert.equal([...result.code.matchAll(/type User = \{/g)].length, 1)
     assert.match(result.code, /type User = \{\n  readonly id: number,\n  name: string,\n\}/)
     assert.match(result.code, /type Person = \{\n  readonly id: number,\n  name: string,\n\}/)
+    assert.match(result.code, /type Formatter = \(user: Person\) => string/)
+    assert.match(result.code, /const label: Formatter = \(user: Person\): string => user\.name/)
     assert.match(result.code, /function greet\(user: Person\): void \{/)
-    assert.match(result.code, /const label: string = user\.name/)
     assert.match(result.code, /function main\(\): void \{/)
     assert.match(result.code, /const user: User = \{ id: 1, name: "Ada" \}/)
     assert.doesNotMatch(result.code, /export function/)

@@ -1217,7 +1217,9 @@ class Checker {
           this.checkAssignableType(expected, param.valueType, param.loc)
         }
 
+        param.declaredType = param.valueType === 'unknown' ? actual : param.valueType
         param.valueType = actual
+        param.nullable = false
 
         this.declare(param.name, {
           kind: 'param',
@@ -1237,6 +1239,10 @@ class Checker {
     if (returnType != null) {
       this.checkAssignableType(actualReturnType, returnType, expression.loc)
     }
+
+    expression.returnType = returnType ?? actualReturnType
+    expression.declaredReturnType = expression.returnType
+    expression.returnNullable = expression.expressionBody && expression.body?.nullable === true
 
     return actualReturnType
   }
@@ -1385,6 +1391,8 @@ class Checker {
   }
 
   checkArrowFunctionExpression(expression: AnyNode, functionType: AnyNode | null = null): void {
+    let actualReturnType: ValueType = functionType?.returnType ?? 'unknown'
+
     this.withScope(() => {
       if (functionType != null && expression.params.length > functionType.params.length) {
         this.report('CCJS_ARG_COUNT', `function callback expects at most ${functionType.params.length} parameter(s), got ${expression.params.length}`, expression.loc)
@@ -1409,6 +1417,18 @@ class Checker {
           this.checkAssignableType(expected.valueType, paramInfo.valueType, param.loc, expected.nullable === true)
         }
 
+        param.declaredType = param.valueType === 'unknown'
+          ? expected?.declaredType ?? paramInfo.valueType
+          : param.valueType
+        param.valueType = paramInfo.valueType
+        param.nullable = paramInfo.nullable
+        param.arrayElementType = paramInfo.arrayElementType
+        param.mapKeyType = paramInfo.mapKeyType
+        param.mapValueType = paramInfo.mapValueType
+        param.setElementType = paramInfo.setElementType
+        param.functionType = paramInfo.functionType
+        param.shape = paramInfo.shape
+
         this.declare(param.name, {
           kind: 'param',
           mutable: true,
@@ -1425,7 +1445,7 @@ class Checker {
       }
 
       if (expression.expressionBody) {
-        const actualReturnType = this.checkExpression(expression.body)
+        actualReturnType = this.checkExpression(expression.body)
 
         if (functionType != null) {
           this.checkAssignableType(actualReturnType, functionType.returnType, expression.body.loc, functionType.returnNullable === true)
@@ -1449,6 +1469,14 @@ class Checker {
         }
       }
     })
+
+    expression.returnType = functionType?.returnType ?? actualReturnType
+    expression.declaredReturnType = functionType?.declaredReturnType ?? expression.returnType
+    expression.returnNullable = functionType?.returnNullable === true || (expression.expressionBody && expression.body?.nullable === true)
+    expression.returnArrayElementType = functionType?.returnArrayElementType ?? expression.body?.arrayElementType ?? null
+    expression.returnMapKeyType = functionType?.returnMapKeyType ?? expression.body?.mapKeyType ?? null
+    expression.returnMapValueType = functionType?.returnMapValueType ?? expression.body?.mapValueType ?? null
+    expression.returnSetElementType = functionType?.returnSetElementType ?? expression.body?.setElementType ?? null
   }
 
   checkClassDeclaration(statement: AnyNode): void {
@@ -1821,6 +1849,7 @@ class Checker {
 
               return {
                 ...param,
+                declaredType: param.valueType,
                 valueType: paramInfo.valueType,
                 nullable: paramInfo.nullable,
                 arrayElementType: paramInfo.arrayElementType,
@@ -1831,6 +1860,7 @@ class Checker {
                 shape: paramInfo.shape
               }
             }),
+            declaredReturnType: shape.returnType,
             returnType: returnInfo.valueType,
             returnNullable: returnInfo.nullable,
             returnArrayElementType: returnInfo.arrayElementType,
