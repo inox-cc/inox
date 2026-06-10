@@ -1,6 +1,5 @@
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "ccjs/array.h"
 #include "ccjs/string.h"
@@ -248,7 +247,17 @@ ccjs_status ccjs_array_sort(ccjs_value array) {
     return CCJS_OK;
   }
 
-  qsort(instance->items, instance->len, sizeof(ccjs_value), ccjs_array_sort_compare);
+  for (size_t index = 1; index < instance->len; index += 1) {
+    ccjs_value value = instance->items[index];
+    size_t scan = index;
+
+    while (scan > 0 && ccjs_array_sort_compare(&instance->items[scan - 1], &value) > 0) {
+      instance->items[scan] = instance->items[scan - 1];
+      scan -= 1;
+    }
+
+    instance->items[scan] = value;
+  }
 
   return CCJS_OK;
 }

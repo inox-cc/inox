@@ -2256,6 +2256,10 @@ test('generated C Array.sort comparator callbacks compile and run with runtime s
   names.sort((left, right) => left.length - right.length)
   console.log(names[0], names[1], names[2])
 
+  const stable = ['bb', 'aa', 'c']
+  stable.sort((left, right) => left.length - right.length)
+  console.log(stable[0], stable[1], stable[2])
+
   const flags = [true, false, true]
   flags.sort((left, right) => left - right)
   console.log(flags[0], flags[1], flags[2])
@@ -2276,7 +2280,7 @@ test('generated C Array.sort comparator callbacks compile and run with runtime s
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '1 2 3\n3 2 1\na cc bbb\n0 1 1\n3 20 40 50\n')
+    assert.equal(run.stdout, '1 2 3\n3 2 1\na cc bbb\nc bb aa\n0 1 1\n3 20 40 50\n')
   } finally {
     await rm(dir, {
       recursive: true,
