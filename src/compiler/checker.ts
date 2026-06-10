@@ -1173,6 +1173,8 @@ class Checker {
       return null
     }
 
+    expression.fsRuntimeMethod = method
+
     if (method === 'readFile') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report('CCJS_ARG_COUNT', `function fs.readFile expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
@@ -1183,6 +1185,19 @@ class Checker {
 
       expression.valueType = 'promise'
       expression.promiseValueType = 'string'
+
+      return 'promise'
+    }
+
+    if (method === 'readFileBytes') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function fs.readFileBytes expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'bytes'
 
       return 'promise'
     }
@@ -1198,6 +1213,20 @@ class Checker {
       expression.promiseValueType = 'array'
       expression.arrayElementType = 'string'
       expression.arrayElementDeclaredType = 'string'
+
+      return 'promise'
+    }
+
+    if (method === 'writeFileBytes') {
+      if (expression.args.length !== 2) {
+        this.report('CCJS_ARG_COUNT', `function fs.writeFileBytes expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsBytesArg(expression, 1)
+
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'void'
 
       return 'promise'
     }
@@ -1223,6 +1252,16 @@ class Checker {
     }
 
     this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
+  }
+
+  checkFsBytesArg(expression: AnyNode, index: number): void {
+    const arg = expression.args[index]
+
+    if (arg == null) {
+      return
+    }
+
+    this.checkAssignableType(this.checkExpression(arg), 'bytes', arg.loc, false, this.expressionCanBeNull(arg))
   }
 
   checkPromiseStaticCall(expression: AnyNode): ValueType | null {
@@ -2352,6 +2391,21 @@ class Checker {
       }
     }
 
+    if (isBytesTypeName(name)) {
+      return {
+        valueType: 'bytes',
+        nullable: false,
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null
+      }
+    }
+
     if (isBuiltinValueType(name)) {
       return {
         valueType: name,
@@ -2885,7 +2939,11 @@ function commonArrayElementType(types: ValueType[]): ValueType {
 }
 
 function isBuiltinValueType(name: string): boolean {
-  return ['array', 'boolean', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(name)
+  return ['array', 'boolean', 'bytes', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(name)
+}
+
+function isBytesTypeName(name: string): boolean {
+  return name === 'Buffer' || name === 'Uint8Array'
 }
 
 function promiseStaticMethodName(callee: AnyNode): string | null {
@@ -2899,7 +2957,7 @@ function promiseStaticMethodName(callee: AnyNode): string | null {
 }
 
 function fsRuntimeMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'MemberExpression' || !['readFile', 'readDir', 'writeFile'].includes(callee.property)) {
+  if (callee.type !== 'MemberExpression' || !['readFile', 'readFileBytes', 'readDir', 'writeFile', 'writeFileBytes'].includes(callee.property)) {
     return null
   }
 

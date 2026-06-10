@@ -232,8 +232,10 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     || path === 'Promise.resolve'
     || path === 'Promise.reject'
     || path === 'fs.readFile'
+    || path === 'fs.readFileBytes'
     || path === 'fs.readDir'
     || path === 'fs.writeFile'
+    || path === 'fs.writeFileBytes'
     || path === 'Map'
     || path === 'Set'
 }
@@ -3687,7 +3689,8 @@ function emitRuntimeCallbackRuntimeValueReturnLines(argument, context) {
 }
 
 function isManagedRuntimeReturnType(valueType) {
-  return valueType === 'string'
+  return valueType === 'bytes'
+    || valueType === 'string'
     || valueType === 'object'
     || valueType === 'array'
     || valueType === 'map'
@@ -3790,7 +3793,8 @@ function registerRuntimeValueMetadata(name, valueType, declaration, expression, 
 function isRuntimeValueLocalExpression(expression, context) {
   const valueType = inferExpressionType(expression, context)
 
-  return valueType === 'object'
+  return valueType === 'bytes'
+    || valueType === 'object'
     || valueType === 'array'
     || valueType === 'map'
     || valueType === 'set'
@@ -4265,6 +4269,10 @@ function cRuntimeValueTag(valueType) {
     return 'CCJS_TAG_STRING'
   }
 
+  if (valueType === 'bytes') {
+    return 'CCJS_TAG_BYTES'
+  }
+
   if (valueType === 'object') {
     return 'CCJS_TAG_OBJECT'
   }
@@ -4389,6 +4397,10 @@ function emitObjectMemberVariableDeclaration(statement, member, context, emitGet
     return emitObjectCollectionMemberVariableDeclaration(statement, member, context, emitGetCall)
   }
 
+  if (member.valueType === 'bytes') {
+    return emitObjectBytesMemberVariableDeclaration(statement, member, context, emitGetCall)
+  }
+
   if (member.valueType === 'string') {
     return emitObjectStringMemberVariableDeclaration(statement, member, context, emitGetCall)
   }
@@ -4446,6 +4458,19 @@ function emitObjectCollectionMemberVariableDeclaration(statement, member, contex
   } else {
     context.setElementTypes.set(statement.name, member.setElementType ?? 'unknown')
   }
+
+  return lines
+}
+
+function emitObjectBytesMemberVariableDeclaration(statement, member, context, emitGetCall) {
+  registerOwnedValue(context, statement.name)
+  const lines = [
+    ...emitPrepareOwnedValueWrite(statement.name),
+    emitStatusCheck(emitGetCall(statement.name), context),
+    emitRuntimeTypeCheck(`${statement.name}.tag != CCJS_TAG_BYTES || ${statement.name}.as.ref == 0`, context)
+  ]
+
+  context.variables.set(statement.name, member.valueType)
 
   return lines
 }
@@ -4688,7 +4713,7 @@ function emitCValueExpression(expression, context) {
       }
     }
 
-    if (type === 'object' || type === 'array') {
+    if (type === 'bytes' || type === 'object' || type === 'array') {
       return {
         lines: [],
         expression: name
@@ -4728,7 +4753,7 @@ function emitCValueExpression(expression, context) {
   if (isMemberAccessExpression(expression)) {
     const member = resolveKnownObjectMember(expression, context)
 
-    if (member?.valueType === 'array' || member?.valueType === 'map' || member?.valueType === 'set') {
+    if (member?.valueType === 'bytes' || member?.valueType === 'array' || member?.valueType === 'map' || member?.valueType === 'set') {
       const temp = nextCName(context, 'ccjs_value')
       const tag = cRuntimeValueTag(member.valueType)
       registerOwnedValue(context, temp)
@@ -4807,7 +4832,7 @@ function emitCValueExpression(expression, context) {
 
     const field = resolveKnownObjectIndex(expression, context)
 
-    if (field?.valueType === 'array' || field?.valueType === 'map' || field?.valueType === 'set') {
+    if (field?.valueType === 'bytes' || field?.valueType === 'array' || field?.valueType === 'map' || field?.valueType === 'set') {
       const temp = nextCName(context, 'ccjs_value')
       const tag = cRuntimeValueTag(field.valueType)
       registerOwnedValue(context, temp)
@@ -6486,7 +6511,7 @@ function emitPreparedCallArgs(expression, params, context) {
 
       lines.push(...value.lines)
       args.push(value.expression)
-    } else if (params[index]?.valueType === 'array' || params[index]?.valueType === 'map' || params[index]?.valueType === 'set') {
+    } else if (params[index]?.valueType === 'bytes' || params[index]?.valueType === 'array' || params[index]?.valueType === 'map' || params[index]?.valueType === 'set') {
       const value = emitCValueExpression(arg, context)
 
       lines.push(...value.lines)
@@ -6524,7 +6549,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 
   const out = options.out ?? nextCName(context, 'ccjs_promise')
   if (options.owned !== false) {
-    registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'writeFile' ? 'void' : method === 'readDir' ? 'array' : 'string'), 'error')
+    registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'writeFile' || method === 'writeFileBytes' ? 'void' : method === 'readDir' ? 'array' : method === 'readFileBytes' ? 'bytes' : 'string'), 'error')
   }
   const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines = [
@@ -6541,8 +6566,32 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
     }
   }
 
+  if (method === 'readFileBytes') {
+    lines.push(emitStatusCheck(`ccjs_fs_read_file_bytes(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`, context))
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
   if (method === 'readDir') {
     lines.push(emitStatusCheck(`ccjs_fs_read_dir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`, context))
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'writeFileBytes') {
+    const bytes = emitCValueExpression(expression.args[1], context)
+
+    lines.push(...bytes.lines)
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(emitStatusCheck(`ccjs_fs_write_file_bytes(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.expression}, &${out})`, context))
 
     return {
       lines,
@@ -6665,7 +6714,7 @@ function emitPreparedAsyncFunctionPromiseCallExpression(expression, context, opt
   }
 
   if (!isSupportedAsyncFunctionPromiseValueType(valueType)) {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async function calls as Promise values currently support only number, boolean, string, object, array, map, set and void values in C', expression.loc))
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async function calls as Promise values currently support only number, boolean, string, bytes, object, array, map, set and void values in C', expression.loc))
 
     return {
       lines: [],
@@ -6719,7 +6768,7 @@ function emitPreparedAsyncFunctionPromiseCallExpression(expression, context, opt
 
 function emitPreparedThrowingAsyncFunctionPromiseCallExpression(expression, valueType, context, options: { out?: string, owned?: boolean } = {}) {
   if (!isSupportedAsyncFunctionPromiseValueType(valueType)) {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'throwing async function calls as Promise values currently support only number, boolean, string, object, array, map, set and void values in C', expression.loc))
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'throwing async function calls as Promise values currently support only number, boolean, string, bytes, object, array, map, set and void values in C', expression.loc))
 
     return {
       lines: [],
@@ -9453,7 +9502,7 @@ function cFsRuntimeCallName(callee) {
     return null
   }
 
-  return ['readFile', 'readDir', 'writeFile'].includes(callee.property) ? callee.property : null
+  return ['readFile', 'readFileBytes', 'readDir', 'writeFile', 'writeFileBytes'].includes(callee.property) ? callee.property : null
 }
 
 function cPromiseRuntimeCallName(callee) {

@@ -300,6 +300,10 @@ function emitTsBaseType(valueType: string | null | undefined, metadata: AnyNode)
     return 'object'
   }
 
+  if (valueType === 'bytes') {
+    return 'Buffer'
+  }
+
   return valueType ?? 'unknown'
 }
 
@@ -621,6 +625,12 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   if (expression.type === 'CallExpression') {
+    const fsBytesCall = emitFsBytesCallExpression(expression, options)
+
+    if (fsBytesCall != null) {
+      return fsBytesCall
+    }
+
     if (isArrayPopCall(expression)) {
       return `ccjsArrayPop(${emitExpression(expression.callee.object, options)})`
     }
@@ -742,6 +752,18 @@ function isMapGetCall(expression: AnyNode): boolean {
     && expression.callee.property === 'get'
     && expression.nullable === true
     && expression.args.length === 1
+}
+
+function emitFsBytesCallExpression(expression: AnyNode, options: JsEmitOptions): string | null {
+  if (expression.fsRuntimeMethod === 'readFileBytes') {
+    return `fs.readFile(${emitExpression(expression.args[0], options)})`
+  }
+
+  if (expression.fsRuntimeMethod === 'writeFileBytes') {
+    return `fs.writeFile(${emitExpression(expression.args[0], options)}, ${emitExpression(expression.args[1], options)})`
+  }
+
+  return null
 }
 
 function isMapIndexGet(expression: AnyNode): boolean {

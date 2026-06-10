@@ -3958,6 +3958,45 @@ test('injects Node fs prelude when fs is referenced', () => {
   assert.doesNotMatch(withoutGlobalUsage, /import \* as fs from 'node:fs\/promises'/)
 })
 
+test('maps fs binary helpers to Buffer-compatible TS and C runtime calls', () => {
+  const ts = compileSource(`export async function main(): Promise<void> {
+  const bytes: Buffer = await fs.readFileBytes('/tmp/value.bin')
+  const view: Uint8Array = bytes
+  await fs.writeFileBytes('/tmp/out.bin', view)
+}
+`, {
+    target: 'ts'
+  })
+
+  assert.match(ts.code, /import \* as fs from 'node:fs\/promises'/)
+  assert.match(ts.code, /const bytes: Buffer = await fs\.readFile\("\/tmp\/value\.bin"\)/)
+  assert.match(ts.code, /const view: Uint8Array = bytes/)
+  assert.match(ts.code, /await fs\.writeFile\("\/tmp\/out\.bin", view\)/)
+
+  const c = compileSource(`export async function main(): Promise<void> {
+  const bytes = await fs.readFileBytes('/tmp/value.bin')
+  await fs.writeFileBytes('/tmp/out.bin', bytes)
+}
+`, {
+    target: 'c'
+  })
+  const main = c.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const bytes = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'bytes')
+
+  assert.ok(bytes)
+  assert.equal(bytes.valueType, 'bytes')
+  assert.match(c.code, /#include "ccjs\/fs\.h"/)
+  assert.match(c.code, /ccjs_value bytes = ccjs_undefined_value\(\);/)
+  assert.match(c.code, /if \(ccjs_fs_read_file_bytes\(&ccjs_loop, "\/tmp\/value\.bin", 14, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /if \(bytes\.tag != CCJS_TAG_BYTES \|\| bytes\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(c.code, /if \(ccjs_fs_write_file_bytes\(&ccjs_loop, "\/tmp\/out\.bin", 12, bytes, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+
+  assertDiagnostic(`export async function main(): Promise<void> {
+  await fs.writeFileBytes('/tmp/out.bin', 'text')
+}
+`, 'CCJS_TYPE_MISMATCH')
+})
+
 test('injects Node http prelude when http is referenced', () => {
   const result = compileSource(`export function main(): void {
   const server = http.createServer((request, response) => {

@@ -640,6 +640,10 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     features.add('async-runtime')
   }
 
+  if (node.valueType === 'bytes' || node.returnType === 'bytes') {
+    features.add('runtime-values')
+  }
+
   if (node.type === 'FunctionDeclaration' || node.type === 'MethodDefinition') {
     recordCallableSignatureFeatures(node, features)
   }
@@ -727,12 +731,12 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
 }
 
 function recordCallableSignatureFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  if (node.returnType === 'string' || node.returnNullable === true) {
+  if (['bytes', 'string'].includes(node.returnType) || node.returnNullable === true) {
     features.add('runtime-values')
   }
 
   for (const param of node.params ?? []) {
-    if (['string', 'object'].includes(param.valueType) || isRuntimeFunctionType(param.functionType)) {
+    if (['bytes', 'string', 'object'].includes(param.valueType) || isRuntimeFunctionType(param.functionType)) {
       features.add('runtime-values')
     }
 
@@ -868,7 +872,7 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
     return null
   }
 
-  return ['readFile', 'readDir', 'writeFile'].includes(callee.property) ? `fs.${callee.property}` : null
+  return ['readFile', 'readFileBytes', 'readDir', 'writeFile', 'writeFileBytes'].includes(callee.property) ? `fs.${callee.property}` : null
 }
 
 function mayBeStringBytesOperand(expression: AnyNode | null | undefined): boolean {

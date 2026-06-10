@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -1288,6 +1288,50 @@ test('generated C fs readDir awaits hosted directory entries', async t => {
 
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, 'alpha.txt beta.txt\nFsError ERR_FS_OPERATION filesystem operation failed\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C fs binary helpers copy hosted bytes', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-bytes-'))
+  const input = join(dir, 'input.bin')
+  const copied = join(dir, 'copied.bin')
+  const source = join(dir, 'fs-bytes.c')
+  const output = join(dir, 'fs-bytes')
+  const data = Buffer.from([0, 1, 2, 3, 255, 10, 13])
+
+  try {
+    await writeFile(input, data)
+
+    const result = compileSource(`export async function main(): Promise<void> {
+  const bytes = await fs.readFileBytes(${JSON.stringify(input)})
+  await fs.writeFileBytes(${JSON.stringify(copied)}, bytes)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.deepEqual(await readFile(copied), data)
   } finally {
     await rm(dir, {
       recursive: true,

@@ -374,6 +374,21 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
     }
   }
 
+  if (isBytesTypeName(name)) {
+    return {
+      valueType: 'bytes',
+      nullable: false,
+      arrayElementType: null,
+      arrayElementDeclaredType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      promiseValueType: null,
+      setElementType: null,
+      shape: null,
+      functionType: null
+    }
+  }
+
   if (isBuiltinValueType(name)) {
     return {
       valueType: name,
@@ -606,7 +621,11 @@ function commonArrayElementType(types: string[]): string {
 }
 
 function isBuiltinValueType(name: string): boolean {
-  return ['array', 'boolean', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(name)
+  return ['array', 'boolean', 'bytes', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(name)
+}
+
+function isBytesTypeName(name: string): boolean {
+  return name === 'Buffer' || name === 'Uint8Array'
 }
 
 function lowerExpression(expression: AnyNode, context: LowerContext = { types: new Map() }): AnyNode {

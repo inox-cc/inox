@@ -116,6 +116,7 @@ export type IrProgram = {
 export type ValueType =
   | 'array'
   | 'boolean'
+  | 'bytes'
   | 'class'
   | 'function'
   | 'null'
