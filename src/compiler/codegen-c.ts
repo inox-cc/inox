@@ -2251,6 +2251,14 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'VariableDeclaration') {
+    const asyncPromiseCall = emitPreparedAsyncFunctionPromiseCallExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (asyncPromiseCall != null) {
+      return asyncPromiseCall.lines
+    }
+
     const promiseMethod = emitPreparedPromiseMethodExpression(statement.init, context, {
       out: statement.name
     })
@@ -6616,6 +6624,60 @@ function emitPreparedPromiseMethodExpression(expression, context, options: { out
   }
 }
 
+function emitPreparedAsyncFunctionPromiseCallExpression(expression, context, options: { out?: string, owned?: boolean } = {}) {
+  if (expression?.type !== 'CallExpression' || !isAsyncFunctionCallee(expression.callee, context) || expression.valueType !== 'promise') {
+    return null
+  }
+
+  if (isThrowingFunctionCallee(expression.callee, context)) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'throwing async function calls as Promise values are not supported by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: '0',
+      valueType: expression.promiseValueType ?? 'unknown',
+      rejectionValueType: 'unknown'
+    }
+  }
+
+  const valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
+
+  if (!['boolean', 'number', 'void'].includes(valueType)) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async function calls as Promise values currently support only number, boolean and void values in C', expression.loc))
+
+    return {
+      lines: [],
+      expression: '0',
+      valueType,
+      rejectionValueType: 'unknown'
+    }
+  }
+
+  registerEventLoop(context)
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const call = emitPreparedCallExpression(expression, context)
+  const value = valueType === 'void'
+    ? 'ccjs_undefined_value()'
+    : valueType === 'boolean'
+      ? `ccjs_bool_value((${call.expression}) != 0)`
+      : `ccjs_number_value(${call.expression})`
+
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, valueType, 'unknown')
+  }
+
+  return {
+    lines: [
+      ...call.lines,
+      emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context)
+    ],
+    expression: out,
+    valueType,
+    rejectionValueType: 'unknown'
+  }
+}
+
 function emitPreparedAwaitPromiseExpression(expression, context) {
   const promiseExpression = emitPreparedPromiseExpression(expression, context)
 
@@ -6653,6 +6715,15 @@ function emitPreparedPromiseExpression(expression, context, options: { out?: str
   if (promiseMethod != null) {
     return {
       ...promiseMethod,
+      valueType: expression.promiseValueType ?? 'unknown'
+    }
+  }
+
+  const asyncPromiseCall = emitPreparedAsyncFunctionPromiseCallExpression(expression, context, options)
+
+  if (asyncPromiseCall != null) {
+    return {
+      ...asyncPromiseCall,
       valueType: expression.promiseValueType ?? 'unknown'
     }
   }

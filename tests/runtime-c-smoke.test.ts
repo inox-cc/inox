@@ -1126,6 +1126,7 @@ export async function main(): Promise<void> {
   const promise = Promise.resolve(2)
   const value = await promise
   const asyncValue = await getValue()
+  const asyncPromiseValue = getValue()
   const text = await getText()
   const plainPromiseValue = await getPromise()
   const doubled = Promise.resolve(4).then(value => value * 2)
@@ -1137,6 +1138,7 @@ export async function main(): Promise<void> {
   console.log(await Promise.resolve('ok'))
   console.log(value)
   console.log(asyncValue)
+  console.log(await asyncPromiseValue)
   console.log(text)
   console.log(plainPromiseValue)
   console.log(await doubled)
@@ -1183,7 +1185,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n3\ndone\n4\n8\n95\n3\nfail\nplain fail\nError stored error\nasync fail\n')
+    assert.equal(run.stdout, 'ok\n2\n3\n3\ndone\n4\n8\n95\n3\nfail\nplain fail\nError stored error\nasync fail\n')
   } finally {
     await rm(dir, {
       recursive: true,

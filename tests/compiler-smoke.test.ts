@@ -3691,6 +3691,35 @@ export async function main(): Promise<void> {
   assert.match(c.code, /ccjs_await_value_\d+ = getText\(\);/)
 })
 
+test('lowers async function calls as C Promise values', () => {
+  const result = compileSource(`async function getValue(): Promise<number> {
+  return Promise.resolve(3)
+}
+
+export async function main(): Promise<void> {
+  const promise = getValue()
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_promise\* promise = 0;/)
+  assert.match(result.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(getValue\(\)\), &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /while \(ccjs_promise_get_state\(promise\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
+  assertDiagnostic(`async function failText(): Promise<string> {
+  throw 'fail'
+}
+
+export async function main(): Promise<void> {
+  const promise = failText()
+  console.log(await promise)
+}
+`, 'CCJS_C_ASYNC', {
+    target: 'c'
+  })
+})
+
 test('lowers awaited plain Promise-returning calls to C', () => {
   const result = compileSource(`function getPromise(): Promise<number> {
   return Promise.resolve(2)
