@@ -5056,18 +5056,23 @@ test('generated C Map and Set object fields compile and run with runtime sources
   try {
     const result = compileSource(`type Bag = {
   scores: Map<string, number>,
+  labels: Map<string, string>,
   names: Set<string>
 }
 
 export function main(): void {
   const scores: Map<string, number> = new Map([['Ada', 7]])
+  const labels: Map<string, string> = new Map([['Ada', 'ok']])
   const names: Set<string> = new Set(['Ada'])
-  const bag: Bag = { scores, names }
-  const bagScores = bag.scores
-  const bagNames = bag['names']
-  const adaScore = bagScores.get('Ada') ?? 0
+  const bag: Bag = { scores, labels, names }
+  bag.scores['Grace'] = 9
+  const adaScore = bag.scores.get('Ada') ?? 0
+  const graceScore = bag.scores['Grace'] ?? 0
+  const label = bag.labels.get('Ada') ?? 'missing'
+  const hasAda = bag['names'].has('Ada')
+  bag.names.clear()
 
-  console.log(adaScore, bagNames.has('Ada'), bagScores.size, bagNames.size)
+  console.log(adaScore, graceScore, label, hasAda, bag.scores.size, bag.names.size)
 }
 `, {
       target: 'c'
@@ -5082,7 +5087,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '7 1 1 1\n')
+    assert.equal(run.stdout, '7 9 ok 1 2 0\n')
   } finally {
     await rm(dir, {
       recursive: true,

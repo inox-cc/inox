@@ -3887,15 +3887,16 @@ function emitCValueExpression(expression, context) {
   if (isMemberAccessExpression(expression)) {
     const member = resolveKnownObjectMember(expression, context)
 
-    if (member?.valueType === 'array') {
+    if (member?.valueType === 'array' || member?.valueType === 'map' || member?.valueType === 'set') {
       const temp = nextCName(context, 'ccjs_value')
+      const tag = cRuntimeValueTag(member.valueType)
       registerOwnedValue(context, temp)
 
       return {
         lines: [
           ...emitPrepareOwnedValueWrite(temp),
           emitStatusCheck(`ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`, context),
-          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_ARRAY || ${temp}.as.ref == 0`, context)
+          emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context)
         ],
         expression: temp
       }
@@ -3965,15 +3966,16 @@ function emitCValueExpression(expression, context) {
 
     const field = resolveKnownObjectIndex(expression, context)
 
-    if (field?.valueType === 'array') {
+    if (field?.valueType === 'array' || field?.valueType === 'map' || field?.valueType === 'set') {
       const temp = nextCName(context, 'ccjs_value')
+      const tag = cRuntimeValueTag(field.valueType)
       registerOwnedValue(context, temp)
 
       return {
         lines: [
           ...emitPrepareOwnedValueWrite(temp),
           emitStatusCheck(`ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`, context),
-          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_ARRAY || ${temp}.as.ref == 0`, context)
+          emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context)
         ],
         expression: temp
       }
@@ -6190,8 +6192,16 @@ function inferExpressionType(expression, context) {
     return expression.type === 'OptionalIndexExpression' ? 'optional' : 'number'
   }
 
-  if (expression?.type === 'CallExpression' && expression.callee.type === 'Reference') {
-    return context.functionReturnTypes.get(expression.callee.path[0]) ?? 'number'
+  if (expression?.type === 'CallExpression') {
+    if (expression.valueType != null && expression.valueType !== 'unknown') {
+      return expression.valueType
+    }
+
+    if (expression.callee.type === 'Reference') {
+      return context.functionReturnTypes.get(expression.callee.path[0]) ?? 'number'
+    }
+
+    return 'number'
   }
 
   if (expression?.type === 'NewExpression') {
@@ -6956,6 +6966,22 @@ function emitPreparedCollectionReceiver(expression, context) {
         }
   }
 
+  if (isMemberAccessExpression(expression) || isIndexAccessExpression(expression)) {
+    const valueType = inferExpressionType(expression, context)
+
+    if (valueType !== 'map' && valueType !== 'set') {
+      return null
+    }
+
+    const value = emitCValueExpression(expression, context)
+
+    return {
+      type: valueType,
+      lines: value.lines,
+      expression: value.expression
+    }
+  }
+
   return null
 }
 
@@ -7032,7 +7058,7 @@ function emitPreparedMapMethodCall(name, expression, context) {
 }
 
 function emitPreparedMapIndexGetExpression(expression, context) {
-  const mapIndex = resolveMapIndexExpression(expression, context)
+  const mapIndex = emitPreparedMapIndexReceiver(expression, context)
 
   if (mapIndex == null) {
     return null
@@ -7047,9 +7073,10 @@ function emitPreparedMapIndexGetExpression(expression, context) {
 
   return {
     lines: [
+      ...mapIndex.receiver.lines,
       ...key.lines,
       ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_map_get(${mapIndex.name}, ${key.expression}, &${out})`, context),
+      emitStatusCheck(`ccjs_map_get(${mapIndex.receiver.expression}, ${key.expression}, &${out})`, context),
       ...emitRuntimeNullableValueCheck(out, expectedTag, context)
     ],
     expression: out
@@ -7061,7 +7088,7 @@ function emitPreparedMapIndexAssignment(expression, context) {
     return null
   }
 
-  const mapIndex = resolveMapIndexExpression(expression.target, context)
+  const mapIndex = emitPreparedMapIndexReceiver(expression.target, context)
 
   if (mapIndex == null) {
     return null
@@ -7073,27 +7100,30 @@ function emitPreparedMapIndexAssignment(expression, context) {
 
   return {
     lines: [
+      ...mapIndex.receiver.lines,
       ...key.lines,
       ...value.lines,
-      emitStatusCheck(`ccjs_map_set(${mapIndex.name}, ${key.expression}, ${value.expression})`, context)
+      emitStatusCheck(`ccjs_map_set(${mapIndex.receiver.expression}, ${key.expression}, ${value.expression})`, context)
     ],
     expression: ''
   }
 }
 
-function resolveMapIndexExpression(expression, context) {
+function emitPreparedMapIndexReceiver(expression, context) {
   if (expression?.type !== 'IndexExpression' || expression.collectionKind !== 'map') {
     return null
   }
 
-  if (expression.object.type === 'Reference' && expression.object.path.length === 1 && context.variables.get(expression.object.path[0]) === 'map') {
-    return {
-      name: expression.object.path[0],
-      key: expression.index
-    }
+  const receiver = emitPreparedCollectionReceiver(expression.object, context)
+
+  if (receiver == null || receiver.type !== 'map') {
+    return null
   }
 
-  return null
+  return {
+    receiver,
+    key: expression.index
+  }
 }
 
 function emitPreparedSetMethodCall(name, expression, context) {
@@ -7146,24 +7176,24 @@ function emitPreparedSetMethodCall(name, expression, context) {
 }
 
 function emitPreparedCollectionSizeExpression(expression, context) {
-  if (expression?.type !== 'MemberExpression' || expression.property !== 'size' || expression.object.type !== 'Reference' || expression.object.path.length !== 1) {
+  if (expression?.type !== 'MemberExpression' || expression.property !== 'size') {
     return null
   }
 
-  const name = expression.object.path[0]
-  const type = context.variables.get(name)
+  const receiver = emitPreparedCollectionReceiver(expression.object, context)
 
-  if (type !== 'map' && type !== 'set') {
+  if (receiver == null) {
     return null
   }
 
-  const out = nextCName(context, `ccjs_${type}_size`)
-  const helper = type === 'map' ? 'ccjs_map_size' : 'ccjs_set_size'
+  const out = nextCName(context, `ccjs_${receiver.type}_size`)
+  const helper = receiver.type === 'map' ? 'ccjs_map_size' : 'ccjs_set_size'
 
   return {
     lines: [
+      ...receiver.lines,
       `size_t ${out} = 0;`,
-      emitStatusCheck(`${helper}(${name}, &${out})`, context)
+      emitStatusCheck(`${helper}(${receiver.expression}, &${out})`, context)
     ],
     expression: out
   }
