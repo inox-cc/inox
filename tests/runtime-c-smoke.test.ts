@@ -2389,6 +2389,55 @@ test('generated C Array.map expression callbacks compile and run with runtime so
   }
 })
 
+test('generated C Array methods over object fields compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-field-methods-'))
+  const source = join(dir, 'array-field-methods.c')
+  const output = join(dir, 'array-field-methods')
+
+  try {
+    const result = compileSource(`type Box = {
+  values: number[],
+  names: string[]
+}
+
+export function main(): void {
+  const box: Box = { values: [3, 1, 2], names: ['Grace', 'Ada'] }
+  box.values.push(4)
+  const last = box.values.pop() ?? 0
+  const numbers = box.values.sort((left, right) => left - right).filter(value => value !== 2)
+  const initials = box['names'].map(name => name.slice(0, 1)).sort()
+  console.log(last, numbers.length, numbers[0], numbers[1])
+  console.log(initials.length, initials[0], initials[1])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '4 2 1 3\n2 A G\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C array length lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

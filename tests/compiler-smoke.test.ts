@@ -323,6 +323,34 @@ export function main(): void {
   assert.match(result.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_STRING/)
 })
 
+test('lowers C array methods over runtime array object fields', () => {
+  const result = compileSource(`type Box = {
+  values: number[],
+  names: string[]
+}
+
+export function main(): void {
+  const box: Box = { values: [3, 1, 2], names: ['Grace', 'Ada'] }
+  box.values.push(4)
+  const last = box.values.pop() ?? 0
+  const numbers = box.values.sort((left, right) => left - right).filter(value => value !== 2)
+  const initials = box['names'].map(name => name.slice(0, 1)).sort()
+  console.log(last, numbers.length, numbers[0], numbers[1], initials.length, initials[0], initials[1])
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_push\(ccjs_value_\d+, ccjs_number_value\(4\)\)/)
+  assert.match(result.code, /ccjs_array_pop\(ccjs_value_\d+, &ccjs_array_pop_\d+\)/)
+  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_sort_length_\d+\)/)
+  assert.match(result.code, /ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(box, "names", 5, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(/)
+  assert.match(result.code, /ccjs_array_sort\(ccjs_map_array_\d+\)/)
+})
+
 test('lowers C string length for literals and runtime strings', () => {
   const result = compileSource(`type User = {
   name: string

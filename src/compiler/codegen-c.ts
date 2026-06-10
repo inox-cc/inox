@@ -6877,6 +6877,22 @@ function emitPreparedArrayReceiver(expression, context) {
     }
   }
 
+  if (expression?.type === 'MemberExpression' || expression?.type === 'IndexExpression') {
+    const valueType = inferExpressionType(expression, context)
+
+    if (valueType !== 'array') {
+      return null
+    }
+
+    const value = emitCValueExpression(expression, context)
+
+    return {
+      lines: value.lines,
+      expression: value.expression,
+      elementType: resolveRuntimeArrayElementType(expression, context) ?? expression.arrayElementType ?? 'unknown'
+    }
+  }
+
   if (expression?.type === 'CallExpression') {
     const valueType = inferExpressionType(expression, context)
 
