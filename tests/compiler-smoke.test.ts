@@ -1469,6 +1469,10 @@ console.log(name)
   assert.match(js.code, /console\.log\(name\)/)
   assert.doesNotMatch(emitJs(js.hir, {}, withoutTopLevelItems), /const name/)
   assert.doesNotMatch(emitJs(js.hir, {}, withoutTopLevelItems), /console\.log/)
+  assert.doesNotMatch(emitJs(js.hir, {}, {
+    ...js.ir,
+    body: []
+  }), /const name/)
   assert.match(c.code, /printf\("%s\\n", name\);/)
   assert.doesNotMatch(emitC(c.hir, {
     ...c.ir,

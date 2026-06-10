@@ -69,7 +69,7 @@ function emitProgramBody(program: ProgramNode, options: JsEmitOptions = {}, ir: 
   const lines: string[] = []
 
   for (const topLevelItem of ir.topLevelItems) {
-    const item = ir.body[topLevelItem.index] ?? program.body[topLevelItem.index]
+    const item = ir.body[topLevelItem.index]
 
     if (item == null || topLevelItem.kind === 'import') {
       continue
