@@ -3812,6 +3812,30 @@ export async function main(): Promise<void> {
   assert.doesNotMatch(result.code, /ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(addLater\(2, 4\)\), &ccjs_promise_\d+\)/)
 })
 
+test('lowers async task frame await over local Promise variables to C', () => {
+  const result = compileSource(`async function addLater(input: number, delta: number): Promise<number> {
+  const pending = Promise.resolve(input)
+  const value = await pending
+
+  return Promise.resolve(value + delta)
+}
+
+export async function main(): Promise<void> {
+  console.log(await addLater(2, 4))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /status = ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(input\), &frame->awaited\);/)
+  assert.match(result.code, /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_addLater_resume, ccjs_async_task_addLater_reject, frame, ccjs_async_task_addLater_finalize\);/)
+  assert.doesNotMatch(result.code, /status = ccjs_promise_new\(ccjs_loop, &frame->awaited\);/)
+  assert.doesNotMatch(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(input\)\);/)
+  assert.match(result.code, /double input = frame->param_input;/)
+  assert.match(result.code, /double delta = frame->param_delta;/)
+  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
+})
+
 test('lowers awaited plain Promise-returning calls to C', () => {
   const result = compileSource(`function getPromise(): Promise<number> {
   return Promise.resolve(2)
