@@ -44,12 +44,22 @@ export type IrFunctionEffect = {
   throwValueTypes: IrThrowValueType[]
 }
 
+export type IrSyntaxFeature =
+  | 'async-function'
+  | 'class'
+
+export type IrSyntaxFeatureUsage = {
+  feature: IrSyntaxFeature
+  loc?: SourceLocation
+}
+
 export type IrProgram = {
   type: 'IrProgram'
   version: 1
   features: IrFeature[]
   runtimeRequirements: IrRuntimeRequirement[]
   functionEffects: IrFunctionEffect[]
+  syntaxFeatures: IrSyntaxFeatureUsage[]
   body: AnyNode[]
 }
 

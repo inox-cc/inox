@@ -64,8 +64,7 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, ir
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || irPrograms.some(program => hasIrRuntimeRequirement(program, 'managed-values'))
   const needsTimeRuntime = irPrograms.some(program => hasIrRuntimeRequirement(program, 'clocks'))
   const needsStringHeader = irPrograms.some(program => hasIrRuntimeRequirement(program, 'string-bytes'))
-  reportUnsupportedClasses(programs, diagnostics)
-  reportUnsupportedAsync(programs, diagnostics)
+  reportUnsupportedCSyntaxFeatures(irPrograms, diagnostics)
   const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
@@ -202,18 +201,12 @@ function createThrowingFunctionInfo(functions: AnyNode[], functionEffects: IrFun
   }
 }
 
-function reportUnsupportedClasses(programs, diagnostics) {
-  for (const item of programs.flatMap(program => program.body)) {
-    if (item.type === 'ClassDeclaration') {
-      diagnostics.push(diagnostic('CCJS_C_CLASS', 'classes are not supported by the current C backend slice', item.loc))
-    }
-  }
-}
-
-function reportUnsupportedAsync(programs, diagnostics) {
-  for (const item of programs.flatMap(program => program.body)) {
-    if (item.type === 'FunctionDeclaration' && item.async) {
-      diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', item.loc))
+function reportUnsupportedCSyntaxFeatures(irPrograms: IrProgram[], diagnostics: Diagnostic[]) {
+  for (const usage of irPrograms.flatMap(program => program.syntaxFeatures)) {
+    if (usage.feature === 'class') {
+      diagnostics.push(diagnostic('CCJS_C_CLASS', 'classes are not supported by the current C backend slice', usage.loc))
+    } else if (usage.feature === 'async-function') {
+      diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', usage.loc))
     }
   }
 }

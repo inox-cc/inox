@@ -1,4 +1,4 @@
-import type { AnyNode, IrFeature, IrFunctionEffect, IrProgram, IrRuntimeRequirement, IrThrowValueType, ProgramNode } from './types.ts'
+import type { AnyNode, IrFeature, IrFunctionEffect, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, ProgramNode } from './types.ts'
 
 export function lowerHirToIr(program: ProgramNode): IrProgram {
   const features = collectIrFeatures(program)
@@ -9,6 +9,7 @@ export function lowerHirToIr(program: ProgramNode): IrProgram {
     features,
     runtimeRequirements: collectRuntimeRequirements(features),
     functionEffects: collectIrFunctionEffects([{ body: program.body }]),
+    syntaxFeatures: collectSyntaxFeatureUsages(program),
     body: program.body
   }
 }
@@ -45,6 +46,53 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
   }
 
   return [...requirements].sort()
+}
+
+function collectSyntaxFeatureUsages(program: ProgramNode): IrSyntaxFeatureUsage[] {
+  const usages: IrSyntaxFeatureUsage[] = []
+
+  visitSyntaxFeatureUsage(program, usages)
+
+  return usages
+}
+
+function visitSyntaxFeatureUsage(node: unknown, usages: IrSyntaxFeatureUsage[]): void {
+  if (node == null) {
+    return
+  }
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      visitSyntaxFeatureUsage(item, usages)
+    }
+    return
+  }
+
+  if (typeof node !== 'object') {
+    return
+  }
+
+  const item = node as AnyNode
+
+  if (item.type === 'ClassDeclaration') {
+    usages.push({
+      feature: 'class',
+      loc: item.loc
+    })
+  } else if (item.type === 'FunctionDeclaration' && item.async === true) {
+    usages.push({
+      feature: 'async-function',
+      loc: item.loc
+    })
+  }
+
+  for (const [key, value] of Object.entries(item)) {
+    if (key === 'loc' || key === 'shape') {
+      continue
+    }
+
+    visitSyntaxFeatureUsage(value, usages)
+  }
 }
 
 function collectFunctionEffects(functions: AnyNode[]): IrFunctionEffect[] {

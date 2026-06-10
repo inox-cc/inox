@@ -1387,6 +1387,7 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
   assert.equal(result.ir.type, 'IrProgram')
   assert.equal(result.ir.version, 1)
   assert.deepEqual(result.ir.runtimeRequirements, [])
+  assert.deepEqual(result.ir.syntaxFeatures, [])
   assert.deepEqual(result.ir.functionEffects, [
     {
       name: 'main',
@@ -2793,6 +2794,7 @@ export function main(): void {
   assert.match(js.code, /constructor\(name\) \{/)
   assert.match(js.code, /this\.name = name/)
   assert.match(js.code, /const user = new User\("Ada"\)/)
+  assert.deepEqual(js.ir.syntaxFeatures.map(item => item.feature), ['class'])
   assertDiagnostic(source, 'CCJS_C_CLASS', {
     target: 'c'
   })
@@ -2815,6 +2817,7 @@ export async function main(): void {
   assert.match(js.code, /async function getValue\(\)/)
   assert.match(js.code, /return await Promise\.resolve\(2\)/)
   assert.match(js.code, /export async function main\(\)/)
+  assert.deepEqual(js.ir.syntaxFeatures.map(item => item.feature), ['async-function', 'async-function'])
   assertDiagnostic(source, 'CCJS_C_ASYNC', {
     target: 'c'
   })
@@ -2937,6 +2940,7 @@ export function main(): void {
 
     assert.equal(result.graph.modules.every(module => module.hir?.type === 'HirProgram'), true)
     assert.equal(result.graph.modules.every(module => module.ir?.type === 'IrProgram'), true)
+    assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.syntaxFeatures)), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.functionEffects)), true)
   } finally {
     await rm(dir, {
