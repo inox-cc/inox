@@ -142,6 +142,9 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
   for (const feature of features) {
     if (feature === 'runtime-values') {
       requirements.add('managed-values')
+    } else if (feature === 'collections') {
+      requirements.add('collections')
+      requirements.add('managed-values')
     } else if (feature === 'array-pop-null' || feature === 'map-get-null' || feature === 'map-index-set') {
       continue
     } else {
@@ -630,8 +633,16 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     features.add('runtime-values')
   }
 
+  if (node.type === 'ArrayLiteral') {
+    features.add('collections')
+  }
+
   if (node.type === 'NewExpression' && runtimeConstructorName(node) != null) {
     features.add('runtime-values')
+
+    if (collectionConstructorName(node) != null) {
+      features.add('collections')
+    }
   }
 
   if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression') {
@@ -639,10 +650,14 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
   }
 
   if (node.type === 'IndexExpression' && node.collectionKind === 'map' && node.nullable === true) {
+    features.add('collections')
+    features.add('runtime-values')
     features.add('map-get-null')
   }
 
   if (node.type === 'AssignmentExpression' && node.target?.type === 'IndexExpression' && node.target.collectionKind === 'map') {
+    features.add('collections')
+    features.add('runtime-values')
     features.add('map-index-set')
   }
 
@@ -692,6 +707,7 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
   const collectionMethod = collectionMethodCallName(expression)
 
   if (collectionMethod != null || arrayMethod != null) {
+    features.add('collections')
     features.add('runtime-values')
   }
 
@@ -720,6 +736,14 @@ function runtimeConstructorName(expression: AnyNode): string | null {
   }
 
   return ['Error', 'Map', 'Set'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
+}
+
+function collectionConstructorName(expression: AnyNode): string | null {
+  if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return null
+  }
+
+  return ['Map', 'Set'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
 }
 
 function collectionMethodCallName(expression: AnyNode): string | null {

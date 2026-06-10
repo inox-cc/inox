@@ -41,12 +41,13 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || hasRuntimeRequirement(runtimeRequirements, 'callback-values')
-  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || hasRuntimeRequirement(runtimeRequirements, 'managed-values')
+  const needsCollectionRuntime = hasRuntimeRequirement(runtimeRequirements, 'collections')
+  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || needsCollectionRuntime || hasRuntimeRequirement(runtimeRequirements, 'managed-values')
   const needsTimeRuntime = hasRuntimeRequirement(runtimeRequirements, 'clocks')
   const needsStringHeader = hasRuntimeRequirement(runtimeRequirements, 'string-bytes')
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
   for (const wrapper of arrowCallbackWrappers) {
@@ -96,7 +97,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -107,13 +108,19 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, need
 
   if (needsRuntime) {
     lines.push('#include <stdlib.h>')
-    lines.push('#include "ccjs/array.h"')
+    if (needsCollectionRuntime) {
+      lines.push('#include "ccjs/array.h"')
+    }
     if (needsCallbackRuntime) {
       lines.push('#include "ccjs/callback.h"')
     }
-    lines.push('#include "ccjs/map.h"')
+    if (needsCollectionRuntime) {
+      lines.push('#include "ccjs/map.h"')
+    }
     lines.push('#include "ccjs/object.h"')
-    lines.push('#include "ccjs/set.h"')
+    if (needsCollectionRuntime) {
+      lines.push('#include "ccjs/set.h"')
+    }
     lines.push('#include "ccjs/string.h"')
   }
 

@@ -1742,11 +1742,13 @@ test('collects target-neutral IR feature requirements', () => {
   assert.equal(result.ir.type, 'IrProgram')
   assert.deepEqual(result.ir.features, [
     'clocks',
+    'collections',
     'runtime-values',
     'string-bytes'
   ])
   assert.deepEqual(result.ir.runtimeRequirements, [
     'clocks',
+    'collections',
     'managed-values',
     'string-bytes'
   ])
@@ -1869,6 +1871,7 @@ test('drives C runtime prelude from target-neutral IR requirements', () => {
 
   assert.deepEqual(result.ir.runtimeRequirements, [
     'clocks',
+    'collections',
     'managed-values',
     'string-bytes'
   ])
@@ -1878,6 +1881,50 @@ test('drives C runtime prelude from target-neutral IR requirements', () => {
   assert.doesNotMatch(withoutRuntimeRequirements, /#include <string\.h>/)
   assert.doesNotMatch(withoutRuntimeRequirements, /#include "ccjs\/array\.h"/)
   assert.doesNotMatch(withoutRuntimeRequirements, /#include "ccjs\/time\.h"/)
+})
+
+test('drives C collection headers from target-neutral IR requirements', () => {
+  const stringOnly = compileSource(`export function main(): void {
+  const text = String(7)
+  console.log(text.length)
+}
+`, {
+    target: 'c'
+  })
+  const arrayResult = compileSource(`export function main(): void {
+  const values = [1]
+  console.log(values.length)
+}
+`, {
+    target: 'c'
+  })
+  const arrayCode = emitCFromIr({
+    ...arrayResult.ir,
+    features: []
+  })
+  const withoutCollections = emitCFromIr({
+    ...arrayResult.ir,
+    runtimeRequirements: arrayResult.ir.runtimeRequirements.filter(item => item !== 'collections')
+  })
+
+  assert.deepEqual(stringOnly.ir.runtimeRequirements, [
+    'managed-values',
+    'string-bytes'
+  ])
+  assert.doesNotMatch(stringOnly.code, /#include "ccjs\/array\.h"/)
+  assert.doesNotMatch(stringOnly.code, /#include "ccjs\/map\.h"/)
+  assert.doesNotMatch(stringOnly.code, /#include "ccjs\/set\.h"/)
+  assert.deepEqual(arrayResult.ir.runtimeRequirements, [
+    'collections',
+    'managed-values',
+    'string-bytes'
+  ])
+  assert.match(arrayCode, /#include "ccjs\/array\.h"/)
+  assert.match(arrayCode, /#include "ccjs\/map\.h"/)
+  assert.match(arrayCode, /#include "ccjs\/set\.h"/)
+  assert.doesNotMatch(withoutCollections, /#include "ccjs\/array\.h"/)
+  assert.doesNotMatch(withoutCollections, /#include "ccjs\/map\.h"/)
+  assert.doesNotMatch(withoutCollections, /#include "ccjs\/set\.h"/)
 })
 
 test('drives C unsupported syntax diagnostics from stored target-neutral IR syntax features', () => {
@@ -4445,9 +4492,11 @@ test('checks Array pop as a nullable typed mutating call', () => {
   assert.equal(value.init.nullable, true)
   assert.deepEqual(result.ir.features, [
     'array-pop-null',
+    'collections',
     'runtime-values'
   ])
   assert.deepEqual(result.ir.runtimeRequirements, [
+    'collections',
     'managed-values'
   ])
   assert.match(result.code, /function ccjsArrayPop\(array\) \{/)
@@ -4537,10 +4586,12 @@ export function main(): void {
   assert.equal(hasName.valueType, 'boolean')
   assert.equal(clearedNames.valueType, 'void')
   assert.deepEqual(result.ir.features, [
+    'collections',
     'map-get-null',
     'runtime-values'
   ])
   assert.deepEqual(result.ir.runtimeRequirements, [
+    'collections',
     'managed-values'
   ])
   assert.match(result.code, /function ccjsMapGet\(map, key\) \{/)
@@ -4746,11 +4797,13 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
   assert.equal(contentType.nullable, true)
   assert.equal(fallback.valueType, 'string')
   assert.deepEqual(result.ir.features, [
+    'collections',
     'map-get-null',
     'map-index-set',
     'runtime-values'
   ])
   assert.deepEqual(result.ir.runtimeRequirements, [
+    'collections',
     'managed-values'
   ])
   assert.match(result.code, /function ccjsMapGet\(map, key\) \{/)

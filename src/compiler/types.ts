@@ -28,6 +28,7 @@ export type IrFeature =
   | 'array-pop-null'
   | 'callback-values'
   | 'clocks'
+  | 'collections'
   | 'map-index-set'
   | 'map-get-null'
   | 'runtime-values'
@@ -36,6 +37,7 @@ export type IrFeature =
 export type IrRuntimeRequirement =
   | 'callback-values'
   | 'clocks'
+  | 'collections'
   | 'managed-values'
   | 'string-bytes'
 
