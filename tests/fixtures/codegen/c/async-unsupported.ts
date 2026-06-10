@@ -1,6 +1,5 @@
 // @targets c
-// @expect diagnostic
-// @diagnostic CCJS_C_ASYNC
+// @expect pass
 
 function getPromise(): Promise<number> {
   return Promise.resolve(2)

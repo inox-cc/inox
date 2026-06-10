@@ -299,6 +299,7 @@ function emitFunctionDeclaration(statement, baseContext) {
   const context = createFunctionContext(baseContext, returnType, returnNullable)
   context.returnShape = context.functionReturnShapes.get(statement.name) ?? null
   context.throwingFunction = isThrowingFunctionName(statement.name, context)
+  context.externalEventLoop = isPlainPromiseReturningFunctionName(statement.name, context)
   context.functionReturnOut = 'ccjs_out'
   context.functionErrorOut = 'ccjs_error_out'
 
@@ -437,6 +438,10 @@ function emitFunctionHead(statement, context) {
 
     return `${emitCType(param.valueType)} ${param.name}`
   })
+
+  if (isPlainPromiseReturningFunctionName(statement.name, context)) {
+    params.unshift('ccjs_loop* ccjs_loop')
+  }
 
   if (isThrowingFunctionName(statement.name, context)) {
     if (returnType !== 'void') {
@@ -1650,6 +1655,7 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     functionReturnOut: null,
     functionTypes: new Map(),
     eventLoopUsed: false,
+    externalEventLoop: false,
     mapTypes: new Map(),
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
@@ -1930,6 +1936,14 @@ function emitStatement(statement, context) {
       return promise.lines
     }
 
+    const promiseCall = emitPreparedPromiseReturningCallExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (promiseCall != null) {
+      return promiseCall.lines
+    }
+
     if (isCollectionConstructorExpression(statement.init)) {
       return emitCollectionVariableDeclaration(statement, context)
     }
@@ -2145,6 +2159,10 @@ function emitStatement(statement, context) {
       return emitRuntimeCallbackReturnStatement(returnStatement, context)
     }
 
+    if (context.returnType === 'promise') {
+      return emitPromiseReturnStatement(returnStatement, context)
+    }
+
     if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
       return emitNullableScalarReturnStatement(returnStatement, context)
     }
@@ -2204,6 +2222,24 @@ function normalizeCAsyncReturnArgument(argument, context, loc) {
     valueType: context.returnType,
     loc
   }
+}
+
+function emitPromiseReturnStatement(statement, context) {
+  const promise = emitPreparedPromiseExpression(statement.argument, context, {
+    out: 'ccjs_return',
+    owned: false
+  })
+
+  if (promise == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'this Promise return expression is not supported by the current C backend slice', statement.loc))
+
+    return emitReturnJump(context)
+  }
+
+  return [
+    ...promise.lines,
+    ...emitReturnJump(context)
+  ]
 }
 
 function emitIfStatement(statement, context) {
@@ -2974,6 +3010,17 @@ function emitPreparedForVariableDeclaration(statement, context) {
   if (promise != null) {
     return {
       lines: promise.lines,
+      expression: ''
+    }
+  }
+
+  const promiseCall = emitPreparedPromiseReturningCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (promiseCall != null) {
+    return {
+      lines: promiseCall.lines,
       expression: ''
     }
   }
@@ -6002,13 +6049,22 @@ function emitPreparedCallExpression(expression, context) {
     return emitPreparedThrowingCallExpression(expression, args, lines, context)
   }
 
+  if (isPromiseReturningFunctionCallee(expression.callee, context)) {
+    registerEventLoop(context)
+
+    return {
+      lines,
+      expression: `${emitCallee(expression.callee, context)}(${[emitEventLoopReference(context), ...args].join(', ')})`
+    }
+  }
+
   return {
     lines,
     expression: `${emitCallee(expression.callee, context)}(${args.join(', ')})`
   }
 }
 
-function emitPreparedFsCallExpression(expression, context, options: { out?: string } = {}) {
+function emitPreparedFsCallExpression(expression, context, options: { out?: string, owned?: boolean } = {}) {
   const method = cFsRuntimeCallName(expression?.callee)
 
   if (method == null || expression?.valueType !== 'promise') {
@@ -6018,14 +6074,16 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
   registerEventLoop(context)
 
   const out = options.out ?? nextCName(context, 'ccjs_promise')
-  registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'readFile' ? 'string' : 'void'))
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'readFile' ? 'string' : 'void'))
+  }
   const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines = [
     ...path.lines
   ]
 
   if (method === 'readFile') {
-    lines.push(emitStatusCheck(`ccjs_fs_read_file(&ccjs_loop, ${path.bytes}, ${path.length}, &${out})`, context))
+    lines.push(emitStatusCheck(`ccjs_fs_read_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`, context))
 
     return {
       lines,
@@ -6036,7 +6094,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
   const bytes = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
 
   lines.push(...bytes.lines)
-  lines.push(emitStatusCheck(`ccjs_fs_write_file(&ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &${out})`, context))
+  lines.push(emitStatusCheck(`ccjs_fs_write_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &${out})`, context))
 
   return {
     lines,
@@ -6044,7 +6102,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
   }
 }
 
-function emitPreparedPromiseStaticExpression(expression, context, options: { out?: string } = {}) {
+function emitPreparedPromiseStaticExpression(expression, context, options: { out?: string, owned?: boolean } = {}) {
   const method = cPromiseRuntimeCallName(expression?.callee)
 
   if (method == null || expression?.valueType !== 'promise') {
@@ -6054,7 +6112,9 @@ function emitPreparedPromiseStaticExpression(expression, context, options: { out
   registerEventLoop(context)
 
   const out = options.out ?? nextCName(context, 'ccjs_promise')
-  registerOwnedPromise(context, out, expression.promiseValueType ?? 'unknown')
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, expression.promiseValueType ?? 'unknown')
+  }
   const runtimeCall = method === 'resolve' ? 'ccjs_promise_resolved' : 'ccjs_promise_rejected'
   const value = expression.args[0] == null
     ? {
@@ -6066,14 +6126,27 @@ function emitPreparedPromiseStaticExpression(expression, context, options: { out
   return {
     lines: [
       ...value.lines,
-      emitStatusCheck(`${runtimeCall}(&ccjs_loop, ${value.expression}, &${out})`, context)
+      emitStatusCheck(`${runtimeCall}(${emitEventLoopReference(context)}, ${value.expression}, &${out})`, context)
     ],
     expression: out
   }
 }
 
 function emitPreparedAwaitPromiseExpression(expression, context) {
-  const fsCall = emitPreparedFsCallExpression(expression, context)
+  const promiseExpression = emitPreparedPromiseExpression(expression, context)
+
+  if (promiseExpression != null) {
+    return {
+      ...promiseExpression,
+      valueType: promiseExpression.valueType ?? expression.promiseValueType ?? 'unknown'
+    }
+  }
+
+  return null
+}
+
+function emitPreparedPromiseExpression(expression, context, options: { out?: string, owned?: boolean } = {}) {
+  const fsCall = emitPreparedFsCallExpression(expression, context, options)
 
   if (fsCall != null) {
     return {
@@ -6082,13 +6155,19 @@ function emitPreparedAwaitPromiseExpression(expression, context) {
     }
   }
 
-  const promiseResolve = emitPreparedPromiseStaticExpression(expression, context)
+  const promiseResolve = emitPreparedPromiseStaticExpression(expression, context, options)
 
   if (promiseResolve != null) {
     return {
       ...promiseResolve,
       valueType: expression.promiseValueType ?? 'unknown'
     }
+  }
+
+  const promiseCall = emitPreparedPromiseReturningCallExpression(expression, context, options)
+
+  if (promiseCall != null) {
+    return promiseCall
   }
 
   if (expression?.type === 'Reference' && expression.path.length === 1) {
@@ -6140,8 +6219,8 @@ function emitCAwaitValueExpression(expression, context) {
     lines: [
       ...promise.lines,
       ...emitPrepareOwnedValueWrite(value),
-      `while (ccjs_promise_get_state(${promise.expression}) == CCJS_PROMISE_PENDING && ccjs_loop_has_work(&ccjs_loop)) {`,
-      `  ${emitStatusCheck('ccjs_loop_poll(&ccjs_loop, 0)', context)}`,
+      `while (ccjs_promise_get_state(${promise.expression}) == CCJS_PROMISE_PENDING && ccjs_loop_has_work(${emitEventLoopReference(context)})) {`,
+      `  ${emitStatusCheck(`ccjs_loop_poll(${emitEventLoopReference(context)}, 0)`, context)}`,
       '}',
       ...emitAwaitRejectedPromiseLines(promise.expression, context),
       `if (ccjs_promise_get_state(${promise.expression}) != CCJS_PROMISE_FULFILLED) ${emitFailureStatement(context)}`,
@@ -6271,6 +6350,30 @@ function emitPreparedThrowingCallExpression(expression, args, preparedLines, con
   return {
     lines,
     expression: result
+  }
+}
+
+function emitPreparedPromiseReturningCallExpression(expression, context, options: { out?: string, owned?: boolean } = {}) {
+  if (expression?.type !== 'CallExpression' || !isPromiseReturningFunctionCallee(expression.callee, context)) {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const valueType = resolvePromiseReturningFunctionValueType(expression.callee, context)
+  const call = emitPreparedCallExpression(expression, context)
+
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, valueType)
+  }
+
+  return {
+    lines: [
+      ...call.lines,
+      `${out} = ${call.expression};`,
+      `if (${out} == 0) ${emitFailureStatement(context)}`
+    ],
+    expression: out,
+    valueType
   }
 }
 
@@ -8421,6 +8524,10 @@ function shouldEmitCleanupLabel(context) {
 }
 
 function emitReturnValueDeclarations(context) {
+  if (context.returnType === 'promise') {
+    return ['ccjs_promise* ccjs_return = 0;']
+  }
+
   if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
@@ -8460,7 +8567,7 @@ function emitOwnedPromiseDeclarations(context) {
 }
 
 function emitEventLoopDeclarations(context) {
-  return context.eventLoopUsed
+  return context.eventLoopUsed && !context.externalEventLoop
     ? [
         'ccjs_loop ccjs_loop;',
         'int ccjs_loop_active = 0;'
@@ -8487,16 +8594,28 @@ function emitOwnedPromiseCleanup(context) {
 }
 
 function emitEventLoopInit(context) {
-  return context.eventLoopUsed
-    ? [
-        `if (ccjs_loop_init(&ccjs_loop, &ccjs_default_allocator) != CCJS_OK) ${emitFailureStatement(context)}`,
-        'ccjs_loop_active = 1;'
-      ]
-    : []
+  if (!context.eventLoopUsed) {
+    return []
+  }
+
+  if (context.externalEventLoop) {
+    return [
+      `if (ccjs_loop == 0) ${emitFailureStatement(context)}`
+    ]
+  }
+
+  return [
+    `if (ccjs_loop_init(&ccjs_loop, &ccjs_default_allocator) != CCJS_OK) ${emitFailureStatement(context)}`,
+    'ccjs_loop_active = 1;'
+  ]
 }
 
 function emitEventLoopCleanup(context) {
-  return context.eventLoopUsed ? ['if (ccjs_loop_active) ccjs_loop_dispose(&ccjs_loop);'] : []
+  return context.eventLoopUsed && !context.externalEventLoop ? ['if (ccjs_loop_active) ccjs_loop_dispose(&ccjs_loop);'] : []
+}
+
+function emitEventLoopReference(context) {
+  return context.externalEventLoop ? 'ccjs_loop' : '&ccjs_loop'
 }
 
 function emitBoxedValueCleanup(context) {
@@ -8620,6 +8739,25 @@ function cPromiseRuntimeCallName(callee) {
   }
 
   return ['resolve', 'reject'].includes(callee.property) ? callee.property : null
+}
+
+function isPlainPromiseReturningFunctionName(name, context) {
+  return context.functionReturnTypes.get(name) === 'promise'
+    && context.functionAsyncFlags.get(name) !== true
+}
+
+function isPromiseReturningFunctionCallee(callee, context) {
+  return callee?.type === 'Reference'
+    && callee.path.length === 1
+    && isPlainPromiseReturningFunctionName(callee.path[0], context)
+}
+
+function resolvePromiseReturningFunctionValueType(callee, context) {
+  if (!isPromiseReturningFunctionCallee(callee, context)) {
+    return 'unknown'
+  }
+
+  return context.functionReturnPromiseValueTypes.get(callee.path[0]) ?? 'unknown'
 }
 
 function isAsyncFunctionCallee(callee, context) {

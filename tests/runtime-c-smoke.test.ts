@@ -1110,6 +1110,10 @@ async function getText(): Promise<string> {
   return Promise.resolve('done')
 }
 
+function getPromise(): Promise<number> {
+  return Promise.resolve(4)
+}
+
 async function failText(): Promise<string> {
   throw 'async fail'
 }
@@ -1119,10 +1123,12 @@ export async function main(): Promise<void> {
   const value = await promise
   const asyncValue = await getValue()
   const text = await getText()
+  const plainPromiseValue = await getPromise()
   console.log(await Promise.resolve('ok'))
   console.log(value)
   console.log(asyncValue)
   console.log(text)
+  console.log(plainPromiseValue)
 
   try {
     await Promise.reject('fail')
@@ -1150,7 +1156,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n3\ndone\nfail\nasync fail\n')
+    assert.equal(run.stdout, 'ok\n2\n3\ndone\n4\nfail\nasync fail\n')
   } finally {
     await rm(dir, {
       recursive: true,

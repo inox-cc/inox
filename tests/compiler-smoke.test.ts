@@ -3691,8 +3691,8 @@ export async function main(): Promise<void> {
   assert.match(c.code, /ccjs_await_value_\d+ = getText\(\);/)
 })
 
-test('rejects unsupported C await over plain Promise-returning calls', () => {
-  const source = `function getPromise(): Promise<number> {
+test('lowers awaited plain Promise-returning calls to C', () => {
+  const result = compileSource(`function getPromise(): Promise<number> {
   return Promise.resolve(2)
 }
 
@@ -3700,11 +3700,15 @@ export async function main(): Promise<void> {
   const value = await getPromise()
   console.log(value)
 }
-`
-
-  assertDiagnostic(source, 'CCJS_C_ASYNC', {
+`, {
     target: 'c'
   })
+
+  assert.match(result.code, /ccjs_promise\* getPromise\(ccjs_loop\* ccjs_loop\);/)
+  assert.match(result.code, /if \(ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(2\), &ccjs_return\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_promise_\d+ = getPromise\(&ccjs_loop\);/)
+  assert.match(result.code, /while \(ccjs_promise_get_state\(ccjs_promise_\d+\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
+  assert.match(result.code, /if \(ccjs_promise_get_result\(ccjs_promise_\d+, &ccjs_await_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
 test('lowers first C async await slice over Promise.resolve and fs promises', () => {
