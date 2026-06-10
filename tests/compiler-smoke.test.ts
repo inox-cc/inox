@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { emitCBundle, emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c.ts'
-import { emitJsBundle, emitJsBundleFromIrModules, emitJsFromIr, emitTsBundle, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
+import { emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c.ts'
+import { emitJsBundleFromIrModules, emitJsFromIr, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
 import { collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
@@ -3780,7 +3780,7 @@ export function main(): void {
         hir: null
       }))
     }
-    const code = emitJsBundle(graph)
+    const code = emitJsBundleFromIrModules(collectIrModuleRecords(graph), graph.entry)
 
     assert.match(code, /function greet\(\)/)
     assert.match(code, /function main\(\)/)
@@ -3821,7 +3821,7 @@ export function main(): void {
         hir: null
       }))
     }
-    const code = emitTsBundle(graph, {
+    const code = emitTsBundleFromIrModules(collectIrModuleRecords(graph), graph.entry, {
       callMain: false
     })
 
@@ -3862,7 +3862,7 @@ export function main(): void {
         hir: null
       }))
     }
-    const code = emitCBundle(graph)
+    const code = emitCBundleFromIrModules(collectIrModuleRecords(graph), graph.entry)
 
     assert.match(code, /void greet\(void\);/)
     assert.match(code, /void ccjs_main\(void\);/)

@@ -1,6 +1,6 @@
-import { collectIrGlobalRoots, collectIrModuleRecords, collectIrPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
+import { collectIrGlobalRoots, collectIrPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
-import type { AnyNode, IrProgram, ModuleGraph } from './types.ts'
+import type { AnyNode, IrProgram } from './types.ts'
 
 type JsEmitOptions = {
   callMain?: boolean
@@ -35,10 +35,6 @@ export function emitTsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string
   })
 }
 
-export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {
-  return emitJsBundleFromIrModules(collectIrModuleRecords(graph), graph.entry, options)
-}
-
 export function emitJsBundleFromIrModules(irModules: IrModuleRecord[], entry: string, options: JsEmitOptions = {}): string {
   const irPrograms = collectIrPrograms(irModules)
   const entryIr = findIrEntryProgram(irModules, entry)
@@ -65,10 +61,6 @@ export function emitJsBundleFromIrModules(irModules: IrModuleRecord[], entry: st
   }
 
   return `${lines.join('\n')}\n`
-}
-
-export function emitTsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {
-  return emitTsBundleFromIrModules(collectIrModuleRecords(graph), graph.entry, options)
 }
 
 export function emitTsBundleFromIrModules(irModules: IrModuleRecord[], entry: string, options: JsEmitOptions = {}): string {

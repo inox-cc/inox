@@ -1,7 +1,7 @@
-import { emitCBundle, emitCFromIr } from './codegen-c.ts'
-import { emitJsBundle, emitJsFromIr, emitTsBundle, emitTsFromIr } from './codegen-js.ts'
+import { emitCBundleFromIrModules, emitCFromIr } from './codegen-c.ts'
+import { emitJsBundleFromIrModules, emitJsFromIr, emitTsBundleFromIrModules, emitTsFromIr } from './codegen-js.ts'
 import { checkProgram } from './checker.ts'
-import { lowerHirToIr } from './ir.ts'
+import { collectIrModuleRecords, lowerHirToIr } from './ir.ts'
 import { tokenize } from './lexer.ts'
 import { lowerProgram } from './lower.ts'
 import { buildModuleGraph } from './module-graph.ts'
@@ -58,21 +58,23 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
 
   if (target === 'c') {
     const graph = await buildModuleGraph(entry)
+    const irModules = collectIrModuleRecords(graph)
 
     return {
       target,
       graph,
-      code: emitCBundle(graph)
+      code: emitCBundleFromIrModules(irModules, graph.entry)
     }
   }
 
   const graph = await buildModuleGraph(entry)
+  const irModules = collectIrModuleRecords(graph)
 
   if (target === 'js') {
     return {
       target,
       graph,
-      code: emitJsBundle(graph, {
+      code: emitJsBundleFromIrModules(irModules, graph.entry, {
         callMain: options.callMain
       })
     }
@@ -82,7 +84,7 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
     return {
       target,
       graph,
-      code: emitTsBundle(graph, {
+      code: emitTsBundleFromIrModules(irModules, graph.entry, {
         callMain: options.callMain
       })
     }

@@ -1,7 +1,7 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
+import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, ModuleGraph, SourceLocation } from './types.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, SourceLocation } from './types.ts'
 
 const cStringPredicateMethods = new Set([
   'includes',
@@ -17,10 +17,6 @@ const cArrayMethods = new Set([
 
 export function emitCFromIr(ir: IrProgram): string {
   return emitCUnit([ir], ir)
-}
-
-export function emitCBundle(graph: ModuleGraph): string {
-  return emitCBundleFromIrModules(collectIrModuleRecords(graph), graph.entry)
 }
 
 export function emitCBundleFromIrModules(irModules: IrModuleRecord[], entry: string): string {
