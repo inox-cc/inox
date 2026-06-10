@@ -7,6 +7,7 @@ import { emitC, emitCBundle } from '../src/compiler/codegen-c.ts'
 import { emitJs, emitJsBundle } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
+import { collectIrModuleRecords } from '../src/compiler/ir.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 
 test('compiles exported main to runnable JS', () => {
@@ -3278,6 +3279,44 @@ export function main(): void {
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.syntaxFeatures)), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.globalUsages)), true)
     assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.functionEffects)), true)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('collects target-neutral IR module records from stored IR without HIR', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ir-module-records-'))
+
+  try {
+    await writeFile(join(dir, 'lib.ts'), `export function greet(): void {
+  console.log('from lib')
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import { greet } from './lib.ts'
+
+export function main(): void {
+  greet()
+}
+`)
+
+    const result = await compileFile(join(dir, 'main.ts'), {
+      target: 'js'
+    })
+    const graph = {
+      ...result.graph,
+      modules: result.graph.modules.map(module => ({
+        ...module,
+        hir: null
+      }))
+    }
+    const irModules = collectIrModuleRecords(graph)
+
+    assert.equal(irModules.length, result.graph.modules.length)
+    assert.deepEqual(irModules.map(module => module.path), result.graph.modules.map(module => module.path))
+    assert.deepEqual(irModules.flatMap(module => module.ir.functionDeclarations.map(item => item.name)), ['greet', 'main'])
   } finally {
     await rm(dir, {
       recursive: true,

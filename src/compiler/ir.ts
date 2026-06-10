@@ -1,4 +1,4 @@
-import type { AnyNode, IrFeature, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, IrTopLevelItem, IrTopLevelItemKind, ProgramNode } from './types.ts'
+import type { AnyNode, IrFeature, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, IrTopLevelItem, IrTopLevelItemKind, ModuleGraph, ProgramNode } from './types.ts'
 
 const jsStdGlobalRoots = new Set([
   'Array',
@@ -28,6 +28,11 @@ const jsStdGlobalRoots = new Set([
   'setImmediate'
 ])
 
+export type IrModuleRecord = {
+  path: string
+  ir: IrProgram
+}
+
 export function lowerHirToIr(program: ProgramNode): IrProgram {
   const features = collectIrFeatures(program)
   const topLevelItems = collectTopLevelItems(program)
@@ -44,6 +49,19 @@ export function lowerHirToIr(program: ProgramNode): IrProgram {
     globalUsages: collectGlobalUsages(program),
     body: program.body
   }
+}
+
+export function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
+  return graph.modules.flatMap(module => {
+    const ir = moduleRecordIr(module)
+
+    return ir == null
+      ? []
+      : [{
+          path: module.path,
+          ir
+        }]
+  })
 }
 
 export function hasIrFeature(program: IrProgram, feature: IrFeature): boolean {
@@ -72,6 +90,14 @@ export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, 
 
 export function collectIrTopLevelNodes(program: { body: AnyNode[], topLevelItems: IrTopLevelItem[] }, kind: IrTopLevelItemKind): AnyNode[] {
   return collectTopLevelNodes(program, kind)
+}
+
+function moduleRecordIr(module: ModuleGraph['modules'][number]): IrProgram | null {
+  if (module.ir != null) {
+    return module.ir
+  }
+
+  return module.hir == null ? null : lowerHirToIr(module.hir)
 }
 
 function collectIrFeatures(program: ProgramNode): IrFeature[] {

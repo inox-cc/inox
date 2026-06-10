@@ -1,14 +1,9 @@
-import { collectIrGlobalUsages, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
+import { collectIrGlobalUsages, collectIrModuleRecords, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
 import type { AnyNode, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
 
 type JsEmitOptions = {
   callMain?: boolean
   stripExports?: boolean
-}
-
-type IrModuleRecord = {
-  path: string
-  ir: IrProgram
 }
 
 export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string {
@@ -38,8 +33,7 @@ export function emitTs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
 export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {
   const irModules = collectIrModuleRecords(graph)
   const irPrograms = irModules.map(module => module.ir)
-  const entryModule = graph.modules.find(module => module.path === graph.entry)
-  const entryIr = entryModule == null ? null : moduleRecordIr(entryModule)
+  const entryIr = irModules.find(module => module.path === graph.entry)?.ir ?? null
   const lines: string[] = emitJsPrelude(irPrograms)
 
   if (lines.length > 0) {
@@ -62,27 +56,6 @@ export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): s
   }
 
   return `${lines.join('\n')}\n`
-}
-
-function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
-  return graph.modules.flatMap(module => {
-    const ir = moduleRecordIr(module)
-
-    return ir == null
-      ? []
-      : [{
-          path: module.path,
-          ir
-        }]
-  })
-}
-
-function moduleRecordIr(module: ModuleGraph['modules'][number]): IrProgram | null {
-  if (module.ir != null) {
-    return module.ir
-  }
-
-  return module.hir == null ? null : lowerHirToIr(module.hir)
 }
 
 function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {

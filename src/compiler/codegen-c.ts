@@ -1,5 +1,5 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrFunctionEffects, collectIrGlobalUsages, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
+import { collectIrFunctionDeclarations, collectIrFunctionEffects, collectIrGlobalUsages, collectIrModuleRecords, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
 
 const cStringPredicateMethods = new Set([
@@ -19,23 +19,11 @@ export function emitC(program: ProgramNode, ir: IrProgram = lowerHirToIr(program
 }
 
 export function emitCBundle(graph: ModuleGraph): string {
-  const entryModule = graph.modules.find(module => module.path === graph.entry)
-  const irPrograms = graph.modules.flatMap(module => {
-    const ir = moduleRecordIr(module)
-
-    return ir == null ? [] : [ir]
-  })
-  const entryIr = entryModule == null ? null : moduleRecordIr(entryModule)
+  const irModules = collectIrModuleRecords(graph)
+  const irPrograms = irModules.map(module => module.ir)
+  const entryIr = irModules.find(module => module.path === graph.entry)?.ir ?? null
 
   return emitCUnit(irPrograms, entryIr)
-}
-
-function moduleRecordIr(module: ModuleGraph['modules'][number]): IrProgram | null {
-  if (module.ir != null) {
-    return module.ir
-  }
-
-  return module.hir == null ? null : lowerHirToIr(module.hir)
 }
 
 function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
