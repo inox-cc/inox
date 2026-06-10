@@ -5138,12 +5138,34 @@ test('checks Promise then catch as typed chain calls', () => {
 }
 `, 'CCJS_TYPE_MISMATCH')
   assertDiagnostic(`export function main(): void {
-  const promise = Promise.resolve(1).then(value => value + 1)
+  const extra = 1
+  const promise = Promise.resolve(1).then(value => value + extra)
   console.log(promise)
 }
 `, 'CCJS_C_ASYNC', {
     target: 'c'
   })
+})
+
+test('lowers Promise then catch chains to C runtime promises', () => {
+  const result = compileSource(`export async function main(): Promise<void> {
+  const doubled = Promise.resolve(4).then(value => value * 2)
+  const failed: Promise<number> = Promise.reject('fail')
+  const recovered = failed.catch(error => 95)
+
+  console.log(await doubled, await recovered)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_promise_chain_arrow_\d+\(void\* context, ccjs_value ccjs_value_input, ccjs_value\* out\);/)
+  assert.match(result.code, /static ccjs_status ccjs_promise_chain_arrow_\d+\(void\* context, ccjs_value ccjs_value_input, ccjs_value\* out\) \{\n  \(void\)context;\n  if \(out == 0\) return CCJS_ERR_TYPE;\n  \*out = ccjs_undefined_value\(\);\n  if \(ccjs_value_input\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n  double value = ccjs_value_input\.as\.number;/)
+  assert.match(result.code, /\*out = ccjs_number_value\(\(value \* 2\)\);/)
+  assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &doubled\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &recovered\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /while \(ccjs_promise_get_state\(doubled\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
+  assert.match(result.code, /while \(ccjs_promise_get_state\(recovered\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
 })
 
 test('compiles C collection values across function boundaries', () => {

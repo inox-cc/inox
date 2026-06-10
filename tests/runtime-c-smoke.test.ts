@@ -1128,11 +1128,20 @@ export async function main(): Promise<void> {
   const asyncValue = await getValue()
   const text = await getText()
   const plainPromiseValue = await getPromise()
+  const doubled = Promise.resolve(4).then(value => value * 2)
+  const failedNumber: Promise<number> = Promise.reject('number fail')
+  const recoveredNumber = failedNumber.catch(error => 95)
+  const chainedNumber = Promise.resolve(1)
+    .then(value => value + 1)
+    .then(value => value + 1)
   console.log(await Promise.resolve('ok'))
   console.log(value)
   console.log(asyncValue)
   console.log(text)
   console.log(plainPromiseValue)
+  console.log(await doubled)
+  console.log(await recoveredNumber)
+  console.log(await chainedNumber)
 
   try {
     await Promise.reject('fail')
@@ -1174,7 +1183,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n3\ndone\n4\nfail\nplain fail\nError stored error\nasync fail\n')
+    assert.equal(run.stdout, 'ok\n2\n3\ndone\n4\n8\n95\n3\nfail\nplain fail\nError stored error\nasync fail\n')
   } finally {
     await rm(dir, {
       recursive: true,

@@ -40,6 +40,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const jsGlobalRoots = new Set(globalRoots)
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
+  baseContext.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || runtimeRequirements.has('callback-values')
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFsRuntime
@@ -75,7 +76,11 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
     lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)};`)
   }
 
-  if (functions.length > 0 || baseContext.callbackWrappers.size > 0) {
+  for (const wrapper of baseContext.promiseChainWrappers.values()) {
+    lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
+  }
+
+  if (functions.length > 0 || baseContext.callbackWrappers.size > 0 || baseContext.promiseChainWrappers.size > 0) {
     lines.push('')
   }
 
@@ -83,6 +88,11 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
     lines.push(...(wrapper.kind === 'plain-arrow'
       ? emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext)
       : emitRuntimeCallbackWrapperDeclaration(wrapper, baseContext)))
+    lines.push('')
+  }
+
+  for (const wrapper of baseContext.promiseChainWrappers.values()) {
+    lines.push(...emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext))
     lines.push('')
   }
 
@@ -267,6 +277,8 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
     functionReturnTypes: new Map(functionDeclarations.map(item => [item.name, item.returnType])),
     functionAsyncFlags: new Map(functionDeclarations.map(item => [item.name, item.async === true])),
     jsGlobalRoots,
+    promiseChainArrowWrappers: new Map(),
+    promiseChainWrappers: new Map(),
     runtimeFunctionParams: new Map(),
     throwingFunctions: throwing.throwingFunctions,
     nextId: 0
@@ -1043,6 +1055,222 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
   return wrappers
 }
 
+function collectPromiseChainWrappers(irPrograms: IrProgram[], context) {
+  const wrappers = new Map()
+  const declare = (scope, name, info) => {
+    scope.set(name, info)
+  }
+  const declareParams = (scope, params) => {
+    for (const param of params) {
+      declare(scope, param.name, {
+        name: param.name,
+        valueType: param.valueType,
+        declaration: param,
+        functionType: param.functionType,
+        nullable: param.nullable === true,
+        shape: param.shape,
+        mutable: true
+      })
+    }
+  }
+  const declareVariable = (scope, statement) => {
+    declare(scope, statement.name, {
+      name: statement.name,
+      valueType: statement.valueType,
+      declaration: statement,
+      functionType: statement.functionType,
+      nullable: statement.nullable === true,
+      shape: statement.shape,
+      mutable: statement.kind === 'let'
+    })
+  }
+  const register = (expression, scopes) => {
+    if (!isPromiseMethodAst(expression)) {
+      return
+    }
+
+    const callback = expression.args[0]
+
+    if (callback?.type !== 'ArrowFunctionExpression' || callback.params.length > 1 || resolveArrowReturnExpression(callback) == null) {
+      return
+    }
+
+    if (context.promiseChainArrowWrappers.has(callback) || collectArrowCaptures(callback, scopes, context).length > 0) {
+      return
+    }
+
+    const index = wrappers.size
+    const key = `promise-chain-arrow:${index}`
+    const wrapper = {
+      kind: 'promise-chain-arrow',
+      key,
+      name: `ccjs_promise_chain_arrow_${index}`,
+      expression: callback,
+      returnType: callback.returnType ?? expression.promiseValueType ?? 'unknown',
+      returnShape: callback.returnShape ?? null
+    }
+
+    wrappers.set(key, wrapper)
+    context.promiseChainArrowWrappers.set(callback, wrapper)
+  }
+  const visitStatement = (statement, scopes) => {
+    if (statement == null) {
+      return
+    }
+
+    if (statement.type === 'VariableDeclaration') {
+      visitExpression(statement.init, scopes)
+      declareVariable(scopes.at(-1), statement)
+      return
+    }
+
+    if (statement.type === 'ExpressionStatement') {
+      visitExpression(statement.expression, scopes)
+      return
+    }
+
+    if (statement.type === 'ReturnStatement' || statement.type === 'ThrowStatement') {
+      visitExpression(statement.argument, scopes)
+      return
+    }
+
+    if (statement.type === 'BlockStatement') {
+      const scope = new Map()
+      statement.body.forEach(item => visitStatement(item, [...scopes, scope]))
+      return
+    }
+
+    if (statement.type === 'IfStatement') {
+      visitExpression(statement.condition, scopes)
+      visitStatement(statement.consequent, scopes)
+      visitStatement(statement.alternate, scopes)
+      return
+    }
+
+    if (statement.type === 'WhileStatement') {
+      visitExpression(statement.condition, scopes)
+      visitStatement(statement.body, scopes)
+      return
+    }
+
+    if (statement.type === 'ForStatement') {
+      const scope = new Map()
+      const loopScopes = [...scopes, scope]
+
+      if (statement.init?.type === 'VariableDeclaration') {
+        visitStatement(statement.init, loopScopes)
+      } else {
+        visitExpression(statement.init, loopScopes)
+      }
+
+      visitExpression(statement.test, loopScopes)
+      visitExpression(statement.update, loopScopes)
+      visitStatement(statement.body, loopScopes)
+      return
+    }
+
+    if (statement.type === 'ForOfStatement') {
+      visitExpression(statement.iterable, scopes)
+      const scope = new Map()
+      declare(scope, statement.name, {
+        name: statement.name,
+        valueType: 'unknown',
+        mutable: statement.kind === 'let'
+      })
+      visitStatement(statement.body, [...scopes, scope])
+      return
+    }
+
+    if (statement.type === 'SwitchStatement') {
+      visitExpression(statement.discriminant, scopes)
+
+      for (const item of statement.cases) {
+        visitExpression(item.test, scopes)
+        const scope = new Map()
+        item.consequent.forEach(statement => visitStatement(statement, [...scopes, scope]))
+      }
+      return
+    }
+
+    if (statement.type === 'TryStatement') {
+      visitStatement(statement.block, scopes)
+      visitStatement(statement.handler?.body, scopes)
+      visitStatement(statement.finalizer, scopes)
+    }
+  }
+  const visitExpression = (expression, scopes) => {
+    if (expression == null) {
+      return
+    }
+
+    if (expression.type === 'CallExpression') {
+      register(expression, scopes)
+      visitExpression(expression.callee, scopes)
+      expression.args.forEach(arg => visitExpression(arg, scopes))
+      return
+    }
+
+    if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+      visitExpression(expression.callee, scopes)
+      expression.args.forEach(arg => visitExpression(arg, scopes))
+      return
+    }
+
+    if (expression.type === 'AssignmentExpression') {
+      visitExpression(expression.target, scopes)
+      visitExpression(expression.value, scopes)
+      return
+    }
+
+    if (expression.type === 'BinaryExpression') {
+      visitExpression(expression.left, scopes)
+      visitExpression(expression.right, scopes)
+      return
+    }
+
+    if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
+      visitExpression(expression.argument, scopes)
+      return
+    }
+
+    if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+      visitExpression(expression.object, scopes)
+      return
+    }
+
+    if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
+      visitExpression(expression.object, scopes)
+      visitExpression(expression.index, scopes)
+      return
+    }
+
+    if (expression.type === 'ArrayLiteral') {
+      expression.elements.forEach(element => visitExpression(element, scopes))
+      return
+    }
+
+    if (expression.type === 'ObjectLiteral') {
+      expression.properties.forEach(property => visitExpression(property.value, scopes))
+    }
+  }
+
+  for (const ir of irPrograms) {
+    const topLevelScope = new Map()
+
+    for (const item of collectIrTopLevelNodeEntries(ir)) {
+      if (item.kind === 'function') {
+        const scope = new Map()
+        declareParams(scope, item.node.params)
+        item.node.body.forEach(statement => visitStatement(statement, [topLevelScope, scope]))
+      } else if (item.kind === 'statement') {
+        visitStatement(item.node, [topLevelScope])
+      }
+    }
+  }
+
+  return wrappers
+}
+
 function collectArrowCaptures(expression, outerScopes, context) {
   const captures = new Map()
   const localScope = new Map()
@@ -1279,6 +1507,108 @@ function runtimeCallbackWrapperFor(target, functionType, context) {
 
 function emitRuntimeCallbackWrapperHead(wrapper) {
   return `static ccjs_status ${wrapper.name}(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out)`
+}
+
+function emitPromiseChainCallbackWrapperHead(wrapper) {
+  return `static ccjs_status ${wrapper.name}(void* context, ccjs_value ccjs_value_input, ccjs_value* out)`
+}
+
+function emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext) {
+  const context = createFunctionContext(baseContext, 'void')
+  context.cleanupEnabled = false
+  context.statusReturn = true
+  context.runtimeCallbackReturnType = wrapper.returnType
+  context.runtimeCallbackReturnShape = wrapper.returnShape ?? null
+  context.runtimeCallbackReturnOut = '(*out)'
+  const bodyLines = emitPromiseChainCallbackParamPrelude(wrapper, context)
+  const statementLines = emitPromiseChainCallbackStatementLines(wrapper, context)
+  const lines = [
+    `${emitPromiseChainCallbackWrapperHead(wrapper)} {`,
+    '  (void)context;',
+    '  if (out == 0) return CCJS_ERR_TYPE;',
+    '  *out = ccjs_undefined_value();',
+    ...bodyLines.map(line => `  ${line}`),
+    ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
+    ...statementLines.map(line => `  ${line}`),
+    ...emitOwnedValueCleanup(context).map(line => `  ${line}`),
+    ...emitBoxedValueCleanup(context).map(line => `  ${line}`),
+    '  return CCJS_OK;',
+    '}'
+  ]
+
+  return lines
+}
+
+function emitPromiseChainCallbackParamPrelude(wrapper, context) {
+  const param = wrapper.expression.params[0]
+
+  if (param == null) {
+    return ['(void)ccjs_value_input;']
+  }
+
+  const valueType = param.valueType ?? 'unknown'
+  context.variables.set(param.name, valueType)
+
+  if (valueType === 'number') {
+    return [
+      emitRuntimeTypeCheck('ccjs_value_input.tag != CCJS_TAG_NUMBER', context),
+      `double ${param.name} = ccjs_value_input.as.number;`
+    ]
+  }
+
+  if (valueType === 'boolean') {
+    return [
+      emitRuntimeTypeCheck('ccjs_value_input.tag != CCJS_TAG_BOOL', context),
+      `double ${param.name} = ccjs_value_input.as.boolean ? 1 : 0;`
+    ]
+  }
+
+  if (valueType === 'string') {
+    context.runtimeStrings.add(param.name)
+
+    return [
+      emitRuntimeTypeCheck('ccjs_value_input.tag != CCJS_TAG_STRING || ccjs_value_input.as.ref == 0', context),
+      `ccjs_string* ${param.name} = (ccjs_string*)ccjs_value_input.as.ref;`
+    ]
+  }
+
+  if (valueType === 'object') {
+    return [
+      emitRuntimeTypeCheck('ccjs_value_input.tag != CCJS_TAG_OBJECT || ccjs_value_input.as.ref == 0', context),
+      `ccjs_value ${param.name} = ccjs_value_input;`
+    ]
+  }
+
+  return [
+    `ccjs_value ${param.name} = ccjs_value_input;`
+  ]
+}
+
+function emitPromiseChainCallbackStatementLines(wrapper, context) {
+  const returnExpression = resolveArrowReturnExpression(wrapper.expression)
+
+  if (returnExpression == null) {
+    return []
+  }
+
+  if (wrapper.returnType === 'number' || wrapper.returnType === 'boolean') {
+    const value = emitPreparedNumberExpression(returnExpression, context)
+    const expression = wrapper.returnType === 'number'
+      ? `ccjs_number_value(${value.expression})`
+      : `ccjs_bool_value((${value.expression}) != 0)`
+
+    return [
+      ...value.lines,
+      `*out = ${expression};`
+    ]
+  }
+
+  if (isManagedRuntimeReturnType(wrapper.returnType)) {
+    return emitRuntimeCallbackRuntimeValueReturnLines(returnExpression, context)
+  }
+
+  return []
 }
 
 function isRuntimeCallbackWrapper(wrapper) {
@@ -1921,6 +2251,14 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'VariableDeclaration') {
+    const promiseMethod = emitPreparedPromiseMethodExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (promiseMethod != null) {
+      return promiseMethod.lines
+    }
+
     const fsCall = emitPreparedFsCallExpression(statement.init, context, {
       out: statement.name
     })
@@ -6063,13 +6401,10 @@ function emitPreparedCallExpression(expression, context) {
     return promise
   }
 
-  if (isPromiseMethodCallExpression(expression, context)) {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'Promise.then/catch lowering is not supported by the current C backend slice', expression.loc))
+  const promiseMethod = emitPreparedPromiseMethodExpression(expression, context)
 
-    return {
-      lines: [],
-      expression: '_'
-    }
+  if (promiseMethod != null) {
+    return promiseMethod
   }
 
   const callbackType = resolveRuntimeCallbackCalleeType(expression.callee, context)
@@ -6226,6 +6561,61 @@ function emitPreparedPromiseStaticExpression(expression, context, options: { out
   }
 }
 
+function emitPreparedPromiseMethodExpression(expression, context, options: { out?: string, owned?: boolean } = {}) {
+  if (!isPromiseMethodCallExpression(expression, context)) {
+    return null
+  }
+
+  const method = expression.callee.property
+  const callback = expression.args[0]
+  const wrapper = callback == null ? null : context.promiseChainArrowWrappers.get(callback)
+
+  if (wrapper == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'Promise.then/catch currently supports only non-capturing arrow callbacks with a single return expression in C', expression.loc))
+
+    return {
+      lines: [],
+      expression: '0',
+      valueType: expression.promiseValueType ?? 'unknown',
+      rejectionValueType: 'unknown'
+    }
+  }
+
+  const receiver = emitPreparedPromiseExpression(expression.callee.object, context)
+
+  if (receiver == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'this Promise chain receiver is not supported by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: '0',
+      valueType: expression.promiseValueType ?? 'unknown',
+      rejectionValueType: 'unknown'
+    }
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const valueType = expression.promiseValueType ?? 'unknown'
+  const rejectionValueType = method === 'then' ? receiver.rejectionValueType ?? 'unknown' : 'unknown'
+  const runtimeCall = method === 'then'
+    ? `ccjs_promise_chain(${receiver.expression}, ${wrapper.name}, 0, 0, 0, &${out})`
+    : `ccjs_promise_catch(${receiver.expression}, ${wrapper.name}, 0, 0, &${out})`
+
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, valueType, rejectionValueType)
+  }
+
+  return {
+    lines: [
+      ...receiver.lines,
+      emitStatusCheck(runtimeCall, context)
+    ],
+    expression: out,
+    valueType,
+    rejectionValueType
+  }
+}
+
 function emitPreparedAwaitPromiseExpression(expression, context) {
   const promiseExpression = emitPreparedPromiseExpression(expression, context)
 
@@ -6254,6 +6644,15 @@ function emitPreparedPromiseExpression(expression, context, options: { out?: str
   if (promiseResolve != null) {
     return {
       ...promiseResolve,
+      valueType: expression.promiseValueType ?? 'unknown'
+    }
+  }
+
+  const promiseMethod = emitPreparedPromiseMethodExpression(expression, context, options)
+
+  if (promiseMethod != null) {
+    return {
+      ...promiseMethod,
       valueType: expression.promiseValueType ?? 'unknown'
     }
   }
@@ -6875,6 +7274,10 @@ function inferExpressionType(expression, context) {
   }
 
   if (expression?.type === 'CallExpression' && cFsRuntimeCallName(expression.callee) != null && expression.valueType === 'promise') {
+    return 'promise'
+  }
+
+  if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) != null && expression.valueType === 'promise') {
     return 'promise'
   }
 
@@ -8846,6 +9249,12 @@ function isPromiseMethodCallExpression(expression, context) {
     && expression.callee?.type === 'MemberExpression'
     && ['catch', 'then'].includes(expression.callee.property)
     && inferExpressionType(expression.callee.object, context) === 'promise'
+}
+
+function isPromiseMethodAst(expression) {
+  return expression?.type === 'CallExpression'
+    && expression.callee?.type === 'MemberExpression'
+    && ['catch', 'then'].includes(expression.callee.property)
 }
 
 function isPlainPromiseReturningFunctionName(name, context) {
