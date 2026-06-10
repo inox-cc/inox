@@ -1587,6 +1587,35 @@ export function main(): void {
   assert.match(withoutParamMetadata, /greet\("Ada"\);/)
 })
 
+test('drives C function return ABI from target-neutral IR declarations', () => {
+  const result = compileSource(`function getScore(): number {
+  return 7
+}
+
+export function main(): void {
+  console.log('ok')
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /double getScore\(void\) \{/)
+  assert.match(result.code, /ccjs_return = 7;/)
+
+  const withNullableReturnMetadata = emitC(result.hir, {
+    ...result.ir,
+    functionDeclarations: result.ir.functionDeclarations.map(item => item.name === 'getScore'
+      ? {
+          ...item,
+          returnNullable: true
+        }
+      : item)
+  })
+
+  assert.match(withNullableReturnMetadata, /ccjs_value getScore\(void\) \{/)
+  assert.match(withNullableReturnMetadata, /ccjs_return = ccjs_number_value\(7\);/)
+})
+
 test('compiles named callback function values to JS and C', () => {
   const source = `function run(callback: Function): void {
   callback()

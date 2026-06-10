@@ -243,8 +243,20 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
   }
 }
 
+function resolveFunctionReturnType(name, fallback, context) {
+  return context.functionReturnTypes.get(name) ?? fallback
+}
+
+function resolveFunctionReturnNullable(name, fallback, context) {
+  return context.functionReturnNullables.has(name)
+    ? context.functionReturnNullables.get(name) === true
+    : fallback === true
+}
+
 function emitFunctionDeclaration(statement, baseContext) {
-  const context = createFunctionContext(baseContext, statement.returnType, statement.returnNullable === true)
+  const returnType = resolveFunctionReturnType(statement.name, statement.returnType, baseContext)
+  const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, baseContext)
+  const context = createFunctionContext(baseContext, returnType, returnNullable)
   context.returnShape = context.functionReturnShapes.get(statement.name) ?? null
   context.throwingFunction = isThrowingFunctionName(statement.name, context)
   context.functionReturnOut = 'ccjs_out'
@@ -315,8 +327,8 @@ function emitFunctionDeclaration(statement, baseContext) {
     lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
     lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
     lines.push(...emitCleanupReturn(context).map(line => `  ${line}`))
-  } else if (statement.returnType !== 'void') {
-    lines.push(`  return ${statement.returnType === 'string' ? '""' : '0'};`)
+  } else if (context.returnType !== 'void') {
+    lines.push(`  return ${context.returnType === 'string' ? '""' : '0'};`)
   }
 
   lines.push('}')
@@ -326,6 +338,8 @@ function emitFunctionDeclaration(statement, baseContext) {
 
 function emitFunctionHead(statement, context) {
   const name = context.functionNames.get(statement.name) ?? emitCFunctionName(statement.name)
+  const returnType = context.returnType ?? resolveFunctionReturnType(statement.name, statement.returnType, context)
+  const returnNullable = context.returnNullable ?? resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
   const params = statement.params.map((param, index) => {
     if (isNullableScalarParam(param)) {
       return `ccjs_value ${emitCScalarParamName(param.name)}`
@@ -359,8 +373,8 @@ function emitFunctionHead(statement, context) {
   })
 
   if (isThrowingFunctionName(statement.name, context)) {
-    if (statement.returnType !== 'void') {
-      params.push(`${emitThrowingFunctionOutType(statement.returnType, statement.returnNullable === true)}* ccjs_out`)
+    if (returnType !== 'void') {
+      params.push(`${emitThrowingFunctionOutType(returnType, returnNullable)}* ccjs_out`)
     }
 
     params.push('ccjs_value* ccjs_error_out')
@@ -368,7 +382,7 @@ function emitFunctionHead(statement, context) {
     return `ccjs_status ${name}(${params.length === 0 ? 'void' : params.join(', ')})`
   }
 
-  return `${emitCReturnType(statement.returnType, statement.returnNullable === true)} ${name}(${params.length === 0 ? 'void' : params.join(', ')})`
+  return `${emitCReturnType(returnType, returnNullable)} ${name}(${params.length === 0 ? 'void' : params.join(', ')})`
 }
 
 function emitFunctionParameter(name, functionType, context, loc) {
