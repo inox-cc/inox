@@ -1662,6 +1662,7 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     objectShapes: new Map(),
     ownedPromises: [],
     ownedValues: [],
+    promiseRejectionValueTypes: new Map(),
     promiseValueTypes: new Map(),
     returnFlowUsed: false,
     returnTargets: [],
@@ -2722,12 +2723,89 @@ function emitThrowStatement(statement, context) {
 }
 
 function inferCatchBindingValueType(statement, context) {
-  const types = collectIrLocalThrowValueTypes(statement.block, {
-    errorObjectNames: context.errorObjectNames,
-    functionThrowValueTypes: context.functionThrowValueTypes
-  })
+  const types = [
+    ...collectIrLocalThrowValueTypes(statement.block, {
+      errorObjectNames: context.errorObjectNames,
+      functionThrowValueTypes: context.functionThrowValueTypes
+    }),
+    ...collectLocalAwaitRejectionValueTypes(statement.block, context)
+  ]
 
   return types.length > 0 && types.every(type => type === 'error') ? 'object' : 'string'
+}
+
+function collectLocalAwaitRejectionValueTypes(node, context, localPromiseRejectionValueTypes = new Map(), localErrorObjectNames = new Set(context.errorObjectNames)) {
+  if (node == null) {
+    return []
+  }
+
+  if (Array.isArray(node)) {
+    const types: string[] = []
+
+    for (const item of node) {
+      types.push(...collectLocalAwaitRejectionValueTypes(item, context, localPromiseRejectionValueTypes, localErrorObjectNames))
+    }
+
+    return types
+  }
+
+  if (typeof node !== 'object') {
+    return []
+  }
+
+  if (node.type === 'BlockStatement') {
+    return collectLocalAwaitRejectionValueTypes(node.body, context, new Map(localPromiseRejectionValueTypes), new Set(localErrorObjectNames))
+  }
+
+  if (node.type === 'VariableDeclaration') {
+    const types = collectLocalAwaitRejectionValueTypes(node.init, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+
+    if (isErrorConstructorExpression(node.init)) {
+      localErrorObjectNames.add(node.name)
+    }
+
+    if (node.valueType === 'promise') {
+      const rejectionValueType = inferPromiseRejectionValueType(node.init, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+
+      if (rejectionValueType !== 'unknown') {
+        localPromiseRejectionValueTypes.set(node.name, rejectionValueType)
+      }
+    }
+
+    return types
+  }
+
+  if (node.type === 'AwaitExpression') {
+    const rejectionValueType = inferPromiseRejectionValueType(node.argument, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+
+    return rejectionValueType === 'unknown' ? [] : [rejectionValueType]
+  }
+
+  return Object.values(node).flatMap(value => collectLocalAwaitRejectionValueTypes(value, context, localPromiseRejectionValueTypes, localErrorObjectNames))
+}
+
+function inferPromiseRejectionValueType(expression, context, localPromiseRejectionValueTypes = context.promiseRejectionValueTypes, localErrorObjectNames = context.errorObjectNames) {
+  if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'reject') {
+    return inferRejectedValueType(expression.args[0], context, localErrorObjectNames)
+  }
+
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    return localPromiseRejectionValueTypes.get(expression.path[0]) ?? context.promiseRejectionValueTypes.get(expression.path[0]) ?? 'unknown'
+  }
+
+  return 'unknown'
+}
+
+function inferRejectedValueType(expression, context, localErrorObjectNames = context.errorObjectNames) {
+  if (isKnownErrorValueExpression(expression, context, localErrorObjectNames)) {
+    return 'error'
+  }
+
+  if (expression?.type === 'StringLiteral' || expression?.type === 'TemplateLiteral' || inferExpressionType(expression, context) === 'string') {
+    return 'string'
+  }
+
+  return 'unknown'
 }
 
 function emitCatchBindingTypeCheck(valueType) {
@@ -6075,7 +6153,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 
   const out = options.out ?? nextCName(context, 'ccjs_promise')
   if (options.owned !== false) {
-    registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'readFile' ? 'string' : 'void'))
+    registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'readFile' ? 'string' : 'void'), 'unknown')
   }
   const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines = [
@@ -6087,7 +6165,8 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 
     return {
       lines,
-      expression: out
+      expression: out,
+      rejectionValueType: 'unknown'
     }
   }
 
@@ -6098,7 +6177,8 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 
   return {
     lines,
-    expression: out
+    expression: out,
+    rejectionValueType: 'unknown'
   }
 }
 
@@ -6112,8 +6192,12 @@ function emitPreparedPromiseStaticExpression(expression, context, options: { out
   registerEventLoop(context)
 
   const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const rejectionValueType = method === 'reject'
+    ? inferRejectedValueType(expression.args[0], context)
+    : 'unknown'
+
   if (options.owned !== false) {
-    registerOwnedPromise(context, out, expression.promiseValueType ?? 'unknown')
+    registerOwnedPromise(context, out, expression.promiseValueType ?? 'unknown', rejectionValueType)
   }
   const runtimeCall = method === 'resolve' ? 'ccjs_promise_resolved' : 'ccjs_promise_rejected'
   const value = expression.args[0] == null
@@ -6128,7 +6212,8 @@ function emitPreparedPromiseStaticExpression(expression, context, options: { out
       ...value.lines,
       emitStatusCheck(`${runtimeCall}(${emitEventLoopReference(context)}, ${value.expression}, &${out})`, context)
     ],
-    expression: out
+    expression: out,
+    rejectionValueType
   }
 }
 
@@ -6177,7 +6262,8 @@ function emitPreparedPromiseExpression(expression, context, options: { out?: str
       return {
         lines: [],
         expression: name,
-        valueType: context.promiseValueTypes.get(name) ?? 'unknown'
+        valueType: context.promiseValueTypes.get(name) ?? 'unknown',
+        rejectionValueType: context.promiseRejectionValueTypes.get(name) ?? 'unknown'
       }
     }
   }
@@ -6222,7 +6308,7 @@ function emitCAwaitValueExpression(expression, context) {
       `while (ccjs_promise_get_state(${promise.expression}) == CCJS_PROMISE_PENDING && ccjs_loop_has_work(${emitEventLoopReference(context)})) {`,
       `  ${emitStatusCheck(`ccjs_loop_poll(${emitEventLoopReference(context)}, 0)`, context)}`,
       '}',
-      ...emitAwaitRejectedPromiseLines(promise.expression, context),
+      ...emitAwaitRejectedPromiseLines(promise.expression, promise.rejectionValueType ?? 'unknown', context),
       `if (ccjs_promise_get_state(${promise.expression}) != CCJS_PROMISE_FULFILLED) ${emitFailureStatement(context)}`,
       emitStatusCheck(`ccjs_promise_get_result(${promise.expression}, &${value})`, context),
       ...(valueCheck === '' ? [] : [valueCheck])
@@ -6231,8 +6317,11 @@ function emitCAwaitValueExpression(expression, context) {
   }
 }
 
-function emitAwaitRejectedPromiseLines(promiseExpression, context) {
+function emitAwaitRejectedPromiseLines(promiseExpression, rejectionValueType, context) {
   const target = currentErrorTarget(context)
+  const rejectedTypeCheck = rejectionValueType === 'error'
+    ? 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
+    : 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
 
   if (target == null && !context.throwingFunction) {
     return [
@@ -6246,7 +6335,7 @@ function emitAwaitRejectedPromiseLines(promiseExpression, context) {
     `if (ccjs_promise_get_state(${promiseExpression}) == CCJS_PROMISE_REJECTED) {`,
     ...emitPrepareOwnedValueWrite('ccjs_error').map(line => `  ${line}`),
     `  ${emitStatusCheck(`ccjs_promise_get_result(${promiseExpression}, &ccjs_error)`, context)}`,
-    `  ${emitRuntimeTypeCheck('ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0', context)}`,
+    `  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`,
     '  ccjs_error_active = 1;',
     ...(target == null
       ? [
@@ -6373,7 +6462,8 @@ function emitPreparedPromiseReturningCallExpression(expression, context, options
       `if (${out} == 0) ${emitFailureStatement(context)}`
     ],
     expression: out,
-    valueType
+    valueType,
+    rejectionValueType: 'unknown'
   }
 }
 
@@ -8488,13 +8578,14 @@ function registerOwnedValue(context, name) {
   }
 }
 
-function registerOwnedPromise(context, name, valueType = 'unknown') {
+function registerOwnedPromise(context, name, valueType = 'unknown', rejectionValueType = 'unknown') {
   if (!context.ownedPromises.includes(name)) {
     context.ownedPromises.push(name)
   }
 
   context.variables.set(name, 'promise')
   context.promiseValueTypes.set(name, valueType)
+  context.promiseRejectionValueTypes.set(name, rejectionValueType)
 }
 
 function registerEventLoop(context) {
@@ -8808,6 +8899,8 @@ function withVariableScope(context, callback) {
   const previousNarrowedNullableScalars = context.narrowedNullableScalars
   const previousNullableVariables = context.nullableVariables
   const previousObjectShapes = context.objectShapes
+  const previousPromiseRejectionValueTypes = context.promiseRejectionValueTypes
+  const previousPromiseValueTypes = context.promiseValueTypes
   const previousRuntimeCallbacks = context.runtimeCallbacks
   const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
   const previousSetElementTypes = context.setElementTypes
@@ -8821,6 +8914,8 @@ function withVariableScope(context, callback) {
   context.narrowedNullableScalars = new Set(previousNarrowedNullableScalars)
   context.nullableVariables = new Set(previousNullableVariables)
   context.objectShapes = new Map(previousObjectShapes)
+  context.promiseRejectionValueTypes = new Map(previousPromiseRejectionValueTypes)
+  context.promiseValueTypes = new Map(previousPromiseValueTypes)
   context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
   context.runtimeArrayElementTypes = new Map(previousRuntimeArrayElementTypes)
   context.setElementTypes = new Map(previousSetElementTypes)
@@ -8838,6 +8933,8 @@ function withVariableScope(context, callback) {
     context.narrowedNullableScalars = previousNarrowedNullableScalars
     context.nullableVariables = previousNullableVariables
     context.objectShapes = previousObjectShapes
+    context.promiseRejectionValueTypes = previousPromiseRejectionValueTypes
+    context.promiseValueTypes = previousPromiseValueTypes
     context.runtimeCallbacks = previousRuntimeCallbacks
     context.runtimeArrayElementTypes = previousRuntimeArrayElementTypes
     context.setElementTypes = previousSetElementTypes

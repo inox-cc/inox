@@ -1146,6 +1146,14 @@ export async function main(): Promise<void> {
     console.log(error)
   }
 
+  const errorPromise = Promise.reject(new Error('stored error'))
+
+  try {
+    await errorPromise
+  } catch (error) {
+    console.log(error.name, error.message)
+  }
+
   try {
     const caught = await failText()
     console.log(caught)
@@ -1166,7 +1174,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n3\ndone\n4\nfail\nplain fail\nasync fail\n')
+    assert.equal(run.stdout, 'ok\n2\n3\ndone\n4\nfail\nplain fail\nError stored error\nasync fail\n')
   } finally {
     await rm(dir, {
       recursive: true,

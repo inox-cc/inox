@@ -3789,6 +3789,28 @@ test('lowers awaited rejected promises into C try catch', () => {
   assert.match(result.code, /goto ccjs_try_\d+_catch;/)
 })
 
+test('lowers awaited Error rejected promises into C try catch', () => {
+  const result = compileSource(`export async function main(): Promise<void> {
+  const promise = Promise.reject(new Error('stored error'))
+
+  try {
+    await promise
+  } catch (error) {
+    console.log(error.name, error.message)
+  }
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error_object_\d+, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_try_\d+_catch:\n    if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_value error = ccjs_error;/)
+  assert.match(result.code, /ccjs_object_get_known\(error, 0, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(error, 1, &ccjs_log_value_\d+\)/)
+})
+
 test('lowers awaited throwing async helpers through the C error channel', () => {
   const result = compileSource(`async function failText(): Promise<string> {
   throw 'async fail'
