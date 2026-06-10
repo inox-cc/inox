@@ -7,7 +7,7 @@ import { emitC, emitCBundle } from '../src/compiler/codegen-c.ts'
 import { emitJs, emitJsBundle } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
-import { collectIrFunctionEffects, collectIrModuleRecords } from '../src/compiler/ir.ts'
+import { collectIrFunctionEffects, collectIrLocalThrowValueTypes, collectIrModuleRecords } from '../src/compiler/ir.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 
 test('compiles exported main to runnable JS', () => {
@@ -1559,6 +1559,38 @@ console.log(label)
     body: result.ir.body,
     topLevelItems: []
   }]), [])
+})
+
+test('collects local IR throw value types for catch binding analysis', () => {
+  const result = compileSource(`function failString(): void {
+  throw 'nope'
+}
+
+function failError(): void {
+  throw new Error('boom')
+}
+
+export function main(): void {
+  const error = new Error('local')
+  try {
+    failString()
+    failError()
+    throw error
+  } catch (caught) {
+    console.log('caught')
+  }
+}
+`, {
+    target: 'js'
+  })
+  const main = result.ir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const tryStatement = main?.body.find(item => item.type === 'TryStatement')
+  const functionThrowValueTypes = new Map(result.ir.functionEffects.map(item => [item.name, item.throwValueTypes]))
+
+  assert.deepEqual(collectIrLocalThrowValueTypes(tryStatement?.block, {
+    errorObjectNames: ['error'],
+    functionThrowValueTypes
+  }), ['string', 'error'])
 })
 
 test('drives C runtime prelude from target-neutral IR requirements', () => {

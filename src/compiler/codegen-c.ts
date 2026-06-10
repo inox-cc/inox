@@ -1,5 +1,5 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrFunctionEffects, collectIrGlobalUsages, collectIrModuleRecords, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
+import { collectIrFunctionDeclarations, collectIrFunctionEffects, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
 
 const cStringPredicateMethods = new Set([
@@ -2380,150 +2380,12 @@ function emitThrowStatement(statement, context) {
 }
 
 function inferCatchBindingValueType(statement, context) {
-  const types = collectLocalThrowValueTypes(statement.block, context, new Set(context.errorObjectNames))
+  const types = collectIrLocalThrowValueTypes(statement.block, {
+    errorObjectNames: context.errorObjectNames,
+    functionThrowValueTypes: context.functionThrowValueTypes
+  })
 
   return types.length > 0 && types.every(type => type === 'error') ? 'object' : 'string'
-}
-
-function collectLocalThrowValueTypes(statement, context, errorObjectNames = new Set(context.errorObjectNames)) {
-  if (statement == null) {
-    return []
-  }
-
-  if (statement.type === 'ThrowStatement') {
-    if (isKnownErrorValueExpression(statement.argument, context, errorObjectNames)) {
-      return ['error']
-    }
-
-    return inferExpressionType(statement.argument, context) === 'string' ? ['string'] : ['other']
-  }
-
-  if (statement.type === 'VariableDeclaration') {
-    const types = collectLocalThrowValueTypesFromExpression(statement.init, context, errorObjectNames)
-
-    if (isKnownErrorValueExpression(statement.init, context, errorObjectNames)) {
-      errorObjectNames.add(statement.name)
-    }
-
-    return types
-  }
-
-  if (statement.type === 'ExpressionStatement') {
-    return collectLocalThrowValueTypesFromExpression(statement.expression, context, errorObjectNames)
-  }
-
-  if (statement.type === 'ReturnStatement') {
-    return collectLocalThrowValueTypesFromExpression(statement.argument, context, errorObjectNames)
-  }
-
-  if (statement.type === 'BlockStatement') {
-    const scopedErrorObjectNames = new Set(errorObjectNames)
-
-    return statement.body.flatMap(item => collectLocalThrowValueTypes(item, context, scopedErrorObjectNames))
-  }
-
-  if (statement.type === 'IfStatement') {
-    return [
-      ...collectLocalThrowValueTypes(statement.consequent, context, new Set(errorObjectNames)),
-      ...collectLocalThrowValueTypes(statement.alternate, context, new Set(errorObjectNames))
-    ]
-  }
-
-  if (statement.type === 'WhileStatement' || statement.type === 'ForOfStatement') {
-    return collectLocalThrowValueTypes(statement.body, context, new Set(errorObjectNames))
-  }
-
-  if (statement.type === 'ForStatement') {
-    return collectLocalThrowValueTypes(statement.body, context, new Set(errorObjectNames))
-  }
-
-  if (statement.type === 'SwitchStatement') {
-    return statement.cases.flatMap(item => {
-      const scopedErrorObjectNames = new Set(errorObjectNames)
-
-      return item.consequent.flatMap(child => collectLocalThrowValueTypes(child, context, scopedErrorObjectNames))
-    })
-  }
-
-  if (statement.type === 'TryStatement') {
-    if (statement.handler != null) {
-      return [
-        ...collectLocalThrowValueTypes(statement.handler.body, context, new Set(errorObjectNames)),
-        ...collectLocalThrowValueTypes(statement.finalizer, context, new Set(errorObjectNames))
-      ]
-    }
-
-    return [
-      ...collectLocalThrowValueTypes(statement.block, context, new Set(errorObjectNames)),
-      ...collectLocalThrowValueTypes(statement.finalizer, context, new Set(errorObjectNames))
-    ]
-  }
-
-  return []
-}
-
-function collectLocalThrowValueTypesFromExpression(expression, context, errorObjectNames) {
-  if (expression == null) {
-    return []
-  }
-
-  if (expression.type === 'CallExpression') {
-    const types = expression.callee.type === 'Reference' && expression.callee.path.length === 1 && isThrowingFunctionName(expression.callee.path[0], context)
-      ? context.functionThrowValueTypes.get(expression.callee.path[0]) ?? ['other']
-      : []
-
-    return [
-      ...types,
-      ...collectLocalThrowValueTypesFromExpression(expression.callee, context, errorObjectNames),
-      ...expression.args.flatMap(arg => collectLocalThrowValueTypesFromExpression(arg, context, errorObjectNames))
-    ]
-  }
-
-  if (expression.type === 'NewExpression' || expression.type === 'OptionalCallExpression') {
-    return [
-      ...collectLocalThrowValueTypesFromExpression(expression.callee, context, errorObjectNames),
-      ...expression.args.flatMap(arg => collectLocalThrowValueTypesFromExpression(arg, context, errorObjectNames))
-    ]
-  }
-
-  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
-    return collectLocalThrowValueTypesFromExpression(expression.object, context, errorObjectNames)
-  }
-
-  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
-    return [
-      ...collectLocalThrowValueTypesFromExpression(expression.object, context, errorObjectNames),
-      ...collectLocalThrowValueTypesFromExpression(expression.index, context, errorObjectNames)
-    ]
-  }
-
-  if (expression.type === 'AssignmentExpression') {
-    return [
-      ...collectLocalThrowValueTypesFromExpression(expression.target, context, errorObjectNames),
-      ...collectLocalThrowValueTypesFromExpression(expression.value, context, errorObjectNames)
-    ]
-  }
-
-  if (expression.type === 'BinaryExpression') {
-    return [
-      ...collectLocalThrowValueTypesFromExpression(expression.left, context, errorObjectNames),
-      ...collectLocalThrowValueTypesFromExpression(expression.right, context, errorObjectNames)
-    ]
-  }
-
-  if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
-    return collectLocalThrowValueTypesFromExpression(expression.argument, context, errorObjectNames)
-  }
-
-  if (expression.type === 'ArrayLiteral') {
-    return expression.elements.flatMap(item => collectLocalThrowValueTypesFromExpression(item, context, errorObjectNames))
-  }
-
-  if (expression.type === 'ObjectLiteral') {
-    return expression.properties.flatMap(property => collectLocalThrowValueTypesFromExpression(property.value, context, errorObjectNames))
-  }
-
-  return []
 }
 
 function emitCatchBindingTypeCheck(valueType) {

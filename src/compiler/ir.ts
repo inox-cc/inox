@@ -33,6 +33,11 @@ export type IrModuleRecord = {
   ir: IrProgram
 }
 
+type IrLocalThrowValueTypeOptions = {
+  errorObjectNames?: Iterable<string>
+  functionThrowValueTypes?: ReadonlyMap<string, readonly IrThrowValueType[]>
+}
+
 export function lowerHirToIr(program: ProgramNode): IrProgram {
   const features = collectIrFeatures(program)
   const topLevelItems = collectTopLevelItems(program)
@@ -74,6 +79,17 @@ export function hasIrRuntimeRequirement(program: IrProgram, requirement: IrRunti
 
 export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[], topLevelItems: IrTopLevelItem[] }>): IrFunctionEffect[] {
   return collectFunctionEffects(programs.flatMap(program => collectTopLevelNodes(program, 'function')))
+}
+
+export function collectIrLocalThrowValueTypes(statement: AnyNode | null | undefined, options: IrLocalThrowValueTypeOptions = {}): IrThrowValueType[] {
+  const functionThrowValueTypes = new Map<string, IrThrowValueType[]>(
+    [...(options.functionThrowValueTypes ?? new Map<string, IrThrowValueType[]>())]
+      .map(([name, types]) => [name, [...types]])
+  )
+  const functionNames = new Set(functionThrowValueTypes.keys())
+  const errorObjectNames = new Set(options.errorObjectNames ?? [])
+
+  return uniqueThrowValueTypes(collectEscapingThrowValueTypesFromStatement(statement, functionThrowValueTypes, functionNames, errorObjectNames, false))
 }
 
 export function collectIrGlobalUsages(programs: Array<{ globalUsages: IrGlobalUsage[] }>): IrGlobalUsage[] {
