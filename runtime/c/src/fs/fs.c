@@ -1,6 +1,7 @@
 #include <string.h>
 #include "ccjs/array.h"
 #include "ccjs/fs.h"
+#include "ccjs/object.h"
 #include "ccjs/string.h"
 
 #ifndef CCJS_FS_DISABLE_HOST
@@ -46,7 +47,10 @@ static ccjs_status ccjs_fs_queue_request(
   ccjs_promise** out
 );
 static ccjs_status ccjs_fs_run_request(void* context);
-static ccjs_status ccjs_fs_reject_status(ccjs_promise* promise, ccjs_status status);
+static ccjs_status ccjs_fs_reject_status(ccjs_loop* loop, ccjs_promise* promise, ccjs_status status);
+static ccjs_status ccjs_fs_error_from_status(ccjs_allocator* allocator, ccjs_status status, ccjs_value* out);
+static const char* ccjs_fs_error_code(ccjs_status status);
+static const char* ccjs_fs_error_message(ccjs_status status);
 static void ccjs_fs_request_finalizer(void* context);
 
 void ccjs_fs_set_adapter(ccjs_fs_adapter adapter) {
@@ -439,7 +443,7 @@ static ccjs_status ccjs_fs_run_request(void* context) {
     ccjs_status status = ccjs_fs_read_file_sync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != CCJS_OK) {
-      return ccjs_fs_reject_status(request->promise, status);
+      return ccjs_fs_reject_status(request->loop, request->promise, status);
     }
 
     ccjs_status resolve_status = ccjs_promise_resolve(request->promise, result);
@@ -453,7 +457,7 @@ static ccjs_status ccjs_fs_run_request(void* context) {
     ccjs_status status = ccjs_fs_read_dir_sync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != CCJS_OK) {
-      return ccjs_fs_reject_status(request->promise, status);
+      return ccjs_fs_reject_status(request->loop, request->promise, status);
     }
 
     ccjs_status resolve_status = ccjs_promise_resolve(request->promise, result);
@@ -465,16 +469,130 @@ static ccjs_status ccjs_fs_run_request(void* context) {
   ccjs_status status = ccjs_fs_write_file_sync(request->path, request->path_len, request->bytes, request->byte_len);
 
   if (status != CCJS_OK) {
-    return ccjs_fs_reject_status(request->promise, status);
+    return ccjs_fs_reject_status(request->loop, request->promise, status);
   }
 
   return ccjs_promise_resolve(request->promise, ccjs_undefined_value());
 }
 
-static ccjs_status ccjs_fs_reject_status(ccjs_promise* promise, ccjs_status status) {
-  ccjs_status reject_status = ccjs_promise_reject(promise, ccjs_number_value((ccjs_number)status));
+static ccjs_status ccjs_fs_reject_status(ccjs_loop* loop, ccjs_promise* promise, ccjs_status status) {
+  if (loop == 0 || promise == 0 || loop->allocator == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_value error = ccjs_undefined_value();
+  ccjs_status error_status = ccjs_fs_error_from_status(loop->allocator, status, &error);
+
+  if (error_status != CCJS_OK) {
+    return ccjs_promise_reject(promise, ccjs_number_value((ccjs_number)status));
+  }
+
+  ccjs_status reject_status = ccjs_promise_reject(promise, error);
+  ccjs_release(error);
 
   return reject_status == CCJS_OK ? CCJS_OK : reject_status;
+}
+
+static ccjs_status ccjs_fs_error_from_status(ccjs_allocator* allocator, ccjs_status status, ccjs_value* out) {
+  static const ccjs_field_info fields[] = {
+    { "name", CCJS_FIELD_READONLY },
+    { "message", CCJS_FIELD_READONLY },
+    { "code", CCJS_FIELD_READONLY }
+  };
+  static const ccjs_shape shape = { 3, fields };
+
+  if (allocator == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = ccjs_undefined_value();
+
+  ccjs_value error = ccjs_undefined_value();
+  ccjs_value name = ccjs_undefined_value();
+  ccjs_value message = ccjs_undefined_value();
+  ccjs_value code = ccjs_undefined_value();
+  ccjs_status result = ccjs_object_new(allocator, &shape, &error);
+
+  if (result == CCJS_OK) {
+    result = ccjs_string_from_literal(allocator, "FsError", 7, &name);
+  }
+
+  const char* message_text = ccjs_fs_error_message(status);
+
+  if (result == CCJS_OK) {
+    result = ccjs_string_from_literal(allocator, message_text, strlen(message_text), &message);
+  }
+
+  const char* code_text = ccjs_fs_error_code(status);
+
+  if (result == CCJS_OK) {
+    result = ccjs_string_from_literal(allocator, code_text, strlen(code_text), &code);
+  }
+
+  if (result == CCJS_OK) {
+    result = ccjs_object_init_known(error, 0, name);
+  }
+
+  if (result == CCJS_OK) {
+    result = ccjs_object_init_known(error, 1, message);
+  }
+
+  if (result == CCJS_OK) {
+    result = ccjs_object_init_known(error, 2, code);
+  }
+
+  ccjs_release(code);
+  ccjs_release(message);
+  ccjs_release(name);
+
+  if (result != CCJS_OK) {
+    ccjs_release(error);
+    return result;
+  }
+
+  *out = error;
+
+  return CCJS_OK;
+}
+
+static const char* ccjs_fs_error_code(ccjs_status status) {
+  if (status == CCJS_ERR_UNSUPPORTED) {
+    return "ERR_FS_UNSUPPORTED";
+  }
+
+  if (status == CCJS_ERR_TYPE) {
+    return "ERR_FS_TYPE";
+  }
+
+  if (status == CCJS_ERR_OOM) {
+    return "ERR_FS_OOM";
+  }
+
+  if (status == CCJS_ERR_READONLY) {
+    return "ERR_FS_READONLY";
+  }
+
+  return "ERR_FS_OPERATION";
+}
+
+static const char* ccjs_fs_error_message(ccjs_status status) {
+  if (status == CCJS_ERR_UNSUPPORTED) {
+    return "filesystem adapter is unavailable";
+  }
+
+  if (status == CCJS_ERR_TYPE) {
+    return "invalid filesystem argument";
+  }
+
+  if (status == CCJS_ERR_OOM) {
+    return "out of memory during filesystem operation";
+  }
+
+  if (status == CCJS_ERR_READONLY) {
+    return "filesystem target is readonly";
+  }
+
+  return "filesystem operation failed";
 }
 
 static void ccjs_fs_request_finalizer(void* context) {

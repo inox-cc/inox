@@ -926,6 +926,7 @@ test('C runtime fs adapter resolves async file promises through the loop', async
 #include "ccjs/allocator.h"
 #include "ccjs/array.h"
 #include "ccjs/fs.h"
+#include "ccjs/object.h"
 #include "ccjs/string.h"
 
 typedef struct fs_state {
@@ -1026,6 +1027,9 @@ int main(void) {
   ccjs_value async_entries = ccjs_undefined_value();
   ccjs_value write_result = ccjs_undefined_value();
   ccjs_value missing_error = ccjs_undefined_value();
+  ccjs_value missing_error_name = ccjs_undefined_value();
+  ccjs_value missing_error_message = ccjs_undefined_value();
+  ccjs_value missing_error_code = ccjs_undefined_value();
   ccjs_value first_entry = ccjs_undefined_value();
   size_t sync_entry_count = 0;
   size_t async_entry_count = 0;
@@ -1065,14 +1069,23 @@ int main(void) {
   if (ccjs_promise_get_result(write_promise, &write_result) != CCJS_OK) return 27;
   if (write_result.tag != CCJS_TAG_UNDEFINED) return 28;
   if (ccjs_promise_get_result(missing_promise, &missing_error) != CCJS_OK) return 29;
-  if (missing_error.tag != CCJS_TAG_NUMBER || missing_error.as.number != (double)CCJS_ERR_FIELD) return 30;
+  if (missing_error.tag != CCJS_TAG_OBJECT || missing_error.as.ref == 0) return 30;
+  if (ccjs_object_get(missing_error, "name", 4, &missing_error_name) != CCJS_OK) return 31;
+  if (ccjs_object_get(missing_error, "message", 7, &missing_error_message) != CCJS_OK) return 32;
+  if (ccjs_object_get(missing_error, "code", 4, &missing_error_code) != CCJS_OK) return 33;
 
   ccjs_string* sync_string = (ccjs_string*)sync_text.as.ref;
   ccjs_string* async_string = (ccjs_string*)async_text.as.ref;
   ccjs_string* first_string = (ccjs_string*)first_entry.as.ref;
-  printf("%.*s %.*s %d %zu %zu %.*s %.*s %.0f\\n", (int)sync_string->len, sync_string->bytes, (int)async_string->len, async_string->bytes, state.writes, sync_entry_count, async_entry_count, (int)first_string->len, first_string->bytes, (int)state.written_len, state.written, missing_error.as.number);
+  ccjs_string* error_name = (ccjs_string*)missing_error_name.as.ref;
+  ccjs_string* error_message = (ccjs_string*)missing_error_message.as.ref;
+  ccjs_string* error_code = (ccjs_string*)missing_error_code.as.ref;
+  printf("%.*s %.*s %d %zu %zu %.*s %.*s %.*s %.*s %.*s\\n", (int)sync_string->len, sync_string->bytes, (int)async_string->len, async_string->bytes, state.writes, sync_entry_count, async_entry_count, (int)first_string->len, first_string->bytes, (int)state.written_len, state.written, (int)error_name->len, error_name->bytes, (int)error_code->len, error_code->bytes, (int)error_message->len, error_message->bytes);
 
   ccjs_release(first_entry);
+  ccjs_release(missing_error_code);
+  ccjs_release(missing_error_message);
+  ccjs_release(missing_error_name);
   ccjs_release(missing_error);
   ccjs_release(write_result);
   ccjs_release(async_entries);
@@ -1096,7 +1109,7 @@ int main(void) {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'hello fs hello fs 2 2 2 beta.txt saved 4\n')
+    assert.equal(run.stdout, 'hello fs hello fs 2 2 2 beta.txt saved FsError ERR_FS_OPERATION filesystem operation failed\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -1154,6 +1167,7 @@ test('generated C fs readDir awaits hosted directory entries', async t => {
 
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-readdir-'))
   const entriesDir = join(dir, 'entries')
+  const missingDir = join(dir, 'missing')
   const source = join(dir, 'fs-readdir.c')
   const output = join(dir, 'fs-readdir')
 
@@ -1166,6 +1180,12 @@ test('generated C fs readDir awaits hosted directory entries', async t => {
   const entries = await fs.readDir(${JSON.stringify(entriesDir)})
   const names = entries.sort()
   console.log(names[0], names[1])
+
+  try {
+    await fs.readDir(${JSON.stringify(missingDir)})
+  } catch (error) {
+    console.log(error.name, error.code, error.message)
+  }
 }
 `, {
       target: 'c'
@@ -1180,7 +1200,7 @@ test('generated C fs readDir awaits hosted directory entries', async t => {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'alpha.txt beta.txt\n')
+    assert.equal(run.stdout, 'alpha.txt beta.txt\nFsError ERR_FS_OPERATION filesystem operation failed\n')
   } finally {
     await rm(dir, {
       recursive: true,

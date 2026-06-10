@@ -45,7 +45,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFsRuntime
   const needsCollectionRuntime = runtimeRequirements.has('collections')
-  const needsObjectRuntime = runtimeRequirements.has('objects')
+  const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || runtimeRequirements.has('managed-values')
   const needsTimeRuntime = runtimeRequirements.has('clocks')
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
@@ -3136,6 +3136,10 @@ function inferPromiseRejectionValueType(expression, context, localPromiseRejecti
     return inferRejectedValueType(expression.args[0], context, localErrorObjectNames)
   }
 
+  if (expression?.type === 'CallExpression' && cFsRuntimeCallName(expression.callee) != null) {
+    return 'error'
+  }
+
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return localPromiseRejectionValueTypes.get(expression.path[0]) ?? context.promiseRejectionValueTypes.get(expression.path[0]) ?? 'unknown'
   }
@@ -5057,14 +5061,16 @@ function emitCErrorObjectInitLines(target, expression, context) {
   const fieldsName = `${shapeName}_fields`
   const name = emitCValueExpression(cStringLiteralNode('Error', expression.loc), context)
   const message = emitCValueExpression(errorMessageExpression(expression, context), context)
+  const code = emitCValueExpression(cStringLiteralNode('', expression.loc), context)
 
   return [
     `static const ccjs_field_info ${fieldsName}[] = {`,
     `  { ${cStringLiteral('name')}, CCJS_FIELD_READONLY },`,
     `  { ${cStringLiteral('message')}, CCJS_FIELD_READONLY },`,
+    `  { ${cStringLiteral('code')}, CCJS_FIELD_READONLY },`,
     '};',
     `static const ccjs_shape ${shapeName} = {`,
-    '  2,',
+    '  3,',
     `  ${fieldsName}`,
     '};',
     ...emitPrepareOwnedValueWrite(target),
@@ -5072,7 +5078,9 @@ function emitCErrorObjectInitLines(target, expression, context) {
     ...name.lines,
     emitStatusCheck(`ccjs_object_init_known(${target}, 0, ${name.expression})`, context),
     ...message.lines,
-    emitStatusCheck(`ccjs_object_init_known(${target}, 1, ${message.expression})`, context)
+    emitStatusCheck(`ccjs_object_init_known(${target}, 1, ${message.expression})`, context),
+    ...code.lines,
+    emitStatusCheck(`ccjs_object_init_known(${target}, 2, ${code.expression})`, context)
   ]
 }
 
@@ -6516,7 +6524,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 
   const out = options.out ?? nextCName(context, 'ccjs_promise')
   if (options.owned !== false) {
-    registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'writeFile' ? 'void' : method === 'readDir' ? 'array' : 'string'), 'unknown')
+    registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'writeFile' ? 'void' : method === 'readDir' ? 'array' : 'string'), 'error')
   }
   const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines = [
@@ -6529,7 +6537,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
     return {
       lines,
       expression: out,
-      rejectionValueType: 'unknown'
+      rejectionValueType: 'error'
     }
   }
 
@@ -6539,7 +6547,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
     return {
       lines,
       expression: out,
-      rejectionValueType: 'unknown'
+      rejectionValueType: 'error'
     }
   }
 
@@ -6551,7 +6559,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
   return {
     lines,
     expression: out,
-    rejectionValueType: 'unknown'
+    rejectionValueType: 'error'
   }
 }
 
@@ -7745,6 +7753,10 @@ function registerErrorObjectShape(context, name) {
     },
     {
       name: 'message',
+      valueType: 'string'
+    },
+    {
+      name: 'code',
       valueType: 'string'
     }
   ])
