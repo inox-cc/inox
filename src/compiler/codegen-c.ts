@@ -6645,8 +6645,8 @@ function emitPreparedAsyncFunctionPromiseCallExpression(expression, context, opt
     return emitPreparedThrowingAsyncFunctionPromiseCallExpression(expression, valueType, context, options)
   }
 
-  if (!['boolean', 'number', 'void'].includes(valueType)) {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async function calls as Promise values currently support only number, boolean and void values in C', expression.loc))
+  if (!isSupportedAsyncFunctionPromiseValueType(valueType)) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async function calls as Promise values currently support only number, boolean, string, object, array, map, set and void values in C', expression.loc))
 
     return {
       lines: [],
@@ -6660,21 +6660,38 @@ function emitPreparedAsyncFunctionPromiseCallExpression(expression, context, opt
 
   const out = options.out ?? nextCName(context, 'ccjs_promise')
   const call = emitPreparedCallExpression(expression, context)
+  const managedValue = isManagedRuntimeReturnType(valueType) ? nextCName(context, 'ccjs_async_value') : null
   const value = valueType === 'void'
     ? 'ccjs_undefined_value()'
     : valueType === 'boolean'
       ? `ccjs_bool_value((${call.expression}) != 0)`
-      : `ccjs_number_value(${call.expression})`
+      : valueType === 'number'
+        ? `ccjs_number_value(${call.expression})`
+        : managedValue
+  const valueCheck = managedValue == null ? '' : emitRuntimeValueCheck(managedValue, cRuntimeValueTag(valueType), context)
+
+  if (managedValue != null) {
+    registerOwnedValue(context, managedValue)
+  }
 
   if (options.owned !== false) {
     registerOwnedPromise(context, out, valueType, 'unknown')
   }
 
   return {
-    lines: [
-      ...call.lines,
-      emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context)
-    ],
+    lines: managedValue == null
+      ? [
+          ...call.lines,
+          emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context)
+        ]
+      : [
+          ...call.lines,
+          ...emitPrepareOwnedValueWrite(managedValue),
+          `${managedValue} = ${call.expression};`,
+          ...(valueCheck === '' ? [] : [valueCheck]),
+          emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context),
+          ...emitPrepareOwnedValueWrite(managedValue)
+        ],
     expression: out,
     valueType,
     rejectionValueType: 'unknown'
@@ -6682,8 +6699,8 @@ function emitPreparedAsyncFunctionPromiseCallExpression(expression, context, opt
 }
 
 function emitPreparedThrowingAsyncFunctionPromiseCallExpression(expression, valueType, context, options: { out?: string, owned?: boolean } = {}) {
-  if (!['boolean', 'number', 'void'].includes(valueType)) {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'throwing async function calls as Promise values currently support only number, boolean and void values in C', expression.loc))
+  if (!isSupportedAsyncFunctionPromiseValueType(valueType)) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'throwing async function calls as Promise values currently support only number, boolean, string, object, array, map, set and void values in C', expression.loc))
 
     return {
       lines: [],
@@ -6712,6 +6729,7 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(expression, valu
   const out = options.out ?? nextCName(context, 'ccjs_promise')
   const prepared = emitPreparedCallArgs(expression, params, context)
   const result = valueType === 'void' ? null : nextCName(context, 'ccjs_async_result')
+  const managedResult = result != null && isManagedRuntimeReturnType(valueType)
   const status = nextCName(context, 'ccjs_async_status')
   const args = [...prepared.args]
   const rejectionValueType = resolveCFunctionRejectionValueType(expression.callee, context)
@@ -6719,7 +6737,10 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(expression, valu
     ? 'ccjs_undefined_value()'
     : valueType === 'boolean'
       ? `ccjs_bool_value((${result}) != 0)`
-      : `ccjs_number_value(${result})`
+      : valueType === 'number'
+        ? `ccjs_number_value(${result})`
+        : result
+  const valueCheck = managedResult ? emitRuntimeValueCheck(result, cRuntimeValueTag(valueType), context) : ''
 
   if (result != null) {
     args.push(`&${result}`)
@@ -6731,11 +6752,19 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(expression, valu
     registerOwnedPromise(context, out, valueType, rejectionValueType)
   }
 
+  if (managedResult) {
+    registerOwnedValue(context, result)
+  }
+
   return {
     lines: [
       ...prepared.lines,
       ...emitPrepareOwnedValueWrite('ccjs_error'),
-      ...(result == null ? [] : [`double ${result} = 0;`]),
+      ...(result == null
+        ? []
+        : managedResult
+          ? emitPrepareOwnedValueWrite(result)
+          : [`double ${result} = 0;`]),
       `ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${args.join(', ')});`,
       `if (${status} == CCJS_ERR_THROW) {`,
       `  ${emitStatusCheck(`ccjs_promise_rejected(${emitEventLoopReference(context)}, ccjs_error, &${out})`, context)}`,
@@ -6743,13 +6772,22 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(expression, valu
       '  ccjs_error = ccjs_undefined_value();',
       '} else {',
       `  if (${status} != CCJS_OK) ${emitFailureStatement(context)}`,
+      ...(valueCheck === '' ? [] : [`  ${valueCheck}`]),
       `  ${emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${fulfilledValue}, &${out})`, context)}`,
+      ...(managedResult ? emitPrepareOwnedValueWrite(result).map(line => `  ${line}`) : []),
       '}'
     ],
     expression: out,
     valueType,
     rejectionValueType
   }
+}
+
+function isSupportedAsyncFunctionPromiseValueType(valueType) {
+  return valueType === 'void'
+    || valueType === 'number'
+    || valueType === 'boolean'
+    || isManagedRuntimeReturnType(valueType)
 }
 
 function resolveCFunctionRejectionValueType(callee, context) {

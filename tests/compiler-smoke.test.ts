@@ -3707,12 +3707,30 @@ export async function main(): Promise<void> {
   assert.match(result.code, /ccjs_promise\* promise = 0;/)
   assert.match(result.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(getValue\(\)\), &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /while \(ccjs_promise_get_state\(promise\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
-  const throwing = compileSource(`async function failNumber(): Promise<number> {
+  const managed = compileSource(`async function getText(): Promise<string> {
+  return Promise.resolve('ok')
+}
+
+export async function main(): Promise<void> {
+  const promise = getText()
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(managed.code, /ccjs_value ccjs_async_value_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(managed.code, /ccjs_async_value_\d+ = getText\(\);/)
+  assert.match(managed.code, /if \(ccjs_async_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_async_value_\d+\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(managed.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_async_value_\d+, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(managed.code, /ccjs_release\(ccjs_async_value_\d+\);\n  ccjs_async_value_\d+ = ccjs_undefined_value\(\);/)
+
+  const throwing = compileSource(`async function failText(): Promise<string> {
   throw 'fail'
 }
 
 export async function main(): Promise<void> {
-  const promise = failNumber()
+  const promise = failText()
 
   try {
     await promise
@@ -3724,12 +3742,14 @@ export async function main(): Promise<void> {
     target: 'c'
   })
 
-  assert.match(throwing.code, /ccjs_status failNumber\(double\* ccjs_out, ccjs_value\* ccjs_error_out\);/)
-  assert.match(throwing.code, /double ccjs_async_result_\d+ = 0;/)
-  assert.match(throwing.code, /ccjs_status ccjs_async_status_\d+ = failNumber\(&ccjs_async_result_\d+, &ccjs_error\);/)
+  assert.match(throwing.code, /ccjs_status failText\(ccjs_value\* ccjs_out, ccjs_value\* ccjs_error_out\);/)
+  assert.match(throwing.code, /ccjs_value ccjs_async_result_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(throwing.code, /ccjs_status ccjs_async_status_\d+ = failText\(&ccjs_async_result_\d+, &ccjs_error\);/)
   assert.match(throwing.code, /if \(ccjs_async_status_\d+ == CCJS_ERR_THROW\) \{\n    if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(throwing.code, /ccjs_release\(ccjs_error\);\n    ccjs_error = ccjs_undefined_value\(\);/)
-  assert.match(throwing.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(ccjs_async_result_\d+\), &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(throwing.code, /if \(ccjs_async_result_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_async_result_\d+\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(throwing.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_async_result_\d+, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(throwing.code, /ccjs_release\(ccjs_async_result_\d+\);\n    ccjs_async_result_\d+ = ccjs_undefined_value\(\);/)
 })
 
 test('lowers awaited plain Promise-returning calls to C', () => {
