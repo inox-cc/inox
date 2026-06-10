@@ -5074,6 +5074,49 @@ export function main(): void {
   }
 })
 
+test('generated C Map bracket syntax compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-map-brackets-'))
+  const source = join(dir, 'map-brackets.c')
+  const output = join(dir, 'map-brackets')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const scores: Map<string, number> = new Map()
+  scores['Ada'] = 7
+  const score = scores['Ada'] ?? 0
+  const missing = scores['Grace'] ?? 9
+
+  console.log(score, missing, scores.size)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7 9 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 function compileRuntimeProgram(source: string, output: string): Promise<CommandResult> {
   return runCommand('cc', [
     '-Iruntime/c/include',

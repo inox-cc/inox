@@ -4453,6 +4453,72 @@ export function main(): void {
   })
 })
 
+test('checks Map bracket syntax as typed get and set sugar', () => {
+  const result = compileSource(`export function main(): void {
+  const headers: Map<string, string> = new Map()
+  headers['content-type'] = 'application/json'
+  const contentType = headers['content-type']
+  const fallback = headers['accept'] ?? 'text/plain'
+  console.log(contentType ?? 'missing', fallback, headers.size)
+}
+`, {
+    target: 'js'
+  })
+  const ts = compileSource(`export function main(): void {
+  const headers: Map<string, string> = new Map()
+  headers['content-type'] = 'application/json'
+  const contentType: string | null = headers['content-type']
+  console.log(contentType ?? 'missing')
+}
+`, {
+    target: 'ts'
+  })
+  const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+  const contentType = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'contentType')
+  const fallback = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'fallback')
+  assert.ok(contentType)
+  assert.ok(fallback)
+
+  assert.equal(contentType.valueType, 'string')
+  assert.equal(contentType.nullable, true)
+  assert.equal(fallback.valueType, 'string')
+  assert.deepEqual(result.ir.features, [
+    'map-get-null',
+    'map-index-set',
+    'runtime-values'
+  ])
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'managed-values'
+  ])
+  assert.match(result.code, /function ccjsMapGet\(map, key\) \{/)
+  assert.match(result.code, /function ccjsMapSet\(map, key, value\) \{/)
+  assert.match(result.code, /ccjsMapSet\(headers, "content-type", "application\/json"\)/)
+  assert.match(result.code, /const contentType = ccjsMapGet\(headers, "content-type"\)/)
+  assert.match(ts.code, /function ccjsMapGet<K, V>\(map: Map<K, V>, key: K\): V \| null \{/)
+  assert.match(ts.code, /function ccjsMapSet<K, V>\(map: Map<K, V>, key: K, value: V\): V \{/)
+  assert.match(ts.code, /const contentType: string \| null = ccjsMapGet\(headers, "content-type"\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const headers: Map<string, string> = new Map()
+  const contentType: string = headers['content-type']
+  console.log(contentType)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const headers: Map<string, string> = new Map()
+  headers[1] = 'application/json'
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const headers: Map<string, string> = new Map()
+  headers['content-type'] = 1
+}
+`, 'CCJS_TYPE_MISMATCH')
+})
+
 test('checks string predicate methods as boolean calls', () => {
   const result = compileSource(`function hasAda(name: string): boolean {
   return name.includes('Ada') && name.startsWith('A') && name.endsWith('a')

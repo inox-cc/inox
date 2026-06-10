@@ -119,6 +119,14 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
     helperLines.push(...emitMapGetHelper(options))
   }
 
+  if (programs.some(program => hasIrFeature(program, 'map-index-set'))) {
+    if (helperLines.length > 0) {
+      helperLines.push('')
+    }
+
+    helperLines.push(...emitMapSetHelper(options))
+  }
+
   if (helperLines.length > 0) {
     if (lines.length > 0) {
       lines.push('')
@@ -154,6 +162,22 @@ function emitMapGetHelper(options: JsEmitOptions): string[] {
     : [
         'function ccjsMapGet(map, key) {',
         '  return map.has(key) ? map.get(key) : null',
+        '}'
+      ]
+}
+
+function emitMapSetHelper(options: JsEmitOptions): string[] {
+  return options.emitTypes === true
+    ? [
+        'function ccjsMapSet<K, V>(map: Map<K, V>, key: K, value: V): V {',
+        '  map.set(key, value)',
+        '  return value',
+        '}'
+      ]
+    : [
+        'function ccjsMapSet(map, key, value) {',
+        '  map.set(key, value)',
+        '  return value',
         '}'
       ]
 }
@@ -541,6 +565,10 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   if (expression.type === 'IndexExpression') {
+    if (isMapIndexGet(expression)) {
+      return `ccjsMapGet(${emitExpression(expression.object, options)}, ${emitExpression(expression.index, options)})`
+    }
+
     return `${emitExpression(expression.object, options)}[${emitExpression(expression.index, options)}]`
   }
 
@@ -588,6 +616,10 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   if (expression.type === 'AssignmentExpression') {
+    if (isMapIndexSet(expression)) {
+      return `ccjsMapSet(${emitExpression(expression.target.object, options)}, ${emitExpression(expression.target.index, options)}, ${emitExpression(expression.value, options)})`
+    }
+
     return `${emitExpression(expression.target, options)} = ${emitExpression(expression.value, options)}`
   }
 
@@ -673,6 +705,18 @@ function isMapGetCall(expression: AnyNode): boolean {
     && expression.callee.property === 'get'
     && expression.nullable === true
     && expression.args.length === 1
+}
+
+function isMapIndexGet(expression: AnyNode): boolean {
+  return expression.type === 'IndexExpression'
+    && expression.collectionKind === 'map'
+    && expression.nullable === true
+}
+
+function isMapIndexSet(expression: AnyNode): boolean {
+  return expression.type === 'AssignmentExpression'
+    && expression.target?.type === 'IndexExpression'
+    && expression.target.collectionKind === 'map'
 }
 
 function indent(lines: string[]): string[] {

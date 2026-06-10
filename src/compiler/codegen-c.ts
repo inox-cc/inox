@@ -1965,6 +1965,12 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
+    const mapIndexAssignment = emitPreparedMapIndexAssignment(statement.expression, context)
+
+    if (mapIndexAssignment != null) {
+      return mapIndexAssignment.lines
+    }
+
     if (statement.expression.target.type === 'MemberExpression') {
       const member = resolveKnownObjectMember(statement.expression.target, context)
 
@@ -3730,6 +3736,12 @@ function emitCValueExpression(expression, context) {
     return arrayPopCall
   }
 
+  const mapIndexGet = emitPreparedMapIndexGetExpression(expression, context)
+
+  if (mapIndexGet != null) {
+    return mapIndexGet
+  }
+
   if (isErrorConstructorExpression(expression)) {
     return emitCErrorObjectValueExpression(expression, context)
   }
@@ -4079,6 +4091,12 @@ function emitPreparedNullableScalarRuntimeValueExpression(expression, context) {
 
   if (expression?.type === 'OptionalCallExpression') {
     return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
+  }
+
+  const mapIndexGet = emitPreparedMapIndexGetExpression(expression, context)
+
+  if (mapIndexGet != null) {
+    return mapIndexGet
   }
 
   if (expression?.type === 'CallExpression' && isNullableScalarRuntimeExpression(expression, context)) {
@@ -6149,6 +6167,10 @@ function inferExpressionType(expression, context) {
   }
 
   if (isIndexAccessExpression(expression)) {
+    if (expression.collectionKind === 'map') {
+      return expression.valueType ?? 'unknown'
+    }
+
     const element = resolveKnownArrayIndex(expression, context)
     const field = resolveKnownObjectIndex(expression, context)
     const runtimeElement = resolveRuntimeArrayIndex(expression, context)
@@ -7007,6 +7029,71 @@ function emitPreparedMapMethodCall(name, expression, context) {
     lines: [],
     expression: '0'
   }
+}
+
+function emitPreparedMapIndexGetExpression(expression, context) {
+  const mapIndex = resolveMapIndexExpression(expression, context)
+
+  if (mapIndex == null) {
+    return null
+  }
+
+  reportCCollectionHashability(inferExpressionType(mapIndex.key, context), 'Map keys', mapIndex.key.loc ?? expression.loc, context)
+  const key = emitCValueExpression(mapIndex.key, context)
+  const valueType = inferExpressionType(expression, context)
+  const expectedTag = cRuntimeValueTag(valueType)
+  const out = nextCName(context, 'ccjs_map_value')
+  registerOwnedValue(context, out)
+
+  return {
+    lines: [
+      ...key.lines,
+      ...emitPrepareOwnedValueWrite(out),
+      emitStatusCheck(`ccjs_map_get(${mapIndex.name}, ${key.expression}, &${out})`, context),
+      ...emitRuntimeNullableValueCheck(out, expectedTag, context)
+    ],
+    expression: out
+  }
+}
+
+function emitPreparedMapIndexAssignment(expression, context) {
+  if (expression?.type !== 'AssignmentExpression') {
+    return null
+  }
+
+  const mapIndex = resolveMapIndexExpression(expression.target, context)
+
+  if (mapIndex == null) {
+    return null
+  }
+
+  reportCCollectionHashability(inferExpressionType(mapIndex.key, context), 'Map keys', mapIndex.key.loc ?? expression.target.loc, context)
+  const key = emitCValueExpression(mapIndex.key, context)
+  const value = emitCValueExpression(expression.value, context)
+
+  return {
+    lines: [
+      ...key.lines,
+      ...value.lines,
+      emitStatusCheck(`ccjs_map_set(${mapIndex.name}, ${key.expression}, ${value.expression})`, context)
+    ],
+    expression: ''
+  }
+}
+
+function resolveMapIndexExpression(expression, context) {
+  if (expression?.type !== 'IndexExpression' || expression.collectionKind !== 'map') {
+    return null
+  }
+
+  if (expression.object.type === 'Reference' && expression.object.path.length === 1 && context.variables.get(expression.object.path[0]) === 'map') {
+    return {
+      name: expression.object.path[0],
+      key: expression.index
+    }
+  }
+
+  return null
 }
 
 function emitPreparedSetMethodCall(name, expression, context) {

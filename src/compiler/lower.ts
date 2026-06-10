@@ -620,7 +620,15 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       ...expression,
       object: lowerExpression(expression.object, context),
       index: lowerExpression(expression.index, context),
-      valueType: 'unknown'
+      valueType: expression.valueType ?? 'unknown',
+      nullable: expression.nullable === true,
+      collectionKind: expression.collectionKind ?? null,
+      arrayElementType: expression.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
+      mapKeyType: expression.mapKeyType ?? null,
+      mapValueType: expression.mapValueType ?? null,
+      setElementType: expression.setElementType ?? null,
+      shape: expression.shape ?? null
     }
   }
 

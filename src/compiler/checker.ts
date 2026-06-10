@@ -834,10 +834,27 @@ class Checker {
   }
 
   checkIndexExpression(expression: AnyNode): ValueType {
-    if (expression.index.type !== 'StringLiteral') {
-      const objectType = this.checkExpression(expression.object)
-      const indexType = this.checkExpression(expression.index)
+    const objectType = this.checkExpression(expression.object)
+    const indexType = this.checkExpression(expression.index)
 
+    if (objectType === 'map') {
+      const mapType = this.resolveExpressionMapType(expression.object) ?? {
+        key: 'unknown',
+        value: 'unknown'
+      }
+
+      this.checkAssignableType(indexType, mapType.key, expression.index.loc, false, this.expressionCanBeNull(expression.index))
+
+      expression.collectionKind = 'map'
+      expression.nullable = true
+      expression.valueType = mapType.value ?? 'unknown'
+      expression.mapKeyType = mapType.key ?? null
+      expression.mapValueType = mapType.value ?? null
+
+      return mapType.value ?? 'unknown'
+    }
+
+    if (expression.index.type !== 'StringLiteral') {
       if (objectType === 'array') {
         this.checkAssignableType(indexType, 'number', expression.index.loc)
         return this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
@@ -849,8 +866,6 @@ class Checker {
     const shape = this.resolveExpressionShape(expression.object)
 
     if (shape == null) {
-      this.checkExpression(expression.object)
-      this.checkExpression(expression.index)
       return 'unknown'
     }
 
@@ -931,18 +946,34 @@ class Checker {
   }
 
   checkIndexAssignment(expression: AnyNode): ValueType {
+    const objectType = this.checkExpression(expression.target.object)
+    const indexType = this.checkExpression(expression.target.index)
+    const valueType = this.checkExpression(expression.value)
+
+    if (objectType === 'map') {
+      const mapType = this.resolveExpressionMapType(expression.target.object) ?? {
+        key: 'unknown',
+        value: 'unknown'
+      }
+
+      this.checkAssignableType(indexType, mapType.key, expression.target.index.loc, false, this.expressionCanBeNull(expression.target.index))
+      this.checkAssignableType(valueType, mapType.value, expression.value.loc, false, this.expressionCanBeNull(expression.value))
+
+      expression.target.collectionKind = 'map'
+      expression.target.valueType = mapType.value ?? 'unknown'
+      expression.target.mapKeyType = mapType.key ?? null
+      expression.target.mapValueType = mapType.value ?? null
+
+      return valueType
+    }
+
     if (expression.target.index.type !== 'StringLiteral') {
-      this.checkExpression(expression.target.object)
-      this.checkExpression(expression.target.index)
-      return this.checkExpression(expression.value)
+      return valueType
     }
 
     const shape = this.resolveExpressionShape(expression.target.object)
-    const valueType = this.checkExpression(expression.value)
 
     if (shape == null) {
-      this.checkExpression(expression.target.object)
-      this.checkExpression(expression.target.index)
       return valueType
     }
 
