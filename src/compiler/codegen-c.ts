@@ -1,6 +1,6 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
-import type { AnyNode, Diagnostic, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
+import { collectIrFunctionEffects, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
+import type { AnyNode, Diagnostic, IrFunctionEffect, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
 
 const cJsGlobalRoots = new Set([
   'Array',
@@ -57,7 +57,8 @@ export function emitCBundle(graph: ModuleGraph): string {
 function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program))) {
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(programs)
-  const baseContext = createBaseContext(diagnostics, functions)
+  const functionEffects = collectIrFunctionEffects(irPrograms)
+  const baseContext = createBaseContext(diagnostics, functions, functionEffects)
   baseContext.callbackWrappers = collectCallbackWrappers(programs, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || irPrograms.some(program => hasIrRuntimeRequirement(program, 'callback-values'))
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || irPrograms.some(program => hasIrRuntimeRequirement(program, 'managed-values'))
@@ -179,30 +180,19 @@ function collectFunctions(programs) {
   return programs.flatMap(program => program.body.filter(item => item.type === 'FunctionDeclaration'))
 }
 
-function collectThrowingFunctionInfo(functions) {
-  const functionNames = new Set(functions.map(item => item.name))
-  const functionThrowValueTypes = new Map(functions.map(item => [item.name, []]))
-  let changed = true
-
-  while (changed) {
-    changed = false
-
-    for (const item of functions) {
-      const types = uniqueThrowValueTypes(collectEscapingThrowValueTypesFromStatements(item.body, functionThrowValueTypes, functionNames, new Set(), false))
-      const previous = functionThrowValueTypes.get(item.name) ?? []
-
-      if (!sameThrowValueTypes(previous, types)) {
-        functionThrowValueTypes.set(item.name, types)
-        changed = true
-      }
-    }
-  }
-
+function createThrowingFunctionInfo(functions: AnyNode[], functionEffects: IrFunctionEffect[]) {
+  const functionThrowValueTypes = new Map<string, IrFunctionEffect['throwValueTypes']>(functions.map(item => [item.name, []]))
   const throwingFunctions = new Set()
 
-  for (const [name, types] of functionThrowValueTypes.entries()) {
-    if (name !== 'main' && Array.isArray(types) && types.length > 0) {
-      throwingFunctions.add(name)
+  for (const effect of functionEffects) {
+    if (!functionThrowValueTypes.has(effect.name)) {
+      continue
+    }
+
+    functionThrowValueTypes.set(effect.name, effect.throwValueTypes)
+
+    if (effect.name !== 'main' && effect.throws) {
+      throwingFunctions.add(effect.name)
     }
   }
 
@@ -210,189 +200,6 @@ function collectThrowingFunctionInfo(functions) {
     functionThrowValueTypes,
     throwingFunctions
   }
-}
-
-function collectEscapingThrowValueTypesFromStatements(statements, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget) {
-  return statements.flatMap(statement => collectEscapingThrowValueTypesFromStatement(statement, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
-}
-
-function collectEscapingThrowValueTypesFromStatement(statement, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget) {
-  if (statement == null) {
-    return []
-  }
-
-  if (statement.type === 'ThrowStatement') {
-    return hasErrorTarget ? [] : [inferThrowValueTypeForAnalysis(statement.argument, errorObjectNames)]
-  }
-
-  if (statement.type === 'VariableDeclaration') {
-    const types = collectEscapingThrowValueTypesFromExpression(statement.init, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
-
-    if (isErrorValueExpressionForAnalysis(statement.init, errorObjectNames)) {
-      errorObjectNames.add(statement.name)
-    }
-
-    return types
-  }
-
-  if (statement.type === 'ExpressionStatement') {
-    return collectEscapingThrowValueTypesFromExpression(statement.expression, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
-  }
-
-  if (statement.type === 'ReturnStatement') {
-    return collectEscapingThrowValueTypesFromExpression(statement.argument, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
-  }
-
-  if (statement.type === 'BlockStatement') {
-    return collectEscapingThrowValueTypesFromStatements(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
-  }
-
-  if (statement.type === 'IfStatement') {
-    return [
-      ...collectEscapingThrowValueTypesFromExpression(statement.condition, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.consequent, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.alternate, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
-    ]
-  }
-
-  if (statement.type === 'WhileStatement') {
-    return [
-      ...collectEscapingThrowValueTypesFromExpression(statement.condition, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
-    ]
-  }
-
-  if (statement.type === 'ForStatement') {
-    return [
-      ...(statement.init?.type === 'VariableDeclaration'
-        ? collectEscapingThrowValueTypesFromStatement(statement.init, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
-        : collectEscapingThrowValueTypesFromExpression(statement.init, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)),
-      ...collectEscapingThrowValueTypesFromExpression(statement.test, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromExpression(statement.update, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
-    ]
-  }
-
-  if (statement.type === 'ForOfStatement') {
-    return [
-      ...collectEscapingThrowValueTypesFromExpression(statement.iterable, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
-    ]
-  }
-
-  if (statement.type === 'SwitchStatement') {
-    return [
-      ...collectEscapingThrowValueTypesFromExpression(statement.discriminant, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...statement.cases.flatMap(item => [
-        ...collectEscapingThrowValueTypesFromExpression(item.test, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-        ...collectEscapingThrowValueTypesFromStatements(item.consequent, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
-      ])
-    ]
-  }
-
-  if (statement.type === 'TryStatement') {
-    const blockHasTarget = statement.handler != null ? true : hasErrorTarget
-
-    return [
-      ...collectEscapingThrowValueTypesFromStatement(statement.block, functionThrowValueTypes, functionNames, new Set(errorObjectNames), blockHasTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.handler?.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.finalizer, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
-    ]
-  }
-
-  return []
-}
-
-function collectEscapingThrowValueTypesFromExpression(expression, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget) {
-  if (expression == null) {
-    return []
-  }
-
-  if (expression.type === 'CallExpression') {
-    const callTypes = !hasErrorTarget && expression.callee.type === 'Reference' && expression.callee.path.length === 1 && functionNames.has(expression.callee.path[0])
-      ? functionThrowValueTypes.get(expression.callee.path[0]) ?? []
-      : []
-
-    return [
-      ...callTypes,
-      ...collectEscapingThrowValueTypesFromExpression(expression.callee, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...expression.args.flatMap(arg => collectEscapingThrowValueTypesFromExpression(arg, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
-    ]
-  }
-
-  if (expression.type === 'NewExpression' || expression.type === 'OptionalCallExpression') {
-    return [
-      ...collectEscapingThrowValueTypesFromExpression(expression.callee, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...expression.args.flatMap(arg => collectEscapingThrowValueTypesFromExpression(arg, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
-    ]
-  }
-
-  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
-    return collectEscapingThrowValueTypesFromExpression(expression.object, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
-  }
-
-  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
-    return [
-      ...collectEscapingThrowValueTypesFromExpression(expression.object, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromExpression(expression.index, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
-    ]
-  }
-
-  if (expression.type === 'AssignmentExpression') {
-    return [
-      ...collectEscapingThrowValueTypesFromExpression(expression.target, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromExpression(expression.value, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
-    ]
-  }
-
-  if (expression.type === 'BinaryExpression') {
-    return [
-      ...collectEscapingThrowValueTypesFromExpression(expression.left, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromExpression(expression.right, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
-    ]
-  }
-
-  if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
-    return collectEscapingThrowValueTypesFromExpression(expression.argument, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
-  }
-
-  if (expression.type === 'ArrayLiteral') {
-    return expression.elements.flatMap(item => collectEscapingThrowValueTypesFromExpression(item, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
-  }
-
-  if (expression.type === 'ObjectLiteral') {
-    return expression.properties.flatMap(property => collectEscapingThrowValueTypesFromExpression(property.value, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
-  }
-
-  return []
-}
-
-function inferThrowValueTypeForAnalysis(expression, errorObjectNames) {
-  if (isErrorValueExpressionForAnalysis(expression, errorObjectNames)) {
-    return 'error'
-  }
-
-  if (expression?.type === 'StringLiteral' || expression?.type === 'TemplateLiteral' || expression?.valueType === 'string') {
-    return 'string'
-  }
-
-  return 'other'
-}
-
-function isErrorValueExpressionForAnalysis(expression, errorObjectNames) {
-  if (isErrorConstructorExpression(expression)) {
-    return true
-  }
-
-  return expression?.type === 'Reference' && expression.path.length === 1 && errorObjectNames.has(expression.path[0])
-}
-
-function uniqueThrowValueTypes(types) {
-  return [...new Set(types)]
-}
-
-function sameThrowValueTypes(left, right) {
-  return left.length === right.length && left.every(item => right.includes(item))
 }
 
 function reportUnsupportedClasses(programs, diagnostics) {
@@ -411,8 +218,8 @@ function reportUnsupportedAsync(programs, diagnostics) {
   }
 }
 
-function createBaseContext(diagnostics, functions) {
-  const throwing = collectThrowingFunctionInfo(functions)
+function createBaseContext(diagnostics, functions, functionEffects: IrFunctionEffect[]) {
+  const throwing = createThrowingFunctionInfo(functions, functionEffects)
 
   return {
     boxedMutableCaptureDeclarations: new Set(),

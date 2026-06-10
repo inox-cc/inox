@@ -1387,6 +1387,13 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
   assert.equal(result.ir.type, 'IrProgram')
   assert.equal(result.ir.version, 1)
   assert.deepEqual(result.ir.runtimeRequirements, [])
+  assert.deepEqual(result.ir.functionEffects, [
+    {
+      name: 'main',
+      throws: false,
+      throwValueTypes: []
+    }
+  ])
   assert.deepEqual(result.ir.body, result.hir.body)
 })
 
@@ -2729,6 +2736,28 @@ export function main(): void {
     target: 'c'
   })
 
+  assert.deepEqual(result.ir.functionEffects, [
+    {
+      name: 'failString',
+      throws: true,
+      throwValueTypes: ['string']
+    },
+    {
+      name: 'failError',
+      throws: true,
+      throwValueTypes: ['error']
+    },
+    {
+      name: 'readValue',
+      throws: true,
+      throwValueTypes: ['string']
+    },
+    {
+      name: 'main',
+      throws: false,
+      throwValueTypes: []
+    }
+  ])
   assert.match(result.code, /ccjs_status failString\(ccjs_value\* ccjs_error_out\);/)
   assert.match(result.code, /ccjs_status failError\(ccjs_value\* ccjs_error_out\);/)
   assert.match(result.code, /ccjs_status readValue\(double ok, double\* ccjs_out, ccjs_value\* ccjs_error_out\);/)
@@ -2908,6 +2937,7 @@ export function main(): void {
 
     assert.equal(result.graph.modules.every(module => module.hir?.type === 'HirProgram'), true)
     assert.equal(result.graph.modules.every(module => module.ir?.type === 'IrProgram'), true)
+    assert.equal(result.graph.modules.every(module => Array.isArray(module.ir?.functionEffects)), true)
   } finally {
     await rm(dir, {
       recursive: true,

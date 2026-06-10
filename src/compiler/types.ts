@@ -36,11 +36,20 @@ export type IrRuntimeRequirement =
   | 'managed-values'
   | 'string-bytes'
 
+export type IrThrowValueType = 'error' | 'other' | 'string'
+
+export type IrFunctionEffect = {
+  name: string
+  throws: boolean
+  throwValueTypes: IrThrowValueType[]
+}
+
 export type IrProgram = {
   type: 'IrProgram'
   version: 1
   features: IrFeature[]
   runtimeRequirements: IrRuntimeRequirement[]
+  functionEffects: IrFunctionEffect[]
   body: AnyNode[]
 }
 
