@@ -6430,6 +6430,29 @@ function emitPreparedCallExpression(expression, context) {
     }
   }
 
+  const prepared = emitPreparedCallArgs(expression, params, context)
+  const { lines, args } = prepared
+
+  if (isThrowingFunctionCallee(expression.callee, context)) {
+    return emitPreparedThrowingCallExpression(expression, args, lines, context)
+  }
+
+  if (isPromiseReturningFunctionCallee(expression.callee, context)) {
+    registerEventLoop(context)
+
+    return {
+      lines,
+      expression: `${emitCallee(expression.callee, context)}(${[emitEventLoopReference(context), ...args].join(', ')})`
+    }
+  }
+
+  return {
+    lines,
+    expression: `${emitCallee(expression.callee, context)}(${args.join(', ')})`
+  }
+}
+
+function emitPreparedCallArgs(expression, params, context) {
   const lines: string[] = []
   const args: string[] = []
 
@@ -6475,22 +6498,9 @@ function emitPreparedCallExpression(expression, context) {
     }
   }
 
-  if (isThrowingFunctionCallee(expression.callee, context)) {
-    return emitPreparedThrowingCallExpression(expression, args, lines, context)
-  }
-
-  if (isPromiseReturningFunctionCallee(expression.callee, context)) {
-    registerEventLoop(context)
-
-    return {
-      lines,
-      expression: `${emitCallee(expression.callee, context)}(${[emitEventLoopReference(context), ...args].join(', ')})`
-    }
-  }
-
   return {
     lines,
-    expression: `${emitCallee(expression.callee, context)}(${args.join(', ')})`
+    args
   }
 }
 
@@ -6629,18 +6639,11 @@ function emitPreparedAsyncFunctionPromiseCallExpression(expression, context, opt
     return null
   }
 
-  if (isThrowingFunctionCallee(expression.callee, context)) {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'throwing async function calls as Promise values are not supported by the current C backend slice', expression.loc))
-
-    return {
-      lines: [],
-      expression: '0',
-      valueType: expression.promiseValueType ?? 'unknown',
-      rejectionValueType: 'unknown'
-    }
-  }
-
   const valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
+
+  if (isThrowingFunctionCallee(expression.callee, context)) {
+    return emitPreparedThrowingAsyncFunctionPromiseCallExpression(expression, valueType, context, options)
+  }
 
   if (!['boolean', 'number', 'void'].includes(valueType)) {
     context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async function calls as Promise values currently support only number, boolean and void values in C', expression.loc))
@@ -6676,6 +6679,95 @@ function emitPreparedAsyncFunctionPromiseCallExpression(expression, context, opt
     valueType,
     rejectionValueType: 'unknown'
   }
+}
+
+function emitPreparedThrowingAsyncFunctionPromiseCallExpression(expression, valueType, context, options: { out?: string, owned?: boolean } = {}) {
+  if (!['boolean', 'number', 'void'].includes(valueType)) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'throwing async function calls as Promise values currently support only number, boolean and void values in C', expression.loc))
+
+    return {
+      lines: [],
+      expression: '0',
+      valueType,
+      rejectionValueType: resolveCFunctionRejectionValueType(expression.callee, context)
+    }
+  }
+
+  const params = resolveFunctionParams(expression.callee, context)
+
+  if (params == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'this async function call is not supported as a Promise value in the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: '0',
+      valueType,
+      rejectionValueType: 'unknown'
+    }
+  }
+
+  registerEventLoop(context)
+  registerErrorChannel(context)
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const prepared = emitPreparedCallArgs(expression, params, context)
+  const result = valueType === 'void' ? null : nextCName(context, 'ccjs_async_result')
+  const status = nextCName(context, 'ccjs_async_status')
+  const args = [...prepared.args]
+  const rejectionValueType = resolveCFunctionRejectionValueType(expression.callee, context)
+  const fulfilledValue = valueType === 'void'
+    ? 'ccjs_undefined_value()'
+    : valueType === 'boolean'
+      ? `ccjs_bool_value((${result}) != 0)`
+      : `ccjs_number_value(${result})`
+
+  if (result != null) {
+    args.push(`&${result}`)
+  }
+
+  args.push('&ccjs_error')
+
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, valueType, rejectionValueType)
+  }
+
+  return {
+    lines: [
+      ...prepared.lines,
+      ...emitPrepareOwnedValueWrite('ccjs_error'),
+      ...(result == null ? [] : [`double ${result} = 0;`]),
+      `ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${args.join(', ')});`,
+      `if (${status} == CCJS_ERR_THROW) {`,
+      `  ${emitStatusCheck(`ccjs_promise_rejected(${emitEventLoopReference(context)}, ccjs_error, &${out})`, context)}`,
+      '  ccjs_release(ccjs_error);',
+      '  ccjs_error = ccjs_undefined_value();',
+      '} else {',
+      `  if (${status} != CCJS_OK) ${emitFailureStatement(context)}`,
+      `  ${emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${fulfilledValue}, &${out})`, context)}`,
+      '}'
+    ],
+    expression: out,
+    valueType,
+    rejectionValueType
+  }
+}
+
+function resolveCFunctionRejectionValueType(callee, context) {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return 'unknown'
+  }
+
+  const types = context.functionThrowValueTypes.get(callee.path[0]) ?? []
+
+  if (types.length === 1 && types[0] === 'error') {
+    return 'error'
+  }
+
+  if (types.length === 1 && types[0] === 'string') {
+    return 'string'
+  }
+
+  return 'unknown'
 }
 
 function emitPreparedAwaitPromiseExpression(expression, context) {

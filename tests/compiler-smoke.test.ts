@@ -3707,17 +3707,29 @@ export async function main(): Promise<void> {
   assert.match(result.code, /ccjs_promise\* promise = 0;/)
   assert.match(result.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(getValue\(\)\), &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /while \(ccjs_promise_get_state\(promise\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
-  assertDiagnostic(`async function failText(): Promise<string> {
+  const throwing = compileSource(`async function failNumber(): Promise<number> {
   throw 'fail'
 }
 
 export async function main(): Promise<void> {
-  const promise = failText()
-  console.log(await promise)
+  const promise = failNumber()
+
+  try {
+    await promise
+  } catch (error) {
+    console.log(error)
+  }
 }
-`, 'CCJS_C_ASYNC', {
+`, {
     target: 'c'
   })
+
+  assert.match(throwing.code, /ccjs_status failNumber\(double\* ccjs_out, ccjs_value\* ccjs_error_out\);/)
+  assert.match(throwing.code, /double ccjs_async_result_\d+ = 0;/)
+  assert.match(throwing.code, /ccjs_status ccjs_async_status_\d+ = failNumber\(&ccjs_async_result_\d+, &ccjs_error\);/)
+  assert.match(throwing.code, /if \(ccjs_async_status_\d+ == CCJS_ERR_THROW\) \{\n    if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(throwing.code, /ccjs_release\(ccjs_error\);\n    ccjs_error = ccjs_undefined_value\(\);/)
+  assert.match(throwing.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(ccjs_async_result_\d+\), &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
 test('lowers awaited plain Promise-returning calls to C', () => {
