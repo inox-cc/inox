@@ -4239,6 +4239,38 @@ test('checks Array sort filter map as typed chain calls', () => {
 `, 'CCJS_TYPE_MISMATCH')
 })
 
+test('checks Array push as a typed mutating call', () => {
+  const result = compileSource(`export function main(): void {
+  const values: number[] = [1]
+  const length = values.push(2)
+  console.log(length, values.length)
+}
+`, {
+    target: 'js'
+  })
+  const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+  const length = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'length')
+  assert.ok(length)
+
+  assert.equal(length.valueType, 'number')
+  assert.equal(length.init.valueType, 'number')
+  assert.equal(length.init.args[0].valueType, 'number')
+  assert.match(result.code, /const length = values\.push\(2\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const values: number[] = [1]
+  values.push('Ada')
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const values: number[] = [1]
+  values.push()
+}
+`, 'CCJS_ARG_COUNT')
+})
+
 test('checks Map and Set generic methods as typed chain calls', () => {
   const result = compileSource(`function makeScores(): Map<string, number> {
   return new Map()

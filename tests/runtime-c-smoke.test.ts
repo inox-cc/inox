@@ -2071,6 +2071,51 @@ test('generated C array literal lowering compiles and runs with runtime sources'
   }
 })
 
+test('generated C Array.push statements compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-push-'))
+  const source = join(dir, 'array-push.c')
+  const output = join(dir, 'array-push')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values: number[] = [1, 2]
+  values.push(3)
+  values.push(4)
+  console.log(values.length, values[2], values[3])
+
+  const names: string[] = ['Ada']
+  names.push('Grace')
+  console.log(names.length, names[1])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '4 3 4\n2 Grace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C Array.sort without comparator compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

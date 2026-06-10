@@ -12,7 +12,8 @@ const cStringPredicateMethods = new Set([
 const cArrayMethods = new Set([
   'sort',
   'filter',
-  'map'
+  'map',
+  'push'
 ])
 
 export function emitCFromIr(ir: IrProgram): string {
@@ -1909,6 +1910,12 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'CallExpression') {
+    const arrayPushCall = emitPreparedArrayPushCallExpression(statement.expression, context)
+
+    if (arrayPushCall != null) {
+      return arrayPushCall.lines
+    }
+
     const arrayMapCall = emitPreparedArrayMapCallExpression(statement.expression, context)
 
     if (arrayMapCall != null) {
@@ -6422,6 +6429,32 @@ function emitPreparedArraySortCallExpression(expression, context) {
   }
 }
 
+function emitPreparedArrayPushCallExpression(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'push' || expression.args.length !== 1) {
+    return null
+  }
+
+  const receiver = emitPreparedArrayReceiver(expression.callee.object, context)
+
+  if (receiver == null) {
+    return null
+  }
+
+  const value = emitCValueExpression(expression.args[0], context)
+
+  updatePushedArrayMetadata(expression.callee.object, inferExpressionType(expression.args[0], context), context)
+
+  return {
+    lines: [
+      ...receiver.lines,
+      ...value.lines,
+      emitStatusCheck(`ccjs_array_push(${receiver.expression}, ${value.expression})`, context)
+    ],
+    expression: '',
+    elementType: receiver.elementType
+  }
+}
+
 function emitPreparedArrayComparatorSortCallExpression(expression, receiver, context) {
   const callback = expression.args[0]
 
@@ -6628,6 +6661,37 @@ function emitPreparedArrayCallbackInput(callback, receiver, value, index, contex
   }
 
   return lines
+}
+
+function updatePushedArrayMetadata(receiver, valueType, context) {
+  if (receiver?.type !== 'Reference' || receiver.path.length !== 1 || valueType === 'unknown') {
+    return
+  }
+
+  const name = receiver.path[0]
+  const elements = context.arrayShapes.get(name)
+
+  if (elements == null) {
+    if (context.variables.get(name) === 'array') {
+      context.runtimeArrayElementTypes.set(name, context.runtimeArrayElementTypes.get(name) ?? valueType)
+    }
+
+    return
+  }
+
+  const nextElements = [
+    ...elements,
+    { valueType }
+  ]
+  const elementType = resolveForOfElementType(nextElements)
+
+  if (elementType === 'unknown') {
+    context.arrayShapes.delete(name)
+    context.runtimeArrayElementTypes.set(name, 'unknown')
+    return
+  }
+
+  context.arrayShapes.set(name, nextElements)
 }
 
 function emitPreparedArrayMapValue(expression, valueType, context) {

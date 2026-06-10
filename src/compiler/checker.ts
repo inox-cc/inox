@@ -1167,9 +1167,32 @@ class Checker {
     const elementType = this.resolveExpressionArrayElementType(expression.callee.object) ?? 'unknown'
     const elementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.callee.object) ?? elementType
 
-    expression.valueType = 'array'
     expression.arrayElementType = elementType
     expression.arrayElementDeclaredType = elementDeclaredType
+
+    if (expression.callee.property === 'push') {
+      expression.valueType = 'number'
+
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `array.push expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      if (expression.args[0] != null) {
+        const pushedType = this.checkExpression(expression.args[0])
+
+        if (elementType !== 'unknown') {
+          this.checkAssignableType(pushedType, elementType, expression.args[0].loc)
+        }
+      }
+
+      for (const arg of expression.args.slice(1)) {
+        this.checkExpression(arg)
+      }
+
+      return 'number'
+    }
+
+    expression.valueType = 'array'
 
     if (expression.callee.property === 'sort') {
       if (expression.args.length > 1) {
@@ -2249,7 +2272,7 @@ function isStringPredicateMethod(name: string): boolean {
 }
 
 function isArrayMethod(name: string): boolean {
-  return ['sort', 'filter', 'map'].includes(name)
+  return ['sort', 'filter', 'map', 'push'].includes(name)
 }
 
 function isMapMethod(name: string): boolean {
