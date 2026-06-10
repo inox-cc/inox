@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { emitC, emitCBundle, emitCFromIr } from '../src/compiler/codegen-c.ts'
-import { emitJs, emitJsBundle, emitJsFromIr, emitTs, emitTsBundle, emitTsFromIr } from '../src/compiler/codegen-js.ts'
+import { emitC, emitCBundle, emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c.ts'
+import { emitJs, emitJsBundle, emitJsBundleFromIrModules, emitJsFromIr, emitTs, emitTsBundle, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
 import { collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords } from '../src/compiler/ir.ts'
@@ -3654,6 +3654,50 @@ export function main(): void {
     assert.equal(irModules.length, result.graph.modules.length)
     assert.deepEqual(irModules.map(module => module.path), result.graph.modules.map(module => module.path))
     assert.deepEqual(irModules.flatMap(module => module.ir.functionDeclarations.map(item => item.name)), ['greet', 'main'])
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('emits JS TS and C bundles directly from target-neutral IR module records', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-bundle-ir-entrypoints-'))
+
+  try {
+    await writeFile(join(dir, 'lib.ts'), `export function greet(): void {
+  console.log('from lib')
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import { greet } from './lib.ts'
+
+export function main(): void {
+  greet()
+}
+`)
+
+    const result = await compileFile(join(dir, 'main.ts'), {
+      target: 'js',
+      callMain: false
+    })
+    const irModules = collectIrModuleRecords(result.graph)
+    const js = emitJsBundleFromIrModules(irModules, result.graph.entry, {
+      callMain: false
+    })
+    const ts = emitTsBundleFromIrModules(irModules, result.graph.entry, {
+      callMain: false
+    })
+    const c = emitCBundleFromIrModules(irModules, result.graph.entry)
+
+    assert.match(js, /function greet\(\) \{/)
+    assert.match(js, /function main\(\) \{/)
+    assert.doesNotMatch(js, /const ccjsMainResult/)
+    assert.match(ts, /function greet\(\): void \{/)
+    assert.match(ts, /function main\(\): void \{/)
+    assert.match(c, /void greet\(void\);/)
+    assert.match(c, /void ccjs_main\(void\);/)
+    assert.match(c, /int main\(void\) \{\n  ccjs_main\(\);/)
   } finally {
     await rm(dir, {
       recursive: true,

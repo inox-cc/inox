@@ -1,5 +1,6 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
+import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
 
 const cStringPredicateMethods = new Set([
@@ -23,9 +24,12 @@ export function emitCFromIr(ir: IrProgram): string {
 }
 
 export function emitCBundle(graph: ModuleGraph): string {
-  const irModules = collectIrModuleRecords(graph)
+  return emitCBundleFromIrModules(collectIrModuleRecords(graph), graph.entry)
+}
+
+export function emitCBundleFromIrModules(irModules: IrModuleRecord[], entry: string): string {
   const irPrograms = irModules.map(module => module.ir)
-  const entryIr = irModules.find(module => module.path === graph.entry)?.ir ?? null
+  const entryIr = irModules.find(module => module.path === entry)?.ir ?? null
 
   return emitCUnit(irPrograms, entryIr)
 }
