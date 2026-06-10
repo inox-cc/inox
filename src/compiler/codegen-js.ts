@@ -13,7 +13,7 @@ export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
     lines.push('')
   }
 
-  lines.push(...emitProgramBody(program, {}, ir))
+  lines.push(...emitProgramBody(ir))
 
   if (hasIrFunctionDeclaration(ir, 'main') && options.callMain !== false) {
     lines.push('')
@@ -49,9 +49,9 @@ export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): s
     lines.push(`// ${module.path}`)
     const ir = module.ir ?? lowerHirToIr(module.hir)
 
-    lines.push(...emitProgramBody(module.hir, {
+    lines.push(...emitProgramBody(ir, {
       stripExports: true
-    }, ir))
+    }))
     lines.push('')
   }
 
@@ -65,7 +65,7 @@ export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): s
   return `${lines.join('\n')}\n`
 }
 
-function emitProgramBody(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string[] {
+function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {
   const lines: string[] = []
 
   for (const topLevelItem of ir.topLevelItems) {
