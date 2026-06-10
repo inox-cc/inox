@@ -82,14 +82,6 @@ export function collectIrFeatureRequirements(programs: Array<{ features: IrFeatu
   return [...new Set(programs.flatMap(program => program.features))].sort()
 }
 
-export function hasIrFeature(program: IrProgram, feature: IrFeature): boolean {
-  return program.features.includes(feature)
-}
-
-export function hasIrRuntimeRequirement(program: IrProgram, requirement: IrRuntimeRequirement): boolean {
-  return program.runtimeRequirements.includes(requirement)
-}
-
 export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[], topLevelItems: IrTopLevelItem[] }>): IrFunctionEffect[] {
   return collectFunctionEffects(programs.flatMap(program => collectIrTopLevelNodes(program, 'function')))
 }

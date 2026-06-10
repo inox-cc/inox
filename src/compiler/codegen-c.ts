@@ -1,7 +1,7 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodeEntries, collectIrTopLevelNodes, collectIrTopLevelNodesFromPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, SourceLocation } from './types.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrSyntaxFeatureUsage, SourceLocation } from './types.ts'
 
 const cStringPredicateMethods = new Set([
   'includes',
@@ -35,17 +35,17 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const globalRoots = collectIrGlobalRoots(irPrograms)
-  const runtimeRequirements = collectIrRuntimeRequirements(irPrograms)
+  const runtimeRequirements = new Set(collectIrRuntimeRequirements(irPrograms))
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const jsGlobalRoots = new Set(globalRoots)
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
-  const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || hasRuntimeRequirement(runtimeRequirements, 'callback-values')
-  const needsCollectionRuntime = hasRuntimeRequirement(runtimeRequirements, 'collections')
-  const needsObjectRuntime = hasRuntimeRequirement(runtimeRequirements, 'objects')
-  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || hasRuntimeRequirement(runtimeRequirements, 'managed-values')
-  const needsTimeRuntime = hasRuntimeRequirement(runtimeRequirements, 'clocks')
-  const needsStringHeader = hasRuntimeRequirement(runtimeRequirements, 'string-bytes')
+  const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || runtimeRequirements.has('callback-values')
+  const needsCollectionRuntime = runtimeRequirements.has('collections')
+  const needsObjectRuntime = runtimeRequirements.has('objects')
+  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || runtimeRequirements.has('managed-values')
+  const needsTimeRuntime = runtimeRequirements.has('clocks')
+  const needsStringHeader = runtimeRequirements.has('string-bytes')
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
   const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime)
@@ -164,10 +164,6 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, need
   }
 
   return lines
-}
-
-function hasRuntimeRequirement(requirements: IrRuntimeRequirement[], requirement: IrRuntimeRequirement): boolean {
-  return requirements.includes(requirement)
 }
 
 function createThrowingFunctionInfo(functionDeclarations: IrFunctionDeclaration[], functionEffects: IrFunctionEffect[]) {
