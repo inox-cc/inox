@@ -1,5 +1,5 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
+import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, collectIrTopLevelNodesFromPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, SourceLocation } from './types.ts'
 
@@ -30,7 +30,7 @@ export function emitCBundleFromIrModules(irModules: IrModuleRecord[], entry: str
 
 function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
   const diagnostics: Diagnostic[] = []
-  const functions = collectFunctions(irPrograms)
+  const functions = collectIrTopLevelNodesFromPrograms(irPrograms, 'function')
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
   const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
@@ -164,10 +164,6 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, need
   }
 
   return lines
-}
-
-function collectFunctions(irPrograms: IrProgram[]) {
-  return irPrograms.flatMap(program => collectIrTopLevelNodes(program, 'function'))
 }
 
 function hasRuntimeRequirement(requirements: IrRuntimeRequirement[], requirement: IrRuntimeRequirement): boolean {

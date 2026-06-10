@@ -132,6 +132,10 @@ export function collectIrTopLevelNodes(program: { body: AnyNode[], topLevelItems
   return collectTopLevelNodes(program, kind)
 }
 
+export function collectIrTopLevelNodesFromPrograms(programs: Array<{ body: AnyNode[], topLevelItems: IrTopLevelItem[] }>, kind: IrTopLevelItemKind): AnyNode[] {
+  return programs.flatMap(program => collectIrTopLevelNodes(program, kind))
+}
+
 function collectIrFeatures(program: ProgramNode): IrFeature[] {
   const features = new Set<IrFeature>()
 

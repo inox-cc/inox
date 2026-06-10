@@ -7,7 +7,7 @@ import { emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c
 import { emitJsBundleFromIrModules, emitJsFromIr, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
-import { collectIrFeatureRequirements, collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
+import { collectIrFeatureRequirements, collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrTopLevelNodesFromPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 
 test('compiles exported main to runnable JS', () => {
@@ -1710,6 +1710,36 @@ export function main(): void {
 
   assert.doesNotMatch(withoutIrBodyFunctions, /void greet\(void\) \{/)
   assert.doesNotMatch(withoutIrBodyFunctions, /void ccjs_main\(void\) \{/)
+})
+
+test('collects IR top-level function nodes across stored programs', () => {
+  const left = compileSource(`export function left(): void {
+  console.log('left')
+}
+`, {
+    target: 'js'
+  })
+  const right = compileSource(`export function right(): void {
+  console.log('right')
+}
+`, {
+    target: 'js'
+  })
+  const functions = collectIrTopLevelNodesFromPrograms([left.ir, right.ir], 'function')
+
+  assert.deepEqual(functions.map(item => item.type === 'FunctionDeclaration'
+    ? item.name
+    : null), ['left', 'right'])
+  assert.deepEqual(collectIrTopLevelNodesFromPrograms([
+    {
+      ...left.ir,
+      topLevelItems: []
+    },
+    {
+      ...right.ir,
+      body: []
+    }
+  ], 'function'), [])
 })
 
 test('emits single-file JS TS and C directly from target-neutral IR programs', () => {
