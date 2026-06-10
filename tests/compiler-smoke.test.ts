@@ -3752,6 +3752,37 @@ export async function main(): Promise<void> {
   assert.match(throwing.code, /ccjs_release\(ccjs_async_result_\d+\);\n    ccjs_async_result_\d+ = ccjs_undefined_value\(\);/)
 })
 
+test('lowers simple async functions with await to C task frames', () => {
+  const result = compileSource(`async function compute(): Promise<number> {
+  const value = await Promise.resolve(2)
+
+  return Promise.resolve(value + 3)
+}
+
+export async function main(): Promise<void> {
+  const promise = compute()
+  console.log(await compute())
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /typedef struct ccjs_async_task_compute_frame \{/)
+  assert.match(result.code, /ccjs_promise\* awaited;/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_compute_start\(ccjs_loop\* ccjs_loop, ccjs_promise\*\* out\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_compute_resume\(void\* context, ccjs_value ccjs_value_input\);/)
+  assert.match(result.code, /status = ccjs_promise_new\(ccjs_loop, &frame->awaited\);/)
+  assert.match(result.code, /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_compute_resume, ccjs_async_task_compute_reject, frame, ccjs_async_task_compute_finalize\);/)
+  assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(2\)\);/)
+  assert.match(result.code, /double value = ccjs_value_input\.as\.number;/)
+  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ 3\)\)\);/)
+  assert.match(result.code, /if \(ccjs_async_task_compute_start\(&ccjs_loop, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_async_task_compute_start\(&ccjs_loop, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.doesNotMatch(result.code, /ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(compute\(\)\), &promise\)/)
+  assert.doesNotMatch(result.code, /ccjs_await_value_\d+ = ccjs_number_value\(compute\(\)\);/)
+})
+
 test('lowers awaited plain Promise-returning calls to C', () => {
   const result = compileSource(`function getPromise(): Promise<number> {
   return Promise.resolve(2)

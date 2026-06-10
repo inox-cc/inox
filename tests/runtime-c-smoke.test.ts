@@ -1642,6 +1642,52 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame over awaited Promise.resolve compiles and runs', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-'))
+  const source = join(dir, 'async-task-frame.c')
+  const output = join(dir, 'async-task-frame')
+
+  try {
+    const result = compileSource(`async function compute(): Promise<number> {
+  const value = await Promise.resolve(2)
+
+  return Promise.resolve(value + 3)
+}
+
+export async function main(): Promise<void> {
+  const promise = compute()
+  console.log(await compute())
+  console.log(await promise)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '5\n5\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C object literal lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
