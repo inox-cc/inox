@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -924,12 +924,14 @@ test('C runtime fs adapter resolves async file promises through the loop', async
 #include <stdlib.h>
 #include <string.h>
 #include "ccjs/allocator.h"
+#include "ccjs/array.h"
 #include "ccjs/fs.h"
 #include "ccjs/string.h"
 
 typedef struct fs_state {
   int reads;
   int writes;
+  int dirs;
   char written[32];
   size_t written_len;
 } fs_state;
@@ -984,19 +986,49 @@ static ccjs_status write_file(void* user, const char* path, size_t path_len, con
   return CCJS_OK;
 }
 
+static ccjs_status read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+  fs_state* state = (fs_state*)user;
+  state->dirs += 1;
+
+  if (path == 0 || path_len == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_value entries = ccjs_undefined_value();
+  ccjs_value first = ccjs_undefined_value();
+  ccjs_value second = ccjs_undefined_value();
+
+  if (ccjs_array_new(allocator, 0, &entries) != CCJS_OK) return CCJS_ERR_OOM;
+  if (ccjs_string_from_literal(allocator, "beta.txt", 8, &first) != CCJS_OK) return CCJS_ERR_OOM;
+  if (ccjs_array_push(entries, first) != CCJS_OK) return CCJS_ERR_OOM;
+  ccjs_release(first);
+  if (ccjs_string_from_literal(allocator, "alpha.txt", 9, &second) != CCJS_OK) return CCJS_ERR_OOM;
+  if (ccjs_array_push(entries, second) != CCJS_OK) return CCJS_ERR_OOM;
+  ccjs_release(second);
+  *out = entries;
+
+  return CCJS_OK;
+}
+
 int main(void) {
   ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  fs_state state = { 0, 0, { 0 }, 0 };
-  ccjs_fs_adapter adapter = { &state, read_file, write_file };
+  fs_state state = { 0, 0, 0, { 0 }, 0 };
+  ccjs_fs_adapter adapter = { &state, read_file, write_file, read_dir };
   ccjs_loop loop;
   ccjs_promise* read_promise = 0;
+  ccjs_promise* dir_promise = 0;
   ccjs_promise* write_promise = 0;
   ccjs_promise* missing_promise = 0;
   ccjs_value default_text = ccjs_undefined_value();
   ccjs_value sync_text = ccjs_undefined_value();
+  ccjs_value sync_entries = ccjs_undefined_value();
   ccjs_value async_text = ccjs_undefined_value();
+  ccjs_value async_entries = ccjs_undefined_value();
   ccjs_value write_result = ccjs_undefined_value();
   ccjs_value missing_error = ccjs_undefined_value();
+  ccjs_value first_entry = ccjs_undefined_value();
+  size_t sync_entry_count = 0;
+  size_t async_entry_count = 0;
 
   if (ccjs_fs_write_file_sync(${defaultPathLiteral}, ${defaultPathLen}, "default", 7) != CCJS_OK) return 1;
   if (ccjs_fs_read_file_sync(&allocator, ${defaultPathLiteral}, ${defaultPathLen}, &default_text) != CCJS_OK) return 2;
@@ -1009,35 +1041,47 @@ int main(void) {
   ccjs_fs_set_adapter(adapter);
   if (ccjs_fs_read_file_sync(&allocator, "sync", 4, &sync_text) != CCJS_OK) return 5;
   if (ccjs_fs_write_file_sync("sync-out", 8, "disk", 4) != CCJS_OK) return 6;
-  if (state.reads != 1 || state.writes != 1) return 7;
+  if (ccjs_fs_read_dir_sync(&allocator, "sync-dir", 8, &sync_entries) != CCJS_OK) return 7;
+  if (ccjs_array_len(sync_entries, &sync_entry_count) != CCJS_OK || sync_entry_count != 2) return 8;
+  if (state.reads != 1 || state.writes != 1 || state.dirs != 1) return 9;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 8;
-  if (ccjs_fs_read_file(&loop, "async", 5, &read_promise) != CCJS_OK) return 9;
-  if (ccjs_fs_write_file(&loop, "async-out", 9, "saved", 5, &write_promise) != CCJS_OK) return 10;
-  if (ccjs_fs_read_file(&loop, "missing", 7, &missing_promise) != CCJS_OK) return 11;
-  if (state.reads != 1 || state.writes != 1) return 12;
-  if (ccjs_loop_pending_immediates(&loop) != 3) return 13;
-  if (ccjs_loop_poll(&loop, 0) != CCJS_OK) return 14;
-  if (ccjs_loop_has_work(&loop)) return 15;
-  if (ccjs_promise_get_state(read_promise) != CCJS_PROMISE_FULFILLED) return 16;
-  if (ccjs_promise_get_state(write_promise) != CCJS_PROMISE_FULFILLED) return 17;
-  if (ccjs_promise_get_state(missing_promise) != CCJS_PROMISE_REJECTED) return 18;
-  if (ccjs_promise_get_result(read_promise, &async_text) != CCJS_OK) return 19;
-  if (ccjs_promise_get_result(write_promise, &write_result) != CCJS_OK) return 20;
-  if (write_result.tag != CCJS_TAG_UNDEFINED) return 21;
-  if (ccjs_promise_get_result(missing_promise, &missing_error) != CCJS_OK) return 22;
-  if (missing_error.tag != CCJS_TAG_NUMBER || missing_error.as.number != (double)CCJS_ERR_FIELD) return 23;
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 10;
+  if (ccjs_fs_read_file(&loop, "async", 5, &read_promise) != CCJS_OK) return 11;
+  if (ccjs_fs_read_dir(&loop, "async-dir", 9, &dir_promise) != CCJS_OK) return 12;
+  if (ccjs_fs_write_file(&loop, "async-out", 9, "saved", 5, &write_promise) != CCJS_OK) return 13;
+  if (ccjs_fs_read_file(&loop, "missing", 7, &missing_promise) != CCJS_OK) return 14;
+  if (state.reads != 1 || state.writes != 1 || state.dirs != 1) return 15;
+  if (ccjs_loop_pending_immediates(&loop) != 4) return 16;
+  if (ccjs_loop_poll(&loop, 0) != CCJS_OK) return 17;
+  if (ccjs_loop_has_work(&loop)) return 18;
+  if (ccjs_promise_get_state(read_promise) != CCJS_PROMISE_FULFILLED) return 19;
+  if (ccjs_promise_get_state(dir_promise) != CCJS_PROMISE_FULFILLED) return 20;
+  if (ccjs_promise_get_state(write_promise) != CCJS_PROMISE_FULFILLED) return 21;
+  if (ccjs_promise_get_state(missing_promise) != CCJS_PROMISE_REJECTED) return 22;
+  if (ccjs_promise_get_result(read_promise, &async_text) != CCJS_OK) return 23;
+  if (ccjs_promise_get_result(dir_promise, &async_entries) != CCJS_OK) return 24;
+  if (ccjs_array_len(async_entries, &async_entry_count) != CCJS_OK || async_entry_count != 2) return 25;
+  if (ccjs_array_get(async_entries, 0, &first_entry) != CCJS_OK) return 26;
+  if (ccjs_promise_get_result(write_promise, &write_result) != CCJS_OK) return 27;
+  if (write_result.tag != CCJS_TAG_UNDEFINED) return 28;
+  if (ccjs_promise_get_result(missing_promise, &missing_error) != CCJS_OK) return 29;
+  if (missing_error.tag != CCJS_TAG_NUMBER || missing_error.as.number != (double)CCJS_ERR_FIELD) return 30;
 
   ccjs_string* sync_string = (ccjs_string*)sync_text.as.ref;
   ccjs_string* async_string = (ccjs_string*)async_text.as.ref;
-  printf("%.*s %.*s %d %.*s %.0f\\n", (int)sync_string->len, sync_string->bytes, (int)async_string->len, async_string->bytes, state.writes, (int)state.written_len, state.written, missing_error.as.number);
+  ccjs_string* first_string = (ccjs_string*)first_entry.as.ref;
+  printf("%.*s %.*s %d %zu %zu %.*s %.*s %.0f\\n", (int)sync_string->len, sync_string->bytes, (int)async_string->len, async_string->bytes, state.writes, sync_entry_count, async_entry_count, (int)first_string->len, first_string->bytes, (int)state.written_len, state.written, missing_error.as.number);
 
+  ccjs_release(first_entry);
   ccjs_release(missing_error);
   ccjs_release(write_result);
+  ccjs_release(async_entries);
   ccjs_release(async_text);
+  ccjs_release(sync_entries);
   ccjs_release(sync_text);
   ccjs_promise_release(missing_promise);
   ccjs_promise_release(write_promise);
+  ccjs_promise_release(dir_promise);
   ccjs_promise_release(read_promise);
   ccjs_loop_dispose(&loop);
   ccjs_fs_clear_adapter();
@@ -1052,7 +1096,7 @@ int main(void) {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'hello fs hello fs 2 saved 4\n')
+    assert.equal(run.stdout, 'hello fs hello fs 2 2 2 beta.txt saved 4\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -1092,6 +1136,51 @@ test('generated C fs promise calls compile and run with runtime sources', async 
 
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, '')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C fs readDir awaits hosted directory entries', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-readdir-'))
+  const entriesDir = join(dir, 'entries')
+  const source = join(dir, 'fs-readdir.c')
+  const output = join(dir, 'fs-readdir')
+
+  try {
+    await mkdir(entriesDir)
+    await writeFile(join(entriesDir, 'beta.txt'), '')
+    await writeFile(join(entriesDir, 'alpha.txt'), '')
+
+    const result = compileSource(`export async function main(): Promise<void> {
+  const entries = await fs.readDir(${JSON.stringify(entriesDir)})
+  const names = entries.sort()
+  console.log(names[0], names[1])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'alpha.txt beta.txt\n')
   } finally {
     await rm(dir, {
       recursive: true,

@@ -1,14 +1,19 @@
 #include <string.h>
+#include "ccjs/array.h"
 #include "ccjs/fs.h"
 #include "ccjs/string.h"
 
 #ifndef CCJS_FS_DISABLE_HOST
+#ifndef _WIN32
+#include <dirent.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #endif
 
 typedef enum ccjs_fs_request_kind {
   CCJS_FS_REQUEST_READ_FILE,
+  CCJS_FS_REQUEST_READ_DIR,
   CCJS_FS_REQUEST_WRITE_FILE
 } ccjs_fs_request_kind;
 
@@ -22,12 +27,13 @@ typedef struct ccjs_fs_request {
   size_t byte_len;
 } ccjs_fs_request;
 
-static ccjs_fs_adapter ccjs_fs_active_adapter = { 0, 0, 0 };
+static ccjs_fs_adapter ccjs_fs_active_adapter = { 0, 0, 0, 0 };
 
 static ccjs_status ccjs_fs_copy_bytes(ccjs_allocator* allocator, const char* bytes, size_t len, char** out);
 #ifndef CCJS_FS_DISABLE_HOST
 static ccjs_status ccjs_fs_copy_host_bytes(const char* bytes, size_t len, char** out);
 static ccjs_status ccjs_fs_default_read_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+static ccjs_status ccjs_fs_default_read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_default_write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
 #endif
 static ccjs_status ccjs_fs_queue_request(
@@ -52,7 +58,7 @@ ccjs_fs_adapter ccjs_fs_get_adapter(void) {
 }
 
 void ccjs_fs_clear_adapter(void) {
-  ccjs_fs_adapter adapter = { 0, 0, 0 };
+  ccjs_fs_adapter adapter = { 0, 0, 0, 0 };
   ccjs_fs_active_adapter = adapter;
 }
 
@@ -76,6 +82,26 @@ ccjs_status ccjs_fs_read_file_sync(ccjs_allocator* allocator, const char* path, 
 #endif
 }
 
+ccjs_status ccjs_fs_read_dir_sync(ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+  if (out != 0) {
+    *out = ccjs_undefined_value();
+  }
+
+  if (allocator == 0 || allocator->alloc == 0 || out == 0 || (path == 0 && path_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (ccjs_fs_active_adapter.read_dir != 0) {
+    return ccjs_fs_active_adapter.read_dir(ccjs_fs_active_adapter.user, allocator, path, path_len, out);
+  }
+
+#ifndef CCJS_FS_DISABLE_HOST
+  return ccjs_fs_default_read_dir(0, allocator, path, path_len, out);
+#else
+  return CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
 ccjs_status ccjs_fs_write_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   if ((path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
     return CCJS_ERR_TYPE;
@@ -94,6 +120,10 @@ ccjs_status ccjs_fs_write_file_sync(const char* path, size_t path_len, const cha
 
 ccjs_status ccjs_fs_read_file(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
   return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_FILE, path, path_len, 0, 0, out);
+}
+
+ccjs_status ccjs_fs_read_dir(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_DIR, path, path_len, 0, 0, out);
 }
 
 ccjs_status ccjs_fs_write_file(
@@ -233,6 +263,77 @@ static ccjs_status ccjs_fs_default_read_file(void* user, ccjs_allocator* allocat
   return status;
 }
 
+static ccjs_status ccjs_fs_default_read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+  (void)user;
+
+  if (allocator == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+#ifdef _WIN32
+  (void)path;
+  (void)path_len;
+  return CCJS_ERR_UNSUPPORTED;
+#else
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  DIR* dir = opendir(path_copy);
+  free(path_copy);
+
+  if (dir == 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  ccjs_value entries = ccjs_undefined_value();
+  status = ccjs_array_new(allocator, 0, &entries);
+
+  if (status != CCJS_OK) {
+    closedir(dir);
+    return status;
+  }
+
+  struct dirent* entry = readdir(dir);
+
+  while (entry != 0) {
+    const char* name = entry->d_name;
+
+    if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+      ccjs_value value = ccjs_undefined_value();
+      size_t name_len = strlen(name);
+      status = ccjs_string_from_literal(allocator, name, name_len, &value);
+
+      if (status == CCJS_OK) {
+        status = ccjs_array_push(entries, value);
+      }
+
+      ccjs_release(value);
+
+      if (status != CCJS_OK) {
+        closedir(dir);
+        ccjs_release(entries);
+        return status;
+      }
+    }
+
+    entry = readdir(dir);
+  }
+
+  if (closedir(dir) != 0) {
+    ccjs_release(entries);
+    return CCJS_ERR_FIELD;
+  }
+
+  *out = entries;
+
+  return CCJS_OK;
+#endif
+}
+
 static ccjs_status ccjs_fs_default_write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   (void)user;
 
@@ -336,6 +437,20 @@ static ccjs_status ccjs_fs_run_request(void* context) {
   if (request->kind == CCJS_FS_REQUEST_READ_FILE) {
     ccjs_value result = ccjs_undefined_value();
     ccjs_status status = ccjs_fs_read_file_sync(request->loop->allocator, request->path, request->path_len, &result);
+
+    if (status != CCJS_OK) {
+      return ccjs_fs_reject_status(request->promise, status);
+    }
+
+    ccjs_status resolve_status = ccjs_promise_resolve(request->promise, result);
+    ccjs_release(result);
+
+    return resolve_status;
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_READ_DIR) {
+    ccjs_value result = ccjs_undefined_value();
+    ccjs_status status = ccjs_fs_read_dir_sync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != CCJS_OK) {
       return ccjs_fs_reject_status(request->promise, status);

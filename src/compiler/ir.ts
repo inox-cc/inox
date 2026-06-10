@@ -868,7 +868,7 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
     return null
   }
 
-  return ['readFile', 'writeFile'].includes(callee.property) ? `fs.${callee.property}` : null
+  return ['readFile', 'readDir', 'writeFile'].includes(callee.property) ? `fs.${callee.property}` : null
 }
 
 function mayBeStringBytesOperand(expression: AnyNode | null | undefined): boolean {

@@ -232,6 +232,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     || path === 'Promise.resolve'
     || path === 'Promise.reject'
     || path === 'fs.readFile'
+    || path === 'fs.readDir'
     || path === 'fs.writeFile'
     || path === 'Map'
     || path === 'Set'
@@ -6515,7 +6516,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 
   const out = options.out ?? nextCName(context, 'ccjs_promise')
   if (options.owned !== false) {
-    registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'readFile' ? 'string' : 'void'), 'unknown')
+    registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'writeFile' ? 'void' : method === 'readDir' ? 'array' : 'string'), 'unknown')
   }
   const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines = [
@@ -6524,6 +6525,16 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 
   if (method === 'readFile') {
     lines.push(emitStatusCheck(`ccjs_fs_read_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`, context))
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'unknown'
+    }
+  }
+
+  if (method === 'readDir') {
+    lines.push(emitStatusCheck(`ccjs_fs_read_dir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`, context))
 
     return {
       lines,
@@ -9430,7 +9441,7 @@ function cFsRuntimeCallName(callee) {
     return null
   }
 
-  return ['readFile', 'writeFile'].includes(callee.property) ? callee.property : null
+  return ['readFile', 'readDir', 'writeFile'].includes(callee.property) ? callee.property : null
 }
 
 function cPromiseRuntimeCallName(callee) {

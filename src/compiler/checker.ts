@@ -433,6 +433,17 @@ class Checker {
       const setElementType = declared?.valueType === 'set' ? declared.setElementType : this.resolveExpressionSetElementType(statement.init)
       const promiseValueType = declared?.valueType === 'promise' ? declared.promiseValueType ?? null : this.resolveExpressionPromiseValueType(statement.init)
 
+      statement.valueType = valueType
+      statement.nullable = declared?.nullable === true || statement.init?.nullable === true
+      statement.arrayElementType = arrayElementType
+      statement.arrayElementDeclaredType = arrayElementDeclaredType
+      statement.mapKeyType = mapType?.key ?? null
+      statement.mapValueType = mapType?.value ?? null
+      statement.promiseValueType = promiseValueType
+      statement.setElementType = setElementType
+      statement.functionType = declared?.functionType ?? null
+      statement.shape = declared?.shape ?? null
+
       if (declared?.shape != null && statement.init?.type === 'ObjectLiteral') {
         this.checkObjectLiteralAgainstShape(statement.init, declared.shape)
       }
@@ -624,6 +635,11 @@ class Checker {
         : argumentType
 
       expression.valueType = valueType
+
+      if (valueType === 'array') {
+        expression.arrayElementType = this.resolveExpressionArrayElementType(expression.argument)
+        expression.arrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.argument)
+      }
 
       return valueType
     }
@@ -1167,6 +1183,21 @@ class Checker {
 
       expression.valueType = 'promise'
       expression.promiseValueType = 'string'
+
+      return 'promise'
+    }
+
+    if (method === 'readDir') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function fs.readDir expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'array'
+      expression.arrayElementType = 'string'
+      expression.arrayElementDeclaredType = 'string'
 
       return 'promise'
     }
@@ -2453,6 +2484,10 @@ class Checker {
       return expression.arrayElementType ?? null
     }
 
+    if (expression.type === 'AwaitExpression') {
+      return expression.arrayElementType ?? null
+    }
+
     if (expression.type === 'Reference' && expression.path.length === 1) {
       return this.scope.resolve(expression.path[0])?.arrayElementType ?? null
     }
@@ -2480,6 +2515,10 @@ class Checker {
     }
 
     if (expression.type === 'ArrayLiteral' || expression.type === 'CallExpression') {
+      return expression.arrayElementDeclaredType ?? expression.arrayElementType ?? null
+    }
+
+    if (expression.type === 'AwaitExpression') {
       return expression.arrayElementDeclaredType ?? expression.arrayElementType ?? null
     }
 
@@ -2860,7 +2899,7 @@ function promiseStaticMethodName(callee: AnyNode): string | null {
 }
 
 function fsRuntimeMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'MemberExpression' || !['readFile', 'writeFile'].includes(callee.property)) {
+  if (callee.type !== 'MemberExpression' || !['readFile', 'readDir', 'writeFile'].includes(callee.property)) {
     return null
   }
 

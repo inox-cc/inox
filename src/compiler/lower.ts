@@ -206,13 +206,13 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       nullable: declared.nullable || init?.nullable === true,
       shape: declared.shape,
       functionType: declared.functionType,
-      arrayElementType: declared.arrayElementType ?? inferArrayElementType(init),
-      arrayElementDeclaredType: declared.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init),
+      arrayElementType: declared.arrayElementType ?? statement.arrayElementType ?? inferArrayElementType(init),
+      arrayElementDeclaredType: declared.arrayElementDeclaredType ?? statement.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init),
       mapKeyType: declared.mapKeyType ?? inferredMapType?.key ?? null,
       mapValueType: declared.mapValueType ?? inferredMapType?.value ?? null,
-      promiseValueType: declared.promiseValueType ?? inferPromiseValueType(init),
-      setElementType: declared.setElementType ?? inferSetElementType(init),
-      valueType: declared.valueType ?? statement.declaredType ?? init?.valueType ?? 'unknown',
+      promiseValueType: declared.promiseValueType ?? statement.promiseValueType ?? inferPromiseValueType(init),
+      setElementType: declared.setElementType ?? statement.setElementType ?? inferSetElementType(init),
+      valueType: declared.valueType ?? statement.valueType ?? statement.declaredType ?? init?.valueType ?? 'unknown',
       init
     }
   }
@@ -771,7 +771,9 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
     return {
       ...expression,
       argument: lowerExpression(expression.argument, context),
-      valueType: expression.valueType ?? 'unknown'
+      valueType: expression.valueType ?? 'unknown',
+      arrayElementType: expression.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null
     }
   }
 

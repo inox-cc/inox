@@ -420,14 +420,17 @@ test('ccjs run --target c runs fs globals through hosted fallback', async t => {
 export async function main(): Promise<void> {
   await fs.writeFile(${JSON.stringify(file)}, 'hello c fs')
   const text = await loadText()
+  const entries = await fs.readDir(${JSON.stringify(dir)})
+  const names = entries.sort()
   console.log(text)
+  console.log(names[0], names[1])
 }
 `)
 
     const result = await runCli(['run', entry, '--target', 'c'])
 
     assert.equal(result.code, 0)
-    assert.equal(result.stdout, 'hello c fs\n')
+    assert.equal(result.stdout, 'hello c fs\nmain.ts value.txt\n')
     assert.equal(result.stderr, '')
   } finally {
     await rm(dir, {

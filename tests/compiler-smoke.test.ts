@@ -4030,9 +4030,10 @@ test('lowers Date.now and performance.now to the C time runtime', () => {
   assert.match(result.code, /double elapsed = ccjs_performance_now\(\);/)
 })
 
-test('lowers fs readFile and writeFile to the C fs runtime', () => {
+test('lowers fs readFile, readDir and writeFile to the C fs runtime', () => {
   const result = compileSource(`export function main(): void {
   const read = fs.readFile('/tmp/value.txt', 'utf8')
+  const entries = fs.readDir('/tmp')
   fs.writeFile('/tmp/out.txt', 'saved')
 }
 `, {
@@ -4044,6 +4045,12 @@ test('lowers fs readFile and writeFile to the C fs runtime', () => {
   assert.ok(read)
   assert.equal(read.valueType, 'promise')
   assert.equal(read.promiseValueType, 'string')
+  const entries = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'entries')
+
+  assert.ok(entries)
+  assert.equal(entries.valueType, 'promise')
+  assert.equal(entries.promiseValueType, 'array')
+  assert.equal(entries.arrayElementType, 'string')
   assert.deepEqual(result.ir.features, [
     'async-runtime',
     'fs'
@@ -4056,15 +4063,23 @@ test('lowers fs readFile and writeFile to the C fs runtime', () => {
   assert.match(result.code, /#include "ccjs\/fs\.h"/)
   assert.match(result.code, /ccjs_loop ccjs_loop;/)
   assert.match(result.code, /ccjs_promise\* read = 0;/)
+  assert.match(result.code, /ccjs_promise\* entries = 0;/)
   assert.match(result.code, /ccjs_promise\* ccjs_promise_\d+ = 0;/)
   assert.match(result.code, /if \(ccjs_loop_init\(&ccjs_loop, &ccjs_default_allocator\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/value\.txt", 14, &read\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_fs_read_dir\(&ccjs_loop, "\/tmp", 4, &entries\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(read != 0\) ccjs_promise_release\(read\);/)
+  assert.match(result.code, /if \(entries != 0\) ccjs_promise_release\(entries\);/)
   assert.match(result.code, /if \(ccjs_loop_active\) ccjs_loop_dispose\(&ccjs_loop\);/)
 
   assertDiagnostic(`export function main(): void {
   fs.writeFile('/tmp/out.txt')
+}
+`, 'CCJS_ARG_COUNT')
+
+  assertDiagnostic(`export function main(): void {
+  fs.readDir('/tmp', 'utf8')
 }
 `, 'CCJS_ARG_COUNT')
 })
