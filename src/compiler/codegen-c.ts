@@ -942,7 +942,7 @@ function collectCallbackWrappers(programs: ProgramNode[], irPrograms: IrProgram[
     const topLevelScope = new Map()
 
     for (const topLevelItem of ir.topLevelItems) {
-      const item = ir.body[topLevelItem.index] ?? program.body[topLevelItem.index]
+      const item = ir.body[topLevelItem.index]
 
       if (item == null) {
         continue

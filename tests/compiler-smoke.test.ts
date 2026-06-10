@@ -1771,6 +1771,10 @@ export function main(): void {
   })
 
   assert.doesNotMatch(withoutMainBodyCallbacks, /ccjs_callback_hello_0/)
+  assert.doesNotMatch(emitC(result.hir, {
+    ...result.ir,
+    body: []
+  }), /ccjs_callback_hello_0/)
 })
 
 test('compiles typed callback aliases with object parameters through the C callback ABI', () => {
