@@ -1464,9 +1464,18 @@ class Checker {
         const returnExpression = this.resolveSingleReturnExpression(expression.body)
 
         if (returnExpression == null) {
+          const terminalReturnExpression = this.resolveTerminalReturnExpression(expression.body)
+
           this.withReturnContext(returnType ?? 'unknown', false, null, () => {
             this.checkStatements(expression.body)
           })
+
+          if (terminalReturnExpression != null) {
+            actualReturnType = this.checkExpression(terminalReturnExpression)
+            returnLoc = terminalReturnExpression.loc ?? expression.loc
+            returnNullable = this.expressionCanBeNull(terminalReturnExpression)
+            returnPromiseValueType = this.resolveExpressionPromiseValueType(terminalReturnExpression)
+          }
         } else {
           actualReturnType = this.checkExpression(returnExpression)
           returnLoc = returnExpression.loc ?? expression.loc
@@ -1845,9 +1854,17 @@ class Checker {
         const returnExpression = this.resolveSingleReturnExpression(expression.body)
 
         if (returnExpression == null) {
+          const terminalReturnExpression = this.resolveTerminalReturnExpression(expression.body)
+
           this.withReturnContext(returnType ?? 'unknown', false, null, () => {
             this.checkStatements(expression.body)
           })
+
+          if (terminalReturnExpression != null) {
+            actualReturnType = this.checkExpression(terminalReturnExpression)
+            returnLoc = terminalReturnExpression.loc ?? expression.loc
+            returnNullable = this.expressionCanBeNull(terminalReturnExpression)
+          }
         } else {
           actualReturnType = this.checkExpression(returnExpression)
           returnLoc = returnExpression.loc ?? expression.loc
@@ -1879,6 +1896,22 @@ class Checker {
     }
 
     const [statement] = statements
+
+    return statement?.type === 'ReturnStatement' ? statement.argument ?? null : null
+  }
+
+  resolveTerminalReturnExpression(body: AnyNode): AnyNode | null {
+    const statements = Array.isArray(body)
+      ? body
+      : body?.type === 'BlockStatement'
+        ? body.body
+        : null
+
+    if (statements == null || statements.length === 0) {
+      return null
+    }
+
+    const statement = statements.at(-1)
 
     return statement?.type === 'ReturnStatement' ? statement.argument ?? null : null
   }

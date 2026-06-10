@@ -1203,7 +1203,7 @@ function collectPromiseChainWrappers(irPrograms: IrProgram[], context) {
 
     const callback = expression.args[0]
 
-    if (callback?.type !== 'ArrowFunctionExpression' || callback.params.length > 1 || resolveArrowReturnExpression(callback) == null) {
+    if (callback?.type !== 'ArrowFunctionExpression' || callback.params.length > 1 || resolvePromiseChainArrowBody(callback) == null) {
       return
     }
 
@@ -1698,12 +1698,21 @@ function emitPromiseChainCallbackParamPrelude(wrapper, context) {
 }
 
 function emitPromiseChainCallbackStatementLines(wrapper, context) {
-  const returnExpression = resolveArrowReturnExpression(wrapper.expression)
+  const body = resolvePromiseChainArrowBody(wrapper.expression)
 
-  if (returnExpression == null) {
+  if (body == null) {
     return []
   }
 
+  const prefixLines = emitStatementList(body.prefixStatements, context)
+
+  return [
+    ...prefixLines,
+    ...emitPromiseChainCallbackReturnLines(body.returnExpression, wrapper, context)
+  ]
+}
+
+function emitPromiseChainCallbackReturnLines(returnExpression, wrapper, context) {
   if (wrapper.returnType === 'number' || wrapper.returnType === 'boolean') {
     const value = emitPreparedNumberExpression(returnExpression, context)
     const expression = wrapper.returnType === 'number'
@@ -8651,6 +8660,50 @@ function resolveArrowReturnExpression(callback) {
   const statement = statements[0]
 
   return statement?.type === 'ReturnStatement' ? statement.argument ?? null : null
+}
+
+function resolvePromiseChainArrowBody(callback) {
+  if (callback?.type !== 'ArrowFunctionExpression') {
+    return null
+  }
+
+  if (callback.expressionBody) {
+    return {
+      prefixStatements: [],
+      returnExpression: callback.body
+    }
+  }
+
+  const statements = Array.isArray(callback.body)
+    ? callback.body
+    : callback.body?.type === 'BlockStatement'
+      ? callback.body.body
+      : null
+
+  if (statements == null || statements.length === 0) {
+    return null
+  }
+
+  const returnStatement = statements.at(-1)
+
+  if (returnStatement?.type !== 'ReturnStatement') {
+    return null
+  }
+
+  const prefixStatements = statements.slice(0, -1)
+
+  if (!prefixStatements.every(isStraightLinePromiseCallbackStatement)) {
+    return null
+  }
+
+  return {
+    prefixStatements,
+    returnExpression: returnStatement.argument ?? null
+  }
+}
+
+function isStraightLinePromiseCallbackStatement(statement) {
+  return statement?.type === 'VariableDeclaration' || statement?.type === 'ExpressionStatement'
 }
 
 function emitPreparedArrayCallbackInput(callback, receiver, value, index, context) {

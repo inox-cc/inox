@@ -1518,10 +1518,20 @@ export async function main(): Promise<void> {
   const blockDoubled = Promise.resolve(5).then(value => {
     return value * 3
   })
+  const multiDoubled = Promise.resolve(6).then(value => {
+    const doubled = value * 2
+
+    return doubled
+  })
   const failedNumber: Promise<number> = Promise.reject('number fail')
   const recoveredNumber = failedNumber.catch(error => 95)
   const blockRecoveredNumber = failedNumber.catch(error => {
     return 96
+  })
+  const multiRecoveredNumber = failedNumber.catch(error => {
+    const recovered = 97
+
+    return recovered
   })
   const chainedNumber = Promise.resolve(1)
     .then(value => value + 1)
@@ -1537,8 +1547,10 @@ export async function main(): Promise<void> {
   console.log(plainPromiseValue)
   console.log(await doubled)
   console.log(await blockDoubled)
+  console.log(await multiDoubled)
   console.log(await recoveredNumber)
   console.log(await blockRecoveredNumber)
+  console.log(await multiRecoveredNumber)
   console.log(await chainedNumber)
   console.log(await loadedTextPromise)
 
@@ -1594,7 +1606,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n3\n3\ndone\ndone\n4\n8\n15\n95\n96\n3\nloaded\nfail\nplain fail\nError stored error\nasync fail\nasync number fail\nasync fail\n')
+    assert.equal(run.stdout, 'ok\n2\n3\n3\ndone\ndone\n4\n8\n15\n12\n95\n96\n97\n3\nloaded\nfail\nplain fail\nError stored error\nasync fail\nasync number fail\nasync fail\n')
   } finally {
     await rm(dir, {
       recursive: true,
