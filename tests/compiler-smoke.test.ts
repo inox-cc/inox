@@ -1642,6 +1642,43 @@ console.log(label)
   }]), [])
 })
 
+test('drives C throwing function ABI from stored target-neutral IR function effects', () => {
+  const result = compileSource(`function ok(): void {
+  console.log('ok')
+}
+
+export function main(): void {
+  try {
+    ok()
+  } catch (error) {
+    console.log(error)
+  }
+}
+`, {
+    target: 'c'
+  })
+  const withThrowingEffect = {
+    ...result.ir,
+    functionEffects: result.ir.functionEffects.map(item => item.name === 'ok'
+      ? {
+          ...item,
+          throws: true,
+          throwValueTypes: ['string' as const]
+        }
+      : item)
+  }
+  const code = emitC(result.hir, withThrowingEffect)
+
+  assert.deepEqual(result.ir.functionEffects.find(item => item.name === 'ok'), {
+    name: 'ok',
+    throws: false,
+    throwValueTypes: []
+  })
+  assert.match(code, /ccjs_status ok\(ccjs_value\* ccjs_error_out\);/)
+  assert.match(code, /ccjs_status ok\(ccjs_value\* ccjs_error_out\) \{/)
+  assert.match(code, /ccjs_status ccjs_call_status_\d+ = ok\(&ccjs_error\);/)
+})
+
 test('collects local IR throw value types for catch binding analysis', () => {
   const result = compileSource(`function failString(): void {
   throw 'nope'

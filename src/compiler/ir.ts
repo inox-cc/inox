@@ -81,6 +81,10 @@ export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[], topL
   return collectFunctionEffects(programs.flatMap(program => collectTopLevelNodes(program, 'function')))
 }
 
+export function collectIrStoredFunctionEffects(programs: Array<{ functionEffects: IrFunctionEffect[] }>): IrFunctionEffect[] {
+  return programs.flatMap(program => program.functionEffects)
+}
+
 export function collectIrLocalThrowValueTypes(statement: AnyNode | null | undefined, options: IrLocalThrowValueTypeOptions = {}): IrThrowValueType[] {
   const functionThrowValueTypes = new Map<string, IrThrowValueType[]>(
     [...(options.functionThrowValueTypes ?? new Map<string, IrThrowValueType[]>())]

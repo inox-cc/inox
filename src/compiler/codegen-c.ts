@@ -1,5 +1,5 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrFunctionEffects, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
+import { collectIrFunctionDeclarations, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrStoredFunctionEffects, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
 
 const cStringPredicateMethods = new Set([
@@ -30,7 +30,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(irPrograms)
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
-  const functionEffects = collectIrFunctionEffects(irPrograms)
+  const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const jsGlobalRoots = new Set(globalUsages.map(usage => usage.root))
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
