@@ -1464,7 +1464,9 @@ class Checker {
         const returnExpression = this.resolveSingleReturnExpression(expression.body)
 
         if (returnExpression == null) {
-          this.checkStatements(expression.body)
+          this.withReturnContext(returnType ?? 'unknown', false, null, () => {
+            this.checkStatements(expression.body)
+          })
         } else {
           actualReturnType = this.checkExpression(returnExpression)
           returnLoc = returnExpression.loc ?? expression.loc
@@ -1843,7 +1845,9 @@ class Checker {
         const returnExpression = this.resolveSingleReturnExpression(expression.body)
 
         if (returnExpression == null) {
-          this.checkStatements(expression.body)
+          this.withReturnContext(returnType ?? 'unknown', false, null, () => {
+            this.checkStatements(expression.body)
+          })
         } else {
           actualReturnType = this.checkExpression(returnExpression)
           returnLoc = returnExpression.loc ?? expression.loc
@@ -2908,6 +2912,23 @@ class Checker {
       callback()
     } finally {
       this.scope = previous
+    }
+  }
+
+  withReturnContext(returnType: ValueType, returnNullable: boolean, returnPromiseValueType: ValueType | null, callback: () => void): void {
+    const previousReturnType = this.currentReturnType
+    const previousReturnNullable = this.currentReturnNullable
+    const previousReturnPromiseValueType = this.currentReturnPromiseValueType
+
+    try {
+      this.currentReturnType = returnType
+      this.currentReturnNullable = returnNullable
+      this.currentReturnPromiseValueType = returnPromiseValueType
+      callback()
+    } finally {
+      this.currentReturnType = previousReturnType
+      this.currentReturnNullable = previousReturnNullable
+      this.currentReturnPromiseValueType = previousReturnPromiseValueType
     }
   }
 

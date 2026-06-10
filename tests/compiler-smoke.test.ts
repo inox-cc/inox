@@ -4962,6 +4962,22 @@ test('checks Array sort filter map as typed chain calls', () => {
   assert.match(c.code, /if \(\(value > index\)\) \{/)
   assert.match(c.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \+ 1\)\)\)/)
 
+  const multiStatementFilter = compileSource(`export function main(): void {
+  const values: number[] = [1, 2]
+  const result = values.filter(value => {
+    const keep = value > 1
+
+    return keep
+  })
+
+  console.log(result.length)
+}
+`, {
+    target: 'ts'
+  })
+
+  assert.match(multiStatementFilter.code, /const result: number\[\] = values\.filter\(\(value: number\): boolean => \{/)
+
   assertDiagnostic(`export function main(): void {
   const values: number[] = [1]
   values.filter(value => value + 1)
@@ -5318,6 +5334,19 @@ test('checks Promise then catch as typed chain calls', () => {
   const extra = 1
   const promise = Promise.resolve(1).then(value => value + extra)
   console.log(promise)
+}
+`, 'CCJS_C_ASYNC', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`export async function main(): Promise<void> {
+  const promise = Promise.resolve(1).then(value => {
+    const doubled = value * 2
+
+    return doubled
+  })
+
+  console.log(await promise)
 }
 `, 'CCJS_C_ASYNC', {
     target: 'c'
