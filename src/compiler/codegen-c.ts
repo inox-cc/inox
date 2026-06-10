@@ -1,6 +1,6 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrStoredFunctionEffects, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
+import { collectIrFunctionDeclarations, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodes, hasIrFunctionDeclaration, lowerHirToIr } from './ir.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
 
 const cStringPredicateMethods = new Set([
   'includes',
@@ -32,14 +32,16 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
   const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
+  const runtimeRequirements = collectIrRuntimeRequirements(irPrograms)
+  const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const jsGlobalRoots = new Set(globalUsages.map(usage => usage.root))
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
-  const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || irPrograms.some(program => hasIrRuntimeRequirement(program, 'callback-values'))
-  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || irPrograms.some(program => hasIrRuntimeRequirement(program, 'managed-values'))
-  const needsTimeRuntime = irPrograms.some(program => hasIrRuntimeRequirement(program, 'clocks'))
-  const needsStringHeader = irPrograms.some(program => hasIrRuntimeRequirement(program, 'string-bytes'))
-  reportUnsupportedCSyntaxFeatures(irPrograms, diagnostics)
+  const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || hasRuntimeRequirement(runtimeRequirements, 'callback-values')
+  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || hasRuntimeRequirement(runtimeRequirements, 'managed-values')
+  const needsTimeRuntime = hasRuntimeRequirement(runtimeRequirements, 'clocks')
+  const needsStringHeader = hasRuntimeRequirement(runtimeRequirements, 'string-bytes')
+  reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
   const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsCallbackRuntime, needsStringHeader)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
@@ -155,6 +157,10 @@ function collectFunctions(irPrograms: IrProgram[]) {
   return irPrograms.flatMap(program => collectIrTopLevelNodes(program, 'function'))
 }
 
+function hasRuntimeRequirement(requirements: IrRuntimeRequirement[], requirement: IrRuntimeRequirement): boolean {
+  return requirements.includes(requirement)
+}
+
 function createThrowingFunctionInfo(functionDeclarations: IrFunctionDeclaration[], functionEffects: IrFunctionEffect[]) {
   const functionThrowValueTypes = new Map<string, IrFunctionEffect['throwValueTypes']>(functionDeclarations.map(item => [item.name, []]))
   const throwingFunctions = new Set()
@@ -177,8 +183,8 @@ function createThrowingFunctionInfo(functionDeclarations: IrFunctionDeclaration[
   }
 }
 
-function reportUnsupportedCSyntaxFeatures(irPrograms: IrProgram[], diagnostics: Diagnostic[]) {
-  for (const usage of irPrograms.flatMap(program => program.syntaxFeatures)) {
+function reportUnsupportedCSyntaxFeatures(syntaxFeatures: IrSyntaxFeatureUsage[], diagnostics: Diagnostic[]) {
+  for (const usage of syntaxFeatures) {
     if (usage.feature === 'class') {
       diagnostics.push(diagnostic('CCJS_C_CLASS', 'classes are not supported by the current C backend slice', usage.loc))
     } else if (usage.feature === 'async-function') {

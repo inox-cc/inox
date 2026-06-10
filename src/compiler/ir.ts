@@ -85,6 +85,14 @@ export function collectIrStoredFunctionEffects(programs: Array<{ functionEffects
   return programs.flatMap(program => program.functionEffects)
 }
 
+export function collectIrRuntimeRequirements(programs: Array<{ runtimeRequirements: IrRuntimeRequirement[] }>): IrRuntimeRequirement[] {
+  return [...new Set(programs.flatMap(program => program.runtimeRequirements))].sort()
+}
+
+export function collectIrSyntaxFeatureUsages(programs: Array<{ syntaxFeatures: IrSyntaxFeatureUsage[] }>): IrSyntaxFeatureUsage[] {
+  return programs.flatMap(program => program.syntaxFeatures)
+}
+
 export function collectIrLocalThrowValueTypes(statement: AnyNode | null | undefined, options: IrLocalThrowValueTypeOptions = {}): IrThrowValueType[] {
   const functionThrowValueTypes = new Map<string, IrThrowValueType[]>(
     [...(options.functionThrowValueTypes ?? new Map<string, IrThrowValueType[]>())]

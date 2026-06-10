@@ -1725,6 +1725,10 @@ test('drives C runtime prelude from target-neutral IR requirements', () => {
     ...result.ir,
     features: []
   })
+  const withoutRuntimeRequirements = emitC(result.hir, {
+    ...result.ir,
+    runtimeRequirements: []
+  })
 
   assert.deepEqual(result.ir.runtimeRequirements, [
     'clocks',
@@ -1734,6 +1738,36 @@ test('drives C runtime prelude from target-neutral IR requirements', () => {
   assert.match(code, /#include <string\.h>/)
   assert.match(code, /#include "ccjs\/array\.h"/)
   assert.match(code, /#include "ccjs\/time\.h"/)
+  assert.doesNotMatch(withoutRuntimeRequirements, /#include <string\.h>/)
+  assert.doesNotMatch(withoutRuntimeRequirements, /#include "ccjs\/array\.h"/)
+  assert.doesNotMatch(withoutRuntimeRequirements, /#include "ccjs\/time\.h"/)
+})
+
+test('drives C unsupported syntax diagnostics from stored target-neutral IR syntax features', () => {
+  const result = compileSource(`export function main(): void {
+  console.log('ok')
+}
+`, {
+    target: 'c'
+  })
+
+  assert.throws(() => emitC(result.hir, {
+    ...result.ir,
+    syntaxFeatures: [{
+      feature: 'class' as const,
+      loc: {
+        line: 1,
+        column: 1
+      }
+    }]
+  }), error => {
+    assert.ok(error instanceof CompileError)
+    assert.equal(error.diagnostics[0]?.code, 'CCJS_C_CLASS')
+    assert.equal(error.diagnostics[0]?.line, 1)
+    assert.equal(error.diagnostics[0]?.column, 1)
+
+    return true
+  })
 })
 
 test('keeps function signatures in HIR and compiles typed calls', () => {
