@@ -1638,10 +1638,24 @@ export function main(): void {
   assert.match(result.code, /function add\(left, right\)/)
 })
 
-test('emits readable typed TS function and method signatures', () => {
-  const source = `class Greeter {
-  greet(name: string): string {
-    return name
+test('emits readable typed TS type aliases function and method signatures', () => {
+  const source = `type User = {
+  readonly id: number,
+  name: string
+}
+
+type Bag = {
+  names: string[],
+  scores: Map<string, number>,
+  tags: Set<string>,
+  nickname: string | null
+}
+
+type Formatter = (user: User, bag: Bag) => string
+
+class Greeter {
+  greet(user: User): string {
+    return user.name
   }
 }
 
@@ -1649,13 +1663,18 @@ function add(left: number, right: number): number {
   return left + right
 }
 
+function render(user: User): User {
+  return user
+}
+
 export function main(): void {
   const greeter = new Greeter()
   const total = add(2, 3)
   const names = ['Ada']
   const scores: Map<string, number> = new Map()
+  const user: User = { id: 1, name: 'Ada' }
   let maybe: string | null = null
-  console.log(greeter.greet('Ada'), total, names[0], scores.has('Ada'), maybe)
+  console.log(greeter.greet(user), render(user).name, total, names[0], scores.has('Ada'), maybe)
 }
 `
   const js = compileSource(source, {
@@ -1667,12 +1686,18 @@ export function main(): void {
 
   assert.match(js.code, /function add\(left, right\) \{/)
   assert.doesNotMatch(js.code, /left: number/)
-  assert.match(ts.code, /greet\(name: string\): string \{/)
+  assert.doesNotMatch(js.code, /type User/)
+  assert.match(ts.code, /type User = \{\n  readonly id: number,\n  name: string,\n\}/)
+  assert.match(ts.code, /type Bag = \{\n  names: string\[\],\n  scores: Map<string, number>,\n  tags: Set<string>,\n  nickname: string \| null,\n\}/)
+  assert.match(ts.code, /type Formatter = \(user: User, bag: Bag\) => string/)
+  assert.match(ts.code, /greet\(user: User\): string \{/)
   assert.match(ts.code, /function add\(left: number, right: number\): number \{/)
+  assert.match(ts.code, /function render\(user: User\): User \{/)
   assert.match(ts.code, /export function main\(\): void \{/)
   assert.match(ts.code, /const total: number = add\(2, 3\)/)
   assert.match(ts.code, /const names: string\[\] = \["Ada"\]/)
   assert.match(ts.code, /const scores: Map<string, number> = new Map\(\)/)
+  assert.match(ts.code, /const user: User = \{ id: 1, name: "Ada" \}/)
   assert.match(ts.code, /let maybe: string \| null = null/)
 })
 
@@ -4373,15 +4398,24 @@ test('compiles a static ESM module graph to typed TS bundle', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-modules-'))
 
   try {
-    await writeFile(join(dir, 'lib.ts'), `export function greet(name: string): void {
-  const label: string = name
+    await writeFile(join(dir, 'types.ts'), `export type User = {
+  readonly id: number,
+  name: string
+}
+`)
+    await writeFile(join(dir, 'lib.ts'), `import type { User as Person } from './types.ts'
+
+export function greet(user: Person): void {
+  const label: string = user.name
   console.log(label)
 }
 `)
-    await writeFile(join(dir, 'main.ts'), `import { greet } from './lib.ts'
+    await writeFile(join(dir, 'main.ts'), `import type { User } from './types.ts'
+import { greet } from './lib.ts'
 
 export function main(): void {
-  greet('Ada')
+  const user: User = { id: 1, name: 'Ada' }
+  greet(user)
 }
 `)
 
@@ -4389,9 +4423,13 @@ export function main(): void {
       target: 'ts'
     })
 
-    assert.match(result.code, /function greet\(name: string\): void \{/)
-    assert.match(result.code, /const label: string = name/)
+    assert.equal([...result.code.matchAll(/type User = \{/g)].length, 1)
+    assert.match(result.code, /type User = \{\n  readonly id: number,\n  name: string,\n\}/)
+    assert.match(result.code, /type Person = \{\n  readonly id: number,\n  name: string,\n\}/)
+    assert.match(result.code, /function greet\(user: Person\): void \{/)
+    assert.match(result.code, /const label: string = user\.name/)
     assert.match(result.code, /function main\(\): void \{/)
+    assert.match(result.code, /const user: User = \{ id: 1, name: "Ada" \}/)
     assert.doesNotMatch(result.code, /export function/)
   } finally {
     await rm(dir, {

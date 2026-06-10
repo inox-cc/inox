@@ -80,7 +80,9 @@ function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {
       continue
     }
 
-    if (topLevelItem.kind === 'function') {
+    if (item.type === 'TypeAliasDeclaration') {
+      lines.push(...emitTypeAlias(item, options))
+    } else if (topLevelItem.kind === 'function') {
       lines.push(...emitFunction(item, options))
     } else if (topLevelItem.kind === 'class') {
       lines.push(...emitClass(item, options))
@@ -148,12 +150,12 @@ function emitMethod(method: AnyNode, options: JsEmitOptions = {}): string[] {
 
 function emitFunctionParams(params: AnyNode[], options: JsEmitOptions = {}): string {
   return params.map(param => options.emitTypes === true
-    ? `${param.name}: ${emitTsValueType(param.valueType, param)}`
+    ? `${param.name}: ${emitTsValueType(param.declaredType ?? param.valueType, param)}`
     : param.name).join(', ')
 }
 
 function emitReturnTypeAnnotation(node: AnyNode, options: JsEmitOptions = {}): string {
-  return options.emitTypes === true ? `: ${emitTsValueType(node.returnType, {
+  return options.emitTypes === true ? `: ${emitTsValueType(node.declaredReturnType ?? node.returnType, {
     arrayElementType: node.returnArrayElementType,
     mapKeyType: node.returnMapKeyType,
     mapValueType: node.returnMapValueType,
@@ -165,22 +167,46 @@ function emitReturnTypeAnnotation(node: AnyNode, options: JsEmitOptions = {}): s
 function emitTsValueType(valueType: string | null | undefined, metadata: AnyNode = {}): string {
   const baseType = emitTsBaseType(valueType, metadata)
 
-  return metadata.nullable === true && baseType !== 'null'
+  return metadata.nullable === true && baseType !== 'null' && !baseType.endsWith(' | null')
     ? `${baseType} | null`
     : baseType
 }
 
 function emitTsBaseType(valueType: string | null | undefined, metadata: AnyNode): string {
+  const nullableType = genericTypeArgs(valueType, 'nullable')
+
+  if (nullableType.length === 1) {
+    return `${emitTsValueType(nullableType[0])} | null`
+  }
+
   if (valueType === 'array') {
-    return `${emitTsValueType(metadata.arrayElementType ?? 'unknown')}[]`
+    return emitTsArrayType(metadata.arrayElementType ?? 'unknown')
+  }
+
+  const arrayType = genericTypeArgs(valueType, 'array')
+
+  if (arrayType.length === 1) {
+    return emitTsArrayType(arrayType[0])
   }
 
   if (valueType === 'map') {
     return `Map<${emitTsValueType(metadata.mapKeyType ?? 'unknown')}, ${emitTsValueType(metadata.mapValueType ?? 'unknown')}>`
   }
 
+  const mapType = genericTypeArgs(valueType, 'map')
+
+  if (mapType.length === 2) {
+    return `Map<${emitTsValueType(mapType[0])}, ${emitTsValueType(mapType[1])}>`
+  }
+
   if (valueType === 'set') {
     return `Set<${emitTsValueType(metadata.setElementType ?? 'unknown')}>`
+  }
+
+  const setType = genericTypeArgs(valueType, 'set')
+
+  if (setType.length === 1) {
+    return `Set<${emitTsValueType(setType[0])}>`
   }
 
   if (valueType === 'function') {
@@ -194,14 +220,81 @@ function emitTsBaseType(valueType: string | null | undefined, metadata: AnyNode)
   return valueType ?? 'unknown'
 }
 
+function emitTsArrayType(elementType: string): string {
+  const type = emitTsValueType(elementType)
+
+  return type.includes(' | ') ? `(${type})[]` : `${type}[]`
+}
+
+function genericTypeArgs(valueType: string | null | undefined, name: string): string[] {
+  const match = new RegExp(`^${name}<(.+)>$`).exec(valueType ?? '')
+
+  return match == null ? [] : splitGenericArgs(match[1])
+}
+
+function splitGenericArgs(value: string): string[] {
+  const args: string[] = []
+  let depth = 0
+  let start = 0
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+
+    if (char === '<') {
+      depth += 1
+    } else if (char === '>') {
+      depth -= 1
+    } else if (char === ',' && depth === 0) {
+      args.push(value.slice(start, index))
+      start = index + 1
+    }
+  }
+
+  args.push(value.slice(start))
+
+  return args.map(arg => arg.trim()).filter(Boolean)
+}
+
 function emitVariableTypeAnnotation(statement: AnyNode, options: JsEmitOptions = {}): string {
   if (options.emitTypes !== true) {
     return ''
   }
 
-  const type = emitTsValueType(statement.valueType, statement)
+  const type = emitTsValueType(statement.declaredType ?? statement.valueType, statement)
 
   return type === 'unknown' ? '' : `: ${type}`
+}
+
+function emitTypeAlias(statement: AnyNode, options: JsEmitOptions = {}): string[] {
+  if (options.emitTypes !== true || shouldSkipSyntheticTypeAlias(statement)) {
+    return []
+  }
+
+  const exported = statement.exported && !options.stripExports
+  const prefix = `${exported ? 'export ' : ''}type ${statement.name} = `
+  const valueType = statement.valueType
+
+  if (valueType?.kind === 'object') {
+    return [
+      `${prefix}{`,
+      ...valueType.fields.map(field => `  ${field.readonly ? 'readonly ' : ''}${field.name}: ${emitTsValueType(field.valueType, field)},`),
+      '}'
+    ]
+  }
+
+  if (valueType?.kind === 'function') {
+    const params = valueType.params
+      .map(param => `${param.name}: ${emitTsValueType(param.valueType, param)}`)
+      .join(', ')
+
+    return [`${prefix}(${params}) => ${emitTsValueType(valueType.returnType, valueType)}`]
+  }
+
+  return [`${prefix}unknown`]
+}
+
+function shouldSkipSyntheticTypeAlias(statement: AnyNode): boolean {
+  return statement.syntheticTypeImport === true && statement.importedName === statement.name
 }
 
 function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {

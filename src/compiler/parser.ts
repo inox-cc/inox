@@ -231,7 +231,9 @@ class Parser {
 
     this.expectValue(')', 'CCJS_EXPECTED_TYPE', 'expected ) after function type parameters')
     this.expectValue('=>', 'CCJS_EXPECTED_ARROW', 'expected => in function type')
-    const returnType = this.parseTypeAnnotation([';', ',', '}'])
+    const returnType = this.parseTypeAnnotation([';', ',', '}'], {
+      stopAtStatementBoundary: true
+    })
     this.matchValue(';')
 
     return {
@@ -1221,14 +1223,19 @@ class Parser {
     }
   }
 
-  parseTypeAnnotation(values: string[]): string {
+  parseTypeAnnotation(values: string[], options: { stopAtStatementBoundary?: boolean } = {}): string {
     const parts: string[] = []
     let genericDepth = 0
+    let lastTokenLine = this.current().line
 
     while (!this.is('eof')) {
       const token = this.current()
 
       if (genericDepth === 0 && values.includes(token.value)) {
+        break
+      }
+
+      if (genericDepth === 0 && parts.length > 0 && options.stopAtStatementBoundary === true && token.line > lastTokenLine && isStatementBoundaryToken(token)) {
         break
       }
 
@@ -1239,6 +1246,7 @@ class Parser {
       }
 
       parts.push(token.value)
+      lastTokenLine = token.line
       this.advance()
     }
 
@@ -1417,6 +1425,19 @@ function locFromToken(token: SourceLocation): SourceLocation {
     line: token.line,
     column: token.column
   }
+}
+
+function isStatementBoundaryToken(token: Token): boolean {
+  return token.type === 'keyword' && [
+    'async',
+    'class',
+    'const',
+    'export',
+    'function',
+    'import',
+    'let',
+    'type'
+  ].includes(token.value)
 }
 
 function normalizeTypeName(name: string): string {

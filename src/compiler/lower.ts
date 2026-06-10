@@ -48,6 +48,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       name: item.name,
       loc: item.loc,
       params: item.params.map(param => lowerParam(param, context)),
+      declaredReturnType: item.returnType,
       returnType: returnType.valueType ?? item.returnType,
       returnNullable: returnType.nullable,
       returnArrayElementType: returnType.arrayElementType,
@@ -73,6 +74,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
           name: method.name,
           loc: method.loc,
           params: method.params.map(param => lowerParam(param, context)),
+          declaredReturnType: method.returnType,
           returnType: returnType.valueType ?? method.returnType,
           returnNullable: returnType.nullable,
           body: method.body.map(statement => lowerStatement(statement, context))
@@ -230,6 +232,7 @@ function lowerParam(param: AnyNode, context: LowerContext): AnyNode {
 
   return {
     ...param,
+    declaredType: param.valueType,
     valueType: declared.valueType ?? param.valueType,
     nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,

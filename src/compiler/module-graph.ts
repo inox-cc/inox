@@ -198,6 +198,8 @@ function createTypeImportDeclaration(specifier: AnyNode, exported: AnyNode): Any
     exported: false,
     name: specifier.local,
     loc: specifier.loc,
+    syntheticTypeImport: true,
+    importedName: specifier.imported,
     valueType: cloneTypeAliasValue(exported.valueType)
   }
 }
