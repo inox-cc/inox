@@ -8,6 +8,10 @@ type JsEmitOptions = {
 }
 
 export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string {
+  return emitJsFromIr(ir, options)
+}
+
+export function emitJsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string {
   const lines: string[] = emitJsPrelude([ir])
 
   if (lines.length > 0) {
@@ -28,10 +32,14 @@ export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
 }
 
 export function emitTs(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string {
-  return emitJs(program, {
+  return emitTsFromIr(ir, options)
+}
+
+export function emitTsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string {
+  return emitJsFromIr(ir, {
     ...options,
     emitTypes: true
-  }, ir)
+  })
 }
 
 export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {

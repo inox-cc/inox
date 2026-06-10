@@ -15,6 +15,10 @@ const cArrayMethods = new Set([
 ])
 
 export function emitC(program: ProgramNode, ir: IrProgram = lowerHirToIr(program)): string {
+  return emitCFromIr(ir)
+}
+
+export function emitCFromIr(ir: IrProgram): string {
   return emitCUnit([ir], ir)
 }
 

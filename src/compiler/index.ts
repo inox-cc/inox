@@ -1,5 +1,5 @@
-import { emitC, emitCBundle } from './codegen-c.ts'
-import { emitJs, emitJsBundle, emitTs, emitTsBundle } from './codegen-js.ts'
+import { emitCBundle, emitCFromIr } from './codegen-c.ts'
+import { emitJsBundle, emitJsFromIr, emitTsBundle, emitTsFromIr } from './codegen-js.ts'
 import { checkProgram } from './checker.ts'
 import { lowerHirToIr } from './ir.ts'
 import { tokenize } from './lexer.ts'
@@ -22,7 +22,7 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
       ast: checked.ast,
       hir,
       ir,
-      code: emitC(hir, ir)
+      code: emitCFromIr(ir)
     }
   }
 
@@ -32,9 +32,9 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
       ast: checked.ast,
       hir,
       ir,
-      code: emitTs(hir, {
+      code: emitTsFromIr(ir, {
         callMain: options.callMain
-      }, ir)
+      })
     }
   }
 
@@ -44,9 +44,9 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
       ast: checked.ast,
       hir,
       ir,
-      code: emitJs(hir, {
+      code: emitJsFromIr(ir, {
         callMain: options.callMain
-      }, ir)
+      })
     }
   }
 

@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { emitC, emitCBundle } from '../src/compiler/codegen-c.ts'
-import { emitJs, emitJsBundle, emitTs, emitTsBundle } from '../src/compiler/codegen-js.ts'
+import { emitC, emitCBundle, emitCFromIr } from '../src/compiler/codegen-c.ts'
+import { emitJs, emitJsBundle, emitJsFromIr, emitTs, emitTsBundle, emitTsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
 import { collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords } from '../src/compiler/ir.ts'
@@ -1588,6 +1588,21 @@ export function main(): void {
 
   assert.doesNotMatch(withoutIrBodyFunctions, /void greet\(void\) \{/)
   assert.doesNotMatch(withoutIrBodyFunctions, /void ccjs_main\(void\) \{/)
+})
+
+test('emits single-file JS TS and C directly from target-neutral IR programs', () => {
+  const result = compileSource(`export function main(): void {
+  console.log('hello')
+}
+`, {
+    target: 'js'
+  })
+
+  assert.match(emitJsFromIr(result.ir), /const ccjsMainResult = main\(\)/)
+  assert.match(emitTsFromIr(result.ir, {
+    callMain: false
+  }), /export function main\(\): void \{/)
+  assert.match(emitCFromIr(result.ir), /void ccjs_main\(void\) \{/)
 })
 
 test('collects target-neutral IR feature requirements', () => {
