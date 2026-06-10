@@ -1087,6 +1087,12 @@ class Checker {
       return collectionMethodType
     }
 
+    const fsType = this.checkFsCall(expression)
+
+    if (fsType != null) {
+      return fsType
+    }
+
     const promiseStaticType = this.checkPromiseStaticCall(expression)
 
     if (promiseStaticType != null) {
@@ -1126,6 +1132,54 @@ class Checker {
     }
 
     return symbol.returnType ?? 'unknown'
+  }
+
+  checkFsCall(expression: AnyNode): ValueType | null {
+    const method = fsRuntimeMethodName(expression.callee)
+
+    if (method == null) {
+      return null
+    }
+
+    if (this.scope.resolve('fs') != null) {
+      return null
+    }
+
+    if (method === 'readFile') {
+      if (expression.args.length < 1 || expression.args.length > 2) {
+        this.report('CCJS_ARG_COUNT', `function fs.readFile expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsStringArg(expression, 1)
+
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'string'
+
+      return 'promise'
+    }
+
+    if (expression.args.length !== 2) {
+      this.report('CCJS_ARG_COUNT', `function fs.writeFile expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    this.checkFsStringArg(expression, 0)
+    this.checkFsStringArg(expression, 1)
+
+    expression.valueType = 'promise'
+    expression.promiseValueType = 'void'
+
+    return 'promise'
+  }
+
+  checkFsStringArg(expression: AnyNode, index: number): void {
+    const arg = expression.args[index]
+
+    if (arg == null) {
+      return
+    }
+
+    this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
   }
 
   checkPromiseStaticCall(expression: AnyNode): ValueType | null {
@@ -2662,6 +2716,16 @@ function promiseStaticMethodName(callee: AnyNode): string | null {
   }
 
   return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'Promise'
+    ? callee.property
+    : null
+}
+
+function fsRuntimeMethodName(callee: AnyNode): string | null {
+  if (callee.type !== 'MemberExpression' || !['readFile', 'writeFile'].includes(callee.property)) {
+    return null
+  }
+
+  return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'fs'
     ? callee.property
     : null
 }

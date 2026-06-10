@@ -41,15 +41,16 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || runtimeRequirements.has('callback-values')
-  const needsAsyncRuntime = runtimeRequirements.has('async-runtime')
+  const needsFsRuntime = runtimeRequirements.has('fs')
+  const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFsRuntime
   const needsCollectionRuntime = runtimeRequirements.has('collections')
   const needsObjectRuntime = runtimeRequirements.has('objects')
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || runtimeRequirements.has('managed-values')
   const needsTimeRuntime = runtimeRequirements.has('clocks')
-  const needsStringHeader = runtimeRequirements.has('string-bytes')
+  const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
   for (const wrapper of arrowCallbackWrappers) {
@@ -99,7 +100,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -119,6 +120,9 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCa
     }
     if (needsCallbackRuntime) {
       lines.push('#include "ccjs/callback.h"')
+    }
+    if (needsFsRuntime) {
+      lines.push('#include "ccjs/fs.h"')
     }
     if (needsCollectionRuntime) {
       lines.push('#include "ccjs/map.h"')
@@ -217,6 +221,8 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
   return path === 'Date.now'
     || path === 'performance.now'
     || path === 'Error'
+    || path === 'fs.readFile'
+    || path === 'fs.writeFile'
     || path === 'Map'
     || path === 'Set'
 }
@@ -255,6 +261,7 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
       value: item.returnMapValueType ?? null
     }])),
     functionReturnNullables: new Map(functionDeclarations.map(item => [item.name, item.returnNullable === true])),
+    functionReturnPromiseValueTypes: new Map(functionDeclarations.map(item => [item.name, item.returnPromiseValueType ?? null])),
     functionReturnShapes: new Map(functionDeclarations.map(item => [item.name, item.returnShape ?? null])),
     functionReturnSetElementTypes: new Map(functionDeclarations.map(item => [item.name, item.returnSetElementType ?? null])),
     functionReturnTypes: new Map(functionDeclarations.map(item => [item.name, item.returnType])),
@@ -327,6 +334,9 @@ function emitFunctionDeclaration(statement, baseContext) {
     } else if (param.valueType === 'set') {
       context.variables.set(param.name, 'set')
       context.setElementTypes.set(param.name, param.setElementType ?? 'unknown')
+    } else if (param.valueType === 'promise') {
+      context.variables.set(param.name, 'promise')
+      context.promiseValueTypes.set(param.name, param.promiseValueType ?? 'unknown')
     } else if (param.valueType === 'function') {
       const runtimeFunctionType = resolveFunctionParameterRuntimeType(statement.name, index, param, context)
 
@@ -358,9 +368,12 @@ function emitFunctionDeclaration(statement, baseContext) {
     ...emitStatusResultDeclarations(context).map(line => `  ${line}`),
     ...emitLoopFlowDeclarations(context).map(line => `  ${line}`),
     ...emitReturnFlowDeclarations(context).map(line => `  ${line}`),
+    ...emitEventLoopDeclarations(context).map(line => `  ${line}`),
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitOwnedPromiseDeclarations(context).map(line => `  ${line}`),
     ...emitErrorChannelDeclarations(context).map(line => `  ${line}`),
     ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitEventLoopInit(context).map(line => `  ${line}`),
     ...bodyLines
   ]
 
@@ -368,6 +381,8 @@ function emitFunctionDeclaration(statement, baseContext) {
     lines.push('ccjs_cleanup:')
     lines.push(...emitThrowingFunctionErrorTransfer(context).map(line => `  ${line}`))
     lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitOwnedPromiseCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitEventLoopCleanup(context).map(line => `  ${line}`))
     lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
     lines.push(...emitCleanupReturn(context).map(line => `  ${line}`))
   } else if (context.returnType !== 'void') {
@@ -1614,11 +1629,14 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     functionErrorOut: null,
     functionReturnOut: null,
     functionTypes: new Map(),
+    eventLoopUsed: false,
     mapTypes: new Map(),
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
     objectShapes: new Map(),
+    ownedPromises: [],
     ownedValues: [],
+    promiseValueTypes: new Map(),
     returnFlowUsed: false,
     returnTargets: [],
     runtimeCallbacks: new Set(),
@@ -1658,14 +1676,19 @@ function emitMainWrapper(entryIrProgram, baseContext) {
 
   lines.push(...emitLoopFlowDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitReturnFlowDeclarations(context).map(line => `  ${line}`))
+  lines.push(...emitEventLoopDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitOwnedValueDeclarations(context).map(line => `  ${line}`))
+  lines.push(...emitOwnedPromiseDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitErrorChannelDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
+  lines.push(...emitEventLoopInit(context).map(line => `  ${line}`))
   lines.push(...bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
     lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitOwnedPromiseCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitEventLoopCleanup(context).map(line => `  ${line}`))
     lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
   }
 
@@ -1776,6 +1799,10 @@ function emitCType(type) {
     return 'void*'
   }
 
+  if (type === 'promise') {
+    return 'ccjs_promise*'
+  }
+
   return 'double'
 }
 
@@ -1867,6 +1894,14 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'VariableDeclaration') {
+    const fsCall = emitPreparedFsCallExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (fsCall != null) {
+      return fsCall.lines
+    }
+
     if (isCollectionConstructorExpression(statement.init)) {
       return emitCollectionVariableDeclaration(statement, context)
     }
@@ -1988,6 +2023,12 @@ function emitStatement(statement, context) {
 
     if (collectionCall != null) {
       return collectionCall.lines
+    }
+
+    const fsCall = emitPreparedFsCallExpression(statement.expression, context)
+
+    if (fsCall != null) {
+      return fsCall.lines
     }
 
     const call = emitPreparedCallExpression(statement.expression, context)
@@ -2847,6 +2888,17 @@ function emitPreparedForInitializer(init, context) {
 }
 
 function emitPreparedForVariableDeclaration(statement, context) {
+  const fsCall = emitPreparedFsCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (fsCall != null) {
+    return {
+      lines: fsCall.lines,
+      expression: ''
+    }
+  }
+
   if (isCollectionConstructorExpression(statement.init)) {
     return {
       lines: emitCollectionVariableDeclaration(statement, context),
@@ -5787,6 +5839,12 @@ function emitPreparedCallExpression(expression, context) {
     return collectionCall
   }
 
+  const fsCall = emitPreparedFsCallExpression(expression, context)
+
+  if (fsCall != null) {
+    return fsCall
+  }
+
   const callbackType = resolveRuntimeCallbackCalleeType(expression.callee, context)
 
   if (callbackType != null) {
@@ -5854,6 +5912,42 @@ function emitPreparedCallExpression(expression, context) {
   return {
     lines,
     expression: `${emitCallee(expression.callee, context)}(${args.join(', ')})`
+  }
+}
+
+function emitPreparedFsCallExpression(expression, context, options: { out?: string } = {}) {
+  const method = cFsRuntimeCallName(expression?.callee)
+
+  if (method == null || expression?.valueType !== 'promise') {
+    return null
+  }
+
+  registerEventLoop(context)
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  registerOwnedPromise(context, out, expression.promiseValueType ?? (method === 'readFile' ? 'string' : 'void'))
+  const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
+  const lines = [
+    ...path.lines
+  ]
+
+  if (method === 'readFile') {
+    lines.push(emitStatusCheck(`ccjs_fs_read_file(&ccjs_loop, ${path.bytes}, ${path.length}, &${out})`, context))
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  const bytes = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+
+  lines.push(...bytes.lines)
+  lines.push(emitStatusCheck(`ccjs_fs_write_file(&ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &${out})`, context))
+
+  return {
+    lines,
+    expression: out
   }
 }
 
@@ -6277,6 +6371,10 @@ function resolveFunctionParams(callee, context) {
 function inferExpressionType(expression, context) {
   if (expression?.type === 'CallExpression' && cTimeRuntimeCallName(expression.callee) != null) {
     return 'number'
+  }
+
+  if (expression?.type === 'CallExpression' && cFsRuntimeCallName(expression.callee) != null && expression.valueType === 'promise') {
+    return 'promise'
   }
 
   if (isErrorConstructorExpression(expression)) {
@@ -7987,6 +8085,20 @@ function registerOwnedValue(context, name) {
   }
 }
 
+function registerOwnedPromise(context, name, valueType = 'unknown') {
+  if (!context.ownedPromises.includes(name)) {
+    context.ownedPromises.push(name)
+  }
+
+  context.variables.set(name, 'promise')
+  context.promiseValueTypes.set(name, valueType)
+}
+
+function registerEventLoop(context) {
+  context.eventLoopUsed = true
+  context.usedCleanupGoto = true
+}
+
 function registerBoxedValue(context, name, valueType = 'number') {
   if (!context.boxedValues.includes(name)) {
     context.boxedValues.push(name)
@@ -8005,7 +8117,7 @@ function emitPrepareOwnedValueWrite(name) {
 function shouldEmitCleanupLabel(context) {
   return context.throwingFunction
     || context.returnType !== 'void'
-    || (context.returnType === 'void' && (context.ownedValues.length > 0 || context.boxedValues.length > 0 || context.usedCleanupGoto))
+    || (context.returnType === 'void' && (context.ownedValues.length > 0 || context.ownedPromises.length > 0 || context.boxedValues.length > 0 || context.eventLoopUsed || context.usedCleanupGoto))
 }
 
 function emitReturnValueDeclarations(context) {
@@ -8043,6 +8155,19 @@ function emitOwnedValueDeclarations(context) {
   return context.ownedValues.map(name => `ccjs_value ${name} = ccjs_undefined_value();`)
 }
 
+function emitOwnedPromiseDeclarations(context) {
+  return context.ownedPromises.map(name => `ccjs_promise* ${name} = 0;`)
+}
+
+function emitEventLoopDeclarations(context) {
+  return context.eventLoopUsed
+    ? [
+        'ccjs_loop ccjs_loop;',
+        'int ccjs_loop_active = 0;'
+      ]
+    : []
+}
+
 function emitErrorChannelDeclarations(context) {
   return context.errorChannelUsed ? ['int ccjs_error_active = 0;'] : []
 }
@@ -8055,6 +8180,23 @@ function emitBoxedValueDeclarations(context) {
 
 function emitOwnedValueCleanup(context) {
   return context.ownedValues.toReversed().map(name => `ccjs_release(${name});`)
+}
+
+function emitOwnedPromiseCleanup(context) {
+  return context.ownedPromises.toReversed().map(name => `if (${name} != 0) ccjs_promise_release(${name});`)
+}
+
+function emitEventLoopInit(context) {
+  return context.eventLoopUsed
+    ? [
+        `if (ccjs_loop_init(&ccjs_loop, &ccjs_default_allocator) != CCJS_OK) ${emitFailureStatement(context)}`,
+        'ccjs_loop_active = 1;'
+      ]
+    : []
+}
+
+function emitEventLoopCleanup(context) {
+  return context.eventLoopUsed ? ['if (ccjs_loop_active) ccjs_loop_dispose(&ccjs_loop);'] : []
 }
 
 function emitBoxedValueCleanup(context) {
@@ -8154,6 +8296,18 @@ function cTimeRuntimeCallName(callee) {
   }
 
   return null
+}
+
+function cFsRuntimeCallName(callee) {
+  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+    return null
+  }
+
+  if (callee.object.path[0] !== 'fs') {
+    return null
+  }
+
+  return ['readFile', 'writeFile'].includes(callee.property) ? callee.property : null
 }
 
 function isCJsGlobalRoot(name, context) {

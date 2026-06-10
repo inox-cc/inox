@@ -168,6 +168,9 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
     } else if (feature === 'objects') {
       requirements.add('managed-values')
       requirements.add('objects')
+    } else if (feature === 'fs') {
+      requirements.add('async-runtime')
+      requirements.add('fs')
     } else if (feature === 'array-pop-null' || feature === 'map-get-null' || feature === 'map-index-set') {
       continue
     } else {
@@ -744,6 +747,10 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('clocks')
   }
 
+  if (fsRuntimeCallName(expression.callee) != null) {
+    features.add('fs')
+  }
+
   const arrayMethod = arrayMethodCallName(expression)
 
   const collectionMethod = collectionMethodCallName(expression)
@@ -850,6 +857,18 @@ function timeRuntimeCallName(callee: AnyNode): string | null {
   }
 
   return null
+}
+
+function fsRuntimeCallName(callee: AnyNode): string | null {
+  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+    return null
+  }
+
+  if (callee.object.path[0] !== 'fs') {
+    return null
+  }
+
+  return ['readFile', 'writeFile'].includes(callee.property) ? `fs.${callee.property}` : null
 }
 
 function mayBeStringBytesOperand(expression: AnyNode | null | undefined): boolean {

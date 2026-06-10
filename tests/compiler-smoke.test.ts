@@ -3801,6 +3801,45 @@ test('lowers Date.now and performance.now to the C time runtime', () => {
   assert.match(result.code, /double elapsed = ccjs_performance_now\(\);/)
 })
 
+test('lowers fs readFile and writeFile to the C fs runtime', () => {
+  const result = compileSource(`export function main(): void {
+  const read = fs.readFile('/tmp/value.txt', 'utf8')
+  fs.writeFile('/tmp/out.txt', 'saved')
+}
+`, {
+    target: 'c'
+  })
+  const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const read = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'read')
+
+  assert.ok(read)
+  assert.equal(read.valueType, 'promise')
+  assert.equal(read.promiseValueType, 'string')
+  assert.deepEqual(result.ir.features, [
+    'async-runtime',
+    'fs'
+  ])
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'async-runtime',
+    'fs'
+  ])
+  assert.match(result.code, /#include <string\.h>/)
+  assert.match(result.code, /#include "ccjs\/fs\.h"/)
+  assert.match(result.code, /ccjs_loop ccjs_loop;/)
+  assert.match(result.code, /ccjs_promise\* read = 0;/)
+  assert.match(result.code, /ccjs_promise\* ccjs_promise_\d+ = 0;/)
+  assert.match(result.code, /if \(ccjs_loop_init\(&ccjs_loop, &ccjs_default_allocator\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/value\.txt", 14, &read\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(read != 0\) ccjs_promise_release\(read\);/)
+  assert.match(result.code, /if \(ccjs_loop_active\) ccjs_loop_dispose\(&ccjs_loop\);/)
+
+  assertDiagnostic(`export function main(): void {
+  fs.writeFile('/tmp/out.txt')
+}
+`, 'CCJS_ARG_COUNT')
+})
+
 test('reports JS stdlib globals with a stable C diagnostic', () => {
   const usages = compileSource(`export function main(): void {
   const text = fs.readFile('/tmp/value.txt', 'utf8')
@@ -3819,11 +3858,6 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
   assert.deepEqual(usages.ir.globalUsages.map(usage => usage.path.join('.')).sort(), ['Date.parse', 'Promise.resolve', 'fs.readFile', 'http.createServer'])
 
   for (const source of [
-    `export function main(): void {
-  const text = fs.readFile('/tmp/value.txt', 'utf8')
-  console.log(text)
-}
-`,
     `export function main(): void {
   const parsed = Date.parse('2026-06-09T00:00:00Z')
   console.log(parsed)
