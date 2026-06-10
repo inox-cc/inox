@@ -159,6 +159,10 @@ function topLevelItemKind(item: AnyNode): IrTopLevelItemKind {
     return 'class'
   }
 
+  if (item.type === 'TypeAliasDeclaration') {
+    return 'type'
+  }
+
   return 'statement'
 }
 

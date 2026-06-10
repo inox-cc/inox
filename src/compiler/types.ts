@@ -75,6 +75,7 @@ export type IrTopLevelItemKind =
   | 'function'
   | 'import'
   | 'statement'
+  | 'type'
 
 export type IrTopLevelItem = {
   kind: IrTopLevelItemKind

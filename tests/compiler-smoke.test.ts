@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { emitC, emitCBundle } from '../src/compiler/codegen-c.ts'
-import { emitJs, emitJsBundle } from '../src/compiler/codegen-js.ts'
+import { emitJs, emitJsBundle, emitTs, emitTsBundle } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
 import { collectIrFunctionEffects, collectIrLocalThrowValueTypes, collectIrModuleRecords } from '../src/compiler/ir.ts'
@@ -1533,6 +1533,37 @@ console.log(name)
     ...c.ir,
     body: []
   }), /printf/)
+})
+
+test('drives TS type alias emission from target-neutral IR top-level type items', () => {
+  const source = `type User = {
+  readonly id: number,
+  name: string
+}
+
+export function main(): void {
+  const user: User = { id: 1, name: 'Ada' }
+  console.log(user.name)
+}
+`
+  const ts = compileSource(source, {
+    target: 'ts',
+    callMain: false
+  })
+  const withoutTypeItems = {
+    ...ts.ir,
+    topLevelItems: ts.ir.topLevelItems.filter(item => item.kind !== 'type')
+  }
+
+  assert.deepEqual(ts.ir.topLevelItems.map(item => item.kind), ['type', 'function'])
+  assert.match(ts.code, /type User = \{/)
+  assert.match(ts.code, /export function main\(\): void \{/)
+  assert.doesNotMatch(emitTs(ts.hir, {
+    callMain: false
+  }, withoutTypeItems), /type User = \{/)
+  assert.match(emitTs(ts.hir, {
+    callMain: false
+  }, withoutTypeItems), /export function main\(\): void \{/)
 })
 
 test('drives C function collection from target-neutral IR body', () => {
@@ -3533,6 +3564,50 @@ export function main(): void {
     assert.match(code, /function greet\(\)/)
     assert.match(code, /function main\(\)/)
     assert.match(code, /const ccjsMainResult = main\(\)/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('drives TS bundle type aliases from stored target-neutral IR programs', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-bundle-type-ir-'))
+
+  try {
+    await writeFile(join(dir, 'types.ts'), `export type User = {
+  readonly id: number,
+  name: string
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import type { User } from './types.ts'
+
+export function main(): void {
+  const user: User = { id: 1, name: 'Ada' }
+  console.log(user.name)
+}
+`)
+
+    const result = await compileFile(join(dir, 'main.ts'), {
+      target: 'ts',
+      callMain: false
+    })
+    const graph = {
+      ...result.graph,
+      modules: result.graph.modules.map(module => ({
+        ...module,
+        hir: null
+      }))
+    }
+    const code = emitTsBundle(graph, {
+      callMain: false
+    })
+
+    assert.deepEqual(result.graph.modules.flatMap(module => module.ir?.topLevelItems.map(item => item.kind) ?? []), ['type', 'import', 'type', 'function'])
+    assert.equal([...code.matchAll(/type User = \{/g)].length, 1)
+    assert.match(code, /function main\(\): void \{/)
+    assert.doesNotMatch(code, /const ccjsMainResult/)
   } finally {
     await rm(dir, {
       recursive: true,

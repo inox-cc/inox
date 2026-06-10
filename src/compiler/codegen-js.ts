@@ -80,7 +80,7 @@ function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {
       continue
     }
 
-    if (item.type === 'TypeAliasDeclaration') {
+    if (topLevelItem.kind === 'type') {
       lines.push(...emitTypeAlias(item, options))
     } else if (topLevelItem.kind === 'function') {
       lines.push(...emitFunction(item, options))
