@@ -13,7 +13,8 @@ const cArrayMethods = new Set([
   'sort',
   'filter',
   'map',
-  'push'
+  'push',
+  'pop'
 ])
 
 export function emitCFromIr(ir: IrProgram): string {
@@ -1910,6 +1911,14 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'CallExpression') {
+    const arrayPopCall = emitPreparedArrayPopCallExpression(statement.expression, context, {
+      discard: true
+    })
+
+    if (arrayPopCall != null) {
+      return arrayPopCall.lines
+    }
+
     const arrayPushCall = emitPreparedArrayPushCallExpression(statement.expression, context)
 
     if (arrayPushCall != null) {
@@ -3715,6 +3724,12 @@ function emitCValueExpression(expression, context) {
     return emitCNullishCoalescingValueExpression(expression, context)
   }
 
+  const arrayPopCall = emitPreparedArrayPopCallExpression(expression, context)
+
+  if (arrayPopCall != null) {
+    return arrayPopCall
+  }
+
   if (isErrorConstructorExpression(expression)) {
     return emitCErrorObjectValueExpression(expression, context)
   }
@@ -5506,6 +5521,12 @@ function emitCallExpression(expression, context) {
 }
 
 function emitPreparedCallExpression(expression, context) {
+  const arrayPopCall = emitPreparedArrayPopCallExpression(expression, context)
+
+  if (arrayPopCall != null) {
+    return arrayPopCall
+  }
+
   const arrayMapCall = emitPreparedArrayMapCallExpression(expression, context)
 
   if (arrayMapCall != null) {
@@ -6455,6 +6476,39 @@ function emitPreparedArrayPushCallExpression(expression, context) {
   }
 }
 
+function emitPreparedArrayPopCallExpression(expression, context, options: { discard?: boolean } = {}) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'pop' || expression.args.length !== 0) {
+    return null
+  }
+
+  const receiver = emitPreparedArrayReceiver(expression.callee.object, context)
+
+  if (receiver == null) {
+    return null
+  }
+
+  const value = nextCName(context, 'ccjs_array_pop')
+  registerOwnedValue(context, value)
+  updatePoppedArrayMetadata(expression.callee.object, context)
+
+  const lines = [
+    ...receiver.lines,
+    ...emitPrepareOwnedValueWrite(value),
+    emitStatusCheck(`ccjs_array_pop(${receiver.expression}, &${value})`, context)
+  ]
+
+  if (options.discard === true) {
+    lines.push(`ccjs_release(${value});`)
+    lines.push(`${value} = ccjs_undefined_value();`)
+  }
+
+  return {
+    lines,
+    expression: value,
+    elementType: receiver.elementType
+  }
+}
+
 function emitPreparedArrayComparatorSortCallExpression(expression, receiver, context) {
   const callback = expression.args[0]
 
@@ -6692,6 +6746,21 @@ function updatePushedArrayMetadata(receiver, valueType, context) {
   }
 
   context.arrayShapes.set(name, nextElements)
+}
+
+function updatePoppedArrayMetadata(receiver, context) {
+  if (receiver?.type !== 'Reference' || receiver.path.length !== 1) {
+    return
+  }
+
+  const name = receiver.path[0]
+  const elements = context.arrayShapes.get(name)
+
+  if (elements == null) {
+    return
+  }
+
+  context.arrayShapes.set(name, elements.slice(0, -1))
 }
 
 function emitPreparedArrayMapValue(expression, valueType, context) {

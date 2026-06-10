@@ -25,6 +25,7 @@ export type ProgramNode = AnyNode & {
 }
 
 export type IrFeature =
+  | 'array-pop-null'
   | 'callback-values'
   | 'clocks'
   | 'runtime-values'

@@ -4271,6 +4271,60 @@ test('checks Array push as a typed mutating call', () => {
 `, 'CCJS_ARG_COUNT')
 })
 
+test('checks Array pop as a nullable typed mutating call', () => {
+  const result = compileSource(`export function main(): void {
+  const values: number[] = [1]
+  const value = values.pop()
+  const fallback = values.pop() ?? 0
+  console.log(value, fallback)
+}
+`, {
+    target: 'js'
+  })
+  const ts = compileSource(`export function main(): void {
+  const names: string[] = ['Ada']
+  const name: string | null = names.pop()
+  console.log(name ?? 'missing')
+}
+`, {
+    target: 'ts'
+  })
+  const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+  const value = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'value')
+  assert.ok(value)
+
+  assert.equal(value.valueType, 'number')
+  assert.equal(value.nullable, true)
+  assert.equal(value.init.valueType, 'number')
+  assert.equal(value.init.nullable, true)
+  assert.deepEqual(result.ir.features, [
+    'array-pop-null',
+    'runtime-values'
+  ])
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'managed-values'
+  ])
+  assert.match(result.code, /function ccjsArrayPop\(array\) \{/)
+  assert.match(result.code, /const value = ccjsArrayPop\(values\)/)
+  assert.match(result.code, /const fallback = \(ccjsArrayPop\(values\) \?\? 0\)/)
+  assert.match(ts.code, /function ccjsArrayPop<T>\(array: T\[\]\): T \| null \{/)
+  assert.match(ts.code, /const name: string \| null = ccjsArrayPop\(names\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const values: number[] = [1]
+  const value: number = values.pop()
+  console.log(value)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const values: number[] = [1]
+  values.pop(1)
+}
+`, 'CCJS_ARG_COUNT')
+})
+
 test('checks Map and Set generic methods as typed chain calls', () => {
   const result = compileSource(`function makeScores(): Map<string, number> {
   return new Map()

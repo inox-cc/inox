@@ -64,6 +64,9 @@ int main(void) {
   ccjs_value score;
   ccjs_value array;
   ccjs_value first;
+  ccjs_value popped;
+  ccjs_value missing;
+  size_t array_len;
 
   if (ccjs_object_new(&allocator, &shape, &user) != CCJS_OK) return 1;
   if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 2;
@@ -73,9 +76,13 @@ int main(void) {
   if (ccjs_array_new(&allocator, 1, &array) != CCJS_OK) return 6;
   if (ccjs_array_set(array, 0, ccjs_number_value(7)) != CCJS_OK) return 7;
   if (ccjs_array_get(array, 0, &first) != CCJS_OK) return 8;
+  if (ccjs_array_pop(array, &popped) != CCJS_OK) return 9;
+  if (ccjs_array_len(array, &array_len) != CCJS_OK) return 10;
+  if (ccjs_array_pop(array, &missing) != CCJS_OK) return 11;
+  if (missing.tag != CCJS_TAG_NULL) return 12;
 
   ccjs_string* string = (ccjs_string*)name.as.ref;
-  printf("%.*s %.0f %.0f\\n", (int)string->len, string->bytes, score.as.number, first.as.number);
+  printf("%.*s %.0f %.0f %.0f %zu\\n", (int)string->len, string->bytes, score.as.number, first.as.number, popped.as.number, array_len);
   return 0;
 }
 `)
@@ -101,7 +108,7 @@ int main(void) {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'Ada 42 7\n')
+    assert.equal(run.stdout, 'Ada 42 7 7 0\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -2108,6 +2115,54 @@ test('generated C Array.push statements compile and run with runtime sources', a
 
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, '4 3 4\n2 Grace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C Array.pop expressions compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-pop-'))
+  const source = join(dir, 'array-pop.c')
+  const output = join(dir, 'array-pop')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values: number[] = [1, 2]
+  const last = values.pop() ?? 0
+  console.log(values.length, last)
+  const first = values.pop() ?? 0
+  const missing = values.pop() ?? 9
+  console.log(values.length, first, missing)
+
+  const names: string[] = ['Ada']
+  const name = names.pop() ?? 'missing'
+  const none = names.pop() ?? 'empty'
+  console.log(names.length, name, none)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 2\n0 1 9\n0 Ada empty\n')
   } finally {
     await rm(dir, {
       recursive: true,

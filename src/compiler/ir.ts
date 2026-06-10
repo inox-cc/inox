@@ -142,6 +142,8 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
   for (const feature of features) {
     if (feature === 'runtime-values') {
       requirements.add('managed-values')
+    } else if (feature === 'array-pop-null') {
+      continue
     } else {
       requirements.add(feature)
     }
@@ -672,8 +674,14 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('clocks')
   }
 
-  if (collectionMethodCallName(expression) != null || arrayMethodCallName(expression) != null) {
+  const arrayMethod = arrayMethodCallName(expression)
+
+  if (collectionMethodCallName(expression) != null || arrayMethod != null) {
     features.add('runtime-values')
+  }
+
+  if (arrayMethod === 'pop') {
+    features.add('array-pop-null')
   }
 
   if (isStringConversionCall(expression)) {
@@ -708,7 +716,7 @@ function arrayMethodCallName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['filter', 'map', 'sort'].includes(expression.callee.property) ? expression.callee.property : null
+  return ['filter', 'map', 'pop', 'push', 'sort'].includes(expression.callee.property) ? expression.callee.property : null
 }
 
 function isStringConversionCall(expression: AnyNode): boolean {

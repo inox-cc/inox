@@ -443,7 +443,7 @@ class Checker {
       }, statement.loc)
 
       if (declared != null && statement.init != null) {
-        this.checkAssignableType(initType, declared.valueType, statement.loc, declared.nullable)
+        this.checkAssignableType(initType, declared.valueType, statement.loc, declared.nullable, this.expressionCanBeNull(statement.init))
 
         if (declared.valueType === 'array' && declared.arrayElementType != null) {
           this.checkAssignableType(this.resolveExpressionArrayElementType(statement.init), declared.arrayElementType, statement.loc)
@@ -476,7 +476,7 @@ class Checker {
 
     if (statement.type === 'ReturnStatement') {
       const actual = statement.argument == null ? 'void' : this.checkExpression(statement.argument)
-      this.checkAssignableType(actual, this.currentReturnType, statement.loc, this.currentReturnNullable)
+      this.checkAssignableType(actual, this.currentReturnType, statement.loc, this.currentReturnNullable, this.expressionCanBeNull(statement.argument))
     }
   }
 
@@ -581,7 +581,7 @@ class Checker {
 
         for (const [index, param] of symbol.params.entries()) {
           if (index < argTypes.length) {
-            this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true)
+            this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true, this.expressionCanBeNull(expression.args[index]))
           }
         }
       }
@@ -667,7 +667,7 @@ class Checker {
     }
 
     if (symbol != null) {
-      this.checkAssignableType(valueType, symbol.valueType, expression.value.loc, symbol.nullable === true)
+      this.checkAssignableType(valueType, symbol.valueType, expression.value.loc, symbol.nullable === true, this.expressionCanBeNull(expression.value))
     }
 
     return valueType
@@ -808,7 +808,7 @@ class Checker {
     }
 
     const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
-    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, fieldType.nullable)
+    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, fieldType.nullable, this.expressionCanBeNull(expression.value))
 
     if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
       this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
@@ -958,7 +958,7 @@ class Checker {
     }
 
     const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
-    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, fieldType.nullable)
+    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, fieldType.nullable, this.expressionCanBeNull(expression.value))
 
     if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
       this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
@@ -1047,7 +1047,7 @@ class Checker {
 
     for (const [index, param] of symbol.params.entries()) {
       if (index < argTypes.length) {
-        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true)
+        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true, this.expressionCanBeNull(expression.args[index]))
       }
     }
 
@@ -1078,7 +1078,7 @@ class Checker {
         this.checkCollectionArgCount(expression, `map.${property}`, 1)
 
         if (expression.args[0] != null) {
-          this.checkAssignableType(this.checkExpression(expression.args[0]), mapType.key, expression.args[0].loc)
+          this.checkAssignableType(this.checkExpression(expression.args[0]), mapType.key, expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
         }
 
         for (const arg of expression.args.slice(1)) {
@@ -1097,11 +1097,11 @@ class Checker {
       this.checkCollectionArgCount(expression, 'map.set', 2)
 
       if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), mapType.key, expression.args[0].loc)
+        this.checkAssignableType(this.checkExpression(expression.args[0]), mapType.key, expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
       }
 
       if (expression.args[1] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[1]), mapType.value, expression.args[1].loc)
+        this.checkAssignableType(this.checkExpression(expression.args[1]), mapType.value, expression.args[1].loc, false, this.expressionCanBeNull(expression.args[1]))
       }
 
       for (const arg of expression.args.slice(2)) {
@@ -1127,7 +1127,7 @@ class Checker {
       this.checkCollectionArgCount(expression, `set.${property}`, 1)
 
       if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), elementType, expression.args[0].loc)
+        this.checkAssignableType(this.checkExpression(expression.args[0]), elementType, expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
       }
 
       for (const arg of expression.args.slice(1)) {
@@ -1181,7 +1181,7 @@ class Checker {
         const pushedType = this.checkExpression(expression.args[0])
 
         if (elementType !== 'unknown') {
-          this.checkAssignableType(pushedType, elementType, expression.args[0].loc)
+          this.checkAssignableType(pushedType, elementType, expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
         }
       }
 
@@ -1190,6 +1190,21 @@ class Checker {
       }
 
       return 'number'
+    }
+
+    if (expression.callee.property === 'pop') {
+      expression.valueType = elementType
+      expression.nullable = true
+
+      if (expression.args.length !== 0) {
+        this.report('CCJS_ARG_COUNT', `array.pop expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      for (const arg of expression.args) {
+        this.checkExpression(arg)
+      }
+
+      return elementType
     }
 
     expression.valueType = 'array'
@@ -1293,7 +1308,7 @@ class Checker {
     })
 
     if (returnType != null) {
-      this.checkAssignableType(actualReturnType, returnType, expression.loc)
+      this.checkAssignableType(actualReturnType, returnType, expression.loc, false, this.expressionCanBeNull(expression.body))
     }
 
     expression.returnType = returnType ?? actualReturnType
@@ -1384,7 +1399,7 @@ class Checker {
     }
 
     if (argTypes[0] != null) {
-      this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc)
+      this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
     }
 
     return 'boolean'
@@ -1430,7 +1445,7 @@ class Checker {
 
     for (const [index, param] of constructorParams.entries()) {
       if (index < argTypes.length) {
-        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true)
+        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true, this.expressionCanBeNull(expression.args[index]))
       }
     }
 
@@ -1507,7 +1522,7 @@ class Checker {
         actualReturnType = this.checkExpression(expression.body)
 
         if (functionType != null) {
-          this.checkAssignableType(actualReturnType, functionType.returnType, expression.body.loc, functionType.returnNullable === true)
+          this.checkAssignableType(actualReturnType, functionType.returnType, expression.body.loc, functionType.returnNullable === true, this.expressionCanBeNull(expression.body))
         }
       } else {
         if (functionType == null) {
@@ -1603,7 +1618,7 @@ class Checker {
       const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
       const propertyType = this.checkExpression(property.value)
 
-      this.checkAssignableType(propertyType, fieldType.valueType, property.loc, fieldType.nullable)
+      this.checkAssignableType(propertyType, fieldType.valueType, property.loc, fieldType.nullable, this.expressionCanBeNull(property.value))
 
       if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
         this.checkAssignableType(this.resolveExpressionArrayElementType(property.value), fieldType.arrayElementType, property.loc)
@@ -2218,9 +2233,13 @@ class Checker {
     }
   }
 
-  checkAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, loc: SourceLocation, expectedNullable = false): void {
-    if (!isAssignableType(actual, expected, expectedNullable)) {
-      this.report('CCJS_TYPE_MISMATCH', `cannot assign ${actual} to ${expected}`, loc)
+  checkAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, loc: SourceLocation, expectedNullable = false, actualNullable = false): void {
+    if (!isAssignableType(actual, expected, expectedNullable, actualNullable)) {
+      const actualLabel = actualNullable && actual !== 'null' && actual !== 'unknown' && actual != null
+        ? `${actual} | null`
+        : actual
+
+      this.report('CCJS_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
     }
   }
 
@@ -2272,7 +2291,7 @@ function isStringPredicateMethod(name: string): boolean {
 }
 
 function isArrayMethod(name: string): boolean {
-  return ['sort', 'filter', 'map', 'push'].includes(name)
+  return ['sort', 'filter', 'map', 'push', 'pop'].includes(name)
 }
 
 function isMapMethod(name: string): boolean {
@@ -2291,9 +2310,13 @@ function isEqualityComparableType(left: ValueType, right: ValueType): boolean {
   return ['boolean', 'number', 'string', 'null'].includes(left) && left === right
 }
 
-function isAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, expectedNullable = false): boolean {
+function isAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, expectedNullable = false, actualNullable = false): boolean {
   if (actual == null || expected == null || actual === 'unknown' || expected === 'unknown') {
     return true
+  }
+
+  if (actualNullable && actual !== 'null' && !expectedNullable) {
+    return false
   }
 
   if (actual === 'null') {

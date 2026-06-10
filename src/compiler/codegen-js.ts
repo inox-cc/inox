@@ -1,4 +1,4 @@
-import { collectIrGlobalRoots, collectIrPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
+import { collectIrGlobalRoots, collectIrPrograms, findIrEntryProgram, hasIrFeature, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, IrProgram } from './types.ts'
 
@@ -9,7 +9,7 @@ type JsEmitOptions = {
 }
 
 export function emitJsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string {
-  const lines: string[] = emitJsPrelude([ir])
+  const lines: string[] = emitJsPrelude([ir], options)
 
   if (lines.length > 0) {
     lines.push('')
@@ -38,7 +38,7 @@ export function emitTsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string
 export function emitJsBundleFromIrModules(irModules: IrModuleRecord[], entry: string, options: JsEmitOptions = {}): string {
   const irPrograms = collectIrPrograms(irModules)
   const entryIr = findIrEntryProgram(irModules, entry)
-  const lines: string[] = emitJsPrelude(irPrograms)
+  const lines: string[] = emitJsPrelude(irPrograms, options)
 
   if (lines.length > 0) {
     lines.push('')
@@ -94,7 +94,7 @@ function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {
   return lines
 }
 
-function emitJsPrelude(programs: IrProgram[]): string[] {
+function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): string[] {
   const lines: string[] = []
   const globalRoots = new Set(collectIrGlobalRoots(programs))
 
@@ -106,7 +106,29 @@ function emitJsPrelude(programs: IrProgram[]): string[] {
     lines.push('import * as http from \'node:http\'')
   }
 
+  if (programs.some(program => hasIrFeature(program, 'array-pop-null'))) {
+    if (lines.length > 0) {
+      lines.push('')
+    }
+
+    lines.push(...emitArrayPopHelper(options))
+  }
+
   return lines
+}
+
+function emitArrayPopHelper(options: JsEmitOptions): string[] {
+  return options.emitTypes === true
+    ? [
+        'function ccjsArrayPop<T>(array: T[]): T | null {',
+        '  return array.length === 0 ? null : array.pop()!',
+        '}'
+      ]
+    : [
+        'function ccjsArrayPop(array) {',
+        '  return array.length === 0 ? null : array.pop()',
+        '}'
+      ]
 }
 
 function emitFunction(node: AnyNode, options: JsEmitOptions = {}): string[] {
@@ -508,6 +530,10 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   if (expression.type === 'CallExpression') {
+    if (isArrayPopCall(expression)) {
+      return `ccjsArrayPop(${emitExpression(expression.callee.object, options)})`
+    }
+
     return `${emitExpression(expression.callee, options)}(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
   }
 
@@ -601,6 +627,13 @@ function emitObjectProperty(property: AnyNode, options: JsEmitOptions = {}): str
 
 function emitObjectKey(key: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key)
+}
+
+function isArrayPopCall(expression: AnyNode): boolean {
+  return expression.type === 'CallExpression'
+    && expression.callee.type === 'MemberExpression'
+    && expression.callee.property === 'pop'
+    && expression.args.length === 0
 }
 
 function indent(lines: string[]): string[] {

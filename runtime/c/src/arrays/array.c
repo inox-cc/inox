@@ -200,6 +200,25 @@ ccjs_status ccjs_array_len(ccjs_value array, size_t* out) {
   return CCJS_OK;
 }
 
+ccjs_status ccjs_array_pop(ccjs_value array, ccjs_value* out) {
+  if (out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_array* instance = (ccjs_array*)array.as.ref;
+
+  if (instance->len == 0) {
+    *out = ccjs_null_value();
+    return CCJS_OK;
+  }
+
+  instance->len -= 1;
+  *out = instance->items[instance->len];
+  instance->items[instance->len] = ccjs_undefined_value();
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_array_set(ccjs_value array, size_t index, ccjs_value value) {
   if (array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
     return CCJS_ERR_TYPE;
