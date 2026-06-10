@@ -1102,11 +1102,23 @@ test('generated C async await over resolved promises compiles and runs', async t
   const output = join(dir, 'await-codegen')
 
   try {
-    const result = compileSource(`export async function main(): Promise<void> {
+    const result = compileSource(`async function getValue(): Promise<number> {
+  return Promise.resolve(3)
+}
+
+async function getText(): Promise<string> {
+  return Promise.resolve('done')
+}
+
+export async function main(): Promise<void> {
   const promise = Promise.resolve(2)
   const value = await promise
+  const asyncValue = await getValue()
+  const text = await getText()
   console.log(await Promise.resolve('ok'))
   console.log(value)
+  console.log(asyncValue)
+  console.log(text)
 }
 `, {
       target: 'c'
@@ -1121,7 +1133,7 @@ test('generated C async await over resolved promises compiles and runs', async t
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n')
+    assert.equal(run.stdout, 'ok\n2\n3\ndone\n')
   } finally {
     await rm(dir, {
       recursive: true,

@@ -2,11 +2,11 @@
 // @expect diagnostic
 // @diagnostic CCJS_C_ASYNC
 
-async function getValue(): Promise<number> {
+function getPromise(): Promise<number> {
   return Promise.resolve(2)
 }
 
 export async function main(): Promise<void> {
-  const value = await getValue()
+  const value = await getPromise()
   console.log(value)
 }

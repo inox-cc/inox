@@ -3654,13 +3654,19 @@ export function main(): void {
   })
 })
 
-test('compiles async await to JS and rejects unsupported C promise calls', () => {
+test('compiles awaited async function calls to JS and C', () => {
   const source = `async function getValue(): Promise<number> {
   return Promise.resolve(2)
 }
 
+async function getText(): Promise<string> {
+  return Promise.resolve('ok')
+}
+
 export async function main(): Promise<void> {
+  const text = await getText()
   const value = await getValue()
+  console.log(text)
   console.log(value)
 }
 `
@@ -3669,9 +3675,33 @@ export async function main(): Promise<void> {
   })
 
   assert.match(js.code, /async function getValue\(\)/)
+  assert.match(js.code, /async function getText\(\)/)
   assert.match(js.code, /return Promise\.resolve\(2\)/)
   assert.match(js.code, /export async function main\(\)/)
-  assert.deepEqual(js.ir.syntaxFeatures.map(item => item.feature), ['async-function', 'async-function'])
+  assert.deepEqual(js.ir.syntaxFeatures.map(item => item.feature), ['async-function', 'async-function', 'async-function'])
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /double getValue\(void\)/)
+  assert.match(c.code, /ccjs_value getText\(void\)/)
+  assert.match(c.code, /ccjs_return = ccjs_await_value_\d+\.as\.number;/)
+  assert.match(c.code, /ccjs_return = ccjs_await_value_\d+;/)
+  assert.match(c.code, /ccjs_await_value_\d+ = ccjs_number_value\(getValue\(\)\);/)
+  assert.match(c.code, /ccjs_await_value_\d+ = getText\(\);/)
+})
+
+test('rejects unsupported C await over plain Promise-returning calls', () => {
+  const source = `function getPromise(): Promise<number> {
+  return Promise.resolve(2)
+}
+
+export async function main(): Promise<void> {
+  const value = await getPromise()
+  console.log(value)
+}
+`
+
   assertDiagnostic(source, 'CCJS_C_ASYNC', {
     target: 'c'
   })

@@ -264,6 +264,7 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
     functionReturnShapes: new Map(functionDeclarations.map(item => [item.name, item.returnShape ?? null])),
     functionReturnSetElementTypes: new Map(functionDeclarations.map(item => [item.name, item.returnSetElementType ?? null])),
     functionReturnTypes: new Map(functionDeclarations.map(item => [item.name, item.returnType])),
+    functionAsyncFlags: new Map(functionDeclarations.map(item => [item.name, item.async === true])),
     jsGlobalRoots,
     runtimeFunctionParams: new Map(),
     throwingFunctions: throwing.throwingFunctions,
@@ -2131,25 +2132,33 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ReturnStatement') {
+    const argument = normalizeCAsyncReturnArgument(statement.argument, context, statement.loc)
+    const returnStatement = argument === statement.argument
+      ? statement
+      : {
+          ...statement,
+          argument
+        }
+
     if (isRuntimeCallbackReturnContext(context)) {
-      return emitRuntimeCallbackReturnStatement(statement, context)
+      return emitRuntimeCallbackReturnStatement(returnStatement, context)
     }
 
     if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
-      return emitNullableScalarReturnStatement(statement, context)
+      return emitNullableScalarReturnStatement(returnStatement, context)
     }
 
     if (isManagedRuntimeReturnType(context.returnType)) {
-      return emitRuntimeValueReturnStatement(statement, context)
+      return emitRuntimeValueReturnStatement(returnStatement, context)
     }
 
     if (context.returnType !== 'void') {
-      const value = statement.argument == null
+      const value = argument == null
         ? {
             lines: [],
             expression: '0'
           }
-        : emitPreparedNumberExpression(statement.argument, context)
+        : emitPreparedNumberExpression(argument, context)
 
       return [
         ...value.lines,
@@ -2158,15 +2167,22 @@ function emitStatement(statement, context) {
       ]
     }
 
-    if (statement.argument == null || context.returnType === 'void') {
+    const value = argument?.type === 'AwaitExpression'
+      ? emitCAwaitValueExpression(argument, context)
+      : null
+
+    if (argument == null || context.returnType === 'void') {
       if (context.cleanupEnabled) {
-        return emitReturnJump(context)
+        return [
+          ...(value?.lines ?? []),
+          ...emitReturnJump(context)
+        ]
       }
 
       return ['return;']
     }
 
-    return [`return ${emitCExpression(statement.argument, context)};`]
+    return [`return ${emitCExpression(argument, context)};`]
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'OptionalCallExpression') {
@@ -2174,6 +2190,19 @@ function emitStatement(statement, context) {
   }
 
   return []
+}
+
+function normalizeCAsyncReturnArgument(argument, context, loc) {
+  if (argument == null || context.returnType === 'promise' || (argument.valueType !== 'promise' && inferExpressionType(argument, context) !== 'promise')) {
+    return argument
+  }
+
+  return {
+    type: 'AwaitExpression',
+    argument,
+    valueType: context.returnType,
+    loc
+  }
 }
 
 function emitIfStatement(statement, context) {
@@ -6076,6 +6105,12 @@ function emitPreparedAwaitPromiseExpression(expression, context) {
 }
 
 function emitCAwaitValueExpression(expression, context) {
+  const asyncCall = emitCAsyncFunctionAwaitExpression(expression, context)
+
+  if (asyncCall != null) {
+    return asyncCall
+  }
+
   const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)
 
   if (promise == null) {
@@ -6108,6 +6143,58 @@ function emitCAwaitValueExpression(expression, context) {
       '}',
       `if (ccjs_promise_get_state(${promise.expression}) != CCJS_PROMISE_FULFILLED) ${emitFailureStatement(context)}`,
       emitStatusCheck(`ccjs_promise_get_result(${promise.expression}, &${value})`, context),
+      ...(valueCheck === '' ? [] : [valueCheck])
+    ],
+    expression: value
+  }
+}
+
+function emitCAsyncFunctionAwaitExpression(expression, context) {
+  const callExpression = expression.argument
+
+  if (callExpression?.type !== 'CallExpression' || !isAsyncFunctionCallee(callExpression.callee, context)) {
+    return null
+  }
+
+  const valueType = expression.valueType ?? resolveCAsyncFunctionAwaitValueType(callExpression.callee, context) ?? 'unknown'
+  const call = emitPreparedCallExpression(callExpression, context)
+
+  if (valueType === 'void') {
+    return {
+      lines: [
+        ...call.lines,
+        `${call.expression};`
+      ],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
+  const valueTag = cRuntimeValueTag(valueType)
+
+  if (valueTag == null && valueType !== 'number' && valueType !== 'boolean') {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'this async function return value is not supported by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
+  const value = nextCName(context, 'ccjs_await_value')
+  registerOwnedValue(context, value)
+
+  const resultExpression = valueType === 'boolean'
+    ? `ccjs_bool_value((${call.expression}) != 0)`
+    : valueType === 'number'
+      ? `ccjs_number_value(${call.expression})`
+      : call.expression
+  const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
+
+  return {
+    lines: [
+      ...call.lines,
+      ...emitPrepareOwnedValueWrite(value),
+      `${value} = ${resultExpression};`,
       ...(valueCheck === '' ? [] : [valueCheck])
     ],
     expression: value
@@ -8484,6 +8571,20 @@ function cPromiseRuntimeCallName(callee) {
   }
 
   return callee.property === 'resolve' ? 'resolve' : null
+}
+
+function isAsyncFunctionCallee(callee, context) {
+  return callee?.type === 'Reference'
+    && callee.path.length === 1
+    && context.functionAsyncFlags.get(callee.path[0]) === true
+}
+
+function resolveCAsyncFunctionAwaitValueType(callee, context) {
+  if (!isAsyncFunctionCallee(callee, context)) {
+    return null
+  }
+
+  return context.functionReturnPromiseValueTypes.get(callee.path[0]) ?? 'unknown'
 }
 
 function isCJsGlobalRoot(name, context) {
