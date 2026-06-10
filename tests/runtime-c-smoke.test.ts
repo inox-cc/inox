@@ -1265,12 +1265,21 @@ function onTimeout(): void {
   console.log('timeout')
 }
 
+function onInterval(): void {
+  console.log('interval')
+}
+
 function schedule(): void {
-  setTimeout(onTimeout, 1)
+  const timeout = setTimeout(onTimeout, 1)
+  clearTimeout(timeout)
+  const interval = setInterval(onInterval, 1)
+  clearInterval(interval)
 }
 
 export function main(): void {
   schedule()
+  const cancelledImmediate = setImmediate(onTimeout)
+  clearImmediate(cancelledImmediate)
   setImmediate(onImmediate)
 }
 `, {
@@ -1286,7 +1295,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'immediate\ntimeout\n')
+    assert.equal(run.stdout, 'immediate\n')
   } finally {
     await rm(dir, {
       recursive: true,

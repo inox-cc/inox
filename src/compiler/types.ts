@@ -126,6 +126,7 @@ export type ValueType =
   | 'object'
   | 'promise'
   | 'string'
+  | 'timer'
   | 'unknown'
   | 'void'
   | string

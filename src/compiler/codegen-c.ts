@@ -262,7 +262,11 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     || path === 'fs.writeFileBytes'
     || path === 'fs.writeFileBytesSync'
     || path === 'fs.writeFileSync'
+    || path === 'clearImmediate'
+    || path === 'clearInterval'
+    || path === 'clearTimeout'
     || path === 'setImmediate'
+    || path === 'setInterval'
     || path === 'setTimeout'
     || path === 'Map'
     || path === 'Set'
@@ -374,7 +378,7 @@ function functionUsesExternalEventLoop(node, externalNames) {
       return
     }
 
-    if (cTimerRuntimeCallName(value.callee) != null) {
+    if (cTimerStartCallName(value.callee) != null) {
       found = true
       return
     }
@@ -1029,7 +1033,7 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
     }
 
     if (expression.type === 'CallExpression') {
-      if (cTimerRuntimeCallName(expression.callee) != null) {
+      if (cTimerStartCallName(expression.callee) != null) {
         registerRuntime(expression.args[0], timerCallbackFunctionType(), scopes)
       }
 
@@ -2280,6 +2284,10 @@ function emitCType(type) {
 
   if (type === 'promise') {
     return 'ccjs_promise*'
+  }
+
+  if (type === 'timer') {
+    return 'ccjs_timer_handle*'
   }
 
   return 'double'
@@ -4207,11 +4215,26 @@ function emitScalarVariableDeclaration(statement, context) {
     return emitErrorObjectVariableDeclaration(statement, context)
   }
 
-  if (statement.init?.type === 'CallExpression' && cTimerRuntimeCallName(statement.init.callee) != null) {
-    context.diagnostics.push(diagnostic('CCJS_C_TIMER_HANDLE', 'timer handle values are not supported by the current C backend slice', statement.loc))
-    context.variables.set(statement.name, 'number')
+  if (statement.init?.type === 'CallExpression' && cTimerStartCallName(statement.init.callee) != null) {
+    const timerCall = emitPreparedTimerCallExpression(statement.init, context, {
+      out: statement.name
+    })
 
-    return [`double ${statement.name} = 0;`]
+    if (timerCall != null) {
+      context.variables.set(statement.name, 'timer')
+
+      return [
+        `ccjs_timer_handle* ${statement.name} = 0;`,
+        ...timerCall.lines
+      ]
+    }
+  }
+
+  if (statement.init?.type === 'CallExpression' && cTimerClearCallName(statement.init.callee) != null) {
+    context.diagnostics.push(diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls return void and cannot initialize a value', statement.loc))
+    context.variables.set(statement.name, 'timer')
+
+    return [`ccjs_timer_handle* ${statement.name} = 0;`]
   }
 
   const inferred = inferExpressionType(statement.init, context)
@@ -4256,6 +4279,17 @@ function emitScalarVariableDeclaration(statement, context) {
   if (isArrayMethodCall(statement.init)) {
     context.diagnostics.push(diagnostic('CCJS_C_ARRAY_METHOD', 'array methods are not supported by the current C backend slice', statement.loc))
     return [`double ${statement.name} = 0;`]
+  }
+
+  if (inferred === 'timer') {
+    const handle = emitPreparedTimerHandleExpression(statement.init, context)
+
+    context.variables.set(statement.name, 'timer')
+
+    return [
+      ...handle.lines,
+      `ccjs_timer_handle* ${statement.name} = ${handle.expression};`
+    ]
   }
 
   if ((inferred === 'number' || inferred === 'boolean') && context.boxedMutableCaptureDeclarations.has(statement)) {
@@ -6512,6 +6546,11 @@ function emitCExpression(expression, context) {
     return '0'
   }
 
+  if (type === 'timer') {
+    context.diagnostics.push(diagnostic('CCJS_C_TIMER_HANDLE', 'timer handles can only be stored or passed to clear timer functions in the current C backend slice', expression?.loc))
+    return '0'
+  }
+
   if (type === 'optional') {
     context.diagnostics.push(diagnostic('CCJS_C_OPTIONAL_CHAINING', 'optional chaining is not supported by the current C backend slice', expression?.loc))
     return '0'
@@ -6581,13 +6620,12 @@ function emitPreparedCallExpression(expression, context) {
     return fsCall
   }
 
-  if (cTimerRuntimeCallName(expression.callee) != null) {
-    context.diagnostics.push(diagnostic('CCJS_C_TIMER_HANDLE', 'timer handle values are not supported by the current C backend slice', expression.loc))
+  const timerCall = emitPreparedTimerCallExpression(expression, context, {
+    asValue: true
+  })
 
-    return {
-      lines: [],
-      expression: '0'
-    }
+  if (timerCall != null) {
+    return timerCall
   }
 
   const promise = emitPreparedPromiseStaticExpression(expression, context)
@@ -6842,11 +6880,25 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
   }
 }
 
-function emitPreparedTimerCallExpression(expression, context) {
+function emitPreparedTimerCallExpression(expression, context, options: { out?: string, asValue?: boolean } = {}) {
   const method = cTimerRuntimeCallName(expression?.callee)
 
   if (method == null) {
     return null
+  }
+
+  const clearMethod = cTimerClearCallName(expression.callee)
+
+  if (clearMethod != null) {
+    const handle = emitPreparedTimerHandleExpression(expression.args[0], context)
+
+    return {
+      lines: [
+        ...handle.lines,
+        `ccjs_loop_clear_timer(${handle.expression});`
+      ],
+      expression: ''
+    }
   }
 
   if (context.statusReturn && !context.externalEventLoop) {
@@ -6858,41 +6910,76 @@ function emitPreparedTimerCallExpression(expression, context) {
     }
   }
 
+  if (method === 'setInterval' && options.out == null && options.asValue !== true) {
+    context.diagnostics.push(diagnostic('CCJS_C_TIMER_HANDLE', 'setInterval requires a timer handle so it can be cleared by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
   registerEventLoop(context)
 
+  const out = options.out ?? (options.asValue === true ? nextCName(context, 'ccjs_timer_handle') : null)
   const callback = emitRuntimeCallbackValue(expression.args[0], timerCallbackFunctionType(), context)
   const callbackContext = nextCName(context, 'ccjs_timer_ctx')
   const lines = [
+    ...(out != null && options.out == null ? [`ccjs_timer_handle* ${out} = 0;`] : []),
     ...callback.lines,
     `ccjs_value* ${callbackContext} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`,
     `if (${callbackContext} == 0) ${emitFailureStatement(context)}`,
     `*${callbackContext} = ${callback.expression};`,
     `ccjs_retain(*${callbackContext});`
   ]
+  const outArgument = out == null ? '0' : `&${out}`
 
   if (method === 'setImmediate') {
-    lines.push(`if (ccjs_loop_queue_immediate(${emitEventLoopReference(context)}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, 0) != CCJS_OK) {`)
+    lines.push(`if (ccjs_loop_queue_immediate(${emitEventLoopReference(context)}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`)
     lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
     lines.push(`  ${emitFailureStatement(context)}`)
     lines.push('}')
 
     return {
       lines,
-      expression: ''
+      expression: out ?? ''
     }
   }
 
   const delay = emitPreparedNumberExpression(expression.args[1], context)
+  const runtimeCall = method === 'setInterval' ? 'ccjs_loop_set_interval' : 'ccjs_loop_set_timeout'
 
   lines.push(...delay.lines)
-  lines.push(`if (ccjs_loop_set_timeout(${emitEventLoopReference(context)}, ${delay.expression}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, 0) != CCJS_OK) {`)
+  lines.push(`if (${runtimeCall}(${emitEventLoopReference(context)}, ${delay.expression}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`)
   lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
   lines.push(`  ${emitFailureStatement(context)}`)
   lines.push('}')
 
   return {
     lines,
-    expression: ''
+    expression: out ?? ''
+  }
+}
+
+function emitPreparedTimerHandleExpression(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1 && context.variables.get(expression.path[0]) === 'timer') {
+    return {
+      lines: [],
+      expression: emitReference(expression, context)
+    }
+  }
+
+  if (expression?.type === 'CallExpression' && cTimerStartCallName(expression.callee) != null) {
+    return emitPreparedTimerCallExpression(expression, context, {
+      asValue: true
+    })
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls require a timer handle value', expression?.loc))
+
+  return {
+    lines: [],
+    expression: '0'
   }
 }
 
@@ -9818,7 +9905,23 @@ function cTimerRuntimeCallName(callee) {
     return null
   }
 
-  return ['setImmediate', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+  return cTimerStartCallName(callee) ?? cTimerClearCallName(callee)
+}
+
+function cTimerStartCallName(callee) {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  return ['setImmediate', 'setInterval', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+}
+
+function cTimerClearCallName(callee) {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  return ['clearImmediate', 'clearInterval', 'clearTimeout'].includes(callee.path[0]) ? callee.path[0] : null
 }
 
 function timerCallbackFunctionType() {

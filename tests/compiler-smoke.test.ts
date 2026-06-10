@@ -6010,13 +6010,21 @@ function onTimeout(): void {
   console.log('timeout')
 }
 
+function onInterval(): void {
+  console.log('interval')
+}
+
 function schedule(): void {
-  setTimeout(onTimeout, 1)
+  const timeout = setTimeout(onTimeout, 1)
+  clearTimeout(timeout)
+  const interval = setInterval(onInterval, 1)
+  clearInterval(interval)
 }
 
 export function main(): void {
   schedule()
-  setImmediate(onImmediate)
+  const immediate = setImmediate(onImmediate)
+  clearImmediate(immediate)
 }
 `, {
     target: 'c'
@@ -6036,17 +6044,30 @@ export function main(): void {
   assert.match(result.code, /static ccjs_status ccjs_timer_callback_run\(void\* context\)/)
   assert.match(result.code, /void schedule\(ccjs_loop\* ccjs_loop\);/)
   assert.match(result.code, /void ccjs_main\(ccjs_loop\* ccjs_loop\);/)
-  assert.match(result.code, /ccjs_loop_set_timeout\(ccjs_loop, 1, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, 0\)/)
-  assert.match(result.code, /ccjs_loop_queue_immediate\(ccjs_loop, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, 0\)/)
+  assert.match(result.code, /ccjs_timer_handle\* timeout = 0;/)
+  assert.match(result.code, /ccjs_timer_handle\* interval = 0;/)
+  assert.match(result.code, /ccjs_timer_handle\* immediate = 0;/)
+  assert.match(result.code, /ccjs_loop_set_timeout\(ccjs_loop, 1, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &timeout\)/)
+  assert.match(result.code, /ccjs_loop_set_interval\(ccjs_loop, 1, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &interval\)/)
+  assert.match(result.code, /ccjs_loop_queue_immediate\(ccjs_loop, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &immediate\)/)
+  assert.match(result.code, /ccjs_loop_clear_timer\(timeout\);/)
+  assert.match(result.code, /ccjs_loop_clear_timer\(interval\);/)
+  assert.match(result.code, /ccjs_loop_clear_timer\(immediate\);/)
   assert.match(result.code, /ccjs_main\(&ccjs_loop\);/)
   assert.match(result.code, /while \(ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
   assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_loop\.now_ms \+ 1\)/)
 
   assertDiagnostic(`export function main(): void {
-  const handle = setTimeout(() => {}, 1)
-  console.log(handle)
+  setInterval(() => {}, 1)
 }
 `, 'CCJS_C_TIMER_HANDLE', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`export function main(): void {
+  clearTimeout(1)
+}
+`, 'CCJS_TYPE_MISMATCH', {
     target: 'c'
   })
 

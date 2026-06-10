@@ -1587,19 +1587,33 @@ class Checker {
 
     expression.timerRuntimeMethod = method
 
+    if (timerClearMethodName(method) != null) {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function ${method} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      if (expression.args[0] != null) {
+        this.checkAssignableType(this.checkExpression(expression.args[0]), 'timer', expression.args[0].loc)
+      }
+
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
     if (method === 'setImmediate') {
       if (expression.args.length !== 1) {
         this.report('CCJS_ARG_COUNT', `function setImmediate expects 1 argument(s), got ${expression.args.length}`, expression.loc)
       }
 
       this.checkTimerCallbackArg(expression, 0)
-      expression.valueType = 'object'
+      expression.valueType = 'timer'
 
-      return 'object'
+      return 'timer'
     }
 
     if (expression.args.length !== 2) {
-      this.report('CCJS_ARG_COUNT', `function setTimeout expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report('CCJS_ARG_COUNT', `function ${method} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
     }
 
     this.checkTimerCallbackArg(expression, 0)
@@ -1608,9 +1622,9 @@ class Checker {
       this.checkAssignableType(this.checkExpression(expression.args[1]), 'number', expression.args[1].loc)
     }
 
-    expression.valueType = 'object'
+    expression.valueType = 'timer'
 
-    return 'object'
+    return 'timer'
   }
 
   checkTimerCallbackArg(expression: AnyNode, index: number): void {
@@ -3106,7 +3120,11 @@ function timerRuntimeMethodName(callee: AnyNode): string | null {
     return null
   }
 
-  return ['setImmediate', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+  return ['clearImmediate', 'clearInterval', 'clearTimeout', 'setImmediate', 'setInterval', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+}
+
+function timerClearMethodName(method: string): string | null {
+  return ['clearImmediate', 'clearInterval', 'clearTimeout'].includes(method) ? method : null
 }
 
 function timerCallbackFunctionType(): AnyNode {

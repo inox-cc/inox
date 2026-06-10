@@ -320,6 +320,10 @@ function emitTsBaseType(valueType: string | null | undefined, metadata: AnyNode)
     return 'Buffer'
   }
 
+  if (valueType === 'timer') {
+    return 'ReturnType<typeof setTimeout>'
+  }
+
   return valueType ?? 'unknown'
 }
 

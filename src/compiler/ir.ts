@@ -889,7 +889,7 @@ function timerRuntimeCallName(callee: AnyNode): string | null {
     return null
   }
 
-  return ['setImmediate', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+  return ['clearImmediate', 'clearInterval', 'clearTimeout', 'setImmediate', 'setInterval', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
 }
 
 function mayBeStringBytesOperand(expression: AnyNode | null | undefined): boolean {
