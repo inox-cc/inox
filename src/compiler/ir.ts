@@ -73,6 +73,10 @@ export function findIrEntryProgram(records: IrModuleRecord[], entry: string): Ir
   return records.find(record => record.path === entry)?.ir ?? null
 }
 
+export function collectIrFeatureRequirements(programs: Array<{ features: IrFeature[] }>): IrFeature[] {
+  return [...new Set(programs.flatMap(program => program.features))].sort()
+}
+
 export function hasIrFeature(program: IrProgram, feature: IrFeature): boolean {
   return program.features.includes(feature)
 }

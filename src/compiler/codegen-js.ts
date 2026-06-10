@@ -1,4 +1,4 @@
-import { collectIrGlobalRoots, collectIrPrograms, findIrEntryProgram, hasIrFeature, hasIrFunctionDeclaration } from './ir.ts'
+import { collectIrFeatureRequirements, collectIrGlobalRoots, collectIrPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, IrProgram } from './types.ts'
 
@@ -98,6 +98,7 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
   const lines: string[] = []
   const helperLines: string[] = []
   const globalRoots = new Set(collectIrGlobalRoots(programs))
+  const features = new Set(collectIrFeatureRequirements(programs))
 
   if (globalRoots.has('fs')) {
     lines.push('import * as fs from \'node:fs/promises\'')
@@ -107,11 +108,11 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
     lines.push('import * as http from \'node:http\'')
   }
 
-  if (programs.some(program => hasIrFeature(program, 'array-pop-null'))) {
+  if (features.has('array-pop-null')) {
     helperLines.push(...emitArrayPopHelper(options))
   }
 
-  if (programs.some(program => hasIrFeature(program, 'map-get-null'))) {
+  if (features.has('map-get-null')) {
     if (helperLines.length > 0) {
       helperLines.push('')
     }
@@ -119,7 +120,7 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
     helperLines.push(...emitMapGetHelper(options))
   }
 
-  if (programs.some(program => hasIrFeature(program, 'map-index-set'))) {
+  if (features.has('map-index-set')) {
     if (helperLines.length > 0) {
       helperLines.push('')
     }

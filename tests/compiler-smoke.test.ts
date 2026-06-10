@@ -7,7 +7,7 @@ import { emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c
 import { emitJsBundleFromIrModules, emitJsFromIr, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
-import { collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
+import { collectIrFeatureRequirements, collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 
 test('compiles exported main to runnable JS', () => {
@@ -1755,6 +1755,55 @@ test('collects target-neutral IR feature requirements', () => {
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['Date'])
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.path.join('.')), ['Date.now'])
   assert.match(result.code, /#include "ccjs\/time\.h"/)
+})
+
+test('drives JS TS helper prelude from stored target-neutral IR features', () => {
+  const result = compileSource(`export function main(): void {
+  const values = [1]
+  const value = values.pop()
+  const headers: Map<string, string> = new Map()
+  headers['content-type'] = 'application/json'
+  const contentType = headers['content-type']
+
+  console.log(value ?? 0, contentType ?? 'missing')
+}
+`, {
+    target: 'js'
+  })
+  const storedFeaturesOnly = {
+    ...result.ir,
+    body: [],
+    topLevelItems: []
+  }
+  const withoutFeatures = {
+    ...result.ir,
+    body: [],
+    features: [],
+    topLevelItems: []
+  }
+  const js = emitJsFromIr(storedFeaturesOnly, {
+    callMain: false
+  })
+  const ts = emitTsFromIr(storedFeaturesOnly, {
+    callMain: false
+  })
+
+  assert.deepEqual(collectIrFeatureRequirements([storedFeaturesOnly]), [
+    'array-pop-null',
+    'collections',
+    'map-get-null',
+    'map-index-set',
+    'runtime-values'
+  ])
+  assert.match(js, /function ccjsArrayPop\(array\) \{/)
+  assert.match(js, /function ccjsMapGet\(map, key\) \{/)
+  assert.match(js, /function ccjsMapSet\(map, key, value\) \{/)
+  assert.match(ts, /function ccjsArrayPop<T>\(array: T\[\]\): T \| null \{/)
+  assert.match(ts, /function ccjsMapGet<K, V>\(map: Map<K, V>, key: K\): V \| null \{/)
+  assert.match(ts, /function ccjsMapSet<K, V>\(map: Map<K, V>, key: K, value: V\): V \{/)
+  assert.doesNotMatch(emitJsFromIr(withoutFeatures, {
+    callMain: false
+  }), /function ccjs(?:ArrayPop|MapGet|MapSet)/)
 })
 
 test('drives IR function effect collection from top-level item metadata', () => {
