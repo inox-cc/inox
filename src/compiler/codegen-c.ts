@@ -6763,8 +6763,9 @@ function emitPreparedArrayPopCallExpression(expression, context, options: { disc
 
 function emitPreparedArrayComparatorSortCallExpression(expression, receiver, context) {
   const callback = expression.args[0]
+  const returnExpression = resolveArrowReturnExpression(callback)
 
-  if (callback?.type !== 'ArrowFunctionExpression' || !callback.expressionBody || callback.params.length > 2 || !['number', 'boolean', 'string'].includes(receiver.elementType)) {
+  if (callback?.type !== 'ArrowFunctionExpression' || returnExpression == null || callback.params.length > 2 || !['number', 'boolean', 'string'].includes(receiver.elementType)) {
     return null
   }
 
@@ -6780,7 +6781,7 @@ function emitPreparedArrayComparatorSortCallExpression(expression, receiver, con
 
   const body = withVariableScope(context, () => {
     const input = emitPreparedArraySortComparatorInput(callback, receiver, left, right, context)
-    const result = emitPreparedNumberExpression(callback.body, context)
+    const result = emitPreparedNumberExpression(returnExpression, context)
 
     return [
       ...input,
@@ -6820,8 +6821,9 @@ function emitPreparedArrayMapCallExpression(expression, context) {
   }
 
   const callback = expression.args[0]
+  const returnExpression = resolveArrowReturnExpression(callback)
 
-  if (callback?.type !== 'ArrowFunctionExpression' || !callback.expressionBody || callback.params.length > 2) {
+  if (callback?.type !== 'ArrowFunctionExpression' || returnExpression == null || callback.params.length > 2) {
     return null
   }
 
@@ -6844,14 +6846,14 @@ function emitPreparedArrayMapCallExpression(expression, context) {
     const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
 
     mappedElementType = mappedElementType === 'unknown'
-      ? inferExpressionType(callback.body, context)
+      ? inferExpressionType(returnExpression, context)
       : mappedElementType
 
     if (!['number', 'boolean', 'string'].includes(mappedElementType)) {
       return null
     }
 
-    const mappedValue = emitPreparedArrayMapValue(callback.body, mappedElementType, context)
+    const mappedValue = emitPreparedArrayMapValue(returnExpression, mappedElementType, context)
 
     return [
       ...input,
@@ -6889,8 +6891,9 @@ function emitPreparedArrayFilterCallExpression(expression, context) {
   }
 
   const callback = expression.args[0]
+  const returnExpression = resolveArrowReturnExpression(callback)
 
-  if (callback?.type !== 'ArrowFunctionExpression' || !callback.expressionBody || callback.params.length > 2) {
+  if (callback?.type !== 'ArrowFunctionExpression' || returnExpression == null || callback.params.length > 2) {
     return null
   }
 
@@ -6910,7 +6913,7 @@ function emitPreparedArrayFilterCallExpression(expression, context) {
 
   const body = withVariableScope(context, () => {
     const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
-    const predicate = emitPreparedNumberExpression(callback.body, context)
+    const predicate = emitPreparedNumberExpression(returnExpression, context)
 
     return [
       ...input,
@@ -6938,6 +6941,30 @@ function emitPreparedArrayFilterCallExpression(expression, context) {
     expression: out,
     elementType: receiver.elementType
   }
+}
+
+function resolveArrowReturnExpression(callback) {
+  if (callback?.type !== 'ArrowFunctionExpression') {
+    return null
+  }
+
+  if (callback.expressionBody) {
+    return callback.body
+  }
+
+  const statements = Array.isArray(callback.body)
+    ? callback.body
+    : callback.body?.type === 'BlockStatement'
+      ? callback.body.body
+      : null
+
+  if (statements == null || statements.length !== 1) {
+    return null
+  }
+
+  const statement = statements[0]
+
+  return statement?.type === 'ReturnStatement' ? statement.argument ?? null : null
 }
 
 function emitPreparedArrayCallbackInput(callback, receiver, value, index, context) {

@@ -2389,6 +2389,70 @@ test('generated C Array.map expression callbacks compile and run with runtime so
   }
 })
 
+test('generated C Array block-body callbacks compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-block-callbacks-'))
+  const source = join(dir, 'array-block-callbacks.c')
+  const output = join(dir, 'array-block-callbacks')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const values = [3, 1, 2]
+  const result = values
+    .sort((left, right) => {
+      return left - right
+    })
+    .filter(value => {
+      return value > 1
+    })
+    .map((value, index) => {
+      return value * 10 + index
+    })
+
+  console.log(result.length, result[0], result[1], values[0], values[2])
+
+  const names = ['Grace', 'Ada', 'Alan']
+  const initials = names
+    .filter(name => {
+      return name.startsWith('A')
+    })
+    .map(name => {
+      return name.slice(0, 1)
+    })
+    .sort((left, right) => {
+      return left.length - right.length
+    })
+
+  console.log(initials.length, initials[0], initials[1])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2 20 31 1 3\n2 A A\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C Array methods over object fields compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

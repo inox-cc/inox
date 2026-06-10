@@ -4348,6 +4348,29 @@ test('checks Array sort filter map as typed chain calls', () => {
   assert.equal(names.valueType, 'array')
   assert.equal(names.arrayElementType, 'string')
 
+  const c = compileSource(`export function main(): void {
+  const values = [3, 1, 2]
+  const result = values
+    .sort((left, right) => {
+      return left - right
+    })
+    .filter((value, index) => {
+      return value > index
+    })
+    .map(value => {
+      return value + 1
+    })
+
+  console.log(result.length)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /ccjs_sort_compare_\d+ = \(left - right\);/)
+  assert.match(c.code, /if \(\(value > index\)\) \{/)
+  assert.match(c.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \+ 1\)\)\)/)
+
   assertDiagnostic(`export function main(): void {
   const values: number[] = [1]
   values.filter(value => value + 1)

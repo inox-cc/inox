@@ -1310,6 +1310,8 @@ class Checker {
     }
 
     let actualReturnType: ValueType = 'unknown'
+    let returnLoc = expression.loc
+    let returnNullable = false
 
     this.withScope(() => {
       for (const [index, param] of expression.params.entries()) {
@@ -1334,20 +1336,46 @@ class Checker {
 
       if (expression.expressionBody) {
         actualReturnType = this.checkExpression(expression.body)
+        returnLoc = expression.body.loc ?? expression.loc
+        returnNullable = this.expressionCanBeNull(expression.body)
       } else {
-        this.checkStatements(expression.body)
+        const returnExpression = this.resolveSingleReturnExpression(expression.body)
+
+        if (returnExpression == null) {
+          this.checkStatements(expression.body)
+        } else {
+          actualReturnType = this.checkExpression(returnExpression)
+          returnLoc = returnExpression.loc ?? expression.loc
+          returnNullable = this.expressionCanBeNull(returnExpression)
+        }
       }
     })
 
     if (returnType != null) {
-      this.checkAssignableType(actualReturnType, returnType, expression.loc, false, this.expressionCanBeNull(expression.body))
+      this.checkAssignableType(actualReturnType, returnType, returnLoc, false, returnNullable)
     }
 
     expression.returnType = returnType ?? actualReturnType
     expression.declaredReturnType = expression.returnType
-    expression.returnNullable = expression.expressionBody && expression.body?.nullable === true
+    expression.returnNullable = returnNullable
 
     return actualReturnType
+  }
+
+  resolveSingleReturnExpression(body: AnyNode): AnyNode | null {
+    const statements = Array.isArray(body)
+      ? body
+      : body?.type === 'BlockStatement'
+        ? body.body
+        : null
+
+    if (statements == null || statements.length !== 1) {
+      return null
+    }
+
+    const [statement] = statements
+
+    return statement?.type === 'ReturnStatement' ? statement.argument ?? null : null
   }
 
   checkStringConversionCall(expression: AnyNode): ValueType | null {
