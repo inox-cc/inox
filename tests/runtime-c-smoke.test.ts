@@ -1781,6 +1781,51 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C boolean async task frame compiles and runs', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-bool-'))
+  const source = join(dir, 'async-task-frame-bool.c')
+  const output = join(dir, 'async-task-frame-bool')
+
+  try {
+    const result = compileSource(`async function flip(flag: boolean): Promise<boolean> {
+  const value = await Promise.resolve(flag)
+
+  return Promise.resolve(!value)
+}
+
+export async function main(): Promise<void> {
+  console.log(await flip(false))
+  console.log(await flip(true))
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1\n0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C object literal lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

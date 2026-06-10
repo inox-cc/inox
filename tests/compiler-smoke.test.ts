@@ -3836,6 +3836,30 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
 })
 
+test('lowers boolean async task frames to C', () => {
+  const result = compileSource(`async function flip(flag: boolean): Promise<boolean> {
+  const value = await Promise.resolve(flag)
+
+  return Promise.resolve(!value)
+}
+
+export async function main(): Promise<void> {
+  console.log(await flip(false))
+  console.log(await flip(true))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /double param_flag;/)
+  assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_bool_value\(\(flag\) != 0\)\);/)
+  assert.match(result.code, /if \(ccjs_value_input\.tag != CCJS_TAG_BOOL\) return ccjs_promise_reject\(frame->promise, ccjs_number_value\(\(ccjs_number\)CCJS_ERR_TYPE\)\);/)
+  assert.match(result.code, /double value = ccjs_value_input\.as\.boolean \? 1 : 0;/)
+  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_bool_value\(\(\(!value\)\) != 0\)\);/)
+  assert.match(result.code, /if \(ccjs_async_task_flip_start\(&ccjs_loop, 0, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_async_task_flip_start\(&ccjs_loop, 1, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+})
+
 test('lowers awaited plain Promise-returning calls to C', () => {
   const result = compileSource(`function getPromise(): Promise<number> {
   return Promise.resolve(2)
