@@ -5514,7 +5514,7 @@ export function main(): void {
 function assertDiagnostic(source: string, code: string, options: { target?: CompileTarget } = {}): void {
   assert.throws(() => {
     compileSource(source, {
-      target: options.target ?? 'js'
+      target: options.target ?? 'ts'
     })
   }, error => {
     if (!(error instanceof CompileError)) {

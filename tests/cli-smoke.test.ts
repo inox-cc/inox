@@ -477,7 +477,7 @@ test('ccjs run --target c --keep keeps temporary C artifacts', async t => {
   }
 })
 
-test('ccjs run --keep writes temporary js output', async () => {
+test('ccjs run --keep writes temporary ts output by default', async () => {
   const result = await runCli(['tests/fixtures/parser/valid/hello.ts', '--keep'])
   const match = result.stderr.match(/kept (.+)\n?$/)
 
@@ -488,10 +488,10 @@ test('ccjs run --keep writes temporary js output', async () => {
   const dir = match[1]
 
   try {
-    const js = await readFile(join(dir, 'main.js'), 'utf8')
+    const ts = await readFile(join(dir, 'main.ts'), 'utf8')
     const pkg = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'))
 
-    assert.match(js, /function main\(\)/)
+    assert.match(ts, /function main\(\): void/)
     assert.equal(pkg.type, 'module')
   } finally {
     await rm(dir, {

@@ -74,7 +74,7 @@ try {
 }
 
 async function runEntry(plan: CliPlan): Promise<void> {
-  const target = plan.target ?? 'js'
+  const target = plan.target ?? 'ts'
   const entry = requireEntry(plan)
 
   if (target === 'c') {
@@ -83,10 +83,10 @@ async function runEntry(plan: CliPlan): Promise<void> {
   }
 
   const result = await compileFile(entry, {
-    target: target === 'ts' ? 'ts' : 'js'
+    target: 'ts'
   })
   const tempDir = await mkdtemp(join(tmpdir(), 'ccjs-'))
-  const file = join(tempDir, target === 'ts' ? 'main.ts' : 'main.js')
+  const file = join(tempDir, 'main.ts')
 
   await writeFile(join(tempDir, 'package.json'), `${JSON.stringify({
     type: 'module'
