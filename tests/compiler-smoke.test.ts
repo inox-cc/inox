@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { emitC } from '../src/compiler/codegen-c.ts'
+import { emitJs } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
@@ -2859,6 +2860,14 @@ test('injects Node fs prelude when fs is referenced', () => {
   })
 
   assert.match(result.code, /import \* as fs from 'node:fs\/promises'/)
+  assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['fs', 'fs'])
+
+  const withoutGlobalUsage = emitJs(result.hir, {}, {
+    ...result.ir,
+    globalUsages: []
+  })
+
+  assert.doesNotMatch(withoutGlobalUsage, /import \* as fs from 'node:fs\/promises'/)
 })
 
 test('injects Node http prelude when http is referenced', () => {
@@ -2873,6 +2882,14 @@ test('injects Node http prelude when http is referenced', () => {
   })
 
   assert.match(result.code, /import \* as http from 'node:http'/)
+  assert.deepEqual(result.ir.globalUsages.map(usage => usage.root), ['http'])
+
+  const withoutGlobalUsage = emitJs(result.hir, {}, {
+    ...result.ir,
+    globalUsages: []
+  })
+
+  assert.doesNotMatch(withoutGlobalUsage, /import \* as http from 'node:http'/)
 })
 
 test('lowers Date.now and performance.now to the C time runtime', () => {

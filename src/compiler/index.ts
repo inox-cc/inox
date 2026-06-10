@@ -34,7 +34,7 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
       ir,
       code: emitTs(hir, {
         callMain: options.callMain
-      })
+      }, ir)
     }
   }
 
@@ -46,7 +46,7 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
       ir,
       code: emitJs(hir, {
         callMain: options.callMain
-      })
+      }, ir)
     }
   }
 

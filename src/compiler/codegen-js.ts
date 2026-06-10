@@ -1,12 +1,13 @@
-import type { AnyNode, ModuleGraph, ProgramNode } from './types.ts'
+import { collectIrGlobalUsages, lowerHirToIr } from './ir.ts'
+import type { AnyNode, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
 
 type JsEmitOptions = {
   callMain?: boolean
   stripExports?: boolean
 }
 
-export function emitJs(program: ProgramNode, options: JsEmitOptions = {}): string {
-  const lines: string[] = emitJsPrelude([program])
+export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string {
+  const lines: string[] = emitJsPrelude([ir])
 
   if (lines.length > 0) {
     lines.push('')
@@ -27,13 +28,14 @@ export function emitJs(program: ProgramNode, options: JsEmitOptions = {}): strin
   return `${lines.join('\n')}\n`
 }
 
-export function emitTs(program: ProgramNode, options: JsEmitOptions = {}): string {
-  return emitJs(program, options)
+export function emitTs(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string {
+  return emitJs(program, options, ir)
 }
 
 export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {
   const programs = graph.modules.map(module => module.hir).filter((program): program is ProgramNode => program != null)
-  const lines: string[] = emitJsPrelude(programs)
+  const irPrograms = graph.modules.flatMap(module => module.hir == null ? [] : [module.ir ?? lowerHirToIr(module.hir)])
+  const lines: string[] = emitJsPrelude(irPrograms)
 
   if (lines.length > 0) {
     lines.push('')
@@ -73,14 +75,15 @@ function emitProgramBody(program: ProgramNode, options: JsEmitOptions = {}): str
   return lines
 }
 
-function emitJsPrelude(programs: ProgramNode[]): string[] {
+function emitJsPrelude(programs: IrProgram[]): string[] {
   const lines: string[] = []
+  const globalRoots = new Set(collectIrGlobalUsages(programs).map(usage => usage.root))
 
-  if (programs.some(program => usesReferenceName(program, 'fs'))) {
+  if (globalRoots.has('fs')) {
     lines.push('import * as fs from \'node:fs/promises\'')
   }
 
-  if (programs.some(program => usesReferenceName(program, 'http'))) {
+  if (globalRoots.has('http')) {
     lines.push('import * as http from \'node:http\'')
   }
 
@@ -300,130 +303,6 @@ function emitForInitializer(init: AnyNode | null): string {
   }
 
   return emitExpression(init)
-}
-
-function usesReferenceName(program: ProgramNode, name: string): boolean {
-  return program.body.some(item => itemUsesReferenceName(item, name))
-}
-
-function itemUsesReferenceName(item: AnyNode, name: string): boolean {
-  if (item.type === 'FunctionDeclaration') {
-    return item.body.some(statement => statementUsesReferenceName(statement, name))
-  }
-
-  if (item.type === 'ClassDeclaration') {
-    return item.methods.some(method => method.body.some(statement => statementUsesReferenceName(statement, name)))
-  }
-
-  return statementUsesReferenceName(item, name)
-}
-
-function statementUsesReferenceName(statement: AnyNode, name: string): boolean {
-  if (statement.type === 'VariableDeclaration') {
-    return statement.init != null && expressionUsesReferenceName(statement.init, name)
-  }
-
-  if (statement.type === 'ExpressionStatement') {
-    return expressionUsesReferenceName(statement.expression, name)
-  }
-
-  if (statement.type === 'ReturnStatement') {
-    return statement.argument != null && expressionUsesReferenceName(statement.argument, name)
-  }
-
-  if (statement.type === 'ThrowStatement') {
-    return expressionUsesReferenceName(statement.argument, name)
-  }
-
-  if (statement.type === 'BlockStatement') {
-    return statement.body.some(item => statementUsesReferenceName(item, name))
-  }
-
-  if (statement.type === 'IfStatement') {
-    return expressionUsesReferenceName(statement.condition, name)
-      || statementUsesReferenceName(statement.consequent, name)
-      || (statement.alternate != null && statementUsesReferenceName(statement.alternate, name))
-  }
-
-  if (statement.type === 'WhileStatement') {
-    return expressionUsesReferenceName(statement.condition, name) || statementUsesReferenceName(statement.body, name)
-  }
-
-  if (statement.type === 'ForStatement') {
-    return (statement.init != null && (statement.init.type === 'VariableDeclaration' ? statementUsesReferenceName(statement.init, name) : expressionUsesReferenceName(statement.init, name)))
-      || (statement.test != null && expressionUsesReferenceName(statement.test, name))
-      || (statement.update != null && expressionUsesReferenceName(statement.update, name))
-      || statementUsesReferenceName(statement.body, name)
-  }
-
-  if (statement.type === 'ForOfStatement') {
-    return expressionUsesReferenceName(statement.iterable, name) || statementUsesReferenceName(statement.body, name)
-  }
-
-  if (statement.type === 'SwitchStatement') {
-    return expressionUsesReferenceName(statement.discriminant, name)
-      || statement.cases.some(item => (item.test != null && expressionUsesReferenceName(item.test, name)) || item.consequent.some(child => statementUsesReferenceName(child, name)))
-  }
-
-  if (statement.type === 'TryStatement') {
-    return statementUsesReferenceName(statement.block, name)
-      || (statement.handler != null && statementUsesReferenceName(statement.handler.body, name))
-      || (statement.finalizer != null && statementUsesReferenceName(statement.finalizer, name))
-  }
-
-  return false
-}
-
-function expressionUsesReferenceName(expression: AnyNode, name: string): boolean {
-  if (expression.type === 'Reference') {
-    return expression.path[0] === name
-  }
-
-  const expressionType = expression.type ?? ''
-
-  if (expressionType === 'ThisExpression' || expressionType.endsWith('Literal')) {
-    return false
-  }
-
-  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
-    return expressionUsesReferenceName(expression.object, name)
-  }
-
-  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
-    return expressionUsesReferenceName(expression.object, name) || expressionUsesReferenceName(expression.index, name)
-  }
-
-  if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
-    return expressionUsesReferenceName(expression.callee, name) || expression.args.some(arg => expressionUsesReferenceName(arg, name))
-  }
-
-  if (expression.type === 'AssignmentExpression') {
-    return expressionUsesReferenceName(expression.target, name) || expressionUsesReferenceName(expression.value, name)
-  }
-
-  if (expression.type === 'BinaryExpression') {
-    return expressionUsesReferenceName(expression.left, name) || expressionUsesReferenceName(expression.right, name)
-  }
-
-  if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
-    return expressionUsesReferenceName(expression.argument, name)
-  }
-
-  if (expression.type === 'ArrayLiteral') {
-    return expression.elements.some(item => expressionUsesReferenceName(item, name))
-  }
-
-  if (expression.type === 'ObjectLiteral') {
-    return expression.properties.some(item => expressionUsesReferenceName(item.value, name))
-  }
-
-  if (expression.type === 'ArrowFunctionExpression') {
-    return expression.expressionBody
-      ? expressionUsesReferenceName(expression.body, name)
-      : expression.body.some(statement => statementUsesReferenceName(statement, name))
-  }
-
-  return false
 }
 
 function emitExpression(expression: AnyNode): string {
