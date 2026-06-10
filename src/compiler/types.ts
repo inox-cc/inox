@@ -48,6 +48,10 @@ export type IrFunctionDeclaration = {
   name: string
   exported: boolean
   async: boolean
+  params: AnyNode[]
+  returnType: string
+  returnNullable: boolean
+  returnShape?: any
   loc?: SourceLocation
 }
 

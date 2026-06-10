@@ -1403,6 +1403,9 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
       name: 'main',
       exported: true,
       async: false,
+      params: [],
+      returnType: 'void',
+      returnNullable: false,
       loc: {
         line: 1,
         column: 17
@@ -1546,6 +1549,44 @@ export function main(): void {
   assert.match(result.code, /function add\(left, right\)/)
 })
 
+test('drives C function signature metadata from target-neutral IR declarations', () => {
+  const result = compileSource(`function greet(value: string): void {
+  console.log(value)
+}
+
+export function main(): void {
+  greet('Ada')
+}
+`, {
+    target: 'c'
+  })
+  const greet = result.ir.functionDeclarations.find(item => item.name === 'greet')
+
+  assert.deepEqual(greet?.params.map(param => ({
+    name: param.name,
+    valueType: param.valueType
+  })), [
+    {
+      name: 'value',
+      valueType: 'string'
+    }
+  ])
+  assert.equal(greet?.returnType, 'void')
+  assert.match(result.code, /greet\(ccjs_value_\d+\);/)
+
+  const withoutParamMetadata = emitC(result.hir, {
+    ...result.ir,
+    functionDeclarations: result.ir.functionDeclarations.map(item => item.name === 'greet'
+      ? {
+        ...item,
+        params: []
+      }
+      : item)
+  })
+
+  assert.match(withoutParamMetadata, /greet\("Ada"\);/)
+})
+
 test('compiles named callback function values to JS and C', () => {
   const source = `function run(callback: Function): void {
   callback()
@@ -1677,17 +1718,18 @@ export function main(): void {
   })
 
   assert.match(result.code, /static ccjs_status ccjs_callback_hello_0\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\);/)
-  assert.throws(() => emitC(result.hir, {
+  const mainIndex = result.ir.body.findIndex(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const withoutMainBodyCallbacks = emitC(result.hir, {
     ...result.ir,
-    topLevelItems: result.ir.topLevelItems.filter(item => result.ir.body[item.index]?.name !== 'run')
-  }), (error) => {
-    if (!(error instanceof CompileError)) {
-      return false
-    }
-
-    assert.equal(error.diagnostics[0]?.code, 'CCJS_C_FUNCTION_VALUE')
-    return true
+    body: result.ir.body.map((item, index) => index === mainIndex
+      ? {
+        ...item,
+        body: []
+      }
+      : item)
   })
+
+  assert.doesNotMatch(withoutMainBodyCallbacks, /ccjs_callback_hello_0/)
 })
 
 test('compiles typed callback aliases with object parameters through the C callback ABI', () => {

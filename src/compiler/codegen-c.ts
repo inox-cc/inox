@@ -1,6 +1,6 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionEffects, collectIrGlobalUsages, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionEffect, IrGlobalUsage, IrProgram, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
+import { collectIrFunctionDeclarations, collectIrFunctionEffects, collectIrGlobalUsages, collectIrTopLevelNodes, hasIrFunctionDeclaration, hasIrRuntimeRequirement, lowerHirToIr } from './ir.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, ModuleGraph, SourceLocation, ProgramNode } from './types.ts'
 
 const cStringPredicateMethods = new Set([
   'includes',
@@ -30,10 +30,11 @@ export function emitCBundle(graph: ModuleGraph): string {
 function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program)), entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(programs, irPrograms)
+  const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
   const functionEffects = collectIrFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const jsGlobalRoots = new Set(globalUsages.map(usage => usage.root))
-  const baseContext = createBaseContext(diagnostics, functions, functionEffects, jsGlobalRoots)
+  const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
   baseContext.callbackWrappers = collectCallbackWrappers(programs, irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || irPrograms.some(program => hasIrRuntimeRequirement(program, 'callback-values'))
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || irPrograms.some(program => hasIrRuntimeRequirement(program, 'managed-values'))
@@ -155,8 +156,8 @@ function collectFunctions(programs: ProgramNode[], irPrograms: IrProgram[]) {
   return programs.flatMap((program, index) => collectIrTopLevelNodes(irPrograms[index] ?? lowerHirToIr(program), 'function'))
 }
 
-function createThrowingFunctionInfo(functions: AnyNode[], functionEffects: IrFunctionEffect[]) {
-  const functionThrowValueTypes = new Map<string, IrFunctionEffect['throwValueTypes']>(functions.map(item => [item.name, []]))
+function createThrowingFunctionInfo(functionDeclarations: IrFunctionDeclaration[], functionEffects: IrFunctionEffect[]) {
+  const functionThrowValueTypes = new Map<string, IrFunctionEffect['throwValueTypes']>(functionDeclarations.map(item => [item.name, []]))
   const throwingFunctions = new Set()
 
   for (const effect of functionEffects) {
@@ -221,8 +222,8 @@ function sameLocation(left: SourceLocation | undefined, right: SourceLocation | 
   return left.line === right.line && left.column === right.column
 }
 
-function createBaseContext(diagnostics, functions, functionEffects: IrFunctionEffect[], jsGlobalRoots: Set<string>) {
-  const throwing = createThrowingFunctionInfo(functions, functionEffects)
+function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclaration[], functionEffects: IrFunctionEffect[], jsGlobalRoots: Set<string>) {
+  const throwing = createThrowingFunctionInfo(functionDeclarations, functionEffects)
 
   return {
     boxedMutableCaptureDeclarations: new Set(),
@@ -230,10 +231,10 @@ function createBaseContext(diagnostics, functions, functionEffects: IrFunctionEf
     callbackWrappers: new Map(),
     diagnostics,
     functionThrowValueTypes: throwing.functionThrowValueTypes,
-    functionNames: new Map(functions.map(item => [item.name, emitCFunctionName(item.name)])),
-    functionParams: new Map(functions.map(item => [item.name, item.params])),
-    functionReturnNullables: new Map(functions.map(item => [item.name, item.returnNullable === true])),
-    functionReturnTypes: new Map(functions.map(item => [item.name, item.returnType])),
+    functionNames: new Map(functionDeclarations.map(item => [item.name, emitCFunctionName(item.name)])),
+    functionParams: new Map(functionDeclarations.map(item => [item.name, item.params])),
+    functionReturnNullables: new Map(functionDeclarations.map(item => [item.name, item.returnNullable === true])),
+    functionReturnTypes: new Map(functionDeclarations.map(item => [item.name, item.returnType])),
     jsGlobalRoots,
     runtimeFunctionParams: new Map(),
     throwingFunctions: throwing.throwingFunctions,

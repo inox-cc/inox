@@ -62,6 +62,10 @@ export function collectIrGlobalUsages(programs: Array<{ globalUsages: IrGlobalUs
   return programs.flatMap(program => program.globalUsages)
 }
 
+export function collectIrFunctionDeclarations(programs: Array<{ functionDeclarations: IrFunctionDeclaration[] }>): IrFunctionDeclaration[] {
+  return programs.flatMap(program => program.functionDeclarations)
+}
+
 export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, name: string): boolean {
   return program?.functionDeclarations.some(item => item.name === name) === true
 }
@@ -137,6 +141,10 @@ function collectFunctionDeclarations(program: ProgramNode, topLevelItems: IrTopL
       name: item.name,
       exported: item.exported === true,
       async: item.async === true,
+      params: item.params,
+      returnType: item.returnType,
+      returnNullable: item.returnNullable === true,
+      ...(item.returnShape == null ? {} : { returnShape: item.returnShape }),
       loc: item.loc
     }))
 }
