@@ -171,6 +171,11 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
     } else if (feature === 'fs') {
       requirements.add('async-runtime')
       requirements.add('fs')
+    } else if (feature === 'timers') {
+      requirements.add('async-runtime')
+      requirements.add('callback-values')
+      requirements.add('managed-values')
+      requirements.add('timers')
     } else if (feature === 'array-pop-null' || feature === 'map-get-null' || feature === 'map-index-set') {
       continue
     } else {
@@ -755,6 +760,10 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('fs')
   }
 
+  if (timerRuntimeCallName(expression.callee) != null) {
+    features.add('timers')
+  }
+
   const arrayMethod = arrayMethodCallName(expression)
 
   const collectionMethod = collectionMethodCallName(expression)
@@ -873,6 +882,14 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
   }
 
   return ['readFile', 'readFileBytes', 'readFileBytesSync', 'readFileSync', 'readDir', 'readDirSync', 'writeFile', 'writeFileBytes', 'writeFileBytesSync', 'writeFileSync'].includes(callee.property) ? `fs.${callee.property}` : null
+}
+
+function timerRuntimeCallName(callee: AnyNode): string | null {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  return ['setImmediate', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
 }
 
 function mayBeStringBytesOperand(expression: AnyNode | null | undefined): boolean {

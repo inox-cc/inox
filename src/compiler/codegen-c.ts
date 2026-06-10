@@ -39,11 +39,13 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const jsGlobalRoots = new Set(globalRoots)
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
+  baseContext.externalEventLoopFunctions = collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
   baseContext.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || runtimeRequirements.has('callback-values')
   const needsFsRuntime = runtimeRequirements.has('fs')
-  const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFsRuntime
+  const needsTimerRuntime = runtimeRequirements.has('timers')
+  const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFsRuntime || needsTimerRuntime
   const needsCollectionRuntime = runtimeRequirements.has('collections')
   const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || runtimeRequirements.has('managed-values')
@@ -51,7 +53,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsTimerRuntime)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
   for (const wrapper of arrowCallbackWrappers) {
@@ -110,7 +112,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsTimerRuntime) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -180,6 +182,25 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCa
     lines.push('  ccjs_default_free')
     lines.push('};')
     lines.push('')
+
+    if (needsTimerRuntime) {
+      lines.push('static ccjs_status ccjs_timer_callback_run(void* context) {')
+      lines.push('  if (context == 0) return CCJS_ERR_TYPE;')
+      lines.push('  ccjs_value* callback = (ccjs_value*)context;')
+      lines.push('  ccjs_value result = ccjs_undefined_value();')
+      lines.push('  ccjs_status status = ccjs_callback_call(*callback, 0, 0, &result);')
+      lines.push('  ccjs_release(result);')
+      lines.push('  return status;')
+      lines.push('}')
+      lines.push('')
+      lines.push('static void ccjs_timer_callback_finalize(void* context) {')
+      lines.push('  if (context == 0) return;')
+      lines.push('  ccjs_value* callback = (ccjs_value*)context;')
+      lines.push('  ccjs_release(*callback);')
+      lines.push('  ccjs_default_free(0, context, sizeof(ccjs_value), _Alignof(ccjs_value));')
+      lines.push('}')
+      lines.push('')
+    }
   }
 
   return lines
@@ -241,6 +262,8 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     || path === 'fs.writeFileBytes'
     || path === 'fs.writeFileBytesSync'
     || path === 'fs.writeFileSync'
+    || path === 'setImmediate'
+    || path === 'setTimeout'
     || path === 'Map'
     || path === 'Set'
 }
@@ -288,6 +311,7 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
     promiseChainArrowWrappers: new Map(),
     promiseChainWrappers: new Map(),
     runtimeFunctionParams: new Map(),
+    externalEventLoopFunctions: new Set(),
     throwingFunctions: throwing.throwingFunctions,
     nextId: 0
   }
@@ -311,6 +335,69 @@ function isBoxedFunctionParam(param, index, statement, context) {
   return context.boxedMutableCaptureDeclarations.has(statement.params[index] ?? param)
 }
 
+function collectExternalEventLoopFunctions(functions) {
+  const functionsByName = new Map(functions.flatMap(item => typeof item.name === 'string' ? [[item.name, item]] : []))
+  const names = new Set()
+  let changed = true
+
+  while (changed) {
+    changed = false
+
+    for (const [name, item] of functionsByName) {
+      if (names.has(name)) {
+        continue
+      }
+
+      if (functionUsesExternalEventLoop(item, names)) {
+        names.add(name)
+        changed = true
+      }
+    }
+  }
+
+  return names
+}
+
+function functionUsesExternalEventLoop(node, externalNames) {
+  let found = false
+  const visit = value => {
+    if (found || value == null) {
+      return
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+
+    if (typeof value !== 'object') {
+      return
+    }
+
+    if (cTimerRuntimeCallName(value.callee) != null) {
+      found = true
+      return
+    }
+
+    if (value.type === 'CallExpression' && value.callee?.type === 'Reference' && value.callee.path.length === 1 && externalNames.has(value.callee.path[0])) {
+      found = true
+      return
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'loc' || key === 'shape') {
+        continue
+      }
+
+      visit(child)
+    }
+  }
+
+  visit(node)
+
+  return found
+}
+
 function emitFunctionDeclaration(statement, baseContext) {
   const returnInfo = resolveCFunctionReturnInfo(statement, baseContext)
   const returnType = returnInfo.returnType
@@ -319,7 +406,7 @@ function emitFunctionDeclaration(statement, baseContext) {
   const context = createFunctionContext(baseContext, returnType, returnNullable)
   context.returnShape = context.functionReturnShapes.get(statement.name) ?? null
   context.throwingFunction = isThrowingFunctionName(statement.name, context)
-  context.externalEventLoop = isPlainPromiseReturningFunctionName(statement.name, context)
+  context.externalEventLoop = functionTakesEventLoopParam(statement.name, context)
   context.functionReturnOut = 'ccjs_out'
   context.functionErrorOut = 'ccjs_error_out'
 
@@ -459,7 +546,7 @@ function emitFunctionHead(statement, context) {
     return `${emitCType(param.valueType)} ${param.name}`
   })
 
-  if (isPlainPromiseReturningFunctionName(statement.name, context)) {
+  if (functionTakesEventLoopParam(statement.name, context)) {
     params.unshift('ccjs_loop* ccjs_loop')
   }
 
@@ -942,6 +1029,10 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
     }
 
     if (expression.type === 'CallExpression') {
+      if (cTimerRuntimeCallName(expression.callee) != null) {
+        registerRuntime(expression.args[0], timerCallbackFunctionType(), scopes)
+      }
+
       const params = resolveStaticFunctionParams(expression.callee, context)
 
       for (const [index, arg] of expression.args.entries()) {
@@ -2021,12 +2112,34 @@ function emitMainWrapper(entryIrProgram, baseContext) {
   const context = createFunctionContext(baseContext, 'number')
 
   if (hasIrFunctionDeclaration(entryIrProgram, 'main')) {
-    return [
+    if (!functionTakesEventLoopParam('main', baseContext)) {
+      return [
+        'int main(void) {',
+        '  ccjs_main();',
+        '  return 0;',
+        '}'
+      ]
+    }
+
+    registerEventLoop(context)
+
+    const lines = [
       'int main(void) {',
-      '  ccjs_main();',
-      '  return 0;',
-      '}'
+      ...emitEventLoopDeclarations(context).map(line => `  ${line}`),
+      ...emitEventLoopInit(context).map(line => `  ${line}`),
+      '  ccjs_main(&ccjs_loop);',
+      ...emitEventLoopDrain(context).map(line => `  ${line}`)
     ]
+
+    if (shouldEmitCleanupLabel(context)) {
+      lines.push('ccjs_cleanup:')
+      lines.push(...emitEventLoopCleanup(context).map(line => `  ${line}`))
+    }
+
+    lines.push('  return 0;')
+    lines.push('}')
+
+    return lines
   }
 
   const body = entryIrProgram == null
@@ -2048,6 +2161,7 @@ function emitMainWrapper(entryIrProgram, baseContext) {
   lines.push(...emitBoxedValueDeclarations(context).map(line => `  ${line}`))
   lines.push(...emitEventLoopInit(context).map(line => `  ${line}`))
   lines.push(...bodyLines)
+  lines.push(...emitEventLoopDrain(context).map(line => `  ${line}`))
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
@@ -2432,6 +2546,12 @@ function emitStatement(statement, context) {
 
     if (fsSyncCall != null) {
       return fsSyncCall.lines
+    }
+
+    const timerCall = emitPreparedTimerCallExpression(statement.expression, context)
+
+    if (timerCall != null) {
+      return timerCall.lines
     }
 
     const promise = emitPreparedPromiseStaticExpression(statement.expression, context)
@@ -4085,6 +4205,13 @@ function emitScalarVariableDeclaration(statement, context) {
 
   if (isErrorConstructorExpression(statement.init)) {
     return emitErrorObjectVariableDeclaration(statement, context)
+  }
+
+  if (statement.init?.type === 'CallExpression' && cTimerRuntimeCallName(statement.init.callee) != null) {
+    context.diagnostics.push(diagnostic('CCJS_C_TIMER_HANDLE', 'timer handle values are not supported by the current C backend slice', statement.loc))
+    context.variables.set(statement.name, 'number')
+
+    return [`double ${statement.name} = 0;`]
   }
 
   const inferred = inferExpressionType(statement.init, context)
@@ -6454,6 +6581,15 @@ function emitPreparedCallExpression(expression, context) {
     return fsCall
   }
 
+  if (cTimerRuntimeCallName(expression.callee) != null) {
+    context.diagnostics.push(diagnostic('CCJS_C_TIMER_HANDLE', 'timer handle values are not supported by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: '0'
+    }
+  }
+
   const promise = emitPreparedPromiseStaticExpression(expression, context)
 
   if (promise != null) {
@@ -6489,6 +6625,15 @@ function emitPreparedCallExpression(expression, context) {
   }
 
   if (isPromiseReturningFunctionCallee(expression.callee, context)) {
+    registerEventLoop(context)
+
+    return {
+      lines,
+      expression: `${emitCallee(expression.callee, context)}(${[emitEventLoopReference(context), ...args].join(', ')})`
+    }
+  }
+
+  if (isExternalEventLoopFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
 
     return {
@@ -6694,6 +6839,60 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
 
   return {
     lines
+  }
+}
+
+function emitPreparedTimerCallExpression(expression, context) {
+  const method = cTimerRuntimeCallName(expression?.callee)
+
+  if (method == null) {
+    return null
+  }
+
+  if (context.statusReturn && !context.externalEventLoop) {
+    context.diagnostics.push(diagnostic('CCJS_C_TIMER_CALLBACK', 'timer calls inside runtime callbacks need callback loop capture and are not supported by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
+  registerEventLoop(context)
+
+  const callback = emitRuntimeCallbackValue(expression.args[0], timerCallbackFunctionType(), context)
+  const callbackContext = nextCName(context, 'ccjs_timer_ctx')
+  const lines = [
+    ...callback.lines,
+    `ccjs_value* ${callbackContext} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`,
+    `if (${callbackContext} == 0) ${emitFailureStatement(context)}`,
+    `*${callbackContext} = ${callback.expression};`,
+    `ccjs_retain(*${callbackContext});`
+  ]
+
+  if (method === 'setImmediate') {
+    lines.push(`if (ccjs_loop_queue_immediate(${emitEventLoopReference(context)}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, 0) != CCJS_OK) {`)
+    lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
+    lines.push(`  ${emitFailureStatement(context)}`)
+    lines.push('}')
+
+    return {
+      lines,
+      expression: ''
+    }
+  }
+
+  const delay = emitPreparedNumberExpression(expression.args[1], context)
+
+  lines.push(...delay.lines)
+  lines.push(`if (ccjs_loop_set_timeout(${emitEventLoopReference(context)}, ${delay.expression}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, 0) != CCJS_OK) {`)
+  lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
+  lines.push(`  ${emitFailureStatement(context)}`)
+  lines.push('}')
+
+  return {
+    lines,
+    expression: ''
   }
 }
 
@@ -7403,6 +7602,14 @@ function emitRuntimeCallbackValueInto(expression, functionType, out, context) {
 
   if (expression?.type !== 'Reference' || expression.path.length !== 1 || !context.functionNames.has(expression.path[0])) {
     context.diagnostics.push(diagnostic('CCJS_C_FUNCTION_VALUE', 'runtime C callbacks currently require a named non-capturing function', expression?.loc))
+    return [
+      ...emitPrepareOwnedValueWrite(out),
+      `${out} = ccjs_undefined_value();`
+    ]
+  }
+
+  if (functionTakesEventLoopParam(expression.path[0], context)) {
+    context.diagnostics.push(diagnostic('CCJS_C_TIMER_CALLBACK', 'timer callbacks that schedule timers need callback loop capture and are not supported by the current C backend slice', expression.loc))
     return [
       ...emitPrepareOwnedValueWrite(out),
       `${out} = ccjs_undefined_value();`
@@ -9473,6 +9680,20 @@ function emitEventLoopInit(context) {
   ]
 }
 
+function emitEventLoopDrain(context) {
+  if (!context.eventLoopUsed || context.externalEventLoop) {
+    return []
+  }
+
+  const loop = emitEventLoopReference(context)
+
+  return [
+    `while (ccjs_loop_has_work(${loop})) {`,
+    `  ${emitStatusCheck(`ccjs_loop_poll(${loop}, ccjs_loop.now_ms + 1)`, context)}`,
+    '}'
+  ]
+}
+
 function emitEventLoopCleanup(context) {
   return context.eventLoopUsed && !context.externalEventLoop ? ['if (ccjs_loop_active) ccjs_loop_dispose(&ccjs_loop);'] : []
 }
@@ -9592,6 +9813,23 @@ function cFsRuntimeCallName(callee) {
   return ['readFile', 'readFileBytes', 'readFileBytesSync', 'readFileSync', 'readDir', 'readDirSync', 'writeFile', 'writeFileBytes', 'writeFileBytesSync', 'writeFileSync'].includes(callee.property) ? callee.property : null
 }
 
+function cTimerRuntimeCallName(callee) {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  return ['setImmediate', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+}
+
+function timerCallbackFunctionType() {
+  return {
+    kind: 'function',
+    params: [],
+    returnType: 'void',
+    returnNullable: false
+  }
+}
+
 function cPromiseRuntimeCallName(callee) {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
     return null
@@ -9622,10 +9860,21 @@ function isPlainPromiseReturningFunctionName(name, context) {
     && context.functionAsyncFlags.get(name) !== true
 }
 
+function functionTakesEventLoopParam(name, context) {
+  return isPlainPromiseReturningFunctionName(name, context)
+    || context.externalEventLoopFunctions.has(name)
+}
+
 function isPromiseReturningFunctionCallee(callee, context) {
   return callee?.type === 'Reference'
     && callee.path.length === 1
     && isPlainPromiseReturningFunctionName(callee.path[0], context)
+}
+
+function isExternalEventLoopFunctionCallee(callee, context) {
+  return callee?.type === 'Reference'
+    && callee.path.length === 1
+    && context.externalEventLoopFunctions.has(callee.path[0])
 }
 
 function resolvePromiseReturningFunctionValueType(callee, context) {

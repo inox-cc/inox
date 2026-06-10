@@ -6001,6 +6001,67 @@ export function main(): void {
   }
 })
 
+test('marks timer calls and lowers setImmediate/setTimeout to C loop work', () => {
+  const result = compileSource(`function onImmediate(): void {
+  console.log('immediate')
+}
+
+function onTimeout(): void {
+  console.log('timeout')
+}
+
+function schedule(): void {
+  setTimeout(onTimeout, 1)
+}
+
+export function main(): void {
+  schedule()
+  setImmediate(onImmediate)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.deepEqual(result.ir.features, [
+    'timers'
+  ])
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'async-runtime',
+    'callback-values',
+    'managed-values',
+    'timers'
+  ])
+  assert.match(result.code, /#include "ccjs\/loop\.h"/)
+  assert.match(result.code, /#include "ccjs\/callback\.h"/)
+  assert.match(result.code, /static ccjs_status ccjs_timer_callback_run\(void\* context\)/)
+  assert.match(result.code, /void schedule\(ccjs_loop\* ccjs_loop\);/)
+  assert.match(result.code, /void ccjs_main\(ccjs_loop\* ccjs_loop\);/)
+  assert.match(result.code, /ccjs_loop_set_timeout\(ccjs_loop, 1, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, 0\)/)
+  assert.match(result.code, /ccjs_loop_queue_immediate\(ccjs_loop, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, 0\)/)
+  assert.match(result.code, /ccjs_main\(&ccjs_loop\);/)
+  assert.match(result.code, /while \(ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
+  assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_loop\.now_ms \+ 1\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const handle = setTimeout(() => {}, 1)
+  console.log(handle)
+}
+`, 'CCJS_C_TIMER_HANDLE', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`function again(): void {
+  setTimeout(() => {}, 1)
+}
+
+export function main(): void {
+  setTimeout(again, 1)
+}
+`, 'CCJS_C_TIMER_CALLBACK', {
+    target: 'c'
+  })
+})
+
 test('rejects unknown imported exports', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
 

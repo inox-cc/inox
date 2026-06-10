@@ -36,6 +36,7 @@ export type IrFeature =
   | 'objects'
   | 'runtime-values'
   | 'string-bytes'
+  | 'timers'
 
 export type IrRuntimeRequirement =
   | 'async-runtime'
@@ -46,6 +47,7 @@ export type IrRuntimeRequirement =
   | 'managed-values'
   | 'objects'
   | 'string-bytes'
+  | 'timers'
 
 export type IrThrowValueType = 'error' | 'other' | 'string'
 

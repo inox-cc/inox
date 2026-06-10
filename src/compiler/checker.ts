@@ -1121,6 +1121,12 @@ class Checker {
       return fsType
     }
 
+    const timerType = this.checkTimerCall(expression)
+
+    if (timerType != null) {
+      return timerType
+    }
+
     const promiseStaticType = this.checkPromiseStaticCall(expression)
 
     if (promiseStaticType != null) {
@@ -1566,6 +1572,71 @@ class Checker {
     }
 
     return null
+  }
+
+  checkTimerCall(expression: AnyNode): ValueType | null {
+    const method = timerRuntimeMethodName(expression.callee)
+
+    if (method == null) {
+      return null
+    }
+
+    if (this.scope.resolve(method) != null) {
+      return null
+    }
+
+    expression.timerRuntimeMethod = method
+
+    if (method === 'setImmediate') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function setImmediate expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkTimerCallbackArg(expression, 0)
+      expression.valueType = 'object'
+
+      return 'object'
+    }
+
+    if (expression.args.length !== 2) {
+      this.report('CCJS_ARG_COUNT', `function setTimeout expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    this.checkTimerCallbackArg(expression, 0)
+
+    if (expression.args[1] != null) {
+      this.checkAssignableType(this.checkExpression(expression.args[1]), 'number', expression.args[1].loc)
+    }
+
+    expression.valueType = 'object'
+
+    return 'object'
+  }
+
+  checkTimerCallbackArg(expression: AnyNode, index: number): void {
+    const arg = expression.args[index]
+    const functionType = timerCallbackFunctionType()
+
+    if (arg == null) {
+      return
+    }
+
+    if (arg.type === 'ArrowFunctionExpression') {
+      this.checkArrowFunctionExpression(arg, functionType)
+      return
+    }
+
+    this.checkAssignableType(this.checkExpression(arg), 'function', arg.loc)
+
+    const symbol = this.getCallableSymbol(arg)
+
+    if (symbol?.params != null && symbol.params.length !== functionType.params.length) {
+      this.report('CCJS_ARG_COUNT', `function callback expects ${functionType.params.length} argument(s), got ${symbol.params.length}`, arg.loc)
+    }
+
+    if (symbol != null && symbol.returnType != null) {
+      this.checkAssignableType(symbol.returnType, functionType.returnType, arg.loc, functionType.returnNullable === true, symbol.returnNullable === true)
+    }
   }
 
   checkCollectionArgCount(expression: AnyNode, name: string, expected: number): void {
@@ -3028,4 +3099,21 @@ function fsRuntimeMethodName(callee: AnyNode): string | null {
   return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'fs'
     ? callee.property
     : null
+}
+
+function timerRuntimeMethodName(callee: AnyNode): string | null {
+  if (callee.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  return ['setImmediate', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+}
+
+function timerCallbackFunctionType(): AnyNode {
+  return {
+    kind: 'function',
+    params: [],
+    returnType: 'void',
+    returnNullable: false
+  }
 }

@@ -1244,6 +1244,57 @@ test('generated C fs promise calls compile and run with runtime sources', async 
   }
 })
 
+test('generated C timer calls drain from main loop', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-timers-codegen-'))
+  const source = join(dir, 'timers-codegen.c')
+  const output = join(dir, 'timers-codegen')
+
+  try {
+    const result = compileSource(`function onImmediate(): void {
+  console.log('immediate')
+}
+
+function onTimeout(): void {
+  console.log('timeout')
+}
+
+function schedule(): void {
+  setTimeout(onTimeout, 1)
+}
+
+export function main(): void {
+  schedule()
+  setImmediate(onImmediate)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'immediate\ntimeout\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C fs readDir awaits hosted directory entries', async t => {
   const probe = await runCommand('cc', ['--version'])
 
