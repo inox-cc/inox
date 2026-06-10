@@ -1474,6 +1474,10 @@ console.log(name)
     ...c.ir,
     topLevelItems: []
   }), /printf/)
+  assert.doesNotMatch(emitC(c.hir, {
+    ...c.ir,
+    body: []
+  }), /printf/)
 })
 
 test('collects target-neutral IR feature requirements', () => {

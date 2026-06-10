@@ -15,7 +15,7 @@ const cArrayMethods = new Set([
 ])
 
 export function emitC(program: ProgramNode, ir: IrProgram = lowerHirToIr(program)): string {
-  return emitCUnit([program], program, [ir], ir)
+  return emitCUnit([program], [ir], ir)
 }
 
 export function emitCBundle(graph: ModuleGraph): string {
@@ -24,10 +24,10 @@ export function emitCBundle(graph: ModuleGraph): string {
   const irPrograms = graph.modules.flatMap(module => module.hir == null ? [] : [module.ir ?? lowerHirToIr(module.hir)])
   const entryIr = entryModule?.hir == null ? null : entryModule.ir ?? lowerHirToIr(entryModule.hir)
 
-  return emitCUnit(programs, entryModule?.hir ?? graph.modules.at(-1)?.hir ?? null, irPrograms, entryIr)
+  return emitCUnit(programs, irPrograms, entryIr)
 }
 
-function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program)), entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
+function emitCUnit(programs: ProgramNode[], irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program)), entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(programs, irPrograms)
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
@@ -83,7 +83,7 @@ function emitCUnit(programs: ProgramNode[], entryProgram: ProgramNode | null, ir
     lines.push('')
   }
 
-  lines.push(...emitMainWrapper(entryProgram, entryIrProgram, baseContext))
+  lines.push(...emitMainWrapper(entryIrProgram, baseContext))
 
   if (diagnostics.length > 0) {
     throw new CompileError(diagnostics)
@@ -1603,7 +1603,7 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
   }
 }
 
-function emitMainWrapper(entryProgram, entryIrProgram, baseContext) {
+function emitMainWrapper(entryIrProgram, baseContext) {
   const context = createFunctionContext(baseContext, 'number')
 
   if (hasIrFunctionDeclaration(entryIrProgram, 'main')) {
@@ -1615,9 +1615,9 @@ function emitMainWrapper(entryProgram, entryIrProgram, baseContext) {
     ]
   }
 
-  const body = entryProgram == null
+  const body = entryIrProgram == null
     ? []
-    : collectIrTopLevelNodes(entryIrProgram ?? lowerHirToIr(entryProgram), 'statement')
+    : collectIrTopLevelNodes(entryIrProgram, 'statement')
   const bodyLines: string[] = []
   const lines = [
     'int main(void) {'
