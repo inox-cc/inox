@@ -618,8 +618,14 @@ class Checker {
         this.report('CCJS_AWAIT_OUTSIDE_ASYNC', 'await can only be used inside async functions', expression.loc)
       }
 
-      this.checkExpression(expression.argument)
-      return 'unknown'
+      const argumentType = this.checkExpression(expression.argument)
+      const valueType = argumentType === 'promise'
+        ? this.resolveExpressionPromiseValueType(expression.argument) ?? 'unknown'
+        : argumentType
+
+      expression.valueType = valueType
+
+      return valueType
     }
 
     if (expression.type === 'ArrowFunctionExpression') {

@@ -1089,6 +1089,47 @@ test('generated C fs promise calls compile and run with runtime sources', async 
   }
 })
 
+test('generated C async await over resolved promises compiles and runs', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-await-codegen-'))
+  const source = join(dir, 'await-codegen.c')
+  const output = join(dir, 'await-codegen')
+
+  try {
+    const result = compileSource(`export async function main(): Promise<void> {
+  const promise = Promise.resolve(2)
+  const value = await promise
+  console.log(await Promise.resolve('ok'))
+  console.log(value)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'ok\n2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C object literal lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

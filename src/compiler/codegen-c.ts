@@ -201,8 +201,6 @@ function reportUnsupportedCSyntaxFeatures(syntaxFeatures: IrSyntaxFeatureUsage[]
   for (const usage of syntaxFeatures) {
     if (usage.feature === 'class') {
       diagnostics.push(diagnostic('CCJS_C_CLASS', 'classes are not supported by the current C backend slice', usage.loc))
-    } else if (usage.feature === 'async-function') {
-      diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', usage.loc))
     }
   }
 }
@@ -221,6 +219,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
   return path === 'Date.now'
     || path === 'performance.now'
     || path === 'Error'
+    || path === 'Promise.resolve'
     || path === 'fs.readFile'
     || path === 'fs.writeFile'
     || path === 'Map'
@@ -291,8 +290,9 @@ function isBoxedFunctionParam(param, index, statement, context) {
 }
 
 function emitFunctionDeclaration(statement, baseContext) {
-  const returnType = resolveFunctionReturnType(statement.name, statement.returnType, baseContext)
-  const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, baseContext)
+  const returnInfo = resolveCFunctionReturnInfo(statement, baseContext)
+  const returnType = returnInfo.returnType
+  const returnNullable = returnInfo.returnNullable
   const params = resolveFunctionDeclarationParams(statement.name, statement.params, baseContext)
   const context = createFunctionContext(baseContext, returnType, returnNullable)
   context.returnShape = context.functionReturnShapes.get(statement.name) ?? null
@@ -396,8 +396,9 @@ function emitFunctionDeclaration(statement, baseContext) {
 
 function emitFunctionHead(statement, context) {
   const name = context.functionNames.get(statement.name) ?? emitCFunctionName(statement.name)
-  const returnType = context.returnType ?? resolveFunctionReturnType(statement.name, statement.returnType, context)
-  const returnNullable = context.returnNullable ?? resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
+  const returnInfo = resolveCFunctionReturnInfo(statement, context)
+  const returnType = context.returnType ?? returnInfo.returnType
+  const returnNullable = context.returnNullable ?? returnInfo.returnNullable
   const functionParams = resolveFunctionDeclarationParams(statement.name, statement.params, context)
   const params = functionParams.map((param, index) => {
     if (isNullableScalarParam(param)) {
@@ -446,6 +447,23 @@ function emitFunctionHead(statement, context) {
   }
 
   return `${emitCReturnType(returnType, returnNullable)} ${name}(${params.length === 0 ? 'void' : params.join(', ')})`
+}
+
+function resolveCFunctionReturnInfo(statement, context) {
+  const returnType = resolveFunctionReturnType(statement.name, statement.returnType, context)
+  const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
+
+  if (statement.async === true && returnType === 'promise') {
+    return {
+      returnType: context.functionReturnPromiseValueTypes.get(statement.name) ?? statement.returnPromiseValueType ?? 'void',
+      returnNullable: false
+    }
+  }
+
+  return {
+    returnType,
+    returnNullable
+  }
 }
 
 function emitFunctionParameter(name, functionType, context, loc) {
@@ -1902,6 +1920,14 @@ function emitStatement(statement, context) {
       return fsCall.lines
     }
 
+    const promiseResolve = emitPreparedPromiseResolveExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (promiseResolve != null) {
+      return promiseResolve.lines
+    }
+
     if (isCollectionConstructorExpression(statement.init)) {
       return emitCollectionVariableDeclaration(statement, context)
     }
@@ -2031,6 +2057,12 @@ function emitStatement(statement, context) {
       return fsCall.lines
     }
 
+    const promiseResolve = emitPreparedPromiseResolveExpression(statement.expression, context)
+
+    if (promiseResolve != null) {
+      return promiseResolve.lines
+    }
+
     const call = emitPreparedCallExpression(statement.expression, context)
 
     return call.expression === ''
@@ -2039,6 +2071,12 @@ function emitStatement(statement, context) {
           ...call.lines,
           `${call.expression};`
         ]
+  }
+
+  if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AwaitExpression') {
+    const value = emitCAwaitValueExpression(statement.expression, context)
+
+    return value.lines
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
@@ -2895,6 +2933,17 @@ function emitPreparedForVariableDeclaration(statement, context) {
   if (fsCall != null) {
     return {
       lines: fsCall.lines,
+      expression: ''
+    }
+  }
+
+  const promiseResolve = emitPreparedPromiseResolveExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (promiseResolve != null) {
+    return {
+      lines: promiseResolve.lines,
       expression: ''
     }
   }
@@ -4012,6 +4061,10 @@ function emitCValueExpression(expression, context) {
     return emitCNullishCoalescingValueExpression(expression, context)
   }
 
+  if (expression?.type === 'AwaitExpression') {
+    return emitCAwaitValueExpression(expression, context)
+  }
+
   const arrayPopCall = emitPreparedArrayPopCallExpression(expression, context)
 
   if (arrayPopCall != null) {
@@ -5022,7 +5075,7 @@ function emitStringLogValue(expression, context) {
     }
   }
 
-  if (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') {
+  if (isRuntimeProducedStringExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
     const string = nextCName(context, 'ccjs_log_string')
 
@@ -5404,10 +5457,14 @@ function emitPreparedNumberExpression(expression, context) {
   }
 
   if (expression?.type === 'AwaitExpression') {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', expression?.loc))
+    const valueType = inferExpressionType(expression, context)
+    const awaited = emitCAwaitValueExpression(expression, context)
+
     return {
-      lines: [],
-      expression: '0'
+      lines: awaited.lines,
+      expression: valueType === 'boolean'
+        ? `(${awaited.expression}.as.boolean ? 1 : 0)`
+        : `${awaited.expression}.as.number`
     }
   }
 
@@ -5845,6 +5902,12 @@ function emitPreparedCallExpression(expression, context) {
     return fsCall
   }
 
+  const promiseResolve = emitPreparedPromiseResolveExpression(expression, context)
+
+  if (promiseResolve != null) {
+    return promiseResolve
+  }
+
   const callbackType = resolveRuntimeCallbackCalleeType(expression.callee, context)
 
   if (callbackType != null) {
@@ -5948,6 +6011,106 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
   return {
     lines,
     expression: out
+  }
+}
+
+function emitPreparedPromiseResolveExpression(expression, context, options: { out?: string } = {}) {
+  const method = cPromiseRuntimeCallName(expression?.callee)
+
+  if (method !== 'resolve' || expression?.valueType !== 'promise') {
+    return null
+  }
+
+  registerEventLoop(context)
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  registerOwnedPromise(context, out, expression.promiseValueType ?? 'unknown')
+  const value = expression.args[0] == null
+    ? {
+        lines: [],
+        expression: 'ccjs_undefined_value()'
+      }
+    : emitCValueExpression(expression.args[0], context)
+
+  return {
+    lines: [
+      ...value.lines,
+      emitStatusCheck(`ccjs_promise_resolved(&ccjs_loop, ${value.expression}, &${out})`, context)
+    ],
+    expression: out
+  }
+}
+
+function emitPreparedAwaitPromiseExpression(expression, context) {
+  const fsCall = emitPreparedFsCallExpression(expression, context)
+
+  if (fsCall != null) {
+    return {
+      ...fsCall,
+      valueType: expression.promiseValueType ?? 'unknown'
+    }
+  }
+
+  const promiseResolve = emitPreparedPromiseResolveExpression(expression, context)
+
+  if (promiseResolve != null) {
+    return {
+      ...promiseResolve,
+      valueType: expression.promiseValueType ?? 'unknown'
+    }
+  }
+
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+
+    if (context.variables.get(name) === 'promise') {
+      return {
+        lines: [],
+        expression: name,
+        valueType: context.promiseValueTypes.get(name) ?? 'unknown'
+      }
+    }
+  }
+
+  return null
+}
+
+function emitCAwaitValueExpression(expression, context) {
+  const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)
+
+  if (promise == null) {
+    if (inferExpressionType(expression.argument, context) !== 'promise') {
+      return emitCValueExpression(expression.argument, context)
+    }
+
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'this awaited promise expression is not supported by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
+  registerEventLoop(context)
+
+  const valueType = expression.valueType ?? promise.valueType ?? 'unknown'
+  const value = nextCName(context, 'ccjs_await_value')
+  const valueTag = cRuntimeValueTag(valueType)
+  const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
+  registerOwnedValue(context, value)
+
+  return {
+    lines: [
+      ...promise.lines,
+      ...emitPrepareOwnedValueWrite(value),
+      `while (ccjs_promise_get_state(${promise.expression}) == CCJS_PROMISE_PENDING && ccjs_loop_has_work(&ccjs_loop)) {`,
+      `  ${emitStatusCheck('ccjs_loop_poll(&ccjs_loop, 0)', context)}`,
+      '}',
+      `if (ccjs_promise_get_state(${promise.expression}) != CCJS_PROMISE_FULFILLED) ${emitFailureStatement(context)}`,
+      emitStatusCheck(`ccjs_promise_get_result(${promise.expression}, &${value})`, context),
+      ...(valueCheck === '' ? [] : [valueCheck])
+    ],
+    expression: value
   }
 }
 
@@ -6528,7 +6691,7 @@ function inferExpressionType(expression, context) {
   }
 
   if (expression?.type === 'AwaitExpression') {
-    return 'async'
+    return expression.valueType ?? 'unknown'
   }
 
   if (isOptionalChainExpression(expression)) {
@@ -6687,6 +6850,7 @@ function isStringConcatExpression(expression, context) {
 
 function isRuntimeProducedStringExpression(expression, context) {
   return (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string')
+    || (expression?.type === 'AwaitExpression' && inferExpressionType(expression, context) === 'string')
     || isStringConcatExpression(expression, context)
     || (isNullishCoalescingExpression(expression) && canLowerCNullishCoalescingExpression(expression, context))
     || isBoxedRuntimeStringReference(expression, context)
@@ -8308,6 +8472,18 @@ function cFsRuntimeCallName(callee) {
   }
 
   return ['readFile', 'writeFile'].includes(callee.property) ? callee.property : null
+}
+
+function cPromiseRuntimeCallName(callee) {
+  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+    return null
+  }
+
+  if (callee.object.path[0] !== 'Promise') {
+    return null
+  }
+
+  return callee.property === 'resolve' ? 'resolve' : null
 }
 
 function isCJsGlobalRoot(name, context) {

@@ -1,7 +1,7 @@
 // @targets js
 // @expect pass
 
-export async function main(): void {
+export async function main(): Promise<void> {
   const server = http.createServer((request, response) => {
     response.end('ok')
   })

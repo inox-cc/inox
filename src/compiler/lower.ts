@@ -771,7 +771,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
     return {
       ...expression,
       argument: lowerExpression(expression.argument, context),
-      valueType: 'unknown'
+      valueType: expression.valueType ?? 'unknown'
     }
   }
 

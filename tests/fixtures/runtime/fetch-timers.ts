@@ -1,7 +1,7 @@
 // @targets js
 // @expect pass
 
-export async function main(): void {
+export async function main(): Promise<void> {
   const response = await fetch('data:text/plain,hello')
   const text = await response.text()
 

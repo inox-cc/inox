@@ -3654,12 +3654,12 @@ export function main(): void {
   })
 })
 
-test('compiles async await to JS and rejects it for C', () => {
-  const source = `async function getValue(): number {
-  return await Promise.resolve(2)
+test('compiles async await to JS and rejects unsupported C promise calls', () => {
+  const source = `async function getValue(): Promise<number> {
+  return Promise.resolve(2)
 }
 
-export async function main(): void {
+export async function main(): Promise<void> {
   const value = await getValue()
   console.log(value)
 }
@@ -3669,12 +3669,37 @@ export async function main(): void {
   })
 
   assert.match(js.code, /async function getValue\(\)/)
-  assert.match(js.code, /return await Promise\.resolve\(2\)/)
+  assert.match(js.code, /return Promise\.resolve\(2\)/)
   assert.match(js.code, /export async function main\(\)/)
   assert.deepEqual(js.ir.syntaxFeatures.map(item => item.feature), ['async-function', 'async-function'])
   assertDiagnostic(source, 'CCJS_C_ASYNC', {
     target: 'c'
   })
+})
+
+test('lowers first C async await slice over Promise.resolve and fs promises', () => {
+  const result = compileSource(`export async function main(): Promise<void> {
+  const promise = Promise.resolve(2)
+  const value = await promise
+  console.log(await Promise.resolve('ok'))
+  console.log(value)
+  await fs.writeFile('/tmp/out.txt', 'saved')
+  const text = await fs.readFile('/tmp/out.txt', 'utf8')
+  console.log(text)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /void ccjs_main\(void\)/)
+  assert.match(result.code, /ccjs_promise\* promise = 0;/)
+  assert.match(result.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(2\), &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /while \(ccjs_promise_get_state\(promise\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
+  assert.match(result.code, /if \(ccjs_promise_get_result\(promise, &ccjs_await_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_value_\d+, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /const ccjs_string\* text = \(ccjs_string\*\)ccjs_await_value_\d+\.as\.ref;/)
 })
 
 test('compiles arrow functions and chain calls to JS and C', () => {
@@ -3708,7 +3733,7 @@ test('compiles arrow functions and chain calls to JS and C', () => {
 })
 
 test('injects Node fs prelude when fs is referenced', () => {
-  const result = compileSource(`export async function main(): void {
+  const result = compileSource(`export async function main(): Promise<void> {
   await fs.writeFile('/private/tmp/ccjs-fs-smoke.txt', 'hello')
   const text = await fs.readFile('/private/tmp/ccjs-fs-smoke.txt', 'utf8')
   console.log(text)
@@ -3871,7 +3896,7 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
 }
 `,
     `export function main(): void {
-  const promise = Promise.resolve(1)
+  const promise = Promise.reject(1)
   console.log(promise)
 }
 `
