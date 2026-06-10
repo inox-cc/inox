@@ -1,5 +1,11 @@
 #include <string.h>
 #include "ccjs/fs.h"
+#include "ccjs/string.h"
+
+#ifndef CCJS_FS_DISABLE_HOST
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 
 typedef enum ccjs_fs_request_kind {
   CCJS_FS_REQUEST_READ_FILE,
@@ -19,6 +25,11 @@ typedef struct ccjs_fs_request {
 static ccjs_fs_adapter ccjs_fs_active_adapter = { 0, 0, 0 };
 
 static ccjs_status ccjs_fs_copy_bytes(ccjs_allocator* allocator, const char* bytes, size_t len, char** out);
+#ifndef CCJS_FS_DISABLE_HOST
+static ccjs_status ccjs_fs_copy_host_bytes(const char* bytes, size_t len, char** out);
+static ccjs_status ccjs_fs_default_read_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+static ccjs_status ccjs_fs_default_write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
+#endif
 static ccjs_status ccjs_fs_queue_request(
   ccjs_loop* loop,
   ccjs_fs_request_kind kind,
@@ -54,11 +65,15 @@ ccjs_status ccjs_fs_read_file_sync(ccjs_allocator* allocator, const char* path, 
     return CCJS_ERR_TYPE;
   }
 
-  if (ccjs_fs_active_adapter.read_file == 0) {
-    return CCJS_ERR_UNSUPPORTED;
+  if (ccjs_fs_active_adapter.read_file != 0) {
+    return ccjs_fs_active_adapter.read_file(ccjs_fs_active_adapter.user, allocator, path, path_len, out);
   }
 
-  return ccjs_fs_active_adapter.read_file(ccjs_fs_active_adapter.user, allocator, path, path_len, out);
+#ifndef CCJS_FS_DISABLE_HOST
+  return ccjs_fs_default_read_file(0, allocator, path, path_len, out);
+#else
+  return CCJS_ERR_UNSUPPORTED;
+#endif
 }
 
 ccjs_status ccjs_fs_write_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
@@ -66,11 +81,15 @@ ccjs_status ccjs_fs_write_file_sync(const char* path, size_t path_len, const cha
     return CCJS_ERR_TYPE;
   }
 
-  if (ccjs_fs_active_adapter.write_file == 0) {
-    return CCJS_ERR_UNSUPPORTED;
+  if (ccjs_fs_active_adapter.write_file != 0) {
+    return ccjs_fs_active_adapter.write_file(ccjs_fs_active_adapter.user, path, path_len, bytes, byte_len);
   }
 
-  return ccjs_fs_active_adapter.write_file(ccjs_fs_active_adapter.user, path, path_len, bytes, byte_len);
+#ifndef CCJS_FS_DISABLE_HOST
+  return ccjs_fs_default_write_file(0, path, path_len, bytes, byte_len);
+#else
+  return CCJS_ERR_UNSUPPORTED;
+#endif
 }
 
 ccjs_status ccjs_fs_read_file(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
@@ -118,6 +137,131 @@ static ccjs_status ccjs_fs_copy_bytes(ccjs_allocator* allocator, const char* byt
 
   return CCJS_OK;
 }
+
+#ifndef CCJS_FS_DISABLE_HOST
+static ccjs_status ccjs_fs_copy_host_bytes(const char* bytes, size_t len, char** out) {
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = 0;
+
+  if (bytes == 0 && len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (len == ((size_t)-1)) {
+    return CCJS_ERR_OOM;
+  }
+
+  char* copy = malloc(len + 1);
+
+  if (copy == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  if (len != 0) {
+    memcpy(copy, bytes, len);
+  }
+
+  copy[len] = '\0';
+  *out = copy;
+
+  return CCJS_OK;
+}
+
+static ccjs_status ccjs_fs_default_read_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+  (void)user;
+
+  if (allocator == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  FILE* file = fopen(path_copy, "rb");
+  free(path_copy);
+
+  if (file == 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  if (fseek(file, 0, SEEK_END) != 0) {
+    fclose(file);
+    return CCJS_ERR_FIELD;
+  }
+
+  long length = ftell(file);
+
+  if (length < 0) {
+    fclose(file);
+    return CCJS_ERR_FIELD;
+  }
+
+  if (fseek(file, 0, SEEK_SET) != 0) {
+    fclose(file);
+    return CCJS_ERR_FIELD;
+  }
+
+  size_t byte_len = (size_t)length;
+  char* buffer = 0;
+
+  if (byte_len != 0) {
+    buffer = malloc(byte_len);
+
+    if (buffer == 0) {
+      fclose(file);
+      return CCJS_ERR_OOM;
+    }
+
+    if (fread(buffer, 1, byte_len, file) != byte_len) {
+      free(buffer);
+      fclose(file);
+      return CCJS_ERR_FIELD;
+    }
+  }
+
+  fclose(file);
+  status = ccjs_string_from_literal(allocator, buffer == 0 ? "" : buffer, byte_len, out);
+  free(buffer);
+
+  return status;
+}
+
+static ccjs_status ccjs_fs_default_write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len) {
+  (void)user;
+
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  FILE* file = fopen(path_copy, "wb");
+  free(path_copy);
+
+  if (file == 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  if (byte_len != 0 && fwrite(bytes, 1, byte_len, file) != byte_len) {
+    fclose(file);
+    return CCJS_ERR_FIELD;
+  }
+
+  if (fclose(file) != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  return CCJS_OK;
+}
+#endif
 
 static ccjs_status ccjs_fs_queue_request(
   ccjs_loop* loop,

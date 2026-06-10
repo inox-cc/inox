@@ -3805,19 +3805,26 @@ export async function main(): Promise<void> {
 })
 
 test('lowers first C async await slice over Promise.resolve and fs promises', () => {
-  const result = compileSource(`export async function main(): Promise<void> {
+  const result = compileSource(`async function loadText(): Promise<string> {
+  return fs.readFile('/tmp/out.txt', 'utf8')
+}
+
+export async function main(): Promise<void> {
   const promise = Promise.resolve(2)
   const value = await promise
   console.log(await Promise.resolve('ok'))
   console.log(value)
   await fs.writeFile('/tmp/out.txt', 'saved')
+  const loaded = loadText()
   const text = await fs.readFile('/tmp/out.txt', 'utf8')
+  console.log(await loaded)
   console.log(text)
 }
 `, {
     target: 'c'
   })
 
+  assert.match(result.code, /ccjs_value loadText\(void\);/)
   assert.match(result.code, /void ccjs_main\(void\)/)
   assert.match(result.code, /ccjs_promise\* promise = 0;/)
   assert.match(result.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(2\), &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
@@ -3826,6 +3833,8 @@ test('lowers first C async await slice over Promise.resolve and fs promises', ()
   assert.match(result.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_value_\d+, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_async_value_\d+ = loadText\(\);/)
+  assert.match(result.code, /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_async_value_\d+, &loaded\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /const ccjs_string\* text = \(ccjs_string\*\)ccjs_await_value_\d+\.as\.ref;/)
 })
 
