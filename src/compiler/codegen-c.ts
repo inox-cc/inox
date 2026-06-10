@@ -6063,6 +6063,15 @@ function emitPreparedCallExpression(expression, context) {
     return promise
   }
 
+  if (isPromiseMethodCallExpression(expression, context)) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'Promise.then/catch lowering is not supported by the current C backend slice', expression.loc))
+
+    return {
+      lines: [],
+      expression: '_'
+    }
+  }
+
   const callbackType = resolveRuntimeCallbackCalleeType(expression.callee, context)
 
   if (callbackType != null) {
@@ -7064,7 +7073,7 @@ function cUnsupportedExpressionCode(type) {
     return 'CCJS_C_CLASS'
   }
 
-  if (type === 'async') {
+  if (type === 'async' || type === 'promise') {
     return 'CCJS_C_ASYNC'
   }
 
@@ -8830,6 +8839,13 @@ function cPromiseRuntimeCallName(callee) {
   }
 
   return ['resolve', 'reject'].includes(callee.property) ? callee.property : null
+}
+
+function isPromiseMethodCallExpression(expression, context) {
+  return expression?.type === 'CallExpression'
+    && expression.callee?.type === 'MemberExpression'
+    && ['catch', 'then'].includes(expression.callee.property)
+    && inferExpressionType(expression.callee.object, context) === 'promise'
 }
 
 function isPlainPromiseReturningFunctionName(name, context) {

@@ -1093,6 +1093,12 @@ class Checker {
       return collectionMethodType
     }
 
+    const promiseMethodType = this.checkPromiseMethodCall(expression)
+
+    if (promiseMethodType != null) {
+      return promiseMethodType
+    }
+
     const fsType = this.checkFsCall(expression)
 
     if (fsType != null) {
@@ -1209,6 +1215,129 @@ class Checker {
     expression.promiseValueType = method === 'resolve' ? argTypes[0] ?? 'void' : 'unknown'
 
     return 'promise'
+  }
+
+  checkPromiseMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || !isPromiseMethod(expression.callee.property)) {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+
+    if (objectType !== 'promise') {
+      return null
+    }
+
+    const property = expression.callee.property
+    const promiseValueType = this.resolveExpressionPromiseValueType(expression.callee.object) ?? 'unknown'
+
+    if (expression.args.length !== 1) {
+      this.report('CCJS_ARG_COUNT', `promise.${property} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    const callback = expression.args[0]
+
+    if (property === 'then') {
+      const mappedType = callback == null
+        ? 'unknown'
+        : this.checkPromiseCallback(callback, [
+            { name: 'value', valueType: promiseValueType }
+          ], undefined, 'promise.then callback')
+
+      for (const arg of expression.args.slice(1)) {
+        this.checkExpression(arg)
+      }
+
+      expression.valueType = 'promise'
+      expression.promiseValueType = mappedType
+
+      return 'promise'
+    }
+
+    if (callback != null) {
+      this.checkPromiseCallback(callback, [
+        { name: 'error', valueType: 'unknown' }
+      ], promiseValueType === 'unknown' ? undefined : promiseValueType, 'promise.catch callback')
+    }
+
+    for (const arg of expression.args.slice(1)) {
+      this.checkExpression(arg)
+    }
+
+    expression.valueType = 'promise'
+    expression.promiseValueType = promiseValueType
+
+    return 'promise'
+  }
+
+  checkPromiseCallback(expression: AnyNode, params: Array<{ name: string, valueType: ValueType }>, returnType: ValueType | undefined, label: string): ValueType {
+    if (expression.type !== 'ArrowFunctionExpression') {
+      const callbackType = this.checkExpression(expression)
+
+      this.checkAssignableType(callbackType, 'function', expression.loc)
+
+      return 'unknown'
+    }
+
+    if (expression.params.length > params.length) {
+      this.report('CCJS_ARG_COUNT', `${label} expects at most ${params.length} parameter(s), got ${expression.params.length}`, expression.loc)
+    }
+
+    let actualReturnType: ValueType = 'unknown'
+    let returnLoc = expression.loc
+    let returnNullable = false
+    let returnPromiseValueType: ValueType | null = null
+
+    this.withScope(() => {
+      for (const [index, param] of expression.params.entries()) {
+        const expected = params[index]?.valueType ?? 'unknown'
+        const actual = param.valueType === 'unknown' ? expected : param.valueType
+
+        if (param.valueType !== 'unknown') {
+          this.checkAssignableType(expected, param.valueType, param.loc)
+        }
+
+        param.declaredType = param.valueType === 'unknown' ? actual : param.valueType
+        param.valueType = actual
+        param.nullable = false
+
+        this.declare(param.name, {
+          kind: 'param',
+          mutable: true,
+          valueType: actual,
+          loc: param.loc
+        }, param.loc)
+      }
+
+      if (expression.expressionBody) {
+        actualReturnType = this.checkExpression(expression.body)
+        returnLoc = expression.body.loc ?? expression.loc
+        returnNullable = this.expressionCanBeNull(expression.body)
+        returnPromiseValueType = this.resolveExpressionPromiseValueType(expression.body)
+      } else {
+        const returnExpression = this.resolveSingleReturnExpression(expression.body)
+
+        if (returnExpression == null) {
+          this.checkStatements(expression.body)
+        } else {
+          actualReturnType = this.checkExpression(returnExpression)
+          returnLoc = returnExpression.loc ?? expression.loc
+          returnNullable = this.expressionCanBeNull(returnExpression)
+          returnPromiseValueType = this.resolveExpressionPromiseValueType(returnExpression)
+        }
+      }
+    })
+
+    if (returnType != null) {
+      this.checkAssignableType(actualReturnType, returnType, returnLoc, false, returnNullable)
+    }
+
+    expression.returnType = returnType ?? actualReturnType
+    expression.declaredReturnType = expression.returnType
+    expression.returnNullable = returnNullable
+    expression.returnPromiseValueType = returnPromiseValueType
+
+    return actualReturnType
   }
 
   checkCollectionMethodCall(expression: AnyNode): ValueType | null {
@@ -2602,6 +2731,10 @@ function isMapMethod(name: string): boolean {
 
 function isSetMethod(name: string): boolean {
   return ['add', 'clear', 'delete', 'has'].includes(name)
+}
+
+function isPromiseMethod(name: string): boolean {
+  return ['catch', 'then'].includes(name)
 }
 
 function isEqualityComparableType(left: ValueType, right: ValueType): boolean {

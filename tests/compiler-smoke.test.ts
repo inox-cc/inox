@@ -5089,6 +5089,63 @@ export function main(): void {
 `, 'CCJS_TYPE_MISMATCH')
 })
 
+test('checks Promise then catch as typed chain calls', () => {
+  const result = compileSource(`export function main(): void {
+  const source: Promise<number> = Promise.resolve(2)
+  const doubled = source.then(value => value * 2)
+  const failed: Promise<string> = Promise.reject(new Error('bad'))
+  const recovered = failed.catch(error => 'ok')
+  const chained = source
+    .then(value => value + 1)
+    .catch(error => 0)
+    .then(value => String(value))
+
+  console.log(doubled, recovered, chained)
+}
+`, {
+    target: 'ts'
+  })
+  const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const doubled = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'doubled')
+  const recovered = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'recovered')
+  const chained = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'chained')
+  const thenCallback = doubled?.init.args[0]
+  const catchCallback = recovered?.init.args[0]
+
+  assert.equal(doubled?.valueType, 'promise')
+  assert.equal(doubled?.promiseValueType, 'number')
+  assert.equal(thenCallback?.params[0].valueType, 'number')
+  assert.equal(thenCallback?.returnType, 'number')
+  assert.equal(recovered?.valueType, 'promise')
+  assert.equal(recovered?.promiseValueType, 'string')
+  assert.equal(catchCallback?.params[0].valueType, 'unknown')
+  assert.equal(catchCallback?.returnType, 'string')
+  assert.equal(chained?.valueType, 'promise')
+  assert.equal(chained?.promiseValueType, 'string')
+  assert.equal(result.ir.features.includes('async-runtime'), true)
+  assert.match(result.code, /const doubled: Promise<number> = source\.then\(\(value: number\): number => \(value \* 2\)\)/)
+  assert.match(result.code, /const recovered: Promise<string> = failed\.catch\(\(error\): string => "ok"\)/)
+  assert.match(result.code, /const chained: Promise<string> = source\.then\(\(value: number\): number => \(value \+ 1\)\)\.catch\(\(error\): number => 0\)\.then\(\(value: number\): string => String\(value\)\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const source: Promise<number> = Promise.resolve(2)
+  source.then((value: string) => value)
+}
+`, 'CCJS_TYPE_MISMATCH')
+  assertDiagnostic(`export function main(): void {
+  const failed: Promise<string> = Promise.reject(new Error('bad'))
+  failed.catch(error => 1)
+}
+`, 'CCJS_TYPE_MISMATCH')
+  assertDiagnostic(`export function main(): void {
+  const promise = Promise.resolve(1).then(value => value + 1)
+  console.log(promise)
+}
+`, 'CCJS_C_ASYNC', {
+    target: 'c'
+  })
+})
+
 test('compiles C collection values across function boundaries', () => {
   const result = compileSource(`function makeNums(): number[] {
   const nums = [2, 3, 5]
