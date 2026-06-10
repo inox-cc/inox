@@ -7,6 +7,7 @@ type ResolvedTypeInfo = {
   functionType: AnyNode | null
   shape: ObjectShapeInfo | null
   arrayElementType: ValueType | null
+  arrayElementDeclaredType: string | null
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
   setElementType: ValueType | null
@@ -233,6 +234,7 @@ class Checker {
           returnType: returnInfo.valueType,
           returnNullable: returnInfo.nullable,
           returnArrayElementType: returnInfo.arrayElementType,
+          returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
           returnMapKeyType: returnInfo.mapKeyType,
           returnMapValueType: returnInfo.mapValueType,
           returnSetElementType: returnInfo.setElementType,
@@ -262,6 +264,7 @@ class Checker {
       valueType: paramInfo.valueType,
       nullable: paramInfo.nullable,
       arrayElementType: paramInfo.arrayElementType,
+      arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
       mapKeyType: paramInfo.mapKeyType,
       mapValueType: paramInfo.mapValueType,
       setElementType: paramInfo.setElementType,
@@ -297,6 +300,7 @@ class Checker {
             valueType: paramInfo.valueType,
             nullable: paramInfo.nullable,
             arrayElementType: paramInfo.arrayElementType,
+            arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
             mapKeyType: paramInfo.mapKeyType,
             mapValueType: paramInfo.mapValueType,
             setElementType: paramInfo.setElementType,
@@ -410,6 +414,7 @@ class Checker {
       const initType = statement.init == null ? 'unknown' : this.checkVariableInitializer(statement.init, declared)
       const valueType = declared?.valueType ?? initType
       const arrayElementType = declared?.arrayElementType ?? this.resolveExpressionArrayElementType(statement.init)
+      const arrayElementDeclaredType = declared?.arrayElementDeclaredType ?? this.resolveExpressionArrayElementDeclaredType(statement.init)
       const mapType = declared?.valueType === 'map'
         ? {
             key: declared.mapKeyType,
@@ -428,6 +433,7 @@ class Checker {
         valueType,
         nullable: declared?.nullable === true || statement.init?.nullable === true,
         arrayElementType,
+        arrayElementDeclaredType,
         mapKeyType: mapType?.key ?? null,
         mapValueType: mapType?.value ?? null,
         setElementType,
@@ -560,6 +566,7 @@ class Checker {
       expression.valueType = symbol.returnType ?? 'unknown'
       expression.nullable = true
       expression.arrayElementType = symbol.returnArrayElementType ?? null
+      expression.arrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
       expression.mapKeyType = symbol.returnMapKeyType ?? null
       expression.mapValueType = symbol.returnMapValueType ?? null
       expression.setElementType = symbol.returnSetElementType ?? null
@@ -625,6 +632,7 @@ class Checker {
       }
 
       expression.arrayElementType = commonArrayElementType(elementTypes)
+      expression.arrayElementDeclaredType = expression.arrayElementType
 
       return 'array'
     }
@@ -715,9 +723,18 @@ class Checker {
     }
 
     const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
-    expression.nullable = field.nullable === true || fieldType.nullable
+    const valueType = field.valueType ?? fieldType.valueType
 
-    return field.valueType ?? fieldType.valueType
+    expression.nullable = field.nullable === true || fieldType.nullable
+    expression.valueType = valueType
+    expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
+    expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
+    expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
+    expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
+    expression.setElementType = field.setElementType ?? fieldType.setElementType
+    expression.shape = field.shape ?? fieldType.shape
+
+    return valueType
   }
 
   checkOptionalMemberExpression(expression: AnyNode): ValueType {
@@ -746,6 +763,7 @@ class Checker {
     expression.nullable = true
     expression.valueType = valueType
     expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
+    expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
     expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
     expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
     expression.setElementType = field.setElementType ?? fieldType.setElementType
@@ -844,9 +862,18 @@ class Checker {
     }
 
     const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
-    expression.nullable = field.nullable === true || fieldType.nullable
+    const valueType = field.valueType ?? fieldType.valueType
 
-    return field.valueType ?? fieldType.valueType
+    expression.nullable = field.nullable === true || fieldType.nullable
+    expression.valueType = valueType
+    expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
+    expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
+    expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
+    expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
+    expression.setElementType = field.setElementType ?? fieldType.setElementType
+    expression.shape = field.shape ?? fieldType.shape
+
+    return valueType
   }
 
   checkOptionalIndexExpression(expression: AnyNode): ValueType {
@@ -860,6 +887,7 @@ class Checker {
 
         expression.nullable = true
         expression.valueType = valueType
+        expression.arrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
 
         return valueType
       }
@@ -893,6 +921,7 @@ class Checker {
     expression.nullable = true
     expression.valueType = valueType
     expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
+    expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
     expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
     expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
     expression.setElementType = field.setElementType ?? fieldType.setElementType
@@ -1002,6 +1031,7 @@ class Checker {
     expression.valueType = symbol.returnType ?? 'unknown'
     expression.nullable = symbol.returnNullable === true
     expression.arrayElementType = symbol.returnArrayElementType ?? null
+    expression.arrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
     expression.mapKeyType = symbol.returnMapKeyType ?? null
     expression.mapValueType = symbol.returnMapValueType ?? null
     expression.setElementType = symbol.returnSetElementType ?? null
@@ -1135,9 +1165,11 @@ class Checker {
     }
 
     const elementType = this.resolveExpressionArrayElementType(expression.callee.object) ?? 'unknown'
+    const elementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.callee.object) ?? elementType
 
     expression.valueType = 'array'
     expression.arrayElementType = elementType
+    expression.arrayElementDeclaredType = elementDeclaredType
 
     if (expression.callee.property === 'sort') {
       if (expression.args.length > 1) {
@@ -1185,6 +1217,7 @@ class Checker {
         ])
 
     expression.arrayElementType = mappedType
+    expression.arrayElementDeclaredType = mappedType
 
     for (const arg of expression.args.slice(1)) {
       this.checkExpression(arg)
@@ -1405,6 +1438,7 @@ class Checker {
               valueType: expected.valueType,
               nullable: expected.nullable === true,
               arrayElementType: expected.arrayElementType ?? null,
+              arrayElementDeclaredType: expected.arrayElementDeclaredType ?? null,
               mapKeyType: expected.mapKeyType ?? null,
               mapValueType: expected.mapValueType ?? null,
               setElementType: expected.setElementType ?? null,
@@ -1423,6 +1457,7 @@ class Checker {
         param.valueType = paramInfo.valueType
         param.nullable = paramInfo.nullable
         param.arrayElementType = paramInfo.arrayElementType
+        param.arrayElementDeclaredType = paramInfo.arrayElementDeclaredType
         param.mapKeyType = paramInfo.mapKeyType
         param.mapValueType = paramInfo.mapValueType
         param.setElementType = paramInfo.setElementType
@@ -1435,6 +1470,7 @@ class Checker {
           valueType: paramInfo.valueType,
           nullable: paramInfo.nullable,
           arrayElementType: paramInfo.arrayElementType,
+          arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
           mapKeyType: paramInfo.mapKeyType,
           mapValueType: paramInfo.mapValueType,
           setElementType: paramInfo.setElementType,
@@ -1510,6 +1546,7 @@ class Checker {
             valueType: paramInfo.valueType,
             nullable: paramInfo.nullable,
             arrayElementType: paramInfo.arrayElementType,
+            arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
             mapKeyType: paramInfo.mapKeyType,
             mapValueType: paramInfo.mapValueType,
             setElementType: paramInfo.setElementType,
@@ -1604,6 +1641,7 @@ class Checker {
         returnType: symbol.functionType.returnType,
         returnNullable: symbol.functionType.returnNullable,
         returnArrayElementType: symbol.functionType.returnArrayElementType,
+        returnArrayElementDeclaredType: symbol.functionType.returnArrayElementDeclaredType,
         returnMapKeyType: symbol.functionType.returnMapKeyType,
         returnMapValueType: symbol.functionType.returnMapValueType,
         returnSetElementType: symbol.functionType.returnSetElementType,
@@ -1655,12 +1693,41 @@ class Checker {
     const elementType = iterableType === 'array'
       ? this.resolveExpressionArrayElementType(statement.iterable) ?? 'unknown'
       : 'unknown'
+    const elementDeclaredType = iterableType === 'array'
+      ? this.resolveExpressionArrayElementDeclaredType(statement.iterable) ?? elementType
+      : 'unknown'
+    const declared = statement.declaredType == null ? null : this.resolveDeclaredType(statement.declaredType, statement.nameLoc)
+    const valueType = declared?.valueType ?? elementType
+    const inferredDeclaredType = declared == null ? elementDeclaredType : statement.declaredType
+
+    statement.valueType = valueType
+    statement.nullable = declared?.nullable === true
+    statement.inferredDeclaredType = inferredDeclaredType
+    statement.arrayElementType = declared?.arrayElementType ?? null
+    statement.arrayElementDeclaredType = declared?.arrayElementDeclaredType ?? null
+    statement.mapKeyType = declared?.mapKeyType ?? null
+    statement.mapValueType = declared?.mapValueType ?? null
+    statement.setElementType = declared?.setElementType ?? null
+    statement.functionType = declared?.functionType ?? null
+    statement.shape = declared?.shape ?? null
+
+    if (declared != null) {
+      this.checkAssignableType(elementType, declared.valueType, statement.nameLoc, declared.nullable)
+    }
 
     this.withScope(() => {
       this.declare(statement.name, {
         kind: statement.kind,
         mutable: statement.kind === 'let',
-        valueType: elementType,
+        valueType,
+        nullable: declared?.nullable === true,
+        arrayElementType: declared?.arrayElementType ?? null,
+        arrayElementDeclaredType: declared?.arrayElementDeclaredType ?? null,
+        mapKeyType: declared?.mapKeyType ?? null,
+        mapValueType: declared?.mapValueType ?? null,
+        setElementType: declared?.setElementType ?? null,
+        functionType: declared?.functionType ?? null,
+        shape: declared?.shape ?? null,
         loc: statement.nameLoc
       }, statement.nameLoc)
 
@@ -1751,6 +1818,7 @@ class Checker {
         functionType: null,
         shape: null,
         arrayElementType: null,
+        arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
         setElementType: null
@@ -1779,6 +1847,7 @@ class Checker {
         functionType: null,
         shape: null,
         arrayElementType: elementInfo?.valueType ?? 'unknown',
+        arrayElementDeclaredType: arrayElementTypeName ?? null,
         mapKeyType: null,
         mapValueType: null,
         setElementType: null
@@ -1797,6 +1866,7 @@ class Checker {
         functionType: null,
         shape: null,
         arrayElementType: null,
+        arrayElementDeclaredType: null,
         mapKeyType: keyInfo?.valueType ?? 'unknown',
         mapValueType: valueInfo?.valueType ?? 'unknown',
         setElementType: null
@@ -1814,6 +1884,7 @@ class Checker {
         functionType: null,
         shape: null,
         arrayElementType: null,
+        arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
         setElementType: elementInfo?.valueType ?? 'unknown'
@@ -1827,6 +1898,7 @@ class Checker {
         functionType: null,
         shape: null,
         arrayElementType: null,
+        arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
         setElementType: null
@@ -1853,6 +1925,7 @@ class Checker {
                 valueType: paramInfo.valueType,
                 nullable: paramInfo.nullable,
                 arrayElementType: paramInfo.arrayElementType,
+                arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
                 mapKeyType: paramInfo.mapKeyType,
                 mapValueType: paramInfo.mapValueType,
                 setElementType: paramInfo.setElementType,
@@ -1864,6 +1937,7 @@ class Checker {
             returnType: returnInfo.valueType,
             returnNullable: returnInfo.nullable,
             returnArrayElementType: returnInfo.arrayElementType,
+            returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
             returnMapKeyType: returnInfo.mapKeyType,
             returnMapValueType: returnInfo.mapValueType,
             returnSetElementType: returnInfo.setElementType,
@@ -1871,6 +1945,7 @@ class Checker {
           },
           shape: null,
           arrayElementType: null,
+          arrayElementDeclaredType: null,
           mapKeyType: null,
           mapValueType: null,
           setElementType: null
@@ -1883,6 +1958,7 @@ class Checker {
         functionType: null,
         shape: this.resolveObjectShape(shape),
         arrayElementType: null,
+        arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
         setElementType: null
@@ -1897,6 +1973,7 @@ class Checker {
       functionType: null,
       shape: null,
       arrayElementType: null,
+      arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
       setElementType: null
@@ -1915,6 +1992,7 @@ class Checker {
           valueType: fieldInfo.valueType,
           nullable: fieldInfo.nullable,
           arrayElementType: fieldInfo.arrayElementType,
+          arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
           mapKeyType: fieldInfo.mapKeyType,
           mapValueType: fieldInfo.mapValueType,
           setElementType: fieldInfo.setElementType,
@@ -1954,6 +2032,38 @@ class Checker {
       const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
 
       return field?.arrayElementType ?? null
+    }
+
+    return null
+  }
+
+  resolveExpressionArrayElementDeclaredType(expression: AnyNode | null | undefined): string | null {
+    if (expression == null) {
+      return null
+    }
+
+    if (expression.type === 'ArrayLiteral' || expression.type === 'CallExpression') {
+      return expression.arrayElementDeclaredType ?? expression.arrayElementType ?? null
+    }
+
+    if (expression.type === 'Reference' && expression.path.length === 1) {
+      const symbol = this.scope.resolve(expression.path[0])
+
+      return symbol?.arrayElementDeclaredType ?? symbol?.arrayElementType ?? null
+    }
+
+    if (expression.type === 'MemberExpression') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+
+      return field?.arrayElementDeclaredType ?? field?.arrayElementType ?? null
+    }
+
+    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      const shape = this.resolveExpressionShape(expression.object)
+      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+
+      return field?.arrayElementDeclaredType ?? field?.arrayElementType ?? null
     }
 
     return null

@@ -1193,6 +1193,17 @@ test('compiles for of loops over arrays to JS and C', () => {
   })
 
   assert.match(js.code, /for \(const value of values\) \{/)
+  const ts = compileSource(source, {
+    target: 'ts',
+    callMain: false
+  })
+
+  assert.match(ts.code, /for \(const value: number of values\) \{/)
+  assert.doesNotThrow(() => compileSource(ts.code, {
+    target: 'js',
+    callMain: false
+  }))
+
   const c = compileSource(source, {
     target: 'c'
   })
@@ -1200,6 +1211,45 @@ test('compiles for of loops over arrays to JS and C', () => {
   assert.match(c.code, /for \(size_t ccjs_for_index_\d+ = 0; ccjs_for_index_\d+ < 3; ccjs_for_index_\d+ \+= 1\) \{/)
   assert.match(c.code, /ccjs_array_get\(values, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
   assert.match(c.code, /double value = ccjs_for_value_\d+\.as\.number;/)
+})
+
+test('checks explicit typed for of bindings in TS source and output', () => {
+  const source = `type User = {
+  readonly id: number,
+  name: string
+}
+
+export function main(): void {
+  const users: User[] = [{ id: 1, name: 'Ada' }]
+
+  for (const user: User of users) {
+    console.log(user.name)
+  }
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+  const ts = compileSource(source, {
+    target: 'ts',
+    callMain: false
+  })
+
+  assert.match(js.code, /for \(const user of users\) \{/)
+  assert.match(ts.code, /for \(const user: User of users\) \{/)
+  assert.doesNotThrow(() => compileSource(ts.code, {
+    target: 'js',
+    callMain: false
+  }))
+
+  assertDiagnostic(`export function main(): void {
+  const names = ['Ada']
+
+  for (const value: number of names) {
+    console.log(value)
+  }
+}
+`, 'CCJS_TYPE_MISMATCH')
 })
 
 test('compiles for of loops over string arrays to C', () => {

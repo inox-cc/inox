@@ -8,6 +8,7 @@ type LowerResolvedType = {
   valueType: string | null
   nullable: boolean
   arrayElementType: string | null
+  arrayElementDeclaredType: string | null
   mapKeyType: string | null
   mapValueType: string | null
   setElementType: string | null
@@ -52,6 +53,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       returnType: returnType.valueType ?? item.returnType,
       returnNullable: returnType.nullable,
       returnArrayElementType: returnType.arrayElementType,
+      returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
       returnMapKeyType: returnType.mapKeyType,
       returnMapValueType: returnType.mapValueType,
       returnSetElementType: returnType.setElementType,
@@ -77,6 +79,11 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
           declaredReturnType: method.returnType,
           returnType: returnType.valueType ?? method.returnType,
           returnNullable: returnType.nullable,
+          returnArrayElementType: returnType.arrayElementType,
+          returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
+          returnMapKeyType: returnType.mapKeyType,
+          returnMapValueType: returnType.mapValueType,
+          returnSetElementType: returnType.setElementType,
           body: method.body.map(statement => lowerStatement(statement, context))
         }
       })
@@ -129,6 +136,17 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       type: 'ForOfStatement',
       kind: statement.kind,
       name: statement.name,
+      declaredType: statement.declaredType,
+      inferredDeclaredType: statement.inferredDeclaredType,
+      valueType: statement.valueType,
+      nullable: statement.nullable === true,
+      arrayElementType: statement.arrayElementType ?? null,
+      arrayElementDeclaredType: statement.arrayElementDeclaredType ?? null,
+      mapKeyType: statement.mapKeyType ?? null,
+      mapValueType: statement.mapValueType ?? null,
+      setElementType: statement.setElementType ?? null,
+      functionType: statement.functionType ?? null,
+      shape: statement.shape ?? null,
       loc: statement.loc,
       nameLoc: statement.nameLoc,
       iterable: lowerExpression(statement.iterable, context),
@@ -185,6 +203,7 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       shape: declared.shape,
       functionType: declared.functionType,
       arrayElementType: declared.arrayElementType ?? inferArrayElementType(init),
+      arrayElementDeclaredType: declared.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init),
       mapKeyType: declared.mapKeyType ?? inferredMapType?.key ?? null,
       mapValueType: declared.mapValueType ?? inferredMapType?.value ?? null,
       setElementType: declared.setElementType ?? inferSetElementType(init),
@@ -236,6 +255,7 @@ function lowerParam(param: AnyNode, context: LowerContext): AnyNode {
     valueType: declared.valueType ?? param.valueType,
     nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,
+    arrayElementDeclaredType: declared.arrayElementDeclaredType,
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
     setElementType: declared.setElementType,
@@ -250,6 +270,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       valueType: null,
       nullable: false,
       arrayElementType: null,
+      arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
       setElementType: null,
@@ -278,6 +299,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       valueType: 'array',
       nullable: false,
       arrayElementType: elementType?.valueType ?? 'unknown',
+      arrayElementDeclaredType: arrayElementTypeName ?? null,
       mapKeyType: null,
       mapValueType: null,
       setElementType: null,
@@ -296,6 +318,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       valueType: 'map',
       nullable: false,
       arrayElementType: null,
+      arrayElementDeclaredType: null,
       mapKeyType: keyType?.valueType ?? 'unknown',
       mapValueType: valueType?.valueType ?? 'unknown',
       setElementType: null,
@@ -313,6 +336,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       valueType: 'set',
       nullable: false,
       arrayElementType: null,
+      arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
       setElementType: elementType?.valueType ?? 'unknown',
@@ -326,6 +350,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       valueType: name,
       nullable: false,
       arrayElementType: null,
+      arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
       setElementType: null,
@@ -341,6 +366,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       valueType: 'object',
       nullable: false,
       arrayElementType: null,
+      arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
       setElementType: null,
@@ -356,6 +382,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       valueType: 'function',
       nullable: false,
       arrayElementType: null,
+      arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
       setElementType: null,
@@ -370,6 +397,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
             valueType: declared.valueType ?? param.valueType,
             nullable: declared.nullable,
             arrayElementType: declared.arrayElementType,
+            arrayElementDeclaredType: declared.arrayElementDeclaredType,
             mapKeyType: declared.mapKeyType,
             mapValueType: declared.mapValueType,
             setElementType: declared.setElementType,
@@ -380,6 +408,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
         returnType: returnType.valueType ?? type.returnType,
         returnNullable: returnType.nullable,
         returnArrayElementType: returnType.arrayElementType,
+        returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
         returnMapKeyType: returnType.mapKeyType,
         returnMapValueType: returnType.mapValueType,
         returnSetElementType: returnType.setElementType,
@@ -392,6 +421,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
     valueType: null,
     nullable: false,
     arrayElementType: null,
+    arrayElementDeclaredType: null,
     mapKeyType: null,
     mapValueType: null,
     setElementType: null,
@@ -412,6 +442,7 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
         valueType: declared.valueType ?? field.valueType,
         nullable: declared.nullable,
         arrayElementType: declared.arrayElementType,
+        arrayElementDeclaredType: declared.arrayElementDeclaredType,
         mapKeyType: declared.mapKeyType,
         mapValueType: declared.mapValueType,
         setElementType: declared.setElementType,
@@ -424,6 +455,12 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
 
 function inferArrayElementType(expression: AnyNode | null): string | null {
   return expression?.valueType === 'array' ? expression.arrayElementType ?? null : null
+}
+
+function inferArrayElementDeclaredType(expression: AnyNode | null): string | null {
+  return expression?.valueType === 'array'
+    ? expression.arrayElementDeclaredType ?? expression.arrayElementType ?? null
+    : null
 }
 
 function inferMapType(expression: AnyNode | null): { key: string | null, value: string | null } | null {
@@ -594,6 +631,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       valueType: expression.valueType ?? 'unknown',
       nullable: expression.nullable === true,
       arrayElementType: expression.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
       setElementType: expression.setElementType ?? null,
@@ -609,6 +647,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       valueType: expression.valueType ?? 'unknown',
       nullable: expression.nullable === true,
       arrayElementType: expression.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
       setElementType: expression.setElementType ?? null,
@@ -624,6 +663,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       valueType: expression.valueType ?? 'unknown',
       nullable: expression.nullable === true,
       arrayElementType: expression.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
       setElementType: expression.setElementType ?? null,
@@ -639,6 +679,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       args: expression.args.map(arg => lowerExpression(arg, context)),
       valueType: expression.valueType ?? 'unknown',
       arrayElementType: expression.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
       setElementType: expression.setElementType ?? null,
@@ -653,6 +694,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       args: expression.args.map(arg => lowerExpression(arg, context)),
       valueType: expression.valueType ?? 'object',
       arrayElementType: expression.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
       mapKeyType: expression.mapKeyType ?? null,
       mapValueType: expression.mapValueType ?? null,
       setElementType: expression.setElementType ?? null
@@ -713,6 +755,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
       ...expression,
       elements,
       arrayElementType: commonArrayElementType(elements.map(element => element.valueType)),
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? commonArrayElementType(elements.map(element => element.valueType)),
       valueType: 'array'
     }
   }

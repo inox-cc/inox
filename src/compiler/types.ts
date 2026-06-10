@@ -129,6 +129,7 @@ export type SymbolInfo = {
   valueType: ValueType
   nullable?: boolean
   arrayElementType?: ValueType | null
+  arrayElementDeclaredType?: string | null
   mapKeyType?: ValueType | null
   mapValueType?: ValueType | null
   setElementType?: ValueType | null
@@ -136,6 +137,7 @@ export type SymbolInfo = {
   returnType?: ValueType
   returnNullable?: boolean
   returnArrayElementType?: ValueType | null
+  returnArrayElementDeclaredType?: string | null
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
   returnSetElementType?: ValueType | null

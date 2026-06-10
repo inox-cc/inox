@@ -590,6 +590,7 @@ class Parser {
   parseForOfStatement(start: Token): AnyNode {
     const kind = this.advance().value
     const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected for...of binding name')
+    const declaredType = this.matchValue(':') ? this.parseTypeAnnotation(['of']) : null
     this.expectKeyword('of', 'CCJS_EXPECTED_OF', 'expected of in for...of statement')
     const iterable = this.parseExpression()
     this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after for...of iterable')
@@ -598,6 +599,7 @@ class Parser {
       type: 'ForOfStatement',
       kind,
       name: name.value,
+      declaredType,
       loc: locFromToken(start),
       nameLoc: locFromToken(name),
       iterable,
@@ -1367,10 +1369,34 @@ class Parser {
   }
 
   isForHeaderWithKeyword(keyword: string): boolean {
-    return this.current().type === 'keyword'
-      && ['const', 'let'].includes(this.current().value)
-      && this.peek(1).type === 'identifier'
-      && this.peek(2).value === keyword
+    if (this.current().type !== 'keyword' || !['const', 'let'].includes(this.current().value) || this.peek(1).type !== 'identifier') {
+      return false
+    }
+
+    let offset = 2
+    let genericDepth = 0
+
+    while (this.peek(offset).type !== 'eof') {
+      const token = this.peek(offset)
+
+      if (genericDepth === 0 && token.value === keyword) {
+        return true
+      }
+
+      if (genericDepth === 0 && (token.value === ')' || token.value === ';' || token.value === '=')) {
+        return false
+      }
+
+      if (token.value === '<') {
+        genericDepth += 1
+      } else if (token.value === '>' && genericDepth > 0) {
+        genericDepth -= 1
+      }
+
+      offset += 1
+    }
+
+    return false
   }
 
   isArrowFunctionStart(): boolean {
