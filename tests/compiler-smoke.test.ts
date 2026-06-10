@@ -5356,6 +5356,21 @@ test('checks Promise then catch as typed chain calls', () => {
 `, 'CCJS_C_ASYNC', {
     target: 'c'
   })
+
+  assertDiagnostic(`export async function main(): Promise<void> {
+  const promise = Promise.resolve(1).then(value => {
+    if (value > 0) {
+      return value
+    }
+
+    return 0
+  })
+
+  console.log(await promise)
+}
+`, 'CCJS_C_ASYNC', {
+    target: 'c'
+  })
 })
 
 test('lowers Promise then catch chains to C runtime promises', () => {

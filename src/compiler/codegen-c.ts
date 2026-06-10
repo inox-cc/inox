@@ -7060,7 +7060,7 @@ function emitPreparedPromiseMethodExpression(expression, context, options: { out
   const wrapper = callback == null ? null : context.promiseChainArrowWrappers.get(callback)
 
   if (wrapper == null) {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'Promise.then/catch currently supports only non-capturing arrow callbacks with a single return expression in C', expression.loc))
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'Promise.then/catch currently supports only non-capturing expression-body, single-return block-body or straight-line block-body arrow callbacks in C', expression.loc))
 
     return {
       lines: [],
