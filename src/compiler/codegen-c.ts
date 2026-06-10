@@ -15,19 +15,18 @@ const cArrayMethods = new Set([
 ])
 
 export function emitC(program: ProgramNode, ir: IrProgram = lowerHirToIr(program)): string {
-  return emitCUnit([program], [ir], ir)
+  return emitCUnit([ir], ir)
 }
 
 export function emitCBundle(graph: ModuleGraph): string {
   const entryModule = graph.modules.find(module => module.path === graph.entry)
-  const programs = graph.modules.map(module => module.hir).filter((program): program is ProgramNode => program != null)
   const irPrograms = graph.modules.flatMap(module => module.hir == null ? [] : [module.ir ?? lowerHirToIr(module.hir)])
   const entryIr = entryModule?.hir == null ? null : entryModule.ir ?? lowerHirToIr(entryModule.hir)
 
-  return emitCUnit(programs, irPrograms, entryIr)
+  return emitCUnit(irPrograms, entryIr)
 }
 
-function emitCUnit(programs: ProgramNode[], irPrograms: IrProgram[] = programs.map(program => lowerHirToIr(program)), entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
+function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
   const diagnostics: Diagnostic[] = []
   const functions = collectFunctions(irPrograms)
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
@@ -35,7 +34,7 @@ function emitCUnit(programs: ProgramNode[], irPrograms: IrProgram[] = programs.m
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const jsGlobalRoots = new Set(globalUsages.map(usage => usage.root))
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
-  baseContext.callbackWrappers = collectCallbackWrappers(programs, irPrograms, baseContext)
+  baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || irPrograms.some(program => hasIrRuntimeRequirement(program, 'callback-values'))
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsCallbackRuntime || irPrograms.some(program => hasIrRuntimeRequirement(program, 'managed-values'))
   const needsTimeRuntime = irPrograms.some(program => hasIrRuntimeRequirement(program, 'clocks'))
@@ -516,7 +515,7 @@ function resolveRuntimeFunctionArgumentType(callee, index, param, context) {
   return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
 }
 
-function collectCallbackWrappers(programs: ProgramNode[], irPrograms: IrProgram[], context) {
+function collectCallbackWrappers(irPrograms: IrProgram[], context) {
   const wrappers = new Map()
   const pendingPlainFunctionArgs: any[] = []
   const register = (expression, functionType, scopes) => {
@@ -937,8 +936,7 @@ function collectCallbackWrappers(programs: ProgramNode[], irPrograms: IrProgram[
     }
   }
 
-  for (const [programIndex, program] of programs.entries()) {
-    const ir = irPrograms[programIndex] ?? lowerHirToIr(program)
+  for (const ir of irPrograms) {
     const topLevelScope = new Map()
 
     for (const topLevelItem of ir.topLevelItems) {
