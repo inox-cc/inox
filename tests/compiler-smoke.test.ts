@@ -1638,6 +1638,36 @@ export function main(): void {
   assert.match(result.code, /function add\(left, right\)/)
 })
 
+test('emits readable typed TS function and method signatures', () => {
+  const source = `class Greeter {
+  greet(name: string): string {
+    return name
+  }
+}
+
+function add(left: number, right: number): number {
+  return left + right
+}
+
+export function main(): void {
+  const greeter = new Greeter()
+  console.log(greeter.greet('Ada'), add(2, 3))
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+  const ts = compileSource(source, {
+    target: 'ts'
+  })
+
+  assert.match(js.code, /function add\(left, right\) \{/)
+  assert.doesNotMatch(js.code, /left: number/)
+  assert.match(ts.code, /greet\(name: string\): string \{/)
+  assert.match(ts.code, /function add\(left: number, right: number\): number \{/)
+  assert.match(ts.code, /export function main\(\): void \{/)
+})
+
 test('drives C function signature metadata from target-neutral IR declarations', () => {
   const result = compileSource(`function greet(value: string): void {
   console.log(value)
@@ -4322,6 +4352,36 @@ export function main(): void {
     assert.match(result.code, /function greet\(\)/)
     assert.match(result.code, /function main\(\)/)
     assert.doesNotMatch(result.code, /import \{/)
+    assert.doesNotMatch(result.code, /export function/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('compiles a static ESM module graph to typed TS bundle', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-modules-'))
+
+  try {
+    await writeFile(join(dir, 'lib.ts'), `export function greet(name: string): void {
+  console.log(name)
+}
+`)
+    await writeFile(join(dir, 'main.ts'), `import { greet } from './lib.ts'
+
+export function main(): void {
+  greet('Ada')
+}
+`)
+
+    const result = await compileFile(join(dir, 'main.ts'), {
+      target: 'ts'
+    })
+
+    assert.match(result.code, /function greet\(name: string\): void \{/)
+    assert.match(result.code, /function main\(\): void \{/)
     assert.doesNotMatch(result.code, /export function/)
   } finally {
     await rm(dir, {

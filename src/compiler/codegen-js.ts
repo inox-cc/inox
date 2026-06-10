@@ -3,6 +3,7 @@ import type { AnyNode, IrProgram, ModuleGraph, ProgramNode } from './types.ts'
 
 type JsEmitOptions = {
   callMain?: boolean
+  emitTypes?: boolean
   stripExports?: boolean
 }
 
@@ -13,7 +14,7 @@ export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
     lines.push('')
   }
 
-  lines.push(...emitProgramBody(ir))
+  lines.push(...emitProgramBody(ir, options))
 
   if (hasIrFunctionDeclaration(ir, 'main') && options.callMain !== false) {
     lines.push('')
@@ -27,7 +28,10 @@ export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
 }
 
 export function emitTs(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string {
-  return emitJs(program, options, ir)
+  return emitJs(program, {
+    ...options,
+    emitTypes: true
+  }, ir)
 }
 
 export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {
@@ -43,6 +47,7 @@ export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): s
   for (const module of irModules) {
     lines.push(`// ${module.path}`)
     lines.push(...emitProgramBody(module.ir, {
+      ...options,
       stripExports: true
     }))
     lines.push('')
@@ -56,6 +61,13 @@ export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): s
   }
 
   return `${lines.join('\n')}\n`
+}
+
+export function emitTsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {
+  return emitJsBundle(graph, {
+    ...options,
+    emitTypes: true
+  })
 }
 
 function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {
@@ -97,8 +109,8 @@ function emitJsPrelude(programs: IrProgram[]): string[] {
 
 function emitFunction(node: AnyNode, options: JsEmitOptions = {}): string[] {
   const exported = node.exported && !options.stripExports
-  const head = `${exported ? 'export ' : ''}${node.async ? 'async ' : ''}function ${node.name}(${node.params.map(param => param.name).join(', ')}) {`
-  const body = node.body.flatMap(statement => indent(emitStatement(statement)))
+  const head = `${exported ? 'export ' : ''}${node.async ? 'async ' : ''}function ${node.name}(${emitFunctionParams(node.params, options)})${emitReturnTypeAnnotation(node, options)} {`
+  const body = node.body.flatMap(statement => indent(emitStatement(statement, options)))
 
   return [
     head,
@@ -114,7 +126,7 @@ function emitClass(node: AnyNode, options: JsEmitOptions = {}): string[] {
   ]
 
   for (const method of node.methods) {
-    lines.push(...indent(emitMethod(method)))
+    lines.push(...indent(emitMethod(method, options)))
   }
 
   lines.push('}')
@@ -122,15 +134,64 @@ function emitClass(node: AnyNode, options: JsEmitOptions = {}): string[] {
   return lines
 }
 
-function emitMethod(method: AnyNode): string[] {
-  const head = `${method.name}(${method.params.map(param => param.name).join(', ')}) {`
-  const body = method.body.flatMap(statement => indent(emitStatement(statement)))
+function emitMethod(method: AnyNode, options: JsEmitOptions = {}): string[] {
+  const returnType = method.name === 'constructor' ? '' : emitReturnTypeAnnotation(method, options)
+  const head = `${method.name}(${emitFunctionParams(method.params, options)})${returnType} {`
+  const body = method.body.flatMap(statement => indent(emitStatement(statement, options)))
 
   return [
     head,
     ...body,
     '}'
   ]
+}
+
+function emitFunctionParams(params: AnyNode[], options: JsEmitOptions = {}): string {
+  return params.map(param => options.emitTypes === true
+    ? `${param.name}: ${emitTsValueType(param.valueType, param)}`
+    : param.name).join(', ')
+}
+
+function emitReturnTypeAnnotation(node: AnyNode, options: JsEmitOptions = {}): string {
+  return options.emitTypes === true ? `: ${emitTsValueType(node.returnType, {
+    arrayElementType: node.returnArrayElementType,
+    mapKeyType: node.returnMapKeyType,
+    mapValueType: node.returnMapValueType,
+    nullable: node.returnNullable,
+    setElementType: node.returnSetElementType
+  })}` : ''
+}
+
+function emitTsValueType(valueType: string | null | undefined, metadata: AnyNode = {}): string {
+  const baseType = emitTsBaseType(valueType, metadata)
+
+  return metadata.nullable === true && baseType !== 'null'
+    ? `${baseType} | null`
+    : baseType
+}
+
+function emitTsBaseType(valueType: string | null | undefined, metadata: AnyNode): string {
+  if (valueType === 'array') {
+    return `${emitTsValueType(metadata.arrayElementType ?? 'unknown')}[]`
+  }
+
+  if (valueType === 'map') {
+    return `Map<${emitTsValueType(metadata.mapKeyType ?? 'unknown')}, ${emitTsValueType(metadata.mapValueType ?? 'unknown')}>`
+  }
+
+  if (valueType === 'set') {
+    return `Set<${emitTsValueType(metadata.setElementType ?? 'unknown')}>`
+  }
+
+  if (valueType === 'function') {
+    return 'Function'
+  }
+
+  if (valueType === 'object') {
+    return 'object'
+  }
+
+  return valueType ?? 'unknown'
 }
 
 function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {

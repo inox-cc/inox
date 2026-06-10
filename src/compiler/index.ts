@@ -1,5 +1,5 @@
 import { emitC, emitCBundle } from './codegen-c.ts'
-import { emitJs, emitJsBundle, emitTs } from './codegen-js.ts'
+import { emitJs, emitJsBundle, emitTs, emitTsBundle } from './codegen-js.ts'
 import { checkProgram } from './checker.ts'
 import { lowerHirToIr } from './ir.ts'
 import { tokenize } from './lexer.ts'
@@ -82,7 +82,7 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
     return {
       target,
       graph,
-      code: emitJsBundle(graph, {
+      code: emitTsBundle(graph, {
         callMain: options.callMain
       })
     }
