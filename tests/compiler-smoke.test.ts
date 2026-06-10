@@ -1651,7 +1651,11 @@ function add(left: number, right: number): number {
 
 export function main(): void {
   const greeter = new Greeter()
-  console.log(greeter.greet('Ada'), add(2, 3))
+  const total = add(2, 3)
+  const names = ['Ada']
+  const scores: Map<string, number> = new Map()
+  let maybe: string | null = null
+  console.log(greeter.greet('Ada'), total, names[0], scores.has('Ada'), maybe)
 }
 `
   const js = compileSource(source, {
@@ -1666,6 +1670,10 @@ export function main(): void {
   assert.match(ts.code, /greet\(name: string\): string \{/)
   assert.match(ts.code, /function add\(left: number, right: number\): number \{/)
   assert.match(ts.code, /export function main\(\): void \{/)
+  assert.match(ts.code, /const total: number = add\(2, 3\)/)
+  assert.match(ts.code, /const names: string\[\] = \["Ada"\]/)
+  assert.match(ts.code, /const scores: Map<string, number> = new Map\(\)/)
+  assert.match(ts.code, /let maybe: string \| null = null/)
 })
 
 test('drives C function signature metadata from target-neutral IR declarations', () => {
@@ -4366,7 +4374,8 @@ test('compiles a static ESM module graph to typed TS bundle', async () => {
 
   try {
     await writeFile(join(dir, 'lib.ts'), `export function greet(name: string): void {
-  console.log(name)
+  const label: string = name
+  console.log(label)
 }
 `)
     await writeFile(join(dir, 'main.ts'), `import { greet } from './lib.ts'
@@ -4381,6 +4390,7 @@ export function main(): void {
     })
 
     assert.match(result.code, /function greet\(name: string\): void \{/)
+    assert.match(result.code, /const label: string = name/)
     assert.match(result.code, /function main\(\): void \{/)
     assert.doesNotMatch(result.code, /export function/)
   } finally {

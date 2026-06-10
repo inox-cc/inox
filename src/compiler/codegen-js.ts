@@ -194,6 +194,16 @@ function emitTsBaseType(valueType: string | null | undefined, metadata: AnyNode)
   return valueType ?? 'unknown'
 }
 
+function emitVariableTypeAnnotation(statement: AnyNode, options: JsEmitOptions = {}): string {
+  if (options.emitTypes !== true) {
+    return ''
+  }
+
+  const type = emitTsValueType(statement.valueType, statement)
+
+  return type === 'unknown' ? '' : `: ${type}`
+}
+
 function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   if (statement.type === 'BlockStatement') {
     return [
@@ -238,7 +248,7 @@ function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[
   if (statement.type === 'VariableDeclaration') {
     const init = statement.init == null ? '' : ` = ${emitExpression(statement.init)}`
     const exported = statement.exported && !options.stripExports
-    return [`${exported ? 'export ' : ''}${statement.kind} ${statement.name}${init}`]
+    return [`${exported ? 'export ' : ''}${statement.kind} ${statement.name}${emitVariableTypeAnnotation(statement, options)}${init}`]
   }
 
   if (statement.type === 'ExpressionStatement') {
