@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { relative } from 'node:path'
 import { CompileError } from '../src/compiler/diagnostics.ts'
@@ -6,12 +5,7 @@ import { compileFile } from '../src/compiler/index.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 import { findFixtureFiles, rootDir } from './lib/repo-checks.ts'
 import { parseMetadataList, validateFixtureMetadata } from './lib/fixture-metadata.ts'
-
-type CommandResult = {
-  code: number
-  stdout: string
-  stderr: string
-}
+import { normalizeNewlines, runCommand } from './lib/run-command.ts'
 
 const files = await findFixtureFiles()
 const failures: string[] = []
@@ -123,34 +117,4 @@ async function canRunTarget(target: CompileTarget): Promise<boolean> {
   }
 
   return cRunnerAvailable
-}
-
-function runCommand(command: string, args: string[]): Promise<CommandResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: rootDir,
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-    let stdout = ''
-    let stderr = ''
-
-    child.stdout.on('data', chunk => {
-      stdout += chunk
-    })
-    child.stderr.on('data', chunk => {
-      stderr += chunk
-    })
-    child.on('error', reject)
-    child.on('exit', code => {
-      resolve({
-        code: code ?? 1,
-        stdout,
-        stderr
-      })
-    })
-  })
-}
-
-function normalizeNewlines(value: string): string {
-  return value.replaceAll('\r\n', '\n')
 }

@@ -16,7 +16,8 @@
     "test:codegen-snapshots": "node scripts/test-codegen-snapshots.ts",
     "test:diagnostic-snapshots": "node scripts/test-diagnostic-snapshots.ts",
     "test:snapshots": "npm run test:ir-snapshots && npm run test:codegen-snapshots && npm run test:diagnostic-snapshots",
-    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:snapshots"
+    "test:differential": "node scripts/test-differential.ts",
+    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:snapshots && npm run test:differential"
   },
   "engines": {
     "node": ">=24"

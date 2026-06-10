@@ -501,6 +501,30 @@ test('ccjs run --keep writes temporary js output', async () => {
   }
 })
 
+test('ccjs run --target ts writes runnable temporary ts output', async () => {
+  const result = await runCli(['tests/fixtures/parser/valid/hello.ts', '--target', 'ts', '--keep'])
+  const match = result.stderr.match(/kept (.+)\n?$/)
+
+  assert.equal(result.code, 0)
+  assert.equal(result.stdout, 'hello\n')
+  assert.ok(match)
+
+  const dir = match[1]
+
+  try {
+    const ts = await readFile(join(dir, 'main.ts'), 'utf8')
+    const pkg = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'))
+
+    assert.match(ts, /function main\(\): void/)
+    assert.equal(pkg.type, 'module')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs reports diagnostics for invalid source', async () => {
   const result = await runCli(['tests/fixtures/diagnostics/no-var.ts'])
 

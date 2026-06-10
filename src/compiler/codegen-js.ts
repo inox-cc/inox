@@ -411,20 +411,10 @@ function emitForStatement(statement: AnyNode, options: JsEmitOptions = {}): stri
 
 function emitForOfStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   return [
-    `for (${statement.kind} ${statement.name}${emitForOfTypeAnnotation(statement, options)} of ${emitExpression(statement.iterable, options)}) {`,
+    `for (${statement.kind} ${statement.name} of ${emitExpression(statement.iterable, options)}) {`,
     ...indent(emitStatementBody(statement.body, options)),
     '}'
   ]
-}
-
-function emitForOfTypeAnnotation(statement: AnyNode, options: JsEmitOptions = {}): string {
-  if (options.emitTypes !== true) {
-    return ''
-  }
-
-  const type = emitTsValueType(statement.declaredType ?? statement.inferredDeclaredType ?? statement.valueType, statement)
-
-  return type === 'unknown' ? '' : `: ${type}`
 }
 
 function emitSwitchStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {

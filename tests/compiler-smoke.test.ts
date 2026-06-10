@@ -1198,7 +1198,7 @@ test('compiles for of loops over arrays to JS and C', () => {
     callMain: false
   })
 
-  assert.match(ts.code, /for \(const value: number of values\) \{/)
+  assert.match(ts.code, /for \(const value of values\) \{/)
   assert.doesNotThrow(() => compileSource(ts.code, {
     target: 'js',
     callMain: false
@@ -1236,7 +1236,7 @@ export function main(): void {
   })
 
   assert.match(js.code, /for \(const user of users\) \{/)
-  assert.match(ts.code, /for \(const user: User of users\) \{/)
+  assert.match(ts.code, /for \(const user of users\) \{/)
   assert.doesNotThrow(() => compileSource(ts.code, {
     target: 'js',
     callMain: false
