@@ -6,6 +6,11 @@ type JsEmitOptions = {
   stripExports?: boolean
 }
 
+type IrModuleRecord = {
+  path: string
+  ir: IrProgram
+}
+
 export function emitJs(program: ProgramNode, options: JsEmitOptions = {}, ir: IrProgram = lowerHirToIr(program)): string {
   const lines: string[] = emitJsPrelude([ir])
 
@@ -31,24 +36,19 @@ export function emitTs(program: ProgramNode, options: JsEmitOptions = {}, ir: Ir
 }
 
 export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): string {
-  const irPrograms = graph.modules.flatMap(module => module.hir == null ? [] : [module.ir ?? lowerHirToIr(module.hir)])
+  const irModules = collectIrModuleRecords(graph)
+  const irPrograms = irModules.map(module => module.ir)
   const entryModule = graph.modules.find(module => module.path === graph.entry)
-  const entryIr = entryModule?.hir == null ? null : entryModule.ir ?? lowerHirToIr(entryModule.hir)
+  const entryIr = entryModule == null ? null : moduleRecordIr(entryModule)
   const lines: string[] = emitJsPrelude(irPrograms)
 
   if (lines.length > 0) {
     lines.push('')
   }
 
-  for (const module of graph.modules) {
-    if (module.hir == null) {
-      continue
-    }
-
+  for (const module of irModules) {
     lines.push(`// ${module.path}`)
-    const ir = module.ir ?? lowerHirToIr(module.hir)
-
-    lines.push(...emitProgramBody(ir, {
+    lines.push(...emitProgramBody(module.ir, {
       stripExports: true
     }))
     lines.push('')
@@ -62,6 +62,27 @@ export function emitJsBundle(graph: ModuleGraph, options: JsEmitOptions = {}): s
   }
 
   return `${lines.join('\n')}\n`
+}
+
+function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
+  return graph.modules.flatMap(module => {
+    const ir = moduleRecordIr(module)
+
+    return ir == null
+      ? []
+      : [{
+          path: module.path,
+          ir
+        }]
+  })
+}
+
+function moduleRecordIr(module: ModuleGraph['modules'][number]): IrProgram | null {
+  if (module.ir != null) {
+    return module.ir
+  }
+
+  return module.hir == null ? null : lowerHirToIr(module.hir)
 }
 
 function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {

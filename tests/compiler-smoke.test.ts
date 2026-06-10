@@ -3286,7 +3286,7 @@ export function main(): void {
   }
 })
 
-test('drives JS bundle body and main wrapper from target-neutral IR programs', async () => {
+test('drives JS bundle body and main wrapper from stored target-neutral IR programs', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-js-bundle-ir-'))
 
   try {
@@ -3308,12 +3308,7 @@ export function main(): void {
       ...result.graph,
       modules: result.graph.modules.map(module => ({
         ...module,
-        hir: module.hir == null
-          ? null
-          : {
-              ...module.hir,
-              body: []
-            }
+        hir: null
       }))
     }
     const code = emitJsBundle(graph)
