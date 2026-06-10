@@ -1572,6 +1572,8 @@ export function main(): void {
     }
   ])
   assert.equal(greet?.returnType, 'void')
+  assert.match(result.code, /void greet\(ccjs_value ccjs_param_value\);/)
+  assert.match(result.code, /void greet\(ccjs_value ccjs_param_value\) \{\n  if \(ccjs_param_value\.tag != CCJS_TAG_STRING \|\| ccjs_param_value\.as\.ref == 0\) goto ccjs_cleanup;/)
   assert.match(result.code, /greet\(ccjs_value_\d+\);/)
 
   const withoutParamMetadata = emitC(result.hir, {
@@ -1584,6 +1586,8 @@ export function main(): void {
       : item)
   })
 
+  assert.match(withoutParamMetadata, /void greet\(void\);/)
+  assert.doesNotMatch(withoutParamMetadata, /ccjs_param_value/)
   assert.match(withoutParamMetadata, /greet\("Ada"\);/)
 })
 

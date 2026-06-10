@@ -253,9 +253,18 @@ function resolveFunctionReturnNullable(name, fallback, context) {
     : fallback === true
 }
 
+function resolveFunctionDeclarationParams(name, fallback, context) {
+  return context.functionParams.get(name) ?? fallback
+}
+
+function isBoxedFunctionParam(param, index, statement, context) {
+  return context.boxedMutableCaptureDeclarations.has(statement.params[index] ?? param)
+}
+
 function emitFunctionDeclaration(statement, baseContext) {
   const returnType = resolveFunctionReturnType(statement.name, statement.returnType, baseContext)
   const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, baseContext)
+  const params = resolveFunctionDeclarationParams(statement.name, statement.params, baseContext)
   const context = createFunctionContext(baseContext, returnType, returnNullable)
   context.returnShape = context.functionReturnShapes.get(statement.name) ?? null
   context.throwingFunction = isThrowingFunctionName(statement.name, context)
@@ -266,11 +275,11 @@ function emitFunctionDeclaration(statement, baseContext) {
     registerErrorChannel(context)
   }
 
-  for (const [index, param] of statement.params.entries()) {
+  for (const [index, param] of params.entries()) {
     if (isNullableScalarParam(param)) {
       context.variables.set(param.name, param.valueType)
       context.nullableVariables.add(param.name)
-    } else if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean', 'string', 'object'].includes(param.valueType)) {
+    } else if (isBoxedFunctionParam(param, index, statement, context) && ['number', 'boolean', 'string', 'object'].includes(param.valueType)) {
       context.variables.set(param.name, param.valueType)
       context.boxedVariables.add(param.name)
       registerBoxedValue(context, param.name, param.valueType)
@@ -340,7 +349,8 @@ function emitFunctionHead(statement, context) {
   const name = context.functionNames.get(statement.name) ?? emitCFunctionName(statement.name)
   const returnType = context.returnType ?? resolveFunctionReturnType(statement.name, statement.returnType, context)
   const returnNullable = context.returnNullable ?? resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
-  const params = statement.params.map((param, index) => {
+  const functionParams = resolveFunctionDeclarationParams(statement.name, statement.params, context)
+  const params = functionParams.map((param, index) => {
     if (isNullableScalarParam(param)) {
       return `ccjs_value ${emitCScalarParamName(param.name)}`
     }
@@ -350,7 +360,7 @@ function emitFunctionHead(statement, context) {
     }
 
     if (param.valueType === 'object') {
-      if (context.boxedMutableCaptureDeclarations.has(param)) {
+      if (isBoxedFunctionParam(param, index, statement, context)) {
         return `ccjs_value ${emitCObjectParamName(param.name)}`
       }
 
@@ -365,7 +375,7 @@ function emitFunctionHead(statement, context) {
       return emitFunctionParameter(param.name, param.functionType, context, param.loc)
     }
 
-    if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean'].includes(param.valueType)) {
+    if (isBoxedFunctionParam(param, index, statement, context) && ['number', 'boolean'].includes(param.valueType)) {
       return `${emitCType(param.valueType)} ${emitCScalarParamName(param.name)}`
     }
 
@@ -1651,7 +1661,9 @@ function emitCObjectParamName(name) {
 }
 
 function emitRuntimeParamPrelude(statement, context) {
-  return statement.params.flatMap((param, index) => {
+  const params = resolveFunctionDeclarationParams(statement.name, statement.params, context)
+
+  return params.flatMap((param, index) => {
     if (isNullableScalarParam(param)) {
       const paramName = emitCScalarParamName(param.name)
       const expectedTag = cRuntimeValueTag(param.valueType)
@@ -1662,7 +1674,7 @@ function emitRuntimeParamPrelude(statement, context) {
       ]
     }
 
-    if (context.boxedMutableCaptureDeclarations.has(param) && ['string', 'object'].includes(param.valueType)) {
+    if (isBoxedFunctionParam(param, index, statement, context) && ['string', 'object'].includes(param.valueType)) {
       const paramName = param.valueType === 'string' ? emitCStringParamName(param.name) : emitCObjectParamName(param.name)
       const tag = param.valueType === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
 
@@ -1700,7 +1712,7 @@ function emitRuntimeParamPrelude(statement, context) {
       ]
     }
 
-    if (context.boxedMutableCaptureDeclarations.has(param) && ['number', 'boolean'].includes(param.valueType)) {
+    if (isBoxedFunctionParam(param, index, statement, context) && ['number', 'boolean'].includes(param.valueType)) {
       return [
         `${param.name} = ccjs_default_alloc(0, sizeof(double), _Alignof(double));`,
         `if (${param.name} == 0) ${emitFailureStatement(context)}`,
