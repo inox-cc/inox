@@ -1089,7 +1089,7 @@ test('generated C fs promise calls compile and run with runtime sources', async 
   }
 })
 
-test('generated C async await over resolved promises compiles and runs', async t => {
+test('generated C async await over settled promises compiles and runs', async t => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1119,6 +1119,12 @@ export async function main(): Promise<void> {
   console.log(value)
   console.log(asyncValue)
   console.log(text)
+
+  try {
+    await Promise.reject('fail')
+  } catch (error) {
+    console.log(error)
+  }
 }
 `, {
       target: 'c'
@@ -1133,7 +1139,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n3\ndone\n')
+    assert.equal(run.stdout, 'ok\n2\n3\ndone\nfail\n')
   } finally {
     await rm(dir, {
       recursive: true,

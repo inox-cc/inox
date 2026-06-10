@@ -3732,6 +3732,27 @@ test('lowers first C async await slice over Promise.resolve and fs promises', ()
   assert.match(result.code, /const ccjs_string\* text = \(ccjs_string\*\)ccjs_await_value_\d+\.as\.ref;/)
 })
 
+test('lowers awaited rejected promises into C try catch', () => {
+  const result = compileSource(`export async function main(): Promise<void> {
+  const promise = Promise.reject('fail')
+
+  try {
+    await promise
+  } catch (error) {
+    console.log(error)
+  }
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_value_\d+, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_promise_get_state\(promise\) == CCJS_PROMISE_REJECTED\) \{/)
+  assert.match(result.code, /if \(ccjs_promise_get_result\(promise, &ccjs_error\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_error_active = 1;/)
+  assert.match(result.code, /goto ccjs_try_\d+_catch;/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]
@@ -3926,7 +3947,7 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
 }
 `,
     `export function main(): void {
-  const promise = Promise.reject(1)
+  const promise = Promise.all([])
   console.log(promise)
 }
 `
