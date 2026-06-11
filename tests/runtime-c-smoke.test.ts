@@ -2029,6 +2029,71 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame rejected awaits reject returned promises', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-reject-'))
+  const source = join(dir, 'async-task-frame-reject.c')
+  const output = join(dir, 'async-task-frame-reject')
+
+  try {
+    const result = compileSource(`function failNumber(): Promise<number> {
+  return Promise.reject('task fail')
+}
+
+async function compute(): Promise<number> {
+  const value = await failNumber()
+  const next = await Promise.resolve(value)
+
+  return next
+}
+
+async function failDirect(): Promise<number> {
+  const value: number = await Promise.reject('direct fail')
+
+  return value
+}
+
+export async function main(): Promise<void> {
+  try {
+    console.log(await compute())
+  } catch (error) {
+    console.log(error)
+  }
+
+  try {
+    console.log(await failDirect())
+  } catch (error) {
+    console.log(error)
+  }
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'task fail\ndirect fail\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C object literal lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

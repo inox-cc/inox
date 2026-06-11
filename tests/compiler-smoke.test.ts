@@ -3854,7 +3854,7 @@ export async function main(): Promise<void> {
 
   assert.match(result.code, /double param_flag;/)
   assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_bool_value\(\(flag\) != 0\)\);/)
-  assert.match(result.code, /if \(ccjs_value_input\.tag != CCJS_TAG_BOOL\) return ccjs_promise_reject\(frame->promise, ccjs_number_value\(\(ccjs_number\)CCJS_ERR_TYPE\)\);/)
+  assert.match(result.code, /if \(ccjs_value_input\.tag != CCJS_TAG_BOOL\) \{\n      ccjs_status reject_status = ccjs_promise_reject\(frame->promise, ccjs_number_value\(\(ccjs_number\)CCJS_ERR_TYPE\)\);\n      return reject_status;\n    \}/)
   assert.match(result.code, /frame->local_value = ccjs_value_input\.as\.boolean \? 1 : 0;/)
   assert.match(result.code, /double value = frame->local_value;/)
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_bool_value\(\(\(!value\)\) != 0\)\);/)
@@ -3977,6 +3977,47 @@ export async function main(): Promise<void> {
   assert.match(result.code, /frame->state = 3;/)
   assert.match(result.code, /frame->awaited = same\(ccjs_loop, second\);/)
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(third \+ 1\)\)\);/)
+})
+
+test('lowers async task frame rejected awaits to returned Promise rejections', () => {
+  const result = compileSource(`function failNumber(): Promise<number> {
+  return Promise.reject('task fail')
+}
+
+async function compute(): Promise<number> {
+  const value = await failNumber()
+  const next = await Promise.resolve(value)
+
+  return next
+}
+
+async function failDirect(): Promise<number> {
+  const value: number = await Promise.reject('direct fail')
+
+  return value
+}
+
+export async function main(): Promise<void> {
+  try {
+    console.log(await compute())
+  } catch (error) {
+    console.log(error)
+  }
+
+  try {
+    console.log(await failDirect())
+  } catch (error) {
+    console.log(error)
+  }
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /frame->awaited = failNumber\(ccjs_loop\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_compute_reject\(void\* context, ccjs_value ccjs_error\) \{\n  ccjs_async_task_compute_frame\* frame = \(ccjs_async_task_compute_frame\*\)context;\n  if \(frame == 0 \|\| frame->promise == 0\) return CCJS_ERR_TYPE;\n  ccjs_status status = ccjs_promise_reject\(frame->promise, ccjs_error\);\n  if \(frame->state < 1\) \{\n    ccjs_async_task_compute_finalize\(frame\);\n  \}\n  return status;\n\}/)
+  assert.match(result.code, /status = ccjs_promise_rejected\(ccjs_loop, ccjs_reject_value_\d+, &frame->awaited\);/)
+  assert.match(result.code, /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_failDirect_resume, ccjs_async_task_failDirect_reject, frame, ccjs_async_task_failDirect_finalize\);/)
 })
 
 test('lowers awaited plain Promise-returning calls to C', () => {

@@ -423,7 +423,7 @@ function collectAsyncTaskWrappers(functions, context) {
 
   for (const item of functions) {
     const params = resolveAsyncTaskWrapperParams(item, context)
-    const body = params == null ? null : resolveAsyncTaskWrapperBody(item, context)
+    const body = params == null ? null : resolveAsyncTaskWrapperBody(item, context, params)
 
     if (body == null) {
       continue
@@ -468,7 +468,7 @@ function resolveAsyncTaskWrapperParams(statement, context) {
   }))
 }
 
-function resolveAsyncTaskWrapperBody(statement, context) {
+function resolveAsyncTaskWrapperBody(statement, context, params) {
   if (statement?.async !== true || statement.returnType !== 'promise' || isThrowingFunctionName(statement.name, context)) {
     return null
   }
@@ -491,7 +491,20 @@ function resolveAsyncTaskWrapperBody(statement, context) {
 
   const awaits = resolveAsyncTaskAwaitSteps(statement.body.slice(0, -1), context)
 
-  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, context)
+  const returnContext = {
+    ...context,
+    variables: new Map(context.variables ?? [])
+  }
+
+  for (const param of params) {
+    returnContext.variables.set(param.name, param.valueType)
+  }
+
+  for (const item of awaits ?? []) {
+    returnContext.variables.set(item.name, item.type)
+  }
+
+  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
 
   if (awaits == null || returnExpression == null) {
     return null
@@ -637,6 +650,10 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context) {
     return false
   }
 
+  if (cPromiseRuntimeCallName(expression.callee) === 'reject') {
+    return true
+  }
+
   if (isPromiseReturningFunctionCallee(expression.callee, context)) {
     return true
   }
@@ -655,7 +672,9 @@ function resolveAsyncTaskReturnValueExpression(expression, returnType, context) 
     return expression.args[0] ?? null
   }
 
-  const expressionType = expression?.valueType ?? (context.variables == null ? 'unknown' : inferExpressionType(expression, context))
+  const expressionType = expression?.valueType != null && expression.valueType !== 'unknown'
+    ? expression.valueType
+    : context.variables == null ? 'unknown' : inferExpressionType(expression, context)
 
   if ((returnType === 'number' || returnType === 'boolean') && expressionType === returnType) {
     return expression
@@ -790,10 +809,11 @@ function emitAsyncTaskScheduleAwaitLines(wrapper, item, context, options) {
   ]
 }
 
-function emitAsyncTaskScheduleStatusCheck(wrapper, options) {
+function emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines: string[] = []) {
   if (options.cleanup === 'start') {
     return [
       'if (status != CCJS_OK) {',
+      ...cleanupLines.map(line => `  ${line}`),
       '  ccjs_promise_release(*out);',
       '  *out = 0;',
       `  ${wrapper.finalizerName}(frame);`,
@@ -804,6 +824,7 @@ function emitAsyncTaskScheduleStatusCheck(wrapper, options) {
 
   return [
     'if (status != CCJS_OK) {',
+    ...cleanupLines.map(line => `  ${line}`),
     '  ccjs_status reject_status = ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)status));',
     `  ${wrapper.finalizerName}(frame);`,
     '  return reject_status == CCJS_OK ? status : reject_status;',
@@ -878,6 +899,12 @@ function emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, op
     return null
   }
 
+  const rejected = emitPreparedAsyncTaskRejectedPromiseSourceExpression(expression, wrapper, context, options)
+
+  if (rejected != null) {
+    return rejected
+  }
+
   const taskCall = emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context, options)
 
   if (taskCall != null) {
@@ -897,6 +924,60 @@ function emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, op
   }
 
   return null
+}
+
+function emitPreparedAsyncTaskRejectedPromiseSourceExpression(expression, wrapper, context, options) {
+  if (cPromiseRuntimeCallName(expression.callee) !== 'reject') {
+    return null
+  }
+
+  if (expression.args[0]?.type === 'StringLiteral') {
+    const value = nextCName(context, 'ccjs_reject_value')
+    const bytes = cStringLiteral(expression.args[0].value)
+    const length = utf8ByteLength(expression.args[0].value)
+
+    return {
+      lines: [
+        `ccjs_value ${value} = ccjs_undefined_value();`,
+        `status = ccjs_string_from_literal(&ccjs_default_allocator, ${bytes}, ${length}, &${value});`,
+        ...emitAsyncTaskScheduleStatusCheck(wrapper, options, [`ccjs_release(${value});`]),
+        `status = ccjs_promise_rejected(ccjs_loop, ${value}, &frame->awaited);`,
+        `ccjs_release(${value});`,
+        `${value} = ccjs_undefined_value();`,
+        ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+      ]
+    }
+  }
+
+  if (
+    expression.args[0] != null
+    && expression.args[0].type !== 'NumberLiteral'
+    && expression.args[0].type !== 'BooleanLiteral'
+  ) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async task Promise.reject currently supports string, number and boolean rejection values in C', expression.loc))
+
+    return {
+      lines: [
+        'status = CCJS_ERR_TYPE;',
+        ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+      ]
+    }
+  }
+
+  const value = expression.args[0] == null
+    ? {
+        lines: [],
+        expression: 'ccjs_undefined_value()'
+      }
+    : emitCValueExpression(expression.args[0], context)
+
+  return {
+    lines: [
+      ...value.lines,
+      `status = ccjs_promise_rejected(ccjs_loop, ${value.expression}, &frame->awaited);`,
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+    ]
+  }
 }
 
 function emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context, options) {
@@ -1073,7 +1154,9 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
     : 'ccjs_value_input.as.number'
   const lines = [
     `case ${item.index}: {`,
-    `  if (ccjs_value_input.tag != ${expectedTag}) return ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE));`,
+    `  if (ccjs_value_input.tag != ${expectedTag}) {`,
+    ...emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)').map(line => `    ${line}`),
+    '  }',
     `  frame->${item.fieldName} = ${storeValue};`,
     '  if (frame->awaited != 0) {',
     '    ccjs_promise_release(frame->awaited);',
@@ -1102,7 +1185,9 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
 
   lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1).map(line => `  ${line}`))
   lines.push('  ccjs_loop* ccjs_loop = frame->ccjs_loop;')
-  lines.push('  if (ccjs_loop == 0) return ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE));')
+  lines.push('  if (ccjs_loop == 0) {')
+  lines.push(...emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)').map(line => `    ${line}`))
+  lines.push('  }')
   lines.push(`  frame->state = ${nextItem.index};`)
   lines.push(...schedule.map(line => `  ${line}`))
   lines.push('  return CCJS_OK;')
@@ -1111,12 +1196,30 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
   return lines
 }
 
+function emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, errorExpression) {
+  return [
+    `ccjs_status reject_status = ccjs_promise_reject(frame->promise, ${errorExpression});`,
+    ...(item.index < wrapper.awaits.length - 1 ? [`${wrapper.finalizerName}(frame);`] : []),
+    'return reject_status;'
+  ]
+}
+
 function emitAsyncTaskRejectDeclaration(wrapper) {
+  const lastState = wrapper.awaits.length - 1
+
   return [
     `static ccjs_status ${wrapper.rejectName}(void* context, ccjs_value ccjs_error) {`,
     `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`,
     '  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;',
-    '  return ccjs_promise_reject(frame->promise, ccjs_error);',
+    '  ccjs_status status = ccjs_promise_reject(frame->promise, ccjs_error);',
+    ...(lastState > 0
+      ? [
+          `  if (frame->state < ${lastState}) {`,
+          `    ${wrapper.finalizerName}(frame);`,
+          '  }'
+        ]
+      : []),
+    '  return status;',
     '}'
   ]
 }
