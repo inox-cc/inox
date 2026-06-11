@@ -1266,15 +1266,25 @@ test('generated C simple classes compile and run with runtime sources', async t 
     this.name = name
   }
 
-  greet(): void {
-    this.name = 'Grace'
-    console.log(this.id, this.name)
+  rename(next: string): void {
+    this.name = next
+  }
+
+  score(extra: number): number {
+    return this.id + extra
+  }
+
+  label(): string {
+    return this.name
   }
 }
 
 export function main(): void {
   const user = new User(1, 'Ada')
-  user.greet()
+  user.rename('Grace')
+  const value = user.score(2)
+  const name = user.label()
+  console.log(value, name)
 }
 `, {
       target: 'c'
@@ -1289,7 +1299,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '1 Grace\n')
+    assert.equal(run.stdout, '3 Grace\n')
   } finally {
     await rm(dir, {
       recursive: true,

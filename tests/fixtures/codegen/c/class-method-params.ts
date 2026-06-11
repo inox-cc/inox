@@ -1,6 +1,6 @@
 // @targets c
-// @expect diagnostic
-// @diagnostic CCJS_C_CLASS
+// @expect pass
+// @stdout hello Ada
 
 class User {
   constructor(name: string) {

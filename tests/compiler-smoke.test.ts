@@ -3678,15 +3678,25 @@ test('compiles simple classes to JS and C object runtime calls', () => {
     this.name = name
   }
 
-  greet(): void {
-    this.name = 'Grace'
-    console.log(this.id, this.name)
+  rename(next: string): void {
+    this.name = next
+  }
+
+  score(extra: number): number {
+    return this.id + extra
+  }
+
+  label(): string {
+    return this.name
   }
 }
 
 export function main(): void {
   const user = new User(1, 'Ada')
-  user.greet()
+  user.rename('Grace')
+  const value = user.score(2)
+  const name = user.label()
+  console.log(value, name)
 }
 `
   const js = compileSource(source, {
@@ -3701,9 +3711,16 @@ export function main(): void {
   assert.match(js.code, /constructor\(id, name\) \{/)
   assert.match(js.code, /this\.id = id/)
   assert.match(js.code, /this\.name = name/)
+  assert.match(js.code, /rename\(next\) \{/)
+  assert.match(js.code, /score\(extra\) \{/)
+  assert.match(js.code, /label\(\) \{/)
   assert.match(js.code, /const user = new User\(1, "Ada"\)/)
+  assert.match(js.code, /const value = user\.score\(2\)/)
   assert.match(ts.code, /readonly id: number/)
   assert.match(ts.code, /name: string/)
+  assert.match(ts.code, /rename\(next: string\): void/)
+  assert.match(ts.code, /score\(extra: number\): number/)
+  assert.match(ts.code, /label\(\): string/)
   assert.deepEqual(js.ir.syntaxFeatures.map(item => item.feature), ['class'])
 
   const c = compileSource(source, {
@@ -3712,11 +3729,16 @@ export function main(): void {
 
   assert.match(c.code, /#include "ccjs\/object\.h"/)
   assert.match(c.code, /static const ccjs_field_info ccjs_shape_User_\d+_fields\[\] = \{\n\s+\{ "id", CCJS_FIELD_READONLY \},\n\s+\{ "name", 0 \},/)
+  assert.match(c.code, /static void ccjs_method_User_rename\(ccjs_value this, ccjs_value ccjs_param_next\);/)
+  assert.match(c.code, /static double ccjs_method_User_score\(ccjs_value this, double extra\);/)
+  assert.match(c.code, /static ccjs_value ccjs_method_User_label\(ccjs_value this\);/)
   assert.match(c.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_User_\d+, &user\)/)
   assert.match(c.code, /ccjs_object_init_known\(user, 0, ccjs_number_value\(1\)\)/)
   assert.match(c.code, /ccjs_object_init_known\(user, 1, ccjs_value_\d+\)/)
-  assert.match(c.code, /ccjs_value this = user;/)
-  assert.match(c.code, /ccjs_object_get_known\(this, 0, &ccjs_log_value_\d+\)/)
+  assert.match(c.code, /ccjs_object_get_known\(this, 0, &ccjs_expr_value_\d+\)/)
+  assert.match(c.code, /ccjs_method_User_rename\(user, ccjs_value_\d+\);/)
+  assert.match(c.code, /const double value = ccjs_method_User_score\(user, 2\);/)
+  assert.match(c.code, /ccjs_method_value_\d+ = ccjs_method_User_label\(user\);/)
   assert.match(c.code, /ccjs_object_set_known\(this, 1, ccjs_value_\d+\)/)
 })
 

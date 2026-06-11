@@ -46,6 +46,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
   baseContext.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, baseContext)
   baseContext.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, baseContext)
+  const classMethods = collectClassMethods(baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || runtimeRequirements.has('callback-values')
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsTimerRuntime = runtimeRequirements.has('timers')
@@ -75,6 +76,10 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
     lines.push(`${emitFunctionHead(item, baseContext)};`)
   }
 
+  for (const { info, method } of classMethods) {
+    lines.push(`${emitClassMethodHead(info, method, baseContext)};`)
+  }
+
   for (const wrapper of baseContext.asyncTaskWrappers.values()) {
     lines.push(...emitAsyncTaskWrapperPrototypes(wrapper))
   }
@@ -96,7 +101,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
     lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
   }
 
-  if (functions.length > 0 || baseContext.asyncTaskWrappers.size > 0 || baseContext.callbackWrappers.size > 0 || baseContext.promiseChainWrappers.size > 0) {
+  if (functions.length > 0 || classMethods.length > 0 || baseContext.asyncTaskWrappers.size > 0 || baseContext.callbackWrappers.size > 0 || baseContext.promiseChainWrappers.size > 0) {
     lines.push('')
   }
 
@@ -119,6 +124,11 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
 
   for (const item of functions) {
     lines.push(...emitFunctionDeclaration(item, baseContext))
+    lines.push('')
+  }
+
+  for (const { info, method } of classMethods) {
+    lines.push(...emitClassMethodDeclaration(info, method, baseContext))
     lines.push('')
   }
 
@@ -279,6 +289,13 @@ function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]) {
   }
 
   return infos
+}
+
+function collectClassMethods(context) {
+  return [...context.classInfos.values()].flatMap(info => [...info.methods.values()].map(method => ({
+    info,
+    method
+  })))
 }
 
 function collectClassConstructorAssignments(classNode: AnyNode, constructor: AnyNode | null, diagnostics: Diagnostic[]) {
@@ -1835,6 +1852,48 @@ function emitFunctionDeclaration(statement, baseContext) {
     registerErrorChannel(context)
   }
 
+  registerFunctionParamsInContext(statement, params, context)
+
+  const bodyLines: string[] = []
+
+  bodyLines.push(...emitRuntimeParamPreludeForParams(statement, params, context).map(line => `  ${line}`))
+
+  bodyLines.push(...emitStatementList(statement.body, context).map(line => `  ${line}`))
+
+  const lines = [
+    `${emitFunctionHead(statement, context)} {`,
+    ...emitThrowingFunctionPrelude(context).map(line => `  ${line}`),
+    ...emitReturnValueDeclarations(context).map(line => `  ${line}`),
+    ...emitStatusResultDeclarations(context).map(line => `  ${line}`),
+    ...emitLoopFlowDeclarations(context).map(line => `  ${line}`),
+    ...emitReturnFlowDeclarations(context).map(line => `  ${line}`),
+    ...emitEventLoopDeclarations(context).map(line => `  ${line}`),
+    ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitOwnedPromiseDeclarations(context).map(line => `  ${line}`),
+    ...emitErrorChannelDeclarations(context).map(line => `  ${line}`),
+    ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitEventLoopInit(context).map(line => `  ${line}`),
+    ...bodyLines
+  ]
+
+  if (shouldEmitCleanupLabel(context)) {
+    lines.push('ccjs_cleanup:')
+    lines.push(...emitThrowingFunctionErrorTransfer(context).map(line => `  ${line}`))
+    lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitOwnedPromiseCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitEventLoopCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitCleanupReturn(context).map(line => `  ${line}`))
+  } else if (context.returnType !== 'void') {
+    lines.push(`  return ${context.returnType === 'string' ? '""' : '0'};`)
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function registerFunctionParamsInContext(statement, params, context) {
   for (const [index, param] of params.entries()) {
     if (isNullableScalarParam(param)) {
       context.variables.set(param.name, param.valueType)
@@ -1885,44 +1944,6 @@ function emitFunctionDeclaration(statement, baseContext) {
       context.variables.set(param.name, param.valueType)
     }
   }
-
-  const bodyLines: string[] = []
-
-  bodyLines.push(...emitRuntimeParamPrelude(statement, context).map(line => `  ${line}`))
-
-  bodyLines.push(...emitStatementList(statement.body, context).map(line => `  ${line}`))
-
-  const lines = [
-    `${emitFunctionHead(statement, context)} {`,
-    ...emitThrowingFunctionPrelude(context).map(line => `  ${line}`),
-    ...emitReturnValueDeclarations(context).map(line => `  ${line}`),
-    ...emitStatusResultDeclarations(context).map(line => `  ${line}`),
-    ...emitLoopFlowDeclarations(context).map(line => `  ${line}`),
-    ...emitReturnFlowDeclarations(context).map(line => `  ${line}`),
-    ...emitEventLoopDeclarations(context).map(line => `  ${line}`),
-    ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
-    ...emitOwnedPromiseDeclarations(context).map(line => `  ${line}`),
-    ...emitErrorChannelDeclarations(context).map(line => `  ${line}`),
-    ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
-    ...emitEventLoopInit(context).map(line => `  ${line}`),
-    ...bodyLines
-  ]
-
-  if (shouldEmitCleanupLabel(context)) {
-    lines.push('ccjs_cleanup:')
-    lines.push(...emitThrowingFunctionErrorTransfer(context).map(line => `  ${line}`))
-    lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
-    lines.push(...emitOwnedPromiseCleanup(context).map(line => `  ${line}`))
-    lines.push(...emitEventLoopCleanup(context).map(line => `  ${line}`))
-    lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
-    lines.push(...emitCleanupReturn(context).map(line => `  ${line}`))
-  } else if (context.returnType !== 'void') {
-    lines.push(`  return ${context.returnType === 'string' ? '""' : '0'};`)
-  }
-
-  lines.push('}')
-
-  return lines
 }
 
 function emitAsyncTaskFunctionStubDeclaration(statement, context) {
@@ -1996,6 +2017,100 @@ function emitFunctionHead(statement, context) {
   }
 
   return `${emitCReturnType(returnType, returnNullable)} ${name}(${params.length === 0 ? 'void' : params.join(', ')})`
+}
+
+function emitClassMethodDeclaration(info, method, baseContext) {
+  const context = createFunctionContext(baseContext, method.returnType, method.returnNullable)
+  const params = method.params
+
+  context.returnShape = null
+  context.functionReturnOut = 'ccjs_out'
+  context.functionErrorOut = 'ccjs_error_out'
+  context.variables.set('this', 'object')
+  context.classInstanceTypes.set('this', info.name)
+  registerClassObjectShape(context, 'this', info)
+  registerFunctionParamsInContext(method, params, context)
+
+  const bodyLines: string[] = []
+
+  bodyLines.push(...emitRuntimeParamPreludeForParams(method, params, context).map(line => `  ${line}`))
+  bodyLines.push(...emitStatementList(method.body, context).map(line => `  ${line}`))
+
+  const lines = [
+    `${emitClassMethodHead(info, method, context)} {`,
+    ...emitReturnValueDeclarations(context).map(line => `  ${line}`),
+    ...emitStatusResultDeclarations(context).map(line => `  ${line}`),
+    ...emitLoopFlowDeclarations(context).map(line => `  ${line}`),
+    ...emitReturnFlowDeclarations(context).map(line => `  ${line}`),
+    ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
+    ...emitOwnedPromiseDeclarations(context).map(line => `  ${line}`),
+    ...emitErrorChannelDeclarations(context).map(line => `  ${line}`),
+    ...emitBoxedValueDeclarations(context).map(line => `  ${line}`),
+    ...bodyLines
+  ]
+
+  if (shouldEmitCleanupLabel(context)) {
+    lines.push('ccjs_cleanup:')
+    lines.push(...emitOwnedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitOwnedPromiseCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
+    lines.push(...emitCleanupReturn(context).map(line => `  ${line}`))
+  } else if (context.returnType !== 'void') {
+    lines.push(`  return ${context.returnType === 'string' ? 'ccjs_undefined_value()' : '0'};`)
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function emitClassMethodHead(info, method, context) {
+  const params = [
+    'ccjs_value this',
+    ...method.params.map((param, index) => emitClassMethodParam(param, index, method, context))
+  ]
+
+  return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${emitCClassMethodName(info.name, method.name)}(${params.join(', ')})`
+}
+
+function emitClassMethodParam(param, index, method, context) {
+  if (isNullableScalarParam(param)) {
+    return `ccjs_value ${emitCScalarParamName(param.name)}`
+  }
+
+  if (param.valueType === 'string') {
+    return `ccjs_value ${emitCStringParamName(param.name)}`
+  }
+
+  if (param.valueType === 'object') {
+    if (isBoxedFunctionParam(param, index, method, context)) {
+      return `ccjs_value ${emitCObjectParamName(param.name)}`
+    }
+
+    return `ccjs_value ${param.name}`
+  }
+
+  if (param.valueType === 'array' || param.valueType === 'map' || param.valueType === 'set') {
+    return `ccjs_value ${param.name}`
+  }
+
+  if (param.valueType === 'function') {
+    if (resolveFunctionParameterRuntimeType(method.name, index, param, context) != null) {
+      return `ccjs_value ${param.name}`
+    }
+
+    return emitFunctionParameter(param.name, param.functionType, context, param.loc)
+  }
+
+  if (isBoxedFunctionParam(param, index, method, context) && ['number', 'boolean'].includes(param.valueType)) {
+    return `${emitCType(param.valueType)} ${emitCScalarParamName(param.name)}`
+  }
+
+  return `${emitCType(param.valueType)} ${param.name}`
+}
+
+function emitCClassMethodName(className, methodName) {
+  return `ccjs_method_${emitCIdentifier(className)}_${emitCIdentifier(methodName)}`
 }
 
 function resolveCFunctionReturnInfo(statement, context) {
@@ -3673,6 +3788,10 @@ function emitCObjectParamName(name) {
 function emitRuntimeParamPrelude(statement, context) {
   const params = resolveFunctionDeclarationParams(statement.name, statement.params, context)
 
+  return emitRuntimeParamPreludeForParams(statement, params, context)
+}
+
+function emitRuntimeParamPreludeForParams(statement, params, context) {
   return params.flatMap((param, index) => {
     if (isNullableScalarParam(param)) {
       const paramName = emitCScalarParamName(param.name)
@@ -4013,7 +4132,12 @@ function emitStatement(statement, context) {
     const classMethodCall = emitPreparedClassMethodCallExpression(statement.expression, context)
 
     if (classMethodCall != null) {
-      return classMethodCall.lines
+      return classMethodCall.expression === ''
+        ? classMethodCall.lines
+        : [
+            ...classMethodCall.lines,
+            `${classMethodCall.expression};`
+          ]
     }
 
     if (isArrayMethodCall(statement.expression)) {
@@ -5736,11 +5860,60 @@ function isClassConstructorExpression(expression, context) {
 }
 
 function emitPreparedClassMethodCallExpression(expression, context) {
-  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.object.type !== 'Reference' || expression.callee.object.path.length !== 1) {
+  const call = resolveClassMethodCallInfo(expression, context)
+
+  if (call == null) {
     return null
   }
 
-  const objectName = expression.callee.object.path[0]
+  if (call.method == null) {
+    context.diagnostics.push(diagnostic('CCJS_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc ?? expression.loc))
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
+  if (call.method.params.length !== expression.args.length) {
+    context.diagnostics.push(diagnostic('CCJS_ARG_COUNT', `method ${expression.callee.property} expects ${call.method.params.length} argument(s), got ${expression.args.length}`, expression.loc))
+  }
+
+  const prepared = emitPreparedCallArgs(expression, call.method.params, context)
+  const callExpression = `${emitCClassMethodName(call.info.name, call.method.name)}(${[call.objectExpression, ...prepared.args].join(', ')})`
+
+  if (isManagedRuntimeReturnType(call.method.returnType)) {
+    const value = nextCName(context, 'ccjs_method_value')
+    const tag = cRuntimeValueTag(call.method.returnType)
+    registerOwnedValue(context, value)
+
+    return {
+      lines: [
+        ...prepared.lines,
+        ...emitPrepareOwnedValueWrite(value),
+        `${value} = ${callExpression};`,
+        emitRuntimeValueCheck(value, tag, context)
+      ],
+      expression: value
+    }
+  }
+
+  return {
+    lines: prepared.lines,
+    expression: call.method.returnType === 'void' ? `${callExpression}` : callExpression
+  }
+}
+
+function resolveClassMethodCallInfo(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
+    return null
+  }
+
+  const objectName = resolveCObjectExpressionName(expression.callee.object)
+
+  if (objectName == null) {
+    return null
+  }
+
   const className = context.classInstanceTypes.get(objectName)
 
   if (className == null) {
@@ -5748,95 +5921,16 @@ function emitPreparedClassMethodCallExpression(expression, context) {
   }
 
   const info = context.classInfos.get(className)
-  const method = info?.methods.get(expression.callee.property)
 
-  if (info == null || method == null) {
-    context.diagnostics.push(diagnostic('CCJS_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc ?? expression.loc))
-
-    return {
-      lines: [],
-      expression: ''
-    }
+  if (info == null) {
+    return null
   }
-
-  if (method.params.length !== 0 || expression.args.length !== 0) {
-    context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'C class method calls currently support only methods without parameters', expression.loc))
-
-    return {
-      lines: [],
-      expression: ''
-    }
-  }
-
-  if (method.returnType !== 'void') {
-    context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'C class method calls currently support only void methods used as statements', expression.loc))
-
-    return {
-      lines: [],
-      expression: ''
-    }
-  }
-
-  if (statementContainsReturn(method.body)) {
-    context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'C class method lowering currently does not support return statements inside methods', method.loc))
-
-    return {
-      lines: [],
-      expression: ''
-    }
-  }
-
-  const body = withVariableScope(context, () => {
-    context.variables.set('this', 'object')
-    context.classInstanceTypes.set('this', info.name)
-    registerClassObjectShape(context, 'this', info)
-
-    return emitStatementList(method.body, context)
-  })
 
   return {
-    lines: [
-      '{',
-      `  ccjs_value this = ${emitObjectValueReference(objectName, context)};`,
-      ...body.map(line => `  ${line}`),
-      '}'
-    ],
-    expression: ''
+    info,
+    method: info.methods.get(expression.callee.property) ?? null,
+    objectExpression: emitObjectValueReference(objectName, context)
   }
-}
-
-function statementContainsReturn(statement) {
-  if (Array.isArray(statement)) {
-    return statement.some(statementContainsReturn)
-  }
-
-  if (statement.type === 'ReturnStatement') {
-    return true
-  }
-
-  if (statement.type === 'BlockStatement') {
-    return statement.body.some(statementContainsReturn)
-  }
-
-  if (statement.type === 'IfStatement') {
-    return statementContainsReturn(statement.consequent) || (statement.alternate != null && statementContainsReturn(statement.alternate))
-  }
-
-  if (statement.type === 'WhileStatement' || statement.type === 'ForStatement' || statement.type === 'ForOfStatement') {
-    return statementContainsReturn(statement.body)
-  }
-
-  if (statement.type === 'SwitchStatement') {
-    return statement.cases.some(item => item.consequent.some(statementContainsReturn))
-  }
-
-  if (statement.type === 'TryStatement') {
-    return statementContainsReturn(statement.block)
-      || (statement.handler?.body != null && statementContainsReturn(statement.handler.body))
-      || (statement.finalizer != null && statementContainsReturn(statement.finalizer))
-  }
-
-  return false
 }
 
 function emitNullableRuntimeValueVariableDeclaration(statement, context) {
@@ -6787,6 +6881,12 @@ function emitCValueExpression(expression, context) {
 
     if (collectionCall != null) {
       return collectionCall
+    }
+
+    const classMethodCall = emitPreparedClassMethodCallExpression(expression, context)
+
+    if (classMethodCall != null) {
+      return classMethodCall
     }
 
     const temp = nextCName(context, 'ccjs_value')
@@ -7793,6 +7893,12 @@ function emitNumberExpression(expression, context) {
 }
 
 function emitPreparedNumberExpression(expression, context) {
+  const classMethodCall = emitPreparedClassMethodCallExpression(expression, context)
+
+  if (classMethodCall != null && classMethodCall.expression !== '') {
+    return classMethodCall
+  }
+
   if (expression?.type === 'NumberLiteral') {
     return {
       lines: [],
@@ -8384,6 +8490,12 @@ function emitCallExpression(expression, context) {
 }
 
 function emitPreparedCallExpression(expression, context) {
+  const classMethodCall = emitPreparedClassMethodCallExpression(expression, context)
+
+  if (classMethodCall != null) {
+    return classMethodCall
+  }
+
   const arrayPopCall = emitPreparedArrayPopCallExpression(expression, context)
 
   if (arrayPopCall != null) {
