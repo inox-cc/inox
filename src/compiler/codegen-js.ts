@@ -215,6 +215,10 @@ function emitClass(node: AnyNode, options: JsEmitOptions = {}): string[] {
     `${exported ? 'export ' : ''}class ${node.name} {`
   ]
 
+  for (const field of node.fields ?? []) {
+    lines.push(...indent([emitClassField(field, options)]))
+  }
+
   for (const method of node.methods) {
     lines.push(...indent(emitMethod(method, options)))
   }
@@ -222,6 +226,14 @@ function emitClass(node: AnyNode, options: JsEmitOptions = {}): string[] {
   lines.push('}')
 
   return lines
+}
+
+function emitClassField(field: AnyNode, options: JsEmitOptions = {}): string {
+  if (options.emitTypes === true) {
+    return `${field.readonly ? 'readonly ' : ''}${field.name}: ${emitTsValueType(field.declaredType ?? field.valueType, field)}`
+  }
+
+  return field.name
 }
 
 function emitMethod(method: AnyNode, options: JsEmitOptions = {}): string[] {

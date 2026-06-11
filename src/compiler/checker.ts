@@ -206,6 +206,7 @@ class Checker {
   currentReturnNullable: boolean
   currentReturnPromiseValueType: ValueType | null
   currentReturnAsync: boolean
+  currentClassConstructor: boolean
   asyncDepth: number
 
   constructor(program: ProgramNode) {
@@ -219,6 +220,7 @@ class Checker {
     this.currentReturnNullable = false
     this.currentReturnPromiseValueType = null
     this.currentReturnAsync = false
+    this.currentClassConstructor = false
     this.asyncDepth = 0
   }
 
@@ -315,6 +317,13 @@ class Checker {
   }
 
   resolveClassInstanceShape(statement: AnyNode, constructorParams: AnyNode[]): ObjectShapeInfo {
+    if (statement.fields?.length > 0) {
+      return {
+        kind: 'object',
+        fields: statement.fields.map(field => this.resolveClassField(field))
+      }
+    }
+
     const fields: AnyNode[] = []
     const seen = new Set<string>()
     const constructor = statement.methods.find(method => method.name === 'constructor') ?? null
@@ -337,6 +346,24 @@ class Checker {
       kind: 'object',
       fields
     }
+  }
+
+  resolveClassField(field: AnyNode): AnyNode {
+    const fieldInfo = this.resolveDeclaredType(field.valueType, field.loc)
+
+    field.declaredType = field.valueType
+    field.valueType = fieldInfo.valueType
+    field.nullable = fieldInfo.nullable
+    field.arrayElementType = fieldInfo.arrayElementType
+    field.arrayElementDeclaredType = fieldInfo.arrayElementDeclaredType
+    field.mapKeyType = fieldInfo.mapKeyType
+    field.mapValueType = fieldInfo.mapValueType
+    field.promiseValueType = fieldInfo.promiseValueType ?? null
+    field.setElementType = fieldInfo.setElementType
+    field.functionType = fieldInfo.functionType
+    field.shape = fieldInfo.shape
+
+    return field
   }
 
   collectClassConstructorFieldAssignments(constructor: AnyNode | null): AnyNode[] {
@@ -992,7 +1019,7 @@ class Checker {
       return valueType
     }
 
-    if (field.readonly) {
+    if (field.readonly && !this.canInitializeReadonlyClassField(expression.target.object)) {
       this.report('CCJS_ASSIGN_READONLY_FIELD', `cannot assign to readonly field ${expression.target.property}`, expression.target.loc)
     }
 
@@ -1179,7 +1206,7 @@ class Checker {
       return valueType
     }
 
-    if (field.readonly) {
+    if (field.readonly && !this.canInitializeReadonlyClassField(expression.target.object)) {
       this.report('CCJS_ASSIGN_READONLY_FIELD', `cannot assign to readonly field ${expression.target.index.value}`, expression.target.loc)
     }
 
@@ -2410,11 +2437,24 @@ class Checker {
   }
 
   checkClassDeclaration(statement: AnyNode): void {
+    const fieldNames = new Set<string>()
     const methodNames = new Set<string>()
+
+    for (const field of statement.fields ?? []) {
+      if (fieldNames.has(field.name)) {
+        this.report('CCJS_REDECLARED_NAME', `field ${field.name} is already declared in this class`, field.loc)
+      }
+
+      fieldNames.add(field.name)
+    }
 
     for (const method of statement.methods) {
       if (methodNames.has(method.name)) {
         this.report('CCJS_REDECLARED_NAME', `method ${method.name} is already declared in this class`, method.loc)
+      }
+
+      if (fieldNames.has(method.name)) {
+        this.report('CCJS_REDECLARED_NAME', `method ${method.name} conflicts with a class field`, method.loc)
       }
 
       methodNames.add(method.name)
@@ -2428,6 +2468,8 @@ class Checker {
         this.currentReturnPromiseValueType = methodReturnInfo.promiseValueType ?? null
         const previousReturnAsync = this.currentReturnAsync
         this.currentReturnAsync = false
+        const previousClassConstructor = this.currentClassConstructor
+        this.currentClassConstructor = method.name === 'constructor'
 
         this.declare('this', {
           kind: 'this',
@@ -2464,6 +2506,7 @@ class Checker {
           this.currentReturnNullable = previousReturnNullable
           this.currentReturnPromiseValueType = previousReturnPromiseValueType
           this.currentReturnAsync = previousReturnAsync
+          this.currentClassConstructor = previousClassConstructor
         }
       })
     }
@@ -2532,6 +2575,10 @@ class Checker {
   isThisExpression(expression: AnyNode): boolean {
     return expression?.type === 'ThisExpression'
       || (expression?.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'this')
+  }
+
+  canInitializeReadonlyClassField(expression: AnyNode): boolean {
+    return this.currentClassConstructor && this.isThisExpression(expression)
   }
 
   findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {

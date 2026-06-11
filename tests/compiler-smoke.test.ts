@@ -3670,28 +3670,40 @@ export function main(): void {
 
 test('compiles simple classes to JS and C object runtime calls', () => {
   const source = `class User {
-  constructor(name: string) {
+  readonly id: number
+  name: string
+
+  constructor(id: number, name: string) {
+    this.id = id
     this.name = name
   }
 
   greet(): void {
-    console.log(this.name)
+    this.name = 'Grace'
+    console.log(this.id, this.name)
   }
 }
 
 export function main(): void {
-  const user = new User('Ada')
+  const user = new User(1, 'Ada')
   user.greet()
 }
 `
   const js = compileSource(source, {
     target: 'js'
   })
+  const ts = compileSource(source, {
+    target: 'ts'
+  })
 
   assert.match(js.code, /class User \{/)
-  assert.match(js.code, /constructor\(name\) \{/)
+  assert.match(js.code, /\n  id\n  name\n/)
+  assert.match(js.code, /constructor\(id, name\) \{/)
+  assert.match(js.code, /this\.id = id/)
   assert.match(js.code, /this\.name = name/)
-  assert.match(js.code, /const user = new User\("Ada"\)/)
+  assert.match(js.code, /const user = new User\(1, "Ada"\)/)
+  assert.match(ts.code, /readonly id: number/)
+  assert.match(ts.code, /name: string/)
   assert.deepEqual(js.ir.syntaxFeatures.map(item => item.feature), ['class'])
 
   const c = compileSource(source, {
@@ -3699,11 +3711,33 @@ export function main(): void {
   })
 
   assert.match(c.code, /#include "ccjs\/object\.h"/)
-  assert.match(c.code, /static const ccjs_field_info ccjs_shape_User_\d+_fields\[\] = \{\n\s+\{ "name", 0 \},/)
+  assert.match(c.code, /static const ccjs_field_info ccjs_shape_User_\d+_fields\[\] = \{\n\s+\{ "id", CCJS_FIELD_READONLY \},\n\s+\{ "name", 0 \},/)
   assert.match(c.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_User_\d+, &user\)/)
-  assert.match(c.code, /ccjs_object_init_known\(user, 0, ccjs_value_\d+\)/)
+  assert.match(c.code, /ccjs_object_init_known\(user, 0, ccjs_number_value\(1\)\)/)
+  assert.match(c.code, /ccjs_object_init_known\(user, 1, ccjs_value_\d+\)/)
   assert.match(c.code, /ccjs_value this = user;/)
   assert.match(c.code, /ccjs_object_get_known\(this, 0, &ccjs_log_value_\d+\)/)
+  assert.match(c.code, /ccjs_object_set_known\(this, 1, ccjs_value_\d+\)/)
+})
+
+test('rejects readonly class field assignment outside constructors', () => {
+  assertDiagnostic(`class User {
+  readonly id: number
+
+  constructor(id: number) {
+    this.id = id
+  }
+
+  rename(): void {
+    this.id = 2
+  }
+}
+
+export function main(): void {
+  const user = new User(1)
+  user.rename()
+}
+`, 'CCJS_ASSIGN_READONLY_FIELD')
 })
 
 test('compiles awaited async function calls to JS and C', () => {

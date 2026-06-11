@@ -1258,17 +1258,22 @@ test('generated C simple classes compile and run with runtime sources', async t 
 
   try {
     const result = compileSource(`class User {
-  constructor(name: string) {
+  readonly id: number
+  name: string
+
+  constructor(id: number, name: string) {
+    this.id = id
     this.name = name
   }
 
   greet(): void {
-    console.log(this.name)
+    this.name = 'Grace'
+    console.log(this.id, this.name)
   }
 }
 
 export function main(): void {
-  const user = new User('Ada')
+  const user = new User(1, 'Ada')
   user.greet()
 }
 `, {
@@ -1284,7 +1289,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'Ada\n')
+    assert.equal(run.stdout, '1 Grace\n')
   } finally {
     await rm(dir, {
       recursive: true,

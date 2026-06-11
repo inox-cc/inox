@@ -277,12 +277,19 @@ class Parser {
 
   parseClassDeclaration(exported: boolean): AnyNode {
     const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected class name')
+    const fields: AnyNode[] = []
     const methods: AnyNode[] = []
 
     this.expectValue('{', 'CCJS_EXPECTED_BLOCK', 'expected { after class name')
 
     while (!this.isValue('}') && !this.is('eof')) {
-      methods.push(this.parseClassMethod())
+      const member = this.parseClassMember()
+
+      if (member.type === 'FieldDefinition') {
+        fields.push(member)
+      } else {
+        methods.push(member)
+      }
     }
 
     this.expectValue('}', 'CCJS_EXPECTED_BLOCK', 'expected } after class body')
@@ -292,12 +299,39 @@ class Parser {
       exported,
       name: name.value,
       loc: locFromToken(name),
+      fields,
       methods
     }
   }
 
-  parseClassMethod(): AnyNode {
-    const name = this.parseClassMethodName()
+  parseClassMember(): AnyNode {
+    const readonly = this.matchKeyword('readonly')
+    const name = this.parseClassMemberName()
+
+    if (!readonly && this.isValue('(')) {
+      return this.parseClassMethod(name)
+    }
+
+    if (readonly && this.isValue('(')) {
+      this.report('CCJS_EXPECTED_TYPE', 'readonly class methods are not supported; use readonly fields')
+    }
+
+    this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after class field name')
+    const valueType = this.parseTypeAnnotation([';', '}'], {
+      stopAtLineBreak: true
+    })
+    this.matchValue(';')
+
+    return {
+      type: 'FieldDefinition',
+      name: name.value,
+      readonly,
+      valueType,
+      loc: locFromToken(name)
+    }
+  }
+
+  parseClassMethod(name: Token): AnyNode {
     const params: AnyNode[] = []
 
     this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after method name')
@@ -338,7 +372,7 @@ class Parser {
     }
   }
 
-  parseClassMethodName(): Token {
+  parseClassMemberName(): Token {
     if (this.is('identifier') || this.isKeywordValue('constructor')) {
       return this.advance()
     }
@@ -1225,7 +1259,7 @@ class Parser {
     }
   }
 
-  parseTypeAnnotation(values: string[], options: { stopAtStatementBoundary?: boolean } = {}): string {
+  parseTypeAnnotation(values: string[], options: { stopAtLineBreak?: boolean, stopAtStatementBoundary?: boolean } = {}): string {
     const parts: string[] = []
     let genericDepth = 0
     let lastTokenLine = this.current().line
@@ -1234,6 +1268,10 @@ class Parser {
       const token = this.current()
 
       if (genericDepth === 0 && values.includes(token.value)) {
+        break
+      }
+
+      if (genericDepth === 0 && parts.length > 0 && options.stopAtLineBreak === true && token.line > lastTokenLine) {
         break
       }
 

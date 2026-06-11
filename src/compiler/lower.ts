@@ -71,6 +71,19 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       name: item.name,
       loc: item.loc,
       shape: item.shape ?? null,
+      fields: (item.fields ?? []).map(field => ({
+        ...field,
+        declaredType: field.declaredType ?? field.valueType,
+        valueType: field.valueType ?? 'unknown',
+        nullable: field.nullable === true,
+        arrayElementType: field.arrayElementType ?? null,
+        arrayElementDeclaredType: field.arrayElementDeclaredType ?? null,
+        mapKeyType: field.mapKeyType ?? null,
+        mapValueType: field.mapValueType ?? null,
+        promiseValueType: field.promiseValueType ?? null,
+        setElementType: field.setElementType ?? null,
+        shape: field.shape ?? null
+      })),
       methods: item.methods.map(method => {
         const returnType = resolveDeclaredType(method.returnType, context)
 
