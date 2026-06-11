@@ -16,6 +16,7 @@ const requiredFiles: string[] = [
   'docs/language/README.md',
   'docs/runtime/event-loop.md',
   'docs/runtime/c-value-layout.md',
+  'docs/runtime/embedded-profiles.md',
   'docs/stdlib/README.md',
   'docs/testing/compiler-tests.md',
   'examples/async-errors.ts',
