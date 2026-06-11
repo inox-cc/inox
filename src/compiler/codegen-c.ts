@@ -439,10 +439,7 @@ function collectAsyncTaskWrappers(functions, context) {
       rejectName: `ccjs_async_task_${cName}_reject`,
       finalizerName: `ccjs_async_task_${cName}_finalize`,
       params,
-      awaitedName: body.awaitedName,
-      awaitedType: body.awaitedType,
-      awaitedExpression: body.awaitedExpression,
-      awaitedPromiseExpression: body.awaitedPromiseExpression,
+      awaits: body.awaits,
       returnExpression: body.returnExpression,
       returnType: body.returnType
     }
@@ -482,28 +479,88 @@ function resolveAsyncTaskWrapperBody(statement, context) {
     return null
   }
 
-  if (statement.body.length !== 2 && statement.body.length !== 3) {
+  if (statement.body.length < 2) {
     return null
   }
 
-  const [firstStatement, secondStatement, thirdStatement] = statement.body
-  const promiseStatement = statement.body.length === 3 ? firstStatement : null
-  const awaitStatement = statement.body.length === 3 ? secondStatement : firstStatement
-  const returnStatement = statement.body.length === 3 ? thirdStatement : secondStatement
+  const returnStatement = statement.body.at(-1)
 
-  if (awaitStatement?.type !== 'VariableDeclaration' || awaitStatement.init?.type !== 'AwaitExpression' || returnStatement?.type !== 'ReturnStatement') {
+  if (returnStatement?.type !== 'ReturnStatement') {
+    return null
+  }
+
+  const awaits = resolveAsyncTaskAwaitSteps(statement.body.slice(0, -1), context)
+
+  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, context)
+
+  if (awaits == null || returnExpression == null) {
+    return null
+  }
+
+  return {
+    awaits,
+    returnExpression,
+    returnType
+  }
+}
+
+function resolveAsyncTaskAwaitSteps(statements, context) {
+  const awaits: Array<Record<string, any>> = []
+
+  for (let index = 0; index < statements.length;) {
+    const statement = statements[index]
+    const nextStatement = statements[index + 1]
+    const directAwait = resolveAsyncTaskDirectAwaitStep(statement, awaits.length)
+
+    if (directAwait != null) {
+      awaits.push(directAwait)
+      index += 1
+      continue
+    }
+
+    const localPromiseAwait = resolveAsyncTaskLocalPromiseAwaitStep(statement, nextStatement, context, awaits.length)
+
+    if (localPromiseAwait != null) {
+      awaits.push(localPromiseAwait)
+      index += 2
+      continue
+    }
+
+    return null
+  }
+
+  return awaits.length === 0 ? null : awaits
+}
+
+function resolveAsyncTaskDirectAwaitStep(statement, index) {
+  if (statement?.type !== 'VariableDeclaration' || statement.init?.type !== 'AwaitExpression') {
+    return null
+  }
+
+  const awaitedType = statement.valueType ?? statement.init.valueType ?? 'unknown'
+
+  if (awaitedType !== 'number' && awaitedType !== 'boolean') {
+    return null
+  }
+
+  return {
+    index,
+    name: statement.name,
+    type: awaitedType,
+    fieldName: `local_${emitCIdentifier(statement.name)}`,
+    awaitedExpression: statement.init.argument,
+    awaitedPromiseExpression: null
+  }
+}
+
+function resolveAsyncTaskLocalPromiseAwaitStep(promiseStatement, awaitStatement, context, index) {
+  if (awaitStatement?.type !== 'VariableDeclaration' || awaitStatement.init?.type !== 'AwaitExpression') {
     return null
   }
 
   const awaitedPromiseExpression = resolveAsyncTaskAwaitedPromiseExpression(promiseStatement, awaitStatement, context)
 
-  if (statement.body.length === 3 && awaitedPromiseExpression == null) {
-    return null
-  }
-
-  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, context)
-
-  if (returnExpression == null) {
+  if (awaitedPromiseExpression == null) {
     return null
   }
 
@@ -514,12 +571,12 @@ function resolveAsyncTaskWrapperBody(statement, context) {
   }
 
   return {
-    awaitedName: awaitStatement.name,
-    awaitedType,
-    awaitedExpression: awaitedPromiseExpression == null ? awaitStatement.init.argument : null,
-    awaitedPromiseExpression,
-    returnExpression,
-    returnType
+    index,
+    name: awaitStatement.name,
+    type: awaitedType,
+    fieldName: `local_${emitCIdentifier(awaitStatement.name)}`,
+    awaitedExpression: null,
+    awaitedPromiseExpression
   }
 }
 
@@ -585,7 +642,9 @@ function emitAsyncTaskFrameType(wrapper) {
     '  ccjs_loop* ccjs_loop;',
     '  ccjs_promise* promise;',
     '  ccjs_promise* awaited;',
+    '  int state;',
     ...wrapper.params.map(param => `  ${emitCType(param.valueType)} ${param.fieldName};`),
+    ...wrapper.awaits.map(item => `  ${emitCType(item.type)} ${item.fieldName};`),
     `} ${wrapper.frameTypeName};`
   ]
 }
@@ -617,8 +676,10 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
   context.externalEventLoop = true
   context.eventLoopUsed = true
   registerAsyncTaskParams(wrapper, context)
-  const awaitedPromise = emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, context)
-  const awaited = awaitedPromise == null ? emitPreparedAsyncTaskAwaitedValueExpression(wrapper, context) : null
+  const schedule = emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
+    cleanup: 'start',
+    final: wrapper.awaits.length === 1
+  })
   const paramAliases = wrapper.params.map(param => `${emitCType(param.valueType)} ${param.name} = ${param.argName};`)
   const lines = [
     `static ccjs_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`,
@@ -630,7 +691,9 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     '  frame->ccjs_loop = ccjs_loop;',
     '  frame->promise = 0;',
     '  frame->awaited = 0;',
+    '  frame->state = 0;',
     ...wrapper.params.map(param => `  frame->${param.fieldName} = ${param.argName};`),
+    ...wrapper.awaits.map(item => `  frame->${item.fieldName} = 0;`),
     '  ccjs_status status = ccjs_promise_new(ccjs_loop, &frame->promise);',
     '  if (status != CCJS_OK) {',
     '    ccjs_loop->allocator->free(ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));',
@@ -638,35 +701,7 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     '  }',
     '  ccjs_promise_retain(frame->promise);',
     '  *out = frame->promise;',
-    ...(awaitedPromise == null
-      ? [
-          '  status = ccjs_promise_new(ccjs_loop, &frame->awaited);',
-          '  if (status != CCJS_OK) {',
-          '    ccjs_promise_release(*out);',
-          '    *out = 0;',
-          `    ${wrapper.finalizerName}(frame);`,
-          '    return status;',
-          '  }'
-        ]
-      : awaitedPromise.lines.map(line => `  ${line}`)),
-    `  status = ccjs_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${wrapper.finalizerName});`,
-    '  if (status != CCJS_OK) {',
-    '    ccjs_promise_release(*out);',
-    '    *out = 0;',
-    `    ${wrapper.finalizerName}(frame);`,
-    '    return status;',
-    '  }',
-    ...(awaitedPromise == null
-      ? [
-          ...(awaited?.lines ?? []).map(line => `  ${line}`),
-          `  status = ccjs_promise_resolve(frame->awaited, ${awaited?.expression ?? 'ccjs_undefined_value()'});`,
-          '  if (status != CCJS_OK) {',
-          '    ccjs_promise_release(*out);',
-          '    *out = 0;',
-          '    return status;',
-          '  }'
-        ]
-      : []),
+    ...schedule.map(line => `  ${line}`),
     '  return CCJS_OK;',
     '}'
   ]
@@ -690,37 +725,46 @@ function registerAsyncTaskParams(wrapper, context) {
   }
 }
 
-function emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, context) {
-  if (wrapper.awaitedPromiseExpression == null) {
-    return null
+function registerAsyncTaskAwaitLocals(wrapper, context, count) {
+  for (const item of wrapper.awaits.slice(0, count)) {
+    context.variables.set(item.name, item.type)
   }
+}
 
-  const chain = emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, context)
+function emitAsyncTaskVisibleLocalReads(wrapper, count) {
+  return [
+    ...wrapper.params.map(param => `${emitCType(param.valueType)} ${param.name} = frame->${param.fieldName};`),
+    ...wrapper.awaits.slice(0, count).map(item => `${emitCType(item.type)} ${item.name} = frame->${item.fieldName};`)
+  ]
+}
 
-  if (chain != null) {
-    return chain
-  }
+function emitAsyncTaskScheduleAwaitLines(wrapper, item, context, options) {
+  const awaitedPromise = emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, options)
+  const awaited = awaitedPromise == null ? emitPreparedAsyncTaskAwaitedValueExpression(item, context) : null
+  const finalizer = options.final ? wrapper.finalizerName : '0'
 
-  if (wrapper.awaitedPromiseExpression?.type !== 'CallExpression' || cPromiseRuntimeCallName(wrapper.awaitedPromiseExpression.callee) !== 'resolve') {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async task state-machine slice currently supports local Promise.resolve(...) variables only', wrapper.awaitedPromiseExpression?.loc))
+  return [
+    ...(awaitedPromise == null
+      ? [
+          'status = ccjs_promise_new(ccjs_loop, &frame->awaited);',
+          ...emitAsyncTaskScheduleStatusCheck(wrapper, options),
+        ]
+      : awaitedPromise.lines),
+    `status = ccjs_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${finalizer});`,
+    ...emitAsyncTaskScheduleStatusCheck(wrapper, options),
+    ...(awaitedPromise == null
+      ? [
+          ...(awaited?.lines ?? []),
+          `status = ccjs_promise_resolve(frame->awaited, ${awaited?.expression ?? 'ccjs_undefined_value()'});`,
+          ...emitAsyncTaskResolveStatusCheck(wrapper, options)
+        ]
+      : [])
+  ]
+}
 
-    return {
-      lines: [
-        'status = CCJS_ERR_TYPE;',
-        'ccjs_promise_release(*out);',
-        '*out = 0;',
-        `${wrapper.finalizerName}(frame);`,
-        'return status;'
-      ]
-    }
-  }
-
-  const value = emitPreparedAsyncTaskValueExpression(wrapper.awaitedPromiseExpression.args[0], wrapper.awaitedType, context)
-
-  return {
-    lines: [
-      ...value.lines,
-      `status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &frame->awaited);`,
+function emitAsyncTaskScheduleStatusCheck(wrapper, options) {
+  if (options.cleanup === 'start') {
+    return [
       'if (status != CCJS_OK) {',
       '  ccjs_promise_release(*out);',
       '  *out = 0;',
@@ -729,10 +773,72 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, context) {
       '}'
     ]
   }
+
+  return [
+    'if (status != CCJS_OK) {',
+    '  ccjs_status reject_status = ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)status));',
+    `  ${wrapper.finalizerName}(frame);`,
+    '  return reject_status == CCJS_OK ? status : reject_status;',
+    '}'
+  ]
 }
 
-function emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, context) {
-  const expression = wrapper.awaitedPromiseExpression
+function emitAsyncTaskResolveStatusCheck(wrapper, options) {
+  if (options.cleanup === 'start') {
+    return [
+      'if (status != CCJS_OK) {',
+      '  ccjs_promise_release(*out);',
+      '  *out = 0;',
+      ...(options.final ? [] : [`  ${wrapper.finalizerName}(frame);`]),
+      '  return status;',
+      '}'
+    ]
+  }
+
+  if (options.final) {
+    return [
+      'if (status != CCJS_OK) return status;'
+    ]
+  }
+
+  return emitAsyncTaskScheduleStatusCheck(wrapper, options)
+}
+
+function emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, options) {
+  if (item.awaitedPromiseExpression == null) {
+    return null
+  }
+
+  const chain = emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, item, context, options)
+
+  if (chain != null) {
+    return chain
+  }
+
+  if (item.awaitedPromiseExpression?.type !== 'CallExpression' || cPromiseRuntimeCallName(item.awaitedPromiseExpression.callee) !== 'resolve') {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async task state-machine slice currently supports local Promise.resolve(...) variables only', item.awaitedPromiseExpression?.loc))
+
+    return {
+      lines: [
+        'status = CCJS_ERR_TYPE;',
+        ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+      ]
+    }
+  }
+
+  const value = emitPreparedAsyncTaskValueExpression(item.awaitedPromiseExpression.args[0], item.type, context)
+
+  return {
+    lines: [
+      ...value.lines,
+      `status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &frame->awaited);`,
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+    ]
+  }
+}
+
+function emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, item, context, options) {
+  const expression = item.awaitedPromiseExpression
 
   if (expression?.type !== 'CallExpression' || expression.callee?.type !== 'MemberExpression' || expression.callee.property !== 'then') {
     return null
@@ -748,16 +854,13 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, context) {
     return {
       lines: [
         'status = CCJS_ERR_TYPE;',
-        'ccjs_promise_release(*out);',
-        '*out = 0;',
-        `${wrapper.finalizerName}(frame);`,
-        'return status;'
+        ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
       ]
     }
   }
 
   const source = nextCName(context, 'ccjs_async_task_source')
-  const sourceType = receiver.promiseValueType ?? callback.params[0]?.valueType ?? wrapper.awaitedType
+  const sourceType = receiver.promiseValueType ?? callback.params[0]?.valueType ?? item.type
   const value = emitPreparedAsyncTaskValueExpression(receiver.args[0], sourceType, context)
 
   return {
@@ -765,28 +868,18 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, context) {
       `ccjs_promise* ${source} = 0;`,
       ...value.lines,
       `status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &${source});`,
-      'if (status != CCJS_OK) {',
-      '  ccjs_promise_release(*out);',
-      '  *out = 0;',
-      `  ${wrapper.finalizerName}(frame);`,
-      '  return status;',
-      '}',
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options),
       `status = ccjs_promise_chain(${source}, ${chainWrapper.name}, 0, 0, 0, &frame->awaited);`,
       `ccjs_promise_release(${source});`,
       `${source} = 0;`,
-      'if (status != CCJS_OK) {',
-      '  ccjs_promise_release(*out);',
-      '  *out = 0;',
-      `  ${wrapper.finalizerName}(frame);`,
-      '  return status;',
-      '}'
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
     ]
   }
 }
 
-function emitPreparedAsyncTaskAwaitedValueExpression(wrapper, context) {
-  if (wrapper.awaitedExpression?.type !== 'CallExpression' || cPromiseRuntimeCallName(wrapper.awaitedExpression.callee) !== 'resolve') {
-    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async task state-machine slice currently supports await Promise.resolve(...) only', wrapper.awaitedExpression?.loc))
+function emitPreparedAsyncTaskAwaitedValueExpression(item, context) {
+  if (item.awaitedExpression?.type !== 'CallExpression' || cPromiseRuntimeCallName(item.awaitedExpression.callee) !== 'resolve') {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'async task state-machine slice currently supports await Promise.resolve(...) only', item.awaitedExpression?.loc))
 
     return {
       lines: [
@@ -796,7 +889,7 @@ function emitPreparedAsyncTaskAwaitedValueExpression(wrapper, context) {
     }
   }
 
-  return emitPreparedAsyncTaskValueExpression(wrapper.awaitedExpression.args[0], wrapper.awaitedType, context)
+  return emitPreparedAsyncTaskValueExpression(item.awaitedExpression.args[0], item.type, context)
 }
 
 function emitPreparedAsyncTaskValueExpression(expression, valueType, context) {
@@ -821,25 +914,68 @@ function emitAsyncTaskResumeDeclaration(wrapper, baseContext) {
   const context = createFunctionContext(baseContext, wrapper.returnType)
   context.statusReturn = true
   registerAsyncTaskParams(wrapper, context)
-  context.variables.set(wrapper.awaitedName, wrapper.awaitedType)
+  registerAsyncTaskAwaitLocals(wrapper, context, wrapper.awaits.length)
   const returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
-  const awaitedRead = wrapper.awaitedType === 'boolean'
-    ? `double ${wrapper.awaitedName} = ccjs_value_input.as.boolean ? 1 : 0;`
-    : `double ${wrapper.awaitedName} = ccjs_value_input.as.number;`
-  const paramReads = wrapper.params.map(param => `${emitCType(param.valueType)} ${param.name} = frame->${param.fieldName};`)
-  const expectedTag = wrapper.awaitedType === 'boolean' ? 'CCJS_TAG_BOOL' : 'CCJS_TAG_NUMBER'
+  const cases = wrapper.awaits.flatMap(item => emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue))
 
   return [
     `static ccjs_status ${wrapper.resumeName}(void* context, ccjs_value ccjs_value_input) {`,
     `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`,
     '  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;',
-    `  if (ccjs_value_input.tag != ${expectedTag}) return ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE));`,
-    ...paramReads.map(line => `  ${line}`),
-    `  ${awaitedRead}`,
-    ...returnValue.lines.map(line => `  ${line}`),
-    `  return ccjs_promise_resolve(frame->promise, ${returnValue.expression});`,
+    '  ccjs_status status = CCJS_OK;',
+    '  switch (frame->state) {',
+    ...cases.map(line => `  ${line}`),
+    '  default:',
+    '    return ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE));',
+    '  }',
     '}'
   ]
+}
+
+function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
+  const nextItem = wrapper.awaits[item.index + 1] ?? null
+  const expectedTag = item.type === 'boolean' ? 'CCJS_TAG_BOOL' : 'CCJS_TAG_NUMBER'
+  const storeValue = item.type === 'boolean'
+    ? 'ccjs_value_input.as.boolean ? 1 : 0'
+    : 'ccjs_value_input.as.number'
+  const lines = [
+    `case ${item.index}: {`,
+    `  if (ccjs_value_input.tag != ${expectedTag}) return ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE));`,
+    `  frame->${item.fieldName} = ${storeValue};`,
+    '  if (frame->awaited != 0) {',
+    '    ccjs_promise_release(frame->awaited);',
+    '    frame->awaited = 0;',
+    '  }'
+  ]
+
+  if (nextItem == null) {
+    lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1).map(line => `  ${line}`))
+    lines.push(...returnValue.lines.map(line => `  ${line}`))
+    lines.push(`  return ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+    lines.push('}')
+    return lines
+  }
+
+  const context = createFunctionContext(baseContext, 'void')
+  context.statusReturn = true
+  context.externalEventLoop = true
+  context.eventLoopUsed = true
+  registerAsyncTaskParams(wrapper, context)
+  registerAsyncTaskAwaitLocals(wrapper, context, item.index + 1)
+  const schedule = emitAsyncTaskScheduleAwaitLines(wrapper, nextItem, context, {
+    cleanup: 'resume',
+    final: nextItem.index === wrapper.awaits.length - 1
+  })
+
+  lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1).map(line => `  ${line}`))
+  lines.push('  ccjs_loop* ccjs_loop = frame->ccjs_loop;')
+  lines.push('  if (ccjs_loop == 0) return ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE));')
+  lines.push(`  frame->state = ${nextItem.index};`)
+  lines.push(...schedule.map(line => `  ${line}`))
+  lines.push('  return CCJS_OK;')
+  lines.push('}')
+
+  return lines
 }
 
 function emitAsyncTaskRejectDeclaration(wrapper) {

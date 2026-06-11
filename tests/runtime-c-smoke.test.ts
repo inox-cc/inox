@@ -1919,6 +1919,53 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C multiple-await async task frame compiles and runs', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-multi-await-'))
+  const source = join(dir, 'async-task-frame-multi-await.c')
+  const output = join(dir, 'async-task-frame-multi-await')
+
+  try {
+    const result = compileSource(`async function addTwo(input: number, delta: number): Promise<number> {
+  const first = await Promise.resolve(input)
+  const second = await Promise.resolve(first + delta)
+
+  return first + second
+}
+
+export async function main(): Promise<void> {
+  console.log(await addTwo(2, 4))
+  const promise = addTwo(5, 6)
+  console.log(await promise)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '8\n16\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C object literal lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

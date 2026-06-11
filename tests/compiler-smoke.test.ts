@@ -3775,7 +3775,8 @@ export async function main(): Promise<void> {
   assert.match(result.code, /status = ccjs_promise_new\(ccjs_loop, &frame->awaited\);/)
   assert.match(result.code, /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_compute_resume, ccjs_async_task_compute_reject, frame, ccjs_async_task_compute_finalize\);/)
   assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(2\)\);/)
-  assert.match(result.code, /double value = ccjs_value_input\.as\.number;/)
+  assert.match(result.code, /frame->local_value = ccjs_value_input\.as\.number;/)
+  assert.match(result.code, /double value = frame->local_value;/)
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ 3\)\)\);/)
   assert.match(result.code, /if \(ccjs_async_task_compute_start\(&ccjs_loop, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_async_task_compute_start\(&ccjs_loop, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
@@ -3854,7 +3855,8 @@ export async function main(): Promise<void> {
   assert.match(result.code, /double param_flag;/)
   assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_bool_value\(\(flag\) != 0\)\);/)
   assert.match(result.code, /if \(ccjs_value_input\.tag != CCJS_TAG_BOOL\) return ccjs_promise_reject\(frame->promise, ccjs_number_value\(\(ccjs_number\)CCJS_ERR_TYPE\)\);/)
-  assert.match(result.code, /double value = ccjs_value_input\.as\.boolean \? 1 : 0;/)
+  assert.match(result.code, /frame->local_value = ccjs_value_input\.as\.boolean \? 1 : 0;/)
+  assert.match(result.code, /double value = frame->local_value;/)
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_bool_value\(\(\(!value\)\) != 0\)\);/)
   assert.match(result.code, /if \(ccjs_async_task_flip_start\(&ccjs_loop, 0, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_async_task_flip_start\(&ccjs_loop, 1, &ccjs_promise_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
@@ -3903,6 +3905,35 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
   assert.doesNotMatch(result.code, /return Promise\.resolve/)
   assert.doesNotMatch(result.code, /addLater\(2, 4\)/)
+})
+
+test('lowers multiple awaits in async task frames to C state switches', () => {
+  const result = compileSource(`async function addTwo(input: number, delta: number): Promise<number> {
+  const first = await Promise.resolve(input)
+  const second = await Promise.resolve(first + delta)
+
+  return first + second
+}
+
+export async function main(): Promise<void> {
+  console.log(await addTwo(2, 4))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /int state;/)
+  assert.match(result.code, /double local_first;/)
+  assert.match(result.code, /double local_second;/)
+  assert.match(result.code, /switch \(frame->state\) \{/)
+  assert.match(result.code, /case 0: \{/)
+  assert.match(result.code, /frame->local_first = ccjs_value_input\.as\.number;/)
+  assert.match(result.code, /frame->state = 1;/)
+  assert.match(result.code, /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_addTwo_resume, ccjs_async_task_addTwo_reject, frame, 0\);/)
+  assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(\(first \+ delta\)\)\);/)
+  assert.match(result.code, /case 1: \{/)
+  assert.match(result.code, /frame->local_second = ccjs_value_input\.as\.number;/)
+  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(first \+ second\)\)\);/)
 })
 
 test('lowers awaited plain Promise-returning calls to C', () => {
