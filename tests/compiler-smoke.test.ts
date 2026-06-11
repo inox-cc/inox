@@ -4020,6 +4020,53 @@ export async function main(): Promise<void> {
   assert.match(result.code, /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_failDirect_resume, ccjs_async_task_failDirect_reject, frame, ccjs_async_task_failDirect_finalize\);/)
 })
 
+test('lowers async task frame try catch finally around awaited promises', () => {
+  const result = compileSource(`async function recover(): Promise<number> {
+  try {
+    const value: number = await Promise.reject('inner fail')
+
+    return value
+  } catch (error) {
+    console.log('caught', error)
+
+    return 7
+  } finally {
+    console.log('finally recover')
+  }
+}
+
+async function propagate(): Promise<number> {
+  try {
+    const value: number = await Promise.reject('outer fail')
+
+    return value
+  } finally {
+    console.log('finally propagate')
+  }
+}
+
+export async function main(): Promise<void> {
+  console.log(await recover())
+
+  try {
+    console.log(await propagate())
+  } catch (error) {
+    console.log('outer', error)
+  }
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_async_task_recover_reject\(void\* context, ccjs_value ccjs_error\) \{/)
+  assert.match(result.code, /case 0: \{\n    if \(ccjs_error\.tag != CCJS_TAG_STRING \|\| ccjs_error\.as\.ref == 0\) \{/)
+  assert.match(result.code, /ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;/)
+  assert.match(result.code, /printf\("%s %\.\*s\\n", "caught", \(int\)error->len, error->bytes\);/)
+  assert.match(result.code, /printf\("%s\\n", "finally recover"\);/)
+  assert.match(result.code, /status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_propagate_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "finally propagate"\);[\s\S]*status = ccjs_promise_reject\(frame->promise, ccjs_error\);/)
+})
+
 test('lowers awaited plain Promise-returning calls to C', () => {
   const result = compileSource(`function getPromise(): Promise<number> {
   return Promise.resolve(2)

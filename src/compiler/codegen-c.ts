@@ -441,7 +441,8 @@ function collectAsyncTaskWrappers(functions, context) {
       params,
       awaits: body.awaits,
       returnExpression: body.returnExpression,
-      returnType: body.returnType
+      returnType: body.returnType,
+      tryRegion: body.tryRegion ?? null
     }
 
     wrappers.set(item.name, wrapper)
@@ -479,6 +480,12 @@ function resolveAsyncTaskWrapperBody(statement, context, params) {
     return null
   }
 
+  const tryBody = resolveAsyncTaskTryWrapperBody(statement, context, params, returnType)
+
+  if (tryBody != null) {
+    return tryBody
+  }
+
   if (statement.body.length < 2) {
     return null
   }
@@ -513,8 +520,127 @@ function resolveAsyncTaskWrapperBody(statement, context, params) {
   return {
     awaits,
     returnExpression,
-    returnType
+    returnType,
+    tryRegion: null
   }
+}
+
+function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) {
+  if (statement.body.length !== 1 || statement.body[0]?.type !== 'TryStatement') {
+    return null
+  }
+
+  const tryStatement = statement.body[0]
+  const tryStatements = tryStatement.block?.body ?? []
+  const returnStatement = tryStatements.at(-1)
+
+  if (returnStatement?.type !== 'ReturnStatement') {
+    return null
+  }
+
+  if (tryStatement.handler == null && tryStatement.finalizer == null) {
+    return null
+  }
+
+  const awaits = resolveAsyncTaskAwaitSteps(tryStatements.slice(0, -1), context)
+
+  if (awaits == null) {
+    return null
+  }
+
+  const returnContext = createAsyncTaskExpressionContext(context, params, awaits)
+  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
+
+  if (returnExpression == null) {
+    return null
+  }
+
+  const handler = resolveAsyncTaskTryHandler(tryStatement.handler, context, params, returnType)
+  const finalizerStatements = tryStatement.finalizer?.body ?? []
+
+  if ((tryStatement.handler != null && handler == null) || hasUnsupportedAsyncTaskTryControlFlow(finalizerStatements)) {
+    return null
+  }
+
+  return {
+    awaits,
+    returnExpression,
+    returnType,
+    tryRegion: {
+      handler,
+      finalizerStatements
+    }
+  }
+}
+
+function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
+  if (handler == null) {
+    return null
+  }
+
+  const statements = handler.body?.body ?? []
+  const returnStatement = statements.at(-1)
+
+  if (returnStatement?.type !== 'ReturnStatement' || hasUnsupportedAsyncTaskTryControlFlow(statements.slice(0, -1))) {
+    return null
+  }
+
+  const catchContext = createAsyncTaskExpressionContext(context, params, [])
+
+  if (handler.param != null) {
+    catchContext.variables.set(handler.param, 'string')
+    catchContext.runtimeStrings.add(handler.param)
+  }
+
+  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, catchContext)
+
+  if (returnExpression == null) {
+    return null
+  }
+
+  return {
+    param: handler.param,
+    statements: statements.slice(0, -1),
+    returnExpression
+  }
+}
+
+function createAsyncTaskExpressionContext(context, params, awaits) {
+  const result = {
+    ...context,
+    variables: new Map(context.variables ?? []),
+    runtimeStrings: new Set(context.runtimeStrings ?? [])
+  }
+
+  for (const param of params) {
+    result.variables.set(param.name, param.valueType)
+  }
+
+  for (const item of awaits ?? []) {
+    result.variables.set(item.name, item.type)
+  }
+
+  return result
+}
+
+function hasUnsupportedAsyncTaskTryControlFlow(node) {
+  if (node == null) {
+    return false
+  }
+
+  if (Array.isArray(node)) {
+    return node.some(item => hasUnsupportedAsyncTaskTryControlFlow(item))
+  }
+
+  if (typeof node !== 'object') {
+    return false
+  }
+
+  if (['AwaitExpression', 'ReturnStatement', 'ThrowStatement', 'TryStatement', 'BreakStatement', 'ContinueStatement'].includes(node.type)) {
+    return true
+  }
+
+  return Object.values(node).some(value => hasUnsupportedAsyncTaskTryControlFlow(value))
 }
 
 function resolveAsyncTaskAwaitSteps(statements, context) {
@@ -711,7 +837,7 @@ function emitAsyncTaskWrapperDeclaration(wrapper, baseContext) {
     '',
     ...emitAsyncTaskResumeDeclaration(wrapper, baseContext),
     '',
-    ...emitAsyncTaskRejectDeclaration(wrapper),
+    ...emitAsyncTaskRejectDeclaration(wrapper, baseContext),
     '',
     ...emitAsyncTaskFinalizerDeclaration(wrapper)
   ]
@@ -783,6 +909,17 @@ function emitAsyncTaskVisibleLocalReads(wrapper, count) {
     ...wrapper.params.map(param => `${emitCType(param.valueType)} ${param.name} = frame->${param.fieldName};`),
     ...wrapper.awaits.slice(0, count).map(item => `${emitCType(item.type)} ${item.name} = frame->${item.fieldName};`)
   ]
+}
+
+function createAsyncTaskEmitContext(baseContext, wrapper, returnType, visibleAwaitCount) {
+  const context = createFunctionContext(baseContext, returnType)
+  context.statusReturn = true
+  context.externalEventLoop = true
+  context.eventLoopUsed = true
+  registerAsyncTaskParams(wrapper, context)
+  registerAsyncTaskAwaitLocals(wrapper, context, visibleAwaitCount)
+
+  return context
 }
 
 function emitAsyncTaskScheduleAwaitLines(wrapper, item, context, options) {
@@ -1167,6 +1304,7 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
   if (nextItem == null) {
     lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1).map(line => `  ${line}`))
     lines.push(...returnValue.lines.map(line => `  ${line}`))
+    lines.push(...emitAsyncTaskTryFinallyLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
     lines.push(`  return ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
     lines.push('}')
     return lines
@@ -1204,7 +1342,29 @@ function emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, errorExpression
   ]
 }
 
-function emitAsyncTaskRejectDeclaration(wrapper) {
+function emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount) {
+  if (wrapper.tryRegion == null || wrapper.tryRegion.finalizerStatements.length === 0) {
+    return []
+  }
+
+  const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', visibleAwaitCount)
+
+  return withVariableScope(context, () => emitStatementList(wrapper.tryRegion.finalizerStatements, context))
+}
+
+function emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, call) {
+  return [
+    `status = ${call};`,
+    ...(item.index < wrapper.awaits.length - 1 ? [`${wrapper.finalizerName}(frame);`] : []),
+    'return status;'
+  ]
+}
+
+function emitAsyncTaskRejectDeclaration(wrapper, baseContext) {
+  if (wrapper.tryRegion != null) {
+    return emitAsyncTaskTryRejectDeclaration(wrapper, baseContext)
+  }
+
   const lastState = wrapper.awaits.length - 1
 
   return [
@@ -1222,6 +1382,70 @@ function emitAsyncTaskRejectDeclaration(wrapper) {
     '  return status;',
     '}'
   ]
+}
+
+function emitAsyncTaskTryRejectDeclaration(wrapper, baseContext) {
+  const cases = wrapper.awaits.flatMap(item => emitAsyncTaskTryRejectCase(wrapper, item, baseContext))
+
+  return [
+    `static ccjs_status ${wrapper.rejectName}(void* context, ccjs_value ccjs_error) {`,
+    `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`,
+    '  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;',
+    '  ccjs_status status = CCJS_OK;',
+    '  switch (frame->state) {',
+    ...cases.map(line => `  ${line}`),
+    '  default:',
+    '    status = ccjs_promise_reject(frame->promise, ccjs_error);',
+    '    return status;',
+    '  }',
+    '}'
+  ]
+}
+
+function emitAsyncTaskTryRejectCase(wrapper, item, baseContext) {
+  const handler = wrapper.tryRegion?.handler ?? null
+  const lines = [
+    `case ${item.index}: {`
+  ]
+
+  if (handler == null) {
+    lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index).map(line => `  ${line}`))
+    lines.push(...emitAsyncTaskTryFinallyLines(wrapper, baseContext, item.index).map(line => `  ${line}`))
+    lines.push(...emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, 'ccjs_promise_reject(frame->promise, ccjs_error)').map(line => `  ${line}`))
+    lines.push('}')
+
+    return lines
+  }
+
+  if (handler.param != null) {
+    lines.push('  if (ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0) {')
+    lines.push(...emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, 'ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE))').map(line => `    ${line}`))
+    lines.push('  }')
+  }
+
+  const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, item.index)
+
+  if (handler.param != null) {
+    context.variables.set(handler.param, 'string')
+    context.runtimeStrings.add(handler.param)
+  }
+
+  lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index).map(line => `  ${line}`))
+
+  if (handler.param != null) {
+    lines.push(`  ccjs_string* ${handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
+  }
+
+  lines.push(...emitStatementList(handler.statements, context).map(line => `  ${line}`))
+
+  const returnValue = emitPreparedAsyncTaskValueExpression(handler.returnExpression, wrapper.returnType, context)
+
+  lines.push(...returnValue.lines.map(line => `  ${line}`))
+  lines.push(...emitAsyncTaskTryFinallyLines(wrapper, baseContext, item.index).map(line => `  ${line}`))
+  lines.push(...emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, `ccjs_promise_resolve(frame->promise, ${returnValue.expression})`).map(line => `  ${line}`))
+  lines.push('}')
+
+  return lines
 }
 
 function emitAsyncTaskFinalizerDeclaration(wrapper) {

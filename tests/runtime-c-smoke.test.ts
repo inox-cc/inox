@@ -2094,6 +2094,74 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame try catch finally around awaited promises', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-try-'))
+  const source = join(dir, 'async-task-frame-try.c')
+  const output = join(dir, 'async-task-frame-try')
+
+  try {
+    const result = compileSource(`async function recover(): Promise<number> {
+  try {
+    const value: number = await Promise.reject('inner fail')
+
+    return value
+  } catch (error) {
+    console.log('caught', error)
+
+    return 7
+  } finally {
+    console.log('finally recover')
+  }
+}
+
+async function propagate(): Promise<number> {
+  try {
+    const value: number = await Promise.reject('outer fail')
+
+    return value
+  } finally {
+    console.log('finally propagate')
+  }
+}
+
+export async function main(): Promise<void> {
+  console.log(await recover())
+
+  try {
+    console.log(await propagate())
+  } catch (error) {
+    console.log('outer', error)
+  }
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'caught inner fail\nfinally recover\n7\nfinally propagate\nouter outer fail\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C object literal lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
