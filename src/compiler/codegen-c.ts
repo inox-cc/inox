@@ -458,7 +458,7 @@ function resolveAsyncTaskWrapperParams(statement, context) {
 
   const params = resolveFunctionDeclarationParams(statement.name, statement.params, context)
 
-  if (params.some(param => param.nullable === true || (param.valueType !== 'number' && param.valueType !== 'boolean'))) {
+  if (params.some(param => param.nullable === true || !isSupportedAsyncTaskParamType(param.valueType))) {
     return null
   }
 
@@ -469,6 +469,22 @@ function resolveAsyncTaskWrapperParams(statement, context) {
   }))
 }
 
+function isSupportedAsyncTaskParamType(valueType) {
+  return valueType === 'number'
+    || valueType === 'boolean'
+    || valueType === 'string'
+    || valueType === 'bytes'
+}
+
+function isSupportedAsyncTaskValueType(valueType) {
+  return valueType === 'number'
+    || valueType === 'boolean'
+    || valueType === 'string'
+    || valueType === 'bytes'
+    || valueType === 'array'
+    || valueType === 'void'
+}
+
 function resolveAsyncTaskWrapperBody(statement, context, params) {
   if (statement?.async !== true || statement.returnType !== 'promise' || isThrowingFunctionName(statement.name, context)) {
     return null
@@ -476,7 +492,7 @@ function resolveAsyncTaskWrapperBody(statement, context, params) {
 
   const returnType = statement.returnPromiseValueType ?? context.functionReturnPromiseValueTypes.get(statement.name) ?? 'unknown'
 
-  if (returnType !== 'number' && returnType !== 'boolean') {
+  if (!isSupportedAsyncTaskValueType(returnType)) {
     return null
   }
 
@@ -513,7 +529,7 @@ function resolveAsyncTaskWrapperBody(statement, context, params) {
 
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
 
-  if (awaits == null || returnExpression == null) {
+  if (awaits == null || (returnType !== 'void' && returnExpression == null)) {
     return null
   }
 
@@ -551,7 +567,7 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
   const returnContext = createAsyncTaskExpressionContext(context, params, awaits)
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
 
-  if (returnExpression == null) {
+  if (returnType !== 'void' && returnExpression == null) {
     return null
   }
 
@@ -657,6 +673,14 @@ function resolveAsyncTaskAwaitSteps(statements, context) {
       continue
     }
 
+    const statementAwait = resolveAsyncTaskStatementAwaitStep(statement, context, awaits.length)
+
+    if (statementAwait != null) {
+      awaits.push(statementAwait)
+      index += 1
+      continue
+    }
+
     const localPromiseAwait = resolveAsyncTaskLocalPromiseAwaitStep(statement, nextStatement, context, awaits.length)
 
     if (localPromiseAwait != null) {
@@ -682,7 +706,7 @@ function resolveAsyncTaskDirectAwaitStep(statement, context, index) {
     ? awaitedExpression
     : null
 
-  if (awaitedType !== 'number' && awaitedType !== 'boolean') {
+  if (!isSupportedAsyncTaskValueType(awaitedType) || awaitedType === 'void') {
     return null
   }
 
@@ -691,6 +715,32 @@ function resolveAsyncTaskDirectAwaitStep(statement, context, index) {
     name: statement.name,
     type: awaitedType,
     fieldName: `local_${emitCIdentifier(statement.name)}`,
+    arrayElementType: statement.arrayElementType ?? statement.init.arrayElementType ?? awaitedExpression?.arrayElementType ?? 'unknown',
+    awaitedExpression: awaitedPromiseExpression == null ? awaitedExpression : null,
+    awaitedPromiseExpression
+  }
+}
+
+function resolveAsyncTaskStatementAwaitStep(statement, context, index) {
+  if (statement?.type !== 'ExpressionStatement' || statement.expression?.type !== 'AwaitExpression') {
+    return null
+  }
+
+  const awaitedType = statement.expression.valueType ?? 'void'
+  const awaitedExpression = statement.expression.argument
+  const awaitedPromiseExpression = isSupportedAsyncTaskDirectAwaitPromiseExpression(awaitedExpression, context)
+    ? awaitedExpression
+    : null
+
+  if (awaitedType !== 'void') {
+    return null
+  }
+
+  return {
+    index,
+    name: null,
+    type: awaitedType,
+    fieldName: null,
     awaitedExpression: awaitedPromiseExpression == null ? awaitedExpression : null,
     awaitedPromiseExpression
   }
@@ -709,7 +759,7 @@ function resolveAsyncTaskLocalPromiseAwaitStep(promiseStatement, awaitStatement,
 
   const awaitedType = awaitStatement.valueType ?? awaitStatement.init.valueType ?? 'unknown'
 
-  if (awaitedType !== 'number' && awaitedType !== 'boolean') {
+  if (!isSupportedAsyncTaskValueType(awaitedType) || awaitedType === 'void') {
     return null
   }
 
@@ -718,6 +768,7 @@ function resolveAsyncTaskLocalPromiseAwaitStep(promiseStatement, awaitStatement,
     name: awaitStatement.name,
     type: awaitedType,
     fieldName: `local_${emitCIdentifier(awaitStatement.name)}`,
+    arrayElementType: awaitStatement.arrayElementType ?? awaitStatement.init.arrayElementType ?? awaitedPromiseExpression.arrayElementType,
     awaitedExpression: null,
     awaitedPromiseExpression
   }
@@ -780,6 +831,10 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context) {
     return true
   }
 
+  if (isAsyncFsRuntimeCallExpression(expression)) {
+    return true
+  }
+
   if (isPromiseReturningFunctionCallee(expression.callee, context)) {
     return true
   }
@@ -793,7 +848,18 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context) {
   return valueType === 'number' || valueType === 'boolean'
 }
 
+function isAsyncFsRuntimeCallExpression(expression) {
+  const method = cFsRuntimeCallName(expression?.callee)
+
+  return expression?.valueType === 'promise'
+    && ['readFile', 'readFileBytes', 'readDir', 'writeFile', 'writeFileBytes'].includes(method)
+}
+
 function resolveAsyncTaskReturnValueExpression(expression, returnType, context) {
+  if (returnType === 'void') {
+    return expression == null ? null : expression
+  }
+
   if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'resolve') {
     return expression.args[0] ?? null
   }
@@ -802,7 +868,7 @@ function resolveAsyncTaskReturnValueExpression(expression, returnType, context) 
     ? expression.valueType
     : context.variables == null ? 'unknown' : inferExpressionType(expression, context)
 
-  if ((returnType === 'number' || returnType === 'boolean') && expressionType === returnType) {
+  if (isSupportedAsyncTaskValueType(returnType) && expressionType === returnType) {
     return expression
   }
 
@@ -816,10 +882,18 @@ function emitAsyncTaskFrameType(wrapper) {
     '  ccjs_promise* promise;',
     '  ccjs_promise* awaited;',
     '  int state;',
-    ...wrapper.params.map(param => `  ${emitCType(param.valueType)} ${param.fieldName};`),
-    ...wrapper.awaits.map(item => `  ${emitCType(item.type)} ${item.fieldName};`),
+    ...wrapper.params.map(param => `  ${emitAsyncTaskStorageCType(param.valueType)} ${param.fieldName};`),
+    ...wrapper.awaits.filter(item => item.fieldName != null).map(item => `  ${emitAsyncTaskStorageCType(item.type)} ${item.fieldName};`),
     `} ${wrapper.frameTypeName};`
   ]
+}
+
+function emitAsyncTaskStorageCType(valueType) {
+  return isManagedRuntimeReturnType(valueType) ? 'ccjs_value' : emitCType(valueType)
+}
+
+function emitAsyncTaskStorageInit(valueType) {
+  return isManagedRuntimeReturnType(valueType) ? 'ccjs_undefined_value()' : '0'
 }
 
 function emitAsyncTaskWrapperPrototypes(wrapper) {
@@ -853,12 +927,10 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     cleanup: 'start',
     final: wrapper.awaits.length === 1
   })
-  const paramAliases = wrapper.params.map(param => `${emitCType(param.valueType)} ${param.name} = ${param.argName};`)
   const lines = [
     `static ccjs_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`,
     '  if (ccjs_loop == 0 || ccjs_loop->allocator == 0 || out == 0) return CCJS_ERR_TYPE;',
     '  *out = 0;',
-    ...paramAliases.map(line => `  ${line}`),
     `  ${wrapper.frameTypeName}* frame = ccjs_loop->allocator->alloc(ccjs_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`,
     '  if (frame == 0) return CCJS_ERR_OOM;',
     '  frame->ccjs_loop = ccjs_loop;',
@@ -866,14 +938,16 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     '  frame->awaited = 0;',
     '  frame->state = 0;',
     ...wrapper.params.map(param => `  frame->${param.fieldName} = ${param.argName};`),
-    ...wrapper.awaits.map(item => `  frame->${item.fieldName} = 0;`),
+    ...wrapper.awaits.filter(item => item.fieldName != null).map(item => `  frame->${item.fieldName} = ${emitAsyncTaskStorageInit(item.type)};`),
     '  ccjs_status status = ccjs_promise_new(ccjs_loop, &frame->promise);',
     '  if (status != CCJS_OK) {',
     '    ccjs_loop->allocator->free(ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));',
     '    return status;',
     '  }',
+    ...wrapper.params.filter(param => isManagedRuntimeReturnType(param.valueType)).map(param => `  ccjs_retain(frame->${param.fieldName});`),
     '  ccjs_promise_retain(frame->promise);',
     '  *out = frame->promise;',
+    ...emitAsyncTaskVisibleLocalReads(wrapper, 0).map(line => `  ${line}`),
     ...schedule.map(line => `  ${line}`),
     '  return CCJS_OK;',
     '}'
@@ -894,21 +968,45 @@ function emitAsyncTaskStartParams(wrapper) {
 
 function registerAsyncTaskParams(wrapper, context) {
   for (const param of wrapper.params) {
-    context.variables.set(param.name, param.valueType)
+    registerAsyncTaskLocalMetadata(param.name, param.valueType, param, context)
   }
 }
 
 function registerAsyncTaskAwaitLocals(wrapper, context, count) {
   for (const item of wrapper.awaits.slice(0, count)) {
-    context.variables.set(item.name, item.type)
+    if (item.name != null) {
+      registerAsyncTaskLocalMetadata(item.name, item.type, item, context)
+    }
   }
 }
 
 function emitAsyncTaskVisibleLocalReads(wrapper, count) {
   return [
-    ...wrapper.params.map(param => `${emitCType(param.valueType)} ${param.name} = frame->${param.fieldName};`),
-    ...wrapper.awaits.slice(0, count).map(item => `${emitCType(item.type)} ${item.name} = frame->${item.fieldName};`)
+    ...wrapper.params.flatMap(param => emitAsyncTaskVisibleLocalRead(param.name, param.valueType, param.fieldName)),
+    ...wrapper.awaits.slice(0, count).flatMap(item => item.name == null ? [] : emitAsyncTaskVisibleLocalRead(item.name, item.type, item.fieldName))
   ]
+}
+
+function registerAsyncTaskLocalMetadata(name, valueType, item, context) {
+  context.variables.set(name, valueType)
+
+  if (valueType === 'string') {
+    context.runtimeStrings.add(name)
+  } else if (valueType === 'array') {
+    context.runtimeArrayElementTypes.set(name, item.arrayElementType ?? 'unknown')
+  }
+}
+
+function emitAsyncTaskVisibleLocalRead(name, valueType, fieldName) {
+  if (valueType === 'string') {
+    return [`ccjs_string* ${name} = (ccjs_string*)frame->${fieldName}.as.ref;`]
+  }
+
+  if (isManagedRuntimeReturnType(valueType)) {
+    return [`ccjs_value ${name} = frame->${fieldName};`]
+  }
+
+  return [`${emitCType(valueType)} ${name} = frame->${fieldName};`]
 }
 
 function createAsyncTaskEmitContext(baseContext, wrapper, returnType, visibleAwaitCount) {
@@ -1042,6 +1140,12 @@ function emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, op
     return rejected
   }
 
+  const fsCall = emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, options)
+
+  if (fsCall != null) {
+    return fsCall
+  }
+
   const taskCall = emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context, options)
 
   if (taskCall != null) {
@@ -1061,6 +1165,44 @@ function emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, op
   }
 
   return null
+}
+
+function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, options) {
+  if (!isAsyncFsRuntimeCallExpression(expression)) {
+    return null
+  }
+
+  const method = cFsRuntimeCallName(expression.callee)
+  const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
+  const lines = [
+    ...path.lines
+  ]
+
+  if (method === 'readFile') {
+    lines.push(`status = ccjs_fs_read_file(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'readFileBytes') {
+    lines.push(`status = ccjs_fs_read_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'readDir') {
+    lines.push(`status = ccjs_fs_read_dir(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'writeFileBytes') {
+    const bytes = emitCValueExpression(expression.args[1], context)
+
+    lines.push(...bytes.lines)
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(`status = ccjs_fs_write_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`)
+  } else {
+    const bytes = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+
+    lines.push(...bytes.lines)
+    lines.push(`status = ccjs_fs_write_file(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`)
+  }
+
+  return {
+    lines: [
+      ...lines,
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+    ]
+  }
 }
 
 function emitPreparedAsyncTaskRejectedPromiseSourceExpression(expression, wrapper, context, options) {
@@ -1244,6 +1386,26 @@ function emitPreparedAsyncTaskAwaitedValueExpression(item, context) {
 }
 
 function emitPreparedAsyncTaskValueExpression(expression, valueType, context) {
+  if (valueType === 'void') {
+    return {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
+  if (isManagedRuntimeReturnType(valueType)) {
+    const value = emitCValueExpression(expression, context)
+    const expectedTag = cRuntimeValueTag(valueType)
+
+    return {
+      lines: [
+        ...value.lines,
+        emitRuntimeValueCheck(value.expression, expectedTag, context)
+      ],
+      expression: value.expression
+    }
+  }
+
   if (valueType === 'boolean') {
     const value = emitPreparedNumberExpression(expression, context)
 
@@ -1285,16 +1447,11 @@ function emitAsyncTaskResumeDeclaration(wrapper, baseContext) {
 
 function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
   const nextItem = wrapper.awaits[item.index + 1] ?? null
-  const expectedTag = item.type === 'boolean' ? 'CCJS_TAG_BOOL' : 'CCJS_TAG_NUMBER'
-  const storeValue = item.type === 'boolean'
-    ? 'ccjs_value_input.as.boolean ? 1 : 0'
-    : 'ccjs_value_input.as.number'
+  const valueCheck = emitAsyncTaskFulfilledValueCheck(wrapper, item)
   const lines = [
     `case ${item.index}: {`,
-    `  if (ccjs_value_input.tag != ${expectedTag}) {`,
-    ...emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)').map(line => `    ${line}`),
-    '  }',
-    `  frame->${item.fieldName} = ${storeValue};`,
+    ...valueCheck.map(line => `  ${line}`),
+    ...emitAsyncTaskStoreFulfilledValueLines(item).map(line => `  ${line}`),
     '  if (frame->awaited != 0) {',
     '    ccjs_promise_release(frame->awaited);',
     '    frame->awaited = 0;',
@@ -1332,6 +1489,45 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
   lines.push('}')
 
   return lines
+}
+
+function emitAsyncTaskFulfilledValueCheck(wrapper, item) {
+  const expectedTag = cRuntimeValueTag(item.type)
+
+  if (expectedTag == null) {
+    return []
+  }
+
+  const refCheck = isManagedRuntimeReturnType(item.type) ? ' || ccjs_value_input.as.ref == 0' : ''
+
+  return [
+    `if (ccjs_value_input.tag != ${expectedTag}${refCheck}) {`,
+    ...emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)').map(line => `  ${line}`),
+    '}'
+  ]
+}
+
+function emitAsyncTaskStoreFulfilledValueLines(item) {
+  if (item.fieldName == null || item.type === 'void') {
+    return []
+  }
+
+  if (item.type === 'boolean') {
+    return [`frame->${item.fieldName} = ccjs_value_input.as.boolean ? 1 : 0;`]
+  }
+
+  if (item.type === 'number') {
+    return [`frame->${item.fieldName} = ccjs_value_input.as.number;`]
+  }
+
+  if (isManagedRuntimeReturnType(item.type)) {
+    return [
+      `frame->${item.fieldName} = ccjs_value_input;`,
+      `ccjs_retain(frame->${item.fieldName});`
+    ]
+  }
+
+  return []
 }
 
 function emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, errorExpression) {
@@ -1454,6 +1650,8 @@ function emitAsyncTaskFinalizerDeclaration(wrapper) {
     `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`,
     '  if (frame == 0) return;',
     '  if (frame->awaited != 0) ccjs_promise_release(frame->awaited);',
+    ...wrapper.params.filter(param => isManagedRuntimeReturnType(param.valueType)).map(param => `  ccjs_release(frame->${param.fieldName});`),
+    ...wrapper.awaits.filter(item => item.fieldName != null && isManagedRuntimeReturnType(item.type)).map(item => `  ccjs_release(frame->${item.fieldName});`),
     '  if (frame->promise != 0) ccjs_promise_release(frame->promise);',
     '  if (frame->ccjs_loop != 0 && frame->ccjs_loop->allocator != 0) {',
     '    frame->ccjs_loop->allocator->free(frame->ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));',
@@ -1573,9 +1771,15 @@ function emitFunctionDeclaration(statement, baseContext) {
 }
 
 function emitAsyncTaskFunctionStubDeclaration(statement, context) {
+  const returnLine = context.returnType === 'void'
+    ? '  return;'
+    : isManagedRuntimeReturnType(context.returnType)
+      ? '  return ccjs_undefined_value();'
+      : '  return 0;'
+
   return [
     `${emitFunctionHead(statement, context)} {`,
-    '  return 0;',
+    returnLine,
     '}'
   ]
 }

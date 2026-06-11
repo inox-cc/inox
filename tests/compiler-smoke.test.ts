@@ -3801,8 +3801,8 @@ export async function main(): Promise<void> {
   assert.match(result.code, /double param_input;/)
   assert.match(result.code, /double param_delta;/)
   assert.match(result.code, /static ccjs_status ccjs_async_task_addLater_start\(ccjs_loop\* ccjs_loop, double ccjs_arg_input, double ccjs_arg_delta, ccjs_promise\*\* out\);/)
-  assert.match(result.code, /double input = ccjs_arg_input;/)
-  assert.match(result.code, /double delta = ccjs_arg_delta;/)
+  assert.match(result.code, /double input = frame->param_input;/)
+  assert.match(result.code, /double delta = frame->param_delta;/)
   assert.match(result.code, /frame->param_input = ccjs_arg_input;/)
   assert.match(result.code, /frame->param_delta = ccjs_arg_delta;/)
   assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(input\)\);/)
@@ -4065,6 +4065,62 @@ export async function main(): Promise<void> {
   assert.match(result.code, /printf\("%s\\n", "finally recover"\);/)
   assert.match(result.code, /status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/)
   assert.match(result.code, /static ccjs_status ccjs_async_task_propagate_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "finally propagate"\);[\s\S]*status = ccjs_promise_reject\(frame->promise, ccjs_error\);/)
+})
+
+test('lowers fs awaits through async task frames', () => {
+  const result = compileSource(`async function loadText(path: string): Promise<string> {
+  const text = await fs.readFile(path, 'utf8')
+
+  return text
+}
+
+async function loadBytes(path: string): Promise<Buffer> {
+  const bytes: Buffer = await fs.readFileBytes(path)
+
+  return bytes
+}
+
+async function listEntries(path: string): Promise<Array<string>> {
+  const entries: Array<string> = await fs.readDir(path)
+
+  return entries
+}
+
+async function saveText(path: string, text: string): Promise<void> {
+  await fs.writeFile(path, text)
+
+  return
+}
+
+async function saveBytes(path: string, bytes: Buffer): Promise<void> {
+  await fs.writeFileBytes(path, bytes)
+
+  return
+}
+
+export async function main(): Promise<void> {
+  console.log(await loadText('/tmp/in.txt'))
+  await saveText('/tmp/out.txt', 'saved')
+  const bytes = await loadBytes('/tmp/in.bin')
+  await saveBytes('/tmp/out.bin', bytes)
+  const entries = await listEntries('/tmp')
+  console.log(entries.length)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /typedef struct ccjs_async_task_loadText_frame \{[\s\S]*ccjs_value param_path;[\s\S]*ccjs_value local_text;/)
+  assert.match(result.code, /ccjs_retain\(frame->param_path\);/)
+  assert.match(result.code, /ccjs_string\* path = \(ccjs_string\*\)frame->param_path\.as\.ref;/)
+  assert.match(result.code, /status = ccjs_fs_read_file\(ccjs_loop, path->bytes, path->len, &frame->awaited\);/)
+  assert.match(result.code, /frame->local_text = ccjs_value_input;\n    ccjs_retain\(frame->local_text\);/)
+  assert.match(result.code, /ccjs_string\* text = \(ccjs_string\*\)frame->local_text\.as\.ref;/)
+  assert.match(result.code, /status = ccjs_fs_read_file_bytes\(ccjs_loop, path->bytes, path->len, &frame->awaited\);/)
+  assert.match(result.code, /status = ccjs_fs_read_dir\(ccjs_loop, path->bytes, path->len, &frame->awaited\);/)
+  assert.match(result.code, /status = ccjs_fs_write_file\(ccjs_loop, path->bytes, path->len, text->bytes, text->len, &frame->awaited\);/)
+  assert.match(result.code, /status = ccjs_fs_write_file_bytes\(ccjs_loop, path->bytes, path->len, bytes, &frame->awaited\);/)
+  assert.match(result.code, /return ccjs_undefined_value\(\);/)
 })
 
 test('lowers awaited plain Promise-returning calls to C', () => {

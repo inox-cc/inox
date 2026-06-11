@@ -2162,6 +2162,81 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frames await fs promises with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-fs-'))
+  const textInput = join(dir, 'input.txt')
+  const textCopied = join(dir, 'copied.txt')
+  const bytesInput = join(dir, 'input.bin')
+  const bytesCopied = join(dir, 'copied.bin')
+  const entriesDir = join(dir, 'entries')
+  const source = join(dir, 'async-task-frame-fs.c')
+  const output = join(dir, 'async-task-frame-fs')
+  const data = Buffer.from([9, 8, 7, 0, 255])
+
+  try {
+    await writeFile(textInput, 'loaded')
+    await writeFile(bytesInput, data)
+    await mkdir(entriesDir)
+    await writeFile(join(entriesDir, 'one.txt'), '')
+    await writeFile(join(entriesDir, 'two.txt'), '')
+
+    const result = compileSource(`async function copyText(input: string, output: string): Promise<string> {
+  const text = await fs.readFile(input, 'utf8')
+  await fs.writeFile(output, text)
+
+  return text
+}
+
+async function copyBytes(input: string, output: string): Promise<Buffer> {
+  const bytes: Buffer = await fs.readFileBytes(input)
+  await fs.writeFileBytes(output, bytes)
+
+  return bytes
+}
+
+async function listEntries(path: string): Promise<Array<string>> {
+  const entries: Array<string> = await fs.readDir(path)
+
+  return entries
+}
+
+export async function main(): Promise<void> {
+  console.log(await copyText(${JSON.stringify(textInput)}, ${JSON.stringify(textCopied)}))
+  await copyBytes(${JSON.stringify(bytesInput)}, ${JSON.stringify(bytesCopied)})
+  await listEntries(${JSON.stringify(entriesDir)})
+  console.log('listed')
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'loaded\nlisted\n')
+    assert.equal(await readFile(textCopied, 'utf8'), 'loaded')
+    assert.deepEqual(await readFile(bytesCopied), data)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C object literal lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
