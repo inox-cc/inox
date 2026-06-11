@@ -11,6 +11,7 @@
     "build": "node scripts/build.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
+    "test:examples": "node scripts/test-examples.ts",
     "test:fixtures": "node scripts/test-fixtures.ts",
     "test:capabilities": "node scripts/test-capabilities.ts",
     "test:hir-snapshots": "node scripts/test-hir-snapshots.ts",
@@ -19,7 +20,7 @@
     "test:diagnostic-snapshots": "node scripts/test-diagnostic-snapshots.ts",
     "test:snapshots": "npm run test:hir-snapshots && npm run test:ir-snapshots && npm run test:codegen-snapshots && npm run test:diagnostic-snapshots",
     "test:differential": "node scripts/test-differential.ts",
-    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:capabilities && npm run test:snapshots && npm run test:differential"
+    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:examples && npm run test:capabilities && npm run test:snapshots && npm run test:differential"
   },
   "engines": {
     "node": ">=24"

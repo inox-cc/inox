@@ -1349,12 +1349,12 @@ class Checker {
   }
 
   checkClassMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.object.type !== 'Reference' || expression.callee.object.path.length !== 1) {
+    if (expression.callee.type !== 'MemberExpression') {
       return null
     }
 
-    const objectSymbol = this.scope.resolve(expression.callee.object.path[0])
-    const className = objectSymbol?.className
+    this.checkExpression(expression.callee.object)
+    const className = this.resolveClassMethodReceiverClassName(expression.callee.object)
 
     if (className == null) {
       return null
@@ -1363,7 +1363,6 @@ class Checker {
     const classSymbol = this.scope.resolve(className)
     const method = classSymbol?.classMethods?.find(item => item.name === expression.callee.property)
 
-    this.checkExpression(expression.callee.object)
     const argTypes = expression.args.map(arg => this.checkExpression(arg))
 
     if (method == null) {
@@ -1396,6 +1395,18 @@ class Checker {
     expression.shape = returnInfo.shape
 
     return returnInfo.valueType
+  }
+
+  resolveClassMethodReceiverClassName(expression: AnyNode): string | null {
+    if (this.isThisExpression(expression)) {
+      return this.scope.resolve('this')?.className ?? expression.className ?? null
+    }
+
+    if (expression?.type === 'Reference' && expression.path.length === 1) {
+      return this.scope.resolve(expression.path[0])?.className ?? expression.className ?? null
+    }
+
+    return expression?.className ?? null
   }
 
   checkFsCall(expression: AnyNode): ValueType | null {

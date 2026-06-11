@@ -1274,6 +1274,10 @@ test('generated C simple classes compile and run with runtime sources', async t 
     return this.id + extra
   }
 
+  total(extra: number): number {
+    return this.score(extra)
+  }
+
   label(): string {
     return this.name
   }
@@ -1282,7 +1286,7 @@ test('generated C simple classes compile and run with runtime sources', async t 
 export function main(): void {
   const user = new User(1, 'Ada')
   user.rename('Grace')
-  const value = user.score(2)
+  const value = user.total(2)
   const name = user.label()
   console.log(value, name)
 }
