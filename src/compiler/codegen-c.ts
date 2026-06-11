@@ -918,11 +918,7 @@ function emitAsyncTaskWrapperDeclaration(wrapper, baseContext) {
 }
 
 function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
-  const context = createFunctionContext(baseContext, 'void')
-  context.statusReturn = true
-  context.externalEventLoop = true
-  context.eventLoopUsed = true
-  registerAsyncTaskParams(wrapper, context)
+  const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', 0)
   const schedule = emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
     cleanup: 'start',
     final: wrapper.awaits.length === 1
@@ -1424,10 +1420,7 @@ function emitPreparedAsyncTaskValueExpression(expression, valueType, context) {
 }
 
 function emitAsyncTaskResumeDeclaration(wrapper, baseContext) {
-  const context = createFunctionContext(baseContext, wrapper.returnType)
-  context.statusReturn = true
-  registerAsyncTaskParams(wrapper, context)
-  registerAsyncTaskAwaitLocals(wrapper, context, wrapper.awaits.length)
+  const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, wrapper.awaits.length)
   const returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
   const cases = wrapper.awaits.flatMap(item => emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue))
 
@@ -1467,12 +1460,7 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
     return lines
   }
 
-  const context = createFunctionContext(baseContext, 'void')
-  context.statusReturn = true
-  context.externalEventLoop = true
-  context.eventLoopUsed = true
-  registerAsyncTaskParams(wrapper, context)
-  registerAsyncTaskAwaitLocals(wrapper, context, item.index + 1)
+  const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', item.index + 1)
   const schedule = emitAsyncTaskScheduleAwaitLines(wrapper, nextItem, context, {
     cleanup: 'resume',
     final: nextItem.index === wrapper.awaits.length - 1
