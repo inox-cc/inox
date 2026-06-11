@@ -2134,7 +2134,7 @@ export function main(): void {
   assert.match(mapEntryResult.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_map_entry_\d+, &entry\)/)
 })
 
-test('drives C unsupported syntax diagnostics from stored target-neutral IR syntax features', () => {
+test('accepts supported C syntax features from stored target-neutral IR syntax features', () => {
   const result = compileSource(`export function main(): void {
   console.log('ok')
 }
@@ -2142,7 +2142,7 @@ test('drives C unsupported syntax diagnostics from stored target-neutral IR synt
     target: 'c'
   })
 
-  assert.throws(() => emitCFromIr({
+  assert.doesNotThrow(() => emitCFromIr({
     ...result.ir,
     syntaxFeatures: [{
       feature: 'class' as const,
@@ -2151,14 +2151,7 @@ test('drives C unsupported syntax diagnostics from stored target-neutral IR synt
         column: 1
       }
     }]
-  }), error => {
-    assert.ok(error instanceof CompileError)
-    assert.equal(error.diagnostics[0]?.code, 'CCJS_C_CLASS')
-    assert.equal(error.diagnostics[0]?.line, 1)
-    assert.equal(error.diagnostics[0]?.column, 1)
-
-    return true
-  })
+  }))
 })
 
 test('keeps function signatures in HIR and compiles typed calls', () => {
@@ -3675,7 +3668,7 @@ export function main(): void {
   assert.match(result.code, /ccjs_try_\d+_catch:\n    if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;\n    ccjs_error_active = 0;\n    \{\n      ccjs_value error = ccjs_error;/)
 })
 
-test('compiles simple classes to JS and rejects them for C', () => {
+test('compiles simple classes to JS and C object runtime calls', () => {
   const source = `class User {
   constructor(name: string) {
     this.name = name
@@ -3700,9 +3693,17 @@ export function main(): void {
   assert.match(js.code, /this\.name = name/)
   assert.match(js.code, /const user = new User\("Ada"\)/)
   assert.deepEqual(js.ir.syntaxFeatures.map(item => item.feature), ['class'])
-  assertDiagnostic(source, 'CCJS_C_CLASS', {
+
+  const c = compileSource(source, {
     target: 'c'
   })
+
+  assert.match(c.code, /#include "ccjs\/object\.h"/)
+  assert.match(c.code, /static const ccjs_field_info ccjs_shape_User_\d+_fields\[\] = \{\n\s+\{ "name", 0 \},/)
+  assert.match(c.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_User_\d+, &user\)/)
+  assert.match(c.code, /ccjs_object_init_known\(user, 0, ccjs_value_\d+\)/)
+  assert.match(c.code, /ccjs_value this = user;/)
+  assert.match(c.code, /ccjs_object_get_known\(this, 0, &ccjs_log_value_\d+\)/)
 })
 
 test('compiles awaited async function calls to JS and C', () => {

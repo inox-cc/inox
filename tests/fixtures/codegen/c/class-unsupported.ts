@@ -6,9 +6,13 @@ class User {
   constructor(name: string) {
     this.name = name
   }
+
+  greet(prefix: string): void {
+    console.log(prefix, this.name)
+  }
 }
 
 export function main(): void {
   const user = new User('Ada')
-  console.log(user)
+  user.greet('hello')
 }

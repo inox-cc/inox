@@ -1244,6 +1244,55 @@ test('generated C fs promise calls compile and run with runtime sources', async 
   }
 })
 
+test('generated C simple classes compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-class-codegen-'))
+  const source = join(dir, 'class-codegen.c')
+  const output = join(dir, 'class-codegen')
+
+  try {
+    const result = compileSource(`class User {
+  constructor(name: string) {
+    this.name = name
+  }
+
+  greet(): void {
+    console.log(this.name)
+  }
+}
+
+export function main(): void {
+  const user = new User('Ada')
+  user.greet()
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C timer calls drain from main loop', async t => {
   const probe = await runCommand('cc', ['--version'])
 

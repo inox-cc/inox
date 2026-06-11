@@ -70,6 +70,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       exported: item.exported,
       name: item.name,
       loc: item.loc,
+      shape: item.shape ?? null,
       methods: item.methods.map(method => {
         const returnType = resolveDeclaredType(method.returnType, context)
 
@@ -667,7 +668,8 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
   if (expression.type === 'ThisExpression') {
     return {
       ...expression,
-      valueType: 'object'
+      valueType: 'object',
+      shape: expression.shape ?? null
     }
   }
 

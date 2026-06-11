@@ -278,11 +278,18 @@ class Checker {
       }
 
       if (item.type === 'ClassDeclaration') {
+        const constructorParams = item.methods.find(method => method.name === 'constructor')?.params.map(param => this.resolveParam(param)) ?? []
+        const shape = this.resolveClassInstanceShape(item, constructorParams)
+
+        item.shape = shape
+
         this.declare(item.name, {
           kind: 'class',
           mutable: false,
           valueType: 'class',
-          constructorParams: item.methods.find(method => method.name === 'constructor')?.params.map(param => this.resolveParam(param)) ?? [],
+          classMethods: item.methods,
+          constructorParams,
+          shape,
           loc: item.loc
         }, item.loc)
       }
@@ -305,6 +312,89 @@ class Checker {
       functionType: paramInfo.functionType,
       shape: paramInfo.shape
     }
+  }
+
+  resolveClassInstanceShape(statement: AnyNode, constructorParams: AnyNode[]): ObjectShapeInfo {
+    const fields: AnyNode[] = []
+    const seen = new Set<string>()
+    const constructor = statement.methods.find(method => method.name === 'constructor') ?? null
+
+    for (const assignment of this.collectClassConstructorFieldAssignments(constructor)) {
+      if (seen.has(assignment.field)) {
+        continue
+      }
+
+      seen.add(assignment.field)
+      fields.push({
+        name: assignment.field,
+        readonly: false,
+        valueType: this.resolveClassConstructorFieldType(assignment.value, constructorParams),
+        loc: assignment.loc
+      })
+    }
+
+    return {
+      kind: 'object',
+      fields
+    }
+  }
+
+  collectClassConstructorFieldAssignments(constructor: AnyNode | null): AnyNode[] {
+    if (constructor == null) {
+      return []
+    }
+
+    const assignments: AnyNode[] = []
+
+    for (const statement of constructor.body) {
+      const assignment = statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression'
+        ? statement.expression
+        : null
+
+      if (assignment?.target?.type !== 'MemberExpression' || !this.isThisExpression(assignment.target.object)) {
+        continue
+      }
+
+      assignments.push({
+        field: assignment.target.property,
+        value: assignment.value,
+        loc: assignment.loc
+      })
+    }
+
+    return assignments
+  }
+
+  resolveClassConstructorFieldType(expression: AnyNode, constructorParams: AnyNode[]): ValueType {
+    if (expression?.type === 'Reference' && expression.path.length === 1) {
+      const param = constructorParams.find(item => item.name === expression.path[0])
+
+      if (param != null) {
+        return param.valueType
+      }
+    }
+
+    if (expression?.type === 'StringLiteral' || expression?.type === 'TemplateLiteral') {
+      return 'string'
+    }
+
+    if (expression?.type === 'NumberLiteral') {
+      return 'number'
+    }
+
+    if (expression?.type === 'BooleanLiteral') {
+      return 'boolean'
+    }
+
+    if (expression?.type === 'ArrayLiteral') {
+      return 'array'
+    }
+
+    if (expression?.type === 'ObjectLiteral') {
+      return 'object'
+    }
+
+    return expression?.valueType ?? 'unknown'
   }
 
   checkTopLevelItem(item: AnyNode): void {
@@ -475,6 +565,7 @@ class Checker {
       statement.setElementType = setElementType
       statement.functionType = declared?.functionType ?? null
       statement.shape = declared?.shape ?? statement.init?.shape ?? null
+      statement.className = statement.init?.className ?? null
 
       if (declared?.shape != null && statement.init?.type === 'ObjectLiteral') {
         this.checkObjectLiteralAgainstShape(statement.init, declared.shape)
@@ -492,6 +583,7 @@ class Checker {
         promiseValueType,
         setElementType,
         functionType: declared?.functionType ?? null,
+        className: statement.className,
         shape: declared?.shape ?? statement.init?.shape ?? null,
         loc: statement.loc
       }, statement.loc)
@@ -594,11 +686,17 @@ class Checker {
     }
 
     if (expression.type === 'ThisExpression') {
-      return this.resolveReference({
+      const symbol = this.resolveReference({
         type: 'Reference',
         path: ['this'],
         loc: expression.loc
-      })?.valueType ?? 'unknown'
+      })
+
+      expression.nullable = symbol?.nullable === true
+      expression.shape = symbol?.shape ?? null
+      expression.className = symbol?.className ?? null
+
+      return symbol?.valueType ?? 'unknown'
     }
 
     if (expression.type === 'Reference') {
@@ -1182,6 +1280,12 @@ class Checker {
       return promiseStaticType
     }
 
+    const classMethodType = this.checkClassMethodCall(expression)
+
+    if (classMethodType != null) {
+      return classMethodType
+    }
+
     const calleeType = this.checkExpression(expression.callee)
     const argTypes = expression.args.map(arg => this.checkExpression(arg))
     const symbol = this.getCallableSymbol(expression.callee)
@@ -1215,6 +1319,56 @@ class Checker {
     }
 
     return symbol.returnType ?? 'unknown'
+  }
+
+  checkClassMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.object.type !== 'Reference' || expression.callee.object.path.length !== 1) {
+      return null
+    }
+
+    const objectSymbol = this.scope.resolve(expression.callee.object.path[0])
+    const className = objectSymbol?.className
+
+    if (className == null) {
+      return null
+    }
+
+    const classSymbol = this.scope.resolve(className)
+    const method = classSymbol?.classMethods?.find(item => item.name === expression.callee.property)
+
+    this.checkExpression(expression.callee.object)
+    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+
+    if (method == null) {
+      this.report('CCJS_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc)
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    const params = method.params.map(param => this.resolveParam(param))
+    const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
+
+    if (params.length !== expression.args.length) {
+      this.report('CCJS_ARG_COUNT', `method ${expression.callee.property} expects ${params.length} argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    for (const [index, param] of params.entries()) {
+      if (index < argTypes.length) {
+        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true, this.expressionCanBeNull(expression.args[index]))
+      }
+    }
+
+    expression.valueType = returnInfo.valueType
+    expression.nullable = returnInfo.nullable
+    expression.arrayElementType = returnInfo.arrayElementType
+    expression.arrayElementDeclaredType = returnInfo.arrayElementDeclaredType
+    expression.mapKeyType = returnInfo.mapKeyType
+    expression.mapValueType = returnInfo.mapValueType
+    expression.promiseValueType = returnInfo.promiseValueType ?? null
+    expression.setElementType = returnInfo.setElementType
+    expression.shape = returnInfo.shape
+
+    return returnInfo.valueType
   }
 
   checkFsCall(expression: AnyNode): ValueType | null {
@@ -2097,6 +2251,8 @@ class Checker {
       }
     }
 
+    expression.className = expression.callee.path[0]
+    expression.shape = symbol.shape ?? null
     return 'object'
   }
 
@@ -2277,6 +2433,8 @@ class Checker {
           kind: 'this',
           mutable: false,
           valueType: 'object',
+          className: statement.name,
+          shape: statement.shape ?? null,
           loc: method.loc
         }, method.loc)
 
@@ -2360,11 +2518,20 @@ class Checker {
   }
 
   resolveExpressionShape(expression: AnyNode): ObjectShapeInfo | null {
+    if (expression.type === 'ThisExpression') {
+      return this.scope.resolve('this')?.shape ?? expression.shape ?? null
+    }
+
     if (expression.type !== 'Reference' || expression.path.length !== 1) {
       return expression.shape ?? null
     }
 
     return this.scope.resolve(expression.path[0])?.shape ?? expression.shape ?? null
+  }
+
+  isThisExpression(expression: AnyNode): boolean {
+    return expression?.type === 'ThisExpression'
+      || (expression?.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'this')
   }
 
   findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {

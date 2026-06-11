@@ -38,8 +38,10 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const globalRoots = collectIrGlobalRoots(irPrograms)
   const runtimeRequirements = new Set(collectIrRuntimeRequirements(irPrograms))
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
+  const classes = collectIrTopLevelNodesFromPrograms(irPrograms, 'class')
   const jsGlobalRoots = new Set(globalRoots)
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
+  baseContext.classInfos = createClassInfos(classes, diagnostics)
   baseContext.externalEventLoopFunctions = collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
   baseContext.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, baseContext)
@@ -49,8 +51,9 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFsRuntime || needsTimerRuntime
   const needsCollectionRuntime = runtimeRequirements.has('collections')
-  const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime
-  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || runtimeRequirements.has('managed-values')
+  const needsClassRuntime = baseContext.classInfos.size > 0
+  const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime || needsClassRuntime
+  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || needsClassRuntime || runtimeRequirements.has('managed-values')
   const needsTimeRuntime = runtimeRequirements.has('clocks')
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
@@ -246,10 +249,144 @@ function createThrowingFunctionInfo(functionDeclarations: IrFunctionDeclaration[
 
 function reportUnsupportedCSyntaxFeatures(syntaxFeatures: IrSyntaxFeatureUsage[], diagnostics: Diagnostic[]) {
   for (const usage of syntaxFeatures) {
-    if (usage.feature === 'class') {
-      diagnostics.push(diagnostic('CCJS_C_CLASS', 'classes are not supported by the current C backend slice', usage.loc))
+    void usage
+  }
+}
+
+function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]) {
+  const infos = new Map<string, AnyNode>()
+
+  for (const item of classes) {
+    const constructor = item.methods.find(method => method.name === 'constructor') ?? null
+    const assignments = collectClassConstructorAssignments(item, constructor, diagnostics)
+    const fields = resolveClassFields(item, constructor, assignments)
+    const methods = new Map<string, AnyNode>()
+
+    for (const method of item.methods) {
+      if (method.name !== 'constructor') {
+        methods.set(method.name, method)
+      }
+    }
+
+    infos.set(item.name, {
+      name: item.name,
+      node: item,
+      constructor,
+      assignments,
+      fields,
+      methods
+    })
+  }
+
+  return infos
+}
+
+function collectClassConstructorAssignments(classNode: AnyNode, constructor: AnyNode | null, diagnostics: Diagnostic[]) {
+  if (constructor == null) {
+    return []
+  }
+
+  const assignments: AnyNode[] = []
+
+  for (const statement of constructor.body) {
+    const assignment = statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression'
+      ? statement.expression
+      : null
+
+    if (assignment == null || !isThisFieldExpression(assignment.target)) {
+      diagnostics.push(diagnostic('CCJS_C_CLASS', `class ${classNode.name} constructor currently supports only this.field assignments in the C backend`, statement.loc ?? constructor.loc))
+      continue
+    }
+
+    assignments.push({
+      field: assignment.target.property,
+      value: assignment.value,
+      loc: assignment.loc
+    })
+  }
+
+  return assignments
+}
+
+function resolveClassFields(classNode: AnyNode, constructor: AnyNode | null, assignments: AnyNode[]) {
+  const shapeFields = classNode.shape?.fields
+
+  if (shapeFields != null) {
+    return shapeFields.map(field => ({
+      name: field.name,
+      readonly: field.readonly === true,
+      valueType: field.valueType ?? 'unknown',
+      arrayElementType: field.arrayElementType,
+      mapKeyType: field.mapKeyType,
+      mapValueType: field.mapValueType,
+      setElementType: field.setElementType
+    }))
+  }
+
+  const fields: AnyNode[] = []
+  const seen = new Set<string>()
+
+  for (const assignment of assignments) {
+    if (seen.has(assignment.field)) {
+      continue
+    }
+
+    seen.add(assignment.field)
+    fields.push({
+      name: assignment.field,
+      readonly: false,
+      valueType: inferClassConstructorFieldType(assignment.value, constructor)
+    })
+  }
+
+  return fields
+}
+
+function inferClassConstructorFieldType(expression: AnyNode, constructor: AnyNode | null) {
+  if (expression?.type === 'Reference' && expression.path.length === 1 && constructor != null) {
+    const param = constructor.params.find(item => item.name === expression.path[0])
+
+    if (param != null) {
+      return param.valueType ?? 'unknown'
     }
   }
+
+  if (expression?.valueType != null) {
+    return expression.valueType
+  }
+
+  if (expression?.type === 'StringLiteral' || expression?.type === 'TemplateLiteral') {
+    return 'string'
+  }
+
+  if (expression?.type === 'NumberLiteral') {
+    return 'number'
+  }
+
+  if (expression?.type === 'BooleanLiteral') {
+    return 'boolean'
+  }
+
+  if (expression?.type === 'ObjectLiteral') {
+    return 'object'
+  }
+
+  if (expression?.type === 'ArrayLiteral') {
+    return 'array'
+  }
+
+  return 'unknown'
+}
+
+function isThisFieldExpression(expression: AnyNode) {
+  return expression?.type === 'MemberExpression'
+    && isThisObjectExpression(expression.object)
+    && typeof expression.property === 'string'
+}
+
+function isThisObjectExpression(expression: AnyNode) {
+  return expression?.type === 'ThisExpression'
+    || (expression?.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'this')
 }
 
 function reportUnsupportedCGlobalUsages(globalUsages: IrGlobalUsage[], diagnostics: Diagnostic[]) {
@@ -309,6 +446,7 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
 
   return {
     boxedMutableCaptureDeclarations: new Set(),
+    classInfos: new Map(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
     diagnostics,
@@ -3412,6 +3550,7 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     boxedValueTypes: new Map(),
     boxedValues: [],
     boxedVariables: new Set(),
+    classInstanceTypes: new Map(),
     continueFlowUsed: false,
     continueTargets: [],
     cleanupEnabled: true,
@@ -3785,6 +3924,10 @@ function emitStatement(statement, context) {
       return emitErrorObjectVariableDeclaration(statement, context)
     }
 
+    if (isClassConstructorExpression(statement.init, context)) {
+      return emitClassObjectVariableDeclaration(statement, context)
+    }
+
     if (statement.init?.type === 'ObjectLiteral') {
       if (context.boxedMutableCaptureDeclarations.has(statement)) {
         return emitBoxedObjectVariableDeclaration(statement, context)
@@ -3865,6 +4008,12 @@ function emitStatement(statement, context) {
 
     if (arraySortCall != null) {
       return arraySortCall.lines
+    }
+
+    const classMethodCall = emitPreparedClassMethodCallExpression(statement.expression, context)
+
+    if (classMethodCall != null) {
+      return classMethodCall.lines
     }
 
     if (isArrayMethodCall(statement.expression)) {
@@ -4977,6 +5126,13 @@ function emitPreparedForVariableDeclaration(statement, context) {
     }
   }
 
+  if (isClassConstructorExpression(statement.init, context)) {
+    return {
+      lines: emitClassObjectVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
   if (statement.init?.type === 'ObjectLiteral') {
     return {
       lines: emitObjectVariableDeclaration(statement, context),
@@ -5443,6 +5599,244 @@ function emitObjectVariableDeclaration(statement, context) {
   }
 
   return lines
+}
+
+function emitClassObjectVariableDeclaration(statement, context) {
+  const info = resolveClassConstructorInfo(statement.init, context)
+
+  if (info == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'this class constructor is not supported by the current C backend slice', statement.init?.loc ?? statement.loc))
+    return [`ccjs_value ${statement.name} = ccjs_undefined_value();`]
+  }
+
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'object')
+  context.classInstanceTypes.set(statement.name, info.name)
+  registerClassObjectShape(context, statement.name, info)
+
+  return emitCClassObjectInitLines(statement.name, statement.init, info, context)
+}
+
+function emitCClassObjectValueExpression(expression, context) {
+  const info = resolveClassConstructorInfo(expression, context)
+  const temp = nextCName(context, 'ccjs_class_object')
+  registerOwnedValue(context, temp)
+
+  if (info == null) {
+    context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'this class constructor is not supported by the current C backend slice', expression?.loc))
+
+    return {
+      lines: [
+        ...emitPrepareOwnedValueWrite(temp),
+        `${temp} = ccjs_undefined_value();`
+      ],
+      expression: temp
+    }
+  }
+
+  return {
+    lines: emitCClassObjectInitLines(temp, expression, info, context),
+    expression: temp
+  }
+}
+
+function emitCClassObjectInitLines(target, expression, info, context) {
+  const shapeName = nextCName(context, `ccjs_shape_${info.name}`)
+  const fieldsName = `${shapeName}_fields`
+  const lines = [
+    `static const ccjs_field_info ${fieldsName}[] = {`
+  ]
+
+  for (const field of info.fields) {
+    lines.push(`  { ${cStringLiteral(field.name)}, ${field.readonly ? 'CCJS_FIELD_READONLY' : '0'} },`)
+  }
+
+  lines.push('};')
+  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`  ${info.fields.length},`)
+  lines.push(`  ${fieldsName}`)
+  lines.push('};')
+  lines.push(...emitPrepareOwnedValueWrite(target))
+  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${target})`, context))
+
+  const constructorArgs = mapClassConstructorArgs(expression, info)
+
+  for (const assignment of info.assignments) {
+    const fieldIndex = info.fields.findIndex(field => field.name === assignment.field)
+
+    if (fieldIndex === -1) {
+      context.diagnostics.push(diagnostic('CCJS_UNKNOWN_FIELD', `unknown class field ${assignment.field}`, assignment.loc ?? expression.loc))
+      continue
+    }
+
+    const value = emitCValueExpression(substituteClassConstructorParams(assignment.value, constructorArgs), context)
+    lines.push(...value.lines)
+    lines.push(emitStatusCheck(`ccjs_object_init_known(${target}, ${fieldIndex}, ${value.expression})`, context))
+  }
+
+  return lines
+}
+
+function registerClassObjectShape(context, name, info) {
+  context.objectShapes.set(name, info.fields.map(field => ({
+    name: field.name,
+    valueType: field.valueType,
+    arrayElementType: field.arrayElementType,
+    mapKeyType: field.mapKeyType,
+    mapValueType: field.mapValueType,
+    setElementType: field.setElementType
+  })))
+}
+
+function mapClassConstructorArgs(expression, info) {
+  const args = new Map<string, AnyNode>()
+  const params = info.constructor?.params ?? []
+
+  for (const [index, param] of params.entries()) {
+    if (expression.args[index] != null) {
+      args.set(param.name, expression.args[index])
+    }
+  }
+
+  return args
+}
+
+function substituteClassConstructorParams(node, args) {
+  if (node == null || typeof node !== 'object') {
+    return node
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(item => substituteClassConstructorParams(item, args))
+  }
+
+  if (node.type === 'Reference' && node.path.length === 1 && args.has(node.path[0])) {
+    return args.get(node.path[0])
+  }
+
+  const copy = {}
+
+  for (const [key, value] of Object.entries(node)) {
+    copy[key] = substituteClassConstructorParams(value, args)
+  }
+
+  return copy
+}
+
+function resolveClassConstructorInfo(expression, context) {
+  if (expression?.type !== 'NewExpression' || expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return null
+  }
+
+  return context.classInfos.get(expression.callee.path[0]) ?? null
+}
+
+function isClassConstructorExpression(expression, context) {
+  return resolveClassConstructorInfo(expression, context) != null
+}
+
+function emitPreparedClassMethodCallExpression(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.object.type !== 'Reference' || expression.callee.object.path.length !== 1) {
+    return null
+  }
+
+  const objectName = expression.callee.object.path[0]
+  const className = context.classInstanceTypes.get(objectName)
+
+  if (className == null) {
+    return null
+  }
+
+  const info = context.classInfos.get(className)
+  const method = info?.methods.get(expression.callee.property)
+
+  if (info == null || method == null) {
+    context.diagnostics.push(diagnostic('CCJS_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc ?? expression.loc))
+
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
+  if (method.params.length !== 0 || expression.args.length !== 0) {
+    context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'C class method calls currently support only methods without parameters', expression.loc))
+
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
+  if (method.returnType !== 'void') {
+    context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'C class method calls currently support only void methods used as statements', expression.loc))
+
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
+  if (statementContainsReturn(method.body)) {
+    context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'C class method lowering currently does not support return statements inside methods', method.loc))
+
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
+  const body = withVariableScope(context, () => {
+    context.variables.set('this', 'object')
+    context.classInstanceTypes.set('this', info.name)
+    registerClassObjectShape(context, 'this', info)
+
+    return emitStatementList(method.body, context)
+  })
+
+  return {
+    lines: [
+      '{',
+      `  ccjs_value this = ${emitObjectValueReference(objectName, context)};`,
+      ...body.map(line => `  ${line}`),
+      '}'
+    ],
+    expression: ''
+  }
+}
+
+function statementContainsReturn(statement) {
+  if (Array.isArray(statement)) {
+    return statement.some(statementContainsReturn)
+  }
+
+  if (statement.type === 'ReturnStatement') {
+    return true
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return statement.body.some(statementContainsReturn)
+  }
+
+  if (statement.type === 'IfStatement') {
+    return statementContainsReturn(statement.consequent) || (statement.alternate != null && statementContainsReturn(statement.alternate))
+  }
+
+  if (statement.type === 'WhileStatement' || statement.type === 'ForStatement' || statement.type === 'ForOfStatement') {
+    return statementContainsReturn(statement.body)
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    return statement.cases.some(item => item.consequent.some(statementContainsReturn))
+  }
+
+  if (statement.type === 'TryStatement') {
+    return statementContainsReturn(statement.block)
+      || (statement.handler?.body != null && statementContainsReturn(statement.handler.body))
+      || (statement.finalizer != null && statementContainsReturn(statement.finalizer))
+  }
+
+  return false
 }
 
 function emitNullableRuntimeValueVariableDeclaration(statement, context) {
@@ -6131,6 +6525,10 @@ function emitCValueExpression(expression, context) {
 
   if (isErrorConstructorExpression(expression)) {
     return emitCErrorObjectValueExpression(expression, context)
+  }
+
+  if (isClassConstructorExpression(expression, context)) {
+    return emitCClassObjectValueExpression(expression, context)
   }
 
   if (expression?.type === 'OptionalCallExpression' && isNullableRuntimeExpression(expression, context)) {
@@ -9391,6 +9789,10 @@ function inferExpressionType(expression, context) {
     return 'set'
   }
 
+  if (isClassConstructorExpression(expression, context)) {
+    return 'object'
+  }
+
   if (isStringConversionCall(expression, context)) {
     return 'string'
   }
@@ -10717,11 +11119,16 @@ function isIndexAccessExpression(expression) {
 }
 
 function resolveKnownObjectMember(expression, context) {
-  if (!isMemberAccessExpression(expression) || expression.object.type !== 'Reference' || expression.object.path.length !== 1) {
+  if (!isMemberAccessExpression(expression)) {
     return null
   }
 
-  const objectName = expression.object.path[0]
+  const objectName = resolveCObjectExpressionName(expression.object)
+
+  if (objectName == null) {
+    return null
+  }
+
   const fields = context.objectShapes.get(objectName)
 
   if (fields == null) {
@@ -10750,11 +11157,16 @@ function emitObjectValueReference(name, context) {
 }
 
 function resolveKnownObjectIndex(expression, context) {
-  if (!isIndexAccessExpression(expression) || expression.object.type !== 'Reference' || expression.object.path.length !== 1 || expression.index.type !== 'StringLiteral') {
+  if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
     return null
   }
 
-  const objectName = expression.object.path[0]
+  const objectName = resolveCObjectExpressionName(expression.object)
+
+  if (objectName == null) {
+    return null
+  }
+
   const fields = context.objectShapes.get(objectName)
 
   if (fields == null) {
@@ -10777,6 +11189,18 @@ function resolveKnownObjectIndex(expression, context) {
     mapValueType: fields[index].mapValueType,
     setElementType: fields[index].setElementType
   }
+}
+
+function resolveCObjectExpressionName(expression) {
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    return expression.path[0]
+  }
+
+  if (expression?.type === 'ThisExpression') {
+    return 'this'
+  }
+
+  return null
 }
 
 function updateKnownObjectMemberValueType(member, valueType, context) {
@@ -11570,6 +11994,7 @@ function withVariableScope(context, callback) {
   const previous = context.variables
   const previousArrayShapes = context.arrayShapes
   const previousBoxedVariables = context.boxedVariables
+  const previousClassInstanceTypes = context.classInstanceTypes
   const previousErrorObjectNames = context.errorObjectNames
   const previousFunctionTypes = context.functionTypes
   const previousMapTypes = context.mapTypes
@@ -11585,6 +12010,7 @@ function withVariableScope(context, callback) {
   context.variables = new Map(previous)
   context.arrayShapes = new Map(previousArrayShapes)
   context.boxedVariables = new Set(previousBoxedVariables)
+  context.classInstanceTypes = new Map(previousClassInstanceTypes)
   context.errorObjectNames = new Set(previousErrorObjectNames)
   context.functionTypes = new Map(previousFunctionTypes)
   context.mapTypes = new Map(previousMapTypes)
@@ -11604,6 +12030,7 @@ function withVariableScope(context, callback) {
     context.variables = previous
     context.arrayShapes = previousArrayShapes
     context.boxedVariables = previousBoxedVariables
+    context.classInstanceTypes = previousClassInstanceTypes
     context.errorObjectNames = previousErrorObjectNames
     context.functionTypes = previousFunctionTypes
     context.mapTypes = previousMapTypes

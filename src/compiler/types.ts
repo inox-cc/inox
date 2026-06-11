@@ -168,6 +168,8 @@ export type SymbolInfo = {
   returnSetElementType?: ValueType | null
   returnShape?: any
   async?: boolean
+  className?: string | null
+  classMethods?: AnyNode[]
   constructable?: boolean
   constructorParams?: AnyNode[]
   functionType?: any
