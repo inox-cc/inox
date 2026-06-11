@@ -18,6 +18,7 @@ const requiredFiles: string[] = [
   'docs/runtime/c-value-layout.md',
   'docs/stdlib/README.md',
   'docs/testing/compiler-tests.md',
+  'examples/async-errors.ts',
   'examples/async-fs.ts',
   'examples/callbacks.ts',
   'examples/classes.ts',
