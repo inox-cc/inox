@@ -4675,6 +4675,49 @@ test('lowers Date.now and performance.now to the C time runtime', () => {
   assert.match(result.code, /double elapsed = ccjs_performance_now\(\);/)
 })
 
+test('lowers supported Math calls to C helpers', () => {
+  const result = compileSource(`export function main(): void {
+  const value = Math.floor(3.8) + Math.ceil(2.1) + Math.round(1.6) + Math.trunc(4.9) + Math.abs(-5) + Math.min(8, 2) + Math.max(1, 6)
+  console.log(value)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.deepEqual(result.ir.globalUsages.map(usage => usage.path.join('.')).sort(), [
+    'Math.abs',
+    'Math.ceil',
+    'Math.floor',
+    'Math.max',
+    'Math.min',
+    'Math.round',
+    'Math.trunc'
+  ])
+  assert.match(result.code, /static double ccjs_math_floor\(double value\)/)
+  assert.match(result.code, /static double ccjs_math_max\(double left, double right\)/)
+  assert.match(result.code, /ccjs_math_floor\(3\.8\)/)
+  assert.match(result.code, /ccjs_math_ceil\(2\.1\)/)
+  assert.match(result.code, /ccjs_math_round\(1\.6\)/)
+  assert.match(result.code, /ccjs_math_trunc\(4\.9\)/)
+  assert.match(result.code, /ccjs_math_abs\(\(-5\)\)/)
+  assert.match(result.code, /ccjs_math_min\(8, 2\)/)
+  assert.match(result.code, /ccjs_math_max\(1, 6\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const value = Math.max(1)
+  console.log(value)
+}
+`, 'CCJS_ARG_COUNT')
+
+  assertDiagnostic(`export function main(): void {
+  const value = Math.random()
+  console.log(value)
+}
+`, 'CCJS_C_JS_GLOBAL', {
+    target: 'c'
+  })
+})
+
 test('lowers fs readFile, readDir and writeFile to the C fs runtime', () => {
   const result = compileSource(`export function main(): void {
   const read = fs.readFile('/tmp/value.txt', 'utf8')

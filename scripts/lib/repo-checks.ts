@@ -24,6 +24,7 @@ const requiredFiles: string[] = [
   'examples/classes.ts',
   'examples/collections.ts',
   'examples/errors.ts',
+  'examples/math.ts',
   'examples/timers.ts',
   'runtime/c/include/ccjs/allocator.h',
   'runtime/c/include/ccjs/array.h',

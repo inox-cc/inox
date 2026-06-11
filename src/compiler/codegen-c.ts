@@ -17,6 +17,9 @@ const cArrayMethods = new Set([
   'pop'
 ])
 
+const cMathUnaryMethods = new Set(['abs', 'ceil', 'floor', 'round', 'trunc'])
+const cMathBinaryMethods = new Set(['max', 'min'])
+
 export function emitCFromIr(ir: IrProgram): string {
   return emitCUnit([ir], ir)
 }
@@ -56,10 +59,11 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime || needsClassRuntime
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || needsClassRuntime || runtimeRequirements.has('managed-values')
   const needsTimeRuntime = runtimeRequirements.has('clocks')
+  const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsTimerRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsTimerRuntime)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
 
   for (const wrapper of baseContext.asyncTaskWrappers.values()) {
@@ -141,7 +145,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsTimerRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsTimerRuntime) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -182,6 +186,11 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCa
   }
 
   lines.push('')
+
+  if (needsMathRuntime) {
+    lines.push(...emitMathHelpers())
+    lines.push('')
+  }
 
   if (needsRuntime) {
     lines.push('static void* ccjs_default_alloc(void* user, size_t size, size_t align) {')
@@ -233,6 +242,40 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsAsyncRuntime, needsCa
   }
 
   return lines
+}
+
+function emitMathHelpers() {
+  return [
+    'static double ccjs_math_abs(double value) {',
+    '  return value < 0 ? -value : value;',
+    '}',
+    '',
+    'static double ccjs_math_floor(double value) {',
+    '  long long truncated = (long long)value;',
+    '  return (double)truncated > value ? (double)(truncated - 1) : (double)truncated;',
+    '}',
+    '',
+    'static double ccjs_math_ceil(double value) {',
+    '  long long truncated = (long long)value;',
+    '  return (double)truncated < value ? (double)(truncated + 1) : (double)truncated;',
+    '}',
+    '',
+    'static double ccjs_math_round(double value) {',
+    '  return ccjs_math_floor(value + 0.5);',
+    '}',
+    '',
+    'static double ccjs_math_trunc(double value) {',
+    '  return (double)((long long)value);',
+    '}',
+    '',
+    'static double ccjs_math_min(double left, double right) {',
+    '  return left < right ? left : right;',
+    '}',
+    '',
+    'static double ccjs_math_max(double left, double right) {',
+    '  return left > right ? left : right;',
+    '}'
+  ]
 }
 
 function createThrowingFunctionInfo(functionDeclarations: IrFunctionDeclaration[], functionEffects: IrFunctionEffect[]) {
@@ -440,6 +483,14 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     || path === 'setTimeout'
     || path === 'Map'
     || path === 'Set'
+    || isSupportedCMathGlobalUsage(usage)
+}
+
+function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
+  const path = usage.path.join('.')
+
+  return path.startsWith('Math.')
+    && (cMathUnaryMethods.has(path.slice('Math.'.length)) || cMathBinaryMethods.has(path.slice('Math.'.length)))
 }
 
 function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc?: SourceLocation) {
@@ -8490,6 +8541,12 @@ function emitCallExpression(expression, context) {
 }
 
 function emitPreparedCallExpression(expression, context) {
+  const mathCall = emitPreparedMathCallExpression(expression, context)
+
+  if (mathCall != null) {
+    return mathCall
+  }
+
   const classMethodCall = emitPreparedClassMethodCallExpression(expression, context)
 
   if (classMethodCall != null) {
@@ -8595,6 +8652,21 @@ function emitPreparedCallExpression(expression, context) {
   return {
     lines,
     expression: `${emitCallee(expression.callee, context)}(${args.join(', ')})`
+  }
+}
+
+function emitPreparedMathCallExpression(expression, context) {
+  const method = mathRuntimeMethodName(expression.callee)
+
+  if (method == null) {
+    return null
+  }
+
+  const args = expression.args.map(arg => emitPreparedNumberExpression(arg, context))
+
+  return {
+    lines: args.flatMap(arg => arg.lines),
+    expression: `ccjs_math_${method}(${args.map(arg => arg.expression).join(', ')})`
   }
 }
 
@@ -11974,6 +12046,20 @@ function cFsRuntimeCallName(callee) {
   }
 
   return ['readFile', 'readFileBytes', 'readFileBytesSync', 'readFileSync', 'readDir', 'readDirSync', 'writeFile', 'writeFileBytes', 'writeFileBytesSync', 'writeFileSync'].includes(callee.property) ? callee.property : null
+}
+
+function mathRuntimeMethodName(callee) {
+  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+    return null
+  }
+
+  if (callee.object.path[0] !== 'Math') {
+    return null
+  }
+
+  return cMathUnaryMethods.has(callee.property) || cMathBinaryMethods.has(callee.property)
+    ? callee.property
+    : null
 }
 
 function cTimerRuntimeCallName(callee) {

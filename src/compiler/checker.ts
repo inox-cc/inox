@@ -186,6 +186,9 @@ const globals = new Map<string, SymbolInfo>([
   }]
 ])
 
+const mathUnaryMethods = new Set(['abs', 'ceil', 'floor', 'round', 'trunc'])
+const mathBinaryMethods = new Set(['max', 'min'])
+
 export function checkProgram(program: ProgramNode): { ast: ProgramNode } {
   const checker = new Checker(program)
   checker.check()
@@ -1313,6 +1316,12 @@ class Checker {
       return classMethodType
     }
 
+    const mathType = this.checkMathCall(expression)
+
+    if (mathType != null) {
+      return mathType
+    }
+
     const calleeType = this.checkExpression(expression.callee)
     const argTypes = expression.args.map(arg => this.checkExpression(arg))
     const symbol = this.getCallableSymbol(expression.callee)
@@ -1395,6 +1404,28 @@ class Checker {
     expression.shape = returnInfo.shape
 
     return returnInfo.valueType
+  }
+
+  checkMathCall(expression: AnyNode): ValueType | null {
+    if (!isMathRuntimeMethod(expression.callee) || this.scope.resolve('Math') != null) {
+      return null
+    }
+
+    const method = expression.callee.property
+    const expectedArgCount = mathUnaryMethods.has(method) ? 1 : 2
+
+    expression.mathRuntimeMethod = method
+    expression.valueType = 'number'
+
+    if (expression.args.length !== expectedArgCount) {
+      this.report('CCJS_ARG_COUNT', `function Math.${method} expects ${expectedArgCount} argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    for (const arg of expression.args) {
+      this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc)
+    }
+
+    return 'number'
   }
 
   resolveClassMethodReceiverClassName(expression: AnyNode): string | null {
@@ -3528,6 +3559,14 @@ function fsRuntimeMethodName(callee: AnyNode): string | null {
   return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'fs'
     ? callee.property
     : null
+}
+
+function isMathRuntimeMethod(callee: AnyNode): boolean {
+  return callee.type === 'MemberExpression'
+    && callee.object?.type === 'Reference'
+    && callee.object.path.length === 1
+    && callee.object.path[0] === 'Math'
+    && (mathUnaryMethods.has(callee.property) || mathBinaryMethods.has(callee.property))
 }
 
 function timerRuntimeMethodName(callee: AnyNode): string | null {
