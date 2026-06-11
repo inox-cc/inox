@@ -2451,7 +2451,15 @@ class Checker {
     const fieldNames = new Set<string>()
     const methodNames = new Set<string>()
 
+    if (statement.extendsName != null) {
+      this.report('CCJS_CLASS_EXTENDS', 'class inheritance is not supported', statement.extendsLoc ?? statement.loc)
+    }
+
     for (const field of statement.fields ?? []) {
+      if (field.static) {
+        this.report('CCJS_CLASS_STATIC', 'static class fields are not supported', field.staticLoc ?? field.loc)
+      }
+
       if (fieldNames.has(field.name)) {
         this.report('CCJS_REDECLARED_NAME', `field ${field.name} is already declared in this class`, field.loc)
       }
@@ -2460,6 +2468,10 @@ class Checker {
     }
 
     for (const method of statement.methods) {
+      if (method.static) {
+        this.report('CCJS_CLASS_STATIC', 'static class methods are not supported', method.staticLoc ?? method.loc)
+      }
+
       if (methodNames.has(method.name)) {
         this.report('CCJS_REDECLARED_NAME', `method ${method.name} is already declared in this class`, method.loc)
       }

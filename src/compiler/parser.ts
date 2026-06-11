@@ -279,6 +279,16 @@ class Parser {
     const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected class name')
     const fields: AnyNode[] = []
     const methods: AnyNode[] = []
+    let extendsName: string | null = null
+    let extendsLoc: SourceLocation | null = null
+
+    const extendsToken = this.matchContextualKeyword('extends')
+
+    if (extendsToken != null) {
+      const base = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected base class name')
+      extendsName = base.value
+      extendsLoc = locFromToken(extendsToken)
+    }
 
     this.expectValue('{', 'CCJS_EXPECTED_BLOCK', 'expected { after class name')
 
@@ -299,17 +309,20 @@ class Parser {
       exported,
       name: name.value,
       loc: locFromToken(name),
+      extendsName,
+      extendsLoc,
       fields,
       methods
     }
   }
 
   parseClassMember(): AnyNode {
+    const staticToken = this.matchClassStaticModifier()
     const readonly = this.matchKeyword('readonly')
     const name = this.parseClassMemberName()
 
     if (!readonly && this.isValue('(')) {
-      return this.parseClassMethod(name)
+      return this.parseClassMethod(name, staticToken)
     }
 
     if (readonly && this.isValue('(')) {
@@ -325,13 +338,15 @@ class Parser {
     return {
       type: 'FieldDefinition',
       name: name.value,
+      static: staticToken != null,
+      staticLoc: staticToken == null ? null : locFromToken(staticToken),
       readonly,
       valueType,
       loc: locFromToken(name)
     }
   }
 
-  parseClassMethod(name: Token): AnyNode {
+  parseClassMethod(name: Token, staticToken: Token | null = null): AnyNode {
     const params: AnyNode[] = []
 
     this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after method name')
@@ -365,6 +380,8 @@ class Parser {
     return {
       type: 'MethodDefinition',
       name: name.value,
+      static: staticToken != null,
+      staticLoc: staticToken == null ? null : locFromToken(staticToken),
       loc: locFromToken(name),
       params,
       returnType,
@@ -378,6 +395,20 @@ class Parser {
     }
 
     return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected method name')
+  }
+
+  matchClassStaticModifier(): Token | null {
+    if (!this.isContextualKeyword('static')) {
+      return null
+    }
+
+    const next = this.peek(1)
+
+    if (next.type !== 'identifier' && !['constructor', 'readonly'].includes(next.value)) {
+      return null
+    }
+
+    return this.advance()
   }
 
   parseBlock(): AnyNode[] {
@@ -1338,6 +1369,14 @@ class Parser {
     return false
   }
 
+  matchContextualKeyword(value: string): Token | null {
+    if (!this.isContextualKeyword(value)) {
+      return null
+    }
+
+    return this.advance()
+  }
+
   matchValue(value: string): boolean {
     if (this.isValue(value)) {
       this.advance()
@@ -1392,6 +1431,10 @@ class Parser {
 
   isKeywordValue(value: string): boolean {
     return this.current().type === 'keyword' && this.current().value === value
+  }
+
+  isContextualKeyword(value: string): boolean {
+    return this.current().type === 'identifier' && this.current().value === value
   }
 
   isValue(value: string): boolean {

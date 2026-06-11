@@ -3770,6 +3770,40 @@ export function main(): void {
 `, 'CCJS_ASSIGN_READONLY_FIELD')
 })
 
+test('rejects unsupported class inheritance with a stable diagnostic', () => {
+  assertDiagnostic(`class User {
+  id: number
+
+  constructor(id: number) {
+    this.id = id
+  }
+}
+
+class Admin extends User {
+  level: number
+
+  constructor(id: number, level: number) {
+    this.id = id
+    this.level = level
+  }
+}
+`, 'CCJS_CLASS_EXTENDS')
+})
+
+test('rejects unsupported static class members with stable diagnostics', () => {
+  assertDiagnostic(`class User {
+  static create(): User {
+    return new User()
+  }
+}
+`, 'CCJS_CLASS_STATIC')
+
+  assertDiagnostic(`class Counter {
+  static count: number
+}
+`, 'CCJS_CLASS_STATIC')
+})
+
 test('compiles awaited async function calls to JS and C', () => {
   const source = `async function getValue(): Promise<number> {
   return Promise.resolve(2)
