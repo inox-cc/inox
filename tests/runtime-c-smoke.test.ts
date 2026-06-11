@@ -2094,6 +2094,63 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame awaits managed immediate async helpers', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-managed-helper-'))
+  const input = join(dir, 'input.bin')
+  const source = join(dir, 'async-task-frame-managed-helper.c')
+  const output = join(dir, 'async-task-frame-managed-helper')
+
+  try {
+    await writeFile(input, Buffer.from([7, 8, 9]))
+
+    const result = compileSource(`async function sameText(input: string): Promise<string> {
+  return input
+}
+
+async function sameBytes(input: Buffer): Promise<Buffer> {
+  return input
+}
+
+async function copyText(input: string, path: string): Promise<string> {
+  const text = await sameText(input)
+  const bytes: Buffer = await fs.readFileBytes(path)
+  const copied: Buffer = await sameBytes(bytes)
+
+  return text
+}
+
+export async function main(): Promise<void> {
+  console.log(await copyText('managed', ${JSON.stringify(input)}))
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'managed\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async task frame rejected awaits reject returned promises', async t => {
   const probe = await runCommand('cc', ['--version'])
 

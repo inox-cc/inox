@@ -846,7 +846,7 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context) {
 
   const valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
 
-  return valueType === 'number' || valueType === 'boolean'
+  return isSupportedAsyncTaskValueType(valueType)
 }
 
 function isAsyncFsRuntimeCallExpression(expression) {
@@ -1286,11 +1286,39 @@ function emitPreparedAsyncFunctionSourceCallExpression(expression, wrapper, cont
 
   const valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
 
-  if (valueType !== 'number' && valueType !== 'boolean') {
+  if (!isSupportedAsyncTaskValueType(valueType)) {
     return null
   }
 
   const call = emitPreparedCallExpression(expression, context)
+
+  if (valueType === 'void') {
+    return {
+      lines: [
+        ...call.lines,
+        `${call.expression};`,
+        'status = ccjs_promise_resolved(ccjs_loop, ccjs_undefined_value(), &frame->awaited);',
+        ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+      ]
+    }
+  }
+
+  if (isManagedRuntimeReturnType(valueType)) {
+    const value = nextCName(context, 'ccjs_async_value')
+    const tag = cRuntimeValueTag(valueType)
+
+    return {
+      lines: [
+        ...call.lines,
+        `ccjs_value ${value} = ${call.expression};`,
+        emitRuntimeValueCheck(value, tag, context),
+        `status = ccjs_promise_resolved(ccjs_loop, ${value}, &frame->awaited);`,
+        ...emitAsyncTaskScheduleStatusCheck(wrapper, options, [`ccjs_release(${value});`]),
+        `ccjs_release(${value});`
+      ]
+    }
+  }
+
   const value = valueType === 'boolean'
     ? `ccjs_bool_value((${call.expression}) != 0)`
     : `ccjs_number_value(${call.expression})`

@@ -4012,6 +4012,38 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(third \+ 1\)\)\);/)
 })
 
+test('lowers async task frame awaits over managed immediate async helpers', () => {
+  const result = compileSource(`async function sameText(input: string): Promise<string> {
+  return input
+}
+
+async function sameBytes(input: Buffer): Promise<Buffer> {
+  return input
+}
+
+async function copy(input: string): Promise<string> {
+  const text = await sameText(input)
+  const bytes: Buffer = await fs.readFileBytes('/tmp/value.bin')
+  const copied: Buffer = await sameBytes(bytes)
+
+  return text
+}
+
+export async function main(): Promise<void> {
+  console.log(await copy('ok'))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_value ccjs_async_value_\d+ = sameText\(ccjs_value_\d+\);/)
+  assert.match(result.code, /if \(ccjs_async_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_async_value_\d+\.as\.ref == 0\) return CCJS_ERR_TYPE;/)
+  assert.match(result.code, /status = ccjs_promise_resolved\(ccjs_loop, ccjs_async_value_\d+, &frame->awaited\);/)
+  assert.match(result.code, /ccjs_release\(ccjs_async_value_\d+\);/)
+  assert.match(result.code, /ccjs_value ccjs_async_value_\d+ = sameBytes\(bytes\);/)
+  assert.match(result.code, /if \(ccjs_async_value_\d+\.tag != CCJS_TAG_BYTES \|\| ccjs_async_value_\d+\.as\.ref == 0\) return CCJS_ERR_TYPE;/)
+})
+
 test('lowers async task frame rejected awaits to returned Promise rejections', () => {
   const result = compileSource(`function failNumber(): Promise<number> {
   return Promise.reject('task fail')
