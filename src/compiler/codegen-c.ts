@@ -1,6 +1,6 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
-import { collectIrFunctionDeclarations, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodeEntries, collectIrTopLevelNodes, collectIrTopLevelNodesFromPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
-import type { IrModuleRecord } from './ir.ts'
+import { collectIrFunctionDeclarations, collectIrFunctionNodeEntries, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodeEntries, collectIrTopLevelNodes, collectIrTopLevelNodesFromPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
+import type { IrFunctionNodeEntry, IrModuleRecord } from './ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrSyntaxFeatureUsage, SourceLocation } from './types.ts'
 
 const cStringPredicateMethods = new Set([
@@ -30,7 +30,8 @@ export function emitCBundleFromIrModules(irModules: IrModuleRecord[], entry: str
 
 function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
   const diagnostics: Diagnostic[] = []
-  const functions = collectIrTopLevelNodesFromPrograms(irPrograms, 'function')
+  const functionEntries = collectIrFunctionNodeEntries(irPrograms)
+  const functions = functionEntries.map(entry => entry.node)
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
   const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
@@ -42,7 +43,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   baseContext.externalEventLoopFunctions = collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
   baseContext.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, baseContext)
-  baseContext.asyncTaskWrappers = collectAsyncTaskWrappers(functions, baseContext)
+  baseContext.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || runtimeRequirements.has('callback-values')
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsTimerRuntime = runtimeRequirements.has('timers')
@@ -418,21 +419,21 @@ function functionUsesExternalEventLoop(node, externalNames) {
   return found
 }
 
-function collectAsyncTaskWrappers(functions, context) {
+function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
   const wrappers = new Map()
 
-  for (const item of functions) {
-    const params = resolveAsyncTaskWrapperParams(item, context)
-    const body = params == null ? null : resolveAsyncTaskWrapperBody(item, context, params)
+  for (const { declaration, node: item } of functions) {
+    const params = resolveAsyncTaskWrapperParams(declaration, context)
+    const body = params == null ? null : resolveAsyncTaskWrapperBody(item, declaration, context, params)
 
     if (body == null) {
       continue
     }
 
-    const cName = emitCIdentifier(item.name)
+    const cName = emitCIdentifier(declaration.name)
     const wrapper = {
-      key: item.name,
-      functionName: item.name,
+      key: declaration.name,
+      functionName: declaration.name,
       frameTypeName: `ccjs_async_task_${cName}_frame`,
       startName: `ccjs_async_task_${cName}_start`,
       resumeName: `ccjs_async_task_${cName}_resume`,
@@ -445,18 +446,18 @@ function collectAsyncTaskWrappers(functions, context) {
       tryRegion: body.tryRegion ?? null
     }
 
-    wrappers.set(item.name, wrapper)
+    wrappers.set(declaration.name, wrapper)
   }
 
   return wrappers
 }
 
-function resolveAsyncTaskWrapperParams(statement, context) {
-  if (statement?.async !== true || statement.returnType !== 'promise' || isThrowingFunctionName(statement.name, context)) {
+function resolveAsyncTaskWrapperParams(declaration: IrFunctionDeclaration, context) {
+  if (declaration.async !== true || declaration.returnType !== 'promise' || isThrowingFunctionName(declaration.name, context)) {
     return null
   }
 
-  const params = resolveFunctionDeclarationParams(statement.name, statement.params, context)
+  const params = resolveFunctionDeclarationParams(declaration.name, declaration.params, context)
 
   if (params.some(param => param.nullable === true || !isSupportedAsyncTaskParamType(param.valueType))) {
     return null
@@ -485,12 +486,12 @@ function isSupportedAsyncTaskValueType(valueType) {
     || valueType === 'void'
 }
 
-function resolveAsyncTaskWrapperBody(statement, context, params) {
-  if (statement?.async !== true || statement.returnType !== 'promise' || isThrowingFunctionName(statement.name, context)) {
+function resolveAsyncTaskWrapperBody(statement, declaration: IrFunctionDeclaration, context, params) {
+  if (declaration.async !== true || declaration.returnType !== 'promise' || isThrowingFunctionName(declaration.name, context)) {
     return null
   }
 
-  const returnType = statement.returnPromiseValueType ?? context.functionReturnPromiseValueTypes.get(statement.name) ?? 'unknown'
+  const returnType = declaration.returnPromiseValueType ?? context.functionReturnPromiseValueTypes.get(declaration.name) ?? 'unknown'
 
   if (!isSupportedAsyncTaskValueType(returnType)) {
     return null
@@ -1835,7 +1836,7 @@ function resolveCFunctionReturnInfo(statement, context) {
   const returnType = resolveFunctionReturnType(statement.name, statement.returnType, context)
   const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
 
-  if (statement.async === true && returnType === 'promise') {
+  if (context.functionAsyncFlags.get(statement.name) === true && returnType === 'promise') {
     return {
       returnType: context.functionReturnPromiseValueTypes.get(statement.name) ?? statement.returnPromiseValueType ?? 'void',
       returnNullable: false

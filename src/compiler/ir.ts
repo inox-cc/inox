@@ -43,6 +43,11 @@ type IrTopLevelNodeEntry = {
   node: AnyNode
 }
 
+export type IrFunctionNodeEntry = {
+  declaration: IrFunctionDeclaration
+  node: AnyNode
+}
+
 export function lowerHirToIr(program: ProgramNode): IrProgram {
   const features = collectIrFeatures(program)
   const topLevelItems = collectTopLevelItems(program)
@@ -119,6 +124,38 @@ export function collectIrGlobalRoots(programs: Array<{ globalUsages: IrGlobalUsa
 
 export function collectIrFunctionDeclarations(programs: Array<{ functionDeclarations: IrFunctionDeclaration[] }>): IrFunctionDeclaration[] {
   return programs.flatMap(program => program.functionDeclarations)
+}
+
+export function collectIrFunctionNodeEntries(programs: Array<{
+  body: AnyNode[]
+  functionDeclarations: IrFunctionDeclaration[]
+  topLevelItems: IrTopLevelItem[]
+}>): IrFunctionNodeEntry[] {
+  return programs.flatMap(program => {
+    const declarationsByName = new Map<string, IrFunctionDeclaration[]>()
+
+    for (const declaration of program.functionDeclarations) {
+      declarationsByName.set(declaration.name, [
+        ...(declarationsByName.get(declaration.name) ?? []),
+        declaration
+      ])
+    }
+
+    return collectIrTopLevelNodeEntries(program)
+      .filter(item => item.kind === 'function')
+      .flatMap(item => {
+        const name = typeof item.node.name === 'string' ? item.node.name : ''
+        const declarations = declarationsByName.get(name)
+        const declaration = declarations?.shift()
+
+        return declaration == null
+          ? []
+          : [{
+              declaration,
+              node: item.node
+            }]
+      })
+  })
 }
 
 export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, name: string): boolean {

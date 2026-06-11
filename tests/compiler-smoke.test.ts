@@ -7,7 +7,7 @@ import { emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c
 import { emitJsBundleFromIrModules, emitJsFromIr, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
-import { collectIrFeatureRequirements, collectIrFunctionEffects, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrTopLevelNodeEntries, collectIrTopLevelNodesFromPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
+import { collectIrFeatureRequirements, collectIrFunctionEffects, collectIrFunctionNodeEntries, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrTopLevelNodeEntries, collectIrTopLevelNodesFromPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
 import type { CompileTarget } from '../src/compiler/types.ts'
 
 test('compiles exported main to runnable JS', () => {
@@ -1620,6 +1620,39 @@ test('drives JS and C main wrappers from target-neutral IR function declarations
     ...c.ir,
     functionDeclarations: []
   }), /int main\(void\) \{\n  ccjs_main\(\);/)
+})
+
+test('drives C async task wrapper selection from target-neutral IR function declarations', () => {
+  const result = compileSource(`async function getValue(): Promise<number> {
+  const value = await Promise.resolve(2)
+  return value
+}
+
+export async function main(): Promise<void> {
+  const value = await getValue()
+  console.log(value)
+}
+`, {
+    target: 'c'
+  })
+  const ir = {
+    ...result.ir,
+    body: result.ir.body.map(item => item.type === 'FunctionDeclaration' && item.name === 'getValue'
+      ? {
+          ...item,
+          async: false,
+          returnPromiseValueType: null
+        }
+      : item)
+  }
+  const entries = collectIrFunctionNodeEntries([ir])
+  const getValue = entries.find(item => item.declaration.name === 'getValue')
+  const code = emitCFromIr(ir)
+
+  assert.equal(getValue?.declaration.async, true)
+  assert.equal(getValue?.node.async, false)
+  assert.match(code, /ccjs_async_task_getValue_frame/)
+  assert.match(code, /ccjs_async_task_getValue_start/)
 })
 
 test('drives JS and C top-level emission from target-neutral IR top-level items', () => {
