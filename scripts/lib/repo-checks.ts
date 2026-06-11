@@ -19,6 +19,7 @@ const requiredFiles: string[] = [
   'docs/stdlib/README.md',
   'docs/testing/compiler-tests.md',
   'examples/async-fs.ts',
+  'examples/callbacks.ts',
   'examples/classes.ts',
   'examples/collections.ts',
   'examples/errors.ts',
