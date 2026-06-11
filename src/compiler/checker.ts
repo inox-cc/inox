@@ -14,6 +14,33 @@ type ResolvedTypeInfo = {
   setElementType: ValueType | null
 }
 
+const errorObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  fields: [
+    {
+      name: 'name',
+      valueType: 'string',
+      readonly: true
+    },
+    {
+      name: 'message',
+      valueType: 'string',
+      readonly: true
+    },
+    {
+      name: 'code',
+      valueType: 'string',
+      readonly: true
+    },
+    {
+      name: 'cause',
+      valueType: 'object',
+      nullable: true,
+      readonly: true
+    }
+  ]
+}
+
 const globals = new Map<string, SymbolInfo>([
   ['console', {
     kind: 'global',
@@ -447,7 +474,7 @@ class Checker {
       statement.promiseValueType = promiseValueType
       statement.setElementType = setElementType
       statement.functionType = declared?.functionType ?? null
-      statement.shape = declared?.shape ?? null
+      statement.shape = declared?.shape ?? statement.init?.shape ?? null
 
       if (declared?.shape != null && statement.init?.type === 'ObjectLiteral') {
         this.checkObjectLiteralAgainstShape(statement.init, declared.shape)
@@ -465,7 +492,7 @@ class Checker {
         promiseValueType,
         setElementType,
         functionType: declared?.functionType ?? null,
-        shape: declared?.shape ?? null,
+        shape: declared?.shape ?? statement.init?.shape ?? null,
         loc: statement.loc
       }, statement.loc)
 
@@ -2040,6 +2067,13 @@ class Checker {
       return 'set'
     }
 
+    if (expression.callee.path[0] === 'Error') {
+      this.checkErrorConstructorExpression(expression, argTypes)
+      expression.valueType = 'object'
+      expression.shape = errorObjectShape
+      return 'object'
+    }
+
     const symbol = this.scope.resolve(expression.callee.path[0]) ?? globals.get(expression.callee.path[0])
 
     if (symbol?.kind !== 'class' && !symbol?.constructable) {
@@ -2064,6 +2098,44 @@ class Checker {
     }
 
     return 'object'
+  }
+
+  checkErrorConstructorExpression(expression: AnyNode, argTypes: ValueType[]): void {
+    if (expression.args.length > 2) {
+      this.report('CCJS_ARG_COUNT', `Error constructor expects at most 2 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    if (argTypes[0] != null) {
+      this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+    }
+
+    const options = expression.args[1]
+
+    if (options == null) {
+      return
+    }
+
+    if (options.type !== 'ObjectLiteral') {
+      this.report('CCJS_TYPE_MISMATCH', 'Error options must be an object literal in the current compiler slice', options.loc)
+      return
+    }
+
+    for (const property of options.properties) {
+      if (property.key !== 'code' && property.key !== 'cause') {
+        this.report('CCJS_UNKNOWN_FIELD', `unknown Error option ${property.key}`, property.loc)
+        continue
+      }
+
+      if (property.key === 'code') {
+        this.checkAssignableType(property.value.valueType ?? this.checkExpression(property.value), 'string', property.value.loc, false, this.expressionCanBeNull(property.value))
+      } else {
+        const causeType = property.value.valueType ?? this.checkExpression(property.value)
+
+        if (property.value.type !== 'NullLiteral' && causeType !== 'object') {
+          this.report('CCJS_TYPE_MISMATCH', 'Error cause must be an Error object or null in the current compiler slice', property.value.loc)
+        }
+      }
+    }
   }
 
   checkVariableInitializer(expression: AnyNode, declared: ResolvedTypeInfo | null): ValueType {
@@ -2289,10 +2361,10 @@ class Checker {
 
   resolveExpressionShape(expression: AnyNode): ObjectShapeInfo | null {
     if (expression.type !== 'Reference' || expression.path.length !== 1) {
-      return null
+      return expression.shape ?? null
     }
 
-    return this.scope.resolve(expression.path[0])?.shape ?? null
+    return this.scope.resolve(expression.path[0])?.shape ?? expression.shape ?? null
   }
 
   findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {

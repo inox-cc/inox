@@ -6232,13 +6232,14 @@ test('generated C lightweight Error objects compile and run with runtime sources
 
   try {
     const result = compileSource(`export function main(): void {
-  const created = new Error('created')
-  console.log(created.name, created.message)
+  const root = new Error('root', { code: 'E_ROOT' })
+  const created = new Error('created', { code: 'E_CREATED', cause: root })
+  console.log(created.name, created.message, created.code)
   try {
-    const thrown = new Error('boom')
+    const thrown = new Error('boom', { code: 'E_BOOM', cause: created })
     throw thrown
   } catch (error) {
-    console.log(error.name, error.message)
+    console.log(error.name, error.message, error.code)
   } finally {
     console.log('finally')
   }
@@ -6256,7 +6257,7 @@ test('generated C lightweight Error objects compile and run with runtime sources
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'Error created\nError boom\nfinally\n')
+    assert.equal(run.stdout, 'Error created E_CREATED\nError boom E_BOOM\nfinally\n')
   } finally {
     await rm(dir, {
       recursive: true,

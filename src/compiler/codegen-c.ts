@@ -6605,18 +6605,21 @@ function emitCErrorObjectValueExpression(expression, context) {
 function emitCErrorObjectInitLines(target, expression, context) {
   const shapeName = nextCName(context, 'ccjs_shape_error')
   const fieldsName = `${shapeName}_fields`
+  const parts = errorConstructorExpressions(expression, context)
   const name = emitCValueExpression(cStringLiteralNode('Error', expression.loc), context)
-  const message = emitCValueExpression(errorMessageExpression(expression, context), context)
-  const code = emitCValueExpression(cStringLiteralNode('', expression.loc), context)
+  const message = emitCValueExpression(parts.message, context)
+  const code = emitCValueExpression(parts.code, context)
+  const cause = emitCValueExpression(parts.cause, context)
 
   return [
     `static const ccjs_field_info ${fieldsName}[] = {`,
     `  { ${cStringLiteral('name')}, CCJS_FIELD_READONLY },`,
     `  { ${cStringLiteral('message')}, CCJS_FIELD_READONLY },`,
     `  { ${cStringLiteral('code')}, CCJS_FIELD_READONLY },`,
+    `  { ${cStringLiteral('cause')}, CCJS_FIELD_READONLY },`,
     '};',
     `static const ccjs_shape ${shapeName} = {`,
-    '  3,',
+    '  4,',
     `  ${fieldsName}`,
     '};',
     ...emitPrepareOwnedValueWrite(target),
@@ -6626,30 +6629,86 @@ function emitCErrorObjectInitLines(target, expression, context) {
     ...message.lines,
     emitStatusCheck(`ccjs_object_init_known(${target}, 1, ${message.expression})`, context),
     ...code.lines,
-    emitStatusCheck(`ccjs_object_init_known(${target}, 2, ${code.expression})`, context)
+    emitStatusCheck(`ccjs_object_init_known(${target}, 2, ${code.expression})`, context),
+    ...cause.lines,
+    emitStatusCheck(`ccjs_object_init_known(${target}, 3, ${cause.expression})`, context)
   ]
 }
 
-function errorMessageExpression(expression, context) {
-  if (expression.args.length > 1) {
-    context.diagnostics.push(diagnostic('CCJS_ARG_COUNT', `Error constructor expects at most 1 argument(s), got ${expression.args.length}`, expression.loc))
+function errorConstructorExpressions(expression, context) {
+  if (expression.args.length > 2) {
+    context.diagnostics.push(diagnostic('CCJS_ARG_COUNT', `Error constructor expects at most 2 argument(s), got ${expression.args.length}`, expression.loc))
   }
 
   const message = expression.args[0] ?? cStringLiteralNode('', expression.loc)
+  const options = expression.args[1]
+  let code = cStringLiteralNode('', expression.loc)
+  let cause = cNullLiteralNode(expression.loc)
 
   if (inferExpressionType(message, context) !== 'string') {
     context.diagnostics.push(diagnostic('CCJS_TYPE_MISMATCH', 'Error message must be a string in the current C backend slice', message.loc ?? expression.loc))
 
-    return cStringLiteralNode('', expression.loc)
+    return {
+      message: cStringLiteralNode('', expression.loc),
+      code,
+      cause
+    }
   }
 
-  return message
+  if (options == null) {
+    return {
+      message,
+      code,
+      cause
+    }
+  }
+
+  if (options.type !== 'ObjectLiteral') {
+    context.diagnostics.push(diagnostic('CCJS_TYPE_MISMATCH', 'Error options must be an object literal in the current C backend slice', options.loc ?? expression.loc))
+
+    return {
+      message,
+      code,
+      cause
+    }
+  }
+
+  for (const property of options.properties) {
+    if (property.key === 'code') {
+      if (inferExpressionType(property.value, context) !== 'string') {
+        context.diagnostics.push(diagnostic('CCJS_TYPE_MISMATCH', 'Error code must be a string in the current C backend slice', property.value.loc ?? property.loc))
+      } else {
+        code = property.value
+      }
+    } else if (property.key === 'cause') {
+      if (property.value.type === 'NullLiteral' || isErrorValueExpression(property.value, context)) {
+        cause = property.value
+      } else {
+        context.diagnostics.push(diagnostic('CCJS_TYPE_MISMATCH', 'Error cause must be an Error object or null in the current C backend slice', property.value.loc ?? property.loc))
+      }
+    } else {
+      context.diagnostics.push(diagnostic('CCJS_UNKNOWN_FIELD', `unknown Error option ${property.key}`, property.loc ?? options.loc))
+    }
+  }
+
+  return {
+    message,
+    code,
+    cause
+  }
 }
 
 function cStringLiteralNode(value, loc = null) {
   return {
     type: 'StringLiteral',
     value,
+    loc
+  }
+}
+
+function cNullLiteralNode(loc = null) {
+  return {
+    type: 'NullLiteral',
     loc
   }
 }
@@ -9577,6 +9636,10 @@ function registerErrorObjectShape(context, name) {
     {
       name: 'code',
       valueType: 'string'
+    },
+    {
+      name: 'cause',
+      valueType: 'object'
     }
   ])
 }
