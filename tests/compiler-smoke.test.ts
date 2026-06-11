@@ -5851,6 +5851,52 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   assert.match(result.code, /while \(ccjs_promise_get_state\(recovered\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
 })
 
+test('lowers Promise callbacks with try catch finally to C runtime promises', () => {
+  const result = compileSource(`export async function main(): Promise<void> {
+  const handled = Promise.resolve(3).then(value => {
+    try {
+      if (value > 2) {
+        throw 'large'
+      }
+
+      return value
+    } catch (error) {
+      console.log(error)
+
+      return 7
+    } finally {
+      console.log('chain finally')
+    }
+
+    return 0
+  })
+  const finalized = Promise.resolve(2).then(value => {
+    try {
+      return value * 2
+    } finally {
+      console.log('return finally')
+    }
+
+    return 0
+  })
+
+  console.log(await handled, await finalized)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_promise_chain_arrow_\d+\(void\* context, ccjs_value ccjs_value_input, ccjs_value\* out\) \{[\s\S]*ccjs_try_\d+_catch:/)
+  assert.match(result.code, /ccjs_error_active = 1;\n\s+goto ccjs_try_\d+_catch;/)
+  assert.match(result.code, /printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);/)
+  assert.match(result.code, /\(\*out\) = ccjs_number_value\(7\);\n\s+ccjs_return_active = 1;\n\s+goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /printf\("%s\\n", "chain finally"\);/)
+  assert.match(result.code, /\(\*out\) = ccjs_number_value\(\(value \* 2\)\);\n\s+ccjs_return_active = 1;\n\s+goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /printf\("%s\\n", "return finally"\);/)
+  assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &handled\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &finalized\) != CCJS_OK\) goto ccjs_cleanup;/)
+})
+
 test('compiles C collection values across function boundaries', () => {
   const result = compileSource(`function makeNums(): number[] {
   const nums = [2, 3, 5]

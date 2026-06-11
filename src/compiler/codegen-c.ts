@@ -10055,7 +10055,7 @@ function isPromiseChainCallbackStatement(statement) {
     return false
   }
 
-  if (isStraightLinePromiseCallbackStatement(statement) || statement.type === 'ReturnStatement') {
+  if (isStraightLinePromiseCallbackStatement(statement) || statement.type === 'ReturnStatement' || statement.type === 'ThrowStatement') {
     return true
   }
 
@@ -10065,6 +10065,12 @@ function isPromiseChainCallbackStatement(statement) {
 
   if (statement.type === 'SwitchStatement') {
     return isPromiseChainCallbackSwitchStatement(statement)
+  }
+
+  if (statement.type === 'TryStatement') {
+    return isPromiseChainCallbackStatement(statement.block)
+      && (statement.handler == null || isPromiseChainCallbackStatement(statement.handler.body))
+      && (statement.finalizer == null || isPromiseChainCallbackStatement(statement.finalizer))
   }
 
   if (statement.type !== 'IfStatement') {

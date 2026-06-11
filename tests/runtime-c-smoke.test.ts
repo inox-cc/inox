@@ -1642,6 +1642,71 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C Promise callbacks with try catch finally compile and run', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-promise-callback-try-'))
+  const source = join(dir, 'promise-callback-try.c')
+  const output = join(dir, 'promise-callback-try')
+
+  try {
+    const result = compileSource(`export async function main(): Promise<void> {
+  const handled = Promise.resolve(3).then(value => {
+    try {
+      if (value > 2) {
+        throw 'large'
+      }
+
+      return value
+    } catch (error) {
+      console.log(error)
+
+      return 7
+    } finally {
+      console.log('chain finally')
+    }
+
+    return 0
+  })
+  const finalized = Promise.resolve(2).then(value => {
+    try {
+      return value * 2
+    } finally {
+      console.log('return finally')
+    }
+
+    return 0
+  })
+
+  console.log(await handled, await finalized)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'large\nchain finally\nreturn finally\n7 4\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async task frame over awaited Promise.resolve compiles and runs', async t => {
   const probe = await runCommand('cc', ['--version'])
 
