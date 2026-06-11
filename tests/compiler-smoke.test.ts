@@ -3936,6 +3936,49 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(first \+ second\)\)\);/)
 })
 
+test('lowers async task frame awaits over local async tasks and plain Promise helpers', () => {
+  const result = compileSource(`async function immediate(input: number): Promise<number> {
+  return input
+}
+
+function same(input: number): Promise<number> {
+  return Promise.resolve(input)
+}
+
+async function addLater(input: number): Promise<number> {
+  const value = await Promise.resolve(input)
+
+  return value + 1
+}
+
+async function compute(input: number): Promise<number> {
+  const zero = await immediate(input)
+  const first = await same(zero)
+  const second = await addLater(first)
+  const third = await same(second)
+
+  return third + 1
+}
+
+export async function main(): Promise<void> {
+  console.log(await compute(2))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_promise\* same\(ccjs_loop\* ccjs_loop, double input\);/)
+  assert.match(result.code, /status = ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(immediate\(input\)\), &frame->awaited\);/)
+  assert.match(result.code, /frame->state = 1;/)
+  assert.match(result.code, /frame->awaited = same\(ccjs_loop, zero\);/)
+  assert.match(result.code, /status = frame->awaited == 0 \? CCJS_ERR_TYPE : CCJS_OK;/)
+  assert.match(result.code, /frame->state = 2;/)
+  assert.match(result.code, /status = ccjs_async_task_addLater_start\(ccjs_loop, first, &frame->awaited\);/)
+  assert.match(result.code, /frame->state = 3;/)
+  assert.match(result.code, /frame->awaited = same\(ccjs_loop, second\);/)
+  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(third \+ 1\)\)\);/)
+})
+
 test('lowers awaited plain Promise-returning calls to C', () => {
   const result = compileSource(`function getPromise(): Promise<number> {
   return Promise.resolve(2)

@@ -1966,6 +1966,69 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame awaits local async tasks and plain Promise helpers', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-promise-sources-'))
+  const source = join(dir, 'async-task-frame-promise-sources.c')
+  const output = join(dir, 'async-task-frame-promise-sources')
+
+  try {
+    const result = compileSource(`async function immediate(input: number): Promise<number> {
+  return input
+}
+
+function same(input: number): Promise<number> {
+  return Promise.resolve(input)
+}
+
+async function addLater(input: number): Promise<number> {
+  const value = await Promise.resolve(input)
+
+  return value + 1
+}
+
+async function compute(input: number): Promise<number> {
+  const zero = await immediate(input)
+  const first = await same(zero)
+  const second = await addLater(first)
+  const third = await same(second)
+
+  return third + 1
+}
+
+export async function main(): Promise<void> {
+  console.log(await compute(2))
+  const promise = compute(5)
+  console.log(await promise)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '4\n7\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C object literal lowering compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

@@ -510,7 +510,7 @@ function resolveAsyncTaskAwaitSteps(statements, context) {
   for (let index = 0; index < statements.length;) {
     const statement = statements[index]
     const nextStatement = statements[index + 1]
-    const directAwait = resolveAsyncTaskDirectAwaitStep(statement, awaits.length)
+    const directAwait = resolveAsyncTaskDirectAwaitStep(statement, context, awaits.length)
 
     if (directAwait != null) {
       awaits.push(directAwait)
@@ -532,12 +532,16 @@ function resolveAsyncTaskAwaitSteps(statements, context) {
   return awaits.length === 0 ? null : awaits
 }
 
-function resolveAsyncTaskDirectAwaitStep(statement, index) {
+function resolveAsyncTaskDirectAwaitStep(statement, context, index) {
   if (statement?.type !== 'VariableDeclaration' || statement.init?.type !== 'AwaitExpression') {
     return null
   }
 
   const awaitedType = statement.valueType ?? statement.init.valueType ?? 'unknown'
+  const awaitedExpression = statement.init.argument
+  const awaitedPromiseExpression = isSupportedAsyncTaskDirectAwaitPromiseExpression(awaitedExpression, context)
+    ? awaitedExpression
+    : null
 
   if (awaitedType !== 'number' && awaitedType !== 'boolean') {
     return null
@@ -548,8 +552,8 @@ function resolveAsyncTaskDirectAwaitStep(statement, index) {
     name: statement.name,
     type: awaitedType,
     fieldName: `local_${emitCIdentifier(statement.name)}`,
-    awaitedExpression: statement.init.argument,
-    awaitedPromiseExpression: null
+    awaitedExpression: awaitedPromiseExpression == null ? awaitedExpression : null,
+    awaitedPromiseExpression
   }
 }
 
@@ -607,6 +611,10 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(expression, context) {
     return false
   }
 
+  if (isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context)) {
+    return true
+  }
+
   if (cPromiseRuntimeCallName(expression.callee) === 'resolve') {
     return true
   }
@@ -624,12 +632,32 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(expression, context) {
     && context.promiseChainArrowWrappers.has(callback)
 }
 
+function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context) {
+  if (expression?.type !== 'CallExpression') {
+    return false
+  }
+
+  if (isPromiseReturningFunctionCallee(expression.callee, context)) {
+    return true
+  }
+
+  if (!isAsyncFunctionCallee(expression.callee, context) || isThrowingFunctionCallee(expression.callee, context)) {
+    return false
+  }
+
+  const valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
+
+  return valueType === 'number' || valueType === 'boolean'
+}
+
 function resolveAsyncTaskReturnValueExpression(expression, returnType, context) {
   if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'resolve') {
     return expression.args[0] ?? null
   }
 
-  if ((returnType === 'number' || returnType === 'boolean') && inferExpressionType(expression, context) === returnType) {
+  const expressionType = expression?.valueType ?? (context.variables == null ? 'unknown' : inferExpressionType(expression, context))
+
+  if ((returnType === 'number' || returnType === 'boolean') && expressionType === returnType) {
     return expression
   }
 
@@ -809,6 +837,12 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, o
     return null
   }
 
+  const promiseSource = emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, options)
+
+  if (promiseSource != null) {
+    return promiseSource
+  }
+
   const chain = emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, item, context, options)
 
   if (chain != null) {
@@ -832,6 +866,105 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, o
     lines: [
       ...value.lines,
       `status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &frame->awaited);`,
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+    ]
+  }
+}
+
+function emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, options) {
+  const expression = item.awaitedPromiseExpression
+
+  if (expression?.type !== 'CallExpression') {
+    return null
+  }
+
+  const taskCall = emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context, options)
+
+  if (taskCall != null) {
+    return taskCall
+  }
+
+  const asyncCall = emitPreparedAsyncFunctionSourceCallExpression(expression, wrapper, context, options)
+
+  if (asyncCall != null) {
+    return asyncCall
+  }
+
+  const promiseCall = emitPreparedPlainPromiseSourceCallExpression(expression, wrapper, context, options)
+
+  if (promiseCall != null) {
+    return promiseCall
+  }
+
+  return null
+}
+
+function emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context, options) {
+  if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return null
+  }
+
+  const target = context.asyncTaskWrappers.get(expression.callee.path[0])
+
+  if (target == null) {
+    return null
+  }
+
+  const prepared = emitPreparedCallArgs(expression, target.params, context)
+  const args = ['ccjs_loop', ...prepared.args, '&frame->awaited']
+
+  return {
+    lines: [
+      ...prepared.lines,
+      `status = ${target.startName}(${args.join(', ')});`,
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+    ]
+  }
+}
+
+function emitPreparedAsyncFunctionSourceCallExpression(expression, wrapper, context, options) {
+  if (!isAsyncFunctionCallee(expression.callee, context) || isThrowingFunctionCallee(expression.callee, context)) {
+    return null
+  }
+
+  const valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
+
+  if (valueType !== 'number' && valueType !== 'boolean') {
+    return null
+  }
+
+  const call = emitPreparedCallExpression(expression, context)
+  const value = valueType === 'boolean'
+    ? `ccjs_bool_value((${call.expression}) != 0)`
+    : `ccjs_number_value(${call.expression})`
+
+  return {
+    lines: [
+      ...call.lines,
+      `status = ccjs_promise_resolved(ccjs_loop, ${value}, &frame->awaited);`,
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+    ]
+  }
+}
+
+function emitPreparedPlainPromiseSourceCallExpression(expression, wrapper, context, options) {
+  if (!isPromiseReturningFunctionCallee(expression.callee, context)) {
+    return null
+  }
+
+  const params = resolveFunctionParams(expression.callee, context)
+
+  if (params == null) {
+    return null
+  }
+
+  const prepared = emitPreparedCallArgs(expression, params, context)
+
+  return {
+    lines: [
+      ...prepared.lines,
+      `frame->awaited = ${emitCallee(expression.callee, context)}(${['ccjs_loop', ...prepared.args].join(', ')});`,
+      'status = frame->awaited == 0 ? CCJS_ERR_TYPE : CCJS_OK;',
       ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
     ]
   }
