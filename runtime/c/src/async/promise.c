@@ -21,6 +21,7 @@ struct ccjs_promise {
   ccjs_loop* loop;
   unsigned int ref_count;
   ccjs_promise_state state;
+  bool handled;
   ccjs_value result;
   ccjs_promise_reaction* head;
   ccjs_promise_reaction* tail;
@@ -34,6 +35,7 @@ typedef struct ccjs_promise_reaction_task {
 static ccjs_status ccjs_promise_settle(ccjs_promise* promise, ccjs_promise_state state, ccjs_value value);
 static ccjs_status ccjs_promise_add_reaction(ccjs_promise* promise, ccjs_promise_reaction* reaction);
 static ccjs_status ccjs_promise_schedule_reaction(ccjs_promise* promise, ccjs_promise_reaction* reaction);
+static bool ccjs_promise_reaction_tracks_rejection(const ccjs_promise_reaction* reaction);
 static ccjs_status ccjs_promise_run_observer_reaction(ccjs_promise_reaction_task* task);
 static ccjs_status ccjs_promise_run_chain_reaction(ccjs_promise_reaction_task* task);
 static ccjs_status ccjs_promise_run_reaction(void* context);
@@ -55,6 +57,7 @@ ccjs_status ccjs_promise_new(ccjs_loop* loop, ccjs_promise** out) {
   promise->loop = loop;
   promise->ref_count = 1;
   promise->state = CCJS_PROMISE_PENDING;
+  promise->handled = false;
   promise->result = ccjs_undefined_value();
   promise->head = 0;
   promise->tail = 0;
@@ -96,9 +99,17 @@ ccjs_promise_state ccjs_promise_get_state(const ccjs_promise* promise) {
   return promise == 0 ? CCJS_PROMISE_REJECTED : promise->state;
 }
 
-ccjs_status ccjs_promise_get_result(const ccjs_promise* promise, ccjs_value* out) {
+bool ccjs_promise_is_unhandled_rejection(const ccjs_promise* promise) {
+  return promise != 0 && promise->state == CCJS_PROMISE_REJECTED && !promise->handled;
+}
+
+ccjs_status ccjs_promise_get_result(ccjs_promise* promise, ccjs_value* out) {
   if (promise == 0 || out == 0 || promise->state == CCJS_PROMISE_PENDING) {
     return CCJS_ERR_TYPE;
+  }
+
+  if (promise->state == CCJS_PROMISE_REJECTED) {
+    promise->handled = true;
   }
 
   *out = promise->result;
@@ -292,8 +303,20 @@ static ccjs_status ccjs_promise_add_reaction(ccjs_promise* promise, ccjs_promise
     return CCJS_ERR_TYPE;
   }
 
+  bool tracks_rejection = ccjs_promise_reaction_tracks_rejection(reaction);
+
   if (promise->state != CCJS_PROMISE_PENDING) {
-    return ccjs_promise_schedule_reaction(promise, reaction);
+    ccjs_status status = ccjs_promise_schedule_reaction(promise, reaction);
+
+    if (status == CCJS_OK && tracks_rejection) {
+      promise->handled = true;
+    }
+
+    return status;
+  }
+
+  if (tracks_rejection) {
+    promise->handled = true;
   }
 
   if (promise->tail == 0) {
@@ -335,6 +358,18 @@ static ccjs_status ccjs_promise_schedule_reaction(ccjs_promise* promise, ccjs_pr
   }
 
   return status;
+}
+
+static bool ccjs_promise_reaction_tracks_rejection(const ccjs_promise_reaction* reaction) {
+  if (reaction == 0) {
+    return false;
+  }
+
+  if (reaction->kind == CCJS_PROMISE_REACTION_CHAIN) {
+    return true;
+  }
+
+  return reaction->on_rejected != 0;
 }
 
 static ccjs_status ccjs_promise_run_reaction(void* context) {

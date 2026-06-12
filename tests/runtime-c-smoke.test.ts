@@ -837,15 +837,19 @@ int main(void) {
   result = ccjs_undefined_value();
 
   if (ccjs_promise_rejected(&loop, ccjs_number_value(6), &rejected_factory) != CCJS_OK) return 18;
-  if (ccjs_promise_chain(rejected_factory, 0, 0, &log, finalize_chain, &propagated) != CCJS_OK) return 19;
-  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 20;
-  if (ccjs_promise_get_state(propagated) != CCJS_PROMISE_REJECTED) return 21;
-  if (ccjs_promise_get_result(propagated, &result) != CCJS_OK) return 22;
-  if (result.as.number != 6) return 23;
+  if (!ccjs_promise_is_unhandled_rejection(rejected_factory)) return 19;
+  if (ccjs_promise_chain(rejected_factory, 0, 0, &log, finalize_chain, &propagated) != CCJS_OK) return 20;
+  if (ccjs_promise_is_unhandled_rejection(rejected_factory)) return 21;
+  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 22;
+  if (ccjs_promise_get_state(propagated) != CCJS_PROMISE_REJECTED) return 23;
+  if (!ccjs_promise_is_unhandled_rejection(propagated)) return 24;
+  if (ccjs_promise_get_result(propagated, &result) != CCJS_OK) return 25;
+  if (ccjs_promise_is_unhandled_rejection(propagated)) return 26;
+  if (result.as.number != 6) return 27;
   propagated_value = (int)result.as.number;
   ccjs_release(result);
   result = ccjs_undefined_value();
-  if (log.finalized != 3) return 24;
+  if (log.finalized != 3) return 28;
 
   ccjs_promise_release(propagated);
   ccjs_promise_release(rejected_factory);

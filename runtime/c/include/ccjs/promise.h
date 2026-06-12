@@ -1,6 +1,7 @@
 #ifndef CCJS_PROMISE_H
 #define CCJS_PROMISE_H
 
+#include <stdbool.h>
 #include "ccjs/loop.h"
 #include "ccjs/value.h"
 
@@ -20,7 +21,8 @@ ccjs_status ccjs_promise_new(ccjs_loop* loop, ccjs_promise** out);
 void ccjs_promise_retain(ccjs_promise* promise);
 void ccjs_promise_release(ccjs_promise* promise);
 ccjs_promise_state ccjs_promise_get_state(const ccjs_promise* promise);
-ccjs_status ccjs_promise_get_result(const ccjs_promise* promise, ccjs_value* out);
+bool ccjs_promise_is_unhandled_rejection(const ccjs_promise* promise);
+ccjs_status ccjs_promise_get_result(ccjs_promise* promise, ccjs_value* out);
 ccjs_status ccjs_promise_then(
   ccjs_promise* promise,
   ccjs_promise_reaction_fn on_fulfilled,
