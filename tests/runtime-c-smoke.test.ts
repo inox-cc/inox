@@ -1710,6 +1710,67 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C captured Promise callbacks compile and run', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-promise-callback-capture-'))
+  const source = join(dir, 'promise-callback-capture.c')
+  const output = join(dir, 'promise-callback-capture')
+
+  try {
+    const result = compileSource(`type User = {
+  name: string
+}
+
+export async function main(): Promise<void> {
+  const extra = 5
+  const literal = 'literal'
+  const user: User = { name: 'captured' }
+  const label = user.name
+  const raw = Promise.resolve(1).then(value => {
+    console.log(literal)
+
+    return value + extra
+  })
+  console.log(await raw)
+
+  const added = Promise.resolve(4).then(value => value + extra)
+  console.log(await added)
+
+  const logged = Promise.resolve(6).then(value => {
+    console.log(label)
+
+    return value + extra
+  })
+  console.log(await logged)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'literal\n6\n9\ncaptured\n11\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C Promise callbacks with try catch finally compile and run', async t => {
   const probe = await runCommand('cc', ['--version'])
 

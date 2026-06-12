@@ -5988,14 +5988,6 @@ test('checks Promise then catch as typed chain calls', () => {
 }
 `, 'CCJS_TYPE_MISMATCH')
   assertDiagnostic(`export function main(): void {
-  const extra = 1
-  const promise = Promise.resolve(1).then(value => value + extra)
-  console.log(promise)
-}
-`, 'CCJS_C_ASYNC', {
-    target: 'c'
-  })
-  assertDiagnostic(`export function main(): void {
   const promise = Promise.resolve(1).then(value => {
     while (value > 0) {
       return value
@@ -6087,6 +6079,49 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   assert.match(result.code, /while \(ccjs_promise_get_state\(doubled\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
   assert.match(result.code, /while \(ccjs_promise_get_state\(blockDoubled\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
   assert.match(result.code, /while \(ccjs_promise_get_state\(recovered\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
+})
+
+test('lowers captured Promise callbacks to C runtime promises', () => {
+  const result = compileSource(`type User = {
+  name: string
+}
+
+export async function main(): Promise<void> {
+  const extra = 3
+  const literal = 'literal'
+  const user: User = { name: 'captured' }
+  const label = user.name
+  const raw = Promise.resolve(1).then(value => {
+    console.log(literal)
+
+    return value + extra
+  })
+  const added = Promise.resolve(4).then(value => value + extra)
+  const logged = Promise.resolve(5).then(value => {
+    console.log(label)
+
+    return value + extra
+  })
+
+  console.log(await raw, await added, await logged)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /typedef struct ccjs_promise_chain_context_\d+ \{\n  double extra;\n\} ccjs_promise_chain_context_\d+;/)
+  assert.match(result.code, /typedef struct ccjs_promise_chain_context_\d+ \{\n  char\* literal;\n  double extra;\n\} ccjs_promise_chain_context_\d+;/)
+  assert.match(result.code, /typedef struct ccjs_promise_chain_context_\d+ \{\n  ccjs_value label;\n  double extra;\n\} ccjs_promise_chain_context_\d+;/)
+  assert.match(result.code, /static void ccjs_promise_chain_context_\d+_finalize\(void\* context\);/)
+  assert.match(result.code, /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n  ccjs_release\(captured->label\);/)
+  assert.match(result.code, /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n  double extra = captured->extra;/)
+  assert.match(result.code, /char\* literal = captured->literal;/)
+  assert.match(result.code, /ccjs_string\* label = \(ccjs_string\*\)captured->label\.as\.ref;/)
+  assert.match(result.code, /ccjs_promise_callback_ctx_\d+->literal = literal;/)
+  assert.match(result.code, /ccjs_promise_callback_ctx_\d+->label\.tag = CCJS_TAG_STRING;\n  ccjs_promise_callback_ctx_\d+->label\.as\.ref = \(ccjs_ref\*\)&label->header;\n  ccjs_retain\(ccjs_promise_callback_ctx_\d+->label\);/)
+  assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &raw\) != CCJS_OK\) \{/)
+  assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &added\) != CCJS_OK\) \{/)
+  assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &logged\) != CCJS_OK\) \{/)
 })
 
 test('lowers Promise callbacks with try catch finally to C runtime promises', () => {

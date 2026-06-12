@@ -65,6 +65,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
   const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsTimerRuntime)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
+  const promiseChainCallbackWrappers = [...baseContext.promiseChainWrappers.values()].filter(isPromiseChainCallbackWrapperWithContext)
 
   for (const wrapper of baseContext.asyncTaskWrappers.values()) {
     lines.push(...emitAsyncTaskFrameType(wrapper))
@@ -72,6 +73,11 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   }
 
   for (const wrapper of arrowCallbackWrappers) {
+    lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
+    lines.push('')
+  }
+
+  for (const wrapper of promiseChainCallbackWrappers) {
     lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
   }
@@ -102,6 +108,10 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   }
 
   for (const wrapper of baseContext.promiseChainWrappers.values()) {
+    if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
+      lines.push(`static void ${wrapper.finalizerName}(void* context);`)
+    }
+
     lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
   }
 
@@ -1586,18 +1596,63 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, item, conte
   const source = nextCName(context, 'ccjs_async_task_source')
   const sourceType = receiver.promiseValueType ?? callback.params[0]?.valueType ?? item.type
   const value = emitPreparedAsyncTaskValueExpression(receiver.args[0], sourceType, context)
+  const callbackContext = emitAsyncTaskPromiseChainCallbackContext(wrapper, chainWrapper, context, options)
+  const cleanupLines = callbackContext.expression === '0'
+    ? []
+    : [`${chainWrapper.finalizerName}(${callbackContext.expression});`]
 
   return {
     lines: [
+      ...callbackContext.lines,
       `ccjs_promise* ${source} = 0;`,
       ...value.lines,
       `status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &${source});`,
-      ...emitAsyncTaskScheduleStatusCheck(wrapper, options),
-      `status = ccjs_promise_chain(${source}, ${chainWrapper.name}, 0, 0, 0, &frame->awaited);`,
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines),
+      `status = ccjs_promise_chain(${source}, ${chainWrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &frame->awaited);`,
       `ccjs_promise_release(${source});`,
       `${source} = 0;`,
-      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
+      ...emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines)
     ]
+  }
+}
+
+function emitAsyncTaskPromiseChainCallbackContext(asyncWrapper, chainWrapper, context, options) {
+  if (!isPromiseChainCallbackWrapperWithContext(chainWrapper)) {
+    return {
+      lines: [],
+      expression: '0',
+      finalizer: '0'
+    }
+  }
+
+  const lines: string[] = []
+
+  for (const capture of chainWrapper.captures) {
+    if (capture.mutable && !isSupportedMutableRuntimeArrowCapture(capture, context)) {
+      context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'capturing this mutable binding in async Promise callbacks requires unsupported boxed closure storage', chainWrapper.expression.loc))
+    }
+
+    if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
+      context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'capturing async Promise callbacks currently support only const number/boolean/string/object bindings', chainWrapper.expression.loc))
+    }
+  }
+
+  const contextName = nextCName(context, 'ccjs_promise_callback_ctx')
+
+  lines.push(`${chainWrapper.contextTypeName}* ${contextName} = ccjs_default_alloc(0, sizeof(${chainWrapper.contextTypeName}), _Alignof(${chainWrapper.contextTypeName}));`)
+  lines.push('if (' + contextName + ' == 0) {')
+  lines.push('  status = CCJS_ERR_OOM;')
+  lines.push(...emitAsyncTaskScheduleStatusCheck(asyncWrapper, options).map(line => `  ${line}`))
+  lines.push('}')
+
+  for (const capture of chainWrapper.captures) {
+    lines.push(...emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
+  }
+
+  return {
+    lines,
+    expression: contextName,
+    finalizer: chainWrapper.finalizerName
   }
 }
 
@@ -2778,11 +2833,46 @@ function collectPromiseChainWrappers(irPrograms: IrProgram[], context) {
         functionType: param.functionType,
         nullable: param.nullable === true,
         shape: param.shape,
+        runtimeManaged: ['string', 'object'].includes(param.valueType),
         mutable: true
       })
     }
   }
-  const declareVariable = (scope, statement) => {
+  const lookup = (name, scopes) => {
+    for (let index = scopes.length - 1; index >= 0; index -= 1) {
+      const entry = scopes[index].get(name)
+
+      if (entry != null) {
+        return entry
+      }
+    }
+
+    return null
+  }
+  const isRuntimeManagedCaptureBinding = (statement, scopes, valueType) => {
+    if (valueType === 'object') {
+      return true
+    }
+
+    if (valueType !== 'string') {
+      return false
+    }
+
+    if (statement.init?.type === 'StringLiteral') {
+      return false
+    }
+
+    if (statement.init?.type === 'TemplateLiteral' && !statement.init.raw.includes('${')) {
+      return false
+    }
+
+    if (statement.init?.type === 'Reference' && statement.init.path.length === 1) {
+      return lookup(statement.init.path[0], scopes)?.runtimeManaged === true
+    }
+
+    return true
+  }
+  const declareVariable = (scope, statement, scopes) => {
     declare(scope, statement.name, {
       name: statement.name,
       valueType: statement.valueType,
@@ -2790,6 +2880,7 @@ function collectPromiseChainWrappers(irPrograms: IrProgram[], context) {
       functionType: statement.functionType,
       nullable: statement.nullable === true,
       shape: statement.shape,
+      runtimeManaged: isRuntimeManagedCaptureBinding(statement, scopes, statement.valueType),
       mutable: statement.kind === 'let'
     })
   }
@@ -2804,19 +2895,30 @@ function collectPromiseChainWrappers(irPrograms: IrProgram[], context) {
       return
     }
 
-    if (context.promiseChainArrowWrappers.has(callback) || collectArrowCaptures(callback, scopes, context).length > 0) {
+    if (context.promiseChainArrowWrappers.has(callback)) {
       return
     }
 
     const index = wrappers.size
     const key = `promise-chain-arrow:${index}`
+    const captures = collectArrowCaptures(callback, scopes, context)
+
+    for (const capture of captures) {
+      if (capture.mutable && ['number', 'boolean', 'string', 'object'].includes(capture.valueType) && capture.declaration != null) {
+        context.boxedMutableCaptureDeclarations.add(capture.declaration)
+      }
+    }
+
     const wrapper = {
       kind: 'promise-chain-arrow',
       key,
       name: `ccjs_promise_chain_arrow_${index}`,
+      contextTypeName: `ccjs_promise_chain_context_${index}`,
+      finalizerName: `ccjs_promise_chain_context_${index}_finalize`,
       expression: callback,
       returnType: callback.returnType ?? expression.promiseValueType ?? 'unknown',
-      returnShape: callback.returnShape ?? null
+      returnShape: callback.returnShape ?? null,
+      captures
     }
 
     wrappers.set(key, wrapper)
@@ -2829,7 +2931,7 @@ function collectPromiseChainWrappers(irPrograms: IrProgram[], context) {
 
     if (statement.type === 'VariableDeclaration') {
       visitExpression(statement.init, scopes)
-      declareVariable(scopes.at(-1), statement)
+      declareVariable(scopes.at(-1), statement, scopes)
       return
     }
 
@@ -3223,6 +3325,13 @@ function emitPromiseChainCallbackWrapperHead(wrapper) {
 }
 
 function emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext) {
+  const lines: string[] = []
+
+  if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
+    lines.push(...emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper))
+    lines.push('')
+  }
+
   const context = createFunctionContext(baseContext, 'void')
   context.cleanupEnabled = false
   context.statusReturn = true
@@ -3230,11 +3339,15 @@ function emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext) {
   context.runtimeCallbackReturnShape = wrapper.returnShape ?? null
   context.runtimeCallbackReturnOut = '(*out)'
   context.runtimeCallbackCleanupLabel = 'ccjs_promise_callback_cleanup'
-  const bodyLines = emitPromiseChainCallbackParamPrelude(wrapper, context)
+  const bodyLines = [
+    ...emitRuntimeArrowCallbackContextLocals(wrapper, context),
+    ...emitPromiseChainCallbackParamPrelude(wrapper, context)
+  ]
   const statementLines = emitPromiseChainCallbackStatementLines(wrapper, context)
-  const lines = [
+
+  lines.push(
     `${emitPromiseChainCallbackWrapperHead(wrapper)} {`,
-    '  (void)context;',
+    isPromiseChainCallbackWrapperWithContext(wrapper) ? '  if (context == 0) return CCJS_ERR_TYPE;' : '  (void)context;',
     '  if (out == 0) return CCJS_ERR_TYPE;',
     '  *out = ccjs_undefined_value();',
     ...bodyLines.map(line => `  ${line}`),
@@ -3249,7 +3362,7 @@ function emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext) {
     ...emitBoxedValueCleanup(context).map(line => `  ${line}`),
     '  return CCJS_OK;',
     '}'
-  ]
+  )
 
   return lines
 }
@@ -3433,7 +3546,15 @@ function emitRuntimeCallbackWrapperDeclaration(wrapper, context) {
 }
 
 function isRuntimeArrowCallbackWrapperWithContext(wrapper) {
-  return wrapper.kind === 'arrow' && (wrapper.captures.length > 0 || wrapper.needsEventLoop === true)
+  return wrapper.kind === 'arrow' && hasRuntimeArrowCallbackContext(wrapper)
+}
+
+function isPromiseChainCallbackWrapperWithContext(wrapper) {
+  return wrapper.kind === 'promise-chain-arrow' && hasRuntimeArrowCallbackContext(wrapper)
+}
+
+function hasRuntimeArrowCallbackContext(wrapper) {
+  return wrapper.captures.length > 0 || wrapper.needsEventLoop === true
 }
 
 function emitRuntimeArrowCallbackContextType(wrapper) {
@@ -3445,20 +3566,28 @@ function emitRuntimeArrowCallbackContextType(wrapper) {
   ]
 }
 
+function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper) {
+  const lines = [
+    `static void ${wrapper.finalizerName}(void* context) {`,
+    '  if (context == 0) return;',
+    `  ${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)context;`
+  ]
+
+  for (const capture of wrapper.captures.filter(isRetainedRuntimeArrowCapture)) {
+    lines.push(`  ccjs_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
+  }
+
+  lines.push(`  ccjs_default_free(0, context, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`)
+  lines.push('}')
+
+  return lines
+}
+
 function emitRuntimeArrowCallbackWrapperDeclaration(wrapper, baseContext) {
   const lines: string[] = []
 
   if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
-    lines.push(`static void ${wrapper.finalizerName}(void* context) {`)
-    lines.push('  if (context == 0) return;')
-    lines.push(`  ${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)context;`)
-
-    for (const capture of wrapper.captures.filter(isRetainedRuntimeArrowCapture)) {
-      lines.push(`  ccjs_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
-    }
-
-    lines.push(`  ccjs_default_free(0, context, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`)
-    lines.push('}')
+    lines.push(...emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper))
     lines.push('')
   }
 
@@ -3539,7 +3668,7 @@ function emitRuntimeArrowCallbackStatementLines(wrapper, context) {
 }
 
 function emitRuntimeArrowCallbackContextLocals(wrapper, context) {
-  if (!isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+  if (!hasRuntimeArrowCallbackContext(wrapper)) {
     return []
   }
 
@@ -9038,9 +9167,18 @@ function emitPreparedPromiseMethodExpression(expression, context, options: { out
   const out = options.out ?? nextCName(context, 'ccjs_promise')
   const valueType = expression.promiseValueType ?? 'unknown'
   const rejectionValueType = method === 'then' ? receiver.rejectionValueType ?? 'unknown' : 'unknown'
+  const callbackContext = emitPromiseChainCallbackContext(wrapper, context)
   const runtimeCall = method === 'then'
-    ? `ccjs_promise_chain(${receiver.expression}, ${wrapper.name}, 0, 0, 0, &${out})`
-    : `ccjs_promise_catch(${receiver.expression}, ${wrapper.name}, 0, 0, &${out})`
+    ? `ccjs_promise_chain(${receiver.expression}, ${wrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
+    : `ccjs_promise_catch(${receiver.expression}, ${wrapper.name}, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
+  const runtimeCallLines = callbackContext.expression === '0'
+    ? [emitStatusCheck(runtimeCall, context)]
+    : [
+        `if (${runtimeCall} != CCJS_OK) {`,
+        `  ${wrapper.finalizerName}(${callbackContext.expression});`,
+        `  ${emitFailureStatement(context)}`,
+        '}'
+      ]
 
   if (options.owned !== false) {
     registerOwnedPromise(context, out, valueType, rejectionValueType)
@@ -9049,11 +9187,49 @@ function emitPreparedPromiseMethodExpression(expression, context, options: { out
   return {
     lines: [
       ...receiver.lines,
-      emitStatusCheck(runtimeCall, context)
+      ...callbackContext.lines,
+      ...runtimeCallLines
     ],
     expression: out,
     valueType,
     rejectionValueType
+  }
+}
+
+function emitPromiseChainCallbackContext(wrapper, context) {
+  if (!isPromiseChainCallbackWrapperWithContext(wrapper)) {
+    return {
+      lines: [],
+      expression: '0',
+      finalizer: '0'
+    }
+  }
+
+  const lines: string[] = []
+
+  for (const capture of wrapper.captures) {
+    if (capture.mutable && !isSupportedMutableRuntimeArrowCapture(capture, context)) {
+      context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'capturing this mutable binding in Promise callbacks requires unsupported boxed closure storage', wrapper.expression.loc))
+    }
+
+    if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
+      context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'capturing Promise callbacks currently support only const number/boolean/string/object bindings', wrapper.expression.loc))
+    }
+  }
+
+  const contextName = nextCName(context, 'ccjs_promise_callback_ctx')
+
+  lines.push(`${wrapper.contextTypeName}* ${contextName} = ccjs_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`)
+  lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
+
+  for (const capture of wrapper.captures) {
+    lines.push(...emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
+  }
+
+  return {
+    lines,
+    expression: contextName,
+    finalizer: wrapper.finalizerName
   }
 }
 
