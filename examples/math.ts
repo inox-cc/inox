@@ -1,6 +1,6 @@
 // @targets c
 // @expect pass
-// @stdout math 25
+// @stdout math 29
 
 export function main(): void {
   const value = Math.floor(3.8)
@@ -10,6 +10,9 @@ export function main(): void {
     + Math.abs(-5)
     + Math.min(8, 2)
     + Math.max(1, 6)
+    + Math.sqrt(9)
+    + Math.sin(0)
+    + Math.cos(0)
 
   console.log('math', value)
 }

@@ -186,7 +186,8 @@ const globals = new Map<string, SymbolInfo>([
   }]
 ])
 
-const mathUnaryMethods = new Set(['abs', 'ceil', 'floor', 'round', 'trunc'])
+const mathNullaryMethods = new Set(['random'])
+const mathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'round', 'sin', 'sqrt', 'trunc'])
 const mathBinaryMethods = new Set(['max', 'min'])
 
 export function checkProgram(program: ProgramNode): { ast: ProgramNode } {
@@ -1418,7 +1419,7 @@ class Checker {
     }
 
     const method = expression.callee.property
-    const expectedArgCount = mathUnaryMethods.has(method) ? 1 : 2
+    const expectedArgCount = mathNullaryMethods.has(method) ? 0 : mathUnaryMethods.has(method) ? 1 : 2
 
     expression.mathRuntimeMethod = method
     expression.valueType = 'number'
@@ -3649,7 +3650,7 @@ function isMathRuntimeMethod(callee: AnyNode): boolean {
     && callee.object?.type === 'Reference'
     && callee.object.path.length === 1
     && callee.object.path[0] === 'Math'
-    && (mathUnaryMethods.has(callee.property) || mathBinaryMethods.has(callee.property))
+    && (mathNullaryMethods.has(callee.property) || mathUnaryMethods.has(callee.property) || mathBinaryMethods.has(callee.property))
 }
 
 function timerRuntimeMethodName(callee: AnyNode): string | null {

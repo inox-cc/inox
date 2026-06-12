@@ -17,7 +17,8 @@ const cArrayMethods = new Set([
   'pop'
 ])
 
-const cMathUnaryMethods = new Set(['abs', 'ceil', 'floor', 'round', 'trunc'])
+const cMathNullaryMethods = new Set(['random'])
+const cMathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'round', 'sin', 'sqrt', 'trunc'])
 const cMathBinaryMethods = new Set(['max', 'min'])
 
 export function emitCFromIr(ir: IrProgram): string {
@@ -161,6 +162,10 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsy
     '#include <stdio.h>'
   ]
 
+  if (needsMathRuntime) {
+    lines.push('#include <stdint.h>')
+  }
+
   if (needsStringHeader) {
     lines.push('#include <string.h>')
   }
@@ -288,6 +293,43 @@ function emitMathHelpers() {
     '',
     'static double ccjs_math_max(double left, double right) {',
     '  return left > right ? left : right;',
+    '}',
+    '',
+    'static double ccjs_math_sqrt(double value) {',
+    '  if (value < 0) return 0.0 / 0.0;',
+    '  if (value == 0) return 0;',
+    '  double estimate = value < 1 ? 1 : value;',
+    '  for (int index = 0; index < 24; index += 1) {',
+    '    estimate = 0.5 * (estimate + value / estimate);',
+    '  }',
+    '  return estimate;',
+    '}',
+    '',
+    'static double ccjs_math_reduce_radians(double value) {',
+    '  const double pi = 3.14159265358979323846;',
+    '  const double tau = 6.28318530717958647692;',
+    '  while (value > pi) value -= tau;',
+    '  while (value < -pi) value += tau;',
+    '  return value;',
+    '}',
+    '',
+    'static double ccjs_math_sin(double value) {',
+    '  double x = ccjs_math_reduce_radians(value);',
+    '  double x2 = x * x;',
+    '  return x * (1 - x2 / 6 + (x2 * x2) / 120 - (x2 * x2 * x2) / 5040 + (x2 * x2 * x2 * x2) / 362880);',
+    '}',
+    '',
+    'static double ccjs_math_cos(double value) {',
+    '  double x = ccjs_math_reduce_radians(value);',
+    '  double x2 = x * x;',
+    '  return 1 - x2 / 2 + (x2 * x2) / 24 - (x2 * x2 * x2) / 720 + (x2 * x2 * x2 * x2) / 40320;',
+    '}',
+    '',
+    'static uint32_t ccjs_math_random_state = 0x6d2b79f5u;',
+    '',
+    'static double ccjs_math_random(void) {',
+    '  ccjs_math_random_state = ccjs_math_random_state * 1664525u + 1013904223u;',
+    '  return (double)(ccjs_math_random_state >> 8) / 16777216.0;',
     '}'
   ]
 }
@@ -506,7 +548,7 @@ function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
   const path = usage.path.join('.')
 
   return path.startsWith('Math.')
-    && (cMathUnaryMethods.has(path.slice('Math.'.length)) || cMathBinaryMethods.has(path.slice('Math.'.length)))
+    && (cMathNullaryMethods.has(path.slice('Math.'.length)) || cMathUnaryMethods.has(path.slice('Math.'.length)) || cMathBinaryMethods.has(path.slice('Math.'.length)))
 }
 
 function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc?: SourceLocation) {
@@ -12366,7 +12408,7 @@ function mathRuntimeMethodName(callee) {
     return null
   }
 
-  return cMathUnaryMethods.has(callee.property) || cMathBinaryMethods.has(callee.property)
+  return cMathNullaryMethods.has(callee.property) || cMathUnaryMethods.has(callee.property) || cMathBinaryMethods.has(callee.property)
     ? callee.property
     : null
 }

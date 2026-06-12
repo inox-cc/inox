@@ -4729,7 +4729,7 @@ test('lowers Date.now and performance.now to the C time runtime', () => {
 
 test('lowers supported Math calls to C helpers', () => {
   const result = compileSource(`export function main(): void {
-  const value = Math.floor(3.8) + Math.ceil(2.1) + Math.round(1.6) + Math.trunc(4.9) + Math.abs(-5) + Math.min(8, 2) + Math.max(1, 6)
+  const value = Math.floor(3.8) + Math.ceil(2.1) + Math.round(1.6) + Math.trunc(4.9) + Math.abs(-5) + Math.min(8, 2) + Math.max(1, 6) + Math.sqrt(9) + Math.sin(0) + Math.cos(0) + Math.random()
   console.log(value)
 }
 `, {
@@ -4739,14 +4739,21 @@ test('lowers supported Math calls to C helpers', () => {
   assert.deepEqual(result.ir.globalUsages.map(usage => usage.path.join('.')).sort(), [
     'Math.abs',
     'Math.ceil',
+    'Math.cos',
     'Math.floor',
     'Math.max',
     'Math.min',
+    'Math.random',
     'Math.round',
+    'Math.sin',
+    'Math.sqrt',
     'Math.trunc'
   ])
+  assert.match(result.code, /#include <stdint\.h>/)
   assert.match(result.code, /static double ccjs_math_floor\(double value\)/)
   assert.match(result.code, /static double ccjs_math_max\(double left, double right\)/)
+  assert.match(result.code, /static double ccjs_math_sqrt\(double value\)/)
+  assert.match(result.code, /static double ccjs_math_random\(void\)/)
   assert.match(result.code, /ccjs_math_floor\(3\.8\)/)
   assert.match(result.code, /ccjs_math_ceil\(2\.1\)/)
   assert.match(result.code, /ccjs_math_round\(1\.6\)/)
@@ -4754,6 +4761,10 @@ test('lowers supported Math calls to C helpers', () => {
   assert.match(result.code, /ccjs_math_abs\(\(-5\)\)/)
   assert.match(result.code, /ccjs_math_min\(8, 2\)/)
   assert.match(result.code, /ccjs_math_max\(1, 6\)/)
+  assert.match(result.code, /ccjs_math_sqrt\(9\)/)
+  assert.match(result.code, /ccjs_math_sin\(0\)/)
+  assert.match(result.code, /ccjs_math_cos\(0\)/)
+  assert.match(result.code, /ccjs_math_random\(\)/)
 
   assertDiagnostic(`export function main(): void {
   const value = Math.max(1)
@@ -4762,12 +4773,10 @@ test('lowers supported Math calls to C helpers', () => {
 `, 'CCJS_ARG_COUNT')
 
   assertDiagnostic(`export function main(): void {
-  const value = Math.random()
+  const value = Math.random(1)
   console.log(value)
 }
-`, 'CCJS_C_JS_GLOBAL', {
-    target: 'c'
-  })
+`, 'CCJS_ARG_COUNT')
 })
 
 test('lowers fs readFile, readDir and writeFile to the C fs runtime', () => {
