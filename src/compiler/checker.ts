@@ -1298,6 +1298,12 @@ class Checker {
       return fsType
     }
 
+    const jsonType = this.checkJsonCall(expression)
+
+    if (jsonType != null) {
+      return jsonType
+    }
+
     const timerType = this.checkTimerCall(expression)
 
     if (timerType != null) {
@@ -1604,6 +1610,61 @@ class Checker {
     }
 
     this.checkAssignableType(this.checkExpression(arg), 'bytes', arg.loc, false, this.expressionCanBeNull(arg))
+  }
+
+  checkJsonCall(expression: AnyNode, declared: ResolvedTypeInfo | null = null): ValueType | null {
+    const method = jsonRuntimeMethodName(expression.callee)
+
+    if (method == null) {
+      return null
+    }
+
+    if (this.scope.resolve('JSON') != null) {
+      return null
+    }
+
+    expression.jsonRuntimeMethod = method
+
+    if (expression.args.length !== 1) {
+      this.report('CCJS_ARG_COUNT', `function JSON.${method} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    if (method === 'parse') {
+      this.checkJsonStringArg(expression, 0)
+
+      const valueType = declared != null && isJsonParseDeclaredType(declared.valueType)
+        ? declared.valueType
+        : 'object'
+
+      expression.valueType = valueType
+      expression.arrayElementType = declared?.arrayElementType ?? null
+      expression.arrayElementDeclaredType = declared?.arrayElementDeclaredType ?? null
+      expression.mapKeyType = declared?.mapKeyType ?? null
+      expression.mapValueType = declared?.mapValueType ?? null
+      expression.promiseValueType = declared?.promiseValueType ?? null
+      expression.setElementType = declared?.setElementType ?? null
+      expression.shape = valueType === 'object' ? declared?.shape ?? null : null
+
+      return valueType
+    }
+
+    if (expression.args[0] != null) {
+      this.checkExpression(expression.args[0])
+    }
+
+    expression.valueType = 'string'
+
+    return 'string'
+  }
+
+  checkJsonStringArg(expression: AnyNode, index: number): void {
+    const arg = expression.args[index]
+
+    if (arg == null) {
+      return
+    }
+
+    this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
   }
 
   checkPromiseStaticCall(expression: AnyNode): ValueType | null {
@@ -2367,6 +2428,14 @@ class Checker {
     if (expression.type === 'ArrowFunctionExpression' && declared?.valueType === 'function' && declared.functionType != null) {
       this.checkArrowFunctionExpression(expression, declared.functionType)
       return 'function'
+    }
+
+    if (expression.type === 'CallExpression') {
+      const jsonType = this.checkJsonCall(expression, declared)
+
+      if (jsonType != null) {
+        return jsonType
+      }
     }
 
     return this.checkExpression(expression)
@@ -3559,6 +3628,20 @@ function fsRuntimeMethodName(callee: AnyNode): string | null {
   return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'fs'
     ? callee.property
     : null
+}
+
+function jsonRuntimeMethodName(callee: AnyNode): string | null {
+  if (callee.type !== 'MemberExpression' || !['parse', 'stringify'].includes(callee.property)) {
+    return null
+  }
+
+  return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'JSON'
+    ? callee.property
+    : null
+}
+
+function isJsonParseDeclaredType(valueType: ValueType): boolean {
+  return valueType === 'array' || valueType === 'object' || valueType === 'string'
 }
 
 function isMathRuntimeMethod(callee: AnyNode): boolean {

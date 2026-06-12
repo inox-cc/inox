@@ -1,3 +1,4 @@
+#include <string.h>
 #include "ccjs/array.h"
 #include "ccjs/binary.h"
 #include "ccjs/callback.h"
@@ -30,6 +31,22 @@ void ccjs_release(ccjs_value value) {
 
     for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
       ccjs_release(object->fields[index]);
+    }
+
+    if ((object->header.flags & CCJS_OBJECT_OWNED_SHAPE) != 0 && allocator != 0 && allocator->free != 0) {
+      for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
+        const char* name = object->shape->fields[index].name;
+
+        if (name != 0) {
+          allocator->free(allocator->user, (void*)name, strlen(name) + 1, _Alignof(char));
+        }
+      }
+
+      if (object->shape->fields != 0) {
+        allocator->free(allocator->user, (void*)object->shape->fields, sizeof(ccjs_field_info) * object->shape->field_count, _Alignof(ccjs_field_info));
+      }
+
+      allocator->free(allocator->user, (void*)object->shape, sizeof(ccjs_shape), _Alignof(ccjs_shape));
     }
   } else if (value.as.ref->kind == CCJS_REF_ARRAY) {
     ccjs_array* array = (ccjs_array*)value.as.ref;

@@ -52,18 +52,19 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const classMethods = collectClassMethods(baseContext)
   const needsCallbackRuntime = [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) || runtimeRequirements.has('callback-values')
   const needsFsRuntime = runtimeRequirements.has('fs')
+  const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFsRuntime || needsTimerRuntime
   const needsCollectionRuntime = runtimeRequirements.has('collections')
   const needsClassRuntime = baseContext.classInfos.size > 0
   const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime || needsClassRuntime
-  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || needsClassRuntime || runtimeRequirements.has('managed-values')
+  const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || needsClassRuntime || needsJsonRuntime || runtimeRequirements.has('managed-values')
   const needsTimeRuntime = runtimeRequirements.has('clocks')
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsTimerRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
   const promiseChainCallbackWrappers = [...baseContext.promiseChainWrappers.values()].filter(isPromiseChainCallbackWrapperWithContext)
 
@@ -155,7 +156,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsTimerRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -178,6 +179,9 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsy
     }
     if (needsFsRuntime) {
       lines.push('#include "ccjs/fs.h"')
+    }
+    if (needsJsonRuntime) {
+      lines.push('#include "ccjs/json.h"')
     }
     if (needsCollectionRuntime) {
       lines.push('#include "ccjs/map.h"')
@@ -485,6 +489,8 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     || path === 'fs.writeFileBytes'
     || path === 'fs.writeFileBytesSync'
     || path === 'fs.writeFileSync'
+    || path === 'JSON.parse'
+    || path === 'JSON.stringify'
     || path === 'clearImmediate'
     || path === 'clearInterval'
     || path === 'clearTimeout'
@@ -4227,6 +4233,12 @@ function emitStatement(statement, context) {
       return emitClassObjectVariableDeclaration(statement, context)
     }
 
+    const jsonParseDeclaration = emitJsonParseVariableDeclaration(statement, context)
+
+    if (jsonParseDeclaration != null) {
+      return jsonParseDeclaration
+    }
+
     if (statement.init?.type === 'ObjectLiteral') {
       if (context.boxedMutableCaptureDeclarations.has(statement)) {
         return emitBoxedObjectVariableDeclaration(statement, context)
@@ -5905,6 +5917,58 @@ function emitObjectVariableDeclaration(statement, context) {
   return lines
 }
 
+function emitJsonParseVariableDeclaration(statement, context) {
+  if (statement.init?.type !== 'CallExpression' || cJsonRuntimeCallName(statement.init.callee) !== 'parse') {
+    return null
+  }
+
+  if (statement.valueType !== 'object' || statement.shape?.fields == null) {
+    return null
+  }
+
+  const fields = statement.shape.fields
+  const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
+  const fieldsName = `${shapeName}_fields`
+  const parsed = nextCName(context, 'ccjs_json_object')
+  const parseCall = emitPreparedJsonCallExpression(statement.init, context, {
+    out: parsed
+  })
+  const lines = [
+    `static const ccjs_field_info ${fieldsName}[] = {`
+  ]
+
+  for (const field of fields) {
+    lines.push(`  { ${cStringLiteral(field.name)}, ${field.readonly ? 'CCJS_FIELD_READONLY' : '0'} },`)
+  }
+
+  lines.push('};')
+  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`  ${fields.length},`)
+  lines.push(`  ${fieldsName}`)
+  lines.push('};')
+
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'object')
+  registerObjectShape(context, statement.name, statement.shape)
+
+  lines.push(...parseCall.lines)
+  lines.push(...emitPrepareOwnedValueWrite(statement.name))
+  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`, context))
+
+  for (const [index, field] of fields.entries()) {
+    const value = nextCName(context, `ccjs_json_${emitCIdentifier(field.name)}`)
+    const tag = cRuntimeValueTag(field.valueType)
+
+    registerOwnedValue(context, value)
+    lines.push(...emitPrepareOwnedValueWrite(value))
+    lines.push(emitStatusCheck(`ccjs_object_get(${parsed}, ${cStringLiteral(field.name)}, ${utf8ByteLength(field.name)}, &${value})`, context))
+    lines.push(...(field.nullable === true ? emitRuntimeNullableValueCheck(value, tag, context) : [emitRuntimeValueCheck(value, tag, context)].filter(Boolean)))
+    lines.push(emitStatusCheck(`ccjs_object_init_known(${statement.name}, ${index}, ${value})`, context))
+  }
+
+  return lines
+}
+
 function emitClassObjectVariableDeclaration(statement, context) {
   const info = resolveClassConstructorInfo(statement.init, context)
 
@@ -6783,6 +6847,12 @@ function emitCValueExpression(expression, context) {
 
   if (fsSyncValue != null) {
     return fsSyncValue
+  }
+
+  const jsonCall = emitPreparedJsonCallExpression(expression, context)
+
+  if (jsonCall != null) {
+    return jsonCall
   }
 
   const arrayPopCall = emitPreparedArrayPopCallExpression(expression, context)
@@ -8718,6 +8788,12 @@ function emitPreparedCallExpression(expression, context) {
     return fsCall
   }
 
+  const jsonCall = emitPreparedJsonCallExpression(expression, context)
+
+  if (jsonCall != null) {
+    return jsonCall
+  }
+
   const timerCall = emitPreparedTimerCallExpression(expression, context, {
     asValue: true
   })
@@ -8990,6 +9066,47 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
 
   return {
     lines
+  }
+}
+
+function emitPreparedJsonCallExpression(expression, context, options: { out?: string, owned?: boolean } = {}) {
+  const method = cJsonRuntimeCallName(expression?.callee)
+
+  if (method == null) {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_json_value')
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  if (method === 'parse') {
+    const text = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_json_text')
+    const expectedTag = cRuntimeValueTag(inferExpressionType(expression, context))
+
+    return {
+      lines: [
+        ...text.lines,
+        ...emitPrepareOwnedValueWrite(out),
+        emitStatusCheck(`ccjs_json_parse(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out})`, context),
+        ...(expectedTag == null ? [] : [emitRuntimeValueCheck(out, expectedTag, context)])
+      ],
+      expression: out
+    }
+  }
+
+  const value = emitCValueExpression(expression.args[0], context)
+
+  return {
+    lines: [
+      ...value.lines,
+      ...emitPrepareOwnedValueWrite(out),
+      emitStatusCheck(`ccjs_json_stringify(&ccjs_default_allocator, ${value.expression}, &${out})`, context),
+      emitRuntimeValueCheck(out, 'CCJS_TAG_STRING', context)
+    ],
+    expression: out
   }
 }
 
@@ -10131,6 +10248,10 @@ function inferExpressionType(expression, context) {
     return expression.valueType === 'promise'
       ? 'promise'
       : expression.valueType ?? 'unknown'
+  }
+
+  if (expression?.type === 'CallExpression' && cJsonRuntimeCallName(expression.callee) != null) {
+    return expression.valueType ?? (cJsonRuntimeCallName(expression.callee) === 'parse' ? 'object' : 'string')
   }
 
   if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) != null && expression.valueType === 'promise') {
@@ -12222,6 +12343,18 @@ function cFsRuntimeCallName(callee) {
   }
 
   return ['readFile', 'readFileBytes', 'readFileBytesSync', 'readFileSync', 'readDir', 'readDirSync', 'writeFile', 'writeFileBytes', 'writeFileBytesSync', 'writeFileSync'].includes(callee.property) ? callee.property : null
+}
+
+function cJsonRuntimeCallName(callee) {
+  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+    return null
+  }
+
+  if (callee.object.path[0] !== 'JSON') {
+    return null
+  }
+
+  return ['parse', 'stringify'].includes(callee.property) ? callee.property : null
 }
 
 function mathRuntimeMethodName(callee) {

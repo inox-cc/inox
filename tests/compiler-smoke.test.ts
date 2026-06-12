@@ -2134,6 +2134,34 @@ export function main(): void {
   assert.match(mapEntryResult.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_map_entry_\d+, &entry\)/)
 })
 
+test('drives C JSON runtime from target-neutral IR requirements', () => {
+  const result = compileSource(`type User = {
+  name: string,
+  score: number
+}
+
+export function main(): void {
+  const user: User = JSON.parse('{"score":7,"name":"Ada"}')
+  const text = JSON.stringify(user)
+  console.log(user.name, user.score, text)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'collections',
+    'json',
+    'managed-values',
+    'objects',
+    'string-bytes'
+  ])
+  assert.match(result.code, /#include "ccjs\/json\.h"/)
+  assert.match(result.code, /ccjs_json_parse\(&ccjs_default_allocator, "\{\\"score\\":7,\\"name\\":\\"Ada\\"\}", 24, &ccjs_json_object_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(ccjs_json_object_\d+, "name", 4, &ccjs_json_name_\d+\)/)
+  assert.match(result.code, /ccjs_json_stringify\(&ccjs_default_allocator, user, &ccjs_json_value_\d+\)/)
+})
+
 test('accepts supported C syntax features from stored target-neutral IR syntax features', () => {
   const result = compileSource(`export function main(): void {
   console.log('ok')

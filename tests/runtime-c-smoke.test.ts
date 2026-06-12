@@ -117,6 +117,85 @@ int main(void) {
   }
 })
 
+test('C runtime JSON parse and stringify compiles and runs', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-runtime-'))
+  const source = join(dir, 'json-runtime.c')
+  const output = join(dir, 'json-runtime')
+
+  try {
+    await writeFile(source, `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "ccjs/allocator.h"
+#include "ccjs/json.h"
+#include "ccjs/object.h"
+#include "ccjs/string.h"
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  const char* source = "{\\"name\\":\\"Ada\\",\\"scores\\":[3,4],\\"active\\":true}";
+  ccjs_value value;
+  ccjs_value name;
+  ccjs_value text;
+
+  if (ccjs_json_parse(&allocator, source, strlen(source), &value) != CCJS_OK) return 1;
+  if (ccjs_object_get(value, "name", 4, &name) != CCJS_OK) return 2;
+  if (ccjs_json_stringify(&allocator, value, &text) != CCJS_OK) return 3;
+
+  ccjs_string* name_string = (ccjs_string*)name.as.ref;
+  ccjs_string* text_string = (ccjs_string*)text.as.ref;
+  printf("%.*s %.*s\\n", (int)name_string->len, name_string->bytes, (int)text_string->len, text_string->bytes);
+
+  ccjs_release(text);
+  ccjs_release(name);
+  ccjs_release(value);
+  return 0;
+}
+`)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada {"name":"Ada","scores":[3,4],"active":true}\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('C runtime binary bytes value compiles and runs', async t => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7150,6 +7229,51 @@ export function main(): void {
   }
 })
 
+test('generated C JSON parse and stringify compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-'))
+  const source = join(dir, 'json.c')
+  const output = join(dir, 'json')
+
+  try {
+    const result = compileSource(`type User = {
+  name: string,
+  score: number
+}
+
+export function main(): void {
+  const user: User = JSON.parse('{"score":7,"name":"Ada"}')
+  const text = JSON.stringify(user)
+  console.log(user.name, user.score, text)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada 7 {"name":"Ada","score":7}\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C Map and Set methods compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7512,6 +7636,7 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
     'runtime/c/src/collections/map.c',
     'runtime/c/src/collections/set.c',
     'runtime/c/src/fs/fs.c',
+    'runtime/c/src/json/json.c',
     'runtime/c/src/time/time.c',
     '-o',
     output

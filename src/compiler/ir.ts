@@ -208,6 +208,12 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
     } else if (feature === 'fs') {
       requirements.add('async-runtime')
       requirements.add('fs')
+    } else if (feature === 'json') {
+      requirements.add('collections')
+      requirements.add('json')
+      requirements.add('managed-values')
+      requirements.add('objects')
+      requirements.add('string-bytes')
     } else if (feature === 'timers') {
       requirements.add('async-runtime')
       requirements.add('callback-values')
@@ -797,6 +803,11 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('fs')
   }
 
+  if (jsonRuntimeCallName(expression.callee) != null) {
+    features.add('json')
+    features.add('runtime-values')
+  }
+
   if (timerRuntimeCallName(expression.callee) != null) {
     features.add('timers')
   }
@@ -919,6 +930,18 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
   }
 
   return ['readFile', 'readFileBytes', 'readFileBytesSync', 'readFileSync', 'readDir', 'readDirSync', 'writeFile', 'writeFileBytes', 'writeFileBytesSync', 'writeFileSync'].includes(callee.property) ? `fs.${callee.property}` : null
+}
+
+function jsonRuntimeCallName(callee: AnyNode): string | null {
+  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+    return null
+  }
+
+  if (callee.object.path[0] !== 'JSON') {
+    return null
+  }
+
+  return ['parse', 'stringify'].includes(callee.property) ? callee.property : null
 }
 
 function timerRuntimeCallName(callee: AnyNode): string | null {

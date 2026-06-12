@@ -7,7 +7,8 @@
 #include "ccjs/value.h"
 
 enum {
-  CCJS_FIELD_READONLY = 1u << 0
+  CCJS_FIELD_READONLY = 1u << 0,
+  CCJS_OBJECT_OWNED_SHAPE = 1u << 1
 };
 
 typedef struct ccjs_field_info {
