@@ -4846,6 +4846,7 @@ test('lowers supported Math calls to C helpers', () => {
     'Math.trunc'
   ])
   assert.match(result.code, /#include <stdint\.h>/)
+  assert.match(result.code, /static uint32_t ccjs_math_random_state = 0x6d2b79f5u;/)
   assert.match(result.code, /static double ccjs_math_floor\(double value\)/)
   assert.match(result.code, /static double ccjs_math_max\(double left, double right\)/)
   assert.match(result.code, /static double ccjs_math_sqrt\(double value\)/)
@@ -4873,6 +4874,21 @@ test('lowers supported Math calls to C helpers', () => {
   console.log(value)
 }
 `, 'CCJS_ARG_COUNT')
+})
+
+test('configures C Math.random seed through compiler options', () => {
+  const result = compileSource(`export function main(): void {
+  const value = Math.random()
+  console.log(value)
+}
+`, {
+    target: 'c',
+    random: {
+      seed: 1
+    }
+  })
+
+  assert.match(result.code, /static uint32_t ccjs_math_random_state = 0x00000001u;/)
 })
 
 test('lowers fs readFile, readDir and writeFile to the C fs runtime', () => {

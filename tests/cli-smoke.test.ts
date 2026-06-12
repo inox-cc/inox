@@ -73,6 +73,41 @@ test('ccjs file --emit c writes C source', async () => {
   }
 })
 
+test('ccjs file --emit c reads Math.random seed config', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-random-config-test-'))
+  const out = join(dir, 'random.c')
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  const value = Math.random()
+  console.log(value)
+}
+`)
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      random: {
+        backend: 'simple',
+        seed: 1
+      }
+    }, null, 2)}\n`)
+
+    const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const c = await readFile(out, 'utf8')
+
+    assert.match(c, /static uint32_t ccjs_math_random_state = 0x00000001u;/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs module graph --emit c writes bundled C source', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-test-'))
   const out = join(dir, 'modules.c')
@@ -377,6 +412,35 @@ test('ccjs build --target c reports invalid ccjs.config.json', async () => {
 
     assert.equal(result.code, 1)
     assert.match(result.stderr, /invalid ccjs\.config\.json: c\.cflags must be a string or an array of strings/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('ccjs build --target c reports invalid random seed config', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  const value = Math.random()
+  console.log(value)
+}
+`)
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      random: {
+        seed: 1.5
+      }
+    }, null, 2)}\n`)
+
+    const result = await runCli(['build', 'main.ts', '--target', 'c'], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 1)
+    assert.match(result.stderr, /invalid ccjs\.config\.json: random\.seed must be an integer from 0 to 4294967295/)
   } finally {
     await rm(dir, {
       recursive: true,

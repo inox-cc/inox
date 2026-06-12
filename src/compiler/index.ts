@@ -22,7 +22,9 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
       ast: checked.ast,
       hir,
       ir,
-      code: emitCFromIr(ir)
+      code: emitCFromIr(ir, {
+        random: options.random
+      })
     }
   }
 
@@ -63,7 +65,9 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
     return {
       target,
       graph,
-      code: emitCBundleFromIrModules(irModules, graph.entry)
+      code: emitCBundleFromIrModules(irModules, graph.entry, {
+        random: options.random
+      })
     }
   }
 

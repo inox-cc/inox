@@ -16,6 +16,10 @@ type CConfig = {
     cflags?: string | string[]
     ldflags?: string | string[]
   }
+  random?: {
+    backend?: 'simple'
+    seed?: number
+  }
 }
 
 type CompileCOptions = {
@@ -142,9 +146,11 @@ async function runCEntry(plan: CliPlan): Promise<void> {
 
 async function writeCompiledSource(plan: CliPlan, target: CliTarget): Promise<void> {
   const entry = requireEntry(plan)
+  const config = target === 'c' ? await loadConfig() : {}
   const result = await compileFile(entry, {
     target,
-    callMain: false
+    callMain: false,
+    random: target === 'c' ? config.random : undefined
   })
   const out = plan.out ?? defaultEmitOutput(entry, target)
   const dir = dirname(out)
@@ -176,7 +182,8 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
   const config = await loadConfig()
   const result = await compileFile(entry, {
     target: 'c',
-    callMain: false
+    callMain: false,
+    random: config.random
   })
   const dir = dirname(out)
   const tempDir = options.source == null ? await mkdtemp(join(tmpdir(), 'ccjs-c-build-')) : null
@@ -246,6 +253,7 @@ function validateConfig(config: unknown, fileName: string): CConfig {
   const value = config as CConfig
 
   if (value.c == null) {
+    validateRandomConfig(value.random, fileName)
     return value
   }
 
@@ -259,8 +267,34 @@ function validateConfig(config: unknown, fileName: string): CConfig {
 
   validateConfigFlags(value.c.cflags, 'c.cflags', fileName)
   validateConfigFlags(value.c.ldflags, 'c.ldflags', fileName)
+  validateRandomConfig(value.random, fileName)
 
   return value
+}
+
+function validateRandomConfig(value: unknown, fileName: string): void {
+  const invalidConfig = (message: string): Error => new Error(`invalid ${fileName}: ${message}`)
+
+  if (value == null) {
+    return
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw invalidConfig('random must be an object')
+  }
+
+  const random = value as CConfig['random']
+
+  if (random?.backend != null && random.backend !== 'simple') {
+    throw invalidConfig('random.backend must be "simple"')
+  }
+
+  if (
+    random?.seed != null
+    && (!Number.isInteger(random.seed) || random.seed < 0 || random.seed > 0xffffffff)
+  ) {
+    throw invalidConfig('random.seed must be an integer from 0 to 4294967295')
+  }
 }
 
 function validateConfigFlags(value: unknown, path: string, fileName: string): void {

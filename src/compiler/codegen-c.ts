@@ -1,7 +1,7 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrFunctionDeclarations, collectIrFunctionNodeEntries, collectIrGlobalRoots, collectIrGlobalUsages, collectIrLocalThrowValueTypes, collectIrPrograms, collectIrRuntimeRequirements, collectIrStoredFunctionEffects, collectIrSyntaxFeatureUsages, collectIrTopLevelNodeEntries, collectIrTopLevelNodes, collectIrTopLevelNodesFromPrograms, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from './ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrSyntaxFeatureUsage, SourceLocation } from './types.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrSyntaxFeatureUsage, RandomOptions, SourceLocation } from './types.ts'
 
 const cStringPredicateMethods = new Set([
   'includes',
@@ -20,19 +20,24 @@ const cArrayMethods = new Set([
 const cMathNullaryMethods = new Set(['random'])
 const cMathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'round', 'sin', 'sqrt', 'trunc'])
 const cMathBinaryMethods = new Set(['max', 'min'])
+const defaultRandomSeed = 0x6d2b79f5
 
-export function emitCFromIr(ir: IrProgram): string {
-  return emitCUnit([ir], ir)
+type CEmitOptions = {
+  random?: RandomOptions
 }
 
-export function emitCBundleFromIrModules(irModules: IrModuleRecord[], entry: string): string {
+export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
+  return emitCUnit([ir], ir, options)
+}
+
+export function emitCBundleFromIrModules(irModules: IrModuleRecord[], entry: string, options: CEmitOptions = {}): string {
   const irPrograms = collectIrPrograms(irModules)
   const entryIr = findIrEntryProgram(irModules, entry)
 
-  return emitCUnit(irPrograms, entryIr)
+  return emitCUnit(irPrograms, entryIr, options)
 }
 
-function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null) {
+function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null, options: CEmitOptions = {}) {
   const diagnostics: Diagnostic[] = []
   const functionEntries = collectIrFunctionNodeEntries(irPrograms)
   const functions = functionEntries.map(entry => entry.node)
@@ -66,7 +71,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime, options)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
   const promiseChainCallbackWrappers = [...baseContext.promiseChainWrappers.values()].filter(isPromiseChainCallbackWrapperWithContext)
 
@@ -158,7 +163,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime, options: CEmitOptions = {}) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -211,7 +216,7 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsy
   lines.push('')
 
   if (needsMathRuntime) {
-    lines.push(...emitMathHelpers())
+    lines.push(...emitMathHelpers(options.random))
     lines.push('')
   }
 
@@ -267,7 +272,9 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsy
   return lines
 }
 
-function emitMathHelpers() {
+function emitMathHelpers(random: RandomOptions = {}) {
+  const randomSeed = emitRandomSeedLiteral(random)
+
   return [
     'static double ccjs_math_abs(double value) {',
     '  return value < 0 ? -value : value;',
@@ -329,13 +336,27 @@ function emitMathHelpers() {
     '  return 1 - x2 / 2 + (x2 * x2) / 24 - (x2 * x2 * x2) / 720 + (x2 * x2 * x2 * x2) / 40320;',
     '}',
     '',
-    'static uint32_t ccjs_math_random_state = 0x6d2b79f5u;',
+    `static uint32_t ccjs_math_random_state = ${randomSeed};`,
     '',
     'static double ccjs_math_random(void) {',
     '  ccjs_math_random_state = ccjs_math_random_state * 1664525u + 1013904223u;',
     '  return (double)(ccjs_math_random_state >> 8) / 16777216.0;',
     '}'
   ]
+}
+
+function emitRandomSeedLiteral(random: RandomOptions = {}): string {
+  if (random.backend != null && random.backend !== 'simple') {
+    throw new Error(`unsupported random backend ${JSON.stringify(random.backend)}`)
+  }
+
+  const seed = random.seed ?? defaultRandomSeed
+
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
+    throw new Error('random.seed must be an integer from 0 to 4294967295')
+  }
+
+  return `0x${seed.toString(16).padStart(8, '0')}u`
 }
 
 function createThrowingFunctionInfo(functionDeclarations: IrFunctionDeclaration[], functionEffects: IrFunctionEffect[]) {
@@ -10573,6 +10594,10 @@ function inferExpressionType(expression, context) {
 
   if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) != null && expression.valueType === 'promise') {
     return 'promise'
+  }
+
+  if (expression?.type === 'CallExpression' && mathRuntimeMethodName(expression.callee) != null) {
+    return 'number'
   }
 
   if (isErrorConstructorExpression(expression)) {

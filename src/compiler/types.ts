@@ -198,9 +198,15 @@ export type ModuleGraph = {
 
 export type CompileTarget = 'c' | 'js' | 'ts'
 
+export type RandomOptions = {
+  backend?: 'simple'
+  seed?: number
+}
+
 export type CompileOptions = {
   target?: CompileTarget
   callMain?: boolean
+  random?: RandomOptions
 }
 
 export type SourceCompileResult = {
