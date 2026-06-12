@@ -1,10 +1,15 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrGlobalUsages } from './ir.ts'
-import type { CompileOptions, Diagnostic, IrGlobalUsage, IrProgram, RuntimeCapabilities, SourceLocation } from './types.ts'
+import type { AnyNode, CompileOptions, Diagnostic, IrGlobalUsage, IrProgram, RuntimeCapabilities, SourceLocation } from './types.ts'
 
 type RequiredCapability = {
   key: keyof RuntimeCapabilities
   name: string
+}
+
+type CapabilityUsage = RequiredCapability & {
+  loc?: SourceLocation
+  path: string
 }
 
 const timerGlobals = new Set([
@@ -25,15 +30,12 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
   const diagnostics: Diagnostic[] = []
   const reported = new Set<string>()
 
-  for (const usage of collectIrGlobalUsages(programs)) {
-    const required = requiredCapabilityForGlobalUsage(usage)
-
-    if (required == null || capabilities[required.key] === true) {
+  for (const usage of collectCapabilityUsages(programs)) {
+    if (capabilities[usage.key] === true) {
       continue
     }
 
-    const path = usage.path.join('.')
-    const key = `${required.key}:${path}:${locationKey(usage.loc)}`
+    const key = `${usage.key}:${usage.path}:${locationKey(usage.loc)}`
 
     if (reported.has(key)) {
       continue
@@ -41,7 +43,7 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
 
     diagnostics.push(diagnostic(
       'CCJS_CAPABILITY',
-      `embedded profile requires ${required.name} capability for ${path}`,
+      `embedded profile requires ${usage.name} capability for ${usage.path}`,
       usage.loc
     ))
     reported.add(key)
@@ -49,6 +51,68 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
 
   if (diagnostics.length > 0) {
     throw new CompileError(diagnostics)
+  }
+}
+
+function collectCapabilityUsages(programs: IrProgram[]): CapabilityUsage[] {
+  return [
+    ...collectIrGlobalUsages(programs).flatMap(usage => {
+      const required = requiredCapabilityForGlobalUsage(usage)
+
+      return required == null
+        ? []
+        : [{
+            ...required,
+            path: usage.path.join('.'),
+            loc: usage.loc
+          }]
+    }),
+    ...programs.flatMap(program => collectHeapCapabilityUsages(program.body))
+  ]
+}
+
+function collectHeapCapabilityUsages(node: unknown): CapabilityUsage[] {
+  const usages: CapabilityUsage[] = []
+
+  visitHeapCapabilityUsages(node, usages)
+
+  return usages
+}
+
+function visitHeapCapabilityUsages(node: unknown, usages: CapabilityUsage[]): void {
+  if (node == null) {
+    return
+  }
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      visitHeapCapabilityUsages(item, usages)
+    }
+    return
+  }
+
+  if (typeof node !== 'object') {
+    return
+  }
+
+  const item = node as AnyNode
+  const arrayMethod = arrayProducingMethodName(item)
+
+  if (arrayMethod != null) {
+    usages.push({
+      key: 'heap',
+      name: 'heap',
+      path: `Array.${arrayMethod}`,
+      loc: item.loc
+    })
+  }
+
+  for (const [key, value] of Object.entries(item)) {
+    if (key === 'loc' || key === 'shape') {
+      continue
+    }
+
+    visitHeapCapabilityUsages(value, usages)
   }
 }
 
@@ -84,6 +148,18 @@ function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapabil
   }
 
   return null
+}
+
+function arrayProducingMethodName(expression: AnyNode): string | null {
+  if (expression.type !== 'CallExpression' || expression.valueType !== 'array') {
+    return null
+  }
+
+  if (expression.callee?.type !== 'MemberExpression') {
+    return null
+  }
+
+  return ['filter', 'map'].includes(expression.callee.property) ? expression.callee.property : null
 }
 
 function locationKey(loc: SourceLocation | undefined): string {

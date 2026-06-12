@@ -1,0 +1,13 @@
+{
+  "targets": {
+    "c": {
+      "expect": "pass",
+      "options": {
+        "profile": "embedded",
+        "capabilities": {
+          "heap": true
+        }
+      }
+    }
+  }
+}

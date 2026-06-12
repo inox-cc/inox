@@ -5039,6 +5039,44 @@ export function main(): void {
   assert.match(enabled.code, /ccjs_loop_set_timeout/)
 })
 
+test('reports embedded heap capability diagnostics for array-producing methods', () => {
+  const source = `export function main(): void {
+  const values = [1, 2, 3]
+  const result = values.filter(value => value > 1).map(value => value + 1)
+  console.log(result.length)
+}
+`
+
+  assert.throws(() => {
+    compileSource(source, {
+      target: 'c',
+      profile: 'embedded'
+    })
+  }, error => {
+    if (!(error instanceof CompileError)) {
+      return false
+    }
+
+    assert.equal(error.diagnostics.every(item => item.code === 'CCJS_CAPABILITY'), true)
+    assert.deepEqual(error.diagnostics.map(item => item.message), [
+      'embedded profile requires heap capability for Array.map',
+      'embedded profile requires heap capability for Array.filter'
+    ])
+    return true
+  })
+
+  const enabled = compileSource(source, {
+    target: 'c',
+    profile: 'embedded',
+    capabilities: {
+      heap: true
+    }
+  })
+
+  assert.match(enabled.code, /ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
+  assert.match(enabled.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value/)
+})
+
 test('drives C JS global diagnostics from target-neutral IR global usages', () => {
   const result = compileSource(`export function main(): void {
   console.log('ok')

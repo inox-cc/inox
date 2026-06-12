@@ -1,0 +1,11 @@
+{
+  "targets": {
+    "c": {
+      "expect": "diagnostic",
+      "diagnostic": "CCJS_CAPABILITY",
+      "options": {
+        "profile": "embedded"
+      }
+    }
+  }
+}
