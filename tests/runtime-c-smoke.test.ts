@@ -4628,6 +4628,24 @@ test('generated C Array block-body callbacks compile and run with runtime source
 
   console.log(result.length, result[0], result[1], values[0], values[2])
 
+  const branched = [1, 2, 3, 4]
+    .filter((value, index) => {
+      if (value === 1) {
+        return false
+      } else {
+        return index < 3
+      }
+    })
+    .map(value => {
+      if (value === 2) {
+        return value * 10
+      }
+
+      return value + 10
+    })
+
+  console.log(branched.length, branched[0], branched[1])
+
   const names = ['Grace', 'Ada', 'Alan']
   const initials = names
     .filter(name => {
@@ -4655,7 +4673,7 @@ test('generated C Array block-body callbacks compile and run with runtime source
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '2 20 31 1 3\n2 A A\n')
+    assert.equal(run.stdout, '2 20 31 1 3\n2 20 13\n2 A A\n')
   } finally {
     await rm(dir, {
       recursive: true,

@@ -11191,9 +11191,9 @@ function emitPreparedArrayMapCallExpression(expression, context) {
   }
 
   const callback = expression.args[0]
-  const returnExpression = resolveArrowReturnExpression(callback)
+  const callbackBody = resolveArrayCallbackBody(callback)
 
-  if (callback?.type !== 'ArrowFunctionExpression' || returnExpression == null || callback.params.length > 2) {
+  if (callback?.type !== 'ArrowFunctionExpression' || callbackBody == null || callback.params.length > 2) {
     return null
   }
 
@@ -11216,19 +11216,16 @@ function emitPreparedArrayMapCallExpression(expression, context) {
     const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
 
     mappedElementType = mappedElementType === 'unknown'
-      ? inferExpressionType(returnExpression, context)
+      ? resolveArrayCallbackReturnType(callbackBody, context)
       : mappedElementType
 
     if (!['number', 'boolean', 'string'].includes(mappedElementType)) {
       return null
     }
 
-    const mappedValue = emitPreparedArrayMapValue(returnExpression, mappedElementType, context)
-
     return [
       ...input,
-      ...mappedValue.lines,
-      emitStatusCheck(`ccjs_array_push(${out}, ${mappedValue.expression})`, context)
+      ...emitArrayMapCallbackBodyLines(callbackBody, mappedElementType, out, context)
     ]
   })
 
@@ -11261,9 +11258,9 @@ function emitPreparedArrayFilterCallExpression(expression, context) {
   }
 
   const callback = expression.args[0]
-  const returnExpression = resolveArrowReturnExpression(callback)
+  const callbackBody = resolveArrayCallbackBody(callback)
 
-  if (callback?.type !== 'ArrowFunctionExpression' || returnExpression == null || callback.params.length > 2) {
+  if (callback?.type !== 'ArrowFunctionExpression' || callbackBody == null || callback.params.length > 2) {
     return null
   }
 
@@ -11283,14 +11280,10 @@ function emitPreparedArrayFilterCallExpression(expression, context) {
 
   const body = withVariableScope(context, () => {
     const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
-    const predicate = emitPreparedNumberExpression(returnExpression, context)
 
     return [
       ...input,
-      ...predicate.lines,
-      `if (${predicate.expression}) {`,
-      `  ${emitStatusCheck(`ccjs_array_push(${out}, ${value})`, context)}`,
-      '}'
+      ...emitArrayFilterCallbackBodyLines(callbackBody, out, value, context)
     ]
   })
 
@@ -11335,6 +11328,232 @@ function resolveArrowReturnExpression(callback) {
   const statement = statements[0]
 
   return statement?.type === 'ReturnStatement' ? statement.argument ?? null : null
+}
+
+function resolveArrayCallbackBody(callback) {
+  const returnExpression = resolveArrowReturnExpression(callback)
+
+  if (returnExpression != null) {
+    return {
+      kind: 'prepared-return',
+      returnExpression
+    }
+  }
+
+  if (callback?.type !== 'ArrowFunctionExpression' || callback.expressionBody) {
+    return null
+  }
+
+  const statements = Array.isArray(callback.body)
+    ? callback.body
+    : callback.body?.type === 'BlockStatement'
+      ? callback.body.body
+      : null
+
+  if (!canLowerArrayCallbackStatementList(statements)) {
+    return null
+  }
+
+  return {
+    kind: 'statement-list',
+    statements
+  }
+}
+
+function canLowerArrayCallbackStatementList(statements) {
+  if (statements == null || statements.length === 0) {
+    return false
+  }
+
+  return statements.every((statement, index) => {
+    if (index === statements.length - 1) {
+      return canLowerArrayCallbackTerminalStatement(statement)
+    }
+
+    return canLowerArrayCallbackEarlyReturnStatement(statement)
+  })
+}
+
+function canLowerArrayCallbackTerminalStatement(statement) {
+  if (statement?.type === 'ReturnStatement') {
+    return statement.argument != null
+  }
+
+  if (statement?.type === 'BlockStatement') {
+    return canLowerArrayCallbackStatementList(statement.body)
+  }
+
+  if (statement?.type !== 'IfStatement' || statement.alternate == null) {
+    return false
+  }
+
+  return canLowerArrayCallbackTerminalStatement(statement.consequent)
+    && canLowerArrayCallbackTerminalStatement(statement.alternate)
+}
+
+function canLowerArrayCallbackReturnStatement(statement) {
+  if (statement?.type === 'ReturnStatement') {
+    return statement.argument != null
+  }
+
+  return false
+}
+
+function canLowerArrayCallbackEarlyReturnStatement(statement) {
+  if (statement?.type === 'BlockStatement') {
+    return canLowerArrayCallbackStatementList(statement.body)
+  }
+
+  if (statement?.type !== 'IfStatement') {
+    return false
+  }
+
+  return canLowerArrayCallbackBranch(statement.consequent)
+    && (statement.alternate == null || canLowerArrayCallbackBranch(statement.alternate))
+}
+
+function canLowerArrayCallbackBranch(statement) {
+  if (canLowerArrayCallbackReturnStatement(statement)) {
+    return true
+  }
+
+  if (statement?.type === 'BlockStatement') {
+    return canLowerArrayCallbackStatementList(statement.body)
+  }
+
+  return canLowerArrayCallbackEarlyReturnStatement(statement)
+}
+
+function resolveArrayCallbackReturnType(body, context) {
+  const expressions = collectArrayCallbackReturnExpressions(body)
+  const firstType = expressions.length === 0 ? 'unknown' : inferExpressionType(expressions[0], context)
+
+  if (firstType === 'unknown') {
+    return 'unknown'
+  }
+
+  return expressions.every(expression => inferExpressionType(expression, context) === firstType)
+    ? firstType
+    : 'unknown'
+}
+
+function collectArrayCallbackReturnExpressions(body) {
+  if (body.kind === 'prepared-return') {
+    return [body.returnExpression]
+  }
+
+  const expressions: any[] = []
+  const visitStatement = statement => {
+    if (statement == null) {
+      return
+    }
+
+    if (statement.type === 'ReturnStatement') {
+      expressions.push(statement.argument)
+      return
+    }
+
+    if (statement.type === 'BlockStatement') {
+      statement.body.forEach(visitStatement)
+      return
+    }
+
+    if (statement.type === 'IfStatement') {
+      visitStatement(statement.consequent)
+      visitStatement(statement.alternate)
+    }
+  }
+
+  body.statements.forEach(visitStatement)
+
+  return expressions.filter(Boolean)
+}
+
+function emitArrayMapCallbackBodyLines(body, elementType, out, context) {
+  const emitReturn = expression => emitArrayMapReturnLines(expression, elementType, out, context)
+
+  return emitArrayCallbackBodyLines(body, emitReturn, context)
+}
+
+function emitArrayFilterCallbackBodyLines(body, out, value, context) {
+  const emitReturn = expression => emitArrayFilterReturnLines(expression, out, value, context)
+
+  return emitArrayCallbackBodyLines(body, emitReturn, context)
+}
+
+function emitArrayCallbackBodyLines(body, emitReturn, context) {
+  if (body.kind === 'prepared-return') {
+    return emitReturn(body.returnExpression)
+  }
+
+  const doneLabel = nextCName(context, 'ccjs_array_callback_done')
+
+  return [
+    ...emitArrayCallbackStatementListLines(body.statements, doneLabel, emitReturn, context),
+    `${doneLabel}:;`
+  ]
+}
+
+function emitArrayCallbackStatementListLines(statements, doneLabel, emitReturn, context) {
+  return statements.flatMap(statement => emitArrayCallbackStatementLines(statement, doneLabel, emitReturn, context))
+}
+
+function emitArrayCallbackStatementLines(statement, doneLabel, emitReturn, context) {
+  if (statement?.type === 'ReturnStatement') {
+    return [
+      ...emitReturn(statement.argument),
+      `goto ${doneLabel};`
+    ]
+  }
+
+  if (statement?.type === 'BlockStatement') {
+    return [
+      '{',
+      ...emitArrayCallbackStatementListLines(statement.body, doneLabel, emitReturn, context).map(line => `  ${line}`),
+      '}'
+    ]
+  }
+
+  if (statement?.type !== 'IfStatement') {
+    return []
+  }
+
+  const condition = emitPreparedNumberExpression(statement.condition, context)
+  const consequent = emitArrayCallbackStatementLines(statement.consequent, doneLabel, emitReturn, context)
+  const lines = [
+    ...condition.lines,
+    `if (${condition.expression}) {`,
+    ...consequent.map(line => `  ${line}`),
+    '}'
+  ]
+
+  if (statement.alternate != null) {
+    lines[lines.length - 1] = '} else {'
+    lines.push(...emitArrayCallbackStatementLines(statement.alternate, doneLabel, emitReturn, context).map(line => `  ${line}`))
+    lines.push('}')
+  }
+
+  return lines
+}
+
+function emitArrayMapReturnLines(expression, elementType, out, context) {
+  const mappedValue = emitPreparedArrayMapValue(expression, elementType, context)
+
+  return [
+    ...mappedValue.lines,
+    emitStatusCheck(`ccjs_array_push(${out}, ${mappedValue.expression})`, context)
+  ]
+}
+
+function emitArrayFilterReturnLines(expression, out, value, context) {
+  const predicate = emitPreparedNumberExpression(expression, context)
+
+  return [
+    ...predicate.lines,
+    `if (${predicate.expression}) {`,
+    `  ${emitStatusCheck(`ccjs_array_push(${out}, ${value})`, context)}`,
+    '}'
+  ]
 }
 
 function resolvePromiseChainArrowBody(callback) {

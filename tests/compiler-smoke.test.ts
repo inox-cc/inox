@@ -5873,6 +5873,35 @@ test('checks Array sort filter map as typed chain calls', () => {
   assert.match(c.code, /if \(\(value > index\)\) \{/)
   assert.match(c.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \+ 1\)\)\)/)
 
+  const branchedC = compileSource(`export function main(): void {
+  const values = [1, 2, 3]
+  const result = values
+    .filter(value => {
+      if (value > 1) {
+        return true
+      } else {
+        return false
+      }
+    })
+    .map(value => {
+      if (value === 2) {
+        return value * 10
+      }
+
+      return value + 10
+    })
+
+  console.log(result.length)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(branchedC.code, /ccjs_array_callback_done_\d+:;/)
+  assert.match(branchedC.code, /if \(1\) \{[\s\S]*ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
+  assert.match(branchedC.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \* 10\)\)\)/)
+  assert.match(branchedC.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \+ 10\)\)\)/)
+
   const multiStatementFilter = compileSource(`export function main(): void {
   const values: number[] = [1, 2]
   const result = values.filter(value => {
