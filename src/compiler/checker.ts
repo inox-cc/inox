@@ -3823,7 +3823,7 @@ function jsonRuntimeMethodName(callee: AnyNode): string | null {
 }
 
 function isJsonParseDeclaredType(valueType: ValueType): boolean {
-  return valueType === 'array' || valueType === 'object' || valueType === 'string'
+  return valueType === 'array' || valueType === 'boolean' || valueType === 'number' || valueType === 'object' || valueType === 'string'
 }
 
 function isMathRuntimeMethod(callee: AnyNode): boolean {

@@ -2187,6 +2187,24 @@ export function main(): void {
   assert.match(result.code, /ccjs_json_stringify\(&ccjs_default_allocator, user, &ccjs_json_value_\d+\)/)
 })
 
+test('lowers C JSON scalar parse through runtime tag checks', () => {
+  const result = compileSource(`export function main(): void {
+  const score: number = JSON.parse('7')
+  const active: boolean = JSON.parse('true')
+  console.log(score + 1, active)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /ccjs_json_parse\(&ccjs_default_allocator, "7", 1, &ccjs_json_value_\d+\)/)
+  assert.match(result.code, /ccjs_json_value_\d+\.tag != CCJS_TAG_NUMBER/)
+  assert.match(result.code, /const double score = ccjs_json_value_\d+\.as\.number;/)
+  assert.match(result.code, /ccjs_json_parse\(&ccjs_default_allocator, "true", 4, &ccjs_json_value_\d+\)/)
+  assert.match(result.code, /ccjs_json_value_\d+\.tag != CCJS_TAG_BOOL/)
+  assert.match(result.code, /const double active = \(ccjs_json_value_\d+\.as\.boolean \? 1 : 0\);/)
+})
+
 test('accepts supported C syntax features from stored target-neutral IR syntax features', () => {
   const result = compileSource(`export function main(): void {
   console.log('ok')

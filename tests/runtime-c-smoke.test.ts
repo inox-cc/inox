@@ -7294,8 +7294,10 @@ test('generated C JSON parse and stringify compile and run with runtime sources'
 
 export function main(): void {
   const user: User = JSON.parse('{"score":7,"name":"Ada"}')
+  const parsedScore: number = JSON.parse('8')
+  const active: boolean = JSON.parse('true')
   const text = JSON.stringify(user)
-  console.log(user.name, user.score, text)
+  console.log(user.name, user.score, text, parsedScore, active)
 }
 `, {
       target: 'c'
@@ -7310,7 +7312,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'Ada 7 {"name":"Ada","score":7}\n')
+    assert.equal(run.stdout, 'Ada 7 {"name":"Ada","score":7} 8 1\n')
   } finally {
     await rm(dir, {
       recursive: true,

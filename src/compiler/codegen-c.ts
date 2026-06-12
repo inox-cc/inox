@@ -8531,6 +8531,12 @@ function emitPreparedNumberExpression(expression, context) {
   }
 
   if (expression?.type === 'CallExpression') {
+    const jsonScalarParse = emitPreparedJsonScalarParseExpression(expression, context)
+
+    if (jsonScalarParse != null) {
+      return jsonScalarParse
+    }
+
     const binaryCall = emitPreparedBinaryNumberCallExpression(expression, context)
 
     if (binaryCall != null) {
@@ -9395,6 +9401,29 @@ function emitPreparedJsonCallExpression(expression, context, options: { out?: st
       emitRuntimeValueCheck(out, 'CCJS_TAG_STRING', context)
     ],
     expression: out
+  }
+}
+
+function emitPreparedJsonScalarParseExpression(expression, context) {
+  if (expression?.type !== 'CallExpression' || cJsonRuntimeCallName(expression.callee) !== 'parse') {
+    return null
+  }
+
+  const valueType = inferExpressionType(expression, context)
+
+  if (valueType !== 'number' && valueType !== 'boolean') {
+    return null
+  }
+
+  const value = emitPreparedJsonCallExpression(expression, context)
+
+  if (value == null) {
+    return null
+  }
+
+  return {
+    lines: value.lines,
+    expression: valueType === 'boolean' ? `(${value.expression}.as.boolean ? 1 : 0)` : `${value.expression}.as.number`
   }
 }
 
