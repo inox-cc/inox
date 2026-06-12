@@ -203,9 +203,21 @@ export type RandomOptions = {
   seed?: number
 }
 
+export type RuntimeProfile = 'embedded' | 'hosted'
+
+export type RuntimeCapabilities = {
+  fs?: boolean
+  heap?: boolean
+  monotonicClock?: boolean
+  timers?: boolean
+  wallClock?: boolean
+}
+
 export type CompileOptions = {
   target?: CompileTarget
   callMain?: boolean
+  capabilities?: RuntimeCapabilities
+  profile?: RuntimeProfile
   random?: RandomOptions
 }
 

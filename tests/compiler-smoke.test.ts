@@ -4987,6 +4987,58 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
   }
 })
 
+test('reports embedded profile capability diagnostics from IR global usages', () => {
+  const source = `function onTimer(): void {
+  console.log('timer')
+}
+
+export function main(): void {
+  const wall = Date.now()
+  const monotonic = performance.now()
+  const timeout = setTimeout(onTimer, 1)
+  fs.writeFile('/private/tmp/ccjs-embedded-profile.txt', 'saved')
+  clearTimeout(timeout)
+  console.log('ok', wall, monotonic)
+}
+`
+
+  assert.throws(() => {
+    compileSource(source, {
+      target: 'c',
+      profile: 'embedded'
+    })
+  }, error => {
+    if (!(error instanceof CompileError)) {
+      return false
+    }
+
+    assert.equal(error.diagnostics.every(item => item.code === 'CCJS_CAPABILITY'), true)
+    assert.deepEqual(error.diagnostics.map(item => item.message), [
+      'embedded profile requires wall-clock capability for Date.now',
+      'embedded profile requires monotonic-clock capability for performance.now',
+      'embedded profile requires timers capability for setTimeout',
+      'embedded profile requires filesystem capability for fs.writeFile',
+      'embedded profile requires timers capability for clearTimeout'
+    ])
+    return true
+  })
+
+  const enabled = compileSource(source, {
+    target: 'c',
+    profile: 'embedded',
+    capabilities: {
+      fs: true,
+      monotonicClock: true,
+      timers: true,
+      wallClock: true
+    }
+  })
+
+  assert.match(enabled.code, /#include "ccjs\/fs\.h"/)
+  assert.match(enabled.code, /#include "ccjs\/time\.h"/)
+  assert.match(enabled.code, /ccjs_loop_set_timeout/)
+})
+
 test('drives C JS global diagnostics from target-neutral IR global usages', () => {
   const result = compileSource(`export function main(): void {
   console.log('ok')

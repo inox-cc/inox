@@ -1,3 +1,4 @@
+import { checkCProfileCapabilities } from './capabilities.ts'
 import { emitCBundleFromIrModules, emitCFromIr } from './codegen-c.ts'
 import { emitJsBundleFromIrModules, emitJsFromIr, emitTsBundleFromIrModules, emitTsFromIr } from './codegen-js.ts'
 import { checkProgram } from './checker.ts'
@@ -17,6 +18,8 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
   const ir = lowerHirToIr(hir)
 
   if (target === 'c') {
+    checkCProfileCapabilities([ir], options)
+
     return {
       target,
       ast: checked.ast,
@@ -61,6 +64,7 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
   if (target === 'c') {
     const graph = await buildModuleGraph(entry)
     const irModules = collectIrModuleRecords(graph)
+    checkCProfileCapabilities(irModules.map(module => module.ir), options)
 
     return {
       target,

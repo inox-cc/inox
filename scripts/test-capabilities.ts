@@ -2,17 +2,20 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile } from '../src/compiler/index.ts'
-import type { CompileTarget } from '../src/compiler/types.ts'
+import type { CompileOptions, CompileTarget, RuntimeCapabilities } from '../src/compiler/types.ts'
 import { rootDir } from './lib/repo-checks.ts'
 
 type CapabilityExpectation = {
   expect: 'diagnostic' | 'pass'
   diagnostic?: string
+  options?: CapabilityCompileOptions
 }
 
 type CapabilityMatrix = {
   targets: Partial<Record<CompileTarget, CapabilityExpectation>>
 }
+
+type CapabilityCompileOptions = Pick<CompileOptions, 'capabilities' | 'profile'>
 
 const fixtureRoot = join(rootDir, 'tests/fixtures/capabilities')
 const files = await findMatrixFiles(fixtureRoot)
@@ -48,6 +51,7 @@ async function checkMatrix(file: string): Promise<void> {
 async function checkTarget(source: string, matrixRel: string, target: CompileTarget, expectation: CapabilityExpectation): Promise<void> {
   try {
     await compileFile(source, {
+      ...expectation.options,
       target
     })
 
@@ -100,6 +104,8 @@ function parseMatrix(source: string, rel: string): CapabilityMatrix {
     if (expectation.expect === 'diagnostic' && typeof expectation.diagnostic !== 'string') {
       throw new Error(`${rel}: target ${target} diagnostic expectation must include diagnostic`)
     }
+
+    validateCompileOptions(expectation.options, rel, target)
   }
 
   return {
@@ -109,6 +115,47 @@ function parseMatrix(source: string, rel: string): CapabilityMatrix {
 
 function isCompileTarget(value: string): value is CompileTarget {
   return value === 'c' || value === 'js' || value === 'ts'
+}
+
+function validateCompileOptions(value: unknown, rel: string, target: string): void {
+  if (value == null) {
+    return
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${rel}: target ${target} options must be an object`)
+  }
+
+  const options = value as CapabilityCompileOptions
+
+  if (options.profile != null && options.profile !== 'hosted' && options.profile !== 'embedded') {
+    throw new Error(`${rel}: target ${target} options.profile must be "hosted" or "embedded"`)
+  }
+
+  validateCapabilities(options.capabilities, rel, target)
+}
+
+function validateCapabilities(value: unknown, rel: string, target: string): void {
+  if (value == null) {
+    return
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${rel}: target ${target} options.capabilities must be an object`)
+  }
+
+  const capabilities = value as RuntimeCapabilities
+  const allowed = new Set(['fs', 'heap', 'monotonicClock', 'timers', 'wallClock'])
+
+  for (const [key, enabled] of Object.entries(capabilities)) {
+    if (!allowed.has(key)) {
+      throw new Error(`${rel}: target ${target} unknown capability ${JSON.stringify(key)}`)
+    }
+
+    if (typeof enabled !== 'boolean') {
+      throw new Error(`${rel}: target ${target} capability ${key} must be boolean`)
+    }
+  }
 }
 
 async function findMatrixFiles(dir: string): Promise<string[]> {
