@@ -2834,7 +2834,7 @@ function collectPromiseChainWrappers(irPrograms: IrProgram[], context) {
         nullable: param.nullable === true,
         shape: param.shape,
         runtimeManaged: ['string', 'object'].includes(param.valueType),
-        mutable: true
+        mutable: false
       })
     }
   }

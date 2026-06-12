@@ -2067,6 +2067,53 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame awaits captured local Promise chains', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-captured-chain-'))
+  const source = join(dir, 'async-task-frame-captured-chain.c')
+  const output = join(dir, 'async-task-frame-captured-chain')
+
+  try {
+    const result = compileSource(`async function addChain(input: number, delta: number): Promise<number> {
+  const pending = Promise.resolve(input).then(value => value + delta)
+  const value = await pending
+
+  return value + delta
+}
+
+export async function main(): Promise<void> {
+  console.log(await addChain(2, 4))
+  const promise = addChain(5, 6)
+  console.log(await promise)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '10\n17\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async task frame direct return values compile and run', async t => {
   const probe = await runCommand('cc', ['--version'])
 

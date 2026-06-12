@@ -4036,6 +4036,30 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
 })
 
+test('lowers async task frame await over captured local Promise chains to C', () => {
+  const result = compileSource(`async function addChain(input: number, delta: number): Promise<number> {
+  const pending = Promise.resolve(input).then(value => value + delta)
+  const value = await pending
+
+  return value + delta
+}
+
+export async function main(): Promise<void> {
+  console.log(await addChain(2, 4))
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /typedef struct ccjs_promise_chain_context_\d+ \{\n  double delta;\n\} ccjs_promise_chain_context_\d+;/)
+  assert.match(result.code, /static void ccjs_promise_chain_context_\d+_finalize\(void\* context\);/)
+  assert.match(result.code, /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n  double delta = captured->delta;/)
+  assert.match(result.code, /ccjs_promise_chain_context_\d+\* ccjs_promise_callback_ctx_\d+ = ccjs_default_alloc\(0, sizeof\(ccjs_promise_chain_context_\d+\), _Alignof\(ccjs_promise_chain_context_\d+\)\);/)
+  assert.match(result.code, /ccjs_promise_callback_ctx_\d+->delta = delta;/)
+  assert.match(result.code, /status = ccjs_promise_chain\(ccjs_async_task_source_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &frame->awaited\);/)
+  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
+})
+
 test('lowers async task frame direct return values to C', () => {
   const result = compileSource(`async function addLater(input: number, delta: number): Promise<number> {
   const value = await Promise.resolve(input)
