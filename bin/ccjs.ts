@@ -7,15 +7,18 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CompileError, formatDiagnostics } from '../src/compiler/diagnostics.ts'
 import { compileFile } from '../src/compiler/index.ts'
+import type { CompileOptions, RuntimeCapabilities, RuntimeProfile } from '../src/compiler/types.ts'
 import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
 import type { CliPlan, CliTarget } from '../scripts/lib/cli-args.ts'
 
 type CConfig = {
+  capabilities?: RuntimeCapabilities
   c?: {
     cc?: string
     cflags?: string | string[]
     ldflags?: string | string[]
   }
+  profile?: RuntimeProfile
   random?: {
     backend?: 'simple'
     seed?: number
@@ -150,7 +153,7 @@ async function writeCompiledSource(plan: CliPlan, target: CliTarget): Promise<vo
   const result = await compileFile(entry, {
     target,
     callMain: false,
-    random: target === 'c' ? config.random : undefined
+    ...(target === 'c' ? cCompileOptions(config) : {})
   })
   const out = plan.out ?? defaultEmitOutput(entry, target)
   const dir = dirname(out)
@@ -183,7 +186,7 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
   const result = await compileFile(entry, {
     target: 'c',
     callMain: false,
-    random: config.random
+    ...cCompileOptions(config)
   })
   const dir = dirname(out)
   const tempDir = options.source == null ? await mkdtemp(join(tmpdir(), 'ccjs-c-build-')) : null
@@ -252,8 +255,11 @@ function validateConfig(config: unknown, fileName: string): CConfig {
 
   const value = config as CConfig
 
+  validateProfileConfig(value.profile, fileName)
+  validateCapabilitiesConfig(value.capabilities, fileName)
+  validateRandomConfig(value.random, fileName)
+
   if (value.c == null) {
-    validateRandomConfig(value.random, fileName)
     return value
   }
 
@@ -267,9 +273,49 @@ function validateConfig(config: unknown, fileName: string): CConfig {
 
   validateConfigFlags(value.c.cflags, 'c.cflags', fileName)
   validateConfigFlags(value.c.ldflags, 'c.ldflags', fileName)
-  validateRandomConfig(value.random, fileName)
 
   return value
+}
+
+function cCompileOptions(config: CConfig): Pick<CompileOptions, 'capabilities' | 'profile' | 'random'> {
+  return {
+    capabilities: config.capabilities,
+    profile: config.profile,
+    random: config.random
+  }
+}
+
+function validateProfileConfig(value: unknown, fileName: string): void {
+  if (value == null) {
+    return
+  }
+
+  if (value !== 'hosted' && value !== 'embedded') {
+    throw new Error(`invalid ${fileName}: profile must be "hosted" or "embedded"`)
+  }
+}
+
+function validateCapabilitiesConfig(value: unknown, fileName: string): void {
+  if (value == null) {
+    return
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`invalid ${fileName}: capabilities must be an object`)
+  }
+
+  const capabilities = value as RuntimeCapabilities
+  const allowed = new Set(['fs', 'heap', 'monotonicClock', 'timers', 'wallClock'])
+
+  for (const [key, enabled] of Object.entries(capabilities)) {
+    if (!allowed.has(key)) {
+      throw new Error(`invalid ${fileName}: unknown capability ${JSON.stringify(key)}`)
+    }
+
+    if (typeof enabled !== 'boolean') {
+      throw new Error(`invalid ${fileName}: capability ${key} must be boolean`)
+    }
+  }
 }
 
 function validateRandomConfig(value: unknown, fileName: string): void {
