@@ -57,6 +57,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFsRuntime || needsTimerRuntime
   const needsCollectionRuntime = runtimeRequirements.has('collections')
+  const needsBinaryRuntime = runtimeRequirements.has('binary')
   const needsClassRuntime = baseContext.classInfos.size > 0
   const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime || needsClassRuntime
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || needsClassRuntime || needsJsonRuntime || runtimeRequirements.has('managed-values')
@@ -65,7 +66,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
   const promiseChainCallbackWrappers = [...baseContext.promiseChainWrappers.values()].filter(isPromiseChainCallbackWrapperWithContext)
 
@@ -157,7 +158,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime) {
   const lines = [
     '#include <stdio.h>'
   ]
@@ -181,6 +182,9 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsy
     }
     if (needsCallbackRuntime) {
       lines.push('#include "ccjs/callback.h"')
+    }
+    if (needsBinaryRuntime) {
+      lines.push('#include "ccjs/binary.h"')
     }
     if (needsFsRuntime) {
       lines.push('#include "ccjs/fs.h"')
@@ -533,6 +537,9 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     || path === 'fs.writeFileSync'
     || path === 'JSON.parse'
     || path === 'JSON.stringify'
+    || path === 'Buffer.alloc'
+    || path === 'Buffer.from'
+    || path === 'Uint8Array'
     || path === 'clearImmediate'
     || path === 'clearInterval'
     || path === 'clearTimeout'
@@ -4441,6 +4448,12 @@ function emitStatement(statement, context) {
     }
 
     if (statement.expression.target.type === 'IndexExpression') {
+      const bytesIndexAssignment = emitPreparedBytesIndexAssignment(statement.expression, context)
+
+      if (bytesIndexAssignment != null) {
+        return bytesIndexAssignment.lines
+      }
+
       const element = resolveKnownArrayIndex(statement.expression.target, context)
 
       if (element != null) {
@@ -6897,6 +6910,12 @@ function emitCValueExpression(expression, context) {
     return jsonCall
   }
 
+  const binaryValue = emitPreparedBinaryValueExpression(expression, context)
+
+  if (binaryValue != null) {
+    return binaryValue
+  }
+
   const arrayPopCall = emitPreparedArrayPopCallExpression(expression, context)
 
   if (arrayPopCall != null) {
@@ -7749,6 +7768,192 @@ function emitCStringSplitValueExpression(expression, context) {
   }
 }
 
+function emitPreparedBinaryValueExpression(expression, context) {
+  if (isBufferFromCall(expression)) {
+    return emitCBufferFromValueExpression(expression, context)
+  }
+
+  if (isBufferAllocCall(expression) || isBinaryConstructorExpression(expression)) {
+    return emitCBytesAllocValueExpression(expression, context)
+  }
+
+  if (isBytesSliceCall(expression, context)) {
+    return emitCBytesSliceValueExpression(expression, context)
+  }
+
+  if (isBytesToStringCall(expression, context)) {
+    return emitCBytesToStringValueExpression(expression, context)
+  }
+
+  return null
+}
+
+function emitCBufferFromValueExpression(expression, context) {
+  const value = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_buffer_from')
+  const temp = nextCName(context, 'ccjs_bytes')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...value.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_bytes_from_data(&ccjs_default_allocator, (const uint8_t*)${value.bytes}, ${value.length}, &${temp})`, context),
+      emitRuntimeValueCheck(temp, 'CCJS_TAG_BYTES', context)
+    ],
+    expression: temp
+  }
+}
+
+function emitCBytesAllocValueExpression(expression, context) {
+  const temp = nextCName(context, 'ccjs_bytes')
+  registerOwnedValue(context, temp)
+
+  if (isBinaryConstructorExpression(expression) && expression.args[0]?.type === 'ArrayLiteral') {
+    const elements = expression.args[0].elements
+    const lines = [
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_bytes_new(&ccjs_default_allocator, ${elements.length}, &${temp})`, context)
+    ]
+
+    for (const [index, element] of elements.entries()) {
+      const value = emitPreparedNumberExpression(element, context)
+
+      lines.push(...value.lines)
+      lines.push(emitStatusCheck(`ccjs_bytes_set(${temp}, ${index}, (uint8_t)(${value.expression}))`, context))
+    }
+
+    return {
+      lines,
+      expression: temp
+    }
+  }
+
+  if (isBinaryConstructorExpression(expression) && inferExpressionType(expression.args[0], context) !== 'number') {
+    context.diagnostics.push(diagnostic('CCJS_C_JS_GLOBAL', 'Uint8Array constructor currently supports only length or array literals in C', expression.loc))
+
+    return {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
+  const size = emitPreparedNumberExpression(expression.args[0], context)
+
+  return {
+    lines: [
+      ...size.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_bytes_new(&ccjs_default_allocator, (size_t)(${size.expression}), &${temp})`, context)
+    ],
+    expression: temp
+  }
+}
+
+function emitCBytesSliceValueExpression(expression, context) {
+  const receiver = emitCValueExpression(expression.callee.object, context)
+  const start = emitPreparedNumberExpression(expression.args[0], context)
+  const end = expression.args[1] == null
+    ? null
+    : emitPreparedNumberExpression(expression.args[1], context)
+  const endName = end == null ? nextCName(context, 'ccjs_bytes_len') : null
+  const temp = nextCName(context, 'ccjs_bytes_slice')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...receiver.lines,
+      ...start.lines,
+      ...(end == null
+        ? [
+            `size_t ${endName} = 0;`,
+            emitStatusCheck(`ccjs_bytes_len(${receiver.expression}, &${endName})`, context)
+          ]
+        : end.lines),
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_bytes_slice(${receiver.expression}, (size_t)(${start.expression}), ${end == null ? endName : `(size_t)(${end.expression})`}, &${temp})`, context),
+      emitRuntimeValueCheck(temp, 'CCJS_TAG_BYTES', context)
+    ],
+    expression: temp
+  }
+}
+
+function emitCBytesToStringValueExpression(expression, context) {
+  const receiver = emitCValueExpression(expression.callee.object, context)
+  const temp = nextCName(context, 'ccjs_bytes_string')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...receiver.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_bytes_to_string(&ccjs_default_allocator, ${receiver.expression}, &${temp})`, context),
+      emitRuntimeValueCheck(temp, 'CCJS_TAG_STRING', context)
+    ],
+    expression: temp
+  }
+}
+
+function emitPreparedBinaryNumberCallExpression(expression, context) {
+  return null
+}
+
+function emitPreparedBytesLengthExpression(expression, context) {
+  if (expression?.type !== 'MemberExpression' || expression.property !== 'length' || inferExpressionType(expression.object, context) !== 'bytes') {
+    return null
+  }
+
+  const value = emitCValueExpression(expression.object, context)
+  const temp = nextCName(context, 'ccjs_bytes_len')
+
+  return {
+    lines: [
+      ...value.lines,
+      `size_t ${temp} = 0;`,
+      emitStatusCheck(`ccjs_bytes_len(${value.expression}, &${temp})`, context)
+    ],
+    expression: `((double)${temp})`
+  }
+}
+
+function emitPreparedBytesIndexExpression(expression, context) {
+  if (expression?.type !== 'IndexExpression' || inferExpressionType(expression.object, context) !== 'bytes') {
+    return null
+  }
+
+  const value = emitCValueExpression(expression.object, context)
+  const index = emitPreparedNumberExpression(expression.index, context)
+  const byte = nextCName(context, 'ccjs_byte')
+
+  return {
+    lines: [
+      ...value.lines,
+      ...index.lines,
+      `uint8_t ${byte} = 0;`,
+      emitStatusCheck(`ccjs_bytes_get(${value.expression}, (size_t)(${index.expression}), &${byte})`, context)
+    ],
+    expression: `((double)${byte})`
+  }
+}
+
+function emitPreparedBytesIndexAssignment(expression, context) {
+  if (expression?.target?.type !== 'IndexExpression' || inferExpressionType(expression.target.object, context) !== 'bytes') {
+    return null
+  }
+
+  const value = emitCValueExpression(expression.target.object, context)
+  const index = emitPreparedNumberExpression(expression.target.index, context)
+  const byte = emitPreparedNumberExpression(expression.value, context)
+
+  return {
+    lines: [
+      ...value.lines,
+      ...index.lines,
+      ...byte.lines,
+      emitStatusCheck(`ccjs_bytes_set(${value.expression}, (size_t)(${index.expression}), (uint8_t)(${byte.expression}))`, context)
+    ]
+  }
+}
+
 function emitConsoleLogStatement(args, context) {
   if (args.length === 0) {
     return ['printf("\\n");']
@@ -8326,6 +8531,12 @@ function emitPreparedNumberExpression(expression, context) {
   }
 
   if (expression?.type === 'CallExpression') {
+    const binaryCall = emitPreparedBinaryNumberCallExpression(expression, context)
+
+    if (binaryCall != null) {
+      return binaryCall
+    }
+
     if (isStringPredicateCall(expression, context)) {
       return emitPreparedStringPredicateCall(expression, context)
     }
@@ -8358,6 +8569,12 @@ function emitPreparedNumberExpression(expression, context) {
       return collectionSize
     }
 
+    const bytesLength = emitPreparedBytesLengthExpression(expression, context)
+
+    if (bytesLength != null) {
+      return bytesLength
+    }
+
     const member = resolveKnownObjectMember(expression, context)
 
     if (member != null && ['number', 'boolean'].includes(member.valueType)) {
@@ -8387,6 +8604,12 @@ function emitPreparedNumberExpression(expression, context) {
         lines: value.lines,
         expression: runtimeElement.valueType === 'boolean' ? `(${value.expression}.as.boolean ? 1 : 0)` : `${value.expression}.as.number`
       }
+    }
+
+    const bytesIndex = emitPreparedBytesIndexExpression(expression, context)
+
+    if (bytesIndex != null) {
+      return bytesIndex
     }
   }
 
@@ -10357,6 +10580,14 @@ function inferExpressionType(expression, context) {
 
   if (isStringPredicateCall(expression, context)) {
     return 'boolean'
+  }
+
+  if (isBinaryRuntimeCall(expression)) {
+    return expression.valueType ?? (binaryRuntimeMethodName(expression?.callee) === 'toString' ? 'string' : 'bytes')
+  }
+
+  if (isBinaryConstructorExpression(expression)) {
+    return 'bytes'
   }
 
   if (expression?.type === 'CallExpression' && usesCJsGlobal(expression.callee, context)) {
@@ -12432,6 +12663,52 @@ function cJsonRuntimeCallName(callee) {
   }
 
   return ['parse', 'stringify'].includes(callee.property) ? callee.property : null
+}
+
+function binaryRuntimeMethodName(callee) {
+  if (callee?.type !== 'MemberExpression') {
+    return null
+  }
+
+  if (callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'Buffer') {
+    return ['alloc', 'from'].includes(callee.property) ? callee.property : null
+  }
+
+  return ['slice', 'toString'].includes(callee.property) ? callee.property : null
+}
+
+function isBinaryRuntimeCall(expression) {
+  return expression?.type === 'CallExpression'
+    && typeof expression.binaryRuntimeMethod === 'string'
+    && binaryRuntimeMethodName(expression.callee) === expression.binaryRuntimeMethod
+}
+
+function isBufferFromCall(expression) {
+  return isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'from'
+}
+
+function isBufferAllocCall(expression) {
+  return isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'alloc'
+}
+
+function isBytesSliceCall(expression, context) {
+  return isBinaryRuntimeCall(expression)
+    && expression.binaryRuntimeMethod === 'slice'
+    && inferExpressionType(expression.callee.object, context) === 'bytes'
+}
+
+function isBytesToStringCall(expression, context) {
+  return isBinaryRuntimeCall(expression)
+    && expression.binaryRuntimeMethod === 'toString'
+    && inferExpressionType(expression.callee.object, context) === 'bytes'
+}
+
+function isBinaryConstructorExpression(expression) {
+  return expression?.type === 'NewExpression'
+    && expression.callee.type === 'Reference'
+    && expression.callee.path.length === 1
+    && expression.callee.path[0] === 'Uint8Array'
+    && expression.valueType === 'bytes'
 }
 
 function mathRuntimeMethodName(callee) {

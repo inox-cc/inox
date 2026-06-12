@@ -1,5 +1,6 @@
 #include <string.h>
 #include "ccjs/binary.h"
+#include "ccjs/string.h"
 
 static ccjs_status ccjs_bytes_allocate(ccjs_allocator* allocator, size_t len, ccjs_bytes** out);
 
@@ -117,6 +118,16 @@ ccjs_status ccjs_bytes_slice(ccjs_value value, size_t start, size_t end, ccjs_va
   }
 
   return ccjs_bytes_from_data(source->header.allocator, source->bytes + start, end - start, out);
+}
+
+ccjs_status ccjs_bytes_to_string(ccjs_allocator* allocator, ccjs_value value, ccjs_value* out) {
+  if (out == 0 || value.tag != CCJS_TAG_BYTES || value.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_bytes* bytes = (ccjs_bytes*)value.as.ref;
+
+  return ccjs_string_from_literal(allocator, (const char*)bytes->bytes, bytes->len, out);
 }
 
 static ccjs_status ccjs_bytes_allocate(ccjs_allocator* allocator, size_t len, ccjs_bytes** out) {

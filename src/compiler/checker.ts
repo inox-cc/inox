@@ -915,6 +915,11 @@ class Checker {
   checkMemberExpression(expression: AnyNode): ValueType {
     const objectType = this.checkExpression(expression.object)
 
+    if (objectType === 'bytes' && expression.property === 'length') {
+      expression.valueType = 'number'
+      return 'number'
+    }
+
     if (objectType === 'string' && expression.property === 'length') {
       return 'number'
     }
@@ -1012,6 +1017,11 @@ class Checker {
       return valueType
     }
 
+    if (targetType === 'bytes' && expression.target.property === 'length') {
+      this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
+      return valueType
+    }
+
     if (shape == null) {
       return valueType
     }
@@ -1079,6 +1089,12 @@ class Checker {
     }
 
     if (expression.index.type !== 'StringLiteral') {
+      if (objectType === 'bytes') {
+        this.checkAssignableType(indexType, 'number', expression.index.loc)
+        expression.valueType = 'number'
+        return 'number'
+      }
+
       if (objectType === 'array') {
         this.checkAssignableType(indexType, 'number', expression.index.loc)
         return this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
@@ -1193,6 +1209,13 @@ class Checker {
       return valueType
     }
 
+    if (objectType === 'bytes' && expression.target.index.type !== 'StringLiteral') {
+      this.checkAssignableType(indexType, 'number', expression.target.index.loc)
+      this.checkAssignableType(valueType, 'number', expression.value.loc)
+      expression.target.valueType = 'number'
+      return valueType
+    }
+
     if (expression.target.index.type !== 'StringLiteral') {
       return valueType
     }
@@ -1245,6 +1268,12 @@ class Checker {
   }
 
   checkCallExpression(expression: AnyNode): ValueType {
+    const binaryType = this.checkBinaryCall(expression)
+
+    if (binaryType != null) {
+      return binaryType
+    }
+
     const stringConversionType = this.checkStringConversionCall(expression)
 
     if (stringConversionType != null) {
@@ -1368,6 +1397,104 @@ class Checker {
     }
 
     return symbol.returnType ?? 'unknown'
+  }
+
+  checkBinaryCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression') {
+      return null
+    }
+
+    if (expression.callee.object.type === 'Reference' && expression.callee.object.path.length === 1 && expression.callee.object.path[0] === 'Buffer') {
+      if (this.scope.resolve('Buffer') != null) {
+        return null
+      }
+
+      const method = expression.callee.property
+
+      if (method === 'from') {
+        if (expression.args.length < 1 || expression.args.length > 2) {
+          this.report('CCJS_ARG_COUNT', `function Buffer.from expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+        }
+
+        if (expression.args[0] != null) {
+          this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+        }
+
+        this.checkUtf8EncodingArg(expression, 1, 'Buffer.from')
+        expression.binaryRuntimeMethod = 'from'
+        expression.valueType = 'bytes'
+
+        return 'bytes'
+      }
+
+      if (method === 'alloc') {
+        if (expression.args.length !== 1) {
+          this.report('CCJS_ARG_COUNT', `function Buffer.alloc expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        }
+
+        if (expression.args[0] != null) {
+          this.checkAssignableType(this.checkExpression(expression.args[0]), 'number', expression.args[0].loc)
+        }
+
+        expression.binaryRuntimeMethod = 'alloc'
+        expression.valueType = 'bytes'
+
+        return 'bytes'
+      }
+
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+
+    if (objectType !== 'bytes') {
+      return null
+    }
+
+    if (expression.callee.property === 'slice') {
+      if (expression.args.length < 1 || expression.args.length > 2) {
+        this.report('CCJS_ARG_COUNT', `bytes.slice expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      for (const arg of expression.args) {
+        this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc)
+      }
+
+      expression.binaryRuntimeMethod = 'slice'
+      expression.valueType = 'bytes'
+
+      return 'bytes'
+    }
+
+    if (expression.callee.property === 'toString') {
+      if (expression.args.length > 1) {
+        this.report('CCJS_ARG_COUNT', `bytes.toString expects 0 or 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkUtf8EncodingArg(expression, 0, 'bytes.toString')
+      expression.binaryRuntimeMethod = 'toString'
+      expression.valueType = 'string'
+
+      return 'string'
+    }
+
+    return null
+  }
+
+  checkUtf8EncodingArg(expression: AnyNode, index: number, label: string): void {
+    const arg = expression.args[index]
+
+    if (arg == null) {
+      return
+    }
+
+    const type = this.checkExpression(arg)
+
+    this.checkAssignableType(type, 'string', arg.loc, false, this.expressionCanBeNull(arg))
+
+    if (arg.type !== 'StringLiteral' || arg.value !== 'utf8') {
+      this.report('CCJS_TYPE_MISMATCH', `${label} encoding must be 'utf8' in the MVP`, arg.loc)
+    }
   }
 
   checkClassMethodCall(expression: AnyNode): ValueType | null {
@@ -2383,6 +2510,27 @@ class Checker {
       expression.valueType = 'set'
       expression.setElementType = 'unknown'
       return 'set'
+    }
+
+    if (expression.callee.path[0] === 'Uint8Array') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `Uint8Array constructor expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      if (argTypes[0] != null && argTypes[0] !== 'number' && argTypes[0] !== 'array') {
+        this.report('CCJS_TYPE_MISMATCH', `Uint8Array constructor expects number or number[], got ${argTypes[0]}`, expression.args[0].loc)
+      }
+
+      if (argTypes[0] === 'array') {
+        const elementType = this.resolveExpressionArrayElementType(expression.args[0])
+
+        if (elementType != null) {
+          this.checkAssignableType(elementType, 'number', expression.args[0].loc)
+        }
+      }
+
+      expression.valueType = 'bytes'
+      return 'bytes'
     }
 
     if (expression.callee.path[0] === 'Error') {

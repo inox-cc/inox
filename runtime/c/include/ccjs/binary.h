@@ -18,5 +18,6 @@ ccjs_status ccjs_bytes_get(ccjs_value value, size_t index, uint8_t* out);
 ccjs_status ccjs_bytes_len(ccjs_value value, size_t* out);
 ccjs_status ccjs_bytes_set(ccjs_value value, size_t index, uint8_t byte);
 ccjs_status ccjs_bytes_slice(ccjs_value value, size_t start, size_t end, ccjs_value* out);
+ccjs_status ccjs_bytes_to_string(ccjs_allocator* allocator, ccjs_value value, ccjs_value* out);
 
 #endif

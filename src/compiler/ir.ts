@@ -199,6 +199,9 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
   for (const feature of features) {
     if (feature === 'runtime-values') {
       requirements.add('managed-values')
+    } else if (feature === 'binary') {
+      requirements.add('binary')
+      requirements.add('managed-values')
     } else if (feature === 'collections') {
       requirements.add('collections')
       requirements.add('managed-values')
@@ -670,6 +673,20 @@ function visitNode(node: unknown, features: Set<IrFeature>): void {
 
   recordNodeFeatures(item, features)
 
+  if (isBinaryArrayLiteralConstructor(item)) {
+    visitNode(item.callee, features)
+
+    for (const element of item.args[0].elements) {
+      visitNode(element, features)
+    }
+
+    for (const arg of item.args.slice(1)) {
+      visitNode(arg, features)
+    }
+
+    return
+  }
+
   for (const [key, value] of Object.entries(item)) {
     if (key === 'loc' || key === 'shape') {
       continue
@@ -689,6 +706,7 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
   }
 
   if (node.valueType === 'bytes' || node.returnType === 'bytes') {
+    features.add('binary')
     features.add('runtime-values')
   }
 
@@ -727,6 +745,8 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
 
     if (collectionConstructorName(node) != null) {
       features.add('collections')
+    } else if (binaryConstructorName(node) != null) {
+      features.add('binary')
     } else if (objectConstructorName(node) != null) {
       features.add('objects')
     }
@@ -834,6 +854,11 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('string-bytes')
   }
 
+  if (binaryRuntimeMethodName(expression) != null) {
+    features.add('binary')
+    features.add('runtime-values')
+  }
+
   const stringMethod = stringRuntimeMethodName(expression)
 
   if (stringMethod != null) {
@@ -851,7 +876,7 @@ function runtimeConstructorName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['Error', 'Map', 'Set'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
+  return ['Error', 'Map', 'Set', 'Uint8Array'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
 }
 
 function collectionConstructorName(expression: AnyNode): string | null {
@@ -868,6 +893,26 @@ function objectConstructorName(expression: AnyNode): string | null {
   }
 
   return expression.callee.path[0] === 'Error' ? expression.callee.path[0] : null
+}
+
+function binaryConstructorName(expression: AnyNode): string | null {
+  if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return null
+  }
+
+  return expression.callee.path[0] === 'Uint8Array' ? expression.callee.path[0] : null
+}
+
+function isBinaryArrayLiteralConstructor(expression: AnyNode): boolean {
+  return binaryConstructorName(expression) != null && expression.args?.[0]?.type === 'ArrayLiteral'
+}
+
+function binaryRuntimeMethodName(expression: AnyNode): string | null {
+  if (expression.type !== 'CallExpression' || expression.callee?.type !== 'MemberExpression') {
+    return null
+  }
+
+  return typeof expression.binaryRuntimeMethod === 'string' ? expression.binaryRuntimeMethod : null
 }
 
 function isObjectFieldExpression(expression: AnyNode | null | undefined): boolean {

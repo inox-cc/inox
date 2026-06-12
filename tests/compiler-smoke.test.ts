@@ -4627,6 +4627,59 @@ test('maps fs binary helpers to Buffer-compatible TS and C runtime calls', () =>
 `, 'CCJS_TYPE_MISMATCH')
 })
 
+test('lowers Buffer and Uint8Array APIs to C binary runtime calls', () => {
+  const result = compileSource(`export function main(): void {
+  const bytes = Buffer.from('hi', 'utf8')
+  const out = new Uint8Array(4)
+  out[0] = bytes[0]
+  out[1] = 7
+  const slice = out.slice(0, 2)
+  const text = bytes.toString()
+  console.log(bytes.length, out[1], slice.length, text)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.equal(result.hir.body[0].body.find(item => item.name === 'bytes')?.valueType, 'bytes')
+  assert.equal(result.hir.body[0].body.find(item => item.name === 'out')?.valueType, 'bytes')
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'binary',
+    'managed-values',
+    'string-bytes'
+  ])
+  assert.match(result.code, /#include "ccjs\/binary\.h"/)
+  assert.match(result.code, /ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t\*\)"hi", 2, &ccjs_bytes_\d+\)/)
+  assert.match(result.code, /ccjs_bytes_new\(&ccjs_default_allocator, \(size_t\)\(4\), &ccjs_bytes_\d+\)/)
+  assert.match(result.code, /ccjs_bytes_get\(bytes, \(size_t\)\(0\), &ccjs_byte_\d+\)/)
+  assert.match(result.code, /ccjs_bytes_set\(out, \(size_t\)\(1\), \(uint8_t\)\(7\)\)/)
+  assert.match(result.code, /ccjs_bytes_slice\(out, \(size_t\)\(0\), \(size_t\)\(2\), &ccjs_bytes_slice_\d+\)/)
+  assert.match(result.code, /ccjs_bytes_to_string\(&ccjs_default_allocator, bytes, &ccjs_bytes_string_\d+\)/)
+
+  const arrayLiteral = compileSource(`export function main(): void {
+  const bytes = new Uint8Array([1, 2, 3])
+  console.log(bytes.length, bytes[2])
+}
+`, {
+    target: 'c'
+  })
+
+  assert.deepEqual(arrayLiteral.ir.runtimeRequirements, [
+    'binary',
+    'managed-values',
+    'string-bytes'
+  ])
+  assert.doesNotMatch(arrayLiteral.code, /#include "ccjs\/array\.h"/)
+  assert.match(arrayLiteral.code, /ccjs_bytes_new\(&ccjs_default_allocator, 3, &ccjs_bytes_\d+\)/)
+  assert.match(arrayLiteral.code, /ccjs_bytes_set\(ccjs_bytes_\d+, 2, \(uint8_t\)\(3\)\)/)
+
+  assertDiagnostic(`export function main(): void {
+  const bytes = Buffer.from('hi', 'hex')
+  console.log(bytes.length)
+}
+`, 'CCJS_TYPE_MISMATCH')
+})
+
 test('maps fs sync helpers to Node fs and C runtime calls', () => {
   const ts = compileSource(`export function main(): void {
   const text = fs.readFileSync('/tmp/value.txt')

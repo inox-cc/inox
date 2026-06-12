@@ -27,6 +27,7 @@ export type ProgramNode = AnyNode & {
 export type IrFeature =
   | 'array-pop-null'
   | 'async-runtime'
+  | 'binary'
   | 'callback-values'
   | 'clocks'
   | 'collections'
@@ -41,6 +42,7 @@ export type IrFeature =
 
 export type IrRuntimeRequirement =
   | 'async-runtime'
+  | 'binary'
   | 'callback-values'
   | 'clocks'
   | 'collections'

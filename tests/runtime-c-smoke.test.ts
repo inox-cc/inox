@@ -7319,6 +7319,51 @@ export function main(): void {
   }
 })
 
+test('generated C Buffer and Uint8Array APIs compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-binary-api-'))
+  const source = join(dir, 'binary-api.c')
+  const output = join(dir, 'binary-api')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const bytes = Buffer.from('hi', 'utf8')
+  const out = new Uint8Array(4)
+  out[0] = bytes[0]
+  out[1] = 7
+  out[2] = 9
+  const slice = out.slice(1, 3)
+  const text = bytes.toString()
+  console.log(bytes.length, out[0], out[1], slice.length, slice[1], text)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2 104 7 2 9 hi\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C Map and Set methods compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
