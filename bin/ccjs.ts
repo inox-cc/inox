@@ -30,22 +30,34 @@ type CompileCOptions = {
 }
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
-const cRuntimeSources = [
-  'runtime/c/src/core/value.c',
-  'runtime/c/src/core/allocator.c',
-  'runtime/c/src/core/callback.c',
-  'runtime/c/src/binary/binary.c',
-  'runtime/c/src/async/loop.c',
-  'runtime/c/src/async/promise.c',
-  'runtime/c/src/strings/string.c',
-  'runtime/c/src/objects/object.c',
-  'runtime/c/src/arrays/array.c',
-  'runtime/c/src/collections/map.c',
-  'runtime/c/src/collections/set.c',
-  'runtime/c/src/fs/fs.c',
-  'runtime/c/src/json/json.c',
-  'runtime/c/src/time/time.c'
-].map(file => join(repoRoot, file))
+const cRuntimeSourceGroups = {
+  async: [
+    'runtime/c/src/async/loop.c',
+    'runtime/c/src/async/promise.c'
+  ],
+  binary: [
+    'runtime/c/src/binary/binary.c'
+  ],
+  fs: [
+    'runtime/c/src/fs/fs.c'
+  ],
+  json: [
+    'runtime/c/src/json/json.c'
+  ],
+  managed: [
+    'runtime/c/src/core/value.c',
+    'runtime/c/src/core/allocator.c',
+    'runtime/c/src/core/callback.c',
+    'runtime/c/src/strings/string.c',
+    'runtime/c/src/objects/object.c',
+    'runtime/c/src/arrays/array.c',
+    'runtime/c/src/collections/map.c',
+    'runtime/c/src/collections/set.c'
+  ],
+  time: [
+    'runtime/c/src/time/time.c'
+  ]
+}
 const configFileNames = ['ccjs.config.json', 'ccjs.json']
 
 const result = parseCliArgs(process.argv.slice(2))
@@ -202,6 +214,7 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
 
   try {
     const compiler = cCompilerCommand(config)
+    const runtimeSources = cRuntimeSourcesForCode(result.code)
 
     return await spawnAndWait(compiler.command, [
       ...compiler.args,
@@ -209,7 +222,7 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
       ...splitCommandWords(process.env.CFLAGS),
       `-I${join(repoRoot, 'runtime/c/include')}`,
       source,
-      ...cRuntimeSources,
+      ...runtimeSources,
       ...configLdFlags(config),
       ...splitCommandWords(process.env.LDFLAGS),
       '-o',
@@ -223,6 +236,57 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
       })
     }
   }
+}
+
+function cRuntimeSourcesForCode(code: string): string[] {
+  const groups = new Set<keyof typeof cRuntimeSourceGroups>()
+
+  if (usesCHeader(code, 'time')) {
+    groups.add('time')
+  }
+
+  if (usesCHeader(code, 'binary')) {
+    groups.add('managed')
+    groups.add('binary')
+  }
+
+  if (usesCHeader(code, 'loop') || usesCHeader(code, 'promise')) {
+    groups.add('managed')
+    groups.add('async')
+  }
+
+  if (usesCHeader(code, 'fs')) {
+    groups.add('managed')
+    groups.add('async')
+    groups.add('binary')
+    groups.add('fs')
+  }
+
+  if (usesCHeader(code, 'json')) {
+    groups.add('managed')
+    groups.add('json')
+  }
+
+  if (
+    usesCHeader(code, 'array')
+    || usesCHeader(code, 'callback')
+    || usesCHeader(code, 'map')
+    || usesCHeader(code, 'object')
+    || usesCHeader(code, 'set')
+    || usesCHeader(code, 'string')
+    || usesCHeader(code, 'value')
+  ) {
+    groups.add('managed')
+  }
+
+  return Object.entries(cRuntimeSourceGroups)
+    .filter(([group]) => groups.has(group as keyof typeof cRuntimeSourceGroups))
+    .flatMap(([, sources]) => sources)
+    .map(file => join(repoRoot, file))
+}
+
+function usesCHeader(code: string, name: string): boolean {
+  return code.includes(`#include "ccjs/${name}.h"`)
 }
 
 async function loadConfig(): Promise<CConfig> {

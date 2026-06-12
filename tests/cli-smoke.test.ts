@@ -247,8 +247,59 @@ exec cc "$@"
     assert.match(invocation, /-DCCJS_TEST_CFLAG=1/)
     assert.match(invocation, /<-Llinker path with spaces>/)
     assert.match(invocation, /-DCCJS_TEST_LDFLAG=1/)
+    assert.doesNotMatch(invocation, /runtime\/c\/src\//)
     assert.equal(run.code, 0)
     assert.equal(run.stdout, 'hello\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('ccjs build --target c links only needed C runtime source groups', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-runtime-select-test-'))
+  const out = join(dir, 'time')
+  const wrapper = join(dir, 'cc-wrapper.sh')
+  const log = join(dir, 'cc.log')
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  const now = Date.now()
+  console.log(now)
+}
+`)
+    await writeFile(wrapper, `#!/bin/sh
+printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
+exec cc "$@"
+`)
+    await chmod(wrapper, 0o755)
+
+    const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
+      cwd: dir,
+      env: {
+        CC: wrapper,
+        CCJS_CC_LOG: log
+      }
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const invocation = await readFile(log, 'utf8')
+
+    assert.match(invocation, /runtime\/c\/src\/time\/time\.c/)
+    assert.doesNotMatch(invocation, /runtime\/c\/src\/fs\/fs\.c/)
+    assert.doesNotMatch(invocation, /runtime\/c\/src\/json\/json\.c/)
+    assert.doesNotMatch(invocation, /runtime\/c\/src\/core\/value\.c/)
   } finally {
     await rm(dir, {
       recursive: true,
