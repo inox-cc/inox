@@ -155,6 +155,67 @@ static int ccjs_json_hex_value(char value) {
   return -1;
 }
 
+static bool ccjs_json_parse_hex4(const char* bytes, uint32_t* out) {
+  if (bytes == 0 || out == 0) {
+    return false;
+  }
+
+  int a = ccjs_json_hex_value(bytes[0]);
+  int b = ccjs_json_hex_value(bytes[1]);
+  int c = ccjs_json_hex_value(bytes[2]);
+  int d = ccjs_json_hex_value(bytes[3]);
+
+  if (a < 0 || b < 0 || c < 0 || d < 0) {
+    return false;
+  }
+
+  *out = ((uint32_t)a << 12) | ((uint32_t)b << 8) | ((uint32_t)c << 4) | (uint32_t)d;
+
+  return true;
+}
+
+static ccjs_status ccjs_json_buffer_push_utf8(ccjs_json_buffer* buffer, uint32_t codepoint) {
+  if (codepoint <= 0x7f) {
+    return ccjs_json_buffer_push_char(buffer, (char)codepoint);
+  }
+
+  if (codepoint <= 0x7ff) {
+    char bytes[] = {
+      (char)(0xc0 | (codepoint >> 6)),
+      (char)(0x80 | (codepoint & 0x3f))
+    };
+
+    return ccjs_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
+  }
+
+  if (codepoint <= 0xffff) {
+    if (codepoint >= 0xd800 && codepoint <= 0xdfff) {
+      return CCJS_ERR_TYPE;
+    }
+
+    char bytes[] = {
+      (char)(0xe0 | (codepoint >> 12)),
+      (char)(0x80 | ((codepoint >> 6) & 0x3f)),
+      (char)(0x80 | (codepoint & 0x3f))
+    };
+
+    return ccjs_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
+  }
+
+  if (codepoint <= 0x10ffff) {
+    char bytes[] = {
+      (char)(0xf0 | (codepoint >> 18)),
+      (char)(0x80 | ((codepoint >> 12) & 0x3f)),
+      (char)(0x80 | ((codepoint >> 6) & 0x3f)),
+      (char)(0x80 | (codepoint & 0x3f))
+    };
+
+    return ccjs_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
+  }
+
+  return CCJS_ERR_TYPE;
+}
+
 static ccjs_status ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t* out_len, bool nul_terminated) {
   if (parser == 0 || out_bytes == 0 || out_len == 0 || !ccjs_json_match_byte(parser, '"')) {
     return CCJS_ERR_TYPE;
@@ -209,6 +270,7 @@ static ccjs_status ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char**
     char escaped = parser->bytes[parser->pos];
     parser->pos += 1;
     char output = 0;
+    bool has_output = true;
 
     if (escaped == '"' || escaped == '\\' || escaped == '/') {
       output = escaped;
@@ -228,21 +290,50 @@ static ccjs_status ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char**
         return CCJS_ERR_TYPE;
       }
 
-      int a = ccjs_json_hex_value(parser->bytes[parser->pos]);
-      int b = ccjs_json_hex_value(parser->bytes[parser->pos + 1]);
-      int c = ccjs_json_hex_value(parser->bytes[parser->pos + 2]);
-      int d = ccjs_json_hex_value(parser->bytes[parser->pos + 3]);
+      uint32_t codepoint = 0;
 
-      if (a != 0 || b != 0 || c < 0 || d < 0) {
+      if (!ccjs_json_parse_hex4(parser->bytes + parser->pos, &codepoint)) {
         ccjs_json_buffer_dispose(&buffer);
-        return CCJS_ERR_UNSUPPORTED;
+        return CCJS_ERR_TYPE;
       }
 
-      output = (char)((c << 4) | d);
       parser->pos += 4;
+
+      if (codepoint >= 0xd800 && codepoint <= 0xdbff) {
+        if (parser->pos + 6 > parser->len || parser->bytes[parser->pos] != '\\' || parser->bytes[parser->pos + 1] != 'u') {
+          ccjs_json_buffer_dispose(&buffer);
+          return CCJS_ERR_TYPE;
+        }
+
+        uint32_t low = 0;
+
+        if (!ccjs_json_parse_hex4(parser->bytes + parser->pos + 2, &low) || low < 0xdc00 || low > 0xdfff) {
+          ccjs_json_buffer_dispose(&buffer);
+          return CCJS_ERR_TYPE;
+        }
+
+        parser->pos += 6;
+        codepoint = 0x10000 + ((codepoint - 0xd800) << 10) + (low - 0xdc00);
+      } else if (codepoint >= 0xdc00 && codepoint <= 0xdfff) {
+        ccjs_json_buffer_dispose(&buffer);
+        return CCJS_ERR_TYPE;
+      }
+
+      ccjs_status status = ccjs_json_buffer_push_utf8(&buffer, codepoint);
+
+      if (status != CCJS_OK) {
+        ccjs_json_buffer_dispose(&buffer);
+        return status;
+      }
+
+      has_output = false;
     } else {
       ccjs_json_buffer_dispose(&buffer);
       return CCJS_ERR_TYPE;
+    }
+
+    if (!has_output) {
+      continue;
     }
 
     ccjs_status status = ccjs_json_buffer_push_char(&buffer, output);

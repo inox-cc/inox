@@ -160,20 +160,24 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
 
 int main(void) {
   ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  const char* source = "{\\"name\\":\\"Ada\\",\\"scores\\":[3,4],\\"active\\":true}";
+  const char* source = "{\\"name\\":\\"Ada\\",\\"unicode\\":\\"\\\\u00e9 \\\\u0416 \\\\ud83d\\\\ude00\\",\\"scores\\":[3,4],\\"active\\":true}";
   ccjs_value value;
   ccjs_value name;
+  ccjs_value unicode;
   ccjs_value text;
 
   if (ccjs_json_parse(&allocator, source, strlen(source), &value) != CCJS_OK) return 1;
   if (ccjs_object_get(value, "name", 4, &name) != CCJS_OK) return 2;
-  if (ccjs_json_stringify(&allocator, value, &text) != CCJS_OK) return 3;
+  if (ccjs_object_get(value, "unicode", 7, &unicode) != CCJS_OK) return 3;
+  if (ccjs_json_stringify(&allocator, value, &text) != CCJS_OK) return 4;
 
   ccjs_string* name_string = (ccjs_string*)name.as.ref;
+  ccjs_string* unicode_string = (ccjs_string*)unicode.as.ref;
   ccjs_string* text_string = (ccjs_string*)text.as.ref;
-  printf("%.*s %.*s\\n", (int)name_string->len, name_string->bytes, (int)text_string->len, text_string->bytes);
+  printf("%.*s %.*s %.*s\\n", (int)name_string->len, name_string->bytes, (int)unicode_string->len, unicode_string->bytes, (int)text_string->len, text_string->bytes);
 
   ccjs_release(text);
+  ccjs_release(unicode);
   ccjs_release(name);
   ccjs_release(value);
   return 0;
@@ -187,7 +191,7 @@ int main(void) {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'Ada {"name":"Ada","scores":[3,4],"active":true}\n')
+    assert.equal(run.stdout, 'Ada é Ж 😀 {"name":"Ada","unicode":"é Ж 😀","scores":[3,4],"active":true}\n')
   } finally {
     await rm(dir, {
       recursive: true,
