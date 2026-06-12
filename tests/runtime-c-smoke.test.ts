@@ -1812,6 +1812,7 @@ test('generated C captured Promise callbacks compile and run', async t => {
 
 export async function main(): Promise<void> {
   const extra = 5
+  const ok = true
   const literal = 'literal'
   const user: User = { name: 'captured' }
   const label = user.name
@@ -1831,6 +1832,17 @@ export async function main(): Promise<void> {
     return value + extra
   })
   console.log(await logged)
+
+  const objectLogged = Promise.resolve(7).then(value => {
+    if (ok) {
+      console.log(user.name)
+
+      return value + extra
+    }
+
+    return value
+  })
+  console.log(await objectLogged)
 }
 `, {
       target: 'c'
@@ -1845,7 +1857,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'literal\n6\n9\ncaptured\n11\n')
+    assert.equal(run.stdout, 'literal\n6\n9\ncaptured\n11\ncaptured\n12\n')
   } finally {
     await rm(dir, {
       recursive: true,
