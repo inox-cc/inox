@@ -213,9 +213,15 @@ export type RuntimeCapabilities = {
   wallClock?: boolean
 }
 
+export type RuntimeBudgets = {
+  maxFeatures?: number
+  maxRuntimeRequirements?: number
+}
+
 export type CompileOptions = {
   target?: CompileTarget
   callMain?: boolean
+  budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
   profile?: RuntimeProfile
   random?: RandomOptions

@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile } from '../src/compiler/index.ts'
-import type { CompileOptions, CompileTarget, RuntimeCapabilities } from '../src/compiler/types.ts'
+import type { CompileOptions, CompileTarget, RuntimeBudgets, RuntimeCapabilities } from '../src/compiler/types.ts'
 import { rootDir } from './lib/repo-checks.ts'
 
 type CapabilityExpectation = {
@@ -15,7 +15,7 @@ type CapabilityMatrix = {
   targets: Partial<Record<CompileTarget, CapabilityExpectation>>
 }
 
-type CapabilityCompileOptions = Pick<CompileOptions, 'capabilities' | 'profile'>
+type CapabilityCompileOptions = Pick<CompileOptions, 'budgets' | 'capabilities' | 'profile'>
 
 const fixtureRoot = join(rootDir, 'tests/fixtures/capabilities')
 const files = await findMatrixFiles(fixtureRoot)
@@ -132,7 +132,31 @@ function validateCompileOptions(value: unknown, rel: string, target: string): vo
     throw new Error(`${rel}: target ${target} options.profile must be "hosted" or "embedded"`)
   }
 
+  validateBudgets(options.budgets, rel, target)
   validateCapabilities(options.capabilities, rel, target)
+}
+
+function validateBudgets(value: unknown, rel: string, target: string): void {
+  if (value == null) {
+    return
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${rel}: target ${target} options.budgets must be an object`)
+  }
+
+  const budgets = value as RuntimeBudgets
+  const allowed = new Set(['maxFeatures', 'maxRuntimeRequirements'])
+
+  for (const [key, budget] of Object.entries(budgets)) {
+    if (!allowed.has(key)) {
+      throw new Error(`${rel}: target ${target} unknown budget ${JSON.stringify(key)}`)
+    }
+
+    if (!Number.isInteger(budget) || budget < 0) {
+      throw new Error(`${rel}: target ${target} budget ${key} must be a non-negative integer`)
+    }
+  }
 }
 
 function validateCapabilities(value: unknown, rel: string, target: string): void {

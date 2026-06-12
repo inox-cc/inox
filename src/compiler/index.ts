@@ -1,3 +1,4 @@
+import { checkCCompileBudgets } from './budgets.ts'
 import { checkCProfileCapabilities } from './capabilities.ts'
 import { emitCBundleFromIrModules, emitCFromIr } from './codegen-c.ts'
 import { emitJsBundleFromIrModules, emitJsFromIr, emitTsBundleFromIrModules, emitTsFromIr } from './codegen-js.ts'
@@ -19,6 +20,7 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
 
   if (target === 'c') {
     checkCProfileCapabilities([ir], options)
+    checkCCompileBudgets([ir], options)
 
     return {
       target,
@@ -65,6 +67,7 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
     const graph = await buildModuleGraph(entry)
     const irModules = collectIrModuleRecords(graph)
     checkCProfileCapabilities(irModules.map(module => module.ir), options)
+    checkCCompileBudgets(irModules.map(module => module.ir), options)
 
     return {
       target,

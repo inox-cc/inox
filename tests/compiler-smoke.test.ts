@@ -5077,6 +5077,45 @@ test('reports embedded heap capability diagnostics for array-producing methods',
   assert.match(enabled.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value/)
 })
 
+test('reports C compile budget diagnostics from target-neutral IR metadata', () => {
+  const source = `export function main(): void {
+  const values = [1, 2, 3]
+  console.log(values.length)
+}
+`
+
+  assert.throws(() => {
+    compileSource(source, {
+      target: 'c',
+      budgets: {
+        maxFeatures: 0,
+        maxRuntimeRequirements: 0
+      }
+    })
+  }, error => {
+    if (!(error instanceof CompileError)) {
+      return false
+    }
+
+    assert.deepEqual(error.diagnostics.map(item => item.code), ['CCJS_BUDGET', 'CCJS_BUDGET'])
+    assert.deepEqual(error.diagnostics.map(item => item.message), [
+      'C target uses 3 IR features (collections, runtime-values, string-bytes), exceeding maxFeatures budget 0',
+      'C target uses 3 runtime requirements (collections, managed-values, string-bytes), exceeding maxRuntimeRequirements budget 0'
+    ])
+    return true
+  })
+
+  const result = compileSource(source, {
+    target: 'c',
+    budgets: {
+      maxFeatures: 3,
+      maxRuntimeRequirements: 3
+    }
+  })
+
+  assert.match(result.code, /#include "ccjs\/array\.h"/)
+})
+
 test('drives C JS global diagnostics from target-neutral IR global usages', () => {
   const result = compileSource(`export function main(): void {
   console.log('ok')

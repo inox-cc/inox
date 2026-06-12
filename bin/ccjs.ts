@@ -7,11 +7,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CompileError, formatDiagnostics } from '../src/compiler/diagnostics.ts'
 import { compileFile } from '../src/compiler/index.ts'
-import type { CompileOptions, RuntimeCapabilities, RuntimeProfile } from '../src/compiler/types.ts'
+import type { CompileOptions, RuntimeBudgets, RuntimeCapabilities, RuntimeProfile } from '../src/compiler/types.ts'
 import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
 import type { CliPlan, CliTarget } from '../scripts/lib/cli-args.ts'
 
 type CConfig = {
+  budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
   c?: {
     cc?: string
@@ -320,6 +321,7 @@ function validateConfig(config: unknown, fileName: string): CConfig {
   const value = config as CConfig
 
   validateProfileConfig(value.profile, fileName)
+  validateBudgetsConfig(value.budgets, fileName)
   validateCapabilitiesConfig(value.capabilities, fileName)
   validateRandomConfig(value.random, fileName)
 
@@ -341,8 +343,9 @@ function validateConfig(config: unknown, fileName: string): CConfig {
   return value
 }
 
-function cCompileOptions(config: CConfig): Pick<CompileOptions, 'capabilities' | 'profile' | 'random'> {
+function cCompileOptions(config: CConfig): Pick<CompileOptions, 'budgets' | 'capabilities' | 'profile' | 'random'> {
   return {
+    budgets: config.budgets,
     capabilities: config.capabilities,
     profile: config.profile,
     random: config.random
@@ -356,6 +359,29 @@ function validateProfileConfig(value: unknown, fileName: string): void {
 
   if (value !== 'hosted' && value !== 'embedded') {
     throw new Error(`invalid ${fileName}: profile must be "hosted" or "embedded"`)
+  }
+}
+
+function validateBudgetsConfig(value: unknown, fileName: string): void {
+  if (value == null) {
+    return
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`invalid ${fileName}: budgets must be an object`)
+  }
+
+  const budgets = value as RuntimeBudgets
+  const allowed = new Set(['maxFeatures', 'maxRuntimeRequirements'])
+
+  for (const [key, budget] of Object.entries(budgets)) {
+    if (!allowed.has(key)) {
+      throw new Error(`invalid ${fileName}: unknown budget ${JSON.stringify(key)}`)
+    }
+
+    if (!Number.isInteger(budget) || budget < 0) {
+      throw new Error(`invalid ${fileName}: budget ${key} must be a non-negative integer`)
+    }
   }
 }
 

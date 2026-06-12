@@ -154,6 +154,49 @@ test('ccjs file --emit c reads embedded profile capability config', async () => 
   }
 })
 
+test('ccjs file --emit c reads C budget config', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-budget-config-test-'))
+  const out = join(dir, 'values.c')
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  const values = [1, 2, 3]
+  console.log(values.length)
+}
+`)
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      budgets: {
+        maxRuntimeRequirements: 0
+      }
+    }, null, 2)}\n`)
+
+    const exceeded = await runCli(['main.ts', '--emit', 'c', '-o', out], {
+      cwd: dir
+    })
+
+    assert.equal(exceeded.code, 1)
+    assert.match(exceeded.stderr, /CCJS_BUDGET: C target uses 3 runtime requirements/)
+
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      budgets: {
+        maxRuntimeRequirements: 3
+      }
+    }, null, 2)}\n`)
+
+    const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${out}\n`)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs module graph --emit c writes bundled C source', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-test-'))
   const out = join(dir, 'modules.c')
@@ -567,6 +610,34 @@ test('ccjs build --target c reports invalid capability config', async () => {
 
     assert.equal(result.code, 1)
     assert.match(result.stderr, /invalid ccjs\.config\.json: capability wallClock must be boolean/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('ccjs build --target c reports invalid budget config', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  console.log('hello')
+}
+`)
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      budgets: {
+        maxFeatures: -1
+      }
+    }, null, 2)}\n`)
+
+    const result = await runCli(['build', 'main.ts', '--target', 'c'], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 1)
+    assert.match(result.stderr, /invalid ccjs\.config\.json: budget maxFeatures must be a non-negative integer/)
   } finally {
     await rm(dir, {
       recursive: true,
