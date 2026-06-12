@@ -158,6 +158,11 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
+static const ccjs_field_info cycle_fields[] = {
+  { "self", 0 }
+};
+static const ccjs_shape cycle_shape = { 1, cycle_fields };
+
 int main(void) {
   ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
   const char* source = "{\\"name\\":\\"Ada\\",\\"unicode\\":\\"\\\\u00e9 \\\\u0416 \\\\ud83d\\\\ude00\\",\\"scores\\":[3,4],\\"active\\":true}";
@@ -165,17 +170,26 @@ int main(void) {
   ccjs_value name;
   ccjs_value unicode;
   ccjs_value text;
+  ccjs_value ignored;
+  ccjs_value cycle;
 
   if (ccjs_json_parse(&allocator, source, strlen(source), &value) != CCJS_OK) return 1;
   if (ccjs_object_get(value, "name", 4, &name) != CCJS_OK) return 2;
   if (ccjs_object_get(value, "unicode", 7, &unicode) != CCJS_OK) return 3;
   if (ccjs_json_stringify(&allocator, value, &text) != CCJS_OK) return 4;
+  if (ccjs_json_stringify(&allocator, ccjs_undefined_value(), &ignored) != CCJS_ERR_UNSUPPORTED) return 5;
+  if (ccjs_object_new(&allocator, &cycle_shape, &cycle) != CCJS_OK) return 6;
+  if (ccjs_object_init_known(cycle, 0, cycle) != CCJS_OK) return 7;
+  if (ccjs_json_stringify(&allocator, cycle, &ignored) != CCJS_ERR_UNSUPPORTED) return 8;
+  if (ccjs_object_set_known(cycle, 0, ccjs_null_value()) != CCJS_OK) return 9;
 
   ccjs_string* name_string = (ccjs_string*)name.as.ref;
   ccjs_string* unicode_string = (ccjs_string*)unicode.as.ref;
   ccjs_string* text_string = (ccjs_string*)text.as.ref;
   printf("%.*s %.*s %.*s\\n", (int)name_string->len, name_string->bytes, (int)unicode_string->len, unicode_string->bytes, (int)text_string->len, text_string->bytes);
 
+  ccjs_release(cycle);
+  ccjs_release(ignored);
   ccjs_release(text);
   ccjs_release(unicode);
   ccjs_release(name);

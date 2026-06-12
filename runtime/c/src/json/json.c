@@ -26,6 +26,11 @@ typedef struct ccjs_json_parser {
   size_t pos;
 } ccjs_json_parser;
 
+typedef struct ccjs_json_stringify_stack {
+  const ccjs_ref* refs[CCJS_JSON_MAX_DEPTH + 1];
+  size_t len;
+} ccjs_json_stringify_stack;
+
 static void ccjs_json_buffer_dispose(ccjs_json_buffer* buffer) {
   if (buffer == 0 || buffer->allocator == 0 || buffer->allocator->free == 0 || buffer->bytes == 0) {
     return;
@@ -755,7 +760,50 @@ ccjs_status ccjs_json_parse(ccjs_allocator* allocator, const char* bytes, size_t
   return CCJS_OK;
 }
 
-static ccjs_status ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_value value, size_t depth);
+static ccjs_status ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth);
+
+static bool ccjs_json_stringify_stack_contains(const ccjs_json_stringify_stack* stack, const ccjs_ref* ref) {
+  if (stack == 0 || ref == 0) {
+    return false;
+  }
+
+  for (size_t index = 0; index < stack->len; index += 1) {
+    if (stack->refs[index] == ref) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static ccjs_status ccjs_json_stringify_stack_push(ccjs_json_stringify_stack* stack, const ccjs_ref* ref) {
+  if (stack == 0 || ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (ccjs_json_stringify_stack_contains(stack, ref)) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  if (stack->len >= CCJS_JSON_MAX_DEPTH + 1) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  stack->refs[stack->len] = ref;
+  stack->len += 1;
+
+  return CCJS_OK;
+}
+
+static void ccjs_json_stringify_stack_pop(ccjs_json_stringify_stack* stack, const ccjs_ref* ref) {
+  if (stack == 0 || ref == 0 || stack->len == 0) {
+    return;
+  }
+
+  if (stack->refs[stack->len - 1] == ref) {
+    stack->len -= 1;
+  }
+}
 
 static ccjs_status ccjs_json_stringify_string_bytes(ccjs_json_buffer* buffer, const char* bytes, size_t len) {
   ccjs_status status = ccjs_json_buffer_push_char(buffer, '"');
@@ -811,12 +859,18 @@ static ccjs_status ccjs_json_stringify_number(ccjs_json_buffer* buffer, double n
   return ccjs_json_buffer_push_bytes(buffer, temp, (size_t)written);
 }
 
-static ccjs_status ccjs_json_stringify_array(ccjs_json_buffer* buffer, ccjs_value value, size_t depth) {
+static ccjs_status ccjs_json_stringify_array(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
   ccjs_array* array = (ccjs_array*)value.as.ref;
-  ccjs_status status = ccjs_json_buffer_push_char(buffer, '[');
+  ccjs_status status = ccjs_json_stringify_stack_push(stack, value.as.ref);
 
   if (status != CCJS_OK) {
     return status;
+  }
+
+  status = ccjs_json_buffer_push_char(buffer, '[');
+
+  if (status != CCJS_OK) {
+    goto done;
   }
 
   for (size_t index = 0; index < array->len; index += 1) {
@@ -824,26 +878,36 @@ static ccjs_status ccjs_json_stringify_array(ccjs_json_buffer* buffer, ccjs_valu
       status = ccjs_json_buffer_push_char(buffer, ',');
 
       if (status != CCJS_OK) {
-        return status;
+        goto done;
       }
     }
 
-    status = ccjs_json_stringify_value(buffer, array->items[index], depth + 1);
+    status = ccjs_json_stringify_value(buffer, stack, array->items[index], depth + 1);
 
     if (status != CCJS_OK) {
-      return status;
+      goto done;
     }
   }
 
-  return ccjs_json_buffer_push_char(buffer, ']');
+  status = ccjs_json_buffer_push_char(buffer, ']');
+
+done:
+  ccjs_json_stringify_stack_pop(stack, value.as.ref);
+  return status;
 }
 
-static ccjs_status ccjs_json_stringify_object(ccjs_json_buffer* buffer, ccjs_value value, size_t depth) {
+static ccjs_status ccjs_json_stringify_object(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
   ccjs_object* object = (ccjs_object*)value.as.ref;
-  ccjs_status status = ccjs_json_buffer_push_char(buffer, '{');
+  ccjs_status status = ccjs_json_stringify_stack_push(stack, value.as.ref);
 
   if (status != CCJS_OK) {
     return status;
+  }
+
+  status = ccjs_json_buffer_push_char(buffer, '{');
+
+  if (status != CCJS_OK) {
+    goto done;
   }
 
   for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
@@ -851,7 +915,7 @@ static ccjs_status ccjs_json_stringify_object(ccjs_json_buffer* buffer, ccjs_val
       status = ccjs_json_buffer_push_char(buffer, ',');
 
       if (status != CCJS_OK) {
-        return status;
+        goto done;
       }
     }
 
@@ -863,18 +927,22 @@ static ccjs_status ccjs_json_stringify_object(ccjs_json_buffer* buffer, ccjs_val
     }
 
     if (status == CCJS_OK) {
-      status = ccjs_json_stringify_value(buffer, object->fields[index], depth + 1);
+      status = ccjs_json_stringify_value(buffer, stack, object->fields[index], depth + 1);
     }
 
     if (status != CCJS_OK) {
-      return status;
+      goto done;
     }
   }
 
-  return ccjs_json_buffer_push_char(buffer, '}');
+  status = ccjs_json_buffer_push_char(buffer, '}');
+
+done:
+  ccjs_json_stringify_stack_pop(stack, value.as.ref);
+  return status;
 }
 
-static ccjs_status ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_value value, size_t depth) {
+static ccjs_status ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
   if (depth > CCJS_JSON_MAX_DEPTH) {
     return CCJS_ERR_UNSUPPORTED;
   }
@@ -900,11 +968,11 @@ static ccjs_status ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_valu
   }
 
   if (value.tag == CCJS_TAG_ARRAY && value.as.ref != 0) {
-    return ccjs_json_stringify_array(buffer, value, depth);
+    return ccjs_json_stringify_array(buffer, stack, value, depth);
   }
 
   if (value.tag == CCJS_TAG_OBJECT && value.as.ref != 0) {
-    return ccjs_json_stringify_object(buffer, value, depth);
+    return ccjs_json_stringify_object(buffer, stack, value, depth);
   }
 
   return CCJS_ERR_UNSUPPORTED;
@@ -919,7 +987,8 @@ ccjs_status ccjs_json_stringify(ccjs_allocator* allocator, ccjs_value value, ccj
   ccjs_json_buffer buffer = {
     .allocator = allocator
   };
-  ccjs_status status = ccjs_json_stringify_value(&buffer, value, 0);
+  ccjs_json_stringify_stack stack = { 0 };
+  ccjs_status status = ccjs_json_stringify_value(&buffer, &stack, value, 0);
 
   if (status == CCJS_OK) {
     status = ccjs_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, out);
