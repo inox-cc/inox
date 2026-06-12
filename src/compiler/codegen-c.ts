@@ -69,6 +69,7 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const needsTimeRuntime = runtimeRequirements.has('clocks')
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
+  baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
   const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime, options)
@@ -87,6 +88,11 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
 
   for (const wrapper of promiseChainCallbackWrappers) {
     lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
+    lines.push('')
+  }
+
+  if (baseContext.unhandledRejectionFlag != null) {
+    lines.push(`static int ${baseContext.unhandledRejectionFlag} = 0;`)
     lines.push('')
   }
 
@@ -626,6 +632,7 @@ function createBaseContext(diagnostics, functionDeclarations: IrFunctionDeclarat
     runtimeFunctionParams: new Map(),
     externalEventLoopFunctions: new Set(),
     throwingFunctions: throwing.throwingFunctions,
+    unhandledRejectionFlag: null as string | null,
     nextId: 0
   }
 }
@@ -3961,10 +3968,12 @@ function emitMainWrapper(entryIrProgram, baseContext) {
 
   if (hasIrFunctionDeclaration(entryIrProgram, 'main')) {
     if (!functionTakesEventLoopParam('main', baseContext)) {
+      const returnExpression = emitMainReturnExpression(context)
+
       return [
         'int main(void) {',
         '  ccjs_main();',
-        '  return 0;',
+        `  return ${returnExpression};`,
         '}'
       ]
     }
@@ -3984,7 +3993,7 @@ function emitMainWrapper(entryIrProgram, baseContext) {
       lines.push(...emitEventLoopCleanup(context).map(line => `  ${line}`))
     }
 
-    lines.push('  return 0;')
+    lines.push(`  return ${emitMainReturnExpression(context)};`)
     lines.push('}')
 
     return lines
@@ -4019,10 +4028,16 @@ function emitMainWrapper(entryIrProgram, baseContext) {
     lines.push(...emitBoxedValueCleanup(context).map(line => `  ${line}`))
   }
 
-  lines.push('  return 0;')
+  lines.push(`  return ${emitMainReturnExpression(context)};`)
   lines.push('}')
 
   return lines
+}
+
+function emitMainReturnExpression(context) {
+  return context.unhandledRejectionFlag == null
+    ? '0'
+    : `${context.unhandledRejectionFlag} == 0 ? 0 : 1`
 }
 
 function emitCFunctionName(name) {
@@ -12554,7 +12569,21 @@ function emitOwnedValueCleanup(context) {
 }
 
 function emitOwnedPromiseCleanup(context) {
-  return context.ownedPromises.toReversed().map(name => `if (${name} != 0) ccjs_promise_release(${name});`)
+  return context.ownedPromises.toReversed().flatMap(name => {
+    const release = `if (${name} != 0) ccjs_promise_release(${name});`
+
+    if (context.unhandledRejectionFlag == null) {
+      return [release]
+    }
+
+    return [
+      `if (${name} != 0 && ccjs_promise_is_unhandled_rejection(${name})) {`,
+      '  fprintf(stderr, "Unhandled Promise rejection\\n");',
+      `  ${context.unhandledRejectionFlag} = 1;`,
+      '}',
+      release
+    ]
+  })
 }
 
 function emitEventLoopInit(context) {

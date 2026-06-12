@@ -894,6 +894,45 @@ int main(void) {
   }
 })
 
+test('generated C reports unhandled Promise rejections', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-unhandled-promise-'))
+  const source = join(dir, 'unhandled-promise.c')
+  const output = join(dir, 'unhandled-promise')
+
+  try {
+    const result = compileSource(`export async function main(): Promise<void> {
+  Promise.reject('boom')
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 1)
+    assert.equal(run.stdout, '')
+    assert.equal(run.stderr, 'Unhandled Promise rejection\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('C runtime loop polls immediates and timers by turn', async t => {
   const probe = await runCommand('cc', ['--version'])
 

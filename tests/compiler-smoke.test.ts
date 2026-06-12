@@ -4452,6 +4452,19 @@ export async function main(): Promise<void> {
   assert.match(result.code, /ccjs_promise_\d+ = loadText\(&ccjs_loop\);/)
 })
 
+test('reports unhandled owned Promise rejections from generated C main', () => {
+  const result = compileSource(`export async function main(): Promise<void> {
+  Promise.reject('boom')
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static int ccjs_unhandled_rejection = 0;/)
+  assert.match(result.code, /if \(ccjs_promise_\d+ != 0 && ccjs_promise_is_unhandled_rejection\(ccjs_promise_\d+\)\) \{\n    fprintf\(stderr, "Unhandled Promise rejection\\n"\);\n    ccjs_unhandled_rejection = 1;\n  \}/)
+  assert.match(result.code, /return ccjs_unhandled_rejection == 0 \? 0 : 1;/)
+})
+
 test('lowers first C async await slice over Promise.resolve and fs promises', () => {
   const result = compileSource(`async function loadText(): Promise<string> {
   return fs.readFile('/tmp/out.txt', 'utf8')
