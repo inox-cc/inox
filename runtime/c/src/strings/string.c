@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include "ccjs/array.h"
 #include "ccjs/string.h"
 
 ccjs_status ccjs_string_from_literal(ccjs_allocator* allocator, const char* bytes, size_t len, ccjs_value* out) {
@@ -164,6 +165,82 @@ ccjs_status ccjs_string_slice_parts(ccjs_allocator* allocator, const char* value
   const char* bytes = value_bytes == 0 ? "" : value_bytes;
 
   return ccjs_string_from_literal(allocator, bytes + start, end - start, out);
+}
+
+static ccjs_status ccjs_string_split_push(ccjs_allocator* allocator, ccjs_value array, const char* bytes, size_t len) {
+  ccjs_value item = ccjs_undefined_value();
+  ccjs_status status = ccjs_string_from_literal(allocator, bytes == 0 ? "" : bytes, len, &item);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  status = ccjs_array_push(array, item);
+  ccjs_release(item);
+
+  return status;
+}
+
+ccjs_status ccjs_string_split_parts(ccjs_allocator* allocator, const char* value_bytes, size_t value_len, const char* separator_bytes, size_t separator_len, ccjs_value* out) {
+  if (out != 0) {
+    *out = ccjs_undefined_value();
+  }
+
+  if (allocator == 0 || allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0 || out == 0 || (value_bytes == 0 && value_len != 0) || (separator_bytes == 0 && separator_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  const char* separator = separator_bytes == 0 ? "" : separator_bytes;
+  ccjs_status status = ccjs_array_new(allocator, 0, out);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  if (separator_len == 0) {
+    for (size_t index = 0; index < value_len; index += 1) {
+      status = ccjs_string_split_push(allocator, *out, bytes + index, 1);
+
+      if (status != CCJS_OK) {
+        ccjs_release(*out);
+        *out = ccjs_undefined_value();
+        return status;
+      }
+    }
+
+    return CCJS_OK;
+  }
+
+  size_t start = 0;
+  size_t index = 0;
+
+  while (index + separator_len <= value_len) {
+    if (memcmp(bytes + index, separator, separator_len) != 0) {
+      index += 1;
+      continue;
+    }
+
+    status = ccjs_string_split_push(allocator, *out, bytes + start, index - start);
+
+    if (status != CCJS_OK) {
+      ccjs_release(*out);
+      *out = ccjs_undefined_value();
+      return status;
+    }
+
+    index += separator_len;
+    start = index;
+  }
+
+  status = ccjs_string_split_push(allocator, *out, bytes + start, value_len - start);
+
+  if (status != CCJS_OK) {
+    ccjs_release(*out);
+    *out = ccjs_undefined_value();
+  }
+
+  return status;
 }
 
 bool ccjs_string_includes_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len) {

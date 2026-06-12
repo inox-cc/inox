@@ -3997,6 +3997,51 @@ export function main(): void {
   }
 })
 
+test('generated C string split compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-split-'))
+  const source = join(dir, 'string-split.c')
+  const output = join(dir, 'string-split')
+
+  try {
+    const result = compileSource(`type User = {
+  names: string
+}
+
+export function main(): void {
+  const user: User = { names: 'Ada,Grace' }
+  const names = user.names.split(',')
+  const initials = user.names.split(',').map(name => name.slice(0, 1)).sort()
+  console.log(names[0], names[1], initials[0], initials[1], 'abc'.split('')[1])
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada Grace A G b\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C string trim compiles and runs with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

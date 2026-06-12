@@ -6937,6 +6937,10 @@ function emitCValueExpression(expression, context) {
     return emitCStringSliceValueExpression(expression, context)
   }
 
+  if (isStringSplitCall(expression, context)) {
+    return emitCStringSplitValueExpression(expression, context)
+  }
+
   if (isStringConcatExpression(expression, context)) {
     return emitCStringConcatValueExpression(expression, context)
   }
@@ -7723,6 +7727,25 @@ function emitCStringSliceValueExpression(expression, context) {
       emitStatusCheck(`ccjs_string_slice_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, (size_t)(${start.expression}), (size_t)(${end.expression}), &${temp})`, context)
     ],
     expression: temp
+  }
+}
+
+function emitCStringSplitValueExpression(expression, context) {
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_split_string')
+  const separator = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_split_separator')
+  const temp = nextCName(context, 'ccjs_split_array')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...value.lines,
+      ...separator.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_string_split_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${separator.bytes}, ${separator.length}, &${temp})`, context),
+      emitRuntimeValueCheck(temp, 'CCJS_TAG_ARRAY', context)
+    ],
+    expression: temp,
+    elementType: 'string'
   }
 }
 
@@ -10328,6 +10351,10 @@ function inferExpressionType(expression, context) {
     return 'string'
   }
 
+  if (isStringSplitCall(expression, context)) {
+    return 'array'
+  }
+
   if (isStringPredicateCall(expression, context)) {
     return 'boolean'
   }
@@ -10650,6 +10677,14 @@ function isStringSliceCall(expression, context) {
   }
 
   return isStringLengthObject(expression.callee.object, context) && expression.args.every(arg => inferExpressionType(arg, context) === 'number')
+}
+
+function isStringSplitCall(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'split' || expression.args.length !== 1) {
+    return false
+  }
+
+  return isStringLengthObject(expression.callee.object, context) && inferExpressionType(expression.args[0], context) === 'string'
 }
 
 function isStringPredicateCall(expression, context) {
@@ -11270,7 +11305,7 @@ function emitPreparedArrayReceiver(expression, context) {
       return null
     }
 
-    const call = emitPreparedArrayMapCallExpression(expression, context) ?? emitPreparedArrayFilterCallExpression(expression, context) ?? emitPreparedArraySortCallExpression(expression, context)
+    const call = emitPreparedArrayMapCallExpression(expression, context) ?? emitPreparedArrayFilterCallExpression(expression, context) ?? emitPreparedArraySortCallExpression(expression, context) ?? emitCStringSplitValueExpression(expression, context)
 
     return call == null
       ? null
@@ -12536,7 +12571,7 @@ function rootReferenceName(expression) {
 }
 
 function isCStringRuntimeMethodName(name) {
-  return name === 'trim' || name === 'slice' || cStringPredicateMethods.has(name)
+  return name === 'trim' || name === 'slice' || name === 'split' || cStringPredicateMethods.has(name)
 }
 
 function withVariableScope(context, callback) {

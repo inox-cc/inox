@@ -834,9 +834,15 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('string-bytes')
   }
 
-  if (stringRuntimeMethodName(expression) != null) {
+  const stringMethod = stringRuntimeMethodName(expression)
+
+  if (stringMethod != null) {
     features.add('runtime-values')
     features.add('string-bytes')
+
+    if (stringMethod === 'split') {
+      features.add('collections')
+    }
   }
 }
 
@@ -901,7 +907,7 @@ function stringRuntimeMethodName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['endsWith', 'includes', 'slice', 'startsWith', 'trim'].includes(expression.callee.property) ? expression.callee.property : null
+  return ['endsWith', 'includes', 'slice', 'split', 'startsWith', 'trim'].includes(expression.callee.property) ? expression.callee.property : null
 }
 
 function timeRuntimeCallName(callee: AnyNode): string | null {

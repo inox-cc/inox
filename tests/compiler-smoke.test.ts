@@ -440,6 +440,31 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, message->bytes, message->len, \(size_t\)\(3\), \(size_t\)\(message->len\), &ccjs_value_\d+\)/)
 })
 
+test('lowers C string split for literals and runtime strings', () => {
+  const result = compileSource(`type User = {
+  names: string
+}
+
+export function main(): void {
+  const user: User = { names: 'Ada,Grace' }
+  const names = user.names.split(',')
+  const initials = user.names.split(',').map(name => name.slice(0, 1)).sort()
+  console.log(names[0], names[1], initials[0], initials[1])
+}
+`, {
+    target: 'c'
+  })
+
+  assert.deepEqual(result.ir.runtimeRequirements, [
+    'collections',
+    'managed-values',
+    'objects',
+    'string-bytes'
+  ])
+  assert.match(result.code, /ccjs_string_split_parts\(&ccjs_default_allocator, ccjs_split_string_\d+->bytes, ccjs_split_string_\d+->len, ",", 1, &ccjs_split_array_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, name->bytes, name->len, \(size_t\)\(0\), \(size_t\)\(1\), &ccjs_value_\d+\)/)
+})
+
 test('lowers C string trim for literals and runtime strings', () => {
   const result = compileSource(`type User = {
   name: string
@@ -6444,6 +6469,32 @@ export function main(): void {
   assertDiagnostic(`export function main(): void {
   const name = 'Ada'
   name.slice()
+}
+`, 'CCJS_ARG_COUNT')
+})
+
+test('checks string split as a string array call', () => {
+  const result = compileSource(`export function main(): void {
+  const parts = 'Ada,Grace'.split(',')
+  const first: string = parts[0]
+  console.log(first)
+}
+`, {
+    target: 'ts'
+  })
+
+  assert.match(result.code, /const parts: string\[\] = "Ada,Grace"\.split\(","\)/)
+  assert.match(result.code, /const first: string = parts\[0\]/)
+  assert.equal(result.hir.body[0].body[0].valueType, 'array')
+  assert.equal(result.hir.body[0].body[0].arrayElementType, 'string')
+
+  assertDiagnostic(`export function main(): void {
+  'Ada'.split(1)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  'Ada'.split()
 }
 `, 'CCJS_ARG_COUNT')
 })

@@ -1263,6 +1263,12 @@ class Checker {
       return stringSliceType
     }
 
+    const stringSplitType = this.checkStringSplitCall(expression)
+
+    if (stringSplitType != null) {
+      return stringSplitType
+    }
+
     const stringMethodType = this.checkStringPredicateCall(expression)
 
     if (stringMethodType != null) {
@@ -2306,6 +2312,33 @@ class Checker {
     }
 
     return 'string'
+  }
+
+  checkStringSplitCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'split') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+
+    if (objectType !== 'string') {
+      return null
+    }
+
+    if (expression.args.length !== 1) {
+      this.report('CCJS_ARG_COUNT', `string.split expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    if (argTypes[0] != null) {
+      this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+    }
+
+    expression.valueType = 'array'
+    expression.arrayElementType = 'string'
+    expression.arrayElementDeclaredType = 'string'
+
+    return 'array'
   }
 
   checkStringPredicateCall(expression: AnyNode): ValueType | null {
