@@ -2612,7 +2612,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame produced string prefix locals compile and run', async t => {
+test('generated C async task frame string prefix locals compile and run', async t => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2640,8 +2640,24 @@ test('generated C async task frame produced string prefix locals compile and run
   }
 }
 
+async function literal(): Promise<string> {
+  try {
+    const prefix: string = 'Ada'
+    try {
+      const value: number = await Promise.resolve(3)
+    } finally {
+      console.log(prefix)
+    }
+    console.log(prefix)
+    return prefix
+  } finally {
+    console.log('outer')
+  }
+}
+
 export async function main(): Promise<void> {
   console.log(await work(4))
+  console.log(await literal())
 }
 `, {
       target: 'c'
@@ -2656,7 +2672,7 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '4\n4\n4\n4\n')
+    assert.equal(run.stdout, '4\n4\n4\n4\nAda\nAda\nouter\nAda\n')
   } finally {
     await rm(dir, {
       recursive: true,

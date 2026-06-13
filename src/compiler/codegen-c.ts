@@ -1087,7 +1087,8 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
       locals.push({
         name: statement.name,
         type: valueType,
-        fieldName: `prefix_${emitCIdentifier(statement.name)}`
+        fieldName: `prefix_${emitCIdentifier(statement.name)}`,
+        forceRuntimeStringDeclaration: valueType === 'string' && isRawStringLiteralExpression(statement.init)
       })
     }
   }
@@ -1117,7 +1118,7 @@ function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
 function isRuntimeStringPrefixLocalDeclaration(statement, context) {
   const expression = statement?.init
 
-  if (resolveRuntimeStringReference(expression, context) != null || isRuntimeProducedStringExpression(expression, context)) {
+  if (resolveRuntimeStringReference(expression, context) != null || isRuntimeProducedStringExpression(expression, context) || isRawStringLiteralExpression(expression)) {
     return true
   }
 
@@ -1136,6 +1137,10 @@ function isRuntimeStringPrefixLocalDeclaration(statement, context) {
   }
 
   return false
+}
+
+function isRawStringLiteralExpression(expression) {
+  return expression?.type === 'StringLiteral' || (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${'))
 }
 
 function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
@@ -1477,6 +1482,9 @@ function emitAsyncTaskWrapperDeclaration(wrapper, baseContext) {
 
 function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', 0)
+  context.forceRuntimeStringDeclarations = new Set(wrapper.prefixLocals
+    .filter(local => local.forceRuntimeStringDeclaration === true)
+    .map(local => local.name))
   context.failureStatement = 'goto ccjs_start_error;'
   const prefixAndScheduleLines = withVariableScope(context, () => [
     ...emitStatementList(wrapper.prefixStatements ?? [], context),
@@ -6810,6 +6818,10 @@ function emitScalarVariableDeclaration(statement, context) {
     }
 
     const runtimeElement = resolveRuntimeArrayIndex(statement.init, context)
+
+    if (context.forceRuntimeStringDeclarations?.has(statement.name) && isRawStringLiteralExpression(statement.init)) {
+      return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
+    }
 
     if (isRuntimeProducedStringExpression(statement.init, context) || runtimeElement?.valueType === 'string') {
       return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
