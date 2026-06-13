@@ -8474,6 +8474,46 @@ test('generated C Buffer and Uint8Array APIs compile and run with runtime source
   }
 })
 
+test('generated C crypto.getRandomValues compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-crypto-random-'))
+  const source = join(dir, 'crypto-random.c')
+  const output = join(dir, 'crypto-random')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const bytes = Buffer.alloc(8)
+  const filled = crypto.getRandomValues(bytes)
+  console.log(filled.length, bytes.length, filled[0] >= 0, filled[0] < 256)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '8 8 1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C Map and Set methods compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

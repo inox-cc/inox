@@ -16,6 +16,7 @@ const jsStdGlobalRoots = new Set([
   'Uint8Array',
   'Uint16Array',
   'Uint32Array',
+  'crypto',
   'fetch',
   'fs',
   'http',
@@ -204,6 +205,9 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
       requirements.add('managed-values')
     } else if (feature === 'collections') {
       requirements.add('collections')
+      requirements.add('managed-values')
+    } else if (feature === 'crypto') {
+      requirements.add('binary')
       requirements.add('managed-values')
     } else if (feature === 'objects') {
       requirements.add('managed-values')
@@ -828,6 +832,11 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('runtime-values')
   }
 
+  if (cryptoRuntimeCallName(expression.callee) != null) {
+    features.add('crypto')
+    features.add('runtime-values')
+  }
+
   if (timerRuntimeCallName(expression.callee) != null) {
     features.add('timers')
   }
@@ -923,6 +932,14 @@ function binaryRuntimeMethodName(expression: AnyNode): string | null {
   }
 
   return typeof expression.binaryRuntimeMethod === 'string' ? expression.binaryRuntimeMethod : null
+}
+
+function cryptoRuntimeCallName(callee: AnyNode): string | null {
+  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1 || callee.object.path[0] !== 'crypto') {
+    return null
+  }
+
+  return callee.property === 'getRandomValues' ? callee.property : null
 }
 
 function isObjectFieldExpression(expression: AnyNode | null | undefined): boolean {

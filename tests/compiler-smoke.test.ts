@@ -5733,6 +5733,56 @@ test('lowers Buffer and Uint8Array APIs to C binary runtime calls', () => {
 `, 'CCJS_TYPE_MISMATCH')
 })
 
+test('types and lowers crypto.getRandomValues as a bytes-preserving call', () => {
+  const source = `export function main(): void {
+  const bytes = Buffer.alloc(4)
+  const filled = crypto.getRandomValues(bytes)
+  console.log(filled.length)
+}
+`
+  const ts = compileSource(source, {
+    target: 'ts'
+  })
+
+  assert.deepEqual(ts.ir.features, [
+    'binary',
+    'crypto',
+    'runtime-values',
+    'string-bytes'
+  ])
+  assert.deepEqual(ts.ir.runtimeRequirements, [
+    'binary',
+    'managed-values',
+    'string-bytes'
+  ])
+  assert.deepEqual(ts.ir.globalUsages.map(usage => usage.path.join('.')), [
+    'Buffer.alloc',
+    'crypto.getRandomValues'
+  ])
+  assert.match(ts.code, /const filled: Buffer = crypto\.getRandomValues\(bytes\)/)
+
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /#include <stdint\.h>/)
+  assert.match(c.code, /#include "ccjs\/binary\.h"/)
+  assert.match(c.code, /static int ccjs_os_random_bytes\(uint8_t\* out, size_t len\)/)
+  assert.match(c.code, /static ccjs_status ccjs_crypto_get_random_values\(ccjs_value value\)/)
+  assert.match(c.code, /if \(ccjs_crypto_get_random_values\(bytes\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(c.code, /ccjs_retain\(ccjs_crypto_bytes_\d+\);/)
+
+  assertDiagnostic(`export function main(): void {
+  crypto.getRandomValues('text')
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  crypto.getRandomValues()
+}
+`, 'CCJS_ARG_COUNT')
+})
+
 test('maps fs sync helpers to Node fs and C runtime calls', () => {
   const ts = compileSource(`export function main(): void {
   const text = fs.readFileSync('/tmp/value.txt')
@@ -5966,12 +6016,12 @@ test('configures C Math.random os backend through compiler options', () => {
   assert.match(result.code, /#define _CRT_RAND_S/)
   assert.match(result.code, /#include <sys\/random\.h>/)
   assert.match(result.code, /static uint32_t ccjs_math_random_state = 0x00000001u;/)
-  assert.match(result.code, /static int ccjs_math_random_os_u32\(uint32_t\* out\)/)
+  assert.match(result.code, /static int ccjs_os_random_bytes\(uint8_t\* out, size_t len\)/)
   assert.match(result.code, /rand_s\(&value\)/)
-  assert.match(result.code, /\*out = arc4random\(\);/)
-  assert.match(result.code, /getrandom\(out, sizeof\(\*out\), 0\)/)
+  assert.match(result.code, /arc4random_buf\(out, len\);/)
+  assert.match(result.code, /getrandom\(out \+ filled, len - filled, 0\)/)
   assert.match(result.code, /open\("\/dev\/urandom", O_RDONLY\)/)
-  assert.match(result.code, /if \(!ccjs_math_random_os_u32\(&value\)\) \{/)
+  assert.match(result.code, /if \(!ccjs_os_random_bytes\(\(uint8_t\*\)&value, sizeof\(value\)\)\) \{/)
   assert.match(result.code, /ccjs_math_random_state = ccjs_math_random_state \* 1664525u \+ 1013904223u;/)
   assert.doesNotMatch(result.code, /value \^= value << 13;/)
 })
@@ -6162,7 +6212,43 @@ test('reports embedded entropy capability diagnostics for OS Math.random backend
     }
   })
 
-  assert.match(enabled.code, /ccjs_math_random_os_u32/)
+  assert.match(enabled.code, /ccjs_os_random_bytes/)
+})
+
+test('reports embedded entropy capability diagnostics for crypto.getRandomValues', () => {
+  const source = `export function main(): void {
+  const bytes = Buffer.alloc(4)
+  crypto.getRandomValues(bytes)
+  console.log(bytes.length)
+}
+`
+
+  assert.throws(() => {
+    compileSource(source, {
+      target: 'c',
+      profile: 'embedded'
+    })
+  }, error => {
+    if (!(error instanceof CompileError)) {
+      return false
+    }
+
+    assert.equal(error.diagnostics.every(item => item.code === 'CCJS_CAPABILITY'), true)
+    assert.deepEqual(error.diagnostics.map(item => item.message), [
+      'embedded profile requires entropy capability for crypto.getRandomValues'
+    ])
+    return true
+  })
+
+  const enabled = compileSource(source, {
+    target: 'c',
+    profile: 'embedded',
+    capabilities: {
+      entropy: true
+    }
+  })
+
+  assert.match(enabled.code, /ccjs_crypto_get_random_values/)
 })
 
 test('reports embedded heap capability diagnostics for array-producing methods', () => {

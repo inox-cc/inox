@@ -10,3 +10,7 @@ declare const fs: {
   writeFileBytesSync(path: string, bytes: Buffer): void
   writeFileSync(path: string, text: string): void
 }
+
+declare const crypto: {
+  getRandomValues<T extends Buffer | Uint8Array>(bytes: T): T
+}

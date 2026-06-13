@@ -123,11 +123,12 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   const needsRuntime = baseContext.throwingFunctions.size > 0 || needsAsyncRuntime || needsCallbackRuntime || needsCollectionRuntime || needsObjectRuntime || needsClassRuntime || needsJsonRuntime || runtimeRequirements.has('managed-values')
   const needsTimeRuntime = runtimeRequirements.has('clocks')
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
+  const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime, options)
+  const lines = emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsCryptoRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime, options)
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
   const promiseChainCallbackWrappers = [...baseContext.promiseChainWrappers.values()].filter(isPromiseChainCallbackWrapperWithContext)
 
@@ -224,14 +225,17 @@ function emitCUnit(irPrograms: IrProgram[], entryIrProgram: IrProgram | null = i
   return `${lines.join('\n')}\n`
 }
 
-function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime, options: CEmitOptions = {}) {
+function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsCryptoRuntime, needsAsyncRuntime, needsCallbackRuntime, needsStringHeader, needsCollectionRuntime, needsBinaryRuntime, needsObjectRuntime, needsFsRuntime, needsJsonRuntime, needsTimerRuntime, options: CEmitOptions = {}) {
   const lines = [
     '#include <stdio.h>'
   ]
 
-  if (needsMathRuntime) {
+  if (needsMathRuntime || needsCryptoRuntime) {
     lines.push('#include <stdint.h>')
-    lines.push(...emitMathRandomHeaders(options.random))
+  }
+
+  if (needsCryptoRuntime || (needsMathRuntime && (options.random?.backend ?? 'simple') === 'os')) {
+    lines.push(...emitOsEntropyHeaders())
   }
 
   if (needsStringHeader) {
@@ -279,8 +283,18 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsy
 
   lines.push('')
 
+  if (needsCryptoRuntime || (needsMathRuntime && (options.random?.backend ?? 'simple') === 'os')) {
+    lines.push(...emitOsEntropyHelper())
+    lines.push('')
+  }
+
   if (needsMathRuntime) {
     lines.push(...emitMathHelpers(options.random))
+    lines.push('')
+  }
+
+  if (needsCryptoRuntime) {
+    lines.push(...emitCryptoHelpers())
     lines.push('')
   }
 
@@ -411,11 +425,7 @@ function emitMathHelpers(random: RandomOptions = {}) {
   ]
 }
 
-function emitMathRandomHeaders(random: RandomOptions = {}) {
-  if ((random.backend ?? 'simple') !== 'os') {
-    return []
-  }
-
+function emitOsEntropyHeaders() {
   return [
     '#if defined(_WIN32) && defined(_MSC_VER)',
     '#define _CRT_RAND_S',
@@ -434,45 +444,61 @@ function emitMathRandomHeaders(random: RandomOptions = {}) {
   ]
 }
 
+function emitOsEntropyHelper() {
+  return [
+    'static int ccjs_os_random_bytes(uint8_t* out, size_t len) {',
+    '  if (out == 0 && len != 0) return 0;',
+    '#if defined(_WIN32) && defined(_MSC_VER)',
+    '  size_t filled = 0;',
+    '  while (filled < len) {',
+    '    unsigned int value = 0;',
+    '    if (rand_s(&value) != 0) return 0;',
+    '    for (size_t index = 0; index < sizeof(value) && filled < len; index += 1) {',
+    '      out[filled] = (uint8_t)(value >> (index * 8));',
+    '      filled += 1;',
+    '    }',
+    '  }',
+    '  return 1;',
+    '#elif defined(_WIN32)',
+    '  (void)out;',
+    '  (void)len;',
+    '  return 0;',
+    '#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)',
+    '  arc4random_buf(out, len);',
+    '  return 1;',
+    '#else',
+    '  size_t filled = 0;',
+    '#if defined(__linux__)',
+    '  while (filled < len) {',
+    '    ssize_t count = getrandom(out + filled, len - filled, 0);',
+    '    if (count <= 0) break;',
+    '    filled += (size_t)count;',
+    '  }',
+    '  if (filled == len) return 1;',
+    '#endif',
+    '  int fd = open("/dev/urandom", O_RDONLY);',
+    '  if (fd < 0) return 0;',
+    '  while (filled < len) {',
+    '    ssize_t count = read(fd, out + filled, len - filled);',
+    '    if (count <= 0) {',
+    '      close(fd);',
+    '      return 0;',
+    '    }',
+    '    filled += (size_t)count;',
+    '  }',
+    '  close(fd);',
+    '  return 1;',
+    '#endif',
+    '}'
+  ]
+}
+
 function emitRandomBackendHelper(backend: NonNullable<RandomOptions['backend']>) {
   if (backend === 'os') {
     return [
-      'static int ccjs_math_random_os_u32(uint32_t* out) {',
-      '#if defined(_WIN32) && defined(_MSC_VER)',
-      '  unsigned int value = 0;',
-      '  if (rand_s(&value) != 0) return 0;',
-      '  *out = (uint32_t)value;',
-      '  return 1;',
-      '#elif defined(_WIN32)',
-      '  (void)out;',
-      '  return 0;',
-      '#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)',
-      '  *out = arc4random();',
-      '  return 1;',
-      '#else',
-      '#if defined(__linux__)',
-      '  if (getrandom(out, sizeof(*out), 0) == (ssize_t)sizeof(*out)) return 1;',
-      '#endif',
-      '  int fd = open("/dev/urandom", O_RDONLY);',
-      '  if (fd < 0) return 0;',
-      '  unsigned char* bytes = (unsigned char*)out;',
-      '  size_t filled = 0;',
-      '  while (filled < sizeof(*out)) {',
-      '    ssize_t count = read(fd, bytes + filled, sizeof(*out) - filled);',
-      '    if (count <= 0) {',
-      '      close(fd);',
-      '      return 0;',
-      '    }',
-      '    filled += (size_t)count;',
-      '  }',
-      '  close(fd);',
-      '  return 1;',
-      '#endif',
-      '}',
-      '',
       'static double ccjs_math_random(void) {',
       '  uint32_t value = 0;',
-      '  if (!ccjs_math_random_os_u32(&value)) {',
+      '  if (!ccjs_os_random_bytes((uint8_t*)&value, sizeof(value))) {',
       '    ccjs_math_random_state = ccjs_math_random_state * 1664525u + 1013904223u;',
       '    value = ccjs_math_random_state;',
       '  }',
@@ -499,6 +525,17 @@ function emitRandomBackendHelper(backend: NonNullable<RandomOptions['backend']>)
     'static double ccjs_math_random(void) {',
     '  ccjs_math_random_state = ccjs_math_random_state * 1664525u + 1013904223u;',
     '  return (double)(ccjs_math_random_state >> 8) / 16777216.0;',
+    '}'
+  ]
+}
+
+function emitCryptoHelpers() {
+  return [
+    'static ccjs_status ccjs_crypto_get_random_values(ccjs_value value) {',
+    '  if (value.tag != CCJS_TAG_BYTES || value.as.ref == 0) return CCJS_ERR_TYPE;',
+    '  ccjs_bytes* bytes = (ccjs_bytes*)value.as.ref;',
+    '  if (bytes->len == 0) return CCJS_OK;',
+    '  return ccjs_os_random_bytes(bytes->bytes, bytes->len) ? CCJS_OK : CCJS_ERR_UNSUPPORTED;',
     '}'
   ]
 }
@@ -727,7 +764,12 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     || path === 'setTimeout'
     || path === 'Map'
     || path === 'Set'
+    || isSupportedCCryptoGlobalUsage(usage)
     || isSupportedCMathGlobalUsage(usage)
+}
+
+function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage): boolean {
+  return usage.path.join('.') === 'crypto.getRandomValues'
 }
 
 function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
@@ -5350,6 +5392,14 @@ function emitStatement(statement, context) {
       return collectionCall.lines
     }
 
+    const cryptoCall = emitPreparedCryptoCallExpression(statement.expression, context, {
+      discard: true
+    })
+
+    if (cryptoCall != null) {
+      return cryptoCall.lines
+    }
+
     const fsCall = emitPreparedFsCallExpression(statement.expression, context)
 
     if (fsCall != null) {
@@ -7888,6 +7938,12 @@ function emitCValueExpression(expression, context) {
     return jsonCall
   }
 
+  const cryptoCall = emitPreparedCryptoCallExpression(expression, context)
+
+  if (cryptoCall != null) {
+    return cryptoCall
+  }
+
   const binaryValue = emitPreparedBinaryValueExpression(expression, context)
 
   if (binaryValue != null) {
@@ -10200,6 +10256,12 @@ function emitPreparedCallExpression(expression, context) {
     return collectionCall
   }
 
+  const cryptoCall = emitPreparedCryptoCallExpression(expression, context)
+
+  if (cryptoCall != null) {
+    return cryptoCall
+  }
+
   const fsCall = emitPreparedFsCallExpression(expression, context)
 
   if (fsCall != null) {
@@ -10548,6 +10610,39 @@ function emitPreparedJsonScalarParseExpression(expression, context) {
   return {
     lines: value.lines,
     expression: valueType === 'boolean' ? `(${value.expression}.as.boolean ? 1 : 0)` : `${value.expression}.as.number`
+  }
+}
+
+function emitPreparedCryptoCallExpression(expression, context, options: { discard?: boolean } = {}) {
+  if (cCryptoRuntimeCallName(expression?.callee) !== 'getRandomValues') {
+    return null
+  }
+
+  const value = emitCValueExpression(expression.args[0], context)
+
+  if (options.discard === true) {
+    return {
+      lines: [
+        ...value.lines,
+        emitStatusCheck(`ccjs_crypto_get_random_values(${value.expression})`, context)
+      ],
+      expression: ''
+    }
+  }
+
+  const out = nextCName(context, 'ccjs_crypto_bytes')
+  registerOwnedValue(context, out)
+
+  return {
+    lines: [
+      ...value.lines,
+      emitStatusCheck(`ccjs_crypto_get_random_values(${value.expression})`, context),
+      ...emitPrepareOwnedValueWrite(out),
+      `${out} = ${value.expression};`,
+      emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context),
+      `ccjs_retain(${out});`
+    ],
+    expression: out
   }
 }
 
@@ -11698,6 +11793,10 @@ function inferExpressionType(expression, context) {
 
   if (expression?.type === 'CallExpression' && cJsonRuntimeCallName(expression.callee) != null) {
     return expression.valueType ?? (cJsonRuntimeCallName(expression.callee) === 'parse' ? 'object' : 'string')
+  }
+
+  if (expression?.type === 'CallExpression' && cCryptoRuntimeCallName(expression.callee) === 'getRandomValues') {
+    return 'bytes'
   }
 
   if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) != null && expression.valueType === 'promise') {
@@ -14123,6 +14222,18 @@ function cJsonRuntimeCallName(callee) {
   }
 
   return ['parse', 'stringify'].includes(callee.property) ? callee.property : null
+}
+
+function cCryptoRuntimeCallName(callee) {
+  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+    return null
+  }
+
+  if (callee.object.path[0] !== 'crypto') {
+    return null
+  }
+
+  return callee.property === 'getRandomValues' ? callee.property : null
 }
 
 function binaryRuntimeMethodName(callee) {

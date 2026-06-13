@@ -134,8 +134,8 @@ test('ccjs file --emit c reads Math.random os backend config', async () => {
 
     const c = await readFile(out, 'utf8')
 
-    assert.match(c, /static int ccjs_math_random_os_u32\(uint32_t\* out\)/)
-    assert.match(c, /arc4random\(\)|getrandom\(out, sizeof\(\*out\), 0\)|rand_s\(&value\)/)
+    assert.match(c, /static int ccjs_os_random_bytes\(uint8_t\* out, size_t len\)/)
+    assert.match(c, /arc4random_buf\(out, len\)|getrandom\(out \+ filled, len - filled, 0\)|rand_s\(&value\)/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -187,7 +187,7 @@ test('ccjs file --emit c checks embedded entropy capability for Math.random os b
 
     const c = await readFile(out, 'utf8')
 
-    assert.match(c, /ccjs_math_random_os_u32/)
+    assert.match(c, /ccjs_os_random_bytes/)
   } finally {
     await rm(dir, {
       recursive: true,

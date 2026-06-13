@@ -69,24 +69,35 @@ function collectCapabilityUsages(programs: IrProgram[], options: CompileOptions)
             loc: usage.loc
           }]
     }),
-    ...collectRandomCapabilityUsages(globalUsages, options),
+    ...collectEntropyCapabilityUsages(globalUsages, options),
     ...programs.flatMap(program => collectHeapCapabilityUsages(program.body))
   ]
 }
 
-function collectRandomCapabilityUsages(globalUsages: IrGlobalUsage[], options: CompileOptions): CapabilityUsage[] {
-  if (options.random?.backend !== 'os') {
-    return []
+function collectEntropyCapabilityUsages(globalUsages: IrGlobalUsage[], options: CompileOptions): CapabilityUsage[] {
+  const usages: CapabilityUsage[] = []
+
+  for (const usage of globalUsages) {
+    const path = usage.path.join('.')
+
+    if (path === 'Math.random' && options.random?.backend === 'os') {
+      usages.push({
+        key: 'entropy',
+        name: 'entropy',
+        path,
+        loc: usage.loc
+      })
+    } else if (path === 'crypto.getRandomValues') {
+      usages.push({
+        key: 'entropy',
+        name: 'entropy',
+        path,
+        loc: usage.loc
+      })
+    }
   }
 
-  return globalUsages
-    .filter(usage => usage.path.join('.') === 'Math.random')
-    .map(usage => ({
-      key: 'entropy',
-      name: 'entropy',
-      path: 'Math.random',
-      loc: usage.loc
-    }))
+  return usages
 }
 
 function collectHeapCapabilityUsages(node: unknown): CapabilityUsage[] {

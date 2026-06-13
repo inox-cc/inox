@@ -138,6 +138,11 @@ const globals = new Map<string, SymbolInfo>([
     mutable: false,
     valueType: 'object'
   }],
+  ['crypto', {
+    kind: 'global',
+    mutable: false,
+    valueType: 'object'
+  }],
   ['Math', {
     kind: 'global',
     mutable: false,
@@ -1355,6 +1360,12 @@ class Checker {
       return jsonType
     }
 
+    const cryptoType = this.checkCryptoCall(expression)
+
+    if (cryptoType != null) {
+      return cryptoType
+    }
+
     const timerType = this.checkTimerCall(expression)
 
     if (timerType != null) {
@@ -1510,6 +1521,30 @@ class Checker {
     if (arg.type !== 'StringLiteral' || arg.value !== 'utf8') {
       this.report('CCJS_TYPE_MISMATCH', `${label} encoding must be 'utf8' in the MVP`, arg.loc)
     }
+  }
+
+  checkCryptoCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.object.type !== 'Reference' || expression.callee.object.path.length !== 1 || expression.callee.object.path[0] !== 'crypto') {
+      return null
+    }
+
+    if (expression.callee.property !== 'getRandomValues') {
+      return null
+    }
+
+    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+
+    expression.valueType = 'bytes'
+    expression.cryptoRuntimeMethod = 'getRandomValues'
+
+    if (expression.args.length !== 1) {
+      this.report('CCJS_ARG_COUNT', `crypto.getRandomValues expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      return 'bytes'
+    }
+
+    this.checkAssignableType(argTypes[0], 'bytes', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+
+    return 'bytes'
   }
 
   checkClassMethodCall(expression: AnyNode): ValueType | null {

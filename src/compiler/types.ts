@@ -31,6 +31,7 @@ export type IrFeature =
   | 'callback-values'
   | 'clocks'
   | 'collections'
+  | 'crypto'
   | 'fs'
   | 'json'
   | 'map-index-set'
