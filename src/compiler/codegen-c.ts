@@ -1711,8 +1711,8 @@ function emitAsyncTaskPromiseChainCallbackContext(asyncWrapper, chainWrapper, co
   const lines: string[] = []
 
   for (const capture of chainWrapper.captures) {
-    if (capture.mutable && !isSupportedMutableRuntimeArrowCapture(capture, context)) {
-      context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'capturing this mutable binding in async Promise callbacks requires unsupported boxed closure storage', chainWrapper.expression.loc))
+    if (capture.mutable) {
+      context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'mutable Promise callback captures are outside the current C backend MVP; use const captures or move mutation outside the Promise callback', chainWrapper.expression.loc))
     }
 
     if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
@@ -9725,8 +9725,8 @@ function emitPromiseChainCallbackContext(wrapper, context) {
   const lines: string[] = []
 
   for (const capture of wrapper.captures) {
-    if (capture.mutable && !isSupportedMutableRuntimeArrowCapture(capture, context)) {
-      context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'capturing this mutable binding in Promise callbacks requires unsupported boxed closure storage', wrapper.expression.loc))
+    if (capture.mutable) {
+      context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'mutable Promise callback captures are outside the current C backend MVP; use const captures or move mutation outside the Promise callback', wrapper.expression.loc))
     }
 
     if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {

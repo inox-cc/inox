@@ -6550,6 +6550,49 @@ export async function main(): Promise<void> {
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &objectLogged\) != CCJS_OK\) \{/)
 })
 
+test('rejects mutable Promise callback captures in C with stable diagnostics', () => {
+  assertDiagnostic(`export function main(): void {
+  let total = 0
+  const promise = Promise.resolve(1).then(value => {
+    total = total + value
+
+    return total
+  })
+}
+`, 'CCJS_C_ASYNC', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`export function main(): void {
+  let handled = 0
+  const promise = Promise.reject('bad').catch(error => {
+    handled = handled + 1
+
+    return handled
+  })
+}
+`, 'CCJS_C_ASYNC', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`function make(): Promise<number> {
+  let total = 0
+
+  return Promise.resolve(1).then(value => {
+    total = total + value
+
+    return total
+  })
+}
+
+export async function main(): Promise<void> {
+  console.log(await make())
+}
+`, 'CCJS_C_ASYNC', {
+    target: 'c'
+  })
+})
+
 test('lowers Promise callbacks with try catch finally to C runtime promises', () => {
   const result = compileSource(`export async function main(): Promise<void> {
   const handled = Promise.resolve(3).then(value => {
