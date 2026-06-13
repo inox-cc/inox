@@ -847,7 +847,7 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
   }
 
   const tryStatement = statement.body[0]
-  const nestedTryFinallyBody = resolveAsyncTaskNestedTryFinallyWrapperBody(tryStatement, context, params, returnType)
+  const nestedTryFinallyBody = resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, returnType)
 
   if (nestedTryFinallyBody != null) {
     return nestedTryFinallyBody
@@ -895,7 +895,7 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
   }
 }
 
-function resolveAsyncTaskNestedTryFinallyWrapperBody(tryStatement, context, params, returnType) {
+function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, returnType) {
   if (tryStatement.handler != null || tryStatement.finalizer == null) {
     return null
   }
@@ -908,7 +908,7 @@ function resolveAsyncTaskNestedTryFinallyWrapperBody(tryStatement, context, para
 
   const innerTry = outerTryStatements[0]
 
-  if (innerTry.handler != null || innerTry.finalizer == null) {
+  if (innerTry.handler == null && innerTry.finalizer == null) {
     return null
   }
 
@@ -934,8 +934,13 @@ function resolveAsyncTaskNestedTryFinallyWrapperBody(tryStatement, context, para
 
   const innerFinalizerStatements = innerTry.finalizer?.body ?? []
   const outerFinalizerStatements = tryStatement.finalizer?.body ?? []
+  const handler = resolveAsyncTaskTryHandler(innerTry.handler, context, params, returnType)
 
-  if (hasUnsupportedAsyncTaskTryControlFlow(innerFinalizerStatements) || hasUnsupportedAsyncTaskTryControlFlow(outerFinalizerStatements)) {
+  if (
+    (innerTry.handler != null && handler == null)
+    || hasUnsupportedAsyncTaskTryControlFlow(innerFinalizerStatements)
+    || hasUnsupportedAsyncTaskTryControlFlow(outerFinalizerStatements)
+  ) {
     return null
   }
 
@@ -944,7 +949,7 @@ function resolveAsyncTaskNestedTryFinallyWrapperBody(tryStatement, context, para
     returnExpression,
     returnType,
     tryRegion: {
-      handler: null,
+      handler,
       finalizerStatements: [
         ...innerFinalizerStatements,
         ...outerFinalizerStatements

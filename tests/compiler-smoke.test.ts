@@ -4709,8 +4709,8 @@ export async function main(): Promise<void> {
   assert.match(errorResult.code, /if \(ccjs_object_get_known\(error, 1, &ccjs_log_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
-test('rejects nested async catch state-machine gaps with stable diagnostics', () => {
-  assertDiagnostic(`async function work(): Promise<number> {
+test('lowers nested async task frame try catch with outer finally', () => {
+  const result = compileSource(`async function work(): Promise<number> {
   try {
     try {
       const value: number = await Promise.reject('inner')
@@ -4728,9 +4728,13 @@ export async function main(): Promise<void> {
   const promise = work()
   console.log(await promise)
 }
-`, 'CCJS_C_ASYNC', {
+`, {
     target: 'c'
   })
+
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_start\(ccjs_loop\* ccjs_loop, ccjs_promise\*\* out\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/)
 })
 
 test('compiles arrow functions and chain calls to JS and C', () => {
