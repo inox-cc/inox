@@ -178,14 +178,6 @@ const globals = new Map<string, SymbolInfo>([
     }
   ],
   [
-    'fs',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
-    }
-  ],
-  [
     'http',
     {
       kind: 'global',
@@ -356,6 +348,8 @@ class Checker {
               kind: 'import',
               mutable: false,
               valueType: 'unknown',
+              importedName: specifier.imported,
+              importSource: item.source,
               loc: specifier.loc
             },
             specifier.loc
@@ -1993,61 +1987,62 @@ class Checker {
   }
 
   checkFsCall(expression: AnyNode): ValueType | null {
-    const method = fsRuntimeMethodName(expression.callee)
+    const info = fsRuntimeCallInfo(expression.callee)
 
-    if (method == null) {
+    if (info == null || !this.isFsRuntimeRoot(info)) {
       return null
     }
 
-    if (this.scope.resolve('fs') != null) {
-      return null
-    }
+    const method = info.method
+    const promisesApi = info.viaPromises || this.isFsPromisesImportRoot(info.root)
+    const label = info.path.join('.')
+    const unsupportedMessage = unsupportedFsRuntimeMethodMessage(info, promisesApi)
 
-    expression.fsRuntimeMethod = method
+    if (unsupportedMessage != null) {
+      this.report('CCJS_FS_UNSUPPORTED', unsupportedMessage, expression.loc)
+      expression.valueType = 'unknown'
+
+      return 'unknown'
+    }
 
     if (method === 'readFileSync') {
-      if (expression.args.length !== 1) {
+      if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function fs.readFileSync expects 1 argument(s), got ${expression.args.length}`,
+          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
 
       this.checkFsStringArg(expression, 0)
 
+      if (expression.args[1] == null) {
+        expression.fsRuntimeMethod = 'readFileBytesSync'
+        expression.valueType = 'bytes'
+
+        return 'bytes'
+      }
+
+      this.checkUtf8EncodingArg(expression, 1, label)
+      expression.fsRuntimeMethod = 'readFileSync'
       expression.valueType = 'string'
 
       return 'string'
     }
 
-    if (method === 'readFileBytesSync') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'CCJS_ARG_COUNT',
-          `function fs.readFileBytesSync expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-
-      expression.valueType = 'bytes'
-
-      return 'bytes'
-    }
-
     if (method === 'readDirSync') {
-      if (expression.args.length !== 1) {
+      if (expression.args.length < 1 || expression.args.length > (info.nodeName === 'readdirSync' ? 2 : 1)) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function fs.readDirSync expects 1 argument(s), got ${expression.args.length}`,
+          `function ${label} expects ${info.nodeName === 'readdirSync' ? '1 or 2' : '1'} argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
 
       this.checkFsStringArg(expression, 0)
+      this.checkUtf8EncodingArg(expression, 1, label)
 
+      expression.fsRuntimeMethod = 'readDirSync'
       expression.valueType = 'array'
       expression.arrayElementType = 'string'
       expression.arrayElementDeclaredType = 'string'
@@ -2056,33 +2051,17 @@ class Checker {
     }
 
     if (method === 'writeFileSync') {
-      if (expression.args.length !== 2) {
+      if (expression.args.length < 2 || expression.args.length > 3) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function fs.writeFileSync expects 2 argument(s), got ${expression.args.length}`,
+          `function ${label} expects 2 or 3 argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
 
       this.checkFsStringArg(expression, 0)
-      this.checkFsStringArg(expression, 1)
-
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'writeFileBytesSync') {
-      if (expression.args.length !== 2) {
-        this.report(
-          'CCJS_ARG_COUNT',
-          `function fs.writeFileBytesSync expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsBytesArg(expression, 1)
+      expression.fsRuntimeMethod = this.checkFsWriteDataArg(expression, 1, `${label} data`, 'writeFileSync')
+      this.checkUtf8EncodingArg(expression, 2, label)
 
       expression.valueType = 'void'
 
@@ -2093,48 +2072,45 @@ class Checker {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function fs.readFile expects 1 or 2 argument(s), got ${expression.args.length}`,
+          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
 
       this.checkFsStringArg(expression, 0)
-      this.checkFsStringArg(expression, 1)
 
+      if (promisesApi && expression.args[1] == null) {
+        expression.fsRuntimeMethod = 'readFileBytes'
+        expression.valueType = 'promise'
+        expression.promiseValueType = 'bytes'
+
+        return 'promise'
+      }
+
+      if (expression.args[1] != null) {
+        this.checkUtf8EncodingArg(expression, 1, label)
+      }
+
+      expression.fsRuntimeMethod = 'readFile'
       expression.valueType = 'promise'
       expression.promiseValueType = 'string'
 
       return 'promise'
     }
 
-    if (method === 'readFileBytes') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'CCJS_ARG_COUNT',
-          `function fs.readFileBytes expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'bytes'
-
-      return 'promise'
-    }
-
     if (method === 'readDir') {
-      if (expression.args.length !== 1) {
+      if (expression.args.length < 1 || expression.args.length > (info.nodeName === 'readdir' ? 2 : 1)) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function fs.readDir expects 1 argument(s), got ${expression.args.length}`,
+          `function ${label} expects ${info.nodeName === 'readdir' ? '1 or 2' : '1'} argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
 
       this.checkFsStringArg(expression, 0)
+      this.checkUtf8EncodingArg(expression, 1, label)
 
+      expression.fsRuntimeMethod = 'readDir'
       expression.valueType = 'promise'
       expression.promiseValueType = 'array'
       expression.arrayElementType = 'string'
@@ -2143,39 +2119,60 @@ class Checker {
       return 'promise'
     }
 
-    if (method === 'writeFileBytes') {
-      if (expression.args.length !== 2) {
-        this.report(
-          'CCJS_ARG_COUNT',
-          `function fs.writeFileBytes expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsBytesArg(expression, 1)
-
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'void'
-
-      return 'promise'
-    }
-
-    if (expression.args.length !== 2) {
+    if (expression.args.length < 2 || expression.args.length > (promisesApi ? 3 : 2)) {
       this.report(
         'CCJS_ARG_COUNT',
-        `function fs.writeFile expects 2 argument(s), got ${expression.args.length}`,
+        `function ${label} expects ${promisesApi ? '2 or 3' : '2'} argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
 
     this.checkFsStringArg(expression, 0)
-    this.checkFsStringArg(expression, 1)
+    expression.fsRuntimeMethod = this.checkFsWriteDataArg(expression, 1, `${label} data`, 'writeFile')
+    this.checkUtf8EncodingArg(expression, 2, label)
 
     expression.valueType = 'promise'
     expression.promiseValueType = 'void'
 
     return 'promise'
+  }
+
+  isFsRuntimeRoot(info: FsRuntimeCallInfo): boolean {
+    const symbol = this.scope.resolve(info.root)
+
+    if (symbol == null) {
+      return false
+    }
+
+    return isFsRuntimeImportSymbol(symbol)
+  }
+
+  isFsPromisesImportRoot(root: string): boolean {
+    const symbol = this.scope.resolve(root)
+
+    return (
+      symbol?.kind === 'import' &&
+      (symbol.importSource === 'node:fs/promises' ||
+        ((symbol.importSource === 'fs' || symbol.importSource === 'node:fs') && symbol.importedName === 'promises'))
+    )
+  }
+
+  checkFsWriteDataArg(expression: AnyNode, index: number, label: string, textMethod: string): string {
+    const arg = expression.args[index]
+
+    if (arg == null) {
+      return textMethod
+    }
+
+    const type = this.checkExpression(arg)
+
+    if (type === 'bytes') {
+      return textMethod === 'writeFileSync' ? 'writeFileBytesSync' : 'writeFileBytes'
+    }
+
+    this.checkAssignableType(type, 'string', arg.loc, false, this.expressionCanBeNull(arg))
+
+    return textMethod
   }
 
   checkFsStringArg(expression: AnyNode, index: number): void {
@@ -2186,16 +2183,6 @@ class Checker {
     }
 
     this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
-  }
-
-  checkFsBytesArg(expression: AnyNode, index: number): void {
-    const arg = expression.args[index]
-
-    if (arg == null) {
-      return
-    }
-
-    this.checkAssignableType(this.checkExpression(arg), 'bytes', arg.loc, false, this.expressionCanBeNull(arg))
   }
 
   checkJsonCall(expression: AnyNode, declared: ResolvedTypeInfo | null = null): ValueType | null {
@@ -4807,28 +4794,116 @@ function promiseStaticMethodName(callee: AnyNode): string | null {
     : null
 }
 
-function fsRuntimeMethodName(callee: AnyNode): string | null {
-  if (
-    callee.type !== 'MemberExpression' ||
-    ![
-      'readFile',
-      'readFileBytes',
-      'readFileBytesSync',
-      'readFileSync',
-      'readDir',
-      'readDirSync',
-      'writeFile',
-      'writeFileBytes',
-      'writeFileBytesSync',
-      'writeFileSync'
-    ].includes(callee.property)
-  ) {
+type FsRuntimeCallInfo = {
+  method: string
+  nodeName: string
+  path: string[]
+  root: string
+  viaPromises: boolean
+}
+
+function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
+  const path = memberExpressionPath(callee)
+
+  if (path == null || path.length < 2) {
     return null
   }
 
-  return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'fs'
-    ? callee.property
-    : null
+  const nodeName = path[path.length - 1]
+
+  if (path.length === 3 && path[1] === 'promises') {
+    const method = nodeName === 'readdir' ? 'readDir' : nodeName
+
+    return ['readFile', 'readDir', 'writeFile'].includes(method)
+      ? {
+          method,
+          nodeName,
+          path,
+          root: path[0],
+          viaPromises: true
+        }
+      : null
+  }
+
+  if (path.length !== 2) {
+    return null
+  }
+
+  const method =
+    nodeName === 'readdir'
+      ? 'readDir'
+      : nodeName === 'readdirSync'
+      ? 'readDirSync'
+      : [
+            'readFile',
+            'readFileBytes',
+            'readFileBytesSync',
+            'readFileSync',
+            'readDir',
+            'readDirSync',
+            'writeFile',
+            'writeFileBytes',
+            'writeFileBytesSync',
+            'writeFileSync'
+          ].includes(nodeName)
+        ? nodeName
+        : null
+
+  return method == null
+    ? null
+    : {
+        method,
+        nodeName,
+        path,
+        root: path[0],
+        viaPromises: false
+      }
+}
+
+function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promisesApi: boolean): string | null {
+  if (['readFileBytes', 'readFileBytesSync', 'writeFileBytes', 'writeFileBytesSync'].includes(info.method)) {
+    return `function ${info.path.join('.')} is not part of Node fs; use fs.promises.readFile/writeFile or fs.readFileSync/writeFileSync`
+  }
+
+  if (info.method === 'readDir') {
+    if (info.nodeName === 'readDir') {
+      return `function ${info.path.join('.')} is not part of Node fs; use fs.promises.readdir or fs.readdirSync`
+    }
+
+    return promisesApi ? null : 'Node fs.readdir callback API is not supported yet; use fs.promises.readdir'
+  }
+
+  if (info.method === 'readDirSync' && info.nodeName === 'readDirSync') {
+    return `function ${info.path.join('.')} is not part of Node fs; use fs.readdirSync`
+  }
+
+  if ((info.method === 'readFile' || info.method === 'writeFile') && !promisesApi) {
+    return `Node ${info.path.join('.')} callback API is not supported yet; use fs.promises.${info.method}`
+  }
+
+  return null
+}
+
+function memberExpressionPath(expression: AnyNode): string[] | null {
+  if (expression?.type === 'Reference' && expression.path.length > 0) {
+    return expression.path
+  }
+
+  if (expression?.type !== 'MemberExpression') {
+    return null
+  }
+
+  const objectPath = memberExpressionPath(expression.object)
+
+  return objectPath == null ? null : [...objectPath, expression.property]
+}
+
+function isFsRuntimeImportSymbol(symbol: SymbolInfo): boolean {
+  return (
+    symbol.kind === 'import' &&
+    ['fs', 'node:fs', 'node:fs/promises'].includes(symbol.importSource ?? '') &&
+    ['default', 'fs', 'promises'].includes(symbol.importedName ?? '')
+  )
 }
 
 function jsonRuntimeMethodName(callee: AnyNode): string | null {

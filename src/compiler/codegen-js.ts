@@ -98,10 +98,12 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
   const globalUsages = collectIrGlobalUsages(programs)
   const fsUsagePaths = new Set(globalUsages.filter((usage) => usage.root === 'fs').map((usage) => usage.path.join('.')))
   const features = new Set(collectIrFeatureRequirements(programs))
-  const needsFsSync = [...fsUsagePaths].some(isFsSyncUsagePath)
-  const needsFsPromises = [...fsUsagePaths].some(isFsPromiseUsagePath)
+  const fsRuntimeMethods = new Set(collectFsRuntimeMethods(programs))
+  const needsFsSync = [...fsUsagePaths].some(isFsSyncUsagePath) || [...fsRuntimeMethods].some(isFsSyncRuntimeMethod)
+  const needsFsPromises =
+    [...fsUsagePaths].some(isFsPromiseUsagePath) || [...fsRuntimeMethods].some(isFsPromiseRuntimeMethod)
 
-  if (needsFsPromises || (globalRoots.has('fs') && !needsFsSync)) {
+  if (needsFsPromises || (features.has('fs') && !needsFsSync) || (globalRoots.has('fs') && !needsFsSync)) {
     lines.push("import * as fs from 'node:fs/promises'")
   }
 
@@ -169,17 +171,60 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
 }
 
 function isFsPromiseUsagePath(path: string): boolean {
-  return ['fs.readFile', 'fs.readFileBytes', 'fs.readDir', 'fs.writeFile', 'fs.writeFileBytes'].includes(path)
+  return ['fs.promises.readFile', 'fs.promises.readdir', 'fs.promises.writeFile'].includes(path)
 }
 
 function isFsSyncUsagePath(path: string): boolean {
-  return [
-    'fs.readFileBytesSync',
-    'fs.readFileSync',
-    'fs.readDirSync',
-    'fs.writeFileBytesSync',
-    'fs.writeFileSync'
-  ].includes(path)
+  return ['fs.readFileSync', 'fs.readdirSync', 'fs.writeFileSync'].includes(path)
+}
+
+function isFsPromiseRuntimeMethod(method: string): boolean {
+  return ['readFile', 'readFileBytes', 'readDir', 'writeFile', 'writeFileBytes'].includes(method)
+}
+
+function isFsSyncRuntimeMethod(method: string): boolean {
+  return ['readFileBytesSync', 'readFileSync', 'readDirSync', 'writeFileBytesSync', 'writeFileSync'].includes(method)
+}
+
+function collectFsRuntimeMethods(programs: IrProgram[]): string[] {
+  const methods: string[] = []
+
+  for (const program of programs) {
+    collectFsRuntimeMethodsFromNode(program.body, methods)
+  }
+
+  return methods
+}
+
+function collectFsRuntimeMethodsFromNode(node: unknown, methods: string[]): void {
+  if (node == null) {
+    return
+  }
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      collectFsRuntimeMethodsFromNode(item, methods)
+    }
+    return
+  }
+
+  if (typeof node !== 'object') {
+    return
+  }
+
+  const item = node as AnyNode
+
+  if (item.type === 'CallExpression' && item.fsRuntimeMethod != null) {
+    methods.push(item.fsRuntimeMethod)
+  }
+
+  for (const [key, value] of Object.entries(item)) {
+    if (key === 'loc' || key === 'shape') {
+      continue
+    }
+
+    collectFsRuntimeMethodsFromNode(value, methods)
+  }
 }
 
 function emitArrayPopHelper(options: JsEmitOptions): string[] {
@@ -771,16 +816,33 @@ function isStringSplitCall(expression: AnyNode): boolean {
 }
 
 function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions): string | null {
+  if (expression.fsRuntimeMethod === 'readFile') {
+    const args =
+      expression.args.length === 1
+        ? [emitExpression(expression.args[0], options), "'utf8'"]
+        : expression.args.map((arg) => emitExpression(arg, options))
+
+    return `fs.readFile(${args.join(', ')})`
+  }
+
   if (expression.fsRuntimeMethod === 'readFileBytes') {
     return `fs.readFile(${emitExpression(expression.args[0], options)})`
   }
 
+  if (expression.fsRuntimeMethod === 'readDir') {
+    return `fs.readdir(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
+  }
+
+  if (expression.fsRuntimeMethod === 'writeFile') {
+    return `fs.writeFile(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
+  }
+
   if (expression.fsRuntimeMethod === 'writeFileBytes') {
-    return `fs.writeFile(${emitExpression(expression.args[0], options)}, ${emitExpression(expression.args[1], options)})`
+    return `fs.writeFile(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.fsRuntimeMethod === 'readFileSync') {
-    return `ccjsFsSync.readFileSync(${emitExpression(expression.args[0], options)}, 'utf8')`
+    return `ccjsFsSync.readFileSync(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.fsRuntimeMethod === 'readFileBytesSync') {
@@ -792,11 +854,11 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
   }
 
   if (expression.fsRuntimeMethod === 'writeFileSync') {
-    return `ccjsFsSync.writeFileSync(${emitExpression(expression.args[0], options)}, ${emitExpression(expression.args[1], options)}, 'utf8')`
+    return `ccjsFsSync.writeFileSync(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.fsRuntimeMethod === 'writeFileBytesSync') {
-    return `ccjsFsSync.writeFileSync(${emitExpression(expression.args[0], options)}, ${emitExpression(expression.args[1], options)})`
+    return `ccjsFsSync.writeFileSync(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   return null

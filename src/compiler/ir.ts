@@ -386,6 +386,24 @@ function visitGlobalUsage(node: unknown, usages: IrGlobalUsage[]): void {
 
   const item = node as AnyNode
 
+  if (item.type === 'CallExpression' && item.fsRuntimeMethod != null) {
+    const path = fsGlobalUsagePathForRuntimeMethod(item.fsRuntimeMethod)
+
+    if (path != null) {
+      usages.push({
+        root: 'fs',
+        path,
+        loc: item.loc
+      })
+
+      for (const arg of item.args ?? []) {
+        visitGlobalUsage(arg, usages)
+      }
+
+      return
+    }
+  }
+
   if (item.type === 'MemberExpression' || item.type === 'OptionalMemberExpression') {
     const path = globalUsagePath(item)
 
@@ -1163,7 +1181,7 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('clocks')
   }
 
-  if (fsRuntimeCallName(expression.callee) != null) {
+  if (expression.fsRuntimeMethod != null || fsRuntimeCallName(expression.callee) != null) {
     features.add('fs')
   }
 
@@ -1365,28 +1383,63 @@ function timeRuntimeCallName(callee: AnyNode): string | null {
 }
 
 function fsRuntimeCallName(callee: AnyNode): string | null {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+  const path = runtimeMemberExpressionPath(callee)
+
+  if (path == null || path[0] !== 'fs') {
     return null
   }
 
-  if (callee.object.path[0] !== 'fs') {
+  if (path.length === 3 && path[1] === 'promises') {
+    return ['readFile', 'readdir', 'writeFile'].includes(path[2]) ? path.join('.') : null
+  }
+
+  if (path.length !== 2) {
     return null
   }
 
-  return [
-    'readFile',
-    'readFileBytes',
-    'readFileBytesSync',
-    'readFileSync',
-    'readDir',
-    'readDirSync',
-    'writeFile',
-    'writeFileBytes',
-    'writeFileBytesSync',
-    'writeFileSync'
-  ].includes(callee.property)
-    ? `fs.${callee.property}`
-    : null
+  return ['readFileSync', 'readdirSync', 'writeFileSync'].includes(path[1]) ? path.join('.') : null
+}
+
+function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
+  if (method === 'readFile' || method === 'readFileBytes') {
+    return ['fs', 'promises', 'readFile']
+  }
+
+  if (method === 'readDir') {
+    return ['fs', 'promises', 'readdir']
+  }
+
+  if (method === 'writeFile' || method === 'writeFileBytes') {
+    return ['fs', 'promises', 'writeFile']
+  }
+
+  if (method === 'readFileSync' || method === 'readFileBytesSync') {
+    return ['fs', 'readFileSync']
+  }
+
+  if (method === 'readDirSync') {
+    return ['fs', 'readdirSync']
+  }
+
+  if (method === 'writeFileSync' || method === 'writeFileBytesSync') {
+    return ['fs', 'writeFileSync']
+  }
+
+  return null
+}
+
+function runtimeMemberExpressionPath(expression: AnyNode): string[] | null {
+  if (expression?.type === 'Reference' && expression.path.length > 0) {
+    return expression.path
+  }
+
+  if (expression?.type !== 'MemberExpression') {
+    return null
+  }
+
+  const objectPath = runtimeMemberExpressionPath(expression.object)
+
+  return objectPath == null ? null : [...objectPath, expression.property]
 }
 
 function jsonRuntimeCallName(callee: AnyNode): string | null {

@@ -151,6 +151,8 @@ export type SymbolInfo = {
   kind: string
   mutable?: boolean
   valueType: ValueType
+  importedName?: string
+  importSource?: string
   nullable?: boolean
   arrayElementType?: ValueType | null
   arrayElementDeclaredType?: string | null

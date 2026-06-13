@@ -1383,7 +1383,7 @@ int main(void) {
   }
 })
 
-test('generated C fs promise calls compile and run with runtime sources', async (t) => {
+test('generated C fs.promises calls compile and run without libuv', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1401,8 +1401,10 @@ test('generated C fs promise calls compile and run with runtime sources', async 
     await writeFile(input, 'saved')
 
     const result = compileSource(
-      `const read = await fs.readFile(${JSON.stringify(input)}, 'utf8')
-await fs.writeFile(${JSON.stringify(copied)}, read)
+      `import fs from 'node:fs'
+
+const read = await fs.promises.readFile(${JSON.stringify(input)}, 'utf8')
+await fs.promises.writeFile(${JSON.stringify(copied)}, read)
 
 `,
       {
@@ -1566,7 +1568,7 @@ setImmediate(() => {
   }
 })
 
-test('generated C fs readDir awaits hosted directory entries', async (t) => {
+test('generated C fs.promises.readdir awaits hosted directory entries', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1586,12 +1588,14 @@ test('generated C fs readDir awaits hosted directory entries', async (t) => {
     await writeFile(join(entriesDir, 'alpha.txt'), '')
 
     const result = compileSource(
-      `const entries = await fs.readDir(${JSON.stringify(entriesDir)})
+      `import fs from 'node:fs'
+
+const entries = await fs.promises.readdir(${JSON.stringify(entriesDir)})
 const names = entries.sort()
 console.log(names[0], names[1])
 
 try {
-  await fs.readDir(${JSON.stringify(missingDir)})
+  await fs.promises.readdir(${JSON.stringify(missingDir)})
 } catch (error) {
   console.log(error.name, error.code, error.message)
 }
@@ -1620,7 +1624,7 @@ try {
   }
 })
 
-test('generated C fs binary helpers copy hosted bytes', async (t) => {
+test('generated C fs.promises binary read/write copies hosted bytes', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1639,8 +1643,10 @@ test('generated C fs binary helpers copy hosted bytes', async (t) => {
     await writeFile(input, data)
 
     const result = compileSource(
-      `const bytes = await fs.readFileBytes(${JSON.stringify(input)})
-await fs.writeFileBytes(${JSON.stringify(copied)}, bytes)
+      `import fs from 'node:fs'
+
+const bytes = await fs.promises.readFile(${JSON.stringify(input)})
+await fs.promises.writeFile(${JSON.stringify(copied)}, bytes)
 
 `,
       {
@@ -1658,6 +1664,70 @@ await fs.writeFileBytes(${JSON.stringify(copied)}, bytes)
 
     assert.equal(run.code, 0, run.stderr)
     assert.deepEqual(await readFile(copied), data)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C node:fs promises copy hosted files and read entries', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-node-promises-'))
+  const entriesDir = join(dir, 'entries')
+  const textInput = join(dir, 'input.txt')
+  const textCopied = join(dir, 'copied.txt')
+  const bytesInput = join(dir, 'input.bin')
+  const bytesCopied = join(dir, 'copied.bin')
+  const source = join(dir, 'fs-node-promises.c')
+  const output = join(dir, 'fs-node-promises')
+  const data = Buffer.from([9, 8, 7, 6, 0, 255])
+
+  try {
+    await mkdir(entriesDir)
+    await writeFile(join(entriesDir, 'beta.txt'), '')
+    await writeFile(join(entriesDir, 'alpha.txt'), '')
+    await writeFile(textInput, 'node text')
+    await writeFile(bytesInput, data)
+
+    const result = compileSource(
+      `import fs from 'node:fs'
+
+const text = await fs.promises.readFile(${JSON.stringify(textInput)}, 'utf8')
+await fs.promises.writeFile(${JSON.stringify(textCopied)}, text)
+
+const bytes: Buffer = await fs.promises.readFile(${JSON.stringify(bytesInput)})
+await fs.promises.writeFile(${JSON.stringify(bytesCopied)}, bytes)
+
+const entries = await fs.promises.readdir(${JSON.stringify(entriesDir)})
+const names = entries.sort()
+console.log(text, names[0], names[1], bytes.length)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'node text alpha.txt beta.txt 6\n')
+    assert.equal(await readFile(textCopied, 'utf8'), 'node text')
+    assert.deepEqual(await readFile(bytesCopied), data)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -1692,11 +1762,13 @@ test('generated C fs sync helpers copy hosted files and read entries', async (t)
     await writeFile(bytesInput, data)
 
     const result = compileSource(
-      `const text = fs.readFileSync(${JSON.stringify(textInput)})
+      `import fs from 'node:fs'
+
+const text = fs.readFileSync(${JSON.stringify(textInput)}, 'utf8')
 fs.writeFileSync(${JSON.stringify(textCopied)}, text)
-const bytes = fs.readFileBytesSync(${JSON.stringify(bytesInput)})
-fs.writeFileBytesSync(${JSON.stringify(bytesCopied)}, bytes)
-const entries = fs.readDirSync(${JSON.stringify(entriesDir)})
+const bytes = fs.readFileSync(${JSON.stringify(bytesInput)})
+fs.writeFileSync(${JSON.stringify(bytesCopied)}, bytes)
+const entries = fs.readdirSync(${JSON.stringify(entriesDir)})
 const names = entries.sort()
 console.log(names[0], names[1])
 
@@ -1740,7 +1812,9 @@ test('generated C async await over settled promises compiles and runs', async (t
 
   try {
     const result = compileSource(
-      `async function getValue(): Promise<number> {
+      `import fs from 'node:fs'
+
+async function getValue(): Promise<number> {
   return Promise.resolve(3)
 }
 
@@ -1757,7 +1831,7 @@ function failPromise(): Promise<string> {
 }
 
 async function loadText(): Promise<string> {
-  return fs.readFile('/tmp/ccjs-async-load.txt', 'utf8')
+  return fs.promises.readFile('/tmp/ccjs-async-load.txt', 'utf8')
 }
 
 async function failText(): Promise<string> {
@@ -1823,7 +1897,7 @@ const branchRecoveredNumber = failedNumber.catch(error => {
 const chainedNumber = Promise.resolve(1)
   .then(value => value + 1)
   .then(value => value + 1)
-await fs.writeFile('/tmp/ccjs-async-load.txt', 'loaded')
+await fs.promises.writeFile('/tmp/ccjs-async-load.txt', 'loaded')
 const loadedTextPromise = loadText()
 console.log(await Promise.resolve('ok'))
 console.log(value)
@@ -2575,7 +2649,9 @@ test('generated C async task frame awaits managed immediate async helpers', asyn
     await writeFile(input, Buffer.from([7, 8, 9]))
 
     const result = compileSource(
-      `async function sameText(input: string): Promise<string> {
+      `import fs from 'node:fs'
+
+async function sameText(input: string): Promise<string> {
   return input
 }
 
@@ -2585,7 +2661,7 @@ async function sameBytes(input: Buffer): Promise<Buffer> {
 
 async function copyText(input: string, path: string): Promise<string> {
   const text = await sameText(input)
-  const bytes: Buffer = await fs.readFileBytes(path)
+  const bytes: Buffer = await fs.promises.readFile(path)
   const copied: Buffer = await sameBytes(bytes)
 
   return text
@@ -3617,7 +3693,7 @@ console.log(await promise)
   }
 })
 
-test('generated C async task frames await fs promises with runtime sources', async (t) => {
+test('generated C async task frames await fs promises without libuv', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3643,22 +3719,24 @@ test('generated C async task frames await fs promises with runtime sources', asy
     await writeFile(join(entriesDir, 'two.txt'), '')
 
     const result = compileSource(
-      `async function copyText(input: string, output: string): Promise<string> {
-  const text = await fs.readFile(input, 'utf8')
-  await fs.writeFile(output, text)
+      `import fs from 'node:fs'
+
+async function copyText(input: string, output: string): Promise<string> {
+  const text = await fs.promises.readFile(input, 'utf8')
+  await fs.promises.writeFile(output, text)
 
   return text
 }
 
 async function copyBytes(input: string, output: string): Promise<Buffer> {
-  const bytes: Buffer = await fs.readFileBytes(input)
-  await fs.writeFileBytes(output, bytes)
+  const bytes: Buffer = await fs.promises.readFile(input)
+  await fs.promises.writeFile(output, bytes)
 
   return bytes
 }
 
 async function listEntries(path: string): Promise<Array<string>> {
-  const entries: Array<string> = await fs.readDir(path)
+  const entries: Array<string> = await fs.promises.readdir(path)
 
   return entries
 }

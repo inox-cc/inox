@@ -10,6 +10,7 @@ import { lowerProgram } from './lower.ts'
 import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord, ProgramNode, SourceLocation } from './types.ts'
 
 const sourceExtensions = ['', '.ts', '.js']
+const runtimeBuiltinImportSources = new Set(['fs', 'node:fs', 'node:fs/promises'])
 
 export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
   const entryPath = resolve(entry)
@@ -65,6 +66,10 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
     const importTypeDeclarations = new Map<number, AnyNode[]>()
 
     for (const [importIndex, item] of module.imports.entries()) {
+      if (isRuntimeBuiltinImportSource(item.source)) {
+        continue
+      }
+
       if (!isRelativeSpecifier(item.source)) {
         diagnostics.push(
           diagnostic(
@@ -349,4 +354,8 @@ async function resolveExistingSource(path: string): Promise<string> {
 
 function isRelativeSpecifier(specifier: string): boolean {
   return specifier.startsWith('./') || specifier.startsWith('../')
+}
+
+function isRuntimeBuiltinImportSource(specifier: string): boolean {
+  return runtimeBuiltinImportSources.has(specifier)
 }

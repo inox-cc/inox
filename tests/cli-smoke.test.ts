@@ -1045,7 +1045,7 @@ test('ccjs run --target c builds and runs a temporary native executable', async 
   assert.equal(result.stderr, '')
 })
 
-test('ccjs run --target c runs fs globals through hosted fallback', async (t) => {
+test('ccjs run --target c runs node:fs through non-libuv hosted fallback', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1060,13 +1060,15 @@ test('ccjs run --target c runs fs globals through hosted fallback', async (t) =>
   try {
     await writeFile(
       entry,
-      `async function loadText(): Promise<string> {
-  return fs.readFile(${JSON.stringify(file)}, 'utf8')
+      `import fs from 'node:fs'
+
+async function loadText(): Promise<string> {
+  return fs.promises.readFile(${JSON.stringify(file)}, 'utf8')
 }
 
-await fs.writeFile(${JSON.stringify(file)}, 'hello c fs')
+await fs.promises.writeFile(${JSON.stringify(file)}, 'hello c fs')
 const text = await loadText()
-const entries = await fs.readDir(${JSON.stringify(dir)})
+const entries = await fs.promises.readdir(${JSON.stringify(dir)})
 const names = entries.sort()
 console.log(text)
 console.log(names[0], names[1])

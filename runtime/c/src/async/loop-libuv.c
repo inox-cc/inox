@@ -1,8 +1,7 @@
-#include "ccjs/loop.h"
+#include "loop-libuv-internal.h"
 #include "ccjs/time.h"
 
 #include <stdint.h>
-#include <uv.h>
 
 typedef struct ccjs_microtask {
   ccjs_microtask_fn run;
@@ -15,6 +14,7 @@ typedef enum ccjs_timer_kind { CCJS_TIMER_IMMEDIATE, CCJS_TIMER_TIMEOUT, CCJS_TI
 
 typedef struct ccjs_libuv_loop_backend {
   uv_loop_t uv_loop;
+  size_t request_count;
   size_t closing_count;
   ccjs_status callback_status;
 } ccjs_libuv_loop_backend;
@@ -55,6 +55,7 @@ static void ccjs_loop_deactivate_handle(ccjs_timer_handle* handle);
 static ccjs_status ccjs_loop_run_handle(ccjs_timer_handle* handle);
 static ccjs_status ccjs_loop_keep_first_error(ccjs_status current, ccjs_status next);
 static void ccjs_libuv_keep_callback_status(ccjs_loop* loop, ccjs_status status);
+static void ccjs_libuv_dispose_microtasks(ccjs_loop* loop);
 static void ccjs_libuv_dispose_handle_list(ccjs_timer_handle* handle);
 static void ccjs_libuv_free_handle_list(ccjs_loop* loop, ccjs_timer_handle* handle);
 
@@ -71,6 +72,7 @@ ccjs_status ccjs_loop_init(ccjs_loop* loop, ccjs_allocator* allocator) {
   }
 
   backend->closing_count = 0;
+  backend->request_count = 0;
   backend->callback_status = CCJS_OK;
 
   if (uv_loop_init(&backend->uv_loop) != 0) {
@@ -105,27 +107,17 @@ void ccjs_loop_dispose(ccjs_loop* loop) {
 
   ccjs_allocator* allocator = loop->allocator;
   ccjs_libuv_loop_backend* backend = ccjs_libuv_backend(loop);
-  ccjs_microtask* task = (ccjs_microtask*)loop->microtask_head;
-
-  while (task != 0) {
-    ccjs_microtask* next = task->next;
-
-    if (task->finalizer != 0) {
-      task->finalizer(task->context);
-    }
-
-    allocator->free(allocator->user, task, sizeof(ccjs_microtask), _Alignof(ccjs_microtask));
-    task = next;
-  }
+  ccjs_libuv_dispose_microtasks(loop);
 
   ccjs_libuv_dispose_handle_list((ccjs_timer_handle*)loop->immediate_head);
   ccjs_libuv_dispose_handle_list((ccjs_timer_handle*)loop->timer_head);
 
   if (backend != 0) {
-    while (backend->closing_count > 0) {
+    while (backend->request_count > 0 || backend->closing_count > 0) {
       uv_run(&backend->uv_loop, UV_RUN_DEFAULT);
     }
 
+    ccjs_libuv_dispose_microtasks(loop);
     (void)uv_loop_close(&backend->uv_loop);
   }
 
@@ -277,7 +269,11 @@ ccjs_status ccjs_loop_poll(ccjs_loop* loop, ccjs_number now_ms) {
 }
 
 int ccjs_loop_has_work(const ccjs_loop* loop) {
-  return loop != 0 && (loop->microtask_count > 0 || loop->immediate_count > 0 || loop->timer_count > 0);
+  ccjs_libuv_loop_backend* backend = ccjs_libuv_backend(loop);
+
+  return loop != 0 &&
+         (loop->microtask_count > 0 || loop->immediate_count > 0 || loop->timer_count > 0 ||
+          (backend != 0 && backend->request_count > 0));
 }
 
 size_t ccjs_loop_pending_microtasks(const ccjs_loop* loop) {
@@ -285,7 +281,9 @@ size_t ccjs_loop_pending_microtasks(const ccjs_loop* loop) {
 }
 
 size_t ccjs_loop_pending_immediates(const ccjs_loop* loop) {
-  return loop == 0 ? 0 : loop->immediate_count;
+  ccjs_libuv_loop_backend* backend = ccjs_libuv_backend(loop);
+
+  return loop == 0 ? 0 : loop->immediate_count + (backend == 0 ? 0 : backend->request_count);
 }
 
 size_t ccjs_loop_pending_timers(const ccjs_loop* loop) {
@@ -328,6 +326,36 @@ int ccjs_loop_next_timer_due_ms(const ccjs_loop* loop, ccjs_number* out) {
 
 static ccjs_libuv_loop_backend* ccjs_libuv_backend(const ccjs_loop* loop) {
   return loop == 0 ? 0 : (ccjs_libuv_loop_backend*)loop->backend;
+}
+
+uv_loop_t* ccjs_libuv_loop_handle(ccjs_loop* loop) {
+  ccjs_libuv_loop_backend* backend = ccjs_libuv_backend(loop);
+
+  return backend == 0 ? 0 : &backend->uv_loop;
+}
+
+ccjs_status ccjs_libuv_loop_retain_request(ccjs_loop* loop) {
+  ccjs_libuv_loop_backend* backend = ccjs_libuv_backend(loop);
+
+  if (backend == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  backend->request_count += 1;
+
+  return CCJS_OK;
+}
+
+void ccjs_libuv_loop_release_request(ccjs_loop* loop) {
+  ccjs_libuv_loop_backend* backend = ccjs_libuv_backend(loop);
+
+  if (backend != 0 && backend->request_count > 0) {
+    backend->request_count -= 1;
+  }
+}
+
+void ccjs_libuv_loop_report_status(ccjs_loop* loop, ccjs_status status) {
+  ccjs_libuv_keep_callback_status(loop, status);
 }
 
 static uint64_t ccjs_libuv_delay_ms(ccjs_number delay_ms) {
@@ -552,6 +580,29 @@ static void ccjs_libuv_keep_callback_status(ccjs_loop* loop, ccjs_status status)
   if (backend != 0) {
     backend->callback_status = ccjs_loop_keep_first_error(backend->callback_status, status);
   }
+}
+
+static void ccjs_libuv_dispose_microtasks(ccjs_loop* loop) {
+  if (loop == 0 || loop->allocator == 0 || loop->allocator->free == 0) {
+    return;
+  }
+
+  ccjs_microtask* task = (ccjs_microtask*)loop->microtask_head;
+
+  while (task != 0) {
+    ccjs_microtask* next = task->next;
+
+    if (task->finalizer != 0) {
+      task->finalizer(task->context);
+    }
+
+    loop->allocator->free(loop->allocator->user, task, sizeof(ccjs_microtask), _Alignof(ccjs_microtask));
+    task = next;
+  }
+
+  loop->microtask_head = 0;
+  loop->microtask_tail = 0;
+  loop->microtask_count = 0;
 }
 
 static void ccjs_libuv_dispose_handle_list(ccjs_timer_handle* handle) {

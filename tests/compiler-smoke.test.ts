@@ -5132,7 +5132,9 @@ export async function main(): Promise<void> {
 
 test('lowers async task frame awaits over managed immediate async helpers', () => {
   const result = compileSource(
-    `async function sameText(input: string): Promise<string> {
+    `import fs from 'node:fs'
+
+async function sameText(input: string): Promise<string> {
   return input
 }
 
@@ -5142,7 +5144,7 @@ async function sameBytes(input: Buffer): Promise<Buffer> {
 
 async function copy(input: string): Promise<string> {
   const text = await sameText(input)
-  const bytes: Buffer = await fs.readFileBytes('/tmp/value.bin')
+  const bytes: Buffer = await fs.promises.readFile('/tmp/value.bin')
   const copied: Buffer = await sameBytes(bytes)
 
   return text
@@ -5322,32 +5324,34 @@ export async function main(): Promise<void> {
 
 test('lowers fs awaits through async task frames', () => {
   const result = compileSource(
-    `async function loadText(path: string): Promise<string> {
-  const text = await fs.readFile(path, 'utf8')
+    `import fs from 'node:fs'
+
+async function loadText(path: string): Promise<string> {
+  const text = await fs.promises.readFile(path, 'utf8')
 
   return text
 }
 
 async function loadBytes(path: string): Promise<Buffer> {
-  const bytes: Buffer = await fs.readFileBytes(path)
+  const bytes: Buffer = await fs.promises.readFile(path)
 
   return bytes
 }
 
 async function listEntries(path: string): Promise<Array<string>> {
-  const entries: Array<string> = await fs.readDir(path)
+  const entries: Array<string> = await fs.promises.readdir(path)
 
   return entries
 }
 
 async function saveText(path: string, text: string): Promise<void> {
-  await fs.writeFile(path, text)
+  await fs.promises.writeFile(path, text)
 
   return
 }
 
 async function saveBytes(path: string, bytes: Buffer): Promise<void> {
-  await fs.writeFileBytes(path, bytes)
+  await fs.promises.writeFile(path, bytes)
 
   return
 }
@@ -5422,12 +5426,14 @@ export async function main(): Promise<void> {
 
 test('lowers plain Promise helpers over rejection and fs to C', () => {
   const result = compileSource(
-    `function failPromise(): Promise<string> {
+    `import fs from 'node:fs'
+
+function failPromise(): Promise<string> {
   return Promise.reject('plain fail')
 }
 
 function loadText(): Promise<string> {
-  return fs.readFile('/tmp/value.txt', 'utf8')
+  return fs.promises.readFile('/tmp/value.txt', 'utf8')
 }
 
 export async function main(): Promise<void> {
@@ -5482,8 +5488,10 @@ test('reports unhandled owned Promise rejections from generated C main', () => {
 
 test('lowers first C async await slice over Promise.resolve and fs promises', () => {
   const result = compileSource(
-    `async function loadText(): Promise<string> {
-  return fs.readFile('/tmp/out.txt', 'utf8')
+    `import fs from 'node:fs'
+
+async function loadText(): Promise<string> {
+  return fs.promises.readFile('/tmp/out.txt', 'utf8')
 }
 
 export async function main(): Promise<void> {
@@ -5491,9 +5499,9 @@ export async function main(): Promise<void> {
   const value = await promise
   console.log(await Promise.resolve('ok'))
   console.log(value)
-  await fs.writeFile('/tmp/out.txt', 'saved')
+  await fs.promises.writeFile('/tmp/out.txt', 'saved')
   const loaded = loadText()
-  const text = await fs.readFile('/tmp/out.txt', 'utf8')
+  const text = await fs.promises.readFile('/tmp/out.txt', 'utf8')
   console.log(await loaded)
   console.log(text)
 }
@@ -6838,9 +6846,11 @@ test('compiles arrow functions and chain calls to JS and C', () => {
 
 test('injects Node fs prelude when fs is referenced', () => {
   const result = compileSource(
-    `export async function main(): Promise<void> {
-  await fs.writeFile('/private/tmp/ccjs-fs-smoke.txt', 'hello')
-  const text = await fs.readFile('/private/tmp/ccjs-fs-smoke.txt', 'utf8')
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  await fs.promises.writeFile('/private/tmp/ccjs-fs-smoke.txt', 'hello')
+  const text = await fs.promises.readFile('/private/tmp/ccjs-fs-smoke.txt', 'utf8')
   console.log(text)
 }
 `,
@@ -6856,23 +6866,129 @@ test('injects Node fs prelude when fs is referenced', () => {
   )
   assert.deepEqual(
     result.ir.globalUsages.map((usage) => usage.path.join('.')),
-    ['fs.writeFile', 'fs.readFile']
+    ['fs.promises.writeFile', 'fs.promises.readFile']
   )
 
-  const withoutGlobalUsage = emitJsFromIr({
-    ...result.ir,
-    globalUsages: []
-  })
+  const withoutFsUsage = compileSource(
+    `export function main(): void {
+  console.log('hello')
+}
+`,
+    {
+      target: 'js'
+    }
+  )
 
-  assert.doesNotMatch(withoutGlobalUsage, /import \* as fs from 'node:fs\/promises'/)
+  assert.doesNotMatch(withoutFsUsage.code, /import \* as fs from 'node:fs\/promises'/)
 })
 
-test('maps fs binary helpers to Buffer-compatible JS and C runtime calls', () => {
+test('lowers default node:fs import and fs.promises calls to the fs runtime', () => {
   const js = compileSource(
-    `export async function main(): Promise<void> {
-  const bytes: Buffer = await fs.readFileBytes('/tmp/value.bin')
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  const bytes: Buffer = await fs.promises.readFile('/tmp/value.bin')
+  const text: string = await fs.promises.readFile('/tmp/value.txt', 'utf8')
+  const entries = await fs.promises.readdir('/tmp')
+  await fs.promises.writeFile('/tmp/out.txt', text)
+  await fs.promises.writeFile('/tmp/out.bin', bytes)
+  console.log(text, entries[0], bytes.length)
+}
+`,
+    {
+      target: 'js'
+    }
+  )
+
+  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
+  assert.match(js.code, /const bytes = await fs\.readFile\("\/tmp\/value\.bin"\)/)
+  assert.match(js.code, /const text = await fs\.readFile\("\/tmp\/value\.txt", "utf8"\)/)
+  assert.match(js.code, /const entries = await fs\.readdir\("\/tmp"\)/)
+  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.txt", text\)/)
+  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.bin", bytes\)/)
+
+  const c = compileSource(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const bytes = fs.promises.readFile('/tmp/value.bin')
+  const text = fs.promises.readFile('/tmp/value.txt', 'utf8')
+  const entries = fs.promises.readdir('/tmp')
+  fs.promises.writeFile('/tmp/out.txt', 'saved')
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const bytes = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'bytes')
+  const text = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'text')
+  const entries = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'entries')
+
+  assert.equal(bytes?.promiseValueType, 'bytes')
+  assert.equal(text?.promiseValueType, 'string')
+  assert.equal(entries?.promiseValueType, 'array')
+  assert.match(c.code, /ccjs_fs_read_file_bytes\(&ccjs_loop, "\/tmp\/value\.bin", 14, &bytes\)/)
+  assert.match(c.code, /ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/value\.txt", 14, &text\)/)
+  assert.match(c.code, /ccjs_fs_read_dir\(&ccjs_loop, "\/tmp", 4, &entries\)/)
+  assert.match(c.code, /ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\)/)
+})
+
+test('lowers node:fs/promises imports to the fs runtime', () => {
+  const js = compileSource(
+    `import fs from 'node:fs/promises'
+
+export async function main(): Promise<void> {
+  const bytes: Buffer = await fs.readFile('/tmp/value.bin')
+  const text: string = await fs.readFile('/tmp/value.txt', 'utf8')
+  const entries = await fs.readdir('/tmp')
+  await fs.writeFile('/tmp/out.txt', text)
+  await fs.writeFile('/tmp/out.bin', bytes)
+  console.log(text, entries[0], bytes.length)
+}
+`,
+    {
+      target: 'js'
+    }
+  )
+
+  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
+  assert.match(js.code, /const bytes = await fs\.readFile\("\/tmp\/value\.bin"\)/)
+  assert.match(js.code, /const text = await fs\.readFile\("\/tmp\/value\.txt", "utf8"\)/)
+  assert.match(js.code, /const entries = await fs\.readdir\("\/tmp"\)/)
+  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.txt", text\)/)
+  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.bin", bytes\)/)
+
+  const c = compileSource(
+    `import fs from 'node:fs/promises'
+
+export function main(): void {
+  const bytes = fs.readFile('/tmp/value.bin')
+  const text = fs.readFile('/tmp/value.txt', 'utf8')
+  const entries = fs.readdir('/tmp')
+  fs.writeFile('/tmp/out.txt', 'saved')
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(c.code, /ccjs_fs_read_file_bytes\(&ccjs_loop, "\/tmp\/value\.bin", 14, &bytes\)/)
+  assert.match(c.code, /ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/value\.txt", 14, &text\)/)
+  assert.match(c.code, /ccjs_fs_read_dir\(&ccjs_loop, "\/tmp", 4, &entries\)/)
+  assert.match(c.code, /ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\)/)
+})
+
+test('maps Node fs binary reads to Buffer-compatible JS and C runtime calls', () => {
+  const js = compileSource(
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  const bytes: Buffer = await fs.promises.readFile('/tmp/value.bin')
   const view: Uint8Array = bytes
-  await fs.writeFileBytes('/tmp/out.bin', view)
+  await fs.promises.writeFile('/tmp/out.bin', view)
 }
 `,
     {
@@ -6886,9 +7002,11 @@ test('maps fs binary helpers to Buffer-compatible JS and C runtime calls', () =>
   assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.bin", view\)/)
 
   const c = compileSource(
-    `export async function main(): Promise<void> {
-  const bytes = await fs.readFileBytes('/tmp/value.bin')
-  await fs.writeFileBytes('/tmp/out.bin', bytes)
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  const bytes = await fs.promises.readFile('/tmp/value.bin')
+  await fs.promises.writeFile('/tmp/out.bin', bytes)
 }
 `,
     {
@@ -6913,11 +7031,13 @@ test('maps fs binary helpers to Buffer-compatible JS and C runtime calls', () =>
   )
 
   assertDiagnostic(
-    `export async function main(): Promise<void> {
-  await fs.writeFileBytes('/tmp/out.bin', 'text')
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  await fs.writeFileBytes('/tmp/out.bin', Buffer.from('text'))
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'CCJS_FS_UNSUPPORTED'
   )
 })
 
@@ -7061,12 +7181,14 @@ function stripCryptoRuntimeMetadata(node: unknown): void {
 
 test('maps fs sync helpers to Node fs and C runtime calls', () => {
   const js = compileSource(
-    `export function main(): void {
-  const text = fs.readFileSync('/tmp/value.txt')
-  const bytes: Buffer = fs.readFileBytesSync('/tmp/value.bin')
-  const entries = fs.readDirSync('/tmp')
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const text = fs.readFileSync('/tmp/value.txt', 'utf8')
+  const bytes: Buffer = fs.readFileSync('/tmp/value.bin')
+  const entries = fs.readdirSync('/tmp')
   fs.writeFileSync('/tmp/out.txt', text)
-  fs.writeFileBytesSync('/tmp/out.bin', bytes)
+  fs.writeFileSync('/tmp/out.bin', bytes)
   console.log(entries[0])
 }
 `,
@@ -7077,19 +7199,21 @@ test('maps fs sync helpers to Node fs and C runtime calls', () => {
 
   assert.doesNotMatch(js.code, /node:fs\/promises/)
   assert.match(js.code, /import \* as ccjsFsSync from 'node:fs'/)
-  assert.match(js.code, /const text = ccjsFsSync\.readFileSync\("\/tmp\/value\.txt", 'utf8'\)/)
+  assert.match(js.code, /const text = ccjsFsSync\.readFileSync\("\/tmp\/value\.txt", "utf8"\)/)
   assert.match(js.code, /const bytes = ccjsFsSync\.readFileSync\("\/tmp\/value\.bin"\)/)
   assert.match(js.code, /const entries = ccjsFsSync\.readdirSync\("\/tmp"\)/)
-  assert.match(js.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.txt", text, 'utf8'\)/)
+  assert.match(js.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.txt", text\)/)
   assert.match(js.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.bin", bytes\)/)
 
   const c = compileSource(
-    `export function main(): void {
-  const text = fs.readFileSync('/tmp/value.txt')
-  const bytes = fs.readFileBytesSync('/tmp/value.bin')
-  const entries = fs.readDirSync('/tmp')
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const text = fs.readFileSync('/tmp/value.txt', 'utf8')
+  const bytes = fs.readFileSync('/tmp/value.bin')
+  const entries = fs.readdirSync('/tmp')
   fs.writeFileSync('/tmp/out.txt', text)
-  fs.writeFileBytesSync('/tmp/out.bin', bytes)
+  fs.writeFileSync('/tmp/out.bin', bytes)
   console.log(entries.length)
 }
 `,
@@ -7128,11 +7252,13 @@ test('maps fs sync helpers to Node fs and C runtime calls', () => {
   )
 
   assertDiagnostic(
-    `export function main(): void {
-  fs.writeFileBytesSync('/tmp/out.bin', 'text')
+    `import fs from 'node:fs'
+
+export function main(): void {
+  fs.writeFileBytesSync('/tmp/out.bin', Buffer.from('text'))
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'CCJS_FS_UNSUPPORTED'
   )
 })
 
@@ -7185,11 +7311,11 @@ test('drives JS Node prelude from stored target-neutral IR global roots', () => 
     },
     {
       root: 'fs',
-      path: ['fs', 'writeFile']
+      path: ['fs', 'promises', 'writeFile']
     },
     {
       root: 'fs',
-      path: ['fs', 'readFile']
+      path: ['fs', 'promises', 'readFile']
     }
   ]
   const code = emitJsFromIr({
@@ -7364,12 +7490,14 @@ test('configures C Math.random os backend through compiler options', () => {
   assert.doesNotMatch(result.code, /value \^= value << 13;/)
 })
 
-test('lowers fs readFile, readDir and writeFile to the C fs runtime', () => {
+test('lowers fs.promises readFile, readdir and writeFile to the C fs runtime', () => {
   const result = compileSource(
-    `export function main(): void {
-  const read = fs.readFile('/tmp/value.txt', 'utf8')
-  const entries = fs.readDir('/tmp')
-  fs.writeFile('/tmp/out.txt', 'saved')
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const read = fs.promises.readFile('/tmp/value.txt', 'utf8')
+  const entries = fs.promises.readdir('/tmp')
+  fs.promises.writeFile('/tmp/out.txt', 'saved')
 }
 `,
     {
@@ -7414,26 +7542,42 @@ test('lowers fs readFile, readDir and writeFile to the C fs runtime', () => {
   assert.match(result.code, /if \(ccjs_loop_active\) ccjs_loop_dispose\(&ccjs_loop\);/)
 
   assertDiagnostic(
-    `export function main(): void {
-  fs.writeFile('/tmp/out.txt')
+    `import fs from 'node:fs'
+
+export function main(): void {
+  fs.promises.writeFile('/tmp/out.txt')
 }
 `,
     'CCJS_ARG_COUNT'
   )
 
   assertDiagnostic(
-    `export function main(): void {
-  fs.readDir('/tmp', 'utf8')
+    `import fs from 'node:fs'
+
+export function main(): void {
+  fs.promises.readdir('/tmp', 'utf8', 'extra')
 }
 `,
     'CCJS_ARG_COUNT'
+  )
+
+  assertDiagnostic(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  fs.readFile('/tmp/value.txt', 'utf8')
+}
+`,
+    'CCJS_FS_UNSUPPORTED'
   )
 })
 
 test('reports JS stdlib globals with a stable C diagnostic', () => {
   const usages = compileSource(
-    `export function main(): void {
-  const text = fs.readFile('/tmp/value.txt', 'utf8')
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const text = fs.promises.readFile('/tmp/value.txt', 'utf8')
   const parsed = Date.parse('2026-06-09T00:00:00Z')
   const server = http.createServer((request, response) => {
     response.end('ok')
@@ -7456,7 +7600,7 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
   assert.deepEqual(usages.ir.globalUsages.map((usage) => usage.path.join('.')).sort(), [
     'Date.parse',
     'Promise.resolve',
-    'fs.readFile',
+    'fs.promises.readFile',
     'http.createServer'
   ])
 
@@ -7486,7 +7630,9 @@ test('reports JS stdlib globals with a stable C diagnostic', () => {
 })
 
 test('reports embedded profile capability diagnostics from IR global usages', () => {
-  const source = `function onTimer(): void {
+  const source = `import fs from 'node:fs'
+
+function onTimer(): void {
   console.log('timer')
 }
 
@@ -7494,7 +7640,7 @@ export function main(): void {
   const wall = Date.now()
   const monotonic = performance.now()
   const timeout = setTimeout(onTimer, 1)
-  fs.writeFile('/private/tmp/ccjs-embedded-profile.txt', 'saved')
+  fs.promises.writeFile('/private/tmp/ccjs-embedded-profile.txt', 'saved')
   clearTimeout(timeout)
   console.log('ok', wall, monotonic)
 }
@@ -7522,7 +7668,7 @@ export function main(): void {
           'embedded profile requires wall-clock capability for Date.now',
           'embedded profile requires monotonic-clock capability for performance.now',
           'embedded profile requires timers capability for setTimeout',
-          'embedded profile requires filesystem capability for fs.writeFile',
+          'embedded profile requires filesystem capability for fs.promises.writeFile',
           'embedded profile requires timers capability for clearTimeout'
         ]
       )

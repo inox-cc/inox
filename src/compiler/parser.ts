@@ -81,29 +81,25 @@ class Parser {
 
     const specifiers: AnyNode[] = []
 
+    if (this.is('identifier')) {
+      const local = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected default import name')
+
+      specifiers.push({
+        imported: 'default',
+        local: local.value,
+        default: true,
+        loc: locFromToken(local)
+      })
+
+      this.matchValue(',')
+    }
+
     if (this.matchValue('{')) {
-      while (!this.isValue('}') && !this.is('eof')) {
-        const imported = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected imported name')
-        let local = imported.value
+      specifiers.push(...this.parseNamedImportSpecifiers())
+    }
 
-        if (this.matchIdentifier('as')) {
-          local = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected local import name').value
-        }
-
-        specifiers.push({
-          imported: imported.value,
-          local,
-          loc: locFromToken(imported)
-        })
-
-        if (!this.matchValue(',')) {
-          break
-        }
-      }
-
-      this.expectValue('}', 'CCJS_EXPECTED_IMPORT', 'expected } after import specifiers')
-    } else {
-      this.report('CCJS_UNSUPPORTED_IMPORT', 'only named ESM imports are implemented in the current compiler slice')
+    if (specifiers.length === 0) {
+      this.report('CCJS_UNSUPPORTED_IMPORT', 'expected ESM default or named import specifiers')
       this.skipStatement()
 
       return {
@@ -122,6 +118,33 @@ class Parser {
       source: source.value,
       loc: locFromToken(source)
     }
+  }
+
+  parseNamedImportSpecifiers(): AnyNode[] {
+    const specifiers: AnyNode[] = []
+
+    while (!this.isValue('}') && !this.is('eof')) {
+      const imported = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected imported name')
+      let local = imported.value
+
+      if (this.matchIdentifier('as')) {
+        local = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected local import name').value
+      }
+
+      specifiers.push({
+        imported: imported.value,
+        local,
+        loc: locFromToken(imported)
+      })
+
+      if (!this.matchValue(',')) {
+        break
+      }
+    }
+
+    this.expectValue('}', 'CCJS_EXPECTED_IMPORT', 'expected } after import specifiers')
+
+    return specifiers
   }
 
   parseFunctionDeclaration(exported: boolean, isAsync = false): AnyNode {

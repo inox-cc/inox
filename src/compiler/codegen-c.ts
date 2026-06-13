@@ -43,6 +43,7 @@ const cMathBinaryMethods = new Set(['max', 'min'])
 const defaultRandomSeed = 0x6d2b79f5
 const cModuleSourceExtensions = ['', '.ts', '.js']
 const generatedCColumnLimit = 130
+const runtimeBuiltinImportSources = new Set(['fs', 'node:fs', 'node:fs/promises'])
 
 type CEmitOptions = {
   random?: RandomOptions
@@ -806,7 +807,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
 
   for (const plan of plans) {
     plan.imports = plan.record.imports.flatMap((declaration) => {
-      if (declaration.typeOnly) {
+      if (declaration.typeOnly || isRuntimeBuiltinImportSource(declaration.source)) {
         return []
       }
 
@@ -1311,6 +1312,10 @@ function resolveKnownCModuleImport(from: string, specifier: string, modulePaths:
       : [normalized]
 
   return candidates.find((candidate) => modulePaths.has(candidate)) ?? null
+}
+
+function isRuntimeBuiltinImportSource(specifier: string): boolean {
+  return runtimeBuiltinImportSources.has(specifier)
 }
 
 function relativeCModuleSourcePath(sourceRoot: string, file: string): string {
@@ -2090,15 +2095,11 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'Promise' ||
     path === 'Promise.resolve' ||
     path === 'Promise.reject' ||
-    path === 'fs.readFile' ||
-    path === 'fs.readFileBytes' ||
-    path === 'fs.readFileBytesSync' ||
+    path === 'fs.promises.readFile' ||
+    path === 'fs.promises.readdir' ||
+    path === 'fs.promises.writeFile' ||
     path === 'fs.readFileSync' ||
-    path === 'fs.readDir' ||
-    path === 'fs.readDirSync' ||
-    path === 'fs.writeFile' ||
-    path === 'fs.writeFileBytes' ||
-    path === 'fs.writeFileBytesSync' ||
+    path === 'fs.readdirSync' ||
     path === 'fs.writeFileSync' ||
     path === 'JSON.parse' ||
     path === 'JSON.stringify' ||
@@ -3357,7 +3358,7 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context) {
 }
 
 function isAsyncFsRuntimeCallExpression(expression) {
-  const method = cFsRuntimeCallName(expression?.callee)
+  const method = cFsRuntimeExpressionMethod(expression)
 
   return (
     expression?.valueType === 'promise' &&
@@ -3763,7 +3764,7 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
     return null
   }
 
-  const method = cFsRuntimeCallName(expression.callee)
+  const method = cFsRuntimeExpressionMethod(expression)
   const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines = [...path.lines]
 
@@ -7977,7 +7978,7 @@ function inferPromiseRejectionValueType(
     return inferRejectedValueType(expression.args[0], context, localErrorObjectNames)
   }
 
-  if (expression?.type === 'CallExpression' && cFsRuntimeCallName(expression.callee) != null) {
+  if (expression?.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression) != null) {
     return 'error'
   }
 
@@ -13100,7 +13101,7 @@ function emitPreparedCallArgs(expression, params, context) {
 }
 
 function emitPreparedFsCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cFsRuntimeCallName(expression?.callee)
+  const method = cFsRuntimeExpressionMethod(expression)
 
   if (method == null || expression?.valueType !== 'promise') {
     return null
@@ -13209,7 +13210,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 }
 
 function emitPreparedFsSyncValueExpression(expression, context) {
-  const method = cFsRuntimeCallName(expression?.callee)
+  const method = cFsRuntimeExpressionMethod(expression)
 
   if (method == null || !['readFileBytesSync', 'readFileSync', 'readDirSync'].includes(method)) {
     return null
@@ -13244,7 +13245,7 @@ function emitPreparedFsSyncValueExpression(expression, context) {
 }
 
 function emitPreparedFsSyncStatementExpression(expression, context) {
-  const method = cFsRuntimeCallName(expression?.callee)
+  const method = cFsRuntimeExpressionMethod(expression)
 
   if (method == null || !['writeFileBytesSync', 'writeFileSync'].includes(method)) {
     return null
@@ -14879,7 +14880,7 @@ function inferExpressionType(expression, context) {
     return 'number'
   }
 
-  if (expression?.type === 'CallExpression' && cFsRuntimeCallName(expression.callee) != null) {
+  if (expression?.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression) != null) {
     return expression.valueType === 'promise' ? 'promise' : (expression.valueType ?? 'unknown')
   }
 
@@ -17503,29 +17504,54 @@ function cTimeRuntimeCallName(callee) {
   return null
 }
 
+function cFsRuntimeExpressionMethod(expression) {
+  return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
+}
+
 function cFsRuntimeCallName(callee) {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+  const path = cRuntimeMemberExpressionPath(callee)
+
+  if (path == null || path[0] !== 'fs') {
     return null
   }
 
-  if (callee.object.path[0] !== 'fs') {
+  if (path.length === 3 && path[1] === 'promises') {
+    if (path[2] === 'readdir') {
+      return 'readDir'
+    }
+
+    return ['readFile', 'writeFile'].includes(path[2]) ? path[2] : null
+  }
+
+  if (path.length !== 2) {
     return null
   }
 
-  return [
-    'readFile',
-    'readFileBytes',
-    'readFileBytesSync',
-    'readFileSync',
-    'readDir',
-    'readDirSync',
-    'writeFile',
-    'writeFileBytes',
-    'writeFileBytesSync',
-    'writeFileSync'
-  ].includes(callee.property)
-    ? callee.property
+  if (path[1] === 'readdir') {
+    return 'readDir'
+  }
+
+  if (path[1] === 'readdirSync') {
+    return 'readDirSync'
+  }
+
+  return ['readFileSync', 'writeFileSync'].includes(path[1])
+    ? path[1]
     : null
+}
+
+function cRuntimeMemberExpressionPath(expression) {
+  if (expression?.type === 'Reference' && expression.path.length > 0) {
+    return expression.path
+  }
+
+  if (expression?.type !== 'MemberExpression') {
+    return null
+  }
+
+  const objectPath = cRuntimeMemberExpressionPath(expression.object)
+
+  return objectPath == null ? null : [...objectPath, expression.property]
 }
 
 function cJsonRuntimeCallName(callee) {
