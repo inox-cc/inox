@@ -6490,6 +6490,44 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   assert.match(result.code, /while \(ccjs_promise_get_state\(recovered\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
 })
 
+test('lowers Promise callback loop bodies to C runtime promises', () => {
+  const result = compileSource(`export async function main(): Promise<void> {
+  const whileTotal = Promise.resolve(3).then(value => {
+    let total = 0
+
+    while (value > 0) {
+      total = total + value
+      value = value - 1
+    }
+
+    return total
+  })
+  const forTotal = Promise.resolve(4).then(value => {
+    let total = 0
+
+    for (let index = 0; index < value; index = index + 1) {
+      if (index === 2) {
+        continue
+      }
+
+      total = total + index
+    }
+
+    return total
+  })
+
+  console.log(await whileTotal, await forTotal)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /while \(\(value > 0\)\) \{/)
+  assert.match(result.code, /for \(double index = 0; \(index < value\); \(index = \(index \+ 1\)\)\) \{/)
+  assert.match(result.code, /goto ccjs_continue_\d+;/)
+  assert.match(result.code, /\(\*out\) = ccjs_number_value\(total\);\n  goto ccjs_promise_callback_cleanup;/)
+})
+
 test('lowers captured Promise callbacks to C runtime promises', () => {
   const result = compileSource(`type User = {
   name: string

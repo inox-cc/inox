@@ -11666,12 +11666,20 @@ function isPromiseChainCallbackStatement(statement) {
     return false
   }
 
-  if (isStraightLinePromiseCallbackStatement(statement) || statement.type === 'ReturnStatement' || statement.type === 'ThrowStatement') {
+  if (isStraightLinePromiseCallbackStatement(statement)
+    || statement.type === 'ReturnStatement'
+    || statement.type === 'ThrowStatement'
+    || statement.type === 'BreakStatement'
+    || statement.type === 'ContinueStatement') {
     return true
   }
 
   if (statement.type === 'BlockStatement') {
     return statement.body.every(isPromiseChainCallbackStatement)
+  }
+
+  if (statement.type === 'WhileStatement' || statement.type === 'ForStatement') {
+    return isPromiseChainCallbackStatement(statement.body)
   }
 
   if (statement.type === 'SwitchStatement') {
