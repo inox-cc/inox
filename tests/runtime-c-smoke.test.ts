@@ -5031,7 +5031,9 @@ export function main(): void {
   const user: User = { name: ' Ada ' }
   const name = user.name
   const message = ' ' + name + ' '
-  console.log(' Ada '.trim(), clean(name), user.name.trim(), getName().trim(), message.trim())
+  const unicode = '\u00a0\u2003Ada\u3000\ufeff'
+  const historicMongolianVowelSeparator = '\u180eAda\u180e'.trim() === '\u180eAda\u180e'
+  console.log(' Ada '.trim(), clean(name), user.name.trim(), getName().trim(), message.trim(), unicode.trim(), historicMongolianVowelSeparator)
 }
 `, {
       target: 'c'
@@ -5046,7 +5048,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'Ada Ada Ada Grace Ada\n')
+    assert.equal(run.stdout, 'Ada Ada Ada Grace Ada Ada 1\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -5126,7 +5128,7 @@ test('generated C Number conversion compiles and runs with runtime sources', asy
 }
 
 export function main(): void {
-  console.log(Number('') ?? 9, Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('nope') ?? 7, Number('1x') ?? 8, parse('-3.25') ?? 0, Number('1e309') ?? 0, Number('-Infinity') ?? 0)
+  console.log(Number('') ?? 9, Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('nope') ?? 7, Number('1x') ?? 8, parse('-3.25') ?? 0, Number('1e309') ?? 0, Number('-Infinity') ?? 0, Number('\u00a0+.5e2\u3000') ?? 0, Number('\ufeff') ?? 9, Number('\u180e') ?? 6)
 }
 `, {
       target: 'c'
@@ -5141,7 +5143,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '0 42 50 7 8 -3.25 inf -inf\n')
+    assert.equal(run.stdout, '0 42 50 7 8 -3.25 inf -inf 50 0 6\n')
   } finally {
     await rm(dir, {
       recursive: true,

@@ -1,6 +1,7 @@
 #include <float.h>
 #include <math.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "ccjs/array.h"
@@ -55,13 +56,22 @@ ccjs_status ccjs_string_from_number(ccjs_allocator* allocator, double value, ccj
   return ccjs_string_from_literal(allocator, buffer, (size_t)len, out);
 }
 
-static bool ccjs_string_is_ascii_trim_space(char value) {
-  return value == ' '
-    || value == '\t'
-    || value == '\n'
-    || value == '\r'
-    || value == '\f'
-    || value == '\v';
+static bool ccjs_string_is_trim_space_code_point(uint32_t value) {
+  return value == 0x0009u
+    || value == 0x000au
+    || value == 0x000bu
+    || value == 0x000cu
+    || value == 0x000du
+    || value == 0x0020u
+    || value == 0x00a0u
+    || value == 0x1680u
+    || (value >= 0x2000u && value <= 0x200au)
+    || value == 0x2028u
+    || value == 0x2029u
+    || value == 0x202fu
+    || value == 0x205fu
+    || value == 0x3000u
+    || value == 0xfeffu;
 }
 
 static bool ccjs_string_is_ascii_digit(char value) {
@@ -134,6 +144,82 @@ static size_t ccjs_utf8_next_len(const char* bytes, size_t len, size_t index) {
   return 1;
 }
 
+static uint32_t ccjs_utf8_code_point_at(const char* bytes, size_t len, size_t index, size_t* step_out) {
+  size_t step = ccjs_utf8_next_len(bytes, len, index);
+
+  if (step == 0) {
+    step = 1;
+  }
+
+  if (step_out != 0) {
+    *step_out = step;
+  }
+
+  const unsigned char first = (unsigned char)bytes[index];
+
+  if (step == 1) {
+    return (uint32_t)first;
+  }
+
+  const unsigned char second = (unsigned char)bytes[index + 1];
+
+  if (step == 2) {
+    return ((uint32_t)(first & 0x1fu) << 6)
+      | (uint32_t)(second & 0x3fu);
+  }
+
+  const unsigned char third = (unsigned char)bytes[index + 2];
+
+  if (step == 3) {
+    return ((uint32_t)(first & 0x0fu) << 12)
+      | ((uint32_t)(second & 0x3fu) << 6)
+      | (uint32_t)(third & 0x3fu);
+  }
+
+  const unsigned char fourth = (unsigned char)bytes[index + 3];
+
+  return ((uint32_t)(first & 0x07u) << 18)
+    | ((uint32_t)(second & 0x3fu) << 12)
+    | ((uint32_t)(third & 0x3fu) << 6)
+    | (uint32_t)(fourth & 0x3fu);
+}
+
+static void ccjs_string_trim_span(const char* bytes, size_t len, size_t* start_out, size_t* end_out) {
+  size_t start = 0;
+  size_t end = 0;
+  size_t index = 0;
+  bool seen_non_space = false;
+
+  while (index < len) {
+    size_t step = 0;
+    const uint32_t code_point = ccjs_utf8_code_point_at(bytes, len, index, &step);
+
+    if (!ccjs_string_is_trim_space_code_point(code_point)) {
+      if (!seen_non_space) {
+        start = index;
+      }
+
+      end = index + step;
+      seen_non_space = true;
+    }
+
+    index += step;
+  }
+
+  if (!seen_non_space) {
+    start = 0;
+    end = 0;
+  }
+
+  if (start_out != 0) {
+    *start_out = start;
+  }
+
+  if (end_out != 0) {
+    *end_out = end;
+  }
+}
+
 size_t ccjs_string_code_point_length_parts(const char* value_bytes, size_t value_len) {
   if (value_bytes == 0 && value_len != 0) {
     return 0;
@@ -187,14 +273,7 @@ ccjs_status ccjs_string_to_number(const char* value_bytes, size_t value_len, ccj
   const char* bytes = value_bytes == 0 ? "" : value_bytes;
   size_t start = 0;
   size_t end = value_len;
-
-  while (start < end && ccjs_string_is_ascii_trim_space(bytes[start])) {
-    start += 1;
-  }
-
-  while (end > start && ccjs_string_is_ascii_trim_space(bytes[end - 1])) {
-    end -= 1;
-  }
+  ccjs_string_trim_span(bytes, value_len, &start, &end);
 
   if (start == end) {
     *out = ccjs_number_value(0);
@@ -364,14 +443,7 @@ ccjs_status ccjs_string_trim_parts(ccjs_allocator* allocator, const char* value_
   const char* bytes = value_bytes == 0 ? "" : value_bytes;
   size_t start = 0;
   size_t end = value_len;
-
-  while (start < end && ccjs_string_is_ascii_trim_space(bytes[start])) {
-    start += 1;
-  }
-
-  while (end > start && ccjs_string_is_ascii_trim_space(bytes[end - 1])) {
-    end -= 1;
-  }
+  ccjs_string_trim_span(bytes, value_len, &start, &end);
 
   return ccjs_string_from_literal(allocator, bytes + start, end - start, out);
 }
