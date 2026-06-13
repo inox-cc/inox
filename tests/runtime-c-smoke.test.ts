@@ -2612,6 +2612,59 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame produced string prefix locals compile and run', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-prefix-string-'))
+  const source = join(dir, 'async-task-frame-prefix-string.c')
+  const output = join(dir, 'async-task-frame-prefix-string')
+
+  try {
+    const result = compileSource(`async function work(count: number): Promise<string> {
+  try {
+    const prefix: string = String(count)
+    try {
+      const value: number = await Promise.resolve(3)
+    } finally {
+      console.log(prefix)
+    }
+    console.log(prefix)
+    return prefix
+  } finally {
+    console.log(count)
+  }
+}
+
+export async function main(): Promise<void> {
+  console.log(await work(4))
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '4\n4\n4\n4\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async task frames await fs promises with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

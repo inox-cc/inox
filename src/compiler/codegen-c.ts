@@ -1477,6 +1477,7 @@ function emitAsyncTaskWrapperDeclaration(wrapper, baseContext) {
 
 function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', 0)
+  context.failureStatement = 'goto ccjs_start_error;'
   const prefixAndScheduleLines = withVariableScope(context, () => [
     ...emitStatementList(wrapper.prefixStatements ?? [], context),
     ...emitAsyncTaskStorePrefixLocalLines(wrapper),
@@ -1499,6 +1500,7 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     ...wrapper.prefixLocals.map(local => `  frame->${local.fieldName} = ${emitAsyncTaskStorageInit(local.type)};`),
     ...wrapper.awaits.filter(item => item.fieldName != null).map(item => `  frame->${item.fieldName} = ${emitAsyncTaskStorageInit(item.type)};`),
     '  ccjs_status status = ccjs_promise_new(ccjs_loop, &frame->promise);',
+    ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
     '  if (status != CCJS_OK) {',
     '    ccjs_loop->allocator->free(ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));',
     '    return status;',
@@ -1508,7 +1510,18 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     '  *out = frame->promise;',
     ...emitAsyncTaskVisibleLocalReads(wrapper, 0, { includePrefixLocals: false }).map(line => `  ${line}`),
     ...prefixAndScheduleLines.map(line => `  ${line}`),
+    ...emitOwnedValueCleanup(context).map(line => `  ${line}`),
     '  return CCJS_OK;',
+    ...(context.failureStatementUsed
+      ? [
+          'ccjs_start_error:',
+          ...emitOwnedValueCleanup(context).map(line => `  ${line}`),
+          '  ccjs_promise_release(*out);',
+          '  *out = 0;',
+          `  ${wrapper.finalizerName}(frame);`,
+          '  return CCJS_ERR_TYPE;'
+        ]
+      : []),
     '}'
   ]
 
@@ -1608,21 +1621,22 @@ function emitAsyncTaskScheduleAwaitLines(wrapper, item, context, options) {
   const awaitedPromise = emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, options)
   const awaited = awaitedPromise == null ? emitPreparedAsyncTaskAwaitedValueExpression(item, context) : null
   const finalizer = options.final ? wrapper.finalizerName : '0'
+  const cleanupLines = options.cleanupLines ?? emitOwnedValueCleanup(context)
 
   return [
     ...(awaitedPromise == null
       ? [
           'status = ccjs_promise_new(ccjs_loop, &frame->awaited);',
-          ...emitAsyncTaskScheduleStatusCheck(wrapper, options),
+          ...emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines),
         ]
       : awaitedPromise.lines),
     `status = ccjs_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${finalizer});`,
-    ...emitAsyncTaskScheduleStatusCheck(wrapper, options),
+    ...emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines),
     ...(awaitedPromise == null
       ? [
           ...(awaited?.lines ?? []),
           `status = ccjs_promise_resolve(frame->awaited, ${awaited?.expression ?? 'ccjs_undefined_value()'});`,
-          ...emitAsyncTaskResolveStatusCheck(wrapper, options)
+          ...emitAsyncTaskResolveStatusCheck(wrapper, options, cleanupLines)
         ]
       : [])
   ]
@@ -1651,10 +1665,11 @@ function emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines: string
   ]
 }
 
-function emitAsyncTaskResolveStatusCheck(wrapper, options) {
+function emitAsyncTaskResolveStatusCheck(wrapper, options, cleanupLines: string[] = []) {
   if (options.cleanup === 'start') {
     return [
       'if (status != CCJS_OK) {',
+      ...cleanupLines.map(line => `  ${line}`),
       '  ccjs_promise_release(*out);',
       '  *out = 0;',
       ...(options.final ? [] : [`  ${wrapper.finalizerName}(frame);`]),
@@ -1665,11 +1680,14 @@ function emitAsyncTaskResolveStatusCheck(wrapper, options) {
 
   if (options.final) {
     return [
-      'if (status != CCJS_OK) return status;'
+      'if (status != CCJS_OK) {',
+      ...cleanupLines.map(line => `  ${line}`),
+      '  return status;',
+      '}'
     ]
   }
 
-  return emitAsyncTaskScheduleStatusCheck(wrapper, options)
+  return emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines)
 }
 
 function emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, options) {
@@ -13095,6 +13113,11 @@ function emitRuntimeTypeCheck(condition, context) {
 }
 
 function emitFailureStatement(context) {
+  if (context.failureStatement != null) {
+    context.failureStatementUsed = true
+    return context.failureStatement
+  }
+
   if (context.throwingFunction && context.cleanupEnabled) {
     context.usedCleanupGoto = true
     return 'do { ccjs_status_result = CCJS_ERR_TYPE; goto ccjs_cleanup; } while (0);'

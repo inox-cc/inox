@@ -4314,9 +4314,10 @@ export async function main(): Promise<void> {
   })
 
   assert.match(result.code, /ccjs_value ccjs_async_value_\d+ = sameText\(ccjs_value_\d+\);/)
-  assert.match(result.code, /if \(ccjs_async_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_async_value_\d+\.as\.ref == 0\) return CCJS_ERR_TYPE;/)
+  assert.match(result.code, /if \(ccjs_async_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_async_value_\d+\.as\.ref == 0\) goto ccjs_start_error;/)
   assert.match(result.code, /status = ccjs_promise_resolved\(ccjs_loop, ccjs_async_value_\d+, &frame->awaited\);/)
   assert.match(result.code, /ccjs_release\(ccjs_async_value_\d+\);/)
+  assert.match(result.code, /ccjs_start_error:\n  ccjs_promise_release\(\*out\);/)
   assert.match(result.code, /ccjs_value ccjs_async_value_\d+ = sameBytes\(bytes\);/)
   assert.match(result.code, /if \(ccjs_async_value_\d+\.tag != CCJS_TAG_BYTES \|\| ccjs_async_value_\d+\.as\.ref == 0\) return CCJS_ERR_TYPE;/)
 })
