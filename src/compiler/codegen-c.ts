@@ -40,10 +40,21 @@ type AsyncTaskFrameLocal = Record<string, any> & {
   fieldName: string
 }
 
-type AsyncTaskBodyPlan = {
+type AsyncTaskBodyDraft = {
   awaits: any[]
   prefixStatements: any[]
   prefixLocals: any[]
+  successPreFinalizerStatements: any[]
+  successPrefixFinalizerStatements: any[]
+  successStatements: any[]
+  returnExpression: any
+  returnType: string
+  tryRegion: any | null
+}
+
+type AsyncTaskBodyPlan = {
+  awaits: any[]
+  prefixStatements: any[]
   frameLocals: AsyncTaskFrameLocal[]
   successPhases: AsyncTaskPhase[]
   tryPhases: AsyncTaskPhase[]
@@ -750,14 +761,13 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
 
   for (const { declaration, node: item } of functions) {
     const params = resolveAsyncTaskWrapperParams(declaration, context)
-    const body = params == null ? null : resolveAsyncTaskWrapperBody(item, declaration, context, params)
+    const bodyPlan = params == null ? null : resolveAsyncTaskBodyPlan(item, declaration, context, params)
 
-    if (body == null) {
+    if (bodyPlan == null) {
       continue
     }
 
     const cName = emitCIdentifier(declaration.name)
-    const bodyPlan = createAsyncTaskBodyPlan(body)
     const wrapper = {
       key: declaration.name,
       functionName: declaration.name,
@@ -776,7 +786,7 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
   return wrappers
 }
 
-function createAsyncTaskBodyPlan(body): AsyncTaskBodyPlan {
+function createAsyncTaskBodyPlan(body: AsyncTaskBodyDraft): AsyncTaskBodyPlan {
   const successPhases = createAsyncTaskSuccessPhases(body)
   const tryRegion = body.tryRegion ?? null
   const awaits = body.awaits
@@ -794,7 +804,6 @@ function createAsyncTaskBodyPlan(body): AsyncTaskBodyPlan {
   return {
     awaits,
     prefixStatements: body.prefixStatements ?? [],
-    prefixLocals,
     frameLocals: createAsyncTaskFrameLocals(prefixLocals, awaits, livePrefixLocalNames),
     successPhases,
     tryPhases,
@@ -970,7 +979,7 @@ function isSupportedAsyncTaskValueType(valueType) {
     || valueType === 'void'
 }
 
-function resolveAsyncTaskWrapperBody(statement, declaration: IrFunctionDeclaration, context, params) {
+function resolveAsyncTaskBodyPlan(statement, declaration: IrFunctionDeclaration, context, params) {
   if (declaration.async !== true || declaration.returnType !== 'promise' || isThrowingFunctionName(declaration.name, context)) {
     return null
   }
@@ -981,7 +990,7 @@ function resolveAsyncTaskWrapperBody(statement, declaration: IrFunctionDeclarati
     return null
   }
 
-  const tryBody = resolveAsyncTaskTryWrapperBody(statement, context, params, returnType)
+  const tryBody = resolveAsyncTaskTryBodyPlan(statement, context, params, returnType)
 
   if (tryBody != null) {
     return tryBody
@@ -1018,7 +1027,7 @@ function resolveAsyncTaskWrapperBody(statement, declaration: IrFunctionDeclarati
     return null
   }
 
-  return {
+  return createAsyncTaskBodyPlan({
     awaits,
     prefixStatements: [],
     prefixLocals: [],
@@ -1028,16 +1037,16 @@ function resolveAsyncTaskWrapperBody(statement, declaration: IrFunctionDeclarati
     returnExpression,
     returnType,
     tryRegion: null
-  }
+  })
 }
 
-function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) {
+function resolveAsyncTaskTryBodyPlan(statement, context, params, returnType) {
   if (statement.body.length !== 1 || statement.body[0]?.type !== 'TryStatement') {
     return null
   }
 
   const tryStatement = statement.body[0]
-  const nestedTryFinallyBody = resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, returnType)
+  const nestedTryFinallyBody = resolveAsyncTaskNestedTryBodyPlan(tryStatement, context, params, returnType)
 
   if (nestedTryFinallyBody != null) {
     return nestedTryFinallyBody
@@ -1074,7 +1083,7 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
     return null
   }
 
-  return {
+  return createAsyncTaskBodyPlan({
     awaits,
     prefixStatements: [],
     prefixLocals: [],
@@ -1088,10 +1097,10 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
       preHandlerFinalizerStatements: [],
       finalizerStatements
     }
-  }
+  })
 }
 
-function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, returnType) {
+function resolveAsyncTaskNestedTryBodyPlan(tryStatement, context, params, returnType) {
   const tryChainResult = collectAsyncTaskNestedTryChain(tryStatement)
 
   if (tryChainResult == null || tryChainResult.chain.length < 2) {
@@ -1170,7 +1179,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     return null
   }
 
-  return {
+  return createAsyncTaskBodyPlan({
     awaits,
     prefixStatements,
     prefixLocals: prefixResult.locals,
@@ -1187,7 +1196,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
       finalizerStatements: successFinalizerStatements,
       handlerFinalizerStatements
     }
-  }
+  })
 }
 
 function splitAsyncTaskLeadingPrefixStatements(statements) {
