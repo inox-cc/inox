@@ -31,10 +31,20 @@ type AsyncTaskPhase = {
   statements: any[]
 }
 
+type AsyncTaskFrameLocalKind = 'prefix' | 'await'
+
+type AsyncTaskFrameLocal = Record<string, any> & {
+  kind: AsyncTaskFrameLocalKind
+  name: string | null
+  type: string
+  fieldName: string
+}
+
 type AsyncTaskBodyPlan = {
   awaits: any[]
   prefixStatements: any[]
   prefixLocals: any[]
+  frameLocals: AsyncTaskFrameLocal[]
   successPhases: AsyncTaskPhase[]
   tryPhases: AsyncTaskPhase[]
   returnExpression: any
@@ -769,11 +779,14 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
 function createAsyncTaskBodyPlan(body): AsyncTaskBodyPlan {
   const successPhases = createAsyncTaskSuccessPhases(body)
   const tryRegion = body.tryRegion ?? null
+  const awaits = body.awaits
+  const prefixLocals = body.prefixLocals ?? []
 
   return {
-    awaits: body.awaits,
+    awaits,
     prefixStatements: body.prefixStatements ?? [],
-    prefixLocals: body.prefixLocals ?? [],
+    prefixLocals,
+    frameLocals: createAsyncTaskFrameLocals(prefixLocals, awaits),
     successPhases,
     tryPhases: createAsyncTaskTryPhases(tryRegion, successPhases),
     returnExpression: body.returnExpression,
@@ -781,6 +794,21 @@ function createAsyncTaskBodyPlan(body): AsyncTaskBodyPlan {
     hasTryRegion: tryRegion != null,
     tryHandler: tryRegion?.handler ?? null
   }
+}
+
+function createAsyncTaskFrameLocals(prefixLocals, awaits): AsyncTaskFrameLocal[] {
+  return [
+    ...prefixLocals.map(local => ({
+      ...local,
+      kind: 'prefix' as const
+    })),
+    ...awaits
+      .filter(item => item.fieldName != null)
+      .map(item => ({
+        ...item,
+        kind: 'await' as const
+      }))
+  ]
 }
 
 function createAsyncTaskSuccessPhases(body): AsyncTaskPhase[] {
@@ -1671,8 +1699,7 @@ function emitAsyncTaskFrameType(wrapper) {
     '  ccjs_promise* awaited;',
     '  int state;',
     ...wrapper.params.map(param => `  ${emitAsyncTaskStorageCType(param.valueType)} ${param.fieldName};`),
-    ...wrapper.prefixLocals.map(local => `  ${emitAsyncTaskStorageCType(local.type)} ${local.fieldName};`),
-    ...wrapper.awaits.filter(item => item.fieldName != null).map(item => `  ${emitAsyncTaskStorageCType(item.type)} ${item.fieldName};`),
+    ...wrapper.frameLocals.map(local => `  ${emitAsyncTaskStorageCType(local.type)} ${local.fieldName};`),
     `} ${wrapper.frameTypeName};`
   ]
 }
@@ -1708,7 +1735,7 @@ function emitAsyncTaskWrapperDeclaration(wrapper, baseContext) {
 
 function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', 0)
-  context.forceRuntimeStringDeclarations = new Set(wrapper.prefixLocals
+  context.forceRuntimeStringDeclarations = new Set(collectAsyncTaskFrameLocals(wrapper, 'prefix')
     .filter(local => local.forceRuntimeStringDeclaration === true)
     .map(local => local.name))
   context.failureStatement = 'goto ccjs_start_error;'
@@ -1731,8 +1758,7 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     '  frame->awaited = 0;',
     '  frame->state = 0;',
     ...wrapper.params.map(param => `  frame->${param.fieldName} = ${param.argName};`),
-    ...wrapper.prefixLocals.map(local => `  frame->${local.fieldName} = ${emitAsyncTaskStorageInit(local.type)};`),
-    ...wrapper.awaits.filter(item => item.fieldName != null).map(item => `  frame->${item.fieldName} = ${emitAsyncTaskStorageInit(item.type)};`),
+    ...wrapper.frameLocals.map(local => `  frame->${local.fieldName} = ${emitAsyncTaskStorageInit(local.type)};`),
     '  ccjs_status status = ccjs_promise_new(ccjs_loop, &frame->promise);',
     ...emitOwnedValueDeclarations(context).map(line => `  ${line}`),
     '  if (status != CCJS_OK) {',
@@ -1779,21 +1805,19 @@ function registerAsyncTaskParams(wrapper, context) {
 }
 
 function registerAsyncTaskAwaitLocals(wrapper, context, count) {
-  for (const item of wrapper.awaits.slice(0, count)) {
-    if (item.name != null) {
-      registerAsyncTaskLocalMetadata(item.name, item.type, item, context)
-    }
+  for (const item of collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)) {
+    registerAsyncTaskLocalMetadata(item.name, item.type, item, context)
   }
 }
 
 function registerAsyncTaskPrefixLocals(wrapper, context) {
-  for (const local of wrapper.prefixLocals) {
+  for (const local of collectAsyncTaskFrameLocals(wrapper, 'prefix')) {
     registerAsyncTaskLocalMetadata(local.name, local.type, local, context)
   }
 }
 
 function emitAsyncTaskStorePrefixLocalLines(wrapper) {
-  return wrapper.prefixLocals.flatMap(local => {
+  return collectAsyncTaskFrameLocals(wrapper, 'prefix').flatMap(local => {
     if (local.type === 'string') {
       return [
         ...emitPrepareOwnedValueWrite(`frame->${local.fieldName}`),
@@ -1820,9 +1844,19 @@ function emitAsyncTaskVisibleLocalReads(wrapper, count, options = { includePrefi
     ...wrapper.params.flatMap(param => emitAsyncTaskVisibleLocalRead(param.name, param.valueType, param.fieldName)),
     ...(options.includePrefixLocals === false
       ? []
-      : wrapper.prefixLocals.flatMap(local => emitAsyncTaskVisibleLocalRead(local.name, local.type, local.fieldName))),
-    ...wrapper.awaits.slice(0, count).flatMap(item => item.name == null ? [] : emitAsyncTaskVisibleLocalRead(item.name, item.type, item.fieldName))
+      : collectAsyncTaskFrameLocals(wrapper, 'prefix').flatMap(local => emitAsyncTaskVisibleLocalRead(local.name, local.type, local.fieldName))),
+    ...collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count).flatMap(item => emitAsyncTaskVisibleLocalRead(item.name, item.type, item.fieldName))
   ]
+}
+
+function collectAsyncTaskFrameLocals(wrapper, kind: AsyncTaskFrameLocalKind | null = null) {
+  return (wrapper.frameLocals ?? [])
+    .filter(local => kind == null || local.kind === kind)
+}
+
+function collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count) {
+  return collectAsyncTaskFrameLocals(wrapper, 'await')
+    .filter(local => local.index < count && local.name != null)
 }
 
 function registerAsyncTaskLocalMetadata(name, valueType, item, context) {
@@ -2691,8 +2725,7 @@ function emitAsyncTaskFinalizerDeclaration(wrapper) {
     '  if (frame == 0) return;',
     '  if (frame->awaited != 0) ccjs_promise_release(frame->awaited);',
     ...wrapper.params.filter(param => isManagedRuntimeReturnType(param.valueType)).map(param => `  ccjs_release(frame->${param.fieldName});`),
-    ...wrapper.prefixLocals.filter(local => isManagedRuntimeReturnType(local.type)).map(local => `  ccjs_release(frame->${local.fieldName});`),
-    ...wrapper.awaits.filter(item => item.fieldName != null && isManagedRuntimeReturnType(item.type)).map(item => `  ccjs_release(frame->${item.fieldName});`),
+    ...wrapper.frameLocals.filter(local => isManagedRuntimeReturnType(local.type)).map(local => `  ccjs_release(frame->${local.fieldName});`),
     '  if (frame->promise != 0) ccjs_promise_release(frame->promise);',
     '  if (frame->ccjs_loop != 0 && frame->ccjs_loop->allocator != 0) {',
     '    frame->ccjs_loop->allocator->free(frame->ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));',
