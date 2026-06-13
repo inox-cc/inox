@@ -16,10 +16,9 @@ function hello(value: Person): void {
   console.log(value.name)
 }
 
-export function main(): void {
-  const person: Person = {
-    name: 'Ada'
-  }
-  const callback: PersonCallback = hello
-  run(callback, person)
+const person: Person = {
+  name: 'Ada'
 }
+const callback: PersonCallback = hello
+run(callback, person)
+

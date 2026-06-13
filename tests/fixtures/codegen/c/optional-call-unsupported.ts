@@ -6,7 +6,6 @@ function hello(): string {
   return 'called'
 }
 
-export function main(): void {
-  const data = { hello }
-  console.log(data.hello?.())
-}
+const data = { hello }
+console.log(data.hello?.())
+

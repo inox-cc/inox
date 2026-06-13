@@ -308,6 +308,7 @@ class Checker {
   currentReturnAsync: boolean
   currentClassConstructor: boolean
   asyncDepth: number
+  functionDepth: number
 
   constructor(program: ProgramNode) {
     this.program = program
@@ -322,6 +323,7 @@ class Checker {
     this.currentReturnAsync = false
     this.currentClassConstructor = false
     this.asyncDepth = 0
+    this.functionDepth = 0
   }
 
   check(): void {
@@ -562,6 +564,8 @@ class Checker {
         this.currentReturnAsync = item.async === true
         const previousAsyncDepth = this.asyncDepth
         this.asyncDepth = item.async ? this.asyncDepth + 1 : this.asyncDepth
+        const previousFunctionDepth = this.functionDepth
+        this.functionDepth += 1
 
         for (const param of item.params) {
           const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
@@ -594,6 +598,7 @@ class Checker {
           this.currentReturnPromiseValueType = previousReturnPromiseValueType
           this.currentReturnAsync = previousReturnAsync
           this.asyncDepth = previousAsyncDepth
+          this.functionDepth = previousFunctionDepth
         }
       })
 
@@ -980,7 +985,7 @@ class Checker {
     }
 
     if (expression.type === 'AwaitExpression') {
-      if (this.asyncDepth === 0) {
+      if (this.asyncDepth === 0 && this.functionDepth > 0) {
         this.report('CCJS_AWAIT_OUTSIDE_ASYNC', 'await can only be used inside async functions', expression.loc)
       }
 
@@ -3407,28 +3412,43 @@ class Checker {
       }
 
       if (expression.expressionBody) {
-        actualReturnType = this.checkExpression(expression.body)
+        const previousFunctionDepth = this.functionDepth
+        this.functionDepth += 1
 
-        if (functionType != null) {
-          this.checkAssignableType(
-            actualReturnType,
-            functionType.returnType,
-            expression.body.loc,
-            functionType.returnNullable === true,
-            this.expressionCanBeNull(expression.body)
-          )
+        try {
+          actualReturnType = this.checkExpression(expression.body)
 
-          if (functionType.returnType === 'promise' && functionType.returnPromiseValueType != null) {
+          if (functionType != null) {
             this.checkAssignableType(
-              this.resolveExpressionPromiseValueType(expression.body),
-              functionType.returnPromiseValueType,
-              expression.body.loc
+              actualReturnType,
+              functionType.returnType,
+              expression.body.loc,
+              functionType.returnNullable === true,
+              this.expressionCanBeNull(expression.body)
             )
+
+            if (functionType.returnType === 'promise' && functionType.returnPromiseValueType != null) {
+              this.checkAssignableType(
+                this.resolveExpressionPromiseValueType(expression.body),
+                functionType.returnPromiseValueType,
+                expression.body.loc
+              )
+            }
           }
+        } finally {
+          this.functionDepth = previousFunctionDepth
         }
       } else {
         if (functionType == null) {
-          this.checkStatements(expression.body)
+          const previousFunctionDepth = this.functionDepth
+          this.functionDepth += 1
+
+          try {
+            this.checkStatements(expression.body)
+          } finally {
+            this.functionDepth = previousFunctionDepth
+          }
+
           return
         }
 
@@ -3436,18 +3456,21 @@ class Checker {
         const previousReturnNullable = this.currentReturnNullable
         const previousReturnPromiseValueType = this.currentReturnPromiseValueType
         const previousReturnAsync = this.currentReturnAsync
+        const previousFunctionDepth = this.functionDepth
 
         try {
           this.currentReturnType = functionType.returnType
           this.currentReturnNullable = functionType.returnNullable === true
           this.currentReturnPromiseValueType = functionType.returnPromiseValueType ?? null
           this.currentReturnAsync = false
+          this.functionDepth += 1
           this.checkStatements(expression.body)
         } finally {
           this.currentReturnType = previousReturnType
           this.currentReturnNullable = previousReturnNullable
           this.currentReturnPromiseValueType = previousReturnPromiseValueType
           this.currentReturnAsync = previousReturnAsync
+          this.functionDepth = previousFunctionDepth
         }
       }
     })
@@ -3511,6 +3534,8 @@ class Checker {
         this.currentReturnAsync = false
         const previousClassConstructor = this.currentClassConstructor
         this.currentClassConstructor = method.name === 'constructor'
+        const previousFunctionDepth = this.functionDepth
+        this.functionDepth += 1
 
         this.declare(
           'this',
@@ -3556,6 +3581,7 @@ class Checker {
           this.currentReturnPromiseValueType = previousReturnPromiseValueType
           this.currentReturnAsync = previousReturnAsync
           this.currentClassConstructor = previousClassConstructor
+          this.functionDepth = previousFunctionDepth
         }
       })
     }

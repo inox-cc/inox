@@ -26,12 +26,16 @@
       }
     },
     {
-      "kind": "function",
+      "kind": "statement",
       "index": 2,
       "loc": {
         "line": 10,
-        "column": 17
+        "column": 7
       }
+    },
+    {
+      "kind": "statement",
+      "index": 3
     }
   ],
   "functionDeclarations": [
@@ -80,28 +84,11 @@
         "line": 6,
         "column": 10
       }
-    },
-    {
-      "name": "main",
-      "exported": true,
-      "async": false,
-      "params": [],
-      "returnType": "void",
-      "returnNullable": false,
-      "loc": {
-        "line": 10,
-        "column": 17
-      }
     }
   ],
   "functionEffects": [
     {
       "name": "greet",
-      "throws": false,
-      "throwValueTypes": []
-    },
-    {
-      "name": "main",
       "throws": false,
       "throwValueTypes": []
     }
@@ -152,14 +139,18 @@
     },
     {
       "index": 2,
-      "type": "FunctionDeclaration",
-      "name": "main",
-      "exported": true,
-      "async": false,
+      "type": "VariableDeclaration",
+      "name": "user",
+      "exported": false,
+      "declarationKind": "const",
       "loc": {
         "line": 10,
-        "column": 17
+        "column": 7
       }
+    },
+    {
+      "index": 3,
+      "type": "ExpressionStatement"
     }
   ]
 }

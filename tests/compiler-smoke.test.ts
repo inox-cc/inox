@@ -148,7 +148,10 @@ test('lowers C object literals to runtime calls', () => {
   assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "Ada", 3/)
   assert.match(result.code, /ccjs_object_init_known\(user, 1, ccjs_number_value\(42\)\)/)
   assert.match(result.code, /ccjs_object_init_known\(user, 2, ccjs_bool_value\(true\)\)/)
-  assert.match(result.code, /ccjs_cleanup:\n  ccjs_release\(ccjs_value_\d+\);\n  ccjs_release\(user\);\n  return;/)
+  assert.match(
+    result.code,
+    /ccjs_cleanup:\n {2}ccjs_release\(ccjs_value_\d+\);\n {2}ccjs_release\(user\);\n {2}return;/
+  )
 })
 
 test('lowers synthetic C main wrapper through cleanup when runtime values are owned', () => {
@@ -166,7 +169,10 @@ console.log('ok')
     result.code,
     /if \(ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_user_\d+, &user\) != CCJS_OK\) goto ccjs_cleanup;/
   )
-  assert.match(result.code, /ccjs_cleanup:\n  ccjs_release\(ccjs_value_\d+\);\n  ccjs_release\(user\);\n  return 0;/)
+  assert.match(
+    result.code,
+    /ccjs_cleanup:\n {2}ccjs_release\(ccjs_value_\d+\);\n {2}ccjs_release\(user\);\n {2}return \(int\)ccjs_return;/
+  )
 })
 
 test('lowers C void return through cleanup when runtime values are owned', () => {
@@ -183,7 +189,10 @@ test('lowers C void return through cleanup when runtime values are owned', () =>
   )
 
   assert.match(result.code, /goto ccjs_cleanup;/)
-  assert.match(result.code, /ccjs_cleanup:\n  ccjs_release\(ccjs_value_\d+\);\n  ccjs_release\(user\);\n  return;/)
+  assert.match(
+    result.code,
+    /ccjs_cleanup:\n {2}ccjs_release\(ccjs_value_\d+\);\n {2}ccjs_release\(user\);\n {2}return;/
+  )
 })
 
 test('lowers C number returns through cleanup when runtime values are owned', () => {
@@ -203,11 +212,11 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /double getScore\(void\) \{\n  double ccjs_return = 0;/)
-  assert.match(result.code, /ccjs_return = score;\n  goto ccjs_cleanup;/)
+  assert.match(result.code, /double getScore\(void\) \{\n {2}double ccjs_return = 0;/)
+  assert.match(result.code, /ccjs_return = score;\n {2}goto ccjs_cleanup;/)
   assert.match(
     result.code,
-    /ccjs_cleanup:\n  ccjs_release\(ccjs_field_\d+\);\n  ccjs_release\(user\);\n  return ccjs_return;/
+    /ccjs_cleanup:\n {2}ccjs_release\(ccjs_field_\d+\);\n {2}ccjs_release\(user\);\n {2}return ccjs_return;/
   )
 })
 
@@ -922,7 +931,7 @@ test('lowers C runtime string references for object and array assignments', () =
 
   assert.match(
     result.code,
-    /ccjs_value ccjs_value_\d+;\n  ccjs_value_\d+\.tag = CCJS_TAG_STRING;\n  ccjs_value_\d+\.as\.ref = \(ccjs_ref\*\)&name->header;/
+    /ccjs_value ccjs_value_\d+;\n {2}ccjs_value_\d+\.tag = CCJS_TAG_STRING;\n {2}ccjs_value_\d+\.as\.ref = \(ccjs_ref\*\)&name->header;/
   )
   assert.match(result.code, /ccjs_object_set_known\(target, 0, ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_array_set\(values, 0, ccjs_value_\d+\)/)
@@ -1031,15 +1040,15 @@ export function main(): void {
   )
 
   assert.match(result.code, /ccjs_value getName\(void\);/)
-  assert.match(result.code, /ccjs_value getName\(void\) \{\n  ccjs_value ccjs_return = ccjs_undefined_value\(\);/)
+  assert.match(result.code, /ccjs_value getName\(void\) \{\n {2}ccjs_value ccjs_return = ccjs_undefined_value\(\);/)
   assert.match(
     result.code,
-    /ccjs_return = ccjs_value_\d+;\n  if \(ccjs_return\.tag != CCJS_TAG_STRING \|\| ccjs_return\.as\.ref == 0\) goto ccjs_cleanup;\n  ccjs_retain\(ccjs_return\);\n  goto ccjs_cleanup;/
+    /ccjs_return = ccjs_value_\d+;\n {2}if \(ccjs_return\.tag != CCJS_TAG_STRING \|\| ccjs_return\.as\.ref == 0\) goto ccjs_cleanup;\n {2}ccjs_retain\(ccjs_return\);\n {2}goto ccjs_cleanup;/
   )
   assert.match(result.code, /return ccjs_return;/)
   assert.match(
     result.code,
-    /ccjs_value ccjs_value_\d+ = ccjs_undefined_value\(\);\n  ccjs_release\(ccjs_value_\d+\);\n  ccjs_value_\d+ = ccjs_undefined_value\(\);\n  ccjs_value_\d+ = getName\(\);/
+    /ccjs_value ccjs_value_\d+ = ccjs_undefined_value\(\);\n {2}ccjs_release\(ccjs_value_\d+\);\n {2}ccjs_value_\d+ = ccjs_undefined_value\(\);\n {2}ccjs_value_\d+ = getName\(\);/
   )
   assert.match(result.code, /const ccjs_string\* name = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
@@ -1433,15 +1442,15 @@ test('prepares owned C runtime values before rewriting them inside loops', () =>
 
   assert.match(
     result.code,
-    /while \(index < 2\) \{[\s\S]*ccjs_release\(user\);\n    user = ccjs_undefined_value\(\);\n    if \(ccjs_object_new/
+    /while \(index < 2\) \{[\s\S]*ccjs_release\(user\);\n {4}user = ccjs_undefined_value\(\);\n {4}if \(ccjs_object_new/
   )
   assert.match(
     result.code,
-    /ccjs_release\(ccjs_value_\d+\);\n    ccjs_value_\d+ = ccjs_undefined_value\(\);\n    if \(ccjs_string_from_literal/
+    /ccjs_release\(ccjs_value_\d+\);\n {4}ccjs_value_\d+ = ccjs_undefined_value\(\);\n {4}if \(ccjs_string_from_literal/
   )
   assert.match(
     result.code,
-    /ccjs_release\(ccjs_log_value_\d+\);\n    ccjs_log_value_\d+ = ccjs_undefined_value\(\);\n    if \(ccjs_object_get_known/
+    /ccjs_release\(ccjs_log_value_\d+\);\n {4}ccjs_log_value_\d+ = ccjs_undefined_value\(\);\n {4}if \(ccjs_object_get_known/
   )
 })
 
@@ -1928,7 +1937,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /ccjs_release\(ccjs_value_\d+\);\n  ccjs_value_\d+ = ccjs_undefined_value\(\);\n  if \(ccjs_string_from_literal\(&ccjs_default_allocator, "step", 4, &ccjs_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;\n  index = nextIndex\(index, ccjs_value_\d+\);/
+    /ccjs_release\(ccjs_value_\d+\);\n {2}ccjs_value_\d+ = ccjs_undefined_value\(\);\n {2}if \(ccjs_string_from_literal\(&ccjs_default_allocator, "step", 4, &ccjs_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;\n {2}index = nextIndex\(index, ccjs_value_\d+\);/
   )
 })
 
@@ -1990,15 +1999,18 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
   assert.deepEqual(result.ir.body, result.hir.body)
 })
 
-test('drives JS and C main wrappers from target-neutral IR function declarations', () => {
-  const source = `export function main(): void {
+test('drives JS main wrappers from function declarations and C main wrappers from top-level statements', () => {
+  const functionSource = `export function main(): void {
   console.log('hello')
 }
 `
-  const js = compileSource(source, {
+  const topLevelC = compileSource("console.log('hello')\n", {
+    target: 'c'
+  })
+  const js = compileSource(functionSource, {
     target: 'js'
   })
-  const c = compileSource(source, {
+  const c = compileSource(functionSource, {
     target: 'c'
   })
   const withoutMainDeclaration = {
@@ -2008,13 +2020,15 @@ test('drives JS and C main wrappers from target-neutral IR function declarations
 
   assert.match(js.code, /const ccjsMainResult = main\(\)/)
   assert.doesNotMatch(emitJsFromIr(withoutMainDeclaration), /const ccjsMainResult = main\(\)/)
-  assert.match(c.code, /int main\(void\) \{\n  ccjs_main\(\);/)
+  assert.match(c.code, /void ccjs_main\(void\) \{/)
+  assert.doesNotMatch(c.code, /int main\(void\) \{[\s\S]*ccjs_main\(\);/)
+  assert.match(topLevelC.code, /int main\(void\) \{[\s\S]*printf\("%s\\n", "hello"\);/)
   assert.doesNotMatch(
     emitCFromIr({
       ...c.ir,
       functionDeclarations: []
     }),
-    /int main\(void\) \{\n  ccjs_main\(\);/
+    /int main\(void\) \{\n {2}ccjs_main\(\);/
   )
 })
 
@@ -2728,7 +2742,7 @@ export function main(): void {
   assert.match(result.code, /void greet\(ccjs_value ccjs_param_value\);/)
   assert.match(
     result.code,
-    /void greet\(ccjs_value ccjs_param_value\) \{\n  if \(ccjs_param_value\.tag != CCJS_TAG_STRING \|\| ccjs_param_value\.as\.ref == 0\) goto ccjs_cleanup;/
+    /void greet\(ccjs_value ccjs_param_value\) \{\n {2}if \(ccjs_param_value\.tag != CCJS_TAG_STRING \|\| ccjs_param_value\.as\.ref == 0\) goto ccjs_cleanup;/
   )
   assert.match(result.code, /greet\(ccjs_value_\d+\);/)
 
@@ -2808,7 +2822,7 @@ export function main(): void {
   })
 
   assert.match(c.code, /void run\(void \(\*callback\)\(void\)\);/)
-  assert.match(c.code, /void run\(void \(\*callback\)\(void\)\) \{\n  callback\(\);/)
+  assert.match(c.code, /void run\(void \(\*callback\)\(void\)\) \{\n {2}callback\(\);/)
   assert.match(c.code, /void \(\*const callback\)\(void\) = hello;/)
   assert.match(c.code, /run\(callback\);/)
 })
@@ -2862,7 +2876,7 @@ export function main(): void {
   })
 
   assert.match(c.code, /void run\(void \(\*callback\)\(double\)\);/)
-  assert.match(c.code, /void run\(void \(\*callback\)\(double\)\) \{\n  callback\(7\);/)
+  assert.match(c.code, /void run\(void \(\*callback\)\(double\)\) \{\n {2}callback\(7\);/)
   assert.match(c.code, /void \(\*const callback\)\(double\) = hello;/)
 })
 
@@ -3001,7 +3015,7 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n  char\* prefix;\n\} ccjs_callback_context_\d+;/)
+  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n {2}char\* prefix;\n\} ccjs_callback_context_\d+;/)
   assert.match(c.code, /static void ccjs_callback_context_\d+_finalize\(void\* context\);/)
   assert.match(
     c.code,
@@ -3046,19 +3060,19 @@ export function main(): void {
 
   assert.match(
     c.code,
-    /typedef struct ccjs_callback_context_\d+ \{\n  ccjs_value name;\n  ccjs_value user;\n\} ccjs_callback_context_\d+;/
+    /typedef struct ccjs_callback_context_\d+ \{\n {2}ccjs_value name;\n {2}ccjs_value user;\n\} ccjs_callback_context_\d+;/
   )
   assert.match(
     c.code,
-    /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)context;\n  ccjs_release\(captured->name\);\n  ccjs_release\(captured->user\);/
+    /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)context;\n {2}ccjs_release\(captured->name\);\n {2}ccjs_release\(captured->user\);/
   )
   assert.match(c.code, /ccjs_string\* name = \(ccjs_string\*\)captured->name\.as\.ref;/)
   assert.match(c.code, /ccjs_value user = captured->user;/)
   assert.match(
     c.code,
-    /ccjs_callback_ctx_\d+->name\.tag = CCJS_TAG_STRING;\n  ccjs_callback_ctx_\d+->name\.as\.ref = \(ccjs_ref\*\)&name->header;\n  ccjs_retain\(ccjs_callback_ctx_\d+->name\);/
+    /ccjs_callback_ctx_\d+->name\.tag = CCJS_TAG_STRING;\n {2}ccjs_callback_ctx_\d+->name\.as\.ref = \(ccjs_ref\*\)&name->header;\n {2}ccjs_retain\(ccjs_callback_ctx_\d+->name\);/
   )
-  assert.match(c.code, /ccjs_callback_ctx_\d+->user = user;\n  ccjs_retain\(ccjs_callback_ctx_\d+->user\);/)
+  assert.match(c.code, /ccjs_callback_ctx_\d+->user = user;\n {2}ccjs_retain\(ccjs_callback_ctx_\d+->user\);/)
 })
 
 test('checks typed callback argument counts', () => {
@@ -3092,7 +3106,7 @@ export function main(): void {
   })
 
   assert.match(c.code, /static void ccjs_callback_arrow_\d+\(void\);/)
-  assert.match(c.code, /static void ccjs_callback_arrow_\d+\(void\) \{\n  printf\("%s\\n", "inline"\);/)
+  assert.match(c.code, /static void ccjs_callback_arrow_\d+\(void\) \{\n {2}printf\("%s\\n", "inline"\);/)
   assert.match(c.code, /run\(ccjs_callback_arrow_\d+\);/)
 })
 
@@ -3114,7 +3128,7 @@ export function main(): void {
 
   assert.match(c.code, /void run\(ccjs_value callback\);/)
   assert.match(c.code, /if \(callback\.tag != CCJS_TAG_FUNCTION \|\| callback\.as\.ref == 0\) goto ccjs_cleanup;/)
-  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n  char\* label;\n\} ccjs_callback_context_\d+;/)
+  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n {2}char\* label;\n\} ccjs_callback_context_\d+;/)
   assert.match(
     c.code,
     /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/
@@ -3364,7 +3378,7 @@ export function main(): void {
 
   assert.match(
     c.code,
-    /typedef struct ccjs_callback_context_\d+ \{\n  ccjs_value\* label;\n  ccjs_value\* person;\n\} ccjs_callback_context_\d+;/
+    /typedef struct ccjs_callback_context_\d+ \{\n {2}ccjs_value\* label;\n {2}ccjs_value\* person;\n\} ccjs_callback_context_\d+;/
   )
   assert.match(c.code, /ccjs_value\* label = 0;/)
   assert.match(c.code, /ccjs_value\* person = 0;/)
@@ -3373,16 +3387,16 @@ export function main(): void {
   assert.match(c.code, /ccjs_value ccjs_box_value_\d+ = ccjs_value_\d+;/)
   assert.match(
     c.code,
-    /ccjs_retain\(ccjs_box_value_\d+\);\n  ccjs_release\(\*label\);\n  \*label = ccjs_box_value_\d+;/
+    /ccjs_retain\(ccjs_box_value_\d+\);\n {2}ccjs_release\(\*label\);\n {2}\*label = ccjs_box_value_\d+;/
   )
   assert.match(c.code, /ccjs_object_set_known\(\(\*person\), 0, \(\*label\)\)/)
   assert.match(
     c.code,
-    /if \(label != 0\) \{\n    ccjs_release\(\*label\);\n    ccjs_default_free\(0, label, sizeof\(ccjs_value\), _Alignof\(ccjs_value\)\);\n  \}/
+    /if \(label != 0\) \{\n {4}ccjs_release\(\*label\);\n {4}ccjs_default_free\(0, label, sizeof\(ccjs_value\), _Alignof\(ccjs_value\)\);\n {2}\}/
   )
   assert.match(
     c.code,
-    /if \(person != 0\) \{\n    ccjs_release\(\*person\);\n    ccjs_default_free\(0, person, sizeof\(ccjs_value\), _Alignof\(ccjs_value\)\);\n  \}/
+    /if \(person != 0\) \{\n {4}ccjs_release\(\*person\);\n {4}ccjs_default_free\(0, person, sizeof\(ccjs_value\), _Alignof\(ccjs_value\)\);\n {2}\}/
   )
 })
 
@@ -4010,7 +4024,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\) \{\n  \(void\)context;\n  if \(out == 0 \|\| arg_count != 1 \|\| args == 0\) return CCJS_ERR_TYPE;\n  \*out = ccjs_undefined_value\(\);\n  if \(args\[0\]\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n  double value = args\[0\]\.as\.number;\n  int ccjs_return_active = 0;/
+    /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\) \{\n {2}\(void\)context;\n {2}if \(out == 0 \|\| arg_count != 1 \|\| args == 0\) return CCJS_ERR_TYPE;\n {2}\*out = ccjs_undefined_value\(\);\n {2}if \(args\[0\]\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n {2}double value = args\[0\]\.as\.number;\n {2}int ccjs_return_active = 0;/
   )
   assert.match(
     result.code,
@@ -4026,7 +4040,7 @@ export function main(): void {
   )
   assert.match(
     result.code,
-    /ccjs_callback_cleanup:\n  ccjs_release\(ccjs_value_\d+\);\n  ccjs_release\(ccjs_error\);\n  return CCJS_OK;/
+    /ccjs_callback_cleanup:\n {2}ccjs_release\(ccjs_value_\d+\);\n {2}ccjs_release\(ccjs_error\);\n {2}return CCJS_OK;/
   )
 })
 
@@ -4159,13 +4173,13 @@ test('compiles throw and try catch finally to JS and lowers local string throws 
 
   assert.match(c.code, /ccjs_value ccjs_error = ccjs_undefined_value\(\);/)
   assert.match(c.code, /int ccjs_error_active = 0;/)
-  assert.match(c.code, /ccjs_retain\(ccjs_error\);\n    ccjs_error_active = 1;\n    goto ccjs_try_\d+_catch;/)
+  assert.match(c.code, /ccjs_retain\(ccjs_error\);\n {4}ccjs_error_active = 1;\n {4}goto ccjs_try_\d+_catch;/)
   assert.match(
     c.code,
-    /ccjs_try_\d+_catch:\n    if \(ccjs_error\.tag != CCJS_TAG_STRING \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/
+    /ccjs_try_\d+_catch:\n {4}if \(ccjs_error\.tag != CCJS_TAG_STRING \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/
   )
   assert.match(c.code, /ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;/)
-  assert.match(c.code, /ccjs_release\(ccjs_error\);\n    ccjs_error = ccjs_undefined_value\(\);/)
+  assert.match(c.code, /ccjs_release\(ccjs_error\);\n {4}ccjs_error = ccjs_undefined_value\(\);/)
   assert.match(c.code, /ccjs_try_\d+_finally:/)
   assert.match(c.code, /printf\("%s\\n", "finally"\);/)
 
@@ -4200,13 +4214,13 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /double getScore\(void\) \{\n  double ccjs_return = 0;\n  int ccjs_return_active = 0;/)
-  assert.match(result.code, /ccjs_return = 7;\n    ccjs_return_active = 1;\n    goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /double getScore\(void\) \{\n {2}double ccjs_return = 0;\n {2}int ccjs_return_active = 0;/)
+  assert.match(result.code, /ccjs_return = 7;\n {4}ccjs_return_active = 1;\n {4}goto ccjs_try_\d+_finally;/)
   assert.match(
     result.code,
-    /ccjs_try_\d+_finally:\n    printf\("%s\\n", "finally"\);\n    if \(ccjs_error_active\) goto ccjs_cleanup;\n    if \(ccjs_return_active\) goto ccjs_cleanup;/
+    /ccjs_try_\d+_finally:\n {4}printf\("%s\\n", "finally"\);\n {4}if \(ccjs_error_active\) goto ccjs_cleanup;\n {4}if \(ccjs_return_active\) goto ccjs_cleanup;/
   )
-  assert.match(result.code, /ccjs_cleanup:\n  ccjs_release\(ccjs_error\);\n  return ccjs_return;/)
+  assert.match(result.code, /ccjs_cleanup:\n {2}ccjs_release\(ccjs_error\);\n {2}return ccjs_return;/)
 })
 
 test('lowers C void return through finally before cleanup', () => {
@@ -4229,11 +4243,11 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /void stop\(void\) \{\n  int ccjs_return_active = 0;/)
-  assert.match(result.code, /ccjs_return_active = 1;\n    goto ccjs_try_\d+_finally;/)
+  assert.match(result.code, /void stop\(void\) \{\n {2}int ccjs_return_active = 0;/)
+  assert.match(result.code, /ccjs_return_active = 1;\n {4}goto ccjs_try_\d+_finally;/)
   assert.match(
     result.code,
-    /ccjs_try_\d+_finally:\n    printf\("%s\\n", "finally"\);\n    if \(ccjs_error_active\) goto ccjs_cleanup;\n    if \(ccjs_return_active\) goto ccjs_cleanup;/
+    /ccjs_try_\d+_finally:\n {4}printf\("%s\\n", "finally"\);\n {4}if \(ccjs_error_active\) goto ccjs_cleanup;\n {4}if \(ccjs_return_active\) goto ccjs_cleanup;/
   )
 })
 
@@ -4263,7 +4277,7 @@ test('lowers C break and continue through finally before loop flow', () => {
     }
   )
 
-  assert.match(result.code, /int ccjs_break_active = 0;\n  int ccjs_continue_active = 0;/)
+  assert.match(result.code, /int ccjs_break_active = 0;\n {2}int ccjs_continue_active = 0;/)
   assert.match(result.code, /ccjs_continue_active = 1;\n\s+goto ccjs_try_\d+_finally;/)
   assert.match(result.code, /ccjs_break_active = 1;\n\s+goto ccjs_try_\d+_finally;/)
   assert.match(result.code, /if \(ccjs_break_active\) goto ccjs_break_\d+;/)
@@ -4311,11 +4325,11 @@ test('compiles Error objects to JS and lowers lightweight Error objects to C', (
   assert.match(c.code, /ccjs_object_init_known\(created, 3, root\)/)
   assert.match(
     c.code,
-    /ccjs_error = thrown;\n    if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/
+    /ccjs_error = thrown;\n {4}if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/
   )
   assert.match(
     c.code,
-    /ccjs_try_\d+_catch:\n    if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/
+    /ccjs_try_\d+_catch:\n {4}if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/
   )
   assert.match(c.code, /ccjs_value error = ccjs_error;/)
   assert.match(c.code, /ccjs_object_get_known\(error, 0, &ccjs_log_value_\d+\)/)
@@ -4446,26 +4460,26 @@ export function main(): void {
   assert.match(result.code, /ccjs_status failString\(ccjs_value\* ccjs_error_out\);/)
   assert.match(result.code, /ccjs_status failError\(ccjs_value\* ccjs_error_out\);/)
   assert.match(result.code, /ccjs_status readValue\(double ok, double\* ccjs_out, ccjs_value\* ccjs_error_out\);/)
-  assert.match(result.code, /ccjs_status_result = CCJS_ERR_THROW;\n  ccjs_error_active = 1;\n  goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_status_result = CCJS_ERR_THROW;\n {2}ccjs_error_active = 1;\n {2}goto ccjs_cleanup;/)
   assert.match(
     result.code,
-    /if \(ccjs_error_active\) \{\n    \*ccjs_error_out = ccjs_error;\n    ccjs_error = ccjs_undefined_value\(\);\n  \}/
+    /if \(ccjs_error_active\) \{\n {4}\*ccjs_error_out = ccjs_error;\n {4}ccjs_error = ccjs_undefined_value\(\);\n {2}\}/
   )
   assert.match(
     result.code,
-    /ccjs_status ccjs_call_status_\d+ = failString\(&ccjs_error\);\n    if \(ccjs_call_status_\d+ == CCJS_ERR_THROW\) \{\n      ccjs_error_active = 1;\n      goto ccjs_try_\d+_catch;/
+    /ccjs_status ccjs_call_status_\d+ = failString\(&ccjs_error\);\n {4}if \(ccjs_call_status_\d+ == CCJS_ERR_THROW\) \{\n {6}ccjs_error_active = 1;\n {6}goto ccjs_try_\d+_catch;/
   )
   assert.match(
     result.code,
-    /ccjs_status ccjs_call_status_\d+ = failError\(&ccjs_error\);\n    if \(ccjs_call_status_\d+ == CCJS_ERR_THROW\) \{\n      ccjs_error_active = 1;\n      goto ccjs_try_\d+_catch;/
+    /ccjs_status ccjs_call_status_\d+ = failError\(&ccjs_error\);\n {4}if \(ccjs_call_status_\d+ == CCJS_ERR_THROW\) \{\n {6}ccjs_error_active = 1;\n {6}goto ccjs_try_\d+_catch;/
   )
   assert.match(
     result.code,
-    /double ccjs_call_result_\d+ = 0;\n    ccjs_status ccjs_call_status_\d+ = readValue\(1, &ccjs_call_result_\d+, &ccjs_error\);/
+    /double ccjs_call_result_\d+ = 0;\n {4}ccjs_status ccjs_call_status_\d+ = readValue\(1, &ccjs_call_result_\d+, &ccjs_error\);/
   )
   assert.match(
     result.code,
-    /ccjs_try_\d+_catch:\n    if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;\n    ccjs_error_active = 0;\n    \{\n      ccjs_value error = ccjs_error;/
+    /ccjs_try_\d+_catch:\n {4}if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;\n {4}ccjs_error_active = 0;\n {4}\{\n {6}ccjs_value error = ccjs_error;/
   )
 })
 
@@ -4508,7 +4522,7 @@ export function main(): void {
     target: 'js'
   })
   assert.match(js.code, /class User \{/)
-  assert.match(js.code, /\n  id\n  name\n/)
+  assert.match(js.code, /\n {2}id\n {2}name\n/)
   assert.match(js.code, /constructor\(id, name\) \{/)
   assert.match(js.code, /this\.id = id/)
   assert.match(js.code, /this\.name = name/)
@@ -4707,7 +4721,7 @@ export async function main(): Promise<void> {
   )
   assert.match(
     managed.code,
-    /ccjs_release\(ccjs_async_value_\d+\);\n  ccjs_async_value_\d+ = ccjs_undefined_value\(\);/
+    /ccjs_release\(ccjs_async_value_\d+\);\n {2}ccjs_async_value_\d+ = ccjs_undefined_value\(\);/
   )
 
   const throwing = compileSource(
@@ -4735,9 +4749,9 @@ export async function main(): Promise<void> {
   assert.match(throwing.code, /ccjs_status ccjs_async_status_\d+ = failText\(&ccjs_async_result_\d+, &ccjs_error\);/)
   assert.match(
     throwing.code,
-    /if \(ccjs_async_status_\d+ == CCJS_ERR_THROW\) \{\n    if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\) goto ccjs_cleanup;/
+    /if \(ccjs_async_status_\d+ == CCJS_ERR_THROW\) \{\n {4}if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\) goto ccjs_cleanup;/
   )
-  assert.match(throwing.code, /ccjs_release\(ccjs_error\);\n    ccjs_error = ccjs_undefined_value\(\);/)
+  assert.match(throwing.code, /ccjs_release\(ccjs_error\);\n {4}ccjs_error = ccjs_undefined_value\(\);/)
   assert.match(
     throwing.code,
     /if \(ccjs_async_result_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_async_result_\d+\.as\.ref == 0\) goto ccjs_cleanup;/
@@ -4748,7 +4762,7 @@ export async function main(): Promise<void> {
   )
   assert.match(
     throwing.code,
-    /ccjs_release\(ccjs_async_result_\d+\);\n    ccjs_async_result_\d+ = ccjs_undefined_value\(\);/
+    /ccjs_release\(ccjs_async_result_\d+\);\n {4}ccjs_async_result_\d+ = ccjs_undefined_value\(\);/
   )
 })
 
@@ -4895,7 +4909,7 @@ export async function main(): Promise<void> {
   assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_bool_value\(\(flag\) != 0\)\);/)
   assert.match(
     result.code,
-    /if \(ccjs_value_input\.tag != CCJS_TAG_BOOL\) \{\n      ccjs_status reject_status = ccjs_promise_reject\(frame->promise, ccjs_number_value\(\(ccjs_number\)CCJS_ERR_TYPE\)\);\n      return reject_status;\n    \}/
+    /if \(ccjs_value_input\.tag != CCJS_TAG_BOOL\) \{\n {6}ccjs_status reject_status = ccjs_promise_reject\(frame->promise, ccjs_number_value\(\(ccjs_number\)CCJS_ERR_TYPE\)\);\n {6}return reject_status;\n {4}\}/
   )
   assert.match(result.code, /frame->local_value = ccjs_value_input\.as\.boolean \? 1 : 0;/)
   assert.match(result.code, /double value = frame->local_value;/)
@@ -4969,12 +4983,12 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n  double delta;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}double delta;\n\} ccjs_promise_chain_context_\d+;/
   )
   assert.match(result.code, /static void ccjs_promise_chain_context_\d+_finalize\(void\* context\);/)
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n  double delta = captured->delta;/
+    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}double delta = captured->delta;/
   )
   assert.match(
     result.code,
@@ -5161,7 +5175,7 @@ export async function main(): Promise<void> {
   )
   assert.match(result.code, /status = ccjs_promise_resolved\(ccjs_loop, ccjs_async_value_\d+, &frame->awaited\);/)
   assert.match(result.code, /ccjs_release\(ccjs_async_value_\d+\);/)
-  assert.match(result.code, /ccjs_start_error:\n  ccjs_promise_release\(\*out\);/)
+  assert.match(result.code, /ccjs_start_error:\n {2}ccjs_promise_release\(\*out\);/)
   assert.match(result.code, /ccjs_value ccjs_async_value_\d+ = sameBytes\(bytes\);/)
   assert.match(
     result.code,
@@ -5210,7 +5224,7 @@ export async function main(): Promise<void> {
   assert.match(result.code, /frame->awaited = failNumber\(ccjs_loop\);/)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_compute_reject\(void\* context, ccjs_value ccjs_error\) \{\n  ccjs_async_task_compute_frame\* frame = \(ccjs_async_task_compute_frame\*\)context;\n  if \(frame == 0 \|\| frame->promise == 0\) return CCJS_ERR_TYPE;\n  ccjs_status status = ccjs_promise_reject\(frame->promise, ccjs_error\);\n  if \(frame->state < 1\) \{\n    ccjs_async_task_compute_finalize\(frame\);\n  \}\n  return status;\n\}/
+    /static ccjs_status ccjs_async_task_compute_reject\(void\* context, ccjs_value ccjs_error\) \{\n {2}ccjs_async_task_compute_frame\* frame = \(ccjs_async_task_compute_frame\*\)context;\n {2}if \(frame == 0 \|\| frame->promise == 0\) return CCJS_ERR_TYPE;\n {2}ccjs_status status = ccjs_promise_reject\(frame->promise, ccjs_error\);\n {2}if \(frame->state < 1\) \{\n {4}ccjs_async_task_compute_finalize\(frame\);\n {2}\}\n {2}return status;\n\}/
   )
   assert.match(result.code, /status = ccjs_promise_rejected\(ccjs_loop, ccjs_reject_value_\d+, &frame->awaited\);/)
   assert.match(
@@ -5266,7 +5280,7 @@ export async function main(): Promise<void> {
   )
   assert.match(
     result.code,
-    /case 0: \{\n    if \(ccjs_error\.tag != CCJS_TAG_STRING \|\| ccjs_error\.as\.ref == 0\) \{/
+    /case 0: \{\n {4}if \(ccjs_error\.tag != CCJS_TAG_STRING \|\| ccjs_error\.as\.ref == 0\) \{/
   )
   assert.match(result.code, /ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;/)
   assert.match(result.code, /printf\("%s %\.\*s\\n", "caught", \(int\)error->len, error->bytes\);/)
@@ -5370,7 +5384,7 @@ export async function main(): Promise<void> {
   assert.match(result.code, /ccjs_retain\(frame->param_path\);/)
   assert.match(result.code, /ccjs_string\* path = \(ccjs_string\*\)frame->param_path\.as\.ref;/)
   assert.match(result.code, /status = ccjs_fs_read_file\(ccjs_loop, path->bytes, path->len, &frame->awaited\);/)
-  assert.match(result.code, /frame->local_text = ccjs_value_input;\n    ccjs_retain\(frame->local_text\);/)
+  assert.match(result.code, /frame->local_text = ccjs_value_input;\n {4}ccjs_retain\(frame->local_text\);/)
   assert.match(result.code, /ccjs_string\* text = \(ccjs_string\*\)frame->local_text\.as\.ref;/)
   assert.match(result.code, /status = ccjs_fs_read_file_bytes\(ccjs_loop, path->bytes, path->len, &frame->awaited\);/)
   assert.match(result.code, /status = ccjs_fs_read_dir\(ccjs_loop, path->bytes, path->len, &frame->awaited\);/)
@@ -5472,9 +5486,9 @@ test('reports unhandled owned Promise rejections from generated C main', () => {
   assert.match(result.code, /static int ccjs_unhandled_rejection = 0;/)
   assert.match(
     result.code,
-    /if \(ccjs_promise_\d+ != 0 && ccjs_promise_is_unhandled_rejection\(ccjs_promise_\d+\)\) \{\n    fprintf\(stderr, "Unhandled Promise rejection\\n"\);\n    ccjs_unhandled_rejection = 1;\n  \}/
+    /if \(ccjs_promise_\d+ != 0 && ccjs_promise_is_unhandled_rejection\(ccjs_promise_\d+\)\) \{\n {4}fprintf\(stderr, "Unhandled Promise rejection\\n"\);\n {4}ccjs_unhandled_rejection = 1;\n {2}\}/
   )
-  assert.match(result.code, /return ccjs_unhandled_rejection == 0 \? 0 : 1;/)
+  assert.match(result.code, /return ccjs_unhandled_rejection == 0 \? \(int\)ccjs_return : 1;/)
 })
 
 test('lowers first C async await slice over Promise.resolve and fs promises', () => {
@@ -5589,7 +5603,7 @@ test('lowers awaited Error rejected promises into C try catch', () => {
   )
   assert.match(
     result.code,
-    /ccjs_try_\d+_catch:\n    if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/
+    /ccjs_try_\d+_catch:\n {4}if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/
   )
   assert.match(result.code, /ccjs_value error = ccjs_error;/)
   assert.match(result.code, /ccjs_object_get_known\(error, 0, &ccjs_log_value_\d+\)/)
@@ -5653,7 +5667,7 @@ export async function main(): Promise<void> {
   )
   assert.match(
     stringResult.code,
-    /if \(ccjs_async_status_\d+ == CCJS_ERR_THROW\) \{\n    if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\) goto ccjs_cleanup;/
+    /if \(ccjs_async_status_\d+ == CCJS_ERR_THROW\) \{\n {4}if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\) goto ccjs_cleanup;/
   )
   assert.match(
     stringResult.code,
@@ -8052,9 +8066,9 @@ export function main(): void {
     assert.doesNotMatch(js, /const ccjsMainResult/)
     assert.match(c, /void greet\(void\);/)
     assert.match(c, /void ccjs_main\(void\);/)
-    assert.match(c, /int main\(void\) \{\n  ccjs_main\(\);/)
+    assert.doesNotMatch(c, /int main\(void\) \{[\s\S]*ccjs_main\(\);/)
     assert.doesNotMatch(jsWithLibEntry, /const ccjsMainResult = main\(\)/)
-    assert.doesNotMatch(cWithLibEntry, /int main\(void\) \{\n  ccjs_main\(\);/)
+    assert.doesNotMatch(cWithLibEntry, /int main\(void\) \{\n {2}ccjs_main\(\);/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -8122,9 +8136,7 @@ test('drives C bundle functions and main wrapper from stored target-neutral IR p
       join(dir, 'main.ts'),
       `import { greet } from './lib.ts'
 
-export function main(): void {
-  greet()
-}
+greet()
 `
     )
 
@@ -8141,10 +8153,9 @@ export function main(): void {
     const code = emitCBundleFromIrModules(collectIrModuleRecords(graph), graph.entry)
 
     assert.match(code, /void greet\(void\);/)
-    assert.match(code, /void ccjs_main\(void\);/)
     assert.match(code, /void greet\(void\) \{/)
-    assert.match(code, /void ccjs_main\(void\) \{\n  greet\(\);/)
-    assert.match(code, /int main\(void\) \{\n  ccjs_main\(\);/)
+    assert.doesNotMatch(code, /ccjs_main/)
+    assert.match(code, /int main\(void\) \{\n {2}double ccjs_return = 0;\n {2}greet\(\);/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -8181,10 +8192,10 @@ export function main(): void {
       target: 'c'
     })
 
-    assert.match(js.code, /function sayHello\(\) \{\n  greet\(\)\n}/)
+    assert.match(js.code, /function sayHello\(\) \{\n {2}greet\(\)\n}/)
     assert.match(c.code, /void sayHello\(void\);/)
-    assert.match(c.code, /void sayHello\(void\) \{\n  greet\(\);/)
-    assert.match(c.code, /ccjs_main\(void\) \{\n  sayHello\(\);/)
+    assert.match(c.code, /void sayHello\(void\) \{\n {2}greet\(\);/)
+    assert.match(c.code, /ccjs_main\(void\) \{\n {2}sayHello\(\);/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -9233,7 +9244,7 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_promise_chain_arrow_\d+\(void\* context, ccjs_value ccjs_value_input, ccjs_value\* out\) \{\n  \(void\)context;\n  if \(out == 0\) return CCJS_ERR_TYPE;\n  \*out = ccjs_undefined_value\(\);\n  if \(ccjs_value_input\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n  double value = ccjs_value_input\.as\.number;/
+    /static ccjs_status ccjs_promise_chain_arrow_\d+\(void\* context, ccjs_value ccjs_value_input, ccjs_value\* out\) \{\n {2}\(void\)context;\n {2}if \(out == 0\) return CCJS_ERR_TYPE;\n {2}\*out = ccjs_undefined_value\(\);\n {2}if \(ccjs_value_input\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n {2}double value = ccjs_value_input\.as\.number;/
   )
   assert.match(result.code, /\*out = ccjs_number_value\(\(value \* 2\)\);/)
   assert.match(result.code, /\*out = ccjs_number_value\(\(value \* 3\)\);/)
@@ -9241,22 +9252,22 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   assert.match(result.code, /\*out = ccjs_number_value\(doubled\);/)
   assert.match(
     result.code,
-    /if \(value > 5\) \{\n    \(\*out\) = ccjs_number_value\(\(value \* 2\)\);\n    goto ccjs_promise_callback_cleanup;\n  \}/
+    /if \(value > 5\) \{\n {4}\(\*out\) = ccjs_number_value\(\(value \* 2\)\);\n {4}goto ccjs_promise_callback_cleanup;\n {2}\}/
   )
   assert.match(
     result.code,
-    /\(\*out\) = ccjs_number_value\(value\);\n  goto ccjs_promise_callback_cleanup;\nccjs_promise_callback_cleanup:/
+    /\(\*out\) = ccjs_number_value\(value\);\n {2}goto ccjs_promise_callback_cleanup;\nccjs_promise_callback_cleanup:/
   )
   assert.match(
     result.code,
-    /switch \(\(int\)value\) \{\n    case \(int\)2: \{\n      \(\*out\) = ccjs_number_value\(\(value \* 10\)\);\n      goto ccjs_promise_callback_cleanup;/
+    /switch \(\(int\)value\) \{\n {4}case \(int\)2: \{\n {6}\(\*out\) = ccjs_number_value\(\(value \* 10\)\);\n {6}goto ccjs_promise_callback_cleanup;/
   )
   assert.match(result.code, /\*out = ccjs_number_value\(96\);/)
   assert.match(result.code, /const double recovered = 97;/)
   assert.match(result.code, /\*out = ccjs_number_value\(recovered\);/)
   assert.match(
     result.code,
-    /if \(1 == 1\) \{\n    \(\*out\) = ccjs_number_value\(98\);\n    goto ccjs_promise_callback_cleanup;\n  \}/
+    /if \(1 == 1\) \{\n {4}\(\*out\) = ccjs_number_value\(98\);\n {4}goto ccjs_promise_callback_cleanup;\n {2}\}/
   )
   assert.match(
     result.code,
@@ -9346,7 +9357,7 @@ test('lowers Promise callback loop bodies to C runtime promises', () => {
   assert.match(result.code, /while \(value > 0\) \{/)
   assert.match(result.code, /for \(double index = 0; \(index < value\); \(index = \(index \+ 1\)\)\) \{/)
   assert.match(result.code, /goto ccjs_continue_\d+;/)
-  assert.match(result.code, /\(\*out\) = ccjs_number_value\(total\);\n  goto ccjs_promise_callback_cleanup;/)
+  assert.match(result.code, /\(\*out\) = ccjs_number_value\(total\);\n {2}goto ccjs_promise_callback_cleanup;/)
 })
 
 test('lowers captured Promise callbacks to C runtime promises', () => {
@@ -9392,32 +9403,32 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n  double extra;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
   )
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n  char\* literal;\n  double extra;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}char\* literal;\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
   )
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n  ccjs_value label;\n  double extra;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}ccjs_value label;\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
   )
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n  double ok;\n  ccjs_value user;\n  double extra;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}double ok;\n {2}ccjs_value user;\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
   )
   assert.match(result.code, /static void ccjs_promise_chain_context_\d+_finalize\(void\* context\);/)
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n  ccjs_release\(captured->label\);/
+    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}ccjs_release\(captured->label\);/
   )
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n  ccjs_release\(captured->user\);/
+    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}ccjs_release\(captured->user\);/
   )
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n  double extra = captured->extra;/
+    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}double extra = captured->extra;/
   )
   assert.match(result.code, /double ok = captured->ok;/)
   assert.match(result.code, /char\* literal = captured->literal;/)
@@ -9426,12 +9437,12 @@ export async function main(): Promise<void> {
   assert.match(result.code, /ccjs_promise_callback_ctx_\d+->literal = literal;/)
   assert.match(
     result.code,
-    /ccjs_promise_callback_ctx_\d+->label\.tag = CCJS_TAG_STRING;\n  ccjs_promise_callback_ctx_\d+->label\.as\.ref = \(ccjs_ref\*\)&label->header;\n  ccjs_retain\(ccjs_promise_callback_ctx_\d+->label\);/
+    /ccjs_promise_callback_ctx_\d+->label\.tag = CCJS_TAG_STRING;\n {2}ccjs_promise_callback_ctx_\d+->label\.as\.ref = \(ccjs_ref\*\)&label->header;\n {2}ccjs_retain\(ccjs_promise_callback_ctx_\d+->label\);/
   )
   assert.match(result.code, /ccjs_promise_callback_ctx_\d+->ok = ok;/)
   assert.match(
     result.code,
-    /ccjs_promise_callback_ctx_\d+->user = user;\n  ccjs_retain\(ccjs_promise_callback_ctx_\d+->user\);/
+    /ccjs_promise_callback_ctx_\d+->user = user;\n {2}ccjs_retain\(ccjs_promise_callback_ctx_\d+->user\);/
   )
   assert.match(
     result.code,
@@ -9589,15 +9600,15 @@ test('passes loop context to C Promise callbacks that schedule timers', () => {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n  ccjs_loop\* ccjs_loop;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}ccjs_loop\* ccjs_loop;\n\} ccjs_promise_chain_context_\d+;/
   )
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n  if \(captured->ccjs_loop == 0\) return CCJS_ERR_TYPE;\n  ccjs_loop\* ccjs_loop = captured->ccjs_loop;/
+    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}if \(captured->ccjs_loop == 0\) return CCJS_ERR_TYPE;\n {2}ccjs_loop\* ccjs_loop = captured->ccjs_loop;/
   )
   assert.match(
     result.code,
-    /typedef struct ccjs_callback_context_\d+ \{\n  double value;\n\} ccjs_callback_context_\d+;/
+    /typedef struct ccjs_callback_context_\d+ \{\n {2}double value;\n\} ccjs_callback_context_\d+;/
   )
   assert.match(result.code, /ccjs_promise_callback_ctx_\d+->ccjs_loop = ccjs_loop;/)
   assert.match(result.code, /ccjs_callback_ctx_\d+->value = value;/)
@@ -10407,6 +10418,20 @@ test('rejects await outside async functions', () => {
   )
 })
 
+test('accepts await in top-level C entry statements', () => {
+  const result = compileSource(
+    `const value = await Promise.resolve(1)
+console.log(value)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /int main\(void\) \{/)
+  assert.deepEqual(result.ir.runtimeRequirements, ['async-runtime'])
+})
+
 test('compiles a static ESM module graph to JS bundle', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
 
@@ -10507,11 +10532,9 @@ function scheduleLater(): void {
   setTimeout(onTimeout, 1)
 }
 
-export function main(): void {
-  schedule()
-  const immediate = setImmediate(scheduleLater)
-  clearImmediate(immediate)
-}
+schedule()
+const immediate = setImmediate(scheduleLater)
+clearImmediate(immediate)
 `,
     {
       target: 'c'
@@ -10524,7 +10547,8 @@ export function main(): void {
   assert.match(result.code, /#include "ccjs\/callback\.h"/)
   assert.match(result.code, /static ccjs_status ccjs_timer_callback_run\(void\* context\)/)
   assert.match(result.code, /void schedule\(ccjs_loop\* ccjs_loop\);/)
-  assert.match(result.code, /void ccjs_main\(ccjs_loop\* ccjs_loop\);/)
+  assert.match(result.code, /int main\(void\) \{/)
+  assert.match(result.code, /schedule\(&ccjs_loop\);/)
   assert.match(result.code, /ccjs_timer_handle\* timeout = 0;/)
   assert.match(result.code, /ccjs_timer_handle\* interval = 0;/)
   assert.match(result.code, /ccjs_timer_handle\* immediate = 0;/)
@@ -10538,7 +10562,7 @@ export function main(): void {
   )
   assert.match(
     result.code,
-    /ccjs_loop_queue_immediate\(ccjs_loop, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &immediate\)/
+    /ccjs_loop_queue_immediate\(&ccjs_loop, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &immediate\)/
   )
   assert.match(result.code, /ccjs_loop_clear_timer\(timeout\);/)
   assert.match(result.code, /ccjs_loop_clear_timer\(interval\);/)
@@ -10546,9 +10570,8 @@ export function main(): void {
   assert.match(result.code, /scheduleLater\(\(ccjs_loop\*\)context\);/)
   assert.match(
     result.code,
-    /ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_scheduleLater_\d+, ccjs_loop, 0, &ccjs_callback_\d+\)/
+    /ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_scheduleLater_\d+, &ccjs_loop, 0, &ccjs_callback_\d+\)/
   )
-  assert.match(result.code, /ccjs_main\(&ccjs_loop\);/)
   assert.match(result.code, /while \(ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
   assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_loop\.now_ms \+ 1\)/)
 

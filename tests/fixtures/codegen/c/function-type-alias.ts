@@ -11,7 +11,6 @@ function hello(): void {
   console.log('typed')
 }
 
-export function main(): void {
-  const callback: Done = hello
-  run(callback)
-}
+const callback: Done = hello
+run(callback)
+

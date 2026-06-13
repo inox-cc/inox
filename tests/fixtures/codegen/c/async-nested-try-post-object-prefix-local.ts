@@ -21,7 +21,6 @@ async function work(): Promise<User> {
   }
 }
 
-export async function main(): Promise<void> {
-  const result: User = await work()
-  console.log(result.name, result.score)
-}
+const result: User = await work()
+console.log(result.name, result.score)
+

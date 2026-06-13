@@ -6,9 +6,8 @@ function run(callback: Function): void {
   callback()
 }
 
-export function main(): void {
-  let values = [1]
-  run(() => {
-    console.log(values.length)
-  })
-}
+let values = [1]
+run(() => {
+  console.log(values.length)
+})
+

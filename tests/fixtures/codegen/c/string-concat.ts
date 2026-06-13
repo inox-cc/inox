@@ -10,9 +10,8 @@ function getName(): string {
   return 'Grace'
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const name = user.name
-  const message = name + ' ' + getName() + '!'
-  console.log(message)
-}
+const user: User = { name: 'Ada' }
+const name = user.name
+const message = name + ' ' + getName() + '!'
+console.log(message)
+

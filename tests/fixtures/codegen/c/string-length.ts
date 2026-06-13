@@ -14,9 +14,8 @@ function getName(): string {
   return 'Grace'
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const name = user.name
-  const message = name + '!'
-  console.log('Ada'.length, length(name), user.name.length, getName().length, message.length)
-}
+const user: User = { name: 'Ada' }
+const name = user.name
+const message = name + '!'
+console.log('Ada'.length, length(name), user.name.length, getName().length, message.length)
+

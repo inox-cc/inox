@@ -1,5 +1,3 @@
 example/build/**
-examples/**
-tests/differential/**
 tests/fixtures/**
 tests/snapshots/**

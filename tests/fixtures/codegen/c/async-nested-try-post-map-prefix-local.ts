@@ -16,7 +16,6 @@ async function work(): Promise<Map<string, number>> {
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Map<string, number> = await work()
-  console.log(result.get('Grace') ?? 0, result.size)
-}
+const result: Map<string, number> = await work()
+console.log(result.get('Grace') ?? 0, result.size)
+

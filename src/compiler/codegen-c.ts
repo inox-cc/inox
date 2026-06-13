@@ -10,10 +10,8 @@ import {
   collectIrStoredFunctionEffects,
   collectIrSyntaxFeatureUsages,
   collectIrTopLevelNodeEntries,
-  collectIrTopLevelNodes,
   collectIrTopLevelNodesFromPrograms,
-  findIrEntryProgram,
-  hasIrFunctionDeclaration
+  findIrEntryProgram
 } from './ir.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from './ir.ts'
 import type {
@@ -97,7 +95,7 @@ type AsyncTaskBodyPlan = {
 }
 
 export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
-  return emitCUnit([ir], ir, options)
+  return emitCUnit([ir], ir, options, [ir])
 }
 
 export function emitCBundleFromIrModules(
@@ -106,15 +104,18 @@ export function emitCBundleFromIrModules(
   options: CEmitOptions = {}
 ): string {
   const irPrograms = collectIrPrograms(irModules)
+  const entryIndex = irModules.findIndex((module) => module.path === entry)
+  const entryIrPrograms = collectIrPrograms(entryIndex < 0 ? irModules : irModules.slice(0, entryIndex + 1))
   const entryIr = findIrEntryProgram(irModules, entry)
 
-  return emitCUnit(irPrograms, entryIr, options)
+  return emitCUnit(irPrograms, entryIr, options, entryIrPrograms)
 }
 
 function emitCUnit(
   irPrograms: IrProgram[],
   entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null,
-  options: CEmitOptions = {}
+  options: CEmitOptions = {},
+  entryIrPrograms: IrProgram[] = entryIrProgram == null ? [] : [entryIrProgram]
 ) {
   const diagnostics: Diagnostic[] = []
   const functionEntries = collectIrFunctionNodeEntries(irPrograms)
@@ -276,7 +277,7 @@ function emitCUnit(
     lines.push('')
   }
 
-  lines.push(...emitMainWrapper(entryIrProgram, baseContext))
+  lines.push(...emitMainWrapper(entryIrPrograms, baseContext))
 
   if (diagnostics.length > 0) {
     throw new CompileError(diagnostics)
@@ -656,11 +657,7 @@ function createThrowingFunctionInfo(
   }
 }
 
-function reportUnsupportedCSyntaxFeatures(syntaxFeatures: IrSyntaxFeatureUsage[], diagnostics: Diagnostic[]) {
-  for (const usage of syntaxFeatures) {
-    void usage
-  }
-}
+function reportUnsupportedCSyntaxFeatures(syntaxFeatures: IrSyntaxFeatureUsage[], diagnostics: Diagnostic[]) {}
 
 function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]) {
   const infos = new Map<string, AnyNode>()
@@ -5284,44 +5281,16 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
   }
 }
 
-function emitMainWrapper(entryIrProgram, baseContext) {
+function emitMainWrapper(irPrograms, baseContext) {
   const context = createFunctionContext(baseContext, 'number')
-
-  if (hasIrFunctionDeclaration(entryIrProgram, 'main')) {
-    if (!functionTakesEventLoopParam('main', baseContext)) {
-      const returnExpression = emitMainReturnExpression(context)
-
-      return ['int main(void) {', '  ccjs_main();', `  return ${returnExpression};`, '}']
-    }
-
-    registerEventLoop(context)
-
-    const lines = [
-      'int main(void) {',
-      ...emitEventLoopDeclarations(context).map((line) => `  ${line}`),
-      ...emitEventLoopInit(context).map((line) => `  ${line}`),
-      '  ccjs_main(&ccjs_loop);',
-      ...emitEventLoopDrain(context).map((line) => `  ${line}`)
-    ]
-
-    if (shouldEmitCleanupLabel(context)) {
-      lines.push('ccjs_cleanup:')
-      lines.push(...emitEventLoopCleanup(context).map((line) => `  ${line}`))
-    }
-
-    lines.push(`  return ${emitMainReturnExpression(context)};`)
-    lines.push('}')
-
-    return lines
-  }
-
-  const body = entryIrProgram == null ? [] : collectIrTopLevelNodes(entryIrProgram, 'statement')
+  const body = collectIrTopLevelNodesFromPrograms(irPrograms, 'statement')
   const bodyLines: string[] = []
   const lines = ['int main(void) {']
 
   bodyLines.push(...emitStatementList(body, context).map((line) => `  ${line}`))
 
   lines.push(...emitLoopFlowDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitReturnValueDeclarations(context).map((line) => `  ${line}`))
   lines.push(...emitReturnFlowDeclarations(context).map((line) => `  ${line}`))
   lines.push(...emitEventLoopDeclarations(context).map((line) => `  ${line}`))
   lines.push(...emitOwnedValueDeclarations(context).map((line) => `  ${line}`))
@@ -5347,7 +5316,11 @@ function emitMainWrapper(entryIrProgram, baseContext) {
 }
 
 function emitMainReturnExpression(context) {
-  return context.unhandledRejectionFlag == null ? '0' : `${context.unhandledRejectionFlag} == 0 ? 0 : 1`
+  const successReturn = context.returnType === 'number' ? '(int)ccjs_return' : '0'
+
+  return context.unhandledRejectionFlag == null
+    ? successReturn
+    : `${context.unhandledRejectionFlag} == 0 ? ${successReturn} : 1`
 }
 
 function emitCFunctionName(name) {

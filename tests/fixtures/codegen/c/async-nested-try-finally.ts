@@ -14,7 +14,6 @@ async function compute(): Promise<number> {
   }
 }
 
-export async function main(): Promise<void> {
-  const promise = compute()
-  console.log(await promise)
-}
+const promise = compute()
+console.log(await promise)
+

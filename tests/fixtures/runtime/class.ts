@@ -1,4 +1,4 @@
-// @targets js
+// @targets js,c
 // @expect pass
 
 class User {
@@ -11,7 +11,6 @@ class User {
   }
 }
 
-export function main(): void {
-  const user = new User('Ada')
-  user.greet()
-}
+const user = new User('Ada')
+user.greet()
+

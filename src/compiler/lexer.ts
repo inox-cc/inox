@@ -1,5 +1,9 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
-import type { Diagnostic, Token } from './types.ts'
+import type { Diagnostic, SourceLocation, Token } from './types.ts'
+
+type TokenizeOptions = {
+  file?: string
+}
 
 const keywords = new Set([
   'async',
@@ -65,9 +69,10 @@ const punctuators = new Set([
   '?'
 ])
 
-export function tokenize(source: string): Token[] {
+export function tokenize(source: string, options: TokenizeOptions = {}): Token[] {
   const tokens: Token[] = []
   const diagnostics: Diagnostic[] = []
+  const file = options.file
   let index = 0
   let line = 1
   let column = 1
@@ -121,15 +126,12 @@ export function tokenize(source: string): Token[] {
     }
 
     diagnostics.push(
-      diagnostic('CCJS_UNKNOWN_CHAR', `unknown character ${JSON.stringify(char)}`, {
-        line,
-        column
-      })
+      diagnostic('CCJS_UNKNOWN_CHAR', `unknown character ${JSON.stringify(char)}`, location(line, column))
     )
     advance(char)
   }
 
-  tokens.push(makeToken('eof', '<eof>', line, column, index))
+  tokens.push(makeToken('eof', '<eof>', line, column, index, file))
   throwDiagnostics(diagnostics)
 
   return tokens
@@ -147,7 +149,7 @@ export function tokenize(source: string): Token[] {
 
       if (char === quote) {
         advance(char)
-        return makeToken('string', value, startLine, startColumn, startIndex)
+        return makeToken('string', value, startLine, startColumn, startIndex, file)
       }
 
       if (char === '\\') {
@@ -159,13 +161,10 @@ export function tokenize(source: string): Token[] {
     }
 
     diagnostics.push(
-      diagnostic('CCJS_UNTERMINATED_STRING', 'unterminated string literal', {
-        line: startLine,
-        column: startColumn
-      })
+      diagnostic('CCJS_UNTERMINATED_STRING', 'unterminated string literal', location(startLine, startColumn))
     )
 
-    return makeToken('string', value, startLine, startColumn, startIndex)
+    return makeToken('string', value, startLine, startColumn, startIndex, file)
   }
 
   function readTemplate(): Token {
@@ -188,18 +187,15 @@ export function tokenize(source: string): Token[] {
       }
 
       if (char === '`') {
-        return makeToken('template', raw, startLine, startColumn, startIndex)
+        return makeToken('template', raw, startLine, startColumn, startIndex, file)
       }
     }
 
     diagnostics.push(
-      diagnostic('CCJS_UNTERMINATED_TEMPLATE', 'unterminated template literal', {
-        line: startLine,
-        column: startColumn
-      })
+      diagnostic('CCJS_UNTERMINATED_TEMPLATE', 'unterminated template literal', location(startLine, startColumn))
     )
 
-    return makeToken('template', raw, startLine, startColumn, startIndex)
+    return makeToken('template', raw, startLine, startColumn, startIndex, file)
   }
 
   function readNumber(): Token {
@@ -223,7 +219,7 @@ export function tokenize(source: string): Token[] {
       }
     }
 
-    return makeToken('number', value, startLine, startColumn, startIndex)
+    return makeToken('number', value, startLine, startColumn, startIndex, file)
   }
 
   function readIdentifier(): Token {
@@ -237,7 +233,7 @@ export function tokenize(source: string): Token[] {
       advance(source[index])
     }
 
-    return makeToken(keywords.has(value) ? 'keyword' : 'identifier', value, startLine, startColumn, startIndex)
+    return makeToken(keywords.has(value) ? 'keyword' : 'identifier', value, startLine, startColumn, startIndex, file)
   }
 
   function readPunctuator(): Token {
@@ -258,7 +254,7 @@ export function tokenize(source: string): Token[] {
       advance(char)
     }
 
-    return makeToken('punctuator', value, startLine, startColumn, startIndex)
+    return makeToken('punctuator', value, startLine, startColumn, startIndex, file)
   }
 
   function readEscape(): string {
@@ -317,12 +313,21 @@ export function tokenize(source: string): Token[] {
       column += 1
     }
   }
+
+  function location(line: number, column: number): SourceLocation {
+    return {
+      ...(file == null ? {} : { file }),
+      line,
+      column
+    }
+  }
 }
 
-function makeToken(type: string, value: string, line: number, column: number, index: number): Token {
+function makeToken(type: string, value: string, line: number, column: number, index: number, file?: string): Token {
   return {
     type,
     value,
+    ...(file == null ? {} : { file }),
     line,
     column,
     index

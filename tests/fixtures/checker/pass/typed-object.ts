@@ -1,4 +1,4 @@
-// @targets js
+// @targets js,c
 // @expect pass
 
 type User = {
@@ -6,8 +6,7 @@ type User = {
   name: string
 }
 
-export function main(): void {
-  const user: User = { id: 1, name: 'Ada' }
-  user.name = 'Grace'
-  console.log(user.name)
-}
+const user: User = { id: 1, name: 'Ada' }
+user.name = 'Grace'
+console.log(user.name)
+

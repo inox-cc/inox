@@ -35,10 +35,8 @@ test('ccjs accepts valid TypeScript files as canonical source input', async () =
   try {
     await writeFile(
       entry,
-      `export function main(): void {
-  const name: string = 'Ada'
-  console.log(\`hello \${name}\`)
-}
+      `const name: string = 'Ada'
+console.log(\`hello \${name}\`)
 `
     )
 
@@ -83,10 +81,9 @@ test('ccjs file --emit c reads Math.random seed config', async () => {
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  const value = Math.random()
-  console.log(value)
-}
+      `const value = Math.random()
+console.log(value)
+
 `
     )
     await writeFile(
@@ -129,10 +126,9 @@ test('ccjs file --emit c reads Math.random os backend config', async () => {
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  const value = Math.random()
-  console.log(value)
-}
+      `const value = Math.random()
+console.log(value)
+
 `
     )
     await writeFile(
@@ -174,10 +170,9 @@ test('ccjs file --emit c checks embedded entropy capability for Math.random os b
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  const value = Math.random()
-  console.log(value)
-}
+      `const value = Math.random()
+console.log(value)
+
 `
     )
     await writeFile(
@@ -243,10 +238,9 @@ test('ccjs file --emit c reads embedded profile capability config', async () => 
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  const now = Date.now()
-  console.log(now)
-}
+      `const now = Date.now()
+console.log(now)
+
 `
     )
     await writeFile(
@@ -306,10 +300,9 @@ test('ccjs file --emit c reads C budget config', async () => {
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  const values = [1, 2, 3]
-  console.log(values.length)
-}
+      `const values = [1, 2, 3]
+console.log(values.length)
+
 `
     )
     await writeFile(
@@ -371,7 +364,7 @@ test('ccjs module graph --emit c writes bundled C source', async () => {
 
     const c = await readFile(out, 'utf8')
     assert.match(c, /void greet\(void\);/)
-    assert.match(c, /void ccjs_main\(void\);/)
+    assert.match(c, /int main\(void\)/)
     assert.match(c, /greet\(\);/)
   } finally {
     await rm(dir, {
@@ -482,10 +475,9 @@ test('ccjs build --target c links only needed C runtime source groups', async (t
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  const now = Date.now()
-  console.log(now)
-}
+      `const now = Date.now()
+console.log(now)
+
 `
     )
     await writeFile(
@@ -538,9 +530,7 @@ test('ccjs build --target c reads ccjs.config.json toolchain settings', async (t
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  console.log('hello')
-}
+      `console.log('hello')
 `
     )
     await writeFile(
@@ -610,9 +600,7 @@ test('ccjs build --target c reads ccjs.json toolchain settings', async (t) => {
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  console.log('hello')
-}
+      `console.log('hello')
 `
     )
     await writeFile(
@@ -683,9 +671,8 @@ test('ccjs build --target c prefers ccjs.config.json over ccjs.json', async (t) 
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  console.log('hello')
-}
+      `console.log('hello')
+
 `
     )
     await writeFile(
@@ -758,9 +745,8 @@ test('ccjs build --target c reports invalid ccjs.config.json', async () => {
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  console.log('hello')
-}
+      `console.log('hello')
+
 `
     )
     await writeFile(
@@ -796,10 +782,9 @@ test('ccjs build --target c reports invalid random seed config', async () => {
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  const value = Math.random()
-  console.log(value)
-}
+      `const value = Math.random()
+console.log(value)
+
 `
     )
     await writeFile(
@@ -835,10 +820,9 @@ test('ccjs build --target c reports invalid random backend config', async () => 
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  const value = Math.random()
-  console.log(value)
-}
+      `const value = Math.random()
+console.log(value)
+
 `
     )
     await writeFile(
@@ -874,9 +858,8 @@ test('ccjs build --target c reports invalid capability config', async () => {
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  console.log('hello')
-}
+      `console.log('hello')
+
 `
     )
     await writeFile(
@@ -913,9 +896,8 @@ test('ccjs build --target c reports invalid budget config', async () => {
   try {
     await writeFile(
       join(dir, 'main.ts'),
-      `export function main(): void {
-  console.log('hello')
-}
+      `console.log('hello')
+
 `
     )
     await writeFile(
@@ -979,14 +961,12 @@ test('ccjs run --target c runs fs globals through hosted fallback', async (t) =>
   return fs.readFile(${JSON.stringify(file)}, 'utf8')
 }
 
-export async function main(): Promise<void> {
-  await fs.writeFile(${JSON.stringify(file)}, 'hello c fs')
-  const text = await loadText()
-  const entries = await fs.readDir(${JSON.stringify(dir)})
-  const names = entries.sort()
-  console.log(text)
-  console.log(names[0], names[1])
-}
+await fs.writeFile(${JSON.stringify(file)}, 'hello c fs')
+const text = await loadText()
+const entries = await fs.readDir(${JSON.stringify(dir)})
+const names = entries.sort()
+console.log(text)
+console.log(names[0], names[1])
 `
     )
 
@@ -1117,6 +1097,40 @@ test('ccjs reports diagnostics for invalid source', async () => {
 
   assert.equal(result.code, 1)
   assert.match(result.stderr, /CCJS_NO_VAR/)
+})
+
+test('ccjs reports source file paths for module graph diagnostics', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-cli-diagnostics-'))
+
+  try {
+    await writeFile(
+      join(dir, 'index.ts'),
+      `import { userName } from './user.ts'
+
+console.log(userName())
+
+`
+    )
+    await writeFile(
+      join(dir, 'user.ts'),
+      `export function userName(): string {
+  return {}
+}
+`
+    )
+
+    const result = await runCli(['index.ts', '--emit', 'c'], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 1)
+    assert.match(result.stderr, new RegExp(`${escapeRegExp(join(dir, 'user.ts'))}:2:\\d+ CCJS_TYPE_MISMATCH`))
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
 })
 
 test('ccjs file runs a multi-file module graph', async () => {

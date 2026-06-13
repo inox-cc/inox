@@ -7,15 +7,14 @@ type Box = {
   names: string[]
 }
 
-export function main(): void {
-  const box: Box = { values: [1, 2, 3], names: ['Ada', 'Grace'] }
-  let total = 0
-  let letters = 0
-  for (const value of box.values) {
-    total = total + value
-  }
-  for (const name of box.names) {
-    letters = letters + name.length
-  }
-  console.log(total, letters)
+const box: Box = { values: [1, 2, 3], names: ['Ada', 'Grace'] }
+let total = 0
+let letters = 0
+for (const value of box.values) {
+  total = total + value
 }
+for (const name of box.names) {
+  letters = letters + name.length
+}
+console.log(total, letters)
+

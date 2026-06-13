@@ -6,14 +6,13 @@ function choose(label: string): number {
   return 1
 }
 
-export function main(): void {
-  const code = 1
+const code = 1
 
-  switch (code) {
-    case choose('one'):
-      console.log('one')
-      break
-    default:
-      console.log('other')
-  }
+switch (code) {
+  case choose('one'):
+    console.log('one')
+    break
+  default:
+    console.log('other')
 }
+

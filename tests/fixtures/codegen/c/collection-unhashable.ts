@@ -6,8 +6,7 @@ type User = {
   name: string
 }
 
-export function main(): void {
-  const users: Set<User> = new Set()
-  const user: User = { name: 'Ada' }
-  users.add(user)
-}
+const users: Set<User> = new Set()
+const user: User = { name: 'Ada' }
+users.add(user)
+

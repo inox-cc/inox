@@ -12,7 +12,6 @@ function hello(): void {
   console.log('hello')
 }
 
-export function main(): void {
-  const box: Box = { task: hello }
-  box.task()
-}
+const box: Box = { task: hello }
+box.task()
+

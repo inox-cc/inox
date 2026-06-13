@@ -9,6 +9,5 @@ function hello(): void {
   console.log('callback')
 }
 
-export function main(): void {
-  run(hello)
-}
+run(hello)
+

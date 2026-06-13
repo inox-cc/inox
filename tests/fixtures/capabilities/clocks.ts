@@ -3,9 +3,8 @@
 // @features wall-clock,monotonic-clock
 // @expect pass
 
-export function main(): void {
-  const wall = Date.now()
-  const monotonic = performance.now()
+const wall = Date.now()
+const monotonic = performance.now()
 
-  console.log(wall >= 0, monotonic >= 0)
-}
+console.log(wall >= 0, monotonic >= 0)
+

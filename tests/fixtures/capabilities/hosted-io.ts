@@ -3,19 +3,18 @@
 // @features fetch,fs,http,timers
 // @expect pass
 
-export async function main(): Promise<void> {
-  const response = await fetch('data:text/plain,hello')
-  const text = await response.text()
+const response = await fetch('data:text/plain,hello')
+const text = await response.text()
 
-  await fs.writeFile('/private/tmp/ccjs-capability-smoke.txt', text)
-  const saved = await fs.readFile('/private/tmp/ccjs-capability-smoke.txt', 'utf8')
-  const timeout = setTimeout(() => console.log(saved), 1)
+await fs.writeFile('/private/tmp/ccjs-capability-smoke.txt', text)
+const saved = await fs.readFile('/private/tmp/ccjs-capability-smoke.txt', 'utf8')
+const timeout = setTimeout(() => console.log(saved), 1)
 
-  clearTimeout(timeout)
+clearTimeout(timeout)
 
-  const server = http.createServer((request, response) => {
-    response.end(saved)
-  })
+const server = http.createServer((request, response) => {
+  response.end(saved)
+})
 
-  server.close()
-}
+server.close()
+

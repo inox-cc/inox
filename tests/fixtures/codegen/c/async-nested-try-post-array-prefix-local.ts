@@ -16,8 +16,7 @@ async function work(): Promise<Array<number>> {
   }
 }
 
-export async function main(): Promise<void> {
-  const promise = work()
-  const result: number[] = await promise
-  console.log(result[0], result[1])
-}
+const promise = work()
+const result: number[] = await promise
+console.log(result[0], result[1])
+

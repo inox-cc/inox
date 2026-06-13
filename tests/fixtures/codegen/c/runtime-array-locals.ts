@@ -7,9 +7,8 @@ type Box = {
   names: string[]
 }
 
-export function main(): void {
-  const box: Box = { values: [1, 2, 3], names: ['Ada'] }
-  const values = box.values
-  const names = box.names
-  console.log(values[1], names[0])
-}
+const box: Box = { values: [1, 2, 3], names: ['Ada'] }
+const values = box.values
+const names = box.names
+console.log(values[1], names[0])
+

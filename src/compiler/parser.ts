@@ -77,9 +77,7 @@ class Parser {
   }
 
   parseImportDeclaration(typeOnly: boolean): AnyNode {
-    if (this.matchKeyword('type')) {
-      typeOnly = true
-    }
+    const importTypeOnly = this.matchKeyword('type') ? true : typeOnly
 
     const specifiers: AnyNode[] = []
 
@@ -119,7 +117,7 @@ class Parser {
 
     return {
       type: 'ImportDeclaration',
-      typeOnly,
+      typeOnly: importTypeOnly,
       specifiers,
       source: source.value,
       loc: locFromToken(source)
@@ -1219,7 +1217,7 @@ class Parser {
 
     while (!this.isValue('}') && !this.is('eof')) {
       const key = this.parseObjectKey()
-      let value: AnyNode | null = null
+      let value: AnyNode
 
       if (this.matchValue(':')) {
         value = this.parseExpression()
@@ -1586,6 +1584,7 @@ class Parser {
 
 function locFromToken(token: SourceLocation): SourceLocation {
   return {
+    ...(token.file == null ? {} : { file: token.file }),
     line: token.line,
     column: token.column
   }

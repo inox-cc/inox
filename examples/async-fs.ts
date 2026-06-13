@@ -7,7 +7,5 @@ async function load(path: string): Promise<string> {
   return fs.readFile(path, 'utf8')
 }
 
-export async function main(): Promise<void> {
-  const text = await load('/tmp/ccjs-example-async-fs.txt')
-  console.log(text)
-}
+const text = await load('/tmp/ccjs-example-async-fs.txt')
+console.log(text)

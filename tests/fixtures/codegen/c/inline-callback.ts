@@ -6,8 +6,7 @@ function run(callback: Function): void {
   callback()
 }
 
-export function main(): void {
-  run(() => {
-    console.log('inline')
-  })
-}
+run(() => {
+  console.log('inline')
+})
+

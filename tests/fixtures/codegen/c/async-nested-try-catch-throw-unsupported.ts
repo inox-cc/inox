@@ -16,6 +16,5 @@ async function work(): Promise<number> {
   }
 }
 
-export async function main(): Promise<void> {
-  console.log(await work())
-}
+console.log(await work())
+

@@ -17,7 +17,6 @@ async function work(): Promise<Buffer> {
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Buffer = await work()
-  console.log(result.toString())
-}
+const result: Buffer = await work()
+console.log(result.toString())
+

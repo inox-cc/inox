@@ -28,7 +28,5 @@ class Counter {
   }
 }
 
-export function main(): void {
-  const counter = new Counter('ccjs', 3)
-  console.log(counter.label(), counter.total(4), counter.hasStart(3))
-}
+const counter = new Counter('ccjs', 3)
+console.log(counter.label(), counter.total(4), counter.hasStart(3))

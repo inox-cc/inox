@@ -6,10 +6,9 @@ export function failString(): void {
   throw 'boom'
 }
 
-export function main(): void {
-  try {
-    failString()
-  } catch (error) {
-    console.log(error)
-  }
+try {
+  failString()
+} catch (error) {
+  console.log(error)
 }
+

@@ -6,6 +6,5 @@ function printValue(value: unknown): void {
   console.log(value ?? 'Ada')
 }
 
-export function main(): void {
-  printValue(1)
-}
+printValue(1)
+

@@ -3,6 +3,4 @@
 
 import { greet } from './lib'
 
-export function main(): void {
-  greet()
-}
+greet()

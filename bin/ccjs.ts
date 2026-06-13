@@ -261,7 +261,9 @@ async function loadConfig(): Promise<CConfig> {
       }
 
       if (error instanceof SyntaxError) {
-        throw new Error(`invalid ${fileName}: ${error.message}`)
+        throw new Error(`invalid ${fileName}: ${error.message}`, {
+          cause: error
+        })
       }
 
       throw error

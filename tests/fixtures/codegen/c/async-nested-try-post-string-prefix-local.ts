@@ -16,7 +16,6 @@ async function work(label: string): Promise<string> {
   }
 }
 
-export async function main(): Promise<void> {
-  const promise = work('Ada')
-  console.log(await promise)
-}
+const promise = work('Ada')
+console.log(await promise)
+

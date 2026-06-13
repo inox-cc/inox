@@ -16,7 +16,6 @@ async function work(count: number): Promise<string> {
   }
 }
 
-export async function main(): Promise<void> {
-  const promise = work(4)
-  console.log(await promise)
-}
+const promise = work(4)
+console.log(await promise)
+

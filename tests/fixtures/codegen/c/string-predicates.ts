@@ -14,9 +14,8 @@ function getName(): string {
   return 'Grace'
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const name = user.name
-  const message = name + '!'
-  console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getName().endsWith('e'), message.endsWith('!'), name.includes('z'))
-}
+const user: User = { name: 'Ada' }
+const name = user.name
+const message = name + '!'
+console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getName().endsWith('e'), message.endsWith('!'), name.includes('z'))
+

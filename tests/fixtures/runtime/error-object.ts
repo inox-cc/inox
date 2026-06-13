@@ -1,10 +1,9 @@
-// @targets js
+// @targets js,c
 // @expect pass
 
-export function main(): void {
-  try {
-    throw new Error('boom')
-  } catch (error) {
-    console.log(error.message)
-  }
+try {
+  throw new Error('boom')
+} catch (error) {
+  console.log(error.message)
 }
+

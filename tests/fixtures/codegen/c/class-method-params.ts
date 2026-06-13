@@ -12,7 +12,6 @@ class User {
   }
 }
 
-export function main(): void {
-  const user = new User('Ada')
-  user.greet('hello')
-}
+const user = new User('Ada')
+user.greet('hello')
+

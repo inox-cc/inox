@@ -16,7 +16,6 @@ async function work(): Promise<Set<string>> {
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Set<string> = await work()
-  console.log(result.has('Grace'), result.size)
-}
+const result: Set<string> = await work()
+console.log(result.has('Grace'), result.size)
+

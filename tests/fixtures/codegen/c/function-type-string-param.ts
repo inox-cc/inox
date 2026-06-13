@@ -12,7 +12,6 @@ function hello(value: string): void {
   console.log(value)
 }
 
-export function main(): void {
-  const callback: StringCallback = hello
-  run(callback)
-}
+const callback: StringCallback = hello
+run(callback)
+

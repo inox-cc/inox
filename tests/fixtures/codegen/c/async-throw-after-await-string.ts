@@ -7,13 +7,12 @@ async function failString(): Promise<string> {
   throw 'bad'
 }
 
-export async function main(): Promise<void> {
-  const promise = failString()
+const promise = failString()
 
-  try {
-    const value = await promise
-    console.log(value)
-  } catch (error) {
-    console.log(error)
-  }
+try {
+  const value = await promise
+  console.log(value)
+} catch (error) {
+  console.log(error)
 }
+

@@ -7,12 +7,11 @@ function onTimer(): void {
   console.log('timer')
 }
 
-export function main(): void {
-  const wall = Date.now()
-  const monotonic = performance.now()
-  const timeout = setTimeout(onTimer, 1)
+const wall = Date.now()
+const monotonic = performance.now()
+const timeout = setTimeout(onTimer, 1)
 
-  fs.writeFile('/private/tmp/ccjs-embedded-profile.txt', 'saved')
-  clearTimeout(timeout)
-  console.log('ok', wall, monotonic)
-}
+fs.writeFile('/private/tmp/ccjs-embedded-profile.txt', 'saved')
+clearTimeout(timeout)
+console.log('ok', wall, monotonic)
+

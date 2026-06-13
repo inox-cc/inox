@@ -7,13 +7,12 @@ async function failError(): Promise<string> {
   throw new Error('boom')
 }
 
-export async function main(): Promise<void> {
-  const promise = failError()
+const promise = failError()
 
-  try {
-    const value = await promise
-    console.log(value)
-  } catch (error) {
-    console.log(error.message)
-  }
+try {
+  const value = await promise
+  console.log(value)
+} catch (error) {
+  console.log(error.message)
 }
+

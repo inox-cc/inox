@@ -1,20 +1,18 @@
 // @targets js,c
 // @expect pass
 
-export function main(): void {
-  const code = 2
-  let text = 'none'
+const code = 2
+let text = 'none'
 
-  switch (code) {
-    case 1:
-      text = 'one'
-      break
-    case 2:
-      text = 'two'
-      break
-    default:
-      text = 'other'
-  }
-
-  console.log(text)
+switch (code) {
+  case 1:
+    text = 'one'
+    break
+  case 2:
+    text = 'two'
+    break
+  default:
+    text = 'other'
 }
+
+console.log(text)

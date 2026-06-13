@@ -932,9 +932,8 @@ test('generated C reports unhandled Promise rejections', async (t) => {
 
   try {
     const result = compileSource(
-      `export async function main(): Promise<void> {
-  Promise.reject('boom')
-}
+      `Promise.reject('boom')
+
 `,
       {
         target: 'c'
@@ -1395,13 +1394,16 @@ test('generated C fs promise calls compile and run with runtime sources', async 
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-codegen-'))
   const source = join(dir, 'fs-codegen.c')
   const output = join(dir, 'fs-codegen')
+  const input = join(dir, 'value.txt')
+  const copied = join(dir, 'out.txt')
 
   try {
+    await writeFile(input, 'saved')
+
     const result = compileSource(
-      `export function main(): void {
-  const read = fs.readFile('/tmp/value.txt', 'utf8')
-  fs.writeFile('/tmp/out.txt', 'saved')
-}
+      `const read = await fs.readFile(${JSON.stringify(input)}, 'utf8')
+await fs.writeFile(${JSON.stringify(copied)}, read)
+
 `,
       {
         target: 'c'
@@ -1418,6 +1420,7 @@ test('generated C fs promise calls compile and run with runtime sources', async 
 
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, '')
+    assert.equal(await readFile(copied, 'utf8'), 'saved')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -1466,13 +1469,12 @@ test('generated C simple classes compile and run with runtime sources', async (t
   }
 }
 
-export function main(): void {
-  const user = new User(1, 'Ada')
-  user.rename('Grace')
-  const value = user.total(2)
-  const name = user.label()
-  console.log(value, name)
-}
+const user = new User(1, 'Ada')
+user.rename('Grace')
+const value = user.total(2)
+const name = user.label()
+console.log(value, name)
+
 `,
       {
         target: 'c'
@@ -1528,19 +1530,18 @@ function schedule(): void {
   clearTimeout(timeout)
 }
 
-export function main(): void {
-  schedule()
-  const cancelledImmediate = setImmediate(onTimeout)
-  clearImmediate(cancelledImmediate)
-  const interval = setInterval(onInterval, 1)
-  setTimeout(() => {
-    clearInterval(interval)
-    console.log('cleared')
-  }, 2)
-  setImmediate(() => {
-    setTimeout(onTimeout, 1)
-  })
-}
+schedule()
+const cancelledImmediate = setImmediate(onTimeout)
+clearImmediate(cancelledImmediate)
+const interval = setInterval(onInterval, 1)
+setTimeout(() => {
+  clearInterval(interval)
+  console.log('cleared')
+}, 2)
+setImmediate(() => {
+  setTimeout(onTimeout, 1)
+})
+
 `,
       {
         target: 'c'
@@ -1585,17 +1586,16 @@ test('generated C fs readDir awaits hosted directory entries', async (t) => {
     await writeFile(join(entriesDir, 'alpha.txt'), '')
 
     const result = compileSource(
-      `export async function main(): Promise<void> {
-  const entries = await fs.readDir(${JSON.stringify(entriesDir)})
-  const names = entries.sort()
-  console.log(names[0], names[1])
+      `const entries = await fs.readDir(${JSON.stringify(entriesDir)})
+const names = entries.sort()
+console.log(names[0], names[1])
 
-  try {
-    await fs.readDir(${JSON.stringify(missingDir)})
-  } catch (error) {
-    console.log(error.name, error.code, error.message)
-  }
+try {
+  await fs.readDir(${JSON.stringify(missingDir)})
+} catch (error) {
+  console.log(error.name, error.code, error.message)
 }
+
 `,
       {
         target: 'c'
@@ -1639,10 +1639,9 @@ test('generated C fs binary helpers copy hosted bytes', async (t) => {
     await writeFile(input, data)
 
     const result = compileSource(
-      `export async function main(): Promise<void> {
-  const bytes = await fs.readFileBytes(${JSON.stringify(input)})
-  await fs.writeFileBytes(${JSON.stringify(copied)}, bytes)
-}
+      `const bytes = await fs.readFileBytes(${JSON.stringify(input)})
+await fs.writeFileBytes(${JSON.stringify(copied)}, bytes)
+
 `,
       {
         target: 'c'
@@ -1693,15 +1692,14 @@ test('generated C fs sync helpers copy hosted files and read entries', async (t)
     await writeFile(bytesInput, data)
 
     const result = compileSource(
-      `export function main(): void {
-  const text = fs.readFileSync(${JSON.stringify(textInput)})
-  fs.writeFileSync(${JSON.stringify(textCopied)}, text)
-  const bytes = fs.readFileBytesSync(${JSON.stringify(bytesInput)})
-  fs.writeFileBytesSync(${JSON.stringify(bytesCopied)}, bytes)
-  const entries = fs.readDirSync(${JSON.stringify(entriesDir)})
-  const names = entries.sort()
-  console.log(names[0], names[1])
-}
+      `const text = fs.readFileSync(${JSON.stringify(textInput)})
+fs.writeFileSync(${JSON.stringify(textCopied)}, text)
+const bytes = fs.readFileBytesSync(${JSON.stringify(bytesInput)})
+fs.writeFileBytesSync(${JSON.stringify(bytesCopied)}, bytes)
+const entries = fs.readDirSync(${JSON.stringify(entriesDir)})
+const names = entries.sort()
+console.log(names[0], names[1])
+
 `,
       {
         target: 'c'
@@ -1770,122 +1768,121 @@ async function failNumber(): Promise<number> {
   throw 'async number fail'
 }
 
-export async function main(): Promise<void> {
-  const promise = Promise.resolve(2)
-  const value = await promise
-  const asyncValue = await getValue()
-  const asyncPromiseValue = getValue()
-  const asyncTextPromiseValue = getText()
-  const asyncRejectedPromiseValue = failNumber()
-  const asyncRejectedTextPromiseValue = failText()
-  const text = await getText()
-  const plainPromiseValue = await getPromise()
-  const doubled = Promise.resolve(4).then(value => value * 2)
-  const blockDoubled = Promise.resolve(5).then(value => {
-    return value * 3
-  })
-  const multiDoubled = Promise.resolve(6).then(value => {
-    const doubled = value * 2
+const promise = Promise.resolve(2)
+const value = await promise
+const asyncValue = await getValue()
+const asyncPromiseValue = getValue()
+const asyncTextPromiseValue = getText()
+const asyncRejectedPromiseValue = failNumber()
+const asyncRejectedTextPromiseValue = failText()
+const text = await getText()
+const plainPromiseValue = await getPromise()
+const doubled = Promise.resolve(4).then(value => value * 2)
+const blockDoubled = Promise.resolve(5).then(value => {
+  return value * 3
+})
+const multiDoubled = Promise.resolve(6).then(value => {
+  const doubled = value * 2
 
-    return doubled
-  })
-  const branchDoubled = Promise.resolve(7).then(value => {
-    if (value > 5) {
-      return value * 2
-    }
-
-    return value
-  })
-  const switchDoubled = Promise.resolve(2).then(value => {
-    switch (value) {
-      case 2:
-        return value * 10
-      default:
-        return 0
-    }
-
-    return value
-  })
-  const failedNumber: Promise<number> = Promise.reject('number fail')
-  const recoveredNumber = failedNumber.catch(error => 95)
-  const blockRecoveredNumber = failedNumber.catch(error => {
-    return 96
-  })
-  const multiRecoveredNumber = failedNumber.catch(error => {
-    const recovered = 97
-
-    return recovered
-  })
-  const branchRecoveredNumber = failedNumber.catch(error => {
-    if (1 === 1) {
-      return 98
-    }
-
-    return 0
-  })
-  const chainedNumber = Promise.resolve(1)
-    .then(value => value + 1)
-    .then(value => value + 1)
-  await fs.writeFile('/tmp/ccjs-async-load.txt', 'loaded')
-  const loadedTextPromise = loadText()
-  console.log(await Promise.resolve('ok'))
-  console.log(value)
-  console.log(asyncValue)
-  console.log(await asyncPromiseValue)
-  console.log(await asyncTextPromiseValue)
-  console.log(text)
-  console.log(plainPromiseValue)
-  console.log(await doubled)
-  console.log(await blockDoubled)
-  console.log(await multiDoubled)
-  console.log(await branchDoubled)
-  console.log(await switchDoubled)
-  console.log(await recoveredNumber)
-  console.log(await blockRecoveredNumber)
-  console.log(await multiRecoveredNumber)
-  console.log(await branchRecoveredNumber)
-  console.log(await chainedNumber)
-  console.log(await loadedTextPromise)
-
-  try {
-    await Promise.reject('fail')
-  } catch (error) {
-    console.log(error)
+  return doubled
+})
+const branchDoubled = Promise.resolve(7).then(value => {
+  if (value > 5) {
+    return value * 2
   }
 
-  try {
-    await failPromise()
-  } catch (error) {
-    console.log(error)
+  return value
+})
+const switchDoubled = Promise.resolve(2).then(value => {
+  switch (value) {
+    case 2:
+      return value * 10
+    default:
+      return 0
   }
 
-  const errorPromise = Promise.reject(new Error('stored error'))
+  return value
+})
+const failedNumber: Promise<number> = Promise.reject('number fail')
+const recoveredNumber = failedNumber.catch(error => 95)
+const blockRecoveredNumber = failedNumber.catch(error => {
+  return 96
+})
+const multiRecoveredNumber = failedNumber.catch(error => {
+  const recovered = 97
 
-  try {
-    await errorPromise
-  } catch (error) {
-    console.log(error.name, error.message)
+  return recovered
+})
+const branchRecoveredNumber = failedNumber.catch(error => {
+  if (1 === 1) {
+    return 98
   }
 
-  try {
-    const caught = await failText()
-    console.log(caught)
-  } catch (error) {
-    console.log(error)
-  }
+  return 0
+})
+const chainedNumber = Promise.resolve(1)
+  .then(value => value + 1)
+  .then(value => value + 1)
+await fs.writeFile('/tmp/ccjs-async-load.txt', 'loaded')
+const loadedTextPromise = loadText()
+console.log(await Promise.resolve('ok'))
+console.log(value)
+console.log(asyncValue)
+console.log(await asyncPromiseValue)
+console.log(await asyncTextPromiseValue)
+console.log(text)
+console.log(plainPromiseValue)
+console.log(await doubled)
+console.log(await blockDoubled)
+console.log(await multiDoubled)
+console.log(await branchDoubled)
+console.log(await switchDoubled)
+console.log(await recoveredNumber)
+console.log(await blockRecoveredNumber)
+console.log(await multiRecoveredNumber)
+console.log(await branchRecoveredNumber)
+console.log(await chainedNumber)
+console.log(await loadedTextPromise)
 
-  try {
-    await asyncRejectedPromiseValue
-  } catch (error) {
-    console.log(error)
-  }
-
-  try {
-    await asyncRejectedTextPromiseValue
-  } catch (error) {
-    console.log(error)
-  }
+try {
+  await Promise.reject('fail')
+} catch (error) {
+  console.log(error)
 }
+
+try {
+  await failPromise()
+} catch (error) {
+  console.log(error)
+}
+
+const errorPromise = Promise.reject(new Error('stored error'))
+
+try {
+  await errorPromise
+} catch (error) {
+  console.log(error.name, error.message)
+}
+
+try {
+  const caught = await failText()
+  console.log(caught)
+} catch (error) {
+  console.log(error)
+}
+
+try {
+  await asyncRejectedPromiseValue
+} catch (error) {
+  console.log(error)
+}
+
+try {
+  await asyncRejectedTextPromiseValue
+} catch (error) {
+  console.log(error)
+}
+
 `,
       {
         target: 'c'
@@ -1931,40 +1928,39 @@ test('generated C captured Promise callbacks compile and run', async (t) => {
   name: string
 }
 
-export async function main(): Promise<void> {
-  const extra = 5
-  const ok = true
-  const literal = 'literal'
-  const user: User = { name: 'captured' }
-  const label = user.name
-  const raw = Promise.resolve(1).then(value => {
-    console.log(literal)
+const extra = 5
+const ok = true
+const literal = 'literal'
+const user: User = { name: 'captured' }
+const label = user.name
+const raw = Promise.resolve(1).then(value => {
+  console.log(literal)
+
+  return value + extra
+})
+console.log(await raw)
+
+const added = Promise.resolve(4).then(value => value + extra)
+console.log(await added)
+
+const logged = Promise.resolve(6).then(value => {
+  console.log(label)
+
+  return value + extra
+})
+console.log(await logged)
+
+const objectLogged = Promise.resolve(7).then(value => {
+  if (ok) {
+    console.log(user.name)
 
     return value + extra
-  })
-  console.log(await raw)
+  }
 
-  const added = Promise.resolve(4).then(value => value + extra)
-  console.log(await added)
+  return value
+})
+console.log(await objectLogged)
 
-  const logged = Promise.resolve(6).then(value => {
-    console.log(label)
-
-    return value + extra
-  })
-  console.log(await logged)
-
-  const objectLogged = Promise.resolve(7).then(value => {
-    if (ok) {
-      console.log(user.name)
-
-      return value + extra
-    }
-
-    return value
-  })
-  console.log(await objectLogged)
-}
 `,
       {
         target: 'c'
@@ -2003,36 +1999,35 @@ test('generated C Promise callbacks with try catch finally compile and run', asy
 
   try {
     const result = compileSource(
-      `export async function main(): Promise<void> {
-  const handled = Promise.resolve(3).then(value => {
-    try {
-      if (value > 2) {
-        throw 'large'
-      }
-
-      return value
-    } catch (error) {
-      console.log(error)
-
-      return 7
-    } finally {
-      console.log('chain finally')
+      `const handled = Promise.resolve(3).then(value => {
+  try {
+    if (value > 2) {
+      throw 'large'
     }
 
-    return 0
-  })
-  const finalized = Promise.resolve(2).then(value => {
-    try {
-      return value * 2
-    } finally {
-      console.log('return finally')
-    }
+    return value
+  } catch (error) {
+    console.log(error)
 
-    return 0
-  })
+    return 7
+  } finally {
+    console.log('chain finally')
+  }
 
-  console.log(await handled, await finalized)
-}
+  return 0
+})
+const finalized = Promise.resolve(2).then(value => {
+  try {
+    return value * 2
+  } finally {
+    console.log('return finally')
+  }
+
+  return 0
+})
+
+console.log(await handled, await finalized)
+
 `,
       {
         target: 'c'
@@ -2077,11 +2072,10 @@ test('generated C async task frame over awaited Promise.resolve compiles and run
   return Promise.resolve(value + 3)
 }
 
-export async function main(): Promise<void> {
-  const promise = compute()
-  console.log(await compute())
-  console.log(await promise)
-}
+const promise = compute()
+console.log(await compute())
+console.log(await promise)
+
 `,
       {
         target: 'c'
@@ -2126,11 +2120,10 @@ test('generated C async task frame preserves parameters across resume', async (t
   return Promise.resolve(value + delta)
 }
 
-export async function main(): Promise<void> {
-  console.log(await addLater(2, 4))
-  const promise = addLater(5, 6)
-  console.log(await promise)
-}
+console.log(await addLater(2, 4))
+const promise = addLater(5, 6)
+console.log(await promise)
+
 `,
       {
         target: 'c'
@@ -2176,11 +2169,10 @@ test('generated C async task frame awaits local Promise variables', async (t) =>
   return Promise.resolve(value + delta)
 }
 
-export async function main(): Promise<void> {
-  console.log(await addLater(2, 4))
-  const promise = addLater(5, 6)
-  console.log(await promise)
-}
+console.log(await addLater(2, 4))
+const promise = addLater(5, 6)
+console.log(await promise)
+
 `,
       {
         target: 'c'
@@ -2225,10 +2217,9 @@ test('generated C boolean async task frame compiles and runs', async (t) => {
   return Promise.resolve(!value)
 }
 
-export async function main(): Promise<void> {
-  console.log(await flip(false))
-  console.log(await flip(true))
-}
+console.log(await flip(false))
+console.log(await flip(true))
+
 `,
       {
         target: 'c'
@@ -2274,11 +2265,10 @@ test('generated C async task frame awaits local Promise chains', async (t) => {
   return Promise.resolve(value + delta)
 }
 
-export async function main(): Promise<void> {
-  console.log(await addChain(2, 4))
-  const promise = addChain(5, 6)
-  console.log(await promise)
-}
+console.log(await addChain(2, 4))
+const promise = addChain(5, 6)
+console.log(await promise)
+
 `,
       {
         target: 'c'
@@ -2324,11 +2314,10 @@ test('generated C async task frame awaits captured local Promise chains', async 
   return value + delta
 }
 
-export async function main(): Promise<void> {
-  console.log(await addChain(2, 4))
-  const promise = addChain(5, 6)
-  console.log(await promise)
-}
+console.log(await addChain(2, 4))
+const promise = addChain(5, 6)
+console.log(await promise)
+
 `,
       {
         target: 'c'
@@ -2373,11 +2362,10 @@ test('generated C async task frame direct return values compile and run', async 
   return value + delta
 }
 
-export async function main(): Promise<void> {
-  console.log(await addLater(2, 4))
-  const promise = addLater(5, 6)
-  console.log(await promise)
-}
+console.log(await addLater(2, 4))
+const promise = addLater(5, 6)
+console.log(await promise)
+
 `,
       {
         target: 'c'
@@ -2429,10 +2417,9 @@ test('generated C async task frame direct managed return values compile and run'
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Buffer = await work()
-  console.log(result.toString())
-}
+const result: Buffer = await work()
+console.log(result.toString())
+
 `,
       {
         target: 'c'
@@ -2478,11 +2465,10 @@ test('generated C multiple-await async task frame compiles and runs', async (t) 
   return first + second
 }
 
-export async function main(): Promise<void> {
-  console.log(await addTwo(2, 4))
-  const promise = addTwo(5, 6)
-  console.log(await promise)
-}
+console.log(await addTwo(2, 4))
+const promise = addTwo(5, 6)
+console.log(await promise)
+
 `,
       {
         target: 'c'
@@ -2544,11 +2530,10 @@ async function compute(input: number): Promise<number> {
   return third + 1
 }
 
-export async function main(): Promise<void> {
-  console.log(await compute(2))
-  const promise = compute(5)
-  console.log(await promise)
-}
+console.log(await compute(2))
+const promise = compute(5)
+console.log(await promise)
+
 `,
       {
         target: 'c'
@@ -2606,9 +2591,8 @@ async function copyText(input: string, path: string): Promise<string> {
   return text
 }
 
-export async function main(): Promise<void> {
-  console.log(await copyText('managed', ${JSON.stringify(input)}))
-}
+console.log(await copyText('managed', ${JSON.stringify(input)}))
+
 `,
       {
         target: 'c'
@@ -2664,19 +2648,18 @@ async function failDirect(): Promise<number> {
   return value
 }
 
-export async function main(): Promise<void> {
-  try {
-    console.log(await compute())
-  } catch (error) {
-    console.log(error)
-  }
-
-  try {
-    console.log(await failDirect())
-  } catch (error) {
-    console.log(error)
-  }
+try {
+  console.log(await compute())
+} catch (error) {
+  console.log(error)
 }
+
+try {
+  console.log(await failDirect())
+} catch (error) {
+  console.log(error)
+}
+
 `,
       {
         target: 'c'
@@ -2739,15 +2722,14 @@ async function propagate(): Promise<number> {
   }
 }
 
-export async function main(): Promise<void> {
-  console.log(await recover())
+console.log(await recover())
 
-  try {
-    console.log(await propagate())
-  } catch (error) {
-    console.log('outer', error)
-  }
+try {
+  console.log(await propagate())
+} catch (error) {
+  console.log('outer', error)
 }
+
 `,
       {
         target: 'c'
@@ -2816,10 +2798,9 @@ async function literal(): Promise<string> {
   }
 }
 
-export async function main(): Promise<void> {
-  console.log(await work(4))
-  console.log(await literal())
-}
+console.log(await work(4))
+console.log(await literal())
+
 `,
       {
         target: 'c'
@@ -2873,10 +2854,9 @@ test('generated C async task frame array prefix locals compile and run', async (
   }
 }
 
-export async function main(): Promise<void> {
-  const result: number[] = await work()
-  console.log(result[0], result[1])
-}
+const result: number[] = await work()
+console.log(result[0], result[1])
+
 `,
       {
         target: 'c'
@@ -2930,11 +2910,10 @@ test('generated C async task frame bytes prefix locals compile and run', async (
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Buffer = await work()
-  const text = result.toString()
-  console.log(result[0], result[1], text)
-}
+const result: Buffer = await work()
+const text = result.toString()
+console.log(result[0], result[1], text)
+
 `,
       {
         target: 'c'
@@ -2988,10 +2967,9 @@ test('generated C async task frame inner body prefix locals compile and run', as
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Buffer = await work()
-  console.log(result.length, result.toString())
-}
+const result: Buffer = await work()
+console.log(result.length, result.toString())
+
 `,
       {
         target: 'c'
@@ -3045,10 +3023,9 @@ test('generated C async task frame post await inner managed locals compile and r
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Buffer = await work()
-  console.log(result.toString())
-}
+const result: Buffer = await work()
+console.log(result.toString())
+
 `,
       {
         target: 'c'
@@ -3102,9 +3079,8 @@ test('generated C async task frame post await inner scalar locals compile and ru
   }
 }
 
-export async function main(): Promise<void> {
-  console.log(await work())
-}
+console.log(await work())
+
 `,
       {
         target: 'c'
@@ -3159,9 +3135,8 @@ test('generated C async task frame post await locals before post-nested returns 
   }
 }
 
-export async function main(): Promise<void> {
-  console.log(await work())
-}
+console.log(await work())
+
 `,
       {
         target: 'c'
@@ -3216,9 +3191,8 @@ test('generated C async task frame post await managed locals before post-nested 
   }
 }
 
-export async function main(): Promise<void> {
-  console.log(await work())
-}
+console.log(await work())
+
 `,
       {
         target: 'c'
@@ -3277,10 +3251,9 @@ async function work(): Promise<User> {
   }
 }
 
-export async function main(): Promise<void> {
-  const result: User = await work()
-  console.log(result.name, result.score)
-}
+const result: User = await work()
+console.log(result.name, result.score)
+
 `,
       {
         target: 'c'
@@ -3334,10 +3307,9 @@ test('generated C async task frame Map prefix locals compile and run', async (t)
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Map<string, number> = await work()
-  console.log(result.get('Grace') ?? 0, result.size)
-}
+const result: Map<string, number> = await work()
+console.log(result.get('Grace') ?? 0, result.size)
+
 `,
       {
         target: 'c'
@@ -3391,10 +3363,9 @@ test('generated C async task frame Set prefix locals compile and run', async (t)
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Set<string> = await work()
-  console.log(result.has('Grace'), result.size)
-}
+const result: Set<string> = await work()
+console.log(result.has('Grace'), result.size)
+
 `,
       {
         target: 'c'
@@ -3448,10 +3419,9 @@ test('generated C async task frame post try managed locals compile and run', asy
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Buffer = await work()
-  console.log(result.toString())
-}
+const result: Buffer = await work()
+console.log(result.toString())
+
 `,
       {
         target: 'c'
@@ -3508,10 +3478,9 @@ test('generated C async task frame catch managed locals compile and run', async 
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Buffer = await work()
-  console.log(result.toString())
-}
+const result: Buffer = await work()
+console.log(result.toString())
+
 `,
       {
         target: 'c'
@@ -3566,10 +3535,9 @@ test('generated C async task frame catch direct managed returns compile and run'
   }
 }
 
-export async function main(): Promise<void> {
-  const result: Buffer = await work()
-  console.log(result.toString())
-}
+const result: Buffer = await work()
+console.log(result.toString())
+
 `,
       {
         target: 'c'
@@ -3622,10 +3590,9 @@ test('generated C nested async finalizer throw fallback compiles and runs', asyn
   }
 }
 
-export async function main(): Promise<void> {
-  const promise = work()
-  console.log(await promise)
-}
+const promise = work()
+console.log(await promise)
+
 `,
       {
         target: 'c'
@@ -3696,12 +3663,11 @@ async function listEntries(path: string): Promise<Array<string>> {
   return entries
 }
 
-export async function main(): Promise<void> {
-  console.log(await copyText(${JSON.stringify(textInput)}, ${JSON.stringify(textCopied)}))
-  await copyBytes(${JSON.stringify(bytesInput)}, ${JSON.stringify(bytesCopied)})
-  await listEntries(${JSON.stringify(entriesDir)})
-  console.log('listed')
-}
+console.log(await copyText(${JSON.stringify(textInput)}, ${JSON.stringify(textCopied)}))
+await copyBytes(${JSON.stringify(bytesInput)}, ${JSON.stringify(bytesCopied)})
+await listEntries(${JSON.stringify(entriesDir)})
+console.log('listed')
+
 `,
       {
         target: 'c'
@@ -3742,10 +3708,9 @@ test('generated C object literal lowering compiles and runs with runtime sources
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { name: 'Ada', score: 42 }
-  console.log('ok')
-}
+      `const user = { name: 'Ada', score: 42 }
+console.log('ok')
+
 `,
       {
         target: 'c'
@@ -3784,11 +3749,12 @@ test('generated C early return runs through cleanup label with runtime sources',
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { name: 'Ada' }
+      `const user = { name: 'Ada' }
+if (user.name === 'Ada') {
   return
-  console.log('unreachable')
 }
+console.log('unreachable')
+
 `,
       {
         target: 'c'
@@ -3873,9 +3839,8 @@ test('generated C number return cleanup compiles and runs with runtime sources',
   return score
 }
 
-export function main(): void {
-  console.log(getScore())
-}
+console.log(getScore())
+
 `,
       {
         target: 'c'
@@ -3926,15 +3891,14 @@ function nextIndex(index: number, label: string): number {
   return index + 1
 }
 
-export function main(): void {
-  let total = 0
+let total = 0
 
-  for (let index = start('start'); keepGoing(index, 'limit'); index = nextIndex(index, 'step')) {
-    total = total + index
-  }
-
-  console.log(total)
+for (let index = start('start'); keepGoing(index, 'limit'); index = nextIndex(index, 'step')) {
+  total = total + index
 }
+
+console.log(total)
+
 `,
       {
         target: 'c'
@@ -3973,19 +3937,18 @@ test('generated C continue statements compile and run with runtime sources', asy
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  let total = 0
+      `let total = 0
 
-  for (let index = 0; index < 5; index = index + 1) {
-    if (index === 2) {
-      continue
-    }
-
-    total = total + index
+for (let index = 0; index < 5; index = index + 1) {
+  if (index === 2) {
+    continue
   }
 
-  console.log(total)
+  total = total + index
 }
+
+console.log(total)
+
 `,
       {
         target: 'c'
@@ -4028,13 +3991,12 @@ test('generated C string-returning for initializer compiles and runs with runtim
   return 'Ada'
 }
 
-export function main(): void {
-  let index = 0
+let index = 0
 
-  for (const name = getName(); index < 1; index = index + 1) {
-    console.log(name)
-  }
+for (const name = getName(); index < 1; index = index + 1) {
+  console.log(name)
 }
+
 `,
       {
         target: 'c'
@@ -4085,27 +4047,26 @@ function choose(label: string): number {
   return 2
 }
 
-export function main(): void {
-  let index = 0
+let index = 0
 
-  if (isReady('if')) {
-    index = index + 1
-  }
-
-  while (keepGoing(index, 'while')) {
-    index = index + 1
-  }
-
-  switch (choose('switch')) {
-    case 2:
-      index = index + 1
-      break
-    default:
-      break
-  }
-
-  console.log(index)
+if (isReady('if')) {
+  index = index + 1
 }
+
+while (keepGoing(index, 'while')) {
+  index = index + 1
+}
+
+switch (choose('switch')) {
+  case 2:
+    index = index + 1
+    break
+  default:
+    break
+}
+
+console.log(index)
+
 `,
       {
         target: 'c'
@@ -4148,11 +4109,10 @@ test('generated C prepared scalar assignment compiles and runs with runtime sour
   return index + 1
 }
 
-export function main(): void {
-  let index = 0
-  index = nextIndex(index, 'step')
-  console.log(index)
-}
+let index = 0
+index = nextIndex(index, 'step')
+console.log(index)
+
 `,
       {
         target: 'c'
@@ -4199,10 +4159,9 @@ function hello(): void {
   console.log('callback')
 }
 
-export function main(): void {
-  const callback: Function = hello
-  run(callback)
-}
+const callback: Function = hello
+run(callback)
+
 `,
       {
         target: 'c'
@@ -4245,11 +4204,10 @@ test('generated C non-capturing inline callback values compile and run with runt
   callback()
 }
 
-export function main(): void {
-  run(() => {
-    console.log('inline')
-  })
-}
+run(() => {
+  console.log('inline')
+})
+
 `,
       {
         target: 'c'
@@ -4298,16 +4256,15 @@ function runNumber(callback: NumberCallback): void {
   callback(7)
 }
 
-export function main(): void {
-  const label = 'captured'
-  const offset = 5
-  runPlain(() => {
-    console.log(label)
-  })
-  runNumber((value: number) => {
-    console.log(value + offset)
-  })
-}
+const label = 'captured'
+const offset = 5
+runPlain(() => {
+  console.log(label)
+})
+runNumber((value: number) => {
+  console.log(value + offset)
+})
+
 `,
       {
         target: 'c'
@@ -4356,19 +4313,18 @@ function runNumber(callback: NumberCallback): void {
   callback(7)
 }
 
-export function main(): void {
-  const label = 'direct'
-  const offset = 5
-  const callback: Function = () => {
-    console.log(label)
-  }
-  const numberCallback: NumberCallback = (value: number) => {
-    console.log(value + offset)
-  }
-  callback()
-  run(callback)
-  runNumber(numberCallback)
+const label = 'direct'
+const offset = 5
+const callback: Function = () => {
+  console.log(label)
 }
+const numberCallback: NumberCallback = (value: number) => {
+  console.log(value + offset)
+}
+callback()
+run(callback)
+runNumber(numberCallback)
+
 `,
       {
         target: 'c'
@@ -4411,15 +4367,14 @@ test('generated C mutable numeric callback captures compile and run with runtime
   callback()
 }
 
-export function main(): void {
-  let count = 0
-  const callback: Function = () => {
-    count = count + 1
-    console.log(count)
-  }
-  run(callback)
+let count = 0
+const callback: Function = () => {
+  count = count + 1
   console.log(count)
 }
+run(callback)
+console.log(count)
+
 `,
       {
         target: 'c'
@@ -4467,9 +4422,8 @@ test('generated C mutable numeric callback parameter captures compile and run wi
   console.log(seed)
 }
 
-export function main(): void {
-  run(1)
-}
+run(1)
+
 `,
       {
         target: 'c'
@@ -4512,15 +4466,14 @@ test('generated C mutable string callback captures compile and run with runtime 
   callback()
 }
 
-export function main(): void {
-  let label = 'start'
-  const callback: Function = () => {
-    label = label + '!'
-    console.log(label)
-  }
-  run(callback)
+let label = 'start'
+const callback: Function = () => {
+  label = label + '!'
   console.log(label)
 }
+run(callback)
+console.log(label)
+
 `,
       {
         target: 'c'
@@ -4567,15 +4520,14 @@ function run(callback: Function): void {
   callback()
 }
 
-export function main(): void {
-  let person: Person = { name: 'Ada' }
-  const callback: Function = () => {
-    person.name = 'Grace'
-    console.log(person.name)
-  }
-  run(callback)
+let person: Person = { name: 'Ada' }
+const callback: Function = () => {
+  person.name = 'Grace'
   console.log(person.name)
 }
+run(callback)
+console.log(person.name)
+
 `,
       {
         target: 'c'
@@ -4624,10 +4576,9 @@ function hello(value: number): void {
   console.log(value)
 }
 
-export function main(): void {
-  const callback: NumberCallback = hello
-  run(callback)
-}
+const callback: NumberCallback = hello
+run(callback)
+
 `,
       {
         target: 'c'
@@ -4676,10 +4627,9 @@ function hello(value: string): void {
   console.log(value)
 }
 
-export function main(): void {
-  const callback: StringCallback = hello
-  run(callback)
-}
+const callback: StringCallback = hello
+run(callback)
+
 `,
       {
         target: 'c'
@@ -4732,13 +4682,12 @@ function hello(value: Person): void {
   console.log(value.name)
 }
 
-export function main(): void {
-  const person: Person = {
-    name: 'Ada'
-  }
-  const callback: PersonCallback = hello
-  run(callback, person)
+const person: Person = {
+  name: 'Ada'
 }
+const callback: PersonCallback = hello
+run(callback, person)
+
 `,
       {
         target: 'c'
@@ -4783,13 +4732,12 @@ function run(callback: StringCallback): void {
   callback('Ada')
 }
 
-export function main(): void {
-  const prefix = 'hello'
-  const callback: StringCallback = (value: string) => {
-    console.log(prefix, value)
-  }
-  run(callback)
+const prefix = 'hello'
+const callback: StringCallback = (value: string) => {
+  console.log(prefix, value)
 }
+run(callback)
+
 `,
       {
         target: 'c'
@@ -4834,12 +4782,11 @@ function run(callback: StringCallback): void {
   callback('direct')
 }
 
-export function main(): void {
-  const prefix = 'hello'
-  run((value: string) => {
-    console.log(prefix, value)
-  })
-}
+const prefix = 'hello'
+run((value: string) => {
+  console.log(prefix, value)
+})
+
 `,
       {
         target: 'c'
@@ -4888,14 +4835,13 @@ function run(callback: StringCallback): void {
   callback('Grace')
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const name = user.name
-  const callback: StringCallback = (value: string) => {
-    console.log(name, user.name, value)
-  }
-  run(callback)
+const user: User = { name: 'Ada' }
+const name = user.name
+const callback: StringCallback = (value: string) => {
+  console.log(name, user.name, value)
 }
+run(callback)
+
 `,
       {
         target: 'c'
@@ -4942,15 +4888,14 @@ function getName(): string {
   return 'Ada'
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const values = ['Ada', 'Grace']
-  const name = 'Ada'
-  const sameLocal = name === 'Ada'
-  const sameRuntime = user.name === values[0]
-  const differentCall = getName() !== values[1]
-  console.log(sameLocal, sameRuntime, differentCall)
-}
+const user: User = { name: 'Ada' }
+const values = ['Ada', 'Grace']
+const name = 'Ada'
+const sameLocal = name === 'Ada'
+const sameRuntime = user.name === values[0]
+const differentCall = getName() !== values[1]
+console.log(sameLocal, sameRuntime, differentCall)
+
 `,
       {
         target: 'c'
@@ -4997,12 +4942,11 @@ function getName(): string {
   return 'Grace'
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const name = user.name
-  const message = name + ' ' + getName() + '!'
-  console.log(message)
-}
+const user: User = { name: 'Ada' }
+const name = user.name
+const message = name + ' ' + getName() + '!'
+console.log(message)
+
 `,
       {
         target: 'c'
@@ -5053,13 +4997,12 @@ function getName(): string {
   return 'Grace'
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const name = user.name
-  const message = name + '!'
-  const unicode = 'A😀é'
-  console.log('Ada'.length, length(name), user.name.length, getName().length, message.length, unicode.length)
-}
+const user: User = { name: 'Ada' }
+const name = user.name
+const message = name + '!'
+const unicode = 'A😀é'
+console.log('Ada'.length, length(name), user.name.length, getName().length, message.length, unicode.length)
+
 `,
       {
         target: 'c'
@@ -5110,12 +5053,11 @@ function getName(): string {
   return 'Grace'
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const name = user.name
-  const message = name + '!'
-  console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getName().endsWith('e'), message.endsWith('!'), name.includes('z'))
-}
+const user: User = { name: 'Ada' }
+const name = user.name
+const message = name + '!'
+console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getName().endsWith('e'), message.endsWith('!'), name.includes('z'))
+
 `,
       {
         target: 'c'
@@ -5166,13 +5108,12 @@ function getName(): string {
   return 'Grace'
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const name = user.name
-  const message = name + '!'
-  const unicode = 'A😀é'
-  console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99), unicode.slice(1, 2), unicode.slice(2), name.slice(-2), name.slice(-99, 2), unicode.slice(-2, -1))
-}
+const user: User = { name: 'Ada' }
+const name = user.name
+const message = name + '!'
+const unicode = 'A😀é'
+console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99), unicode.slice(1, 2), unicode.slice(2), name.slice(-2), name.slice(-99, 2), unicode.slice(-2, -1))
+
 `,
       {
         target: 'c'
@@ -5215,12 +5156,11 @@ test('generated C string split compiles and runs with runtime sources', async (t
   names: string
 }
 
-export function main(): void {
-  const user: User = { names: 'Ada,Grace' }
-  const names = user.names.split(',')
-  const initials = user.names.split(',').map(name => name.slice(0, 1)).sort()
-  console.log(names[0], names[1], initials[0], initials[1], 'abc'.split('')[1], 'A😀é'.split('')[1])
-}
+const user: User = { names: 'Ada,Grace' }
+const names = user.names.split(',')
+const initials = user.names.split(',').map(name => name.slice(0, 1)).sort()
+console.log(names[0], names[1], initials[0], initials[1], 'abc'.split('')[1], 'A😀é'.split('')[1])
+
 `,
       {
         target: 'c'
@@ -5271,14 +5211,13 @@ function getName(): string {
   return ' Grace '
 }
 
-export function main(): void {
-  const user: User = { name: ' Ada ' }
-  const name = user.name
-  const message = ' ' + name + ' '
-  const unicode = '\u00a0\u2003Ada\u3000\ufeff'
-  const historicMongolianVowelSeparator = '\u180eAda\u180e'.trim() === '\u180eAda\u180e'
-  console.log(' Ada '.trim(), clean(name), user.name.trim(), getName().trim(), message.trim(), unicode.trim(), historicMongolianVowelSeparator)
-}
+const user: User = { name: ' Ada ' }
+const name = user.name
+const message = ' ' + name + ' '
+const unicode = '\u00a0\u2003Ada\u3000\ufeff'
+const historicMongolianVowelSeparator = '\u180eAda\u180e'.trim() === '\u180eAda\u180e'
+console.log(' Ada '.trim(), clean(name), user.name.trim(), getName().trim(), message.trim(), unicode.trim(), historicMongolianVowelSeparator)
+
 `,
       {
         target: 'c'
@@ -5329,12 +5268,11 @@ function flag(value: boolean): string {
   return String(value)
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada' }
-  const name = user.name
-  const local = 'Ada'
-  console.log(String('Ada'), String(local), String(name), label(42), flag(true), String(false), String(null), String(name).length)
-}
+const user: User = { name: 'Ada' }
+const name = user.name
+const local = 'Ada'
+console.log(String('Ada'), String(local), String(name), label(42), flag(true), String(false), String(null), String(name).length)
+
 `,
       {
         target: 'c'
@@ -5377,9 +5315,8 @@ test('generated C Number conversion compiles and runs with runtime sources', asy
   return Number(text)
 }
 
-export function main(): void {
-  console.log(Number('') ?? 9, Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('nope') ?? 7, Number('1x') ?? 8, parse('-3.25') ?? 0, Number('1e309') ?? 0, Number('-Infinity') ?? 0, Number('\u00a0+.5e2\u3000') ?? 0, Number('\ufeff') ?? 9, Number('\u180e') ?? 6)
-}
+console.log(Number('') ?? 9, Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('nope') ?? 7, Number('1x') ?? 8, parse('-3.25') ?? 0, Number('1e309') ?? 0, Number('-Infinity') ?? 0, Number('\u00a0+.5e2\u3000') ?? 0, Number('\ufeff') ?? 9, Number('\u180e') ?? 6)
+
 `,
       {
         target: 'c'
@@ -5418,15 +5355,14 @@ test('generated C numeric casts compile and run with runtime sources', async (t)
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const signedValue = i32(3.9)
-  const negative = i32(-3.9)
-  const unsignedValue = u32(-0.5)
-  const wide = u64(42.9)
-  const rounded = f32(16777217) === 16777216
-  const preserved = f64(1.25) === 1.25
-  console.log(signedValue, negative, unsignedValue, wide, rounded, preserved)
-}
+      `const signedValue = i32(3.9)
+const negative = i32(-3.9)
+const unsignedValue = u32(-0.5)
+const wide = u64(42.9)
+const rounded = f32(16777217) === 16777216
+const preserved = f64(1.25) === 1.25
+console.log(signedValue, negative, unsignedValue, wide, rounded, preserved)
+
 `,
       {
         target: 'c'
@@ -5465,10 +5401,9 @@ test('generated C Math.random os backend compiles and runs with runtime sources'
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const value = Math.random()
-  console.log(value >= 0, value < 1)
-}
+      `const value = Math.random()
+console.log(value >= 0, value < 1)
+
 `,
       {
         target: 'c',
@@ -5510,11 +5445,10 @@ test('generated C time globals compile and run with runtime sources', async (t) 
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const started = Date.now()
-  const elapsed = performance.now()
-  console.log(started >= 0, elapsed >= 0)
-}
+      `const started = Date.now()
+const elapsed = performance.now()
+console.log(started >= 0, elapsed >= 0)
+
 `,
       {
         target: 'c'
@@ -5553,10 +5487,9 @@ test('generated C array literal lowering compiles and runs with runtime sources'
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [1, 2, 3]
-  console.log('ok')
-}
+      `const values = [1, 2, 3]
+console.log('ok')
+
 `,
       {
         target: 'c'
@@ -5595,16 +5528,15 @@ test('generated C Array.push statements compile and run with runtime sources', a
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values: number[] = [1, 2]
-  values.push(3)
-  values.push(4)
-  console.log(values.length, values[2], values[3])
+      `const values: number[] = [1, 2]
+values.push(3)
+values.push(4)
+console.log(values.length, values[2], values[3])
 
-  const names: string[] = ['Ada']
-  names.push('Grace')
-  console.log(names.length, names[1])
-}
+const names: string[] = ['Ada']
+names.push('Grace')
+console.log(names.length, names[1])
+
 `,
       {
         target: 'c'
@@ -5643,19 +5575,18 @@ test('generated C Array.pop expressions compile and run with runtime sources', a
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values: number[] = [1, 2]
-  const last = values.pop() ?? 0
-  console.log(values.length, last)
-  const first = values.pop() ?? 0
-  const missing = values.pop() ?? 9
-  console.log(values.length, first, missing)
+      `const values: number[] = [1, 2]
+const last = values.pop() ?? 0
+console.log(values.length, last)
+const first = values.pop() ?? 0
+const missing = values.pop() ?? 9
+console.log(values.length, first, missing)
 
-  const names: string[] = ['Ada']
-  const name = names.pop() ?? 'missing'
-  const none = names.pop() ?? 'empty'
-  console.log(names.length, name, none)
-}
+const names: string[] = ['Ada']
+const name = names.pop() ?? 'missing'
+const none = names.pop() ?? 'empty'
+console.log(names.length, name, none)
+
 `,
       {
         target: 'c'
@@ -5694,15 +5625,14 @@ test('generated C Array.sort without comparator compiles and runs with runtime s
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [10, 2, 1]
-  const sorted = values.sort()
-  console.log(sorted[0], sorted[1], sorted[2])
+      `const values = [10, 2, 1]
+const sorted = values.sort()
+console.log(sorted[0], sorted[1], sorted[2])
 
-  const names = ['Grace', 'Ada']
-  names.sort()
-  console.log(names[0], names[1])
-}
+const names = ['Grace', 'Ada']
+names.sort()
+console.log(names[0], names[1])
+
 `,
       {
         target: 'c'
@@ -5741,30 +5671,29 @@ test('generated C Array.sort comparator callbacks compile and run with runtime s
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [3, 1, 2]
-  values.sort((left, right) => left - right)
-  console.log(values[0], values[1], values[2])
+      `const values = [3, 1, 2]
+values.sort((left, right) => left - right)
+console.log(values[0], values[1], values[2])
 
-  const desc = [1, 3, 2]
-  const sortedDesc = desc.sort((left, right) => right - left)
-  console.log(sortedDesc[0], sortedDesc[1], sortedDesc[2])
+const desc = [1, 3, 2]
+const sortedDesc = desc.sort((left, right) => right - left)
+console.log(sortedDesc[0], sortedDesc[1], sortedDesc[2])
 
-  const names = ['bbb', 'a', 'cc']
-  names.sort((left, right) => left.length - right.length)
-  console.log(names[0], names[1], names[2])
+const names = ['bbb', 'a', 'cc']
+names.sort((left, right) => left.length - right.length)
+console.log(names[0], names[1], names[2])
 
-  const stable = ['bb', 'aa', 'c']
-  stable.sort((left, right) => left.length - right.length)
-  console.log(stable[0], stable[1], stable[2])
+const stable = ['bb', 'aa', 'c']
+stable.sort((left, right) => left.length - right.length)
+console.log(stable[0], stable[1], stable[2])
 
-  const flags = [true, false, true]
-  flags.sort((left, right) => left - right)
-  console.log(flags[0], flags[1], flags[2])
+const flags = [true, false, true]
+flags.sort((left, right) => left - right)
+console.log(flags[0], flags[1], flags[2])
 
-  const chained = [5, 1, 4, 2].filter(value => value > 1).sort((left, right) => left - right).map(value => value * 10)
-  console.log(chained.length, chained[0], chained[1], chained[2])
-}
+const chained = [5, 1, 4, 2].filter(value => value > 1).sort((left, right) => left - right).map(value => value * 10)
+console.log(chained.length, chained[0], chained[1], chained[2])
+
 `,
       {
         target: 'c'
@@ -5803,19 +5732,18 @@ test('generated C Array.filter expression callbacks compile and run with runtime
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [1, 2, 3, 4]
-  const middle = values.filter((value, index) => value > 1 && index < 3)
-  console.log(middle.length, middle[0], middle[1])
+      `const values = [1, 2, 3, 4]
+const middle = values.filter((value, index) => value > 1 && index < 3)
+console.log(middle.length, middle[0], middle[1])
 
-  const chainValues = [10, 2, 1]
-  const chained = chainValues.sort().filter(value => value !== 10)
-  console.log(chained.length, chained[0], chained[1])
+const chainValues = [10, 2, 1]
+const chained = chainValues.sort().filter(value => value !== 10)
+console.log(chained.length, chained[0], chained[1])
 
-  const names = ['Ada', 'Grace', 'Alan']
-  const aNames = names.filter(name => name.startsWith('A'))
-  console.log(aNames.length, aNames[0], aNames[1])
-}
+const names = ['Ada', 'Grace', 'Alan']
+const aNames = names.filter(name => name.startsWith('A'))
+console.log(aNames.length, aNames[0], aNames[1])
+
 `,
       {
         target: 'c'
@@ -5854,27 +5782,26 @@ test('generated C Array.map expression callbacks compile and run with runtime so
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [1, 2, 3]
-  const doubled = values.map((value, index) => value * 2 + index)
-  console.log(doubled.length, doubled[0], doubled[1], doubled[2])
+      `const values = [1, 2, 3]
+const doubled = values.map((value, index) => value * 2 + index)
+console.log(doubled.length, doubled[0], doubled[1], doubled[2])
 
-  const flags = values.map(value => value > 1)
-  console.log(flags.length, flags[0], flags[1], flags[2])
+const flags = values.map(value => value > 1)
+console.log(flags.length, flags[0], flags[1], flags[2])
 
-  const names = ['Ada', 'Grace']
-  const initials = names.map(name => name.slice(0, 1))
-  console.log(initials.length, initials[0], initials[1])
+const names = ['Ada', 'Grace']
+const initials = names.map(name => name.slice(0, 1))
+console.log(initials.length, initials[0], initials[1])
 
-  const filteredMapped = values.filter(value => value > 1).map(value => value * 10)
-  console.log(filteredMapped.length, filteredMapped[0], filteredMapped[1])
+const filteredMapped = values.filter(value => value > 1).map(value => value * 10)
+console.log(filteredMapped.length, filteredMapped[0], filteredMapped[1])
 
-  const mappedFiltered = values.map(value => value + 1).filter(value => value > 2)
-  console.log(mappedFiltered.length, mappedFiltered[0], mappedFiltered[1])
+const mappedFiltered = values.map(value => value + 1).filter(value => value > 2)
+console.log(mappedFiltered.length, mappedFiltered[0], mappedFiltered[1])
 
-  const mappedSorted = values.map(value => String(value * 10)).sort()
-  console.log(mappedSorted.length, mappedSorted[0], mappedSorted[1], mappedSorted[2])
-}
+const mappedSorted = values.map(value => String(value * 10)).sort()
+console.log(mappedSorted.length, mappedSorted[0], mappedSorted[1], mappedSorted[2])
+
 `,
       {
         target: 'c'
@@ -5913,53 +5840,52 @@ test('generated C Array block-body callbacks compile and run with runtime source
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [3, 1, 2]
-  const result = values
-    .sort((left, right) => {
-      return left - right
-    })
-    .filter(value => {
-      return value > 1
-    })
-    .map((value, index) => {
-      return value * 10 + index
-    })
+      `const values = [3, 1, 2]
+const result = values
+  .sort((left, right) => {
+    return left - right
+  })
+  .filter(value => {
+    return value > 1
+  })
+  .map((value, index) => {
+    return value * 10 + index
+  })
 
-  console.log(result.length, result[0], result[1], values[0], values[2])
+console.log(result.length, result[0], result[1], values[0], values[2])
 
-  const branched = [1, 2, 3, 4]
-    .filter((value, index) => {
-      if (value === 1) {
-        return false
-      } else {
-        return index < 3
-      }
-    })
-    .map(value => {
-      if (value === 2) {
-        return value * 10
-      }
+const branched = [1, 2, 3, 4]
+  .filter((value, index) => {
+    if (value === 1) {
+      return false
+    } else {
+      return index < 3
+    }
+  })
+  .map(value => {
+    if (value === 2) {
+      return value * 10
+    }
 
-      return value + 10
-    })
+    return value + 10
+  })
 
-  console.log(branched.length, branched[0], branched[1])
+console.log(branched.length, branched[0], branched[1])
 
-  const names = ['Grace', 'Ada', 'Alan']
-  const initials = names
-    .filter(name => {
-      return name.startsWith('A')
-    })
-    .map(name => {
-      return name.slice(0, 1)
-    })
-    .sort((left, right) => {
-      return left.length - right.length
-    })
+const names = ['Grace', 'Ada', 'Alan']
+const initials = names
+  .filter(name => {
+    return name.startsWith('A')
+  })
+  .map(name => {
+    return name.slice(0, 1)
+  })
+  .sort((left, right) => {
+    return left.length - right.length
+  })
 
-  console.log(initials.length, initials[0], initials[1])
-}
+console.log(initials.length, initials[0], initials[1])
+
 `,
       {
         target: 'c'
@@ -6003,15 +5929,14 @@ test('generated C Array methods over object fields compile and run with runtime 
   names: string[]
 }
 
-export function main(): void {
-  const box: Box = { values: [3, 1, 2], names: ['Grace', 'Ada'] }
-  box.values.push(4)
-  const last = box.values.pop() ?? 0
-  const numbers = box.values.sort((left, right) => left - right).filter(value => value !== 2)
-  const initials = box['names'].map(name => name.slice(0, 1)).sort()
-  console.log(last, numbers.length, numbers[0], numbers[1])
-  console.log(initials.length, initials[0], initials[1])
-}
+const box: Box = { values: [3, 1, 2], names: ['Grace', 'Ada'] }
+box.values.push(4)
+const last = box.values.pop() ?? 0
+const numbers = box.values.sort((left, right) => left - right).filter(value => value !== 2)
+const initials = box['names'].map(name => name.slice(0, 1)).sort()
+console.log(last, numbers.length, numbers[0], numbers[1])
+console.log(initials.length, initials[0], initials[1])
+
 `,
       {
         target: 'c'
@@ -6050,10 +5975,9 @@ test('generated C array length lowering compiles and runs with runtime sources',
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [1, 2, 3]
-  console.log(values.length, [4, 5].length)
-}
+      `const values = [1, 2, 3]
+console.log(values.length, [4, 5].length)
+
 `,
       {
         target: 'c'
@@ -6096,10 +6020,9 @@ test('generated C runtime array length compiles and runs with runtime sources', 
   values: number[]
 }
 
-export function main(): void {
-  const box: Box = { values: [1, 2, 3] }
-  console.log(box.values.length)
-}
+const box: Box = { values: [1, 2, 3] }
+console.log(box.values.length)
+
 `,
       {
         target: 'c'
@@ -6144,11 +6067,10 @@ test('generated C runtime array index reads compile and run with runtime sources
   names: string[]
 }
 
-export function main(): void {
-  const box: Box = { values: [1, 2, 3], flags: [true], names: ['Ada'] }
-  const name = box.names[0]
-  console.log(box.values[1], box.flags[0], name)
-}
+const box: Box = { values: [1, 2, 3], flags: [true], names: ['Ada'] }
+const name = box.names[0]
+console.log(box.values[1], box.flags[0], name)
+
 `,
       {
         target: 'c'
@@ -6192,12 +6114,11 @@ test('generated C runtime array locals compile and run with runtime sources', as
   names: string[]
 }
 
-export function main(): void {
-  const box: Box = { values: [1, 2, 3], names: ['Ada'] }
-  const values = box.values
-  const names = box.names
-  console.log(values[1], names[0])
-}
+const box: Box = { values: [1, 2, 3], names: ['Ada'] }
+const values = box.values
+const names = box.names
+console.log(values[1], names[0])
+
 `,
       {
         target: 'c'
@@ -6241,20 +6162,19 @@ test('generated C for of over runtime array locals compiles and runs with runtim
   names: string[]
 }
 
-export function main(): void {
-  const box: Box = { values: [1, 2, 3], names: ['Ada', 'Grace'] }
-  const values = box.values
-  const names = box.names
-  let total = 0
-  let letters = 0
-  for (const value of values) {
-    total = total + value
-  }
-  for (const name of names) {
-    letters = letters + name.length
-  }
-  console.log(total, letters)
+const box: Box = { values: [1, 2, 3], names: ['Ada', 'Grace'] }
+const values = box.values
+const names = box.names
+let total = 0
+let letters = 0
+for (const value of values) {
+  total = total + value
 }
+for (const name of names) {
+  letters = letters + name.length
+}
+console.log(total, letters)
+
 `,
       {
         target: 'c'
@@ -6298,18 +6218,17 @@ test('generated C for of over runtime array expressions compiles and runs with r
   names: string[]
 }
 
-export function main(): void {
-  const box: Box = { values: [1, 2, 3], names: ['Ada', 'Grace'] }
-  let total = 0
-  let letters = 0
-  for (const value of box.values) {
-    total = total + value
-  }
-  for (const name of box.names) {
-    letters = letters + name.length
-  }
-  console.log(total, letters)
+const box: Box = { values: [1, 2, 3], names: ['Ada', 'Grace'] }
+let total = 0
+let letters = 0
+for (const value of box.values) {
+  total = total + value
 }
+for (const name of box.names) {
+  letters = letters + name.length
+}
+console.log(total, letters)
+
 `,
       {
         target: 'c'
@@ -6348,16 +6267,15 @@ test('generated C for of array lowering compiles and runs with runtime sources',
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [1, 2, 3]
-  let total = 0
+      `const values = [1, 2, 3]
+let total = 0
 
-  for (const value of values) {
-    total = total + value
-  }
-
-  console.log(total)
+for (const value of values) {
+  total = total + value
 }
+
+console.log(total)
+
 `,
       {
         target: 'c'
@@ -6396,13 +6314,12 @@ test('generated C for of string array lowering compiles and runs with runtime so
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const names = ['Ada', 'Grace']
+      `const names = ['Ada', 'Grace']
 
-  for (const name of names) {
-    console.log(name)
-  }
+for (const name of names) {
+  console.log(name)
 }
+
 `,
       {
         target: 'c'
@@ -6445,31 +6362,30 @@ test('generated C for of Set lowering compiles and runs with runtime sources', a
   names: Set<string>
 }
 
-export function main(): void {
-  const values: Set<number> = new Set([1, 2, 3])
-  const names: Set<string> = new Set(['Ada', 'Grace'])
-  const bag: Bag = { names }
-  let total = 0
-  let letters = 0
-  let sawAda = 0
-  let sawGrace = 0
+const values: Set<number> = new Set([1, 2, 3])
+const names: Set<string> = new Set(['Ada', 'Grace'])
+const bag: Bag = { names }
+let total = 0
+let letters = 0
+let sawAda = 0
+let sawGrace = 0
 
-  for (const value of values.add(4)) {
-    total = total + value
-  }
-
-  for (const name of bag.names) {
-    letters = letters + name.length
-    if (name === 'Ada') {
-      sawAda = 1
-    }
-    if (name === 'Grace') {
-      sawGrace = 1
-    }
-  }
-
-  console.log(total, letters, sawAda, sawGrace)
+for (const value of values.add(4)) {
+  total = total + value
 }
+
+for (const name of bag.names) {
+  letters = letters + name.length
+  if (name === 'Ada') {
+    sawAda = 1
+  }
+  if (name === 'Grace') {
+    sawGrace = 1
+  }
+}
+
+console.log(total, letters, sawAda, sawGrace)
+
 `,
       {
         target: 'c'
@@ -6512,31 +6428,30 @@ test('generated C for of Map lowering compiles and runs with runtime sources', a
   scores: Map<string, number>
 }
 
-export function main(): void {
-  const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
-  const bag: Bag = { scores }
-  let total = 0
-  let letters = 0
-  let ada = 0
-  let grace = 0
-  let alan = 0
+const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+const bag: Bag = { scores }
+let total = 0
+let letters = 0
+let ada = 0
+let grace = 0
+let alan = 0
 
-  for (const entry of bag['scores'].set('Alan', 5)) {
-    total = total + entry.value
-    letters = letters + entry.key.length
-    if (entry.key === 'Ada') {
-      ada = entry.value
-    }
-    if (entry.key === 'Grace') {
-      grace = entry.value
-    }
-    if (entry.key === 'Alan') {
-      alan = entry.value
-    }
+for (const entry of bag['scores'].set('Alan', 5)) {
+  total = total + entry.value
+  letters = letters + entry.key.length
+  if (entry.key === 'Ada') {
+    ada = entry.value
   }
-
-  console.log(total, letters, ada, grace, alan)
+  if (entry.key === 'Grace') {
+    grace = entry.value
+  }
+  if (entry.key === 'Alan') {
+    alan = entry.value
+  }
 }
+
+console.log(total, letters, ada, grace, alan)
+
 `,
       {
         target: 'c'
@@ -6575,15 +6490,14 @@ test('generated C inline for of array lowering compiles and runs with runtime so
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  let total = 0
+      `let total = 0
 
-  for (const value of [1, 2, 3]) {
-    total = total + value
-  }
-
-  console.log(total)
+for (const value of [1, 2, 3]) {
+  total = total + value
 }
+
+console.log(total)
+
 `,
       {
         target: 'c'
@@ -6622,11 +6536,10 @@ test('generated C inline for of string array lowering compiles and runs with run
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  for (const name of ['Ada', 'Grace']) {
-    console.log(name)
-  }
+      `for (const name of ['Ada', 'Grace']) {
+  console.log(name)
 }
+
 `,
       {
         target: 'c'
@@ -6665,12 +6578,11 @@ test('generated C object field access lowering compiles and runs with runtime so
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { score: 42, active: true }
-  const score = user.score
-  const active = user.active
-  console.log(score, active)
-}
+      `const user = { score: 42, active: true }
+const score = user.score
+const active = user.active
+console.log(score, active)
+
 `,
       {
         target: 'c'
@@ -6709,11 +6621,10 @@ test('generated C string object field access lowering compiles and runs with run
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { name: 'Ada', score: 42 }
-  const name = user.name
-  console.log(name)
-}
+      `const user = { name: 'Ada', score: 42 }
+const name = user.name
+console.log(name)
+
 `,
       {
         target: 'c'
@@ -6752,16 +6663,15 @@ test('generated C object field assignment lowering compiles and runs with runtim
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { score: 1, active: false, name: 'Ada' }
-  user.score = 42
-  user.active = true
-  user.name = 'Grace'
-  const score = user.score
-  const active = user.active
-  const name = user.name
-  console.log(score, active, name)
-}
+      `const user = { score: 1, active: false, name: 'Ada' }
+user.score = 42
+user.active = true
+user.name = 'Grace'
+const score = user.score
+const active = user.active
+const name = user.name
+console.log(score, active, name)
+
 `,
       {
         target: 'c'
@@ -6800,13 +6710,12 @@ test('generated C string index object field reads compile and run with runtime s
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { score: 42, active: true, name: 'Ada' }
-  const score = user['score']
-  const active = user['active']
-  const name = user['name']
-  console.log(score, active, name)
-}
+      `const user = { score: 42, active: true, name: 'Ada' }
+const score = user['score']
+const active = user['active']
+const name = user['name']
+console.log(score, active, name)
+
 `,
       {
         target: 'c'
@@ -6845,16 +6754,15 @@ test('generated C string index object field assignments compile and run with run
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { score: 1, active: false, name: 'Ada' }
-  user['score'] = 42
-  user['active'] = true
-  user['name'] = 'Grace'
-  const score = user['score']
-  const active = user['active']
-  const name = user['name']
-  console.log(score, active, name)
-}
+      `const user = { score: 1, active: false, name: 'Ada' }
+user['score'] = 42
+user['active'] = true
+user['name'] = 'Grace'
+const score = user['score']
+const active = user['active']
+const name = user['name']
+console.log(score, active, name)
+
 `,
       {
         target: 'c'
@@ -6893,12 +6801,11 @@ test('generated C array index access lowering compiles and runs with runtime sou
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [42, true]
-  const score = values[0]
-  const active = values[1]
-  console.log(score, active)
-}
+      `const values = [42, true]
+const score = values[0]
+const active = values[1]
+console.log(score, active)
+
 `,
       {
         target: 'c'
@@ -6937,14 +6844,13 @@ test('generated C array index assignment lowering compiles and runs with runtime
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = [1, false]
-  values[0] = 42
-  values[1] = true
-  const score = values[0]
-  const active = values[1]
-  console.log(score, active)
-}
+      `const values = [1, false]
+values[0] = 42
+values[1] = true
+const score = values[0]
+const active = values[1]
+console.log(score, active)
+
 `,
       {
         target: 'c'
@@ -6983,12 +6889,11 @@ test('generated C string array index reads compile and run with runtime sources'
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const values = ['Ada']
-  values[0] = 'Grace'
-  const name = values[0]
-  console.log(name)
-}
+      `const values = ['Ada']
+values[0] = 'Grace'
+const name = values[0]
+console.log(name)
+
 `,
       {
         target: 'c'
@@ -7027,12 +6932,11 @@ test('generated C runtime string local propagation compiles and runs with runtim
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { name: 'Ada' }
-  const name = user.name
-  const again = name
-  console.log(again)
-}
+      `const user = { name: 'Ada' }
+const name = user.name
+const again = name
+console.log(again)
+
 `,
       {
         target: 'c'
@@ -7071,13 +6975,12 @@ test('generated C nullable string nullish coalescing compiles and runs with runt
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  let name: string | null = null
-  console.log(name ?? 'Ada', name === null)
-  name = 'Grace'
-  const display = name ?? 'Ada'
-  console.log(display, name !== null)
-}
+      `let name: string | null = null
+console.log(name ?? 'Ada', name === null)
+name = 'Grace'
+const display = name ?? 'Ada'
+console.log(display, name !== null)
+
 `,
       {
         target: 'c'
@@ -7120,23 +7023,22 @@ test('generated C nullable runtime optional access compiles and runs with runtim
   name: string
 }
 
-export function main(): void {
-  let user: User | null = null
-  const missingName = user?.name ?? 'missing'
-  user = { name: 'Ada' }
-  const memberName = user?.name ?? 'missing'
-  const indexName = user?.['name'] ?? 'missing'
+let user: User | null = null
+const missingName = user?.name ?? 'missing'
+user = { name: 'Ada' }
+const memberName = user?.name ?? 'missing'
+const indexName = user?.['name'] ?? 'missing'
 
-  const names = ['Grace']
-  const maybeNames: string[] | null = names
-  const emptyNames: string[] | null = null
-  const arrayName = maybeNames?.[0] ?? 'empty'
-  const emptyName = emptyNames?.[0] ?? 'empty'
+const names = ['Grace']
+const maybeNames: string[] | null = names
+const emptyNames: string[] | null = null
+const arrayName = maybeNames?.[0] ?? 'empty'
+const emptyName = emptyNames?.[0] ?? 'empty'
 
-  const scores: Map<string, number> = new Map([['Ada', 7]])
-  const maybeScores: Map<string, number> | null = scores
-  console.log(missingName, memberName, indexName, arrayName, emptyName, maybeScores !== null)
-}
+const scores: Map<string, number> = new Map([['Ada', 7]])
+const maybeScores: Map<string, number> | null = scores
+console.log(missingName, memberName, indexName, arrayName, emptyName, maybeScores !== null)
+
 `,
       {
         target: 'c'
@@ -7180,26 +7082,25 @@ test('generated C nullable scalar nullish coalescing compiles and runs with runt
   active: boolean
 }
 
-export function main(): void {
-  let score: number | null = null
-  let active: boolean | null = null
-  console.log(score ?? 1, active ?? false, score === null, active !== null)
-  score = 7
-  active = true
-  console.log(score ?? 0, active ?? false, score !== null, active === null)
+let score: number | null = null
+let active: boolean | null = null
+console.log(score ?? 1, active ?? false, score === null, active !== null)
+score = 7
+active = true
+console.log(score ?? 0, active ?? false, score !== null, active === null)
 
-  let user: User | null = null
-  console.log(user?.score ?? 3, user?.active ?? true)
-  user = { score: 9, active: false }
-  const maybeScore = user?.score
-  const maybeActive = user?.active
-  console.log(maybeScore ?? 0, maybeActive ?? true)
+let user: User | null = null
+console.log(user?.score ?? 3, user?.active ?? true)
+user = { score: 9, active: false }
+const maybeScore = user?.score
+const maybeActive = user?.active
+console.log(maybeScore ?? 0, maybeActive ?? true)
 
-  const values = [2]
-  const maybeValues: number[] | null = values
-  const emptyValues: number[] | null = null
-  console.log(maybeValues?.[0] ?? 5, emptyValues?.[0] ?? 5)
-}
+const values = [2]
+const maybeValues: number[] | null = values
+const emptyValues: number[] | null = null
+console.log(maybeValues?.[0] ?? 5, emptyValues?.[0] ?? 5)
+
 `,
       {
         target: 'c'
@@ -7258,15 +7159,14 @@ function printScore(score: number | null, active: boolean | null): void {
   console.log(score ?? 0, active ?? false, score !== null, active === null)
 }
 
-export function main(): void {
-  const first = maybeScore(1)
-  const second: number | null = maybeScore(0)
-  let active: boolean | null = maybeActive(1)
-  printScore(first, active)
-  active = maybeActive(0)
-  printScore(second, active)
-  printScore(7 + 1, false)
-}
+const first = maybeScore(1)
+const second: number | null = maybeScore(0)
+let active: boolean | null = maybeActive(1)
+printScore(first, active)
+active = maybeActive(0)
+printScore(second, active)
+printScore(7 + 1, false)
+
 `,
       {
         target: 'c'
@@ -7319,17 +7219,16 @@ test('generated C nullable scalar branch narrowing compiles and runs with runtim
   }
 }
 
-export function main(): void {
-  printScore(4, true)
-  printScore(null, null)
+printScore(4, true)
+printScore(null, null)
 
-  let value: number | null = 5
-  if (value !== null) {
-    console.log(value)
-    value = null
-  }
-  console.log(value ?? 9)
+let value: number | null = 5
+if (value !== null) {
+  console.log(value)
+  value = null
 }
+console.log(value ?? 9)
+
 `,
       {
         target: 'c'
@@ -7382,11 +7281,10 @@ test('generated C nullable scalar logical narrowing compiles and runs with runti
   }
 }
 
-export function main(): void {
-  printScore(4, 3)
-  printScore(null, null)
-  printScore(1, 0)
-}
+printScore(4, 3)
+printScore(null, null)
+printScore(1, 0)
+
 `,
       {
         target: 'c'
@@ -7447,14 +7345,13 @@ function printHigh(score: number | null): void {
   console.log(score + 1)
 }
 
-export function main(): void {
-  printScore(4, true)
-  printScore(null, true)
-  printScore(2, null)
-  printHigh(3)
-  printHigh(null)
-  printHigh(1)
-}
+printScore(4, true)
+printScore(null, true)
+printScore(2, null)
+printHigh(3)
+printHigh(null)
+printHigh(1)
+
 `,
       {
         target: 'c'
@@ -7505,10 +7402,9 @@ test('generated C nullable scalar loop narrowing compiles and runs with runtime 
   }
 }
 
-export function main(): void {
-  printLoop(2, true)
-  printLoop(null, null)
-}
+printLoop(2, true)
+printLoop(null, null)
+
 `,
       {
         target: 'c'
@@ -7565,22 +7461,21 @@ function named(name: string): void {
   console.log(name)
 }
 
-export function main(): void {
-  maybeLog(null)
-  maybeLog(hello)
+maybeLog(null)
+maybeLog(hello)
 
-  let callback: Function | null = null
-  callback?.()
-  callback = hello
-  callback?.()
+let callback: Function | null = null
+callback?.()
+callback = hello
+callback?.()
 
-  let namedCallback: Named | null = null
-  namedCallback?.('skip')
-  namedCallback = named
-  namedCallback?.('Grace')
-  maybeNamed(named)
-  maybeNamed(null)
-}
+let namedCallback: Named | null = null
+namedCallback?.('skip')
+namedCallback = named
+namedCallback?.('Grace')
+maybeNamed(named)
+maybeNamed(null)
+
 `,
       {
         target: 'c'
@@ -7636,10 +7531,9 @@ function printValues(score: Score | null, ready: Ready | null): void {
   console.log(value ?? 0, flag ?? false)
 }
 
-export function main(): void {
-  printValues(addOne, isReady)
-  printValues(null, null)
-}
+printValues(addOne, isReady)
+printValues(null, null)
+
 `,
       {
         target: 'c'
@@ -7687,13 +7581,12 @@ function printValues(score: Score | null, ready: Ready | null): void {
   console.log(value ?? 0, flag ?? false)
 }
 
-export function main(): void {
-  const bonus = 3
-  const score: Score | null = (value: number) => value + bonus
-  const ready: Ready | null = () => bonus === 3
-  printValues(score, ready)
-  printValues(null, null)
-}
+const bonus = 3
+const score: Score | null = (value: number) => value + bonus
+const ready: Ready | null = () => bonus === 3
+printValues(score, ready)
+printValues(null, null)
+
 `,
       {
         target: 'c'
@@ -7741,26 +7634,25 @@ function printValues(score: Score | null, ready: Ready | null): void {
   console.log(value ?? 0, flag ?? false)
 }
 
-export function main(): void {
-  const bonus = 3
-  const score: Score | null = (value: number) => {
-    const doubled = value * 2
-    if (doubled > 4) {
-      return doubled + bonus
-    }
-
-    return bonus
+const bonus = 3
+const score: Score | null = (value: number) => {
+  const doubled = value * 2
+  if (doubled > 4) {
+    return doubled + bonus
   }
-  const ready: Ready | null = () => {
-    if (bonus === 3) {
-      return true
-    }
 
-    return false
-  }
-  printValues(score, ready)
-  printValues(null, null)
+  return bonus
 }
+const ready: Ready | null = () => {
+  if (bonus === 3) {
+    return true
+  }
+
+  return false
+}
+printValues(score, ready)
+printValues(null, null)
+
 `,
       {
         target: 'c'
@@ -7812,28 +7704,27 @@ function printName(name: Name | null): void {
   console.log(value ?? 'missing')
 }
 
-export function main(): void {
-  const score: Score | null = (value: number) => {
-    try {
-      return value + 3
-    } finally {
-      console.log('score finally', value)
-    }
+const score: Score | null = (value: number) => {
+  try {
+    return value + 3
+  } finally {
+    console.log('score finally', value)
   }
-
-  const name: Name | null = () => {
-    try {
-      return 'Ada'
-    } finally {
-      console.log('name finally')
-    }
-  }
-
-  printScore(score)
-  printName(name)
-  printScore(null)
-  printName(null)
 }
+
+const name: Name | null = () => {
+  try {
+    return 'Ada'
+  } finally {
+    console.log('name finally')
+  }
+}
+
+printScore(score)
+printName(name)
+printScore(null)
+printName(null)
+
 `,
       {
         target: 'c'
@@ -7883,13 +7774,12 @@ function printName(callback: Name | null): void {
   console.log(value ?? 'missing')
 }
 
-export function main(): void {
-  printName(getName)
-  printName(null)
+printName(getName)
+printName(null)
 
-  const arrow: Name | null = () => 'Grace'
-  printName(arrow)
-}
+const arrow: Name | null = () => 'Grace'
+printName(arrow)
+
 `,
       {
         target: 'c'
@@ -7945,15 +7835,14 @@ function printUser(callback: MakeUser | null): void {
   console.log(name ?? 'missing', id ?? 0)
 }
 
-export function main(): void {
-  printUser(getUser)
-  printUser(null)
+printUser(getUser)
+printUser(null)
 
-  const arrow: MakeUser | null = () => {
-    return { name: 'Grace', id: 9 }
-  }
-  printUser(arrow)
+const arrow: MakeUser | null = () => {
+  return { name: 'Grace', id: 9 }
 }
+printUser(arrow)
+
 `,
       {
         target: 'c'
@@ -7992,14 +7881,12 @@ test('generated C local string throw try catch finally compiles and runs with ru
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  try {
-    throw 'boom'
-  } catch (error) {
-    console.log(\`caught \${error}\`)
-  } finally {
-    console.log('finally')
-  }
+      `try {
+  throw 'boom'
+} catch (error) {
+  console.log(\`caught \${error}\`)
+} finally {
+  console.log('finally')
 }
 `,
       {
@@ -8039,19 +7926,18 @@ test('generated C lightweight Error objects compile and run with runtime sources
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const root = new Error('root', { code: 'E_ROOT' })
-  const created = new Error('created', { code: 'E_CREATED', cause: root })
-  console.log(created.name, created.message, created.code)
-  try {
-    const thrown = new Error('boom', { code: 'E_BOOM', cause: created })
-    throw thrown
-  } catch (error) {
-    console.log(error.name, error.message, error.code)
-  } finally {
-    console.log('finally')
-  }
+      `const root = new Error('root', { code: 'E_ROOT' })
+const created = new Error('created', { code: 'E_CREATED', cause: root })
+console.log(created.name, created.message, created.code)
+try {
+  const thrown = new Error('boom', { code: 'E_BOOM', cause: created })
+  throw thrown
+} catch (error) {
+  console.log(error.name, error.message, error.code)
+} finally {
+  console.log('finally')
 }
+
 `,
       {
         target: 'c'
@@ -8107,26 +7993,25 @@ export function readValue(ok: boolean): number {
   throw 'no value'
 }
 
-export function main(): void {
-  try {
-    failString()
-  } catch (error) {
-    console.log(error)
-  }
-
-  try {
-    failError()
-  } catch (error) {
-    console.log(error.name, error.message)
-  }
-
-  try {
-    console.log(readValue(true))
-    console.log(readValue(false))
-  } catch (error) {
-    console.log(error)
-  }
+try {
+  failString()
+} catch (error) {
+  console.log(error)
 }
+
+try {
+  failError()
+} catch (error) {
+  console.log(error.name, error.message)
+}
+
+try {
+  console.log(readValue(true))
+  console.log(readValue(false))
+} catch (error) {
+  console.log(error)
+}
+
 `,
       {
         target: 'c'
@@ -8182,10 +8067,9 @@ function stop(): void {
   console.log('after')
 }
 
-export function main(): void {
-  console.log(getScore())
-  stop()
-}
+console.log(getScore())
+stop()
+
 `,
       {
         target: 'c'
@@ -8224,24 +8108,23 @@ test('generated C break and continue through finally compile and run with runtim
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  let index = 0
-  while (index < 4) {
-    index = index + 1
-    try {
-      if (index === 1) {
-        continue
-      }
-      if (index === 3) {
-        break
-      }
-    } finally {
-      console.log('finally', index)
+      `let index = 0
+while (index < 4) {
+  index = index + 1
+  try {
+    if (index === 1) {
+      continue
     }
-    console.log('body', index)
+    if (index === 3) {
+      break
+    }
+  } finally {
+    console.log('finally', index)
   }
-  console.log('done', index)
+  console.log('body', index)
 }
+console.log('done', index)
+
 `,
       {
         target: 'c'
@@ -8280,17 +8163,16 @@ test('generated C runtime string assignment references compile and run with runt
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const source = { name: 'Ada' }
-  const name = source.name
-  const target = { name: 'Bob' }
-  const values = ['Grace']
-  target.name = name
-  values[0] = name
-  const objectName = target.name
-  const arrayName = values[0]
-  console.log(objectName, arrayName)
-}
+      `const source = { name: 'Ada' }
+const name = source.name
+const target = { name: 'Bob' }
+const values = ['Grace']
+target.name = name
+values[0] = name
+const objectName = target.name
+const arrayName = values[0]
+console.log(objectName, arrayName)
+
 `,
       {
         target: 'c'
@@ -8333,13 +8215,12 @@ test('generated C string-returning assignment calls compile and run with runtime
   return 'Ada'
 }
 
-export function main(): void {
-  const target = { name: 'Bob' }
-  const values = ['Grace']
-  target.name = getName()
-  values[0] = getName()
-  console.log(target.name, values[0])
-}
+const target = { name: 'Bob' }
+const values = ['Grace']
+target.name = getName()
+values[0] = getName()
+console.log(target.name, values[0])
+
 `,
       {
         target: 'c'
@@ -8386,12 +8267,11 @@ function echo(name: string): string {
   return name
 }
 
-export function main(): void {
-  const user = { name: 'Ada' }
-  greet('Ada')
-  greet(user.name)
-  console.log(echo(user.name))
-}
+const user = { name: 'Ada' }
+greet('Ada')
+greet(user.name)
+console.log(echo(user.name))
+
 `,
       {
         target: 'c'
@@ -8434,11 +8314,10 @@ test('generated C prepared string args in number expressions compile and run wit
   return 3
 }
 
-export function main(): void {
-  const user = { name: 'Ada' }
-  const total = length('Ada') + length(user.name)
-  console.log(length(user.name), total)
-}
+const user = { name: 'Ada' }
+const total = length('Ada') + length(user.name)
+console.log(length(user.name), total)
+
 `,
       {
         target: 'c'
@@ -8482,10 +8361,9 @@ test('generated C runtime string return compiles and runs with runtime sources',
   return user.name
 }
 
-export function main(): void {
-  const name = getName()
-  console.log(name)
-}
+const name = getName()
+console.log(name)
+
 `,
       {
         target: 'c'
@@ -8534,9 +8412,8 @@ function getArrayName(): string {
   return values[0]
 }
 
-export function main(): void {
-  console.log(getObjectName(), getArrayName())
-}
+console.log(getObjectName(), getArrayName())
+
 `,
       {
         target: 'c'
@@ -8579,9 +8456,8 @@ test('generated C direct console log string return compiles and runs with runtim
   return 'Ada'
 }
 
-export function main(): void {
-  console.log(getName())
-}
+console.log(getName())
+
 `,
       {
         target: 'c'
@@ -8620,12 +8496,10 @@ test('generated C console log template interpolation compiles and runs with runt
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { name: 'Ada', score: 7 }
-  const suffix = 'ok'
-  const ready = true
-  console.log(\`hello \${user.name} \${suffix} score \${user.score} ready \${ready}\`)
-}
+      `const user = { name: 'Ada', score: 7 }
+const suffix = 'ok'
+const ready = true
+console.log(\`hello \${user.name} \${suffix} score \${user.score} ready \${ready}\`)
 `,
       {
         target: 'c'
@@ -8664,11 +8538,10 @@ test('generated C direct console log member and index expressions compile and ru
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { score: 42, active: true, name: 'Ada' }
-  const values = [7, false, 'Grace']
-  console.log(user.score, user.active, user.name, user['name'], values[0], values[1], values[2])
-}
+      `const user = { score: 42, active: true, name: 'Ada' }
+const values = [7, false, 'Grace']
+console.log(user.score, user.active, user.name, user['name'], values[0], values[1], values[2])
+
 `,
       {
         target: 'c'
@@ -8707,13 +8580,12 @@ test('generated C member and index reads inside scalar expressions compile and r
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { score: 7, active: true }
-  const values = [3, true]
-  const total = user.score + values[0]
-  const same = user.active === values[1]
-  console.log(total, same)
-}
+      `const user = { score: 7, active: true }
+const values = [3, true]
+const total = user.score + values[0]
+const same = user.active === values[1]
+console.log(total, same)
+
 `,
       {
         target: 'c'
@@ -8752,11 +8624,10 @@ test('generated C optional object member and index access compile and run with r
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const user = { name: 'Ada', score: 7 }
-  const name = user?.name
-  console.log(name, user?.['score'])
-}
+      `const user = { name: 'Ada', score: 7 }
+const name = user?.name
+console.log(name, user?.['score'])
+
 `,
       {
         target: 'c'
@@ -8800,11 +8671,10 @@ test('generated C typed object shape lowering compiles and runs with runtime sou
   name: string
 }
 
-export function main(): void {
-  const user: User = { name: 'Ada', id: 42 }
-  const id = user.id
-  console.log(id)
-}
+const user: User = { name: 'Ada', id: 42 }
+const id = user.id
+console.log(id)
+
 `,
       {
         target: 'c'
@@ -8848,13 +8718,12 @@ test('generated C JSON parse and stringify compile and run with runtime sources'
   score: number
 }
 
-export function main(): void {
-  const user: User = JSON.parse('{"score":7,"name":"Ada"}')
-  const parsedScore: number = JSON.parse('8')
-  const active: boolean = JSON.parse('true')
-  const text = JSON.stringify(user)
-  console.log(user.name, user.score, text, parsedScore, active)
-}
+const user: User = JSON.parse('{"score":7,"name":"Ada"}')
+const parsedScore: number = JSON.parse('8')
+const active: boolean = JSON.parse('true')
+const text = JSON.stringify(user)
+console.log(user.name, user.score, text, parsedScore, active)
+
 `,
       {
         target: 'c'
@@ -8893,18 +8762,17 @@ test('generated C Buffer and Uint8Array APIs compile and run with runtime source
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const bytes = Buffer.from('hi', 'utf8')
-  const out = new Uint8Array(4)
-  out[0] = bytes[0]
-  out[1] = 7
-  out[2] = 9
-  const slice = out.slice(1, 3)
-  const tail = out.slice(-2)
-  const clamp = out.slice(-99, 2)
-  const text = bytes.toString()
-  console.log(bytes.length, out[0], out[1], slice.length, slice[1], tail[0], tail[1], clamp.length, clamp[1], text)
-}
+      `const bytes = Buffer.from('hi', 'utf8')
+const out = new Uint8Array(4)
+out[0] = bytes[0]
+out[1] = 7
+out[2] = 9
+const slice = out.slice(1, 3)
+const tail = out.slice(-2)
+const clamp = out.slice(-99, 2)
+const text = bytes.toString()
+console.log(bytes.length, out[0], out[1], slice.length, slice[1], tail[0], tail[1], clamp.length, clamp[1], text)
+
 `,
       {
         target: 'c'
@@ -8943,11 +8811,10 @@ test('generated C crypto.getRandomValues compiles and runs with runtime sources'
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const bytes = Buffer.alloc(8)
-  const filled = crypto.getRandomValues(bytes)
-  console.log(filled.length, bytes.length, filled[0] >= 0, filled[0] < 256)
-}
+      `const bytes = Buffer.alloc(8)
+const filled = crypto.getRandomValues(bytes)
+console.log(filled.length, bytes.length, filled[0] >= 0, filled[0] < 256)
+
 `,
       {
         target: 'c'
@@ -8986,29 +8853,28 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const scores: Map<string, number> = new Map()
-  scores.set('Ada', 7)
-  const score = scores.get('Ada') ?? 0
-  const missing = scores.get('Grace') ?? 9
-  const hadAda = scores.has('Ada')
-  const removed = scores.delete('Ada')
-  const hasAda = scores.has('Ada')
-  console.log(score, missing, hadAda, removed, hasAda, scores.size)
-  scores.set('Grace', 9)
-  scores.clear()
-  console.log(scores.get('Grace') ?? 11, scores.has('Grace'), scores.size)
+      `const scores: Map<string, number> = new Map()
+scores.set('Ada', 7)
+const score = scores.get('Ada') ?? 0
+const missing = scores.get('Grace') ?? 9
+const hadAda = scores.has('Ada')
+const removed = scores.delete('Ada')
+const hasAda = scores.has('Ada')
+console.log(score, missing, hadAda, removed, hasAda, scores.size)
+scores.set('Grace', 9)
+scores.clear()
+console.log(scores.get('Grace') ?? 11, scores.has('Grace'), scores.size)
 
-  const names: Set<string> = new Set()
-  names.add('Ada')
-  const hadName = names.has('Ada')
-  const removedName = names.delete('Ada')
-  const hasName = names.has('Ada')
-  console.log(hadName, removedName, hasName, names.size)
-  names.add('Grace')
-  names.clear()
-  console.log(names.has('Grace'), names.size)
-}
+const names: Set<string> = new Set()
+names.add('Ada')
+const hadName = names.has('Ada')
+const removedName = names.delete('Ada')
+const hasName = names.has('Ada')
+console.log(hadName, removedName, hasName, names.size)
+names.add('Grace')
+names.clear()
+console.log(names.has('Grace'), names.size)
+
 `,
       {
         target: 'c'
@@ -9047,17 +8913,16 @@ test('generated C Map and Set method chains compile and run with runtime sources
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const scores: Map<string, number> = new Map()
-  const score = scores.set('Ada', 7).get('Ada') ?? 0
-  const hasScore = scores.set('Grace', 9).has('Grace')
+      `const scores: Map<string, number> = new Map()
+const score = scores.set('Ada', 7).get('Ada') ?? 0
+const hasScore = scores.set('Grace', 9).has('Grace')
 
-  const names: Set<string> = new Set()
-  const hasName = names.add('Ada').has('Ada')
-  const removed = names.add('Grace').delete('Grace')
+const names: Set<string> = new Set()
+const hasName = names.add('Ada').has('Ada')
+const removed = names.add('Grace').delete('Grace')
 
-  console.log(score, hasScore, hasName, removed, names.size)
-}
+console.log(score, hasScore, hasName, removed, names.size)
+
 `,
       {
         target: 'c'
@@ -9149,19 +9014,18 @@ function seenCount(seen: Set<string>): number {
   return count
 }
 
-export function main(): void {
-  const nums = makeNums()
-  const scores = makeScores()
-  const seen = makeSeen()
-  const sumFromNums = sumNums(nums)
-  const sumFromCall = sumNums(makeNums())
-  const totalFromScores = totalScores(scores)
-  const totalFromCall = totalScores(makeScores())
-  const seenFromSeen = seenCount(seen)
-  const seenSizeFromCall = makeSeen().size
+const nums = makeNums()
+const scores = makeScores()
+const seen = makeSeen()
+const sumFromNums = sumNums(nums)
+const sumFromCall = sumNums(makeNums())
+const totalFromScores = totalScores(scores)
+const totalFromCall = totalScores(makeScores())
+const seenFromSeen = seenCount(seen)
+const seenSizeFromCall = makeSeen().size
 
-  console.log(sumFromNums, sumFromCall, totalFromScores, totalFromCall, scores.size, seenFromSeen, seenSizeFromCall)
-}
+console.log(sumFromNums, sumFromCall, totalFromScores, totalFromCall, scores.size, seenFromSeen, seenSizeFromCall)
+
 `,
       {
         target: 'c'
@@ -9200,14 +9064,13 @@ test('generated C Map and Set array literal constructors compile and run with ru
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
-  const names: Set<string> = new Set(['Ada', 'Grace'])
-  const adaScore = scores.get('Ada') ?? 0
-  const graceScore = scores.get('Grace') ?? 0
+      `const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+const names: Set<string> = new Set(['Ada', 'Grace'])
+const adaScore = scores.get('Ada') ?? 0
+const graceScore = scores.get('Grace') ?? 0
 
-  console.log(adaScore, graceScore, names.has('Ada'), names.has('Grace'), scores.size, names.size)
-}
+console.log(adaScore, graceScore, names.has('Ada'), names.has('Grace'), scores.size, names.size)
+
 `,
       {
         target: 'c'
@@ -9252,20 +9115,19 @@ test('generated C Map and Set object fields compile and run with runtime sources
   names: Set<string>
 }
 
-export function main(): void {
-  const scores: Map<string, number> = new Map([['Ada', 7]])
-  const labels: Map<string, string> = new Map([['Ada', 'ok']])
-  const names: Set<string> = new Set(['Ada'])
-  const bag: Bag = { scores, labels, names }
-  bag.scores['Grace'] = 9
-  const adaScore = bag.scores.get('Ada') ?? 0
-  const graceScore = bag.scores['Grace'] ?? 0
-  const label = bag.labels.get('Ada') ?? 'missing'
-  const hasAda = bag['names'].has('Ada')
-  bag.names.clear()
+const scores: Map<string, number> = new Map([['Ada', 7]])
+const labels: Map<string, string> = new Map([['Ada', 'ok']])
+const names: Set<string> = new Set(['Ada'])
+const bag: Bag = { scores, labels, names }
+bag.scores['Grace'] = 9
+const adaScore = bag.scores.get('Ada') ?? 0
+const graceScore = bag.scores['Grace'] ?? 0
+const label = bag.labels.get('Ada') ?? 'missing'
+const hasAda = bag['names'].has('Ada')
+bag.names.clear()
 
-  console.log(adaScore, graceScore, label, hasAda, bag.scores.size, bag.names.size)
-}
+console.log(adaScore, graceScore, label, hasAda, bag.scores.size, bag.names.size)
+
 `,
       {
         target: 'c'
@@ -9304,14 +9166,13 @@ test('generated C Map bracket syntax compiles and runs with runtime sources', as
 
   try {
     const result = compileSource(
-      `export function main(): void {
-  const scores: Map<string, number> = new Map()
-  scores['Ada'] = 7
-  const score = scores['Ada'] ?? 0
-  const missing = scores['Grace'] ?? 9
+      `const scores: Map<string, number> = new Map()
+scores['Ada'] = 7
+const score = scores['Ada'] ?? 0
+const missing = scores['Grace'] ?? 9
 
-  console.log(score, missing, scores.size)
-}
+console.log(score, missing, scores.size)
+
 `,
       {
         target: 'c'

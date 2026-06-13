@@ -6,7 +6,6 @@ type Box = {
   values: number[]
 }
 
-export function main(): void {
-  const box: Box = { values: [1, 2, 3] }
-  console.log(box.values.length)
-}
+const box: Box = { values: [1, 2, 3] }
+console.log(box.values.length)
+

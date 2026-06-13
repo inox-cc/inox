@@ -5,6 +5,5 @@ function coalesce(value: unknown): unknown {
   return value ?? 'Ada'
 }
 
-export function main(): void {
-  console.log(coalesce(null), coalesce('Grace'))
-}
+console.log(coalesce(null), coalesce('Grace'))
+

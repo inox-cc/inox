@@ -10,15 +10,11 @@ function each(values: Array<number>, callback: NumberCallback): void {
   }
 }
 
-export function main(): void {
-  const offset = 5
-  const values = [1, 2, 3]
-    .filter(value => value > 1)
-    .map(value => value * 2)
+const offset = 5
+const values = [1, 2, 3].filter((value) => value > 1).map((value) => value * 2)
 
-  each(values, value => {
-    if (value === 4) {
-      console.log('callbacks', value + offset)
-    }
-  })
-}
+each(values, (value) => {
+  if (value === 4) {
+    console.log('callbacks', value + offset)
+  }
+})

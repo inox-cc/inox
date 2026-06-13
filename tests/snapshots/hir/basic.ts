@@ -14,9 +14,8 @@ function total(user: User): number {
   return sum
 }
 
-export function main(): void {
-  const user: User = { id: 1, name: 'Ada', scores: [2, 3, 5] }
-  const score = total(user)
+const user: User = { id: 1, name: 'Ada', scores: [2, 3, 5] }
+const score = total(user)
 
-  console.log(`${user.name} ${score}`)
-}
+console.log(`${user.name} ${score}`)
+

@@ -44,7 +44,11 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
     visiting.add(path)
 
     const source = await readFile(path, 'utf8')
-    const ast = parse(tokenize(source))
+    const ast = parse(
+      tokenize(source, {
+        file: path
+      })
+    )
     const module: ModuleRecord = {
       path,
       source,
