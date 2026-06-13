@@ -741,6 +741,8 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
       params,
       awaits: body.awaits,
       prefixStatements: body.prefixStatements ?? [],
+      successPrefixFinalizerStatements: body.successPrefixFinalizerStatements ?? [],
+      successStatements: body.successStatements ?? [],
       returnExpression: body.returnExpression,
       returnType: body.returnType,
       tryRegion: body.tryRegion ?? null
@@ -837,6 +839,8 @@ function resolveAsyncTaskWrapperBody(statement, declaration: IrFunctionDeclarati
   return {
     awaits,
     prefixStatements: [],
+    successPrefixFinalizerStatements: [],
+    successStatements: [],
     returnExpression,
     returnType,
     tryRegion: null
@@ -889,6 +893,8 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
   return {
     awaits,
     prefixStatements: [],
+    successPrefixFinalizerStatements: [],
+    successStatements: [],
     returnExpression,
     returnType,
     tryRegion: {
@@ -909,9 +915,17 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   const tryChain = tryChainResult.chain
   const innerTry = tryChain[tryChain.length - 1]
   const innerTryStatements = innerTry.block?.body ?? []
-  const returnStatement = innerTryStatements.at(-1)
+  const postNestedStatements = tryChainResult.postNestedStatements ?? []
+  const hasPostNestedStatements = postNestedStatements.length > 0
+  const returnStatement = hasPostNestedStatements
+    ? postNestedStatements.at(-1)
+    : innerTryStatements.at(-1)
 
   if (returnStatement?.type !== 'ReturnStatement') {
+    return null
+  }
+
+  if (hasPostNestedStatements && tryChain.some(item => item.handler != null)) {
     return null
   }
 
@@ -921,13 +935,13 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     return null
   }
 
-  const awaits = resolveAsyncTaskAwaitSteps(innerTryStatements.slice(0, -1), prefixContext)
+  const awaits = resolveAsyncTaskAwaitSteps(hasPostNestedStatements ? innerTryStatements : innerTryStatements.slice(0, -1), prefixContext)
 
   if (awaits == null) {
     return null
   }
 
-  const returnContext = createAsyncTaskExpressionContext(context, params, awaits)
+  const returnContext = createAsyncTaskExpressionContext(context, params, hasPostNestedStatements ? [] : awaits)
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
 
   if (returnType !== 'void' && returnExpression == null) {
@@ -938,10 +952,12 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   const handlerIndex = findAsyncTaskNearestTryHandlerIndex(tryChain)
   const handlerSource = handlerIndex < 0 ? null : tryChain[handlerIndex].handler
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
+  const successStatements = hasPostNestedStatements ? postNestedStatements.slice(0, -1) : []
 
   if (
     (handlerSource != null && handler == null)
     || hasUnsupportedAsyncTaskTryControlFlow(tryChainResult.prefixStatements)
+    || hasUnsupportedAsyncTaskTryControlFlow(successStatements)
     || finalizers.some(statements => hasUnsupportedAsyncTaskTryControlFlow(statements))
   ) {
     return null
@@ -950,12 +966,18 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   return {
     awaits,
     prefixStatements: tryChainResult.prefixStatements,
+    successPrefixFinalizerStatements: hasPostNestedStatements
+      ? collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, tryChainResult.postNestedOwnerIndex + 1)
+      : [],
+    successStatements,
     returnExpression,
     returnType,
     tryRegion: {
       handler,
       preHandlerFinalizerStatements: handlerIndex < 0 ? [] : collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, handlerIndex + 1),
-      finalizerStatements: handlerIndex < 0
+      finalizerStatements: hasPostNestedStatements
+        ? collectAsyncTaskTryFinalizerStatements(finalizers, tryChainResult.postNestedOwnerIndex, 0)
+        : handlerIndex < 0
         ? collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, 0)
         : collectAsyncTaskTryFinalizerStatements(finalizers, handlerIndex, 0)
     }
@@ -965,6 +987,8 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
 function collectAsyncTaskNestedTryChain(tryStatement) {
   const chain: any[] = []
   const prefixStatements: any[] = []
+  const postNestedStatements: any[] = []
+  let postNestedOwnerIndex = -1
   let current: any = tryStatement
 
   while (current?.type === 'TryStatement') {
@@ -975,17 +999,31 @@ function collectAsyncTaskNestedTryChain(tryStatement) {
     chain.push(current)
 
     const body = current.block?.body ?? []
-    const nestedTry = body.at(-1)
+    const nestedTryIndexes = body.flatMap((item, index) => item?.type === 'TryStatement' ? [index] : [])
 
-    if (nestedTry?.type === 'TryStatement') {
-      prefixStatements.push(...body.slice(0, -1))
-      current = nestedTry
+    if (nestedTryIndexes.length === 1) {
+      const nestedTryIndex = nestedTryIndexes[0]
+      const suffixStatements = body.slice(nestedTryIndex + 1)
+
+      if (suffixStatements.length > 0) {
+        if (postNestedStatements.length > 0) {
+          return null
+        }
+
+        postNestedStatements.push(...suffixStatements)
+        postNestedOwnerIndex = chain.length - 1
+      }
+
+      prefixStatements.push(...body.slice(0, nestedTryIndex))
+      current = body[nestedTryIndex]
       continue
     }
 
     return {
       chain,
-      prefixStatements
+      prefixStatements,
+      postNestedStatements,
+      postNestedOwnerIndex
     }
   }
 
@@ -1988,6 +2026,7 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
 
   if (nextItem == null) {
     lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1).map(line => `  ${line}`))
+    lines.push(...emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
     lines.push(...returnValue.lines.map(line => `  ${line}`))
     lines.push(...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
     lines.push(`  return ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
@@ -2067,6 +2106,25 @@ function emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitC
   }
 
   return emitAsyncTaskTryStatementList([
+    ...(wrapper.tryRegion.preHandlerFinalizerStatements ?? []),
+    ...wrapper.tryRegion.finalizerStatements
+  ], wrapper, baseContext, visibleAwaitCount)
+}
+
+function emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, visibleAwaitCount) {
+  return emitAsyncTaskTryStatementList([
+    ...(wrapper.successPrefixFinalizerStatements ?? []),
+    ...(wrapper.successStatements ?? [])
+  ], wrapper, baseContext, visibleAwaitCount)
+}
+
+function emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, visibleAwaitCount) {
+  if (wrapper.tryRegion == null) {
+    return []
+  }
+
+  return emitAsyncTaskTryStatementList([
+    ...(wrapper.successPrefixFinalizerStatements ?? []),
     ...(wrapper.tryRegion.preHandlerFinalizerStatements ?? []),
     ...wrapper.tryRegion.finalizerStatements
   ], wrapper, baseContext, visibleAwaitCount)
@@ -2156,7 +2214,7 @@ function emitAsyncTaskTryRejectCase(wrapper, item, baseContext) {
 
   if (handler == null) {
     lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index).map(line => `  ${line}`))
-    lines.push(...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index).map(line => `  ${line}`))
+    lines.push(...emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, item.index).map(line => `  ${line}`))
     lines.push(...emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, 'ccjs_promise_reject(frame->promise, ccjs_error)').map(line => `  ${line}`))
     lines.push('}')
 

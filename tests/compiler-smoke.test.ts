@@ -4887,6 +4887,33 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*printf\("%s\\n", "done"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/)
 })
 
+test('lowers nested async task frame post try statements through finalizers', () => {
+  const result = compileSource(`async function work(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.resolve(3)
+    } finally {
+      console.log('inner finally')
+    }
+    console.log('after inner')
+    return 7
+  } finally {
+    console.log('outer finally')
+  }
+}
+
+export async function main(): Promise<void> {
+  const promise = work()
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "after inner"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = ccjs_promise_reject\(frame->promise, ccjs_error\);/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]
