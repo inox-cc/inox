@@ -6772,7 +6772,13 @@ function emitObjectMemberVariableDeclaration(statement, member, context, emitGet
   }
 
   if (!['number', 'boolean'].includes(member.valueType)) {
-    context.diagnostics.push(diagnostic('CCJS_C_UNSUPPORTED_EXPR', 'this object field type is not supported by the current C backend slice', statement.loc))
+    context.diagnostics.push(diagnostic(
+      cUnsupportedExpressionCode(member.valueType),
+      member.valueType === 'function'
+        ? 'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
+        : 'this object field type is not supported by the current C backend slice',
+      statement.loc
+    ))
     return [`double ${statement.name} = 0;`]
   }
 
@@ -6887,7 +6893,13 @@ function emitKnownArrayIndexVariableDeclaration(statement, element, context) {
   }
 
   if (!['number', 'boolean'].includes(element.valueType)) {
-    context.diagnostics.push(diagnostic('CCJS_C_UNSUPPORTED_EXPR', 'this array element type is not supported by the current C backend slice', statement.loc))
+    context.diagnostics.push(diagnostic(
+      cUnsupportedExpressionCode(element.valueType),
+      element.valueType === 'function'
+        ? 'stored callback array elements need delayed closure lifetime support and are not supported by the current C backend slice'
+        : 'this array element type is not supported by the current C backend slice',
+      statement.loc
+    ))
     return [`double ${statement.name} = 0;`]
   }
 
@@ -7284,7 +7296,14 @@ function emitCValueExpression(expression, context) {
     }
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_UNSUPPORTED_EXPR', 'this object field expression is not supported by the current C backend slice', expression?.loc))
+  const unsupportedType = inferExpressionType(expression, context)
+  context.diagnostics.push(diagnostic(
+    cUnsupportedExpressionCode(unsupportedType),
+    unsupportedType === 'function'
+      ? 'stored callback values need delayed closure lifetime support and are not supported by the current C backend slice'
+      : 'this object field expression is not supported by the current C backend slice',
+    expression?.loc
+  ))
 
   return {
     lines: [],

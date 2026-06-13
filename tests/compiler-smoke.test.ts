@@ -2744,6 +2744,71 @@ export function main(): void {
   assert.match(c.code, /runNumber\(numberCallback\);/)
 })
 
+test('rejects delayed callback storage in C with stable diagnostics', () => {
+  assertDiagnostic(`type Task = () => void;
+type Box = {
+  task: Task
+}
+
+function hello(): void {
+  console.log('hello')
+}
+
+export function main(): void {
+  const box: Box = { task: hello }
+  box.task()
+}
+`, 'CCJS_C_FUNCTION_VALUE', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`type Task = () => void;
+
+function hello(): void {
+  console.log('hello')
+}
+
+export function main(): void {
+  const tasks: Task[] = [hello]
+  const task = tasks[0]
+  task()
+}
+`, 'CCJS_C_FUNCTION_VALUE', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`type Task = () => void;
+
+function hello(): void {
+  console.log('hello')
+}
+
+export function main(): void {
+  const tasks: Map<string, Task> = new Map([['hello', hello]])
+  const task: Task | null = tasks.get('hello')
+  task?.()
+}
+`, 'CCJS_C_FUNCTION_VALUE', {
+    target: 'c'
+  })
+
+  assertDiagnostic(`type Task = () => void;
+
+function makeTask(): Task {
+  return () => {
+    console.log('hello')
+  }
+}
+
+export function main(): void {
+  const task = makeTask()
+  task()
+}
+`, 'CCJS_C_FUNCTION_VALUE', {
+    target: 'c'
+  })
+})
+
 test('boxes mutable numeric C callback captures', () => {
   const source = `function run(callback: Function): void {
   callback()
