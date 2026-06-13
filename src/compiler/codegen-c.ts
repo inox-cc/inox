@@ -26,6 +26,23 @@ type CEmitOptions = {
   random?: RandomOptions
 }
 
+type AsyncTaskPhase = {
+  kind: string
+  statements: any[]
+}
+
+type AsyncTaskBodyPlan = {
+  awaits: any[]
+  prefixStatements: any[]
+  prefixLocals: any[]
+  successPhases: AsyncTaskPhase[]
+  tryPhases: AsyncTaskPhase[]
+  returnExpression: any
+  returnType: string
+  hasTryRegion: boolean
+  tryHandler: any | null
+}
+
 export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
   return emitCUnit([ir], ir, options)
 }
@@ -730,8 +747,7 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
     }
 
     const cName = emitCIdentifier(declaration.name)
-    const successPhases = createAsyncTaskSuccessPhases(body)
-    const tryPhases = createAsyncTaskTryPhases(body.tryRegion, successPhases)
+    const bodyPlan = createAsyncTaskBodyPlan(body)
     const wrapper = {
       key: declaration.name,
       functionName: declaration.name,
@@ -741,14 +757,7 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
       rejectName: `ccjs_async_task_${cName}_reject`,
       finalizerName: `ccjs_async_task_${cName}_finalize`,
       params,
-      awaits: body.awaits,
-      prefixStatements: body.prefixStatements ?? [],
-      prefixLocals: body.prefixLocals ?? [],
-      successPhases,
-      tryPhases,
-      returnExpression: body.returnExpression,
-      returnType: body.returnType,
-      tryRegion: body.tryRegion ?? null
+      ...bodyPlan
     }
 
     wrappers.set(declaration.name, wrapper)
@@ -757,8 +766,25 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
   return wrappers
 }
 
-function createAsyncTaskSuccessPhases(body) {
-  const phases: any[] = []
+function createAsyncTaskBodyPlan(body): AsyncTaskBodyPlan {
+  const successPhases = createAsyncTaskSuccessPhases(body)
+  const tryRegion = body.tryRegion ?? null
+
+  return {
+    awaits: body.awaits,
+    prefixStatements: body.prefixStatements ?? [],
+    prefixLocals: body.prefixLocals ?? [],
+    successPhases,
+    tryPhases: createAsyncTaskTryPhases(tryRegion, successPhases),
+    returnExpression: body.returnExpression,
+    returnType: body.returnType,
+    hasTryRegion: tryRegion != null,
+    tryHandler: tryRegion?.handler ?? null
+  }
+}
+
+function createAsyncTaskSuccessPhases(body): AsyncTaskPhase[] {
+  const phases: AsyncTaskPhase[] = []
 
   appendAsyncTaskSuccessPhase(phases, 'pre-finalizer', body.successPreFinalizerStatements)
   appendAsyncTaskSuccessPhase(phases, 'prefix-finalizer', body.successPrefixFinalizerStatements)
@@ -767,7 +793,7 @@ function createAsyncTaskSuccessPhases(body) {
   return phases
 }
 
-function appendAsyncTaskSuccessPhase(phases, kind, statements) {
+function appendAsyncTaskSuccessPhase(phases: AsyncTaskPhase[], kind: string, statements) {
   if ((statements?.length ?? 0) === 0) {
     return
   }
@@ -778,12 +804,12 @@ function appendAsyncTaskSuccessPhase(phases, kind, statements) {
   })
 }
 
-function createAsyncTaskTryPhases(tryRegion, successPhases) {
+function createAsyncTaskTryPhases(tryRegion, successPhases: AsyncTaskPhase[]): AsyncTaskPhase[] {
   if (tryRegion == null) {
     return []
   }
 
-  const phases: any[] = []
+  const phases: AsyncTaskPhase[] = []
   const successPrefixFinalizerStatements = successPhases
     .filter(phase => phase.kind === 'prefix-finalizer')
     .flatMap(phase => phase.statements)
@@ -806,7 +832,7 @@ function createAsyncTaskTryPhases(tryRegion, successPhases) {
   return phases
 }
 
-function appendAsyncTaskTryPhase(phases, kind, statements) {
+function appendAsyncTaskTryPhase(phases: AsyncTaskPhase[], kind: string, statements) {
   if ((statements?.length ?? 0) === 0) {
     return
   }
@@ -2469,7 +2495,7 @@ function emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, errorExpression
 }
 
 function emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitCount) {
-  if (wrapper.tryRegion == null) {
+  if (!wrapper.hasTryRegion) {
     return []
   }
 
@@ -2505,7 +2531,7 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext
 }
 
 function emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, visibleAwaitCount) {
-  if (wrapper.tryRegion == null) {
+  if (!wrapper.hasTryRegion) {
     return []
   }
 
@@ -2513,7 +2539,7 @@ function emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, visibleAwaitCo
 }
 
 function emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, visibleAwaitCount) {
-  if (wrapper.tryRegion == null) {
+  if (!wrapper.hasTryRegion) {
     return []
   }
 
@@ -2521,7 +2547,7 @@ function emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, visibleAwaitC
 }
 
 function emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount) {
-  if (wrapper.tryRegion == null) {
+  if (!wrapper.hasTryRegion) {
     return []
   }
 
@@ -2552,7 +2578,7 @@ function emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, call) {
 }
 
 function emitAsyncTaskRejectDeclaration(wrapper, baseContext) {
-  if (wrapper.tryRegion != null) {
+  if (wrapper.hasTryRegion) {
     return emitAsyncTaskTryRejectDeclaration(wrapper, baseContext)
   }
 
@@ -2594,7 +2620,7 @@ function emitAsyncTaskTryRejectDeclaration(wrapper, baseContext) {
 }
 
 function emitAsyncTaskTryRejectCase(wrapper, item, baseContext) {
-  const handler = wrapper.tryRegion?.handler ?? null
+  const handler = wrapper.tryHandler ?? null
   const lines = [
     `case ${item.index}: {`
   ]
