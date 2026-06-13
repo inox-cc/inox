@@ -31,10 +31,12 @@ for (const file of files) {
 }
 
 if (failures.length > 0) {
-  console.error(['Capability matrix checks failed', ...failures.map(failure => `- ${failure}`)].join('\n'))
+  console.error(['Capability matrix checks failed', ...failures.map((failure) => `- ${failure}`)].join('\n'))
   process.exitCode = 1
 } else {
-  console.log(`Capability matrix checks passed (${files.length} matrix${files.length === 1 ? '' : 'es'}, ${caseCount} case${caseCount === 1 ? '' : 's'})`)
+  console.log(
+    `Capability matrix checks passed (${files.length} matrix${files.length === 1 ? '' : 'es'}, ${caseCount} case${caseCount === 1 ? '' : 's'})`
+  )
 }
 
 async function checkMatrix(file: string): Promise<void> {
@@ -48,7 +50,12 @@ async function checkMatrix(file: string): Promise<void> {
   }
 }
 
-async function checkTarget(source: string, matrixRel: string, target: CompileTarget, expectation: CapabilityExpectation): Promise<void> {
+async function checkTarget(
+  source: string,
+  matrixRel: string,
+  target: CompileTarget,
+  expectation: CapabilityExpectation
+): Promise<void> {
   try {
     await compileFile(source, {
       ...expectation.options,
@@ -65,12 +72,16 @@ async function checkTarget(source: string, matrixRel: string, target: CompileTar
     }
 
     if (expectation.expect === 'pass') {
-      failures.push(`${matrixRel}: expected pass for target ${target}, got ${error.diagnostics.map(item => item.code).join(', ')}`)
+      failures.push(
+        `${matrixRel}: expected pass for target ${target}, got ${error.diagnostics.map((item) => item.code).join(', ')}`
+      )
       return
     }
 
-    if (expectation.diagnostic != null && !error.diagnostics.some(item => item.code === expectation.diagnostic)) {
-      failures.push(`${matrixRel}: expected diagnostic ${expectation.diagnostic} for target ${target}, got ${error.diagnostics.map(item => item.code).join(', ')}`)
+    if (expectation.diagnostic != null && !error.diagnostics.some((item) => item.code === expectation.diagnostic)) {
+      failures.push(
+        `${matrixRel}: expected diagnostic ${expectation.diagnostic} for target ${target}, got ${error.diagnostics.map((item) => item.code).join(', ')}`
+      )
     }
   }
 }
@@ -192,7 +203,7 @@ async function findMatrixFiles(dir: string): Promise<string[]> {
     const path = join(dir, entry.name)
 
     if (entry.isDirectory()) {
-      files.push(...await findMatrixFiles(path))
+      files.push(...(await findMatrixFiles(path)))
     } else if (entry.isFile() && entry.name.endsWith('.matrix.json')) {
       files.push(path)
     }

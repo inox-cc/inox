@@ -841,11 +841,13 @@ class Parser {
     if (this.is('identifier') && this.peek(1).value === '=>') {
       const token = this.advance()
 
-      return [{
-        name: token.value,
-        valueType: 'unknown',
-        loc: locFromToken(token)
-      }]
+      return [
+        {
+          name: token.value,
+          valueType: 'unknown',
+          loc: locFromToken(token)
+        }
+      ]
     }
 
     const params: AnyNode[] = []
@@ -1300,7 +1302,10 @@ class Parser {
     }
   }
 
-  parseTypeAnnotation(values: string[], options: { stopAtLineBreak?: boolean, stopAtStatementBoundary?: boolean } = {}): string {
+  parseTypeAnnotation(
+    values: string[],
+    options: { stopAtLineBreak?: boolean; stopAtStatementBoundary?: boolean } = {}
+  ): string {
     const parts: string[] = []
     let genericDepth = 0
     let lastTokenLine = this.current().line
@@ -1316,7 +1321,13 @@ class Parser {
         break
       }
 
-      if (genericDepth === 0 && parts.length > 0 && options.stopAtStatementBoundary === true && token.line > lastTokenLine && isStatementBoundaryToken(token)) {
+      if (
+        genericDepth === 0 &&
+        parts.length > 0 &&
+        options.stopAtStatementBoundary === true &&
+        token.line > lastTokenLine &&
+        isStatementBoundaryToken(token)
+      ) {
         break
       }
 
@@ -1460,7 +1471,11 @@ class Parser {
   }
 
   isForHeaderWithKeyword(keyword: string): boolean {
-    if (this.current().type !== 'keyword' || !['const', 'let'].includes(this.current().value) || this.peek(1).type !== 'identifier') {
+    if (
+      this.current().type !== 'keyword' ||
+      !['const', 'let'].includes(this.current().value) ||
+      this.peek(1).type !== 'identifier'
+    ) {
       return false
     }
 
@@ -1577,28 +1592,20 @@ function locFromToken(token: SourceLocation): SourceLocation {
 }
 
 function isStatementBoundaryToken(token: Token): boolean {
-  return token.type === 'keyword' && [
-    'async',
-    'class',
-    'const',
-    'export',
-    'function',
-    'import',
-    'let',
-    'type'
-  ].includes(token.value)
+  return (
+    token.type === 'keyword' &&
+    ['async', 'class', 'const', 'export', 'function', 'import', 'let', 'type'].includes(token.value)
+  )
 }
 
 function normalizeTypeName(name: string): string {
   const unionArgs = splitUnionArgs(name)
 
   if (unionArgs.length > 1) {
-    const normalized = unionArgs.map(arg => normalizeTypeName(arg))
-    const withoutNull = normalized.filter(arg => arg !== 'null')
+    const normalized = unionArgs.map((arg) => normalizeTypeName(arg))
+    const withoutNull = normalized.filter((arg) => arg !== 'null')
 
-    return normalized.length === 2 && withoutNull.length === 1
-      ? `nullable<${withoutNull[0]}>`
-      : 'unknown'
+    return normalized.length === 2 && withoutNull.length === 1 ? `nullable<${withoutNull[0]}>` : 'unknown'
   }
 
   if (name.endsWith('[]')) {
@@ -1686,7 +1693,7 @@ function splitGenericArgs(value: string): string[] {
 
   args.push(value.slice(start))
 
-  return args.map(arg => arg.trim()).filter(Boolean)
+  return args.map((arg) => arg.trim()).filter(Boolean)
 }
 
 function splitUnionArgs(value: string): string[] {
@@ -1709,5 +1716,5 @@ function splitUnionArgs(value: string): string[] {
 
   args.push(value.slice(start))
 
-  return args.map(arg => arg.trim()).filter(Boolean)
+  return args.map((arg) => arg.trim()).filter(Boolean)
 }

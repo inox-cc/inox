@@ -1,4 +1,12 @@
-import { collectIrFeatureRequirements, collectIrGlobalRoots, collectIrGlobalUsages, collectIrPrograms, collectIrTopLevelNodeEntries, findIrEntryProgram, hasIrFunctionDeclaration } from './ir.ts'
+import {
+  collectIrFeatureRequirements,
+  collectIrGlobalRoots,
+  collectIrGlobalUsages,
+  collectIrPrograms,
+  collectIrTopLevelNodeEntries,
+  findIrEntryProgram,
+  hasIrFunctionDeclaration
+} from './ir.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, IrProgram } from './types.ts'
 
@@ -19,7 +27,7 @@ export function emitJsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string
   if (hasIrFunctionDeclaration(ir, 'main') && options.callMain !== false) {
     lines.push('')
     lines.push('const ccjsMainResult = main()')
-    lines.push('if (ccjsMainResult && typeof ccjsMainResult.then === \'function\') {')
+    lines.push("if (ccjsMainResult && typeof ccjsMainResult.then === 'function') {")
     lines.push('  await ccjsMainResult')
     lines.push('}')
   }
@@ -27,7 +35,11 @@ export function emitJsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string
   return `${lines.join('\n')}\n`
 }
 
-export function emitJsBundleFromIrModules(irModules: IrModuleRecord[], entry: string, options: JsEmitOptions = {}): string {
+export function emitJsBundleFromIrModules(
+  irModules: IrModuleRecord[],
+  entry: string,
+  options: JsEmitOptions = {}
+): string {
   const irPrograms = collectIrPrograms(irModules)
   const entryIr = findIrEntryProgram(irModules, entry)
   const lines: string[] = emitJsPrelude(irPrograms, options)
@@ -38,16 +50,18 @@ export function emitJsBundleFromIrModules(irModules: IrModuleRecord[], entry: st
 
   for (const module of irModules) {
     lines.push(`// ${module.path}`)
-    lines.push(...emitProgramBody(module.ir, {
-      ...options,
-      stripExports: true
-    }))
+    lines.push(
+      ...emitProgramBody(module.ir, {
+        ...options,
+        stripExports: true
+      })
+    )
     lines.push('')
   }
 
   if (hasIrFunctionDeclaration(entryIr, 'main') && options.callMain !== false) {
     lines.push('const ccjsMainResult = main()')
-    lines.push('if (ccjsMainResult && typeof ccjsMainResult.then === \'function\') {')
+    lines.push("if (ccjsMainResult && typeof ccjsMainResult.then === 'function') {")
     lines.push('  await ccjsMainResult')
     lines.push('}')
   }
@@ -82,21 +96,21 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
   const helperLines: string[] = []
   const globalRoots = new Set(collectIrGlobalRoots(programs))
   const globalUsages = collectIrGlobalUsages(programs)
-  const fsUsagePaths = new Set(globalUsages.filter(usage => usage.root === 'fs').map(usage => usage.path.join('.')))
+  const fsUsagePaths = new Set(globalUsages.filter((usage) => usage.root === 'fs').map((usage) => usage.path.join('.')))
   const features = new Set(collectIrFeatureRequirements(programs))
   const needsFsSync = [...fsUsagePaths].some(isFsSyncUsagePath)
   const needsFsPromises = [...fsUsagePaths].some(isFsPromiseUsagePath)
 
   if (needsFsPromises || (globalRoots.has('fs') && !needsFsSync)) {
-    lines.push('import * as fs from \'node:fs/promises\'')
+    lines.push("import * as fs from 'node:fs/promises'")
   }
 
   if (needsFsSync) {
-    lines.push('import * as ccjsFsSync from \'node:fs\'')
+    lines.push("import * as ccjsFsSync from 'node:fs'")
   }
 
   if (globalRoots.has('http')) {
-    lines.push('import * as http from \'node:http\'')
+    lines.push("import * as http from 'node:http'")
   }
 
   if (features.has('array-pop-null')) {
@@ -159,32 +173,25 @@ function isFsPromiseUsagePath(path: string): boolean {
 }
 
 function isFsSyncUsagePath(path: string): boolean {
-  return ['fs.readFileBytesSync', 'fs.readFileSync', 'fs.readDirSync', 'fs.writeFileBytesSync', 'fs.writeFileSync'].includes(path)
+  return [
+    'fs.readFileBytesSync',
+    'fs.readFileSync',
+    'fs.readDirSync',
+    'fs.writeFileBytesSync',
+    'fs.writeFileSync'
+  ].includes(path)
 }
 
 function emitArrayPopHelper(options: JsEmitOptions): string[] {
-  return [
-    'function ccjsArrayPop(array) {',
-    '  return array.length === 0 ? null : array.pop()',
-    '}'
-  ]
+  return ['function ccjsArrayPop(array) {', '  return array.length === 0 ? null : array.pop()', '}']
 }
 
 function emitMapGetHelper(options: JsEmitOptions): string[] {
-  return [
-    'function ccjsMapGet(map, key) {',
-    '  return map.has(key) ? map.get(key) : null',
-    '}'
-  ]
+  return ['function ccjsMapGet(map, key) {', '  return map.has(key) ? map.get(key) : null', '}']
 }
 
 function emitMapSetHelper(options: JsEmitOptions): string[] {
-  return [
-    'function ccjsMapSet(map, key, value) {',
-    '  map.set(key, value)',
-    '  return value',
-    '}'
-  ]
+  return ['function ccjsMapSet(map, key, value) {', '  map.set(key, value)', '  return value', '}']
 }
 
 function emitStringUnicodeHelpers(options: JsEmitOptions): string[] {
@@ -195,14 +202,14 @@ function emitStringUnicodeHelpers(options: JsEmitOptions): string[] {
     '',
     'function ccjsStringSlice(value, start, end) {',
     '  if (end === null) {',
-    '    return Array.from(value).slice(start).join(\'\')',
+    "    return Array.from(value).slice(start).join('')",
     '  }',
     '',
-    '  return Array.from(value).slice(start, end).join(\'\')',
+    "  return Array.from(value).slice(start, end).join('')",
     '}',
     '',
     'function ccjsStringSplit(value, separator) {',
-    '  if (separator === \'\') {',
+    "  if (separator === '') {",
     '    return Array.from(value)',
     '  }',
     '',
@@ -232,7 +239,7 @@ function emitNumericCastHelpers(options: JsEmitOptions): string[] {
   return [
     'function ccjsNumericCastTrunc(value) {',
     '  if (value !== value || (value - value) !== 0) {',
-    '    throw new Error(\'ccjs numeric cast requires a finite number\')',
+    "    throw new Error('ccjs numeric cast requires a finite number')",
     '  }',
     '',
     '  if (value < 0) {',
@@ -246,7 +253,7 @@ function emitNumericCastHelpers(options: JsEmitOptions): string[] {
     '  const truncated = ccjsNumericCastTrunc(value)',
     '',
     '  if (truncated < min || truncated > max) {',
-    '    throw new Error(\'ccjs numeric cast overflow\')',
+    "    throw new Error('ccjs numeric cast overflow')",
     '  }',
     '',
     '  return truncated',
@@ -277,20 +284,14 @@ function emitNumericCastHelpers(options: JsEmitOptions): string[] {
 function emitFunction(node: AnyNode, options: JsEmitOptions = {}): string[] {
   const exported = node.exported && !options.stripExports
   const head = `${exported ? 'export ' : ''}${node.async ? 'async ' : ''}function ${node.name}(${emitFunctionParams(node.params, options)})${emitReturnTypeAnnotation(node, options)} {`
-  const body = node.body.flatMap(statement => indent(emitStatement(statement, options)))
+  const body = node.body.flatMap((statement) => indent(emitStatement(statement, options)))
 
-  return [
-    head,
-    ...body,
-    '}'
-  ]
+  return [head, ...body, '}']
 }
 
 function emitClass(node: AnyNode, options: JsEmitOptions = {}): string[] {
   const exported = node.exported && !options.stripExports
-  const lines = [
-    `${exported ? 'export ' : ''}class ${node.name} {`
-  ]
+  const lines = [`${exported ? 'export ' : ''}class ${node.name} {`]
 
   for (const field of node.fields ?? []) {
     lines.push(...indent([emitClassField(field, options)]))
@@ -312,17 +313,13 @@ function emitClassField(field: AnyNode, options: JsEmitOptions = {}): string {
 function emitMethod(method: AnyNode, options: JsEmitOptions = {}): string[] {
   const returnType = method.name === 'constructor' ? '' : emitReturnTypeAnnotation(method, options)
   const head = `${method.name}(${emitFunctionParams(method.params, options)})${returnType} {`
-  const body = method.body.flatMap(statement => indent(emitStatement(statement, options)))
+  const body = method.body.flatMap((statement) => indent(emitStatement(statement, options)))
 
-  return [
-    head,
-    ...body,
-    '}'
-  ]
+  return [head, ...body, '}']
 }
 
 function emitFunctionParams(params: AnyNode[], options: JsEmitOptions = {}): string {
-  return params.map(param => param.name).join(', ')
+  return params.map((param) => param.name).join(', ')
 }
 
 function emitReturnTypeAnnotation(node: AnyNode, options: JsEmitOptions = {}): string {
@@ -339,11 +336,7 @@ function emitTypeAlias(statement: AnyNode, options: JsEmitOptions = {}): string[
 
 function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   if (statement.type === 'BlockStatement') {
-    return [
-      '{',
-      ...statement.body.flatMap(item => indent(emitStatement(item, options))),
-      '}'
-    ]
+    return ['{', ...statement.body.flatMap((item) => indent(emitStatement(item, options))), '}']
   }
 
   if (statement.type === 'IfStatement') {
@@ -381,7 +374,9 @@ function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[
   if (statement.type === 'VariableDeclaration') {
     const init = statement.init == null ? '' : ` = ${emitExpression(statement.init, options)}`
     const exported = statement.exported && !options.stripExports
-    return [`${exported ? 'export ' : ''}${statement.kind} ${statement.name}${emitVariableTypeAnnotation(statement, options)}${init}`]
+    return [
+      `${exported ? 'export ' : ''}${statement.kind} ${statement.name}${emitVariableTypeAnnotation(statement, options)}${init}`
+    ]
   }
 
   if (statement.type === 'ExpressionStatement') {
@@ -459,13 +454,11 @@ function isMapForOfStatement(statement: AnyNode): boolean {
 }
 
 function emitSwitchStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
-  const lines = [
-    `switch (${emitExpression(statement.discriminant, options)}) {`
-  ]
+  const lines = [`switch (${emitExpression(statement.discriminant, options)}) {`]
 
   for (const item of statement.cases) {
     lines.push(item.test == null ? '  default:' : `  case ${emitExpression(item.test, options)}:`)
-    lines.push(...item.consequent.flatMap(statement => indent(indent(emitStatement(statement, options)))))
+    lines.push(...item.consequent.flatMap((statement) => indent(indent(emitStatement(statement, options)))))
   }
 
   lines.push('}')
@@ -474,10 +467,7 @@ function emitSwitchStatement(statement: AnyNode, options: JsEmitOptions = {}): s
 }
 
 function emitTryStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
-  const lines = [
-    'try {',
-    ...indent(emitStatementBody(statement.block, options))
-  ]
+  const lines = ['try {', ...indent(emitStatementBody(statement.block, options))]
 
   if (statement.handler != null) {
     lines.push(statement.handler.param == null ? '} catch {' : `} catch (${statement.handler.param}) {`)
@@ -496,7 +486,7 @@ function emitTryStatement(statement: AnyNode, options: JsEmitOptions = {}): stri
 
 function emitStatementBody(statement: AnyNode, options: JsEmitOptions = {}): string[] {
   if (statement.type === 'BlockStatement') {
-    return statement.body.flatMap(item => emitStatement(item, options))
+    return statement.body.flatMap((item) => emitStatement(item, options))
   }
 
   return emitStatement(statement, options)
@@ -569,7 +559,7 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   if (expression.type === 'OptionalCallExpression') {
-    return `${emitExpression(expression.callee, options)}?.(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
+    return `${emitExpression(expression.callee, options)}?.(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.type === 'CallExpression') {
@@ -596,7 +586,7 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
     }
 
     if (isStringSliceCall(expression)) {
-      const args = expression.args.map(arg => emitExpression(arg, options))
+      const args = expression.args.map((arg) => emitExpression(arg, options))
 
       if (args.length === 1) {
         args.push('null')
@@ -609,11 +599,11 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
       return `ccjsStringSplit(${emitExpression(expression.callee.object, options)}, ${emitExpression(expression.args[0], options)})`
     }
 
-    return `${emitExpression(expression.callee, options)}(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
+    return `${emitExpression(expression.callee, options)}(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.type === 'NewExpression') {
-    return `new ${emitExpression(expression.callee, options)}(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
+    return `new ${emitExpression(expression.callee, options)}(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.type === 'AwaitExpression') {
@@ -628,7 +618,7 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
       return `${params}${returnType} => ${emitExpression(expression.body, options)}`
     }
 
-    return `${params}${returnType} => {\n${indent(expression.body.flatMap(statement => emitStatement(statement, options))).join('\n')}\n}`
+    return `${params}${returnType} => {\n${indent(expression.body.flatMap((statement) => emitStatement(statement, options))).join('\n')}\n}`
   }
 
   if (expression.type === 'AssignmentExpression') {
@@ -648,11 +638,11 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   if (expression.type === 'ArrayLiteral') {
-    return `[${expression.elements.map(element => emitExpression(element, options)).join(', ')}]`
+    return `[${expression.elements.map((element) => emitExpression(element, options)).join(', ')}]`
   }
 
   if (expression.type === 'ObjectLiteral') {
-    return `{ ${expression.properties.map(property => emitObjectProperty(property, options)).join(', ')} }`
+    return `{ ${expression.properties.map((property) => emitObjectProperty(property, options)).join(', ')} }`
   }
 
   return 'undefined'
@@ -661,7 +651,7 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
 function emitArrowFunctionParams(expression: AnyNode, options: JsEmitOptions = {}): string {
   return expression.params.length === 1
     ? expression.params[0].name
-    : `(${expression.params.map(param => param.name).join(', ')})`
+    : `(${expression.params.map((param) => param.name).join(', ')})`
 }
 
 function emitArrowReturnTypeAnnotation(expression: AnyNode, options: JsEmitOptions = {}): string {
@@ -689,34 +679,42 @@ function emitObjectKey(key: string): string {
 }
 
 function isArrayPopCall(expression: AnyNode): boolean {
-  return expression.type === 'CallExpression'
-    && expression.callee.type === 'MemberExpression'
-    && expression.callee.property === 'pop'
-    && expression.args.length === 0
+  return (
+    expression.type === 'CallExpression' &&
+    expression.callee.type === 'MemberExpression' &&
+    expression.callee.property === 'pop' &&
+    expression.args.length === 0
+  )
 }
 
 function isMapGetCall(expression: AnyNode): boolean {
-  return expression.type === 'CallExpression'
-    && expression.callee.type === 'MemberExpression'
-    && expression.callee.property === 'get'
-    && expression.nullable === true
-    && expression.args.length === 1
+  return (
+    expression.type === 'CallExpression' &&
+    expression.callee.type === 'MemberExpression' &&
+    expression.callee.property === 'get' &&
+    expression.nullable === true &&
+    expression.args.length === 1
+  )
 }
 
 function isNumberConversionCall(expression: AnyNode): boolean {
-  return expression.type === 'CallExpression'
-    && expression.callee.type === 'Reference'
-    && expression.callee.path.length === 1
-    && expression.callee.path[0] === 'Number'
-    && expression.args.length === 1
+  return (
+    expression.type === 'CallExpression' &&
+    expression.callee.type === 'Reference' &&
+    expression.callee.path.length === 1 &&
+    expression.callee.path[0] === 'Number' &&
+    expression.args.length === 1
+  )
 }
 
 function isNumericCastCall(expression: AnyNode): boolean {
-  return expression.type === 'CallExpression'
-    && expression.callee.type === 'Reference'
-    && expression.callee.path.length === 1
-    && ['i32', 'u32', 'u64', 'f32', 'f64'].includes(expression.callee.path[0])
-    && expression.args.length === 1
+  return (
+    expression.type === 'CallExpression' &&
+    expression.callee.type === 'Reference' &&
+    expression.callee.path.length === 1 &&
+    ['i32', 'u32', 'u64', 'f32', 'f64'].includes(expression.callee.path[0]) &&
+    expression.args.length === 1
+  )
 }
 
 function numericCastHelperName(cast: string): string {
@@ -740,24 +738,30 @@ function numericCastHelperName(cast: string): string {
 }
 
 function isStringLengthExpression(expression: AnyNode): boolean {
-  return expression.type === 'MemberExpression'
-    && expression.property === 'length'
-    && expression.stringRuntimeMethod === 'length'
+  return (
+    expression.type === 'MemberExpression' &&
+    expression.property === 'length' &&
+    expression.stringRuntimeMethod === 'length'
+  )
 }
 
 function isStringSliceCall(expression: AnyNode): boolean {
-  return expression.type === 'CallExpression'
-    && expression.callee.type === 'MemberExpression'
-    && expression.stringRuntimeMethod === 'slice'
-    && expression.args.length >= 1
-    && expression.args.length <= 2
+  return (
+    expression.type === 'CallExpression' &&
+    expression.callee.type === 'MemberExpression' &&
+    expression.stringRuntimeMethod === 'slice' &&
+    expression.args.length >= 1 &&
+    expression.args.length <= 2
+  )
 }
 
 function isStringSplitCall(expression: AnyNode): boolean {
-  return expression.type === 'CallExpression'
-    && expression.callee.type === 'MemberExpression'
-    && expression.stringRuntimeMethod === 'split'
-    && expression.args.length === 1
+  return (
+    expression.type === 'CallExpression' &&
+    expression.callee.type === 'MemberExpression' &&
+    expression.stringRuntimeMethod === 'split' &&
+    expression.args.length === 1
+  )
 }
 
 function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions): string | null {
@@ -793,17 +797,17 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
 }
 
 function isMapIndexGet(expression: AnyNode): boolean {
-  return expression.type === 'IndexExpression'
-    && expression.collectionKind === 'map'
-    && expression.nullable === true
+  return expression.type === 'IndexExpression' && expression.collectionKind === 'map' && expression.nullable === true
 }
 
 function isMapIndexSet(expression: AnyNode): boolean {
-  return expression.type === 'AssignmentExpression'
-    && expression.target?.type === 'IndexExpression'
-    && expression.target.collectionKind === 'map'
+  return (
+    expression.type === 'AssignmentExpression' &&
+    expression.target?.type === 'IndexExpression' &&
+    expression.target.collectionKind === 'map'
+  )
 }
 
 function indent(lines: string[]): string[] {
-  return lines.map(line => `  ${line}`)
+  return lines.map((line) => `  ${line}`)
 }

@@ -4,3 +4,4 @@ dist/
 tmp/
 .idea
 *.log
+example/build/

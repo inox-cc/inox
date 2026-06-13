@@ -51,7 +51,7 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
       ast,
       hir: null,
       ir: null,
-      imports: ast.body.filter(item => item.type === 'ImportDeclaration'),
+      imports: ast.body.filter((item) => item.type === 'ImportDeclaration'),
       exports: collectExports(ast)
     }
 
@@ -62,7 +62,13 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
 
     for (const [importIndex, item] of module.imports.entries()) {
       if (!isRelativeSpecifier(item.source)) {
-        diagnostics.push(diagnostic('CCJS_UNSUPPORTED_IMPORT_SOURCE', `only relative imports are implemented, got ${item.source}`, item.loc))
+        diagnostics.push(
+          diagnostic(
+            'CCJS_UNSUPPORTED_IMPORT_SOURCE',
+            `only relative imports are implemented, got ${item.source}`,
+            item.loc
+          )
+        )
         continue
       }
 
@@ -85,13 +91,21 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
         const exported = importedModule.exports.get(specifier.imported)
 
         if (exported == null) {
-          diagnostics.push(diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc))
+          diagnostics.push(
+            diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
+          )
           continue
         }
 
         if (item.typeOnly) {
           if (exported.type !== 'TypeAliasDeclaration') {
-            diagnostics.push(diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export type ${specifier.imported}`, specifier.loc))
+            diagnostics.push(
+              diagnostic(
+                'CCJS_UNKNOWN_EXPORT',
+                `${item.source} does not export type ${specifier.imported}`,
+                specifier.loc
+              )
+            )
             continue
           }
 
@@ -100,7 +114,13 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
         }
 
         if (exported.type === 'TypeAliasDeclaration') {
-          diagnostics.push(diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} exports ${specifier.imported} as a type; use import type`, specifier.loc))
+          diagnostics.push(
+            diagnostic(
+              'CCJS_UNKNOWN_EXPORT',
+              `${item.source} exports ${specifier.imported} as a type; use import type`,
+              specifier.loc
+            )
+          )
           continue
         }
 
@@ -141,7 +161,10 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
   }
 }
 
-function insertImportSyntheticDeclarations(program: ProgramNode, declarationsByImport: Map<number, AnyNode[]>): ProgramNode {
+function insertImportSyntheticDeclarations(
+  program: ProgramNode,
+  declarationsByImport: Map<number, AnyNode[]>
+): ProgramNode {
   if (declarationsByImport.size === 0) {
     return program
   }
@@ -165,7 +188,7 @@ function insertImportSyntheticDeclarations(program: ProgramNode, declarationsByI
 }
 
 function createImportAliasDeclaration(specifier: AnyNode, importedProgram: ProgramNode): AnyNode | null {
-  const exported = importedProgram.body.find(item => item.exported && item.name === specifier.imported)
+  const exported = importedProgram.body.find((item) => item.exported && item.name === specifier.imported)
 
   if (exported == null) {
     return null
@@ -208,7 +231,7 @@ function cloneTypeAliasValue(valueType: AnyNode): AnyNode {
   if (valueType?.kind === 'object') {
     return {
       ...valueType,
-      fields: valueType.fields.map(field => ({
+      fields: valueType.fields.map((field) => ({
         ...field
       }))
     }
@@ -217,7 +240,7 @@ function cloneTypeAliasValue(valueType: AnyNode): AnyNode {
   if (valueType?.kind === 'function') {
     return {
       ...valueType,
-      params: valueType.params.map(param => ({
+      params: valueType.params.map((param) => ({
         ...param
       }))
     }
@@ -229,7 +252,7 @@ function cloneTypeAliasValue(valueType: AnyNode): AnyNode {
 }
 
 function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: SourceLocation): AnyNode {
-  const params = target.params.map(param => ({
+  const params = target.params.map((param) => ({
     ...param
   }))
   const call = {
@@ -240,7 +263,7 @@ function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: Sour
       loc,
       valueType: 'function'
     },
-    args: params.map(param => ({
+    args: params.map((param) => ({
       type: 'Reference',
       path: [param.name],
       loc: param.loc,
@@ -258,17 +281,22 @@ function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: Sour
     loc,
     params,
     returnType: target.returnType,
-    body: target.returnType === 'void'
-      ? [{
-          type: 'ExpressionStatement',
-          expression: call,
-          loc
-        }]
-      : [{
-          type: 'ReturnStatement',
-          argument: call,
-          loc
-        }]
+    body:
+      target.returnType === 'void'
+        ? [
+            {
+              type: 'ExpressionStatement',
+              expression: call,
+              loc
+            }
+          ]
+        : [
+            {
+              type: 'ReturnStatement',
+              argument: call,
+              loc
+            }
+          ]
   }
 }
 
@@ -276,7 +304,12 @@ export function collectExports(ast: ProgramNode): Map<string, AnyNode> {
   const exports = new Map<string, AnyNode>()
 
   for (const item of ast.body) {
-    if ((item.type === 'FunctionDeclaration' || item.type === 'VariableDeclaration' || item.type === 'TypeAliasDeclaration') && item.exported) {
+    if (
+      (item.type === 'FunctionDeclaration' ||
+        item.type === 'VariableDeclaration' ||
+        item.type === 'TypeAliasDeclaration') &&
+      item.exported
+    ) {
       exports.set(item.name, item)
     }
   }
@@ -290,12 +323,13 @@ export function moduleId(path: string): string {
 
 async function resolveExistingSource(path: string): Promise<string> {
   const normalized = normalize(isAbsolute(path) ? path : resolve(path))
-  const candidates = extname(normalized) === ''
-    ? [
-        ...sourceExtensions.map(ext => `${normalized}${ext}`),
-        ...sourceExtensions.map(ext => join(normalized, `index${ext}`))
-      ]
-    : [normalized]
+  const candidates =
+    extname(normalized) === ''
+      ? [
+          ...sourceExtensions.map((ext) => `${normalized}${ext}`),
+          ...sourceExtensions.map((ext) => join(normalized, `index${ext}`))
+        ]
+      : [normalized]
 
   for (const candidate of candidates) {
     try {

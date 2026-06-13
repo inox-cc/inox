@@ -81,9 +81,7 @@ export type IrFunctionDeclaration = {
   loc?: SourceLocation
 }
 
-export type IrSyntaxFeature =
-  | 'async-function'
-  | 'class'
+export type IrSyntaxFeature = 'async-function' | 'class'
 
 export type IrSyntaxFeatureUsage = {
   feature: IrSyntaxFeature
@@ -96,12 +94,7 @@ export type IrGlobalUsage = {
   loc?: SourceLocation
 }
 
-export type IrTopLevelItemKind =
-  | 'class'
-  | 'function'
-  | 'import'
-  | 'statement'
-  | 'type'
+export type IrTopLevelItemKind = 'class' | 'function' | 'import' | 'statement' | 'type'
 
 export type IrTopLevelItem = {
   kind: IrTopLevelItemKind

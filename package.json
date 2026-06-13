@@ -4,11 +4,14 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "packageManager": "pnpm@11.5.1",
   "bin": {
     "ccjs": "./bin/ccjs.ts"
   },
   "scripts": {
     "build": "node scripts/build.ts",
+    "example": "cmake --build example/build && ./example/build/ccjs_cmake_example",
+    "lint": "eslint --fix . && prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
     "test:examples": "node scripts/test-examples.ts",
@@ -18,15 +21,18 @@
     "test:ir-snapshots": "node scripts/test-ir-snapshots.ts",
     "test:codegen-snapshots": "node scripts/test-codegen-snapshots.ts",
     "test:diagnostic-snapshots": "node scripts/test-diagnostic-snapshots.ts",
-    "test:snapshots": "npm run test:hir-snapshots && npm run test:ir-snapshots && npm run test:codegen-snapshots && npm run test:diagnostic-snapshots",
+    "test:snapshots": "pnpm run test:hir-snapshots && pnpm run test:ir-snapshots && pnpm run test:codegen-snapshots && pnpm run test:diagnostic-snapshots",
     "test:differential": "node scripts/test-differential.ts",
-    "check": "npm run build && npm run typecheck && npm test && npm run test:fixtures && npm run test:examples && npm run test:capabilities && npm run test:snapshots && npm run test:differential"
+    "check": "pnpm run build && pnpm run typecheck && pnpm test && pnpm run test:fixtures && pnpm run test:examples && pnpm run test:capabilities && pnpm run test:snapshots && pnpm run test:differential"
   },
   "engines": {
     "node": ">=24"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
+    "@types/node": "^25.9.3",
+    "@orlv/formatter": "^1.3.2",
+    "eslint": "10.4.1",
+    "prettier": "^3.8.4",
     "typescript": "^6.0.3"
   }
 }

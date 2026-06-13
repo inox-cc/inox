@@ -33,11 +33,14 @@ test('ccjs accepts valid TypeScript files as canonical source input', async () =
   const entry = join(dir, 'main.ts')
 
   try {
-    await writeFile(entry, `export function main(): void {
+    await writeFile(
+      entry,
+      `export function main(): void {
   const name: string = 'Ada'
   console.log(\`hello \${name}\`)
 }
-`)
+`
+    )
 
     const result = await runCli([entry])
 
@@ -78,17 +81,27 @@ test('ccjs file --emit c reads Math.random seed config', async () => {
   const out = join(dir, 'random.c')
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   const value = Math.random()
   console.log(value)
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      random: {
-        backend: 'xorshift32',
-        seed: 1
-      }
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          random: {
+            backend: 'xorshift32',
+            seed: 1
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
       cwd: dir
@@ -114,16 +127,26 @@ test('ccjs file --emit c reads Math.random os backend config', async () => {
   const out = join(dir, 'random.c')
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   const value = Math.random()
   console.log(value)
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      random: {
-        backend: 'os'
-      }
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          random: {
+            backend: 'os'
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
       cwd: dir
@@ -149,17 +172,27 @@ test('ccjs file --emit c checks embedded entropy capability for Math.random os b
   const out = join(dir, 'random.c')
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   const value = Math.random()
   console.log(value)
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      profile: 'embedded',
-      random: {
-        backend: 'os'
-      }
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          profile: 'embedded',
+          random: {
+            backend: 'os'
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const missing = await runCli(['main.ts', '--emit', 'c', '-o', out], {
       cwd: dir
@@ -168,15 +201,22 @@ test('ccjs file --emit c checks embedded entropy capability for Math.random os b
     assert.equal(missing.code, 1)
     assert.match(missing.stderr, /CCJS_CAPABILITY: embedded profile requires entropy capability for Math\.random/)
 
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      profile: 'embedded',
-      capabilities: {
-        entropy: true
-      },
-      random: {
-        backend: 'os'
-      }
-    }, null, 2)}\n`)
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          profile: 'embedded',
+          capabilities: {
+            entropy: true
+          },
+          random: {
+            backend: 'os'
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
       cwd: dir
@@ -201,14 +241,24 @@ test('ccjs file --emit c reads embedded profile capability config', async () => 
   const out = join(dir, 'time.c')
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   const now = Date.now()
   console.log(now)
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      profile: 'embedded'
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          profile: 'embedded'
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const missing = await runCli(['main.ts', '--emit', 'c', '-o', out], {
       cwd: dir
@@ -217,12 +267,19 @@ test('ccjs file --emit c reads embedded profile capability config', async () => 
     assert.equal(missing.code, 1)
     assert.match(missing.stderr, /CCJS_CAPABILITY: embedded profile requires wall-clock capability for Date\.now/)
 
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      profile: 'embedded',
-      capabilities: {
-        wallClock: true
-      }
-    }, null, 2)}\n`)
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          profile: 'embedded',
+          capabilities: {
+            wallClock: true
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
       cwd: dir
@@ -247,16 +304,26 @@ test('ccjs file --emit c reads C budget config', async () => {
   const out = join(dir, 'values.c')
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   const values = [1, 2, 3]
   console.log(values.length)
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      budgets: {
-        maxRuntimeRequirements: 0
-      }
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          budgets: {
+            maxRuntimeRequirements: 0
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const exceeded = await runCli(['main.ts', '--emit', 'c', '-o', out], {
       cwd: dir
@@ -265,11 +332,18 @@ test('ccjs file --emit c reads C budget config', async () => {
     assert.equal(exceeded.code, 1)
     assert.match(exceeded.stderr, /CCJS_BUDGET: C target uses 3 runtime requirements/)
 
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      budgets: {
-        maxRuntimeRequirements: 3
-      }
-    }, null, 2)}\n`)
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          budgets: {
+            maxRuntimeRequirements: 3
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
       cwd: dir
@@ -307,7 +381,7 @@ test('ccjs module graph --emit c writes bundled C source', async () => {
   }
 })
 
-test('ccjs build --target c writes a native executable', async t => {
+test('ccjs build --target c writes a native executable', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -338,7 +412,7 @@ test('ccjs build --target c writes a native executable', async t => {
   }
 })
 
-test('ccjs build --target c uses CC compiler override', async t => {
+test('ccjs build --target c uses CC compiler override', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -352,10 +426,13 @@ test('ccjs build --target c uses CC compiler override', async t => {
   const log = join(dir, 'cc.log')
 
   try {
-    await writeFile(wrapper, `#!/bin/sh
+    await writeFile(
+      wrapper,
+      `#!/bin/sh
 printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
 exec cc "$@"
-`)
+`
+    )
     await chmod(wrapper, 0o755)
 
     const result = await runCli(['build', 'tests/fixtures/parser/valid/hello.ts', '--target', 'c', '-o', out], {
@@ -389,7 +466,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c links only needed C runtime source groups', async t => {
+test('ccjs build --target c links only needed C runtime source groups', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -403,15 +480,21 @@ test('ccjs build --target c links only needed C runtime source groups', async t 
   const log = join(dir, 'cc.log')
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   const now = Date.now()
   console.log(now)
 }
-`)
-    await writeFile(wrapper, `#!/bin/sh
+`
+    )
+    await writeFile(
+      wrapper,
+      `#!/bin/sh
 printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
 exec cc "$@"
-`)
+`
+    )
     await chmod(wrapper, 0o755)
 
     const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
@@ -439,7 +522,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c reads ccjs.config.json toolchain settings', async t => {
+test('ccjs build --target c reads ccjs.config.json toolchain settings', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -453,22 +536,35 @@ test('ccjs build --target c reads ccjs.config.json toolchain settings', async t 
   const log = join(dir, 'cc.log')
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   console.log('hello')
 }
-`)
-    await writeFile(wrapper, `#!/bin/sh
+`
+    )
+    await writeFile(
+      wrapper,
+      `#!/bin/sh
 printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
 exec cc "$@"
-`)
+`
+    )
     await chmod(wrapper, 0o755)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      c: {
-        cc: wrapper,
-        cflags: ['-Inonexistent config path with spaces', '-DCCJS_CONFIG_CFLAG=1'],
-        ldflags: ['-Llinker config path with spaces', '-DCCJS_CONFIG_LDFLAG=1']
-      }
-    }, null, 2)}\n`)
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          c: {
+            cc: wrapper,
+            cflags: ['-Inonexistent config path with spaces', '-DCCJS_CONFIG_CFLAG=1'],
+            ldflags: ['-Llinker config path with spaces', '-DCCJS_CONFIG_LDFLAG=1']
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
       cwd: dir,
@@ -498,7 +594,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c reads ccjs.json toolchain settings', async t => {
+test('ccjs build --target c reads ccjs.json toolchain settings', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -512,22 +608,35 @@ test('ccjs build --target c reads ccjs.json toolchain settings', async t => {
   const log = join(dir, 'cc.log')
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   console.log('hello')
 }
-`)
-    await writeFile(wrapper, `#!/bin/sh
+`
+    )
+    await writeFile(
+      wrapper,
+      `#!/bin/sh
 printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
 exec cc "$@"
-`)
+`
+    )
     await chmod(wrapper, 0o755)
-    await writeFile(join(dir, 'ccjs.json'), `${JSON.stringify({
-      c: {
-        cc: wrapper,
-        cflags: ['-Inonexistent ccjs json path with spaces', '-DCCJS_JSON_CFLAG=1'],
-        ldflags: ['-Llinker ccjs json path with spaces', '-DCCJS_JSON_LDFLAG=1']
-      }
-    }, null, 2)}\n`)
+    await writeFile(
+      join(dir, 'ccjs.json'),
+      `${JSON.stringify(
+        {
+          c: {
+            cc: wrapper,
+            cflags: ['-Inonexistent ccjs json path with spaces', '-DCCJS_JSON_CFLAG=1'],
+            ldflags: ['-Llinker ccjs json path with spaces', '-DCCJS_JSON_LDFLAG=1']
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
       cwd: dir,
@@ -557,7 +666,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c prefers ccjs.config.json over ccjs.json', async t => {
+test('ccjs build --target c prefers ccjs.config.json over ccjs.json', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -572,30 +681,53 @@ test('ccjs build --target c prefers ccjs.config.json over ccjs.json', async t =>
   const log = join(dir, 'cc.log')
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   console.log('hello')
 }
-`)
-    await writeFile(preferredWrapper, `#!/bin/sh
+`
+    )
+    await writeFile(
+      preferredWrapper,
+      `#!/bin/sh
 printf 'preferred\\n<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
 exec cc "$@"
-`)
-    await writeFile(fallbackWrapper, `#!/bin/sh
+`
+    )
+    await writeFile(
+      fallbackWrapper,
+      `#!/bin/sh
 printf 'fallback\\n<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
 exec cc "$@"
-`)
+`
+    )
     await chmod(preferredWrapper, 0o755)
     await chmod(fallbackWrapper, 0o755)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      c: {
-        cc: preferredWrapper
-      }
-    }, null, 2)}\n`)
-    await writeFile(join(dir, 'ccjs.json'), `${JSON.stringify({
-      c: {
-        cc: fallbackWrapper
-      }
-    }, null, 2)}\n`)
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          c: {
+            cc: preferredWrapper
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
+    await writeFile(
+      join(dir, 'ccjs.json'),
+      `${JSON.stringify(
+        {
+          c: {
+            cc: fallbackWrapper
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
       cwd: dir,
@@ -624,15 +756,25 @@ test('ccjs build --target c reports invalid ccjs.config.json', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   console.log('hello')
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      c: {
-        cflags: [1]
-      }
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          c: {
+            cflags: [1]
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['build', 'main.ts', '--target', 'c'], {
       cwd: dir
@@ -652,16 +794,26 @@ test('ccjs build --target c reports invalid random seed config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   const value = Math.random()
   console.log(value)
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      random: {
-        seed: 1.5
-      }
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          random: {
+            seed: 1.5
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['build', 'main.ts', '--target', 'c'], {
       cwd: dir
@@ -681,16 +833,26 @@ test('ccjs build --target c reports invalid random backend config', async () => 
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   const value = Math.random()
   console.log(value)
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      random: {
-        backend: 'native'
-      }
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          random: {
+            backend: 'native'
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['build', 'main.ts', '--target', 'c'], {
       cwd: dir
@@ -710,16 +872,26 @@ test('ccjs build --target c reports invalid capability config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   console.log('hello')
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      profile: 'embedded',
-      capabilities: {
-        wallClock: 'yes'
-      }
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          profile: 'embedded',
+          capabilities: {
+            wallClock: 'yes'
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['build', 'main.ts', '--target', 'c'], {
       cwd: dir
@@ -739,15 +911,25 @@ test('ccjs build --target c reports invalid budget config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
-    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `export function main(): void {
   console.log('hello')
 }
-`)
-    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
-      budgets: {
-        maxFeatures: -1
-      }
-    }, null, 2)}\n`)
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          budgets: {
+            maxFeatures: -1
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
 
     const result = await runCli(['build', 'main.ts', '--target', 'c'], {
       cwd: dir
@@ -763,7 +945,7 @@ test('ccjs build --target c reports invalid budget config', async () => {
   }
 })
 
-test('ccjs run --target c builds and runs a temporary native executable', async t => {
+test('ccjs run --target c builds and runs a temporary native executable', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -778,7 +960,7 @@ test('ccjs run --target c builds and runs a temporary native executable', async 
   assert.equal(result.stderr, '')
 })
 
-test('ccjs run --target c runs fs globals through hosted fallback', async t => {
+test('ccjs run --target c runs fs globals through hosted fallback', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -791,7 +973,9 @@ test('ccjs run --target c runs fs globals through hosted fallback', async t => {
   const file = join(dir, 'value.txt')
 
   try {
-    await writeFile(entry, `async function loadText(): Promise<string> {
+    await writeFile(
+      entry,
+      `async function loadText(): Promise<string> {
   return fs.readFile(${JSON.stringify(file)}, 'utf8')
 }
 
@@ -803,7 +987,8 @@ export async function main(): Promise<void> {
   console.log(text)
   console.log(names[0], names[1])
 }
-`)
+`
+    )
 
     const result = await runCli(['run', entry, '--target', 'c'])
 
@@ -818,7 +1003,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('ccjs run --target c runs a module graph with import aliases', async t => {
+test('ccjs run --target c runs a module graph with import aliases', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -833,7 +1018,7 @@ test('ccjs run --target c runs a module graph with import aliases', async t => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs run --target c runs a module graph with type imports', async t => {
+test('ccjs run --target c runs a module graph with type imports', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -848,7 +1033,7 @@ test('ccjs run --target c runs a module graph with type imports', async t => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs run --target c resolves directory index imports', async t => {
+test('ccjs run --target c resolves directory index imports', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -863,7 +1048,7 @@ test('ccjs run --target c resolves directory index imports', async t => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs run --target c --keep keeps temporary C artifacts', async t => {
+test('ccjs run --target c --keep keeps temporary C artifacts', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -895,7 +1080,7 @@ test('ccjs run --target c --keep keeps temporary C artifacts', async t => {
   }
 })
 
-test('ccjs run --keep writes temporary C output by default', async t => {
+test('ccjs run --keep writes temporary C output by default', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1017,10 +1202,13 @@ test('ccjs file runs try catch finally', async () => {
 function runCli(args: string[], options: RunOptions = {}): Promise<CommandResult> {
   return runCommand(process.execPath, [cliPath, ...args], {
     cwd: options.cwd ?? repoRoot,
-    env: options.env == null ? undefined : {
-      ...process.env,
-      ...options.env
-    }
+    env:
+      options.env == null
+        ? undefined
+        : {
+            ...process.env,
+            ...options.env
+          }
   })
 }
 
@@ -1034,16 +1222,16 @@ function runCommand(command: string, args: string[], options: RunOptions = {}): 
     let stdout = ''
     let stderr = ''
 
-    child.stdout.on('data', chunk => {
+    child.stdout.on('data', (chunk) => {
       stdout += chunk
     })
 
-    child.stderr.on('data', chunk => {
+    child.stderr.on('data', (chunk) => {
       stderr += chunk
     })
 
     child.on('error', reject)
-    child.on('exit', code => {
+    child.on('exit', (code) => {
       resolve({
         code: code ?? 1,
         stdout,

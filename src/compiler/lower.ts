@@ -25,7 +25,7 @@ export function lowerProgram(ast: ProgramNode): ProgramNode {
 
   return {
     type: 'HirProgram',
-    body: ast.body.map(item => lowerTopLevelItem(item, context))
+    body: ast.body.map((item) => lowerTopLevelItem(item, context))
   }
 }
 
@@ -49,7 +49,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       async: item.async,
       name: item.name,
       loc: item.loc,
-      params: item.params.map(param => lowerParam(param, context)),
+      params: item.params.map((param) => lowerParam(param, context)),
       declaredReturnType: item.returnType,
       returnType: returnType.valueType ?? item.returnType,
       returnNullable: returnType.nullable,
@@ -60,7 +60,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       returnPromiseValueType: returnType.promiseValueType ?? null,
       returnSetElementType: returnType.setElementType,
       returnShape: returnType.shape,
-      body: item.body.map(statement => lowerStatement(statement, context))
+      body: item.body.map((statement) => lowerStatement(statement, context))
     }
   }
 
@@ -71,7 +71,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       name: item.name,
       loc: item.loc,
       shape: item.shape ?? null,
-      fields: (item.fields ?? []).map(field => ({
+      fields: (item.fields ?? []).map((field) => ({
         ...field,
         declaredType: field.declaredType ?? field.valueType,
         valueType: field.valueType ?? 'unknown',
@@ -84,14 +84,14 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
         setElementType: field.setElementType ?? null,
         shape: field.shape ?? null
       })),
-      methods: item.methods.map(method => {
+      methods: item.methods.map((method) => {
         const returnType = resolveDeclaredType(method.returnType, context)
 
         return {
           type: 'MethodDefinition',
           name: method.name,
           loc: method.loc,
-          params: method.params.map(param => lowerParam(param, context)),
+          params: method.params.map((param) => lowerParam(param, context)),
           declaredReturnType: method.returnType,
           returnType: returnType.valueType ?? method.returnType,
           returnNullable: returnType.nullable,
@@ -101,7 +101,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
           returnMapValueType: returnType.mapValueType,
           returnPromiseValueType: returnType.promiseValueType ?? null,
           returnSetElementType: returnType.setElementType,
-          body: method.body.map(statement => lowerStatement(statement, context))
+          body: method.body.map((statement) => lowerStatement(statement, context))
         }
       })
     }
@@ -114,7 +114,7 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
   if (statement.type === 'BlockStatement') {
     return {
       type: 'BlockStatement',
-      body: statement.body.map(item => lowerStatement(item, context))
+      body: statement.body.map((item) => lowerStatement(item, context))
     }
   }
 
@@ -176,10 +176,10 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
     return {
       type: 'SwitchStatement',
       discriminant: lowerExpression(statement.discriminant, context),
-      cases: statement.cases.map(item => ({
+      cases: statement.cases.map((item) => ({
         type: 'SwitchCase',
         test: item.test == null ? null : lowerExpression(item.test, context),
-        consequent: item.consequent.map(statement => lowerStatement(statement, context)),
+        consequent: item.consequent.map((statement) => lowerStatement(statement, context)),
         loc: item.loc
       })),
       loc: statement.loc
@@ -190,12 +190,13 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
     return {
       type: 'TryStatement',
       block: lowerStatement(statement.block, context),
-      handler: statement.handler == null
-        ? null
-        : {
-            ...statement.handler,
-            body: lowerStatement(statement.handler.body, context)
-          },
+      handler:
+        statement.handler == null
+          ? null
+          : {
+              ...statement.handler,
+              body: lowerStatement(statement.handler.body, context)
+            },
       finalizer: statement.finalizer == null ? null : lowerStatement(statement.finalizer, context),
       loc: statement.loc
     }
@@ -221,7 +222,8 @@ function lowerStatement(statement: AnyNode, context: LowerContext): AnyNode {
       shape: declared.shape,
       functionType: declared.functionType,
       arrayElementType: declared.arrayElementType ?? statement.arrayElementType ?? inferArrayElementType(init),
-      arrayElementDeclaredType: declared.arrayElementDeclaredType ?? statement.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init),
+      arrayElementDeclaredType:
+        declared.arrayElementDeclaredType ?? statement.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init),
       mapKeyType: declared.mapKeyType ?? inferredMapType?.key ?? null,
       mapValueType: declared.mapValueType ?? inferredMapType?.value ?? null,
       promiseValueType: declared.promiseValueType ?? statement.promiseValueType ?? inferPromiseValueType(init),
@@ -450,7 +452,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
       shape: null,
       functionType: {
         ...type,
-        params: type.params.map(param => {
+        params: type.params.map((param) => {
           const declared = resolveDeclaredType(param.valueType, context)
 
           return {
@@ -497,7 +499,7 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
 function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
   return {
     ...shape,
-    fields: shape.fields.map(field => {
+    fields: shape.fields.map((field) => {
       const declared = resolveDeclaredType(field.valueType, context)
 
       return {
@@ -519,16 +521,16 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
 }
 
 function inferArrayElementType(expression: AnyNode | null): string | null {
-  return expression?.valueType === 'array' ? expression.arrayElementType ?? null : null
+  return expression?.valueType === 'array' ? (expression.arrayElementType ?? null) : null
 }
 
 function inferArrayElementDeclaredType(expression: AnyNode | null): string | null {
   return expression?.valueType === 'array'
-    ? expression.arrayElementDeclaredType ?? expression.arrayElementType ?? null
+    ? (expression.arrayElementDeclaredType ?? expression.arrayElementType ?? null)
     : null
 }
 
-function inferMapType(expression: AnyNode | null): { key: string | null, value: string | null } | null {
+function inferMapType(expression: AnyNode | null): { key: string | null; value: string | null } | null {
   return expression?.valueType === 'map'
     ? {
         key: expression.mapKeyType ?? null,
@@ -538,11 +540,11 @@ function inferMapType(expression: AnyNode | null): { key: string | null, value: 
 }
 
 function inferSetElementType(expression: AnyNode | null): string | null {
-  return expression?.valueType === 'set' ? expression.setElementType ?? null : null
+  return expression?.valueType === 'set' ? (expression.setElementType ?? null) : null
 }
 
 function inferPromiseValueType(expression: AnyNode | null): string | null {
-  return expression?.valueType === 'promise' ? expression.promiseValueType ?? null : null
+  return expression?.valueType === 'promise' ? (expression.promiseValueType ?? null) : null
 }
 
 function arrayElementTypeNameFromTypeName(name: string): string | null {
@@ -557,7 +559,7 @@ function nullableTypeNameFromTypeName(name: string): string | null {
   return match?.[1] ?? null
 }
 
-function mapTypeNamesFromTypeName(name: string): { key: string, value: string } | null {
+function mapTypeNamesFromTypeName(name: string): { key: string; value: string } | null {
   const match = /^map<(.+)>$/.exec(name)
 
   if (match == null) {
@@ -621,7 +623,7 @@ function splitGenericArgs(value: string): string[] {
 
   args.push(value.slice(start))
 
-  return args.map(arg => arg.trim()).filter(Boolean)
+  return args.map((arg) => arg.trim()).filter(Boolean)
 }
 
 function commonArrayElementType(types: string[]): string {
@@ -631,11 +633,13 @@ function commonArrayElementType(types: string[]): string {
     return 'unknown'
   }
 
-  return types.every(type => type === first) ? first : 'unknown'
+  return types.every((type) => type === first) ? first : 'unknown'
 }
 
 function isBuiltinValueType(name: string): boolean {
-  return ['array', 'boolean', 'bytes', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(name)
+  return ['array', 'boolean', 'bytes', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(
+    name
+  )
 }
 
 function isBytesTypeName(name: string): boolean {
@@ -756,7 +760,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
     return {
       ...expression,
       callee: lowerExpression(expression.callee, context),
-      args: expression.args.map(arg => lowerExpression(arg, context)),
+      args: expression.args.map((arg) => lowerExpression(arg, context)),
       valueType: expression.valueType ?? 'unknown',
       nullable: expression.nullable === true,
       arrayElementType: expression.arrayElementType ?? null,
@@ -774,7 +778,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
     return {
       ...expression,
       callee: lowerExpression(expression.callee, context),
-      args: expression.args.map(arg => lowerExpression(arg, context)),
+      args: expression.args.map((arg) => lowerExpression(arg, context)),
       valueType: expression.valueType ?? 'unknown',
       arrayElementType: expression.arrayElementType ?? null,
       arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
@@ -790,7 +794,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
     return {
       ...expression,
       callee: lowerExpression(expression.callee, context),
-      args: expression.args.map(arg => lowerExpression(arg, context)),
+      args: expression.args.map((arg) => lowerExpression(arg, context)),
       valueType: expression.valueType ?? 'object',
       arrayElementType: expression.arrayElementType ?? null,
       arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
@@ -814,7 +818,9 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
   if (expression.type === 'ArrowFunctionExpression') {
     return {
       ...expression,
-      body: expression.expressionBody ? lowerExpression(expression.body, context) : expression.body.map(statement => lowerStatement(statement, context)),
+      body: expression.expressionBody
+        ? lowerExpression(expression.body, context)
+        : expression.body.map((statement) => lowerStatement(statement, context)),
       valueType: 'function'
     }
   }
@@ -851,13 +857,14 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
   }
 
   if (expression.type === 'ArrayLiteral') {
-    const elements = expression.elements.map(element => lowerExpression(element, context))
+    const elements = expression.elements.map((element) => lowerExpression(element, context))
 
     return {
       ...expression,
       elements,
-      arrayElementType: commonArrayElementType(elements.map(element => element.valueType)),
-      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? commonArrayElementType(elements.map(element => element.valueType)),
+      arrayElementType: commonArrayElementType(elements.map((element) => element.valueType)),
+      arrayElementDeclaredType:
+        expression.arrayElementDeclaredType ?? commonArrayElementType(elements.map((element) => element.valueType)),
       valueType: 'array'
     }
   }
@@ -865,7 +872,7 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
   if (expression.type === 'ObjectLiteral') {
     return {
       ...expression,
-      properties: expression.properties.map(property => ({
+      properties: expression.properties.map((property) => ({
         ...property,
         value: lowerExpression(property.value, context)
       })),
@@ -902,7 +909,7 @@ function collectTypes(ast) {
     if (item.type === 'TypeAliasDeclaration' && item.valueType.kind === 'object') {
       types.set(item.name, {
         kind: 'object',
-        fields: item.valueType.fields.map(field => ({
+        fields: item.valueType.fields.map((field) => ({
           name: field.name,
           readonly: field.readonly,
           valueType: field.valueType,
@@ -912,7 +919,7 @@ function collectTypes(ast) {
     } else if (item.type === 'TypeAliasDeclaration' && item.valueType.kind === 'function') {
       types.set(item.name, {
         kind: 'function',
-        params: item.valueType.params.map(param => ({
+        params: item.valueType.params.map((param) => ({
           name: param.name,
           valueType: param.valueType,
           loc: param.loc

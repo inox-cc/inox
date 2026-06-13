@@ -1,17 +1,8 @@
-const knownKeys = new Set([
-  'diagnostic',
-  'exit',
-  'expect',
-  'features',
-  'platforms',
-  'stderr',
-  'stdout',
-  'targets'
-])
+const knownKeys = new Set(['diagnostic', 'exit', 'expect', 'features', 'platforms', 'stderr', 'stdout', 'targets'])
 
 const knownExpectations = new Set(['pass', 'diagnostic', 'runtime-error'])
 
-export function parseFixtureMetadata(source: string): { metadata: Map<string, string>, bodyStartLine: number } {
+export function parseFixtureMetadata(source: string): { metadata: Map<string, string>; bodyStartLine: number } {
   const metadata = new Map()
   const lines = source.split(/\r?\n/)
   let bodyStartLine = 1
@@ -44,10 +35,13 @@ export function parseMetadataList(value: string): string[] {
     return []
   }
 
-  return value.split(',').map(item => item.trim()).filter(Boolean)
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
 }
 
-export function validateFixtureMetadata(source: string): { metadata: Map<string, string>, failures: string[] } {
+export function validateFixtureMetadata(source: string): { metadata: Map<string, string>; failures: string[] } {
   const { metadata } = parseFixtureMetadata(source)
   const failures: string[] = []
 

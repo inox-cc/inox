@@ -1,5 +1,14 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
-import type { AnyNode, Diagnostic, ObjectShapeInfo, ProgramNode, SourceLocation, SymbolInfo, TypeAliasInfo, ValueType } from './types.ts'
+import type {
+  AnyNode,
+  Diagnostic,
+  ObjectShapeInfo,
+  ProgramNode,
+  SourceLocation,
+  SymbolInfo,
+  TypeAliasInfo,
+  ValueType
+} from './types.ts'
 
 type ResolvedTypeInfo = {
   valueType: ValueType
@@ -42,153 +51,234 @@ const errorObjectShape: ObjectShapeInfo = {
 }
 
 const globals = new Map<string, SymbolInfo>([
-  ['console', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object'
-  }],
-  ['Promise', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['Date', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['Error', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['performance', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object'
-  }],
-  ['Set', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['Map', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['Array', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['fetch', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'function'
-  }],
-  ['setTimeout', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'function'
-  }],
-  ['clearTimeout', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'function'
-  }],
-  ['setInterval', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'function'
-  }],
-  ['clearInterval', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'function'
-  }],
-  ['setImmediate', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'function'
-  }],
-  ['clearImmediate', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'function'
-  }],
-  ['fs', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object'
-  }],
-  ['http', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object'
-  }],
-  ['JSON', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object'
-  }],
-  ['crypto', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object'
-  }],
-  ['Math', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object'
-  }],
-  ['Buffer', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object'
-  }],
-  ['Uint8Array', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['Int8Array', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['Uint16Array', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['Int16Array', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['Uint32Array', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }],
-  ['Int32Array', {
-    kind: 'global',
-    mutable: false,
-    valueType: 'object',
-    constructable: true
-  }]
+  [
+    'console',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
+  [
+    'Promise',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'Date',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'Error',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'performance',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
+  [
+    'Set',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'Map',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'Array',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'fetch',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'function'
+    }
+  ],
+  [
+    'setTimeout',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'function'
+    }
+  ],
+  [
+    'clearTimeout',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'function'
+    }
+  ],
+  [
+    'setInterval',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'function'
+    }
+  ],
+  [
+    'clearInterval',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'function'
+    }
+  ],
+  [
+    'setImmediate',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'function'
+    }
+  ],
+  [
+    'clearImmediate',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'function'
+    }
+  ],
+  [
+    'fs',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
+  [
+    'http',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
+  [
+    'JSON',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
+  [
+    'crypto',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
+  [
+    'Math',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
+  [
+    'Buffer',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
+  [
+    'Uint8Array',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'Int8Array',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'Uint16Array',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'Int16Array',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'Uint32Array',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'Int32Array',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ]
 ])
 
 const mathNullaryMethods = new Set(['random'])
@@ -258,52 +348,67 @@ class Checker {
         }
 
         for (const specifier of item.specifiers) {
-          this.declare(specifier.local, {
-            kind: 'import',
-            mutable: false,
-            valueType: 'unknown',
-            loc: specifier.loc
-          }, specifier.loc)
+          this.declare(
+            specifier.local,
+            {
+              kind: 'import',
+              mutable: false,
+              valueType: 'unknown',
+              loc: specifier.loc
+            },
+            specifier.loc
+          )
         }
       }
 
       if (item.type === 'FunctionDeclaration') {
         const returnInfo = this.resolveDeclaredType(item.returnType, item.loc)
 
-        this.declare(item.name, {
-          kind: 'function',
-          mutable: false,
-          valueType: 'function',
-          params: item.params.map(param => this.resolveParam(param)),
-          returnType: returnInfo.valueType,
-          returnNullable: returnInfo.nullable,
-          returnArrayElementType: returnInfo.arrayElementType,
-          returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
-          returnMapKeyType: returnInfo.mapKeyType,
-          returnMapValueType: returnInfo.mapValueType,
-          returnPromiseValueType: returnInfo.promiseValueType ?? null,
-          returnSetElementType: returnInfo.setElementType,
-          returnShape: returnInfo.shape,
-          async: item.async,
-          loc: item.loc
-        }, item.loc)
+        this.declare(
+          item.name,
+          {
+            kind: 'function',
+            mutable: false,
+            valueType: 'function',
+            params: item.params.map((param) => this.resolveParam(param)),
+            returnType: returnInfo.valueType,
+            returnNullable: returnInfo.nullable,
+            returnArrayElementType: returnInfo.arrayElementType,
+            returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
+            returnMapKeyType: returnInfo.mapKeyType,
+            returnMapValueType: returnInfo.mapValueType,
+            returnPromiseValueType: returnInfo.promiseValueType ?? null,
+            returnSetElementType: returnInfo.setElementType,
+            returnShape: returnInfo.shape,
+            async: item.async,
+            loc: item.loc
+          },
+          item.loc
+        )
       }
 
       if (item.type === 'ClassDeclaration') {
-        const constructorParams = item.methods.find(method => method.name === 'constructor')?.params.map(param => this.resolveParam(param)) ?? []
+        const constructorParams =
+          item.methods
+            .find((method) => method.name === 'constructor')
+            ?.params.map((param) => this.resolveParam(param)) ?? []
         const shape = this.resolveClassInstanceShape(item, constructorParams)
 
         item.shape = shape
 
-        this.declare(item.name, {
-          kind: 'class',
-          mutable: false,
-          valueType: 'class',
-          classMethods: item.methods,
-          constructorParams,
-          shape,
-          loc: item.loc
-        }, item.loc)
+        this.declare(
+          item.name,
+          {
+            kind: 'class',
+            mutable: false,
+            valueType: 'class',
+            classMethods: item.methods,
+            constructorParams,
+            shape,
+            loc: item.loc
+          },
+          item.loc
+        )
       }
     }
   }
@@ -330,13 +435,13 @@ class Checker {
     if (statement.fields?.length > 0) {
       return {
         kind: 'object',
-        fields: statement.fields.map(field => this.resolveClassField(field))
+        fields: statement.fields.map((field) => this.resolveClassField(field))
       }
     }
 
     const fields: AnyNode[] = []
     const seen = new Set<string>()
-    const constructor = statement.methods.find(method => method.name === 'constructor') ?? null
+    const constructor = statement.methods.find((method) => method.name === 'constructor') ?? null
 
     for (const assignment of this.collectClassConstructorFieldAssignments(constructor)) {
       if (seen.has(assignment.field)) {
@@ -384,9 +489,10 @@ class Checker {
     const assignments: AnyNode[] = []
 
     for (const statement of constructor.body) {
-      const assignment = statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression'
-        ? statement.expression
-        : null
+      const assignment =
+        statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression'
+          ? statement.expression
+          : null
 
       if (assignment?.target?.type !== 'MemberExpression' || !this.isThisExpression(assignment.target.object)) {
         continue
@@ -404,7 +510,7 @@ class Checker {
 
   resolveClassConstructorFieldType(expression: AnyNode, constructorParams: AnyNode[]): ValueType {
     if (expression?.type === 'Reference' && expression.path.length === 1) {
-      const param = constructorParams.find(item => item.name === expression.path[0])
+      const param = constructorParams.find((item) => item.name === expression.path[0])
 
       if (param != null) {
         return param.valueType
@@ -459,21 +565,25 @@ class Checker {
 
         for (const param of item.params) {
           const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
-          this.declare(param.name, {
-            kind: 'param',
-            mutable: true,
-            valueType: paramInfo.valueType,
-            nullable: paramInfo.nullable,
-            arrayElementType: paramInfo.arrayElementType,
-            arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
-            mapKeyType: paramInfo.mapKeyType,
-            mapValueType: paramInfo.mapValueType,
-            promiseValueType: paramInfo.promiseValueType ?? null,
-            setElementType: paramInfo.setElementType,
-            functionType: paramInfo.functionType,
-            shape: paramInfo.shape,
-            loc: param.loc
-          }, param.loc)
+          this.declare(
+            param.name,
+            {
+              kind: 'param',
+              mutable: true,
+              valueType: paramInfo.valueType,
+              nullable: paramInfo.nullable,
+              arrayElementType: paramInfo.arrayElementType,
+              arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
+              mapKeyType: paramInfo.mapKeyType,
+              mapValueType: paramInfo.mapValueType,
+              promiseValueType: paramInfo.promiseValueType ?? null,
+              setElementType: paramInfo.setElementType,
+              functionType: paramInfo.functionType,
+              shape: paramInfo.shape,
+              loc: param.loc
+            },
+            param.loc
+          )
         }
 
         try {
@@ -578,19 +688,26 @@ class Checker {
         this.report('CCJS_CONST_INIT', 'const declarations must have an initializer', statement.loc)
       }
 
-      const declared = statement.declaredType == null ? null : this.resolveDeclaredType(statement.declaredType, statement.loc)
+      const declared =
+        statement.declaredType == null ? null : this.resolveDeclaredType(statement.declaredType, statement.loc)
       const initType = statement.init == null ? 'unknown' : this.checkVariableInitializer(statement.init, declared)
       const valueType = declared?.valueType ?? initType
       const arrayElementType = declared?.arrayElementType ?? this.resolveExpressionArrayElementType(statement.init)
-      const arrayElementDeclaredType = declared?.arrayElementDeclaredType ?? this.resolveExpressionArrayElementDeclaredType(statement.init)
-      const mapType = declared?.valueType === 'map'
-        ? {
-            key: declared.mapKeyType,
-            value: declared.mapValueType
-          }
-        : this.resolveExpressionMapType(statement.init)
-      const setElementType = declared?.valueType === 'set' ? declared.setElementType : this.resolveExpressionSetElementType(statement.init)
-      const promiseValueType = declared?.valueType === 'promise' ? declared.promiseValueType ?? null : this.resolveExpressionPromiseValueType(statement.init)
+      const arrayElementDeclaredType =
+        declared?.arrayElementDeclaredType ?? this.resolveExpressionArrayElementDeclaredType(statement.init)
+      const mapType =
+        declared?.valueType === 'map'
+          ? {
+              key: declared.mapKeyType,
+              value: declared.mapValueType
+            }
+          : this.resolveExpressionMapType(statement.init)
+      const setElementType =
+        declared?.valueType === 'set' ? declared.setElementType : this.resolveExpressionSetElementType(statement.init)
+      const promiseValueType =
+        declared?.valueType === 'promise'
+          ? (declared.promiseValueType ?? null)
+          : this.resolveExpressionPromiseValueType(statement.init)
 
       statement.valueType = valueType
       statement.nullable = declared?.nullable === true || statement.init?.nullable === true
@@ -608,28 +725,42 @@ class Checker {
         this.checkObjectLiteralAgainstShape(statement.init, declared.shape)
       }
 
-      this.declare(statement.name, {
-        kind: statement.kind,
-        mutable: statement.kind === 'let',
-        valueType,
-        nullable: declared?.nullable === true || statement.init?.nullable === true,
-        arrayElementType,
-        arrayElementDeclaredType,
-        mapKeyType: mapType?.key ?? null,
-        mapValueType: mapType?.value ?? null,
-        promiseValueType,
-        setElementType,
-        functionType: declared?.functionType ?? null,
-        className: statement.className,
-        shape: declared?.shape ?? statement.init?.shape ?? null,
-        loc: statement.loc
-      }, statement.loc)
+      this.declare(
+        statement.name,
+        {
+          kind: statement.kind,
+          mutable: statement.kind === 'let',
+          valueType,
+          nullable: declared?.nullable === true || statement.init?.nullable === true,
+          arrayElementType,
+          arrayElementDeclaredType,
+          mapKeyType: mapType?.key ?? null,
+          mapValueType: mapType?.value ?? null,
+          promiseValueType,
+          setElementType,
+          functionType: declared?.functionType ?? null,
+          className: statement.className,
+          shape: declared?.shape ?? statement.init?.shape ?? null,
+          loc: statement.loc
+        },
+        statement.loc
+      )
 
       if (declared != null && statement.init != null) {
-        this.checkAssignableType(initType, declared.valueType, statement.loc, declared.nullable, this.expressionCanBeNull(statement.init))
+        this.checkAssignableType(
+          initType,
+          declared.valueType,
+          statement.loc,
+          declared.nullable,
+          this.expressionCanBeNull(statement.init)
+        )
 
         if (declared.valueType === 'array' && declared.arrayElementType != null) {
-          this.checkAssignableType(this.resolveExpressionArrayElementType(statement.init), declared.arrayElementType, statement.loc)
+          this.checkAssignableType(
+            this.resolveExpressionArrayElementType(statement.init),
+            declared.arrayElementType,
+            statement.loc
+          )
         }
 
         if (declared.valueType === 'map') {
@@ -645,11 +776,19 @@ class Checker {
         }
 
         if (declared.valueType === 'set' && declared.setElementType != null) {
-          this.checkAssignableType(this.resolveExpressionSetElementType(statement.init), declared.setElementType, statement.loc)
+          this.checkAssignableType(
+            this.resolveExpressionSetElementType(statement.init),
+            declared.setElementType,
+            statement.loc
+          )
         }
 
         if (declared.valueType === 'promise' && declared.promiseValueType != null) {
-          this.checkAssignableType(this.resolveExpressionPromiseValueType(statement.init), declared.promiseValueType, statement.loc)
+          this.checkAssignableType(
+            this.resolveExpressionPromiseValueType(statement.init),
+            declared.promiseValueType,
+            statement.loc
+          )
         }
       }
 
@@ -664,20 +803,44 @@ class Checker {
     if (statement.type === 'ReturnStatement') {
       const actual = statement.argument == null ? 'void' : this.checkExpression(statement.argument)
 
-      if (this.currentReturnAsync && this.currentReturnType === 'promise' && this.currentReturnPromiseValueType != null) {
+      if (
+        this.currentReturnAsync &&
+        this.currentReturnType === 'promise' &&
+        this.currentReturnPromiseValueType != null
+      ) {
         if (actual === 'promise') {
-          this.checkAssignableType(this.resolveExpressionPromiseValueType(statement.argument), this.currentReturnPromiseValueType, statement.loc)
+          this.checkAssignableType(
+            this.resolveExpressionPromiseValueType(statement.argument),
+            this.currentReturnPromiseValueType,
+            statement.loc
+          )
         } else {
-          this.checkAssignableType(actual, this.currentReturnPromiseValueType, statement.loc, false, this.expressionCanBeNull(statement.argument))
+          this.checkAssignableType(
+            actual,
+            this.currentReturnPromiseValueType,
+            statement.loc,
+            false,
+            this.expressionCanBeNull(statement.argument)
+          )
         }
 
         return
       }
 
-      this.checkAssignableType(actual, this.currentReturnType, statement.loc, this.currentReturnNullable, this.expressionCanBeNull(statement.argument))
+      this.checkAssignableType(
+        actual,
+        this.currentReturnType,
+        statement.loc,
+        this.currentReturnNullable,
+        this.expressionCanBeNull(statement.argument)
+      )
 
       if (this.currentReturnType === 'promise' && this.currentReturnPromiseValueType != null) {
-        this.checkAssignableType(this.resolveExpressionPromiseValueType(statement.argument), this.currentReturnPromiseValueType, statement.loc)
+        this.checkAssignableType(
+          this.resolveExpressionPromiseValueType(statement.argument),
+          this.currentReturnPromiseValueType,
+          statement.loc
+        )
       }
     }
   }
@@ -688,12 +851,16 @@ class Checker {
     if (statement.handler != null) {
       this.withScope(() => {
         if (statement.handler.param != null) {
-          this.declare(statement.handler.param, {
-            kind: 'catch',
-            mutable: false,
-            valueType: 'unknown',
-            loc: statement.handler.paramLoc
-          }, statement.handler.paramLoc)
+          this.declare(
+            statement.handler.param,
+            {
+              kind: 'catch',
+              mutable: false,
+              valueType: 'unknown',
+              loc: statement.handler.paramLoc
+            },
+            statement.handler.paramLoc
+          )
         }
 
         this.checkStatement(statement.handler.body)
@@ -761,7 +928,7 @@ class Checker {
 
     if (expression.type === 'OptionalCallExpression') {
       this.checkExpression(expression.callee)
-      const argTypes = expression.args.map(arg => this.checkExpression(arg))
+      const argTypes = expression.args.map((arg) => this.checkExpression(arg))
       const symbol = this.getCallableSymbol(expression.callee)
 
       if (symbol == null) {
@@ -785,12 +952,22 @@ class Checker {
         if (symbol.params.length !== expression.args.length) {
           const name = expression.callee.type === 'Reference' ? expression.callee.path[0] : 'callable'
 
-          this.report('CCJS_ARG_COUNT', `function ${name} expects ${symbol.params.length} argument(s), got ${expression.args.length}`, expression.loc)
+          this.report(
+            'CCJS_ARG_COUNT',
+            `function ${name} expects ${symbol.params.length} argument(s), got ${expression.args.length}`,
+            expression.loc
+          )
         }
 
         for (const [index, param] of symbol.params.entries()) {
           if (index < argTypes.length) {
-            this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true, this.expressionCanBeNull(expression.args[index]))
+            this.checkAssignableType(
+              argTypes[index],
+              param.valueType,
+              expression.args[index].loc,
+              param.nullable === true,
+              this.expressionCanBeNull(expression.args[index])
+            )
           }
         }
       }
@@ -808,9 +985,10 @@ class Checker {
       }
 
       const argumentType = this.checkExpression(expression.argument)
-      const valueType = argumentType === 'promise'
-        ? this.resolveExpressionPromiseValueType(expression.argument) ?? 'unknown'
-        : argumentType
+      const valueType =
+        argumentType === 'promise'
+          ? (this.resolveExpressionPromiseValueType(expression.argument) ?? 'unknown')
+          : argumentType
 
       expression.valueType = valueType
 
@@ -883,14 +1061,28 @@ class Checker {
     const valueType = this.checkExpression(expression.value)
 
     if (symbol != null && expression.target.path.length === 1 && !symbol.mutable) {
-      this.report('CCJS_ASSIGN_CONST', `cannot assign to ${symbol.kind} binding ${expression.target.path[0]}`, expression.target.loc)
+      this.report(
+        'CCJS_ASSIGN_CONST',
+        `cannot assign to ${symbol.kind} binding ${expression.target.path[0]}`,
+        expression.target.loc
+      )
     }
 
     if (symbol != null) {
-      this.checkAssignableType(valueType, symbol.valueType, expression.value.loc, symbol.nullable === true, this.expressionCanBeNull(expression.value))
+      this.checkAssignableType(
+        valueType,
+        symbol.valueType,
+        expression.value.loc,
+        symbol.nullable === true,
+        this.expressionCanBeNull(expression.value)
+      )
 
       if (symbol.valueType === 'promise' && symbol.promiseValueType != null) {
-        this.checkAssignableType(this.resolveExpressionPromiseValueType(expression.value), symbol.promiseValueType, expression.value.loc)
+        this.checkAssignableType(
+          this.resolveExpressionPromiseValueType(expression.value),
+          symbol.promiseValueType,
+          expression.value.loc
+        )
       }
     }
 
@@ -900,11 +1092,17 @@ class Checker {
   checkBinaryExpression(expression: AnyNode): ValueType {
     const left = this.checkExpression(expression.left)
     const right = this.checkExpression(expression.right)
-    const nullableEquality = isEqualityOperator(expression.operator)
-      && ((left === 'null' && this.expressionCanBeNull(expression.right)) || (right === 'null' && this.expressionCanBeNull(expression.left)))
+    const nullableEquality =
+      isEqualityOperator(expression.operator) &&
+      ((left === 'null' && this.expressionCanBeNull(expression.right)) ||
+        (right === 'null' && this.expressionCanBeNull(expression.left)))
 
     if (isEqualityOperator(expression.operator) && !nullableEquality && !isEqualityComparableType(left, right)) {
-      this.report('CCJS_TYPE_MISMATCH', `cannot compare ${left} and ${right} with ${expression.operator}`, expression.loc)
+      this.report(
+        'CCJS_TYPE_MISMATCH',
+        `cannot compare ${left} and ${right} with ${expression.operator}`,
+        expression.loc
+      )
     }
 
     const valueType = inferBinaryExpressionType(expression.operator, left, right)
@@ -1042,14 +1240,28 @@ class Checker {
     }
 
     if (field.readonly && !this.canInitializeReadonlyClassField(expression.target.object)) {
-      this.report('CCJS_ASSIGN_READONLY_FIELD', `cannot assign to readonly field ${expression.target.property}`, expression.target.loc)
+      this.report(
+        'CCJS_ASSIGN_READONLY_FIELD',
+        `cannot assign to readonly field ${expression.target.property}`,
+        expression.target.loc
+      )
     }
 
     const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
-    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, fieldType.nullable, this.expressionCanBeNull(expression.value))
+    this.checkAssignableType(
+      valueType,
+      fieldType.valueType,
+      expression.value.loc,
+      fieldType.nullable,
+      this.expressionCanBeNull(expression.value)
+    )
 
     if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
-      this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
+      this.checkAssignableType(
+        this.resolveExpressionArrayElementType(expression.value),
+        fieldType.arrayElementType,
+        expression.value.loc
+      )
     }
 
     if (fieldType.valueType === 'map') {
@@ -1065,11 +1277,19 @@ class Checker {
     }
 
     if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
-      this.checkAssignableType(this.resolveExpressionSetElementType(expression.value), fieldType.setElementType, expression.value.loc)
+      this.checkAssignableType(
+        this.resolveExpressionSetElementType(expression.value),
+        fieldType.setElementType,
+        expression.value.loc
+      )
     }
 
     if (fieldType.valueType === 'promise' && fieldType.promiseValueType != null) {
-      this.checkAssignableType(this.resolveExpressionPromiseValueType(expression.value), fieldType.promiseValueType, expression.value.loc)
+      this.checkAssignableType(
+        this.resolveExpressionPromiseValueType(expression.value),
+        fieldType.promiseValueType,
+        expression.value.loc
+      )
     }
 
     return valueType
@@ -1085,7 +1305,13 @@ class Checker {
         value: 'unknown'
       }
 
-      this.checkAssignableType(indexType, mapType.key, expression.index.loc, false, this.expressionCanBeNull(expression.index))
+      this.checkAssignableType(
+        indexType,
+        mapType.key,
+        expression.index.loc,
+        false,
+        this.expressionCanBeNull(expression.index)
+      )
 
       expression.collectionKind = 'map'
       expression.nullable = true
@@ -1206,8 +1432,20 @@ class Checker {
         value: 'unknown'
       }
 
-      this.checkAssignableType(indexType, mapType.key, expression.target.index.loc, false, this.expressionCanBeNull(expression.target.index))
-      this.checkAssignableType(valueType, mapType.value, expression.value.loc, false, this.expressionCanBeNull(expression.value))
+      this.checkAssignableType(
+        indexType,
+        mapType.key,
+        expression.target.index.loc,
+        false,
+        this.expressionCanBeNull(expression.target.index)
+      )
+      this.checkAssignableType(
+        valueType,
+        mapType.value,
+        expression.value.loc,
+        false,
+        this.expressionCanBeNull(expression.value)
+      )
 
       expression.target.collectionKind = 'map'
       expression.target.valueType = mapType.value ?? 'unknown'
@@ -1242,14 +1480,28 @@ class Checker {
     }
 
     if (field.readonly && !this.canInitializeReadonlyClassField(expression.target.object)) {
-      this.report('CCJS_ASSIGN_READONLY_FIELD', `cannot assign to readonly field ${expression.target.index.value}`, expression.target.loc)
+      this.report(
+        'CCJS_ASSIGN_READONLY_FIELD',
+        `cannot assign to readonly field ${expression.target.index.value}`,
+        expression.target.loc
+      )
     }
 
     const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
-    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, fieldType.nullable, this.expressionCanBeNull(expression.value))
+    this.checkAssignableType(
+      valueType,
+      fieldType.valueType,
+      expression.value.loc,
+      fieldType.nullable,
+      this.expressionCanBeNull(expression.value)
+    )
 
     if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
-      this.checkAssignableType(this.resolveExpressionArrayElementType(expression.value), fieldType.arrayElementType, expression.value.loc)
+      this.checkAssignableType(
+        this.resolveExpressionArrayElementType(expression.value),
+        fieldType.arrayElementType,
+        expression.value.loc
+      )
     }
 
     if (fieldType.valueType === 'map') {
@@ -1265,11 +1517,19 @@ class Checker {
     }
 
     if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
-      this.checkAssignableType(this.resolveExpressionSetElementType(expression.value), fieldType.setElementType, expression.value.loc)
+      this.checkAssignableType(
+        this.resolveExpressionSetElementType(expression.value),
+        fieldType.setElementType,
+        expression.value.loc
+      )
     }
 
     if (fieldType.valueType === 'promise' && fieldType.promiseValueType != null) {
-      this.checkAssignableType(this.resolveExpressionPromiseValueType(expression.value), fieldType.promiseValueType, expression.value.loc)
+      this.checkAssignableType(
+        this.resolveExpressionPromiseValueType(expression.value),
+        fieldType.promiseValueType,
+        expression.value.loc
+      )
     }
 
     return valueType
@@ -1391,7 +1651,7 @@ class Checker {
     }
 
     const calleeType = this.checkExpression(expression.callee)
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
     const symbol = this.getCallableSymbol(expression.callee)
 
     if (symbol == null) {
@@ -1413,12 +1673,22 @@ class Checker {
     }
 
     if (symbol.params.length !== expression.args.length) {
-      this.report('CCJS_ARG_COUNT', `function ${expression.callee.path[0]} expects ${symbol.params.length} argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function ${expression.callee.path[0]} expects ${symbol.params.length} argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     for (const [index, param] of symbol.params.entries()) {
       if (index < argTypes.length) {
-        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true, this.expressionCanBeNull(expression.args[index]))
+        this.checkAssignableType(
+          argTypes[index],
+          param.valueType,
+          expression.args[index].loc,
+          param.nullable === true,
+          this.expressionCanBeNull(expression.args[index])
+        )
       }
     }
 
@@ -1430,7 +1700,11 @@ class Checker {
       return null
     }
 
-    if (expression.callee.object.type === 'Reference' && expression.callee.object.path.length === 1 && expression.callee.object.path[0] === 'Buffer') {
+    if (
+      expression.callee.object.type === 'Reference' &&
+      expression.callee.object.path.length === 1 &&
+      expression.callee.object.path[0] === 'Buffer'
+    ) {
       if (this.scope.resolve('Buffer') != null) {
         return null
       }
@@ -1439,11 +1713,21 @@ class Checker {
 
       if (method === 'from') {
         if (expression.args.length < 1 || expression.args.length > 2) {
-          this.report('CCJS_ARG_COUNT', `function Buffer.from expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+          this.report(
+            'CCJS_ARG_COUNT',
+            `function Buffer.from expects 1 or 2 argument(s), got ${expression.args.length}`,
+            expression.loc
+          )
         }
 
         if (expression.args[0] != null) {
-          this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+          this.checkAssignableType(
+            this.checkExpression(expression.args[0]),
+            'string',
+            expression.args[0].loc,
+            false,
+            this.expressionCanBeNull(expression.args[0])
+          )
         }
 
         this.checkUtf8EncodingArg(expression, 1, 'Buffer.from')
@@ -1455,7 +1739,11 @@ class Checker {
 
       if (method === 'alloc') {
         if (expression.args.length !== 1) {
-          this.report('CCJS_ARG_COUNT', `function Buffer.alloc expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+          this.report(
+            'CCJS_ARG_COUNT',
+            `function Buffer.alloc expects 1 argument(s), got ${expression.args.length}`,
+            expression.loc
+          )
         }
 
         if (expression.args[0] != null) {
@@ -1479,7 +1767,11 @@ class Checker {
 
     if (expression.callee.property === 'slice') {
       if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report('CCJS_ARG_COUNT', `bytes.slice expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `bytes.slice expects 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       for (const arg of expression.args) {
@@ -1494,7 +1786,11 @@ class Checker {
 
     if (expression.callee.property === 'toString') {
       if (expression.args.length > 1) {
-        this.report('CCJS_ARG_COUNT', `bytes.toString expects 0 or 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `bytes.toString expects 0 or 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkUtf8EncodingArg(expression, 0, 'bytes.toString')
@@ -1524,7 +1820,12 @@ class Checker {
   }
 
   checkCryptoCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.object.type !== 'Reference' || expression.callee.object.path.length !== 1 || expression.callee.object.path[0] !== 'crypto') {
+    if (
+      expression.callee.type !== 'MemberExpression' ||
+      expression.callee.object.type !== 'Reference' ||
+      expression.callee.object.path.length !== 1 ||
+      expression.callee.object.path[0] !== 'crypto'
+    ) {
       return null
     }
 
@@ -1532,17 +1833,27 @@ class Checker {
       return null
     }
 
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     expression.valueType = 'bytes'
     expression.cryptoRuntimeMethod = 'getRandomValues'
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `crypto.getRandomValues expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `crypto.getRandomValues expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
       return 'bytes'
     }
 
-    this.checkAssignableType(argTypes[0], 'bytes', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+    this.checkAssignableType(
+      argTypes[0],
+      'bytes',
+      expression.args[0].loc,
+      false,
+      this.expressionCanBeNull(expression.args[0])
+    )
 
     return 'bytes'
   }
@@ -1560,9 +1871,9 @@ class Checker {
     }
 
     const classSymbol = this.scope.resolve(className)
-    const method = classSymbol?.classMethods?.find(item => item.name === expression.callee.property)
+    const method = classSymbol?.classMethods?.find((item) => item.name === expression.callee.property)
 
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     if (method == null) {
       this.report('CCJS_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc)
@@ -1570,16 +1881,26 @@ class Checker {
       return 'unknown'
     }
 
-    const params = method.params.map(param => this.resolveParam(param))
+    const params = method.params.map((param) => this.resolveParam(param))
     const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
 
     if (params.length !== expression.args.length) {
-      this.report('CCJS_ARG_COUNT', `method ${expression.callee.property} expects ${params.length} argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `method ${expression.callee.property} expects ${params.length} argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     for (const [index, param] of params.entries()) {
       if (index < argTypes.length) {
-        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true, this.expressionCanBeNull(expression.args[index]))
+        this.checkAssignableType(
+          argTypes[index],
+          param.valueType,
+          expression.args[index].loc,
+          param.nullable === true,
+          this.expressionCanBeNull(expression.args[index])
+        )
       }
     }
 
@@ -1608,7 +1929,11 @@ class Checker {
     expression.valueType = 'number'
 
     if (expression.args.length !== expectedArgCount) {
-      this.report('CCJS_ARG_COUNT', `function Math.${method} expects ${expectedArgCount} argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function Math.${method} expects ${expectedArgCount} argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     for (const arg of expression.args) {
@@ -1645,7 +1970,11 @@ class Checker {
 
     if (method === 'readFileSync') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function fs.readFileSync expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function fs.readFileSync expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -1657,7 +1986,11 @@ class Checker {
 
     if (method === 'readFileBytesSync') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function fs.readFileBytesSync expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function fs.readFileBytesSync expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -1669,7 +2002,11 @@ class Checker {
 
     if (method === 'readDirSync') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function fs.readDirSync expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function fs.readDirSync expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -1683,7 +2020,11 @@ class Checker {
 
     if (method === 'writeFileSync') {
       if (expression.args.length !== 2) {
-        this.report('CCJS_ARG_COUNT', `function fs.writeFileSync expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function fs.writeFileSync expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -1696,7 +2037,11 @@ class Checker {
 
     if (method === 'writeFileBytesSync') {
       if (expression.args.length !== 2) {
-        this.report('CCJS_ARG_COUNT', `function fs.writeFileBytesSync expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function fs.writeFileBytesSync expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -1709,7 +2054,11 @@ class Checker {
 
     if (method === 'readFile') {
       if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report('CCJS_ARG_COUNT', `function fs.readFile expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function fs.readFile expects 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -1723,7 +2072,11 @@ class Checker {
 
     if (method === 'readFileBytes') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function fs.readFileBytes expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function fs.readFileBytes expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -1736,7 +2089,11 @@ class Checker {
 
     if (method === 'readDir') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function fs.readDir expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function fs.readDir expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -1751,7 +2108,11 @@ class Checker {
 
     if (method === 'writeFileBytes') {
       if (expression.args.length !== 2) {
-        this.report('CCJS_ARG_COUNT', `function fs.writeFileBytes expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function fs.writeFileBytes expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -1764,7 +2125,11 @@ class Checker {
     }
 
     if (expression.args.length !== 2) {
-      this.report('CCJS_ARG_COUNT', `function fs.writeFile expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function fs.writeFile expects 2 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     this.checkFsStringArg(expression, 0)
@@ -1810,15 +2175,17 @@ class Checker {
     expression.jsonRuntimeMethod = method
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `function JSON.${method} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function JSON.${method} expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     if (method === 'parse') {
       this.checkJsonStringArg(expression, 0)
 
-      const valueType = declared != null && isJsonParseDeclaredType(declared.valueType)
-        ? declared.valueType
-        : 'object'
+      const valueType = declared != null && isJsonParseDeclaredType(declared.valueType) ? declared.valueType : 'object'
 
       expression.valueType = valueType
       expression.arrayElementType = declared?.arrayElementType ?? null
@@ -1827,7 +2194,7 @@ class Checker {
       expression.mapValueType = declared?.mapValueType ?? null
       expression.promiseValueType = declared?.promiseValueType ?? null
       expression.setElementType = declared?.setElementType ?? null
-      expression.shape = valueType === 'object' ? declared?.shape ?? null : null
+      expression.shape = valueType === 'object' ? (declared?.shape ?? null) : null
 
       return valueType
     }
@@ -1863,13 +2230,17 @@ class Checker {
     }
 
     if (expression.args.length > 1) {
-      this.report('CCJS_ARG_COUNT', `function Promise.${method} expects at most 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function Promise.${method} expects at most 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     expression.valueType = 'promise'
-    expression.promiseValueType = method === 'resolve' ? argTypes[0] ?? 'void' : 'unknown'
+    expression.promiseValueType = method === 'resolve' ? (argTypes[0] ?? 'void') : 'unknown'
 
     return 'promise'
   }
@@ -1889,17 +2260,25 @@ class Checker {
     const promiseValueType = this.resolveExpressionPromiseValueType(expression.callee.object) ?? 'unknown'
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `promise.${property} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `promise.${property} expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     const callback = expression.args[0]
 
     if (property === 'then') {
-      const mappedType = callback == null
-        ? 'unknown'
-        : this.checkPromiseCallback(callback, [
-            { name: 'value', valueType: promiseValueType }
-          ], undefined, 'promise.then callback')
+      const mappedType =
+        callback == null
+          ? 'unknown'
+          : this.checkPromiseCallback(
+              callback,
+              [{ name: 'value', valueType: promiseValueType }],
+              undefined,
+              'promise.then callback'
+            )
 
       for (const arg of expression.args.slice(1)) {
         this.checkExpression(arg)
@@ -1912,9 +2291,12 @@ class Checker {
     }
 
     if (callback != null) {
-      this.checkPromiseCallback(callback, [
-        { name: 'error', valueType: 'unknown' }
-      ], promiseValueType === 'unknown' ? undefined : promiseValueType, 'promise.catch callback')
+      this.checkPromiseCallback(
+        callback,
+        [{ name: 'error', valueType: 'unknown' }],
+        promiseValueType === 'unknown' ? undefined : promiseValueType,
+        'promise.catch callback'
+      )
     }
 
     for (const arg of expression.args.slice(1)) {
@@ -1927,7 +2309,12 @@ class Checker {
     return 'promise'
   }
 
-  checkPromiseCallback(expression: AnyNode, params: Array<{ name: string, valueType: ValueType }>, returnType: ValueType | undefined, label: string): ValueType {
+  checkPromiseCallback(
+    expression: AnyNode,
+    params: Array<{ name: string; valueType: ValueType }>,
+    returnType: ValueType | undefined,
+    label: string
+  ): ValueType {
     if (expression.type !== 'ArrowFunctionExpression') {
       const callbackType = this.checkExpression(expression)
 
@@ -1937,12 +2324,20 @@ class Checker {
     }
 
     if (expression.async === true) {
-      this.report('CCJS_ASYNC_CALLBACK', 'async Promise callbacks are not supported in the current compiler slice; use a named async helper and await it explicitly', expression.loc)
+      this.report(
+        'CCJS_ASYNC_CALLBACK',
+        'async Promise callbacks are not supported in the current compiler slice; use a named async helper and await it explicitly',
+        expression.loc
+      )
       return 'unknown'
     }
 
     if (expression.params.length > params.length) {
-      this.report('CCJS_ARG_COUNT', `${label} expects at most ${params.length} parameter(s), got ${expression.params.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `${label} expects at most ${params.length} parameter(s), got ${expression.params.length}`,
+        expression.loc
+      )
     }
 
     let actualReturnType: ValueType = 'unknown'
@@ -1963,12 +2358,16 @@ class Checker {
         param.valueType = actual
         param.nullable = false
 
-        this.declare(param.name, {
-          kind: 'param',
-          mutable: true,
-          valueType: actual,
-          loc: param.loc
-        }, param.loc)
+        this.declare(
+          param.name,
+          {
+            kind: 'param',
+            mutable: true,
+            valueType: actual,
+            loc: param.loc
+          },
+          param.loc
+        )
       }
 
       if (expression.expressionBody) {
@@ -2028,7 +2427,11 @@ class Checker {
       this.checkExpression(arg)
     }
 
-    this.report('CCJS_TIMER_REF_UNREF', 'timer handle ref() and unref() are not supported in the MVP; timer handles are referenced by default', expression.loc)
+    this.report(
+      'CCJS_TIMER_REF_UNREF',
+      'timer handle ref() and unref() are not supported in the MVP; timer handles are referenced by default',
+      expression.loc
+    )
     expression.valueType = 'void'
 
     return 'void'
@@ -2058,7 +2461,13 @@ class Checker {
         this.checkCollectionArgCount(expression, `map.${property}`, 1)
 
         if (expression.args[0] != null) {
-          this.checkAssignableType(this.checkExpression(expression.args[0]), mapType.key, expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+          this.checkAssignableType(
+            this.checkExpression(expression.args[0]),
+            mapType.key,
+            expression.args[0].loc,
+            false,
+            this.expressionCanBeNull(expression.args[0])
+          )
         }
 
         for (const arg of expression.args.slice(1)) {
@@ -2078,11 +2487,23 @@ class Checker {
       this.checkCollectionArgCount(expression, 'map.set', 2)
 
       if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), mapType.key, expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+        this.checkAssignableType(
+          this.checkExpression(expression.args[0]),
+          mapType.key,
+          expression.args[0].loc,
+          false,
+          this.expressionCanBeNull(expression.args[0])
+        )
       }
 
       if (expression.args[1] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[1]), mapType.value, expression.args[1].loc, false, this.expressionCanBeNull(expression.args[1]))
+        this.checkAssignableType(
+          this.checkExpression(expression.args[1]),
+          mapType.value,
+          expression.args[1].loc,
+          false,
+          this.expressionCanBeNull(expression.args[1])
+        )
       }
 
       for (const arg of expression.args.slice(2)) {
@@ -2108,7 +2529,13 @@ class Checker {
       this.checkCollectionArgCount(expression, `set.${property}`, 1)
 
       if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), elementType, expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+        this.checkAssignableType(
+          this.checkExpression(expression.args[0]),
+          elementType,
+          expression.args[0].loc,
+          false,
+          this.expressionCanBeNull(expression.args[0])
+        )
       }
 
       for (const arg of expression.args.slice(1)) {
@@ -2143,7 +2570,11 @@ class Checker {
 
     if (timerClearMethodName(method) != null) {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function ${method} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${method} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       if (expression.args[0] != null) {
@@ -2157,7 +2588,11 @@ class Checker {
 
     if (method === 'setImmediate') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function setImmediate expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function setImmediate expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkTimerCallbackArg(expression, 0)
@@ -2167,7 +2602,11 @@ class Checker {
     }
 
     if (expression.args.length !== 2) {
-      this.report('CCJS_ARG_COUNT', `function ${method} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function ${method} expects 2 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     this.checkTimerCallbackArg(expression, 0)
@@ -2191,7 +2630,11 @@ class Checker {
 
     if (arg.type === 'ArrowFunctionExpression') {
       if (arg.async === true) {
-        this.report('CCJS_ASYNC_TIMER_CALLBACK', 'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly', arg.loc)
+        this.report(
+          'CCJS_ASYNC_TIMER_CALLBACK',
+          'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly',
+          arg.loc
+        )
         return
       }
 
@@ -2204,22 +2647,40 @@ class Checker {
     const symbol = this.getCallableSymbol(arg)
 
     if (symbol?.params != null && symbol.params.length !== functionType.params.length) {
-      this.report('CCJS_ARG_COUNT', `function callback expects ${functionType.params.length} argument(s), got ${symbol.params.length}`, arg.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function callback expects ${functionType.params.length} argument(s), got ${symbol.params.length}`,
+        arg.loc
+      )
     }
 
     if (symbol?.async === true || symbol?.returnType === 'promise') {
-      this.report('CCJS_ASYNC_TIMER_CALLBACK', 'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly', arg.loc)
+      this.report(
+        'CCJS_ASYNC_TIMER_CALLBACK',
+        'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly',
+        arg.loc
+      )
       return
     }
 
     if (symbol != null && symbol.returnType != null) {
-      this.checkAssignableType(symbol.returnType, functionType.returnType, arg.loc, functionType.returnNullable === true, symbol.returnNullable === true)
+      this.checkAssignableType(
+        symbol.returnType,
+        functionType.returnType,
+        arg.loc,
+        functionType.returnNullable === true,
+        symbol.returnNullable === true
+      )
     }
   }
 
   checkCollectionArgCount(expression: AnyNode, name: string, expected: number): void {
     if (expression.args.length !== expected) {
-      this.report('CCJS_ARG_COUNT', `${name} expects ${expected} argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `${name} expects ${expected} argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
   }
 
@@ -2251,7 +2712,13 @@ class Checker {
         const pushedType = this.checkExpression(expression.args[0])
 
         if (elementType !== 'unknown') {
-          this.checkAssignableType(pushedType, elementType, expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+          this.checkAssignableType(
+            pushedType,
+            elementType,
+            expression.args[0].loc,
+            false,
+            this.expressionCanBeNull(expression.args[0])
+          )
         }
       }
 
@@ -2281,14 +2748,22 @@ class Checker {
 
     if (expression.callee.property === 'sort') {
       if (expression.args.length > 1) {
-        this.report('CCJS_ARG_COUNT', `array.sort expects 0 or 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `array.sort expects 0 or 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       if (expression.args[0] != null) {
-        this.checkArrayCallback(expression.args[0], [
-          { name: 'left', valueType: elementType },
-          { name: 'right', valueType: elementType }
-        ], 'number')
+        this.checkArrayCallback(
+          expression.args[0],
+          [
+            { name: 'left', valueType: elementType },
+            { name: 'right', valueType: elementType }
+          ],
+          'number'
+        )
       }
 
       for (const arg of expression.args.slice(1)) {
@@ -2299,15 +2774,23 @@ class Checker {
     }
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `array.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `array.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     if (expression.callee.property === 'filter') {
       if (expression.args[0] != null) {
-        this.checkArrayCallback(expression.args[0], [
-          { name: 'value', valueType: elementType },
-          { name: 'index', valueType: 'number' }
-        ], 'boolean')
+        this.checkArrayCallback(
+          expression.args[0],
+          [
+            { name: 'value', valueType: elementType },
+            { name: 'index', valueType: 'number' }
+          ],
+          'boolean'
+        )
       }
 
       for (const arg of expression.args.slice(1)) {
@@ -2317,12 +2800,13 @@ class Checker {
       return 'array'
     }
 
-    const mappedType = expression.args[0] == null
-      ? 'unknown'
-      : this.checkArrayCallback(expression.args[0], [
-          { name: 'value', valueType: elementType },
-          { name: 'index', valueType: 'number' }
-        ])
+    const mappedType =
+      expression.args[0] == null
+        ? 'unknown'
+        : this.checkArrayCallback(expression.args[0], [
+            { name: 'value', valueType: elementType },
+            { name: 'index', valueType: 'number' }
+          ])
 
     expression.arrayElementType = mappedType
     expression.arrayElementDeclaredType = mappedType
@@ -2334,7 +2818,11 @@ class Checker {
     return 'array'
   }
 
-  checkArrayCallback(expression: AnyNode, params: Array<{ name: string, valueType: ValueType }>, returnType?: ValueType): ValueType {
+  checkArrayCallback(
+    expression: AnyNode,
+    params: Array<{ name: string; valueType: ValueType }>,
+    returnType?: ValueType
+  ): ValueType {
     if (expression.type !== 'ArrowFunctionExpression') {
       const callbackType = this.checkExpression(expression)
 
@@ -2344,12 +2832,20 @@ class Checker {
     }
 
     if (expression.async === true) {
-      this.report('CCJS_ASYNC_CALLBACK', 'async Array callbacks are not supported in the current compiler slice; use a synchronous callback', expression.loc)
+      this.report(
+        'CCJS_ASYNC_CALLBACK',
+        'async Array callbacks are not supported in the current compiler slice; use a synchronous callback',
+        expression.loc
+      )
       return 'unknown'
     }
 
     if (expression.params.length > params.length) {
-      this.report('CCJS_ARG_COUNT', `array callback expects at most ${params.length} parameter(s), got ${expression.params.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `array callback expects at most ${params.length} parameter(s), got ${expression.params.length}`,
+        expression.loc
+      )
     }
 
     let actualReturnType: ValueType = 'unknown'
@@ -2369,12 +2865,16 @@ class Checker {
         param.valueType = actual
         param.nullable = false
 
-        this.declare(param.name, {
-          kind: 'param',
-          mutable: true,
-          valueType: actual,
-          loc: param.loc
-        }, param.loc)
+        this.declare(
+          param.name,
+          {
+            kind: 'param',
+            mutable: true,
+            valueType: actual,
+            loc: param.loc
+          },
+          param.loc
+        )
       }
 
       if (expression.expressionBody) {
@@ -2416,11 +2916,7 @@ class Checker {
   }
 
   resolveSingleReturnExpression(body: AnyNode): AnyNode | null {
-    const statements = Array.isArray(body)
-      ? body
-      : body?.type === 'BlockStatement'
-        ? body.body
-        : null
+    const statements = Array.isArray(body) ? body : body?.type === 'BlockStatement' ? body.body : null
 
     if (statements == null || statements.length !== 1) {
       return null
@@ -2428,15 +2924,11 @@ class Checker {
 
     const [statement] = statements
 
-    return statement?.type === 'ReturnStatement' ? statement.argument ?? null : null
+    return statement?.type === 'ReturnStatement' ? (statement.argument ?? null) : null
   }
 
   resolveTerminalReturnExpression(body: AnyNode): AnyNode | null {
-    const statements = Array.isArray(body)
-      ? body
-      : body?.type === 'BlockStatement'
-        ? body.body
-        : null
+    const statements = Array.isArray(body) ? body : body?.type === 'BlockStatement' ? body.body : null
 
     if (statements == null || statements.length === 0) {
       return null
@@ -2444,15 +2936,19 @@ class Checker {
 
     const statement = statements.at(-1)
 
-    return statement?.type === 'ReturnStatement' ? statement.argument ?? null : null
+    return statement?.type === 'ReturnStatement' ? (statement.argument ?? null) : null
   }
 
   checkStringConversionCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1 || expression.callee.path[0] !== 'String') {
+    if (
+      expression.callee.type !== 'Reference' ||
+      expression.callee.path.length !== 1 ||
+      expression.callee.path[0] !== 'String'
+    ) {
       return null
     }
 
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     if (expression.args.length !== 1) {
       this.report('CCJS_ARG_COUNT', `String expects 1 argument(s), got ${expression.args.length}`, expression.loc)
@@ -2467,11 +2963,15 @@ class Checker {
   }
 
   checkNumberConversionCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1 || expression.callee.path[0] !== 'Number') {
+    if (
+      expression.callee.type !== 'Reference' ||
+      expression.callee.path.length !== 1 ||
+      expression.callee.path[0] !== 'Number'
+    ) {
       return null
     }
 
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     expression.valueType = 'number'
     expression.nullable = true
@@ -2481,27 +2981,47 @@ class Checker {
       return 'number'
     }
 
-    this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+    this.checkAssignableType(
+      argTypes[0],
+      'string',
+      expression.args[0].loc,
+      false,
+      this.expressionCanBeNull(expression.args[0])
+    )
 
     return 'number'
   }
 
   checkNumericCastCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1 || !numericCastNames.has(expression.callee.path[0])) {
+    if (
+      expression.callee.type !== 'Reference' ||
+      expression.callee.path.length !== 1 ||
+      !numericCastNames.has(expression.callee.path[0])
+    ) {
       return null
     }
 
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     expression.valueType = 'number'
     expression.numericCast = expression.callee.path[0]
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `${expression.callee.path[0]} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `${expression.callee.path[0]} expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
       return 'number'
     }
 
-    this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+    this.checkAssignableType(
+      argTypes[0],
+      'number',
+      expression.args[0].loc,
+      false,
+      this.expressionCanBeNull(expression.args[0])
+    )
 
     return 'number'
   }
@@ -2537,14 +3057,18 @@ class Checker {
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     if (objectType !== 'string') {
       return null
     }
 
     if (expression.args.length < 1 || expression.args.length > 2) {
-      this.report('CCJS_ARG_COUNT', `string.slice expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `string.slice expects 1 or 2 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     for (const [index, argType] of argTypes.entries()) {
@@ -2563,7 +3087,7 @@ class Checker {
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     if (objectType !== 'string') {
       return null
@@ -2574,7 +3098,13 @@ class Checker {
     }
 
     if (argTypes[0] != null) {
-      this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+      this.checkAssignableType(
+        argTypes[0],
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
     }
 
     expression.valueType = 'array'
@@ -2591,18 +3121,28 @@ class Checker {
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     if (objectType !== 'string') {
       return null
     }
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `string.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `string.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     if (argTypes[0] != null) {
-      this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+      this.checkAssignableType(
+        argTypes[0],
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
     }
 
     expression.valueType = 'boolean'
@@ -2612,7 +3152,7 @@ class Checker {
   }
 
   checkNewExpression(expression: AnyNode): ValueType {
-    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
       this.checkExpression(expression.callee)
@@ -2634,11 +3174,19 @@ class Checker {
 
     if (expression.callee.path[0] === 'Uint8Array') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `Uint8Array constructor expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `Uint8Array constructor expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       if (argTypes[0] != null && argTypes[0] !== 'number' && argTypes[0] !== 'array') {
-        this.report('CCJS_TYPE_MISMATCH', `Uint8Array constructor expects number or number[], got ${argTypes[0]}`, expression.args[0].loc)
+        this.report(
+          'CCJS_TYPE_MISMATCH',
+          `Uint8Array constructor expects number or number[], got ${argTypes[0]}`,
+          expression.args[0].loc
+        )
       }
 
       if (argTypes[0] === 'array') {
@@ -2674,12 +3222,22 @@ class Checker {
     const constructorParams = symbol.constructorParams ?? []
 
     if (constructorParams.length !== expression.args.length) {
-      this.report('CCJS_ARG_COUNT', `class ${expression.callee.path[0]} constructor expects ${constructorParams.length} argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `class ${expression.callee.path[0]} constructor expects ${constructorParams.length} argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     for (const [index, param] of constructorParams.entries()) {
       if (index < argTypes.length) {
-        this.checkAssignableType(argTypes[index], param.valueType, expression.args[index].loc, param.nullable === true, this.expressionCanBeNull(expression.args[index]))
+        this.checkAssignableType(
+          argTypes[index],
+          param.valueType,
+          expression.args[index].loc,
+          param.nullable === true,
+          this.expressionCanBeNull(expression.args[index])
+        )
       }
     }
 
@@ -2690,11 +3248,21 @@ class Checker {
 
   checkErrorConstructorExpression(expression: AnyNode, argTypes: ValueType[]): void {
     if (expression.args.length > 2) {
-      this.report('CCJS_ARG_COUNT', `Error constructor expects at most 2 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `Error constructor expects at most 2 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     if (argTypes[0] != null) {
-      this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+      this.checkAssignableType(
+        argTypes[0],
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
     }
 
     const options = expression.args[1]
@@ -2704,7 +3272,11 @@ class Checker {
     }
 
     if (options.type !== 'ObjectLiteral') {
-      this.report('CCJS_TYPE_MISMATCH', 'Error options must be an object literal in the current compiler slice', options.loc)
+      this.report(
+        'CCJS_TYPE_MISMATCH',
+        'Error options must be an object literal in the current compiler slice',
+        options.loc
+      )
       return
     }
 
@@ -2715,19 +3287,33 @@ class Checker {
       }
 
       if (property.key === 'code') {
-        this.checkAssignableType(property.value.valueType ?? this.checkExpression(property.value), 'string', property.value.loc, false, this.expressionCanBeNull(property.value))
+        this.checkAssignableType(
+          property.value.valueType ?? this.checkExpression(property.value),
+          'string',
+          property.value.loc,
+          false,
+          this.expressionCanBeNull(property.value)
+        )
       } else {
         const causeType = property.value.valueType ?? this.checkExpression(property.value)
 
         if (property.value.type !== 'NullLiteral' && causeType !== 'object') {
-          this.report('CCJS_TYPE_MISMATCH', 'Error cause must be an Error object or null in the current compiler slice', property.value.loc)
+          this.report(
+            'CCJS_TYPE_MISMATCH',
+            'Error cause must be an Error object or null in the current compiler slice',
+            property.value.loc
+          )
         }
       }
     }
   }
 
   checkVariableInitializer(expression: AnyNode, declared: ResolvedTypeInfo | null): ValueType {
-    if (expression.type === 'ArrowFunctionExpression' && declared?.valueType === 'function' && declared.functionType != null) {
+    if (
+      expression.type === 'ArrowFunctionExpression' &&
+      declared?.valueType === 'function' &&
+      declared.functionType != null
+    ) {
       this.checkArrowFunctionExpression(expression, declared.functionType)
       return 'function'
     }
@@ -2745,7 +3331,11 @@ class Checker {
 
   checkArrowFunctionExpression(expression: AnyNode, functionType: AnyNode | null = null): void {
     if (expression.async === true) {
-      this.report('CCJS_ASYNC_CALLBACK', 'async arrow callbacks are not supported in the current compiler slice; use an async function declaration', expression.loc)
+      this.report(
+        'CCJS_ASYNC_CALLBACK',
+        'async arrow callbacks are not supported in the current compiler slice; use an async function declaration',
+        expression.loc
+      )
       return
     }
 
@@ -2753,33 +3343,37 @@ class Checker {
 
     this.withScope(() => {
       if (functionType != null && expression.params.length > functionType.params.length) {
-        this.report('CCJS_ARG_COUNT', `function callback expects at most ${functionType.params.length} parameter(s), got ${expression.params.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function callback expects at most ${functionType.params.length} parameter(s), got ${expression.params.length}`,
+          expression.loc
+        )
       }
 
       for (const [index, param] of expression.params.entries()) {
         const expected = functionType?.params[index]
-        const paramInfo = param.valueType === 'unknown' && expected != null
-          ? {
-              valueType: expected.valueType,
-              nullable: expected.nullable === true,
-              arrayElementType: expected.arrayElementType ?? null,
-              arrayElementDeclaredType: expected.arrayElementDeclaredType ?? null,
-              mapKeyType: expected.mapKeyType ?? null,
-              mapValueType: expected.mapValueType ?? null,
-              promiseValueType: expected.promiseValueType ?? null,
-              setElementType: expected.setElementType ?? null,
-              functionType: expected.functionType ?? null,
-              shape: expected.shape ?? null
-            }
-          : this.resolveDeclaredType(param.valueType, param.loc)
+        const paramInfo =
+          param.valueType === 'unknown' && expected != null
+            ? {
+                valueType: expected.valueType,
+                nullable: expected.nullable === true,
+                arrayElementType: expected.arrayElementType ?? null,
+                arrayElementDeclaredType: expected.arrayElementDeclaredType ?? null,
+                mapKeyType: expected.mapKeyType ?? null,
+                mapValueType: expected.mapValueType ?? null,
+                promiseValueType: expected.promiseValueType ?? null,
+                setElementType: expected.setElementType ?? null,
+                functionType: expected.functionType ?? null,
+                shape: expected.shape ?? null
+              }
+            : this.resolveDeclaredType(param.valueType, param.loc)
 
         if (expected != null && param.valueType !== 'unknown') {
           this.checkAssignableType(expected.valueType, paramInfo.valueType, param.loc, expected.nullable === true)
         }
 
-        param.declaredType = param.valueType === 'unknown'
-          ? expected?.declaredType ?? paramInfo.valueType
-          : param.valueType
+        param.declaredType =
+          param.valueType === 'unknown' ? (expected?.declaredType ?? paramInfo.valueType) : param.valueType
         param.valueType = paramInfo.valueType
         param.nullable = paramInfo.nullable
         param.arrayElementType = paramInfo.arrayElementType
@@ -2791,31 +3385,45 @@ class Checker {
         param.functionType = paramInfo.functionType
         param.shape = paramInfo.shape
 
-        this.declare(param.name, {
-          kind: 'param',
-          mutable: true,
-          valueType: paramInfo.valueType,
-          nullable: paramInfo.nullable,
-          arrayElementType: paramInfo.arrayElementType,
-          arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
-          mapKeyType: paramInfo.mapKeyType,
-          mapValueType: paramInfo.mapValueType,
-          promiseValueType: paramInfo.promiseValueType ?? null,
-          setElementType: paramInfo.setElementType,
-          functionType: paramInfo.functionType,
-          shape: paramInfo.shape,
-          loc: param.loc
-        }, param.loc)
+        this.declare(
+          param.name,
+          {
+            kind: 'param',
+            mutable: true,
+            valueType: paramInfo.valueType,
+            nullable: paramInfo.nullable,
+            arrayElementType: paramInfo.arrayElementType,
+            arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
+            mapKeyType: paramInfo.mapKeyType,
+            mapValueType: paramInfo.mapValueType,
+            promiseValueType: paramInfo.promiseValueType ?? null,
+            setElementType: paramInfo.setElementType,
+            functionType: paramInfo.functionType,
+            shape: paramInfo.shape,
+            loc: param.loc
+          },
+          param.loc
+        )
       }
 
       if (expression.expressionBody) {
         actualReturnType = this.checkExpression(expression.body)
 
         if (functionType != null) {
-          this.checkAssignableType(actualReturnType, functionType.returnType, expression.body.loc, functionType.returnNullable === true, this.expressionCanBeNull(expression.body))
+          this.checkAssignableType(
+            actualReturnType,
+            functionType.returnType,
+            expression.body.loc,
+            functionType.returnNullable === true,
+            this.expressionCanBeNull(expression.body)
+          )
 
           if (functionType.returnType === 'promise' && functionType.returnPromiseValueType != null) {
-            this.checkAssignableType(this.resolveExpressionPromiseValueType(expression.body), functionType.returnPromiseValueType, expression.body.loc)
+            this.checkAssignableType(
+              this.resolveExpressionPromiseValueType(expression.body),
+              functionType.returnPromiseValueType,
+              expression.body.loc
+            )
           }
         }
       } else {
@@ -2846,11 +3454,14 @@ class Checker {
 
     expression.returnType = functionType?.returnType ?? actualReturnType
     expression.declaredReturnType = functionType?.declaredReturnType ?? expression.returnType
-    expression.returnNullable = functionType?.returnNullable === true || (expression.expressionBody && expression.body?.nullable === true)
-    expression.returnArrayElementType = functionType?.returnArrayElementType ?? expression.body?.arrayElementType ?? null
+    expression.returnNullable =
+      functionType?.returnNullable === true || (expression.expressionBody && expression.body?.nullable === true)
+    expression.returnArrayElementType =
+      functionType?.returnArrayElementType ?? expression.body?.arrayElementType ?? null
     expression.returnMapKeyType = functionType?.returnMapKeyType ?? expression.body?.mapKeyType ?? null
     expression.returnMapValueType = functionType?.returnMapValueType ?? expression.body?.mapValueType ?? null
-    expression.returnPromiseValueType = functionType?.returnPromiseValueType ?? expression.body?.promiseValueType ?? null
+    expression.returnPromiseValueType =
+      functionType?.returnPromiseValueType ?? expression.body?.promiseValueType ?? null
     expression.returnSetElementType = functionType?.returnSetElementType ?? expression.body?.setElementType ?? null
   }
 
@@ -2901,32 +3512,40 @@ class Checker {
         const previousClassConstructor = this.currentClassConstructor
         this.currentClassConstructor = method.name === 'constructor'
 
-        this.declare('this', {
-          kind: 'this',
-          mutable: false,
-          valueType: 'object',
-          className: statement.name,
-          shape: statement.shape ?? null,
-          loc: method.loc
-        }, method.loc)
+        this.declare(
+          'this',
+          {
+            kind: 'this',
+            mutable: false,
+            valueType: 'object',
+            className: statement.name,
+            shape: statement.shape ?? null,
+            loc: method.loc
+          },
+          method.loc
+        )
 
         for (const param of method.params) {
           const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
-          this.declare(param.name, {
-            kind: 'param',
-            mutable: true,
-            valueType: paramInfo.valueType,
-            nullable: paramInfo.nullable,
-            arrayElementType: paramInfo.arrayElementType,
-            arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
-            mapKeyType: paramInfo.mapKeyType,
-            mapValueType: paramInfo.mapValueType,
-            promiseValueType: paramInfo.promiseValueType ?? null,
-            setElementType: paramInfo.setElementType,
-            functionType: paramInfo.functionType,
-            shape: paramInfo.shape,
-            loc: param.loc
-          }, param.loc)
+          this.declare(
+            param.name,
+            {
+              kind: 'param',
+              mutable: true,
+              valueType: paramInfo.valueType,
+              nullable: paramInfo.nullable,
+              arrayElementType: paramInfo.arrayElementType,
+              arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
+              mapKeyType: paramInfo.mapKeyType,
+              mapValueType: paramInfo.mapValueType,
+              promiseValueType: paramInfo.promiseValueType ?? null,
+              setElementType: paramInfo.setElementType,
+              functionType: paramInfo.functionType,
+              shape: paramInfo.shape,
+              loc: param.loc
+            },
+            param.loc
+          )
         }
 
         try {
@@ -2943,7 +3562,7 @@ class Checker {
   }
 
   checkObjectLiteralAgainstShape(expression: AnyNode, shape: ObjectShapeInfo): void {
-    const properties = new Map<string, AnyNode>(expression.properties.map(property => [property.key, property]))
+    const properties = new Map<string, AnyNode>(expression.properties.map((property) => [property.key, property]))
 
     for (const field of shape.fields) {
       const property = properties.get(field.name)
@@ -2956,10 +3575,20 @@ class Checker {
       const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
       const propertyType = this.checkExpression(property.value)
 
-      this.checkAssignableType(propertyType, fieldType.valueType, property.loc, fieldType.nullable, this.expressionCanBeNull(property.value))
+      this.checkAssignableType(
+        propertyType,
+        fieldType.valueType,
+        property.loc,
+        fieldType.nullable,
+        this.expressionCanBeNull(property.value)
+      )
 
       if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
-        this.checkAssignableType(this.resolveExpressionArrayElementType(property.value), fieldType.arrayElementType, property.loc)
+        this.checkAssignableType(
+          this.resolveExpressionArrayElementType(property.value),
+          fieldType.arrayElementType,
+          property.loc
+        )
       }
 
       if (fieldType.valueType === 'map') {
@@ -2975,11 +3604,19 @@ class Checker {
       }
 
       if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
-        this.checkAssignableType(this.resolveExpressionSetElementType(property.value), fieldType.setElementType, property.loc)
+        this.checkAssignableType(
+          this.resolveExpressionSetElementType(property.value),
+          fieldType.setElementType,
+          property.loc
+        )
       }
 
       if (fieldType.valueType === 'promise' && fieldType.promiseValueType != null) {
-        this.checkAssignableType(this.resolveExpressionPromiseValueType(property.value), fieldType.promiseValueType, property.loc)
+        this.checkAssignableType(
+          this.resolveExpressionPromiseValueType(property.value),
+          fieldType.promiseValueType,
+          property.loc
+        )
       }
     }
 
@@ -3003,8 +3640,10 @@ class Checker {
   }
 
   isThisExpression(expression: AnyNode): boolean {
-    return expression?.type === 'ThisExpression'
-      || (expression?.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'this')
+    return (
+      expression?.type === 'ThisExpression' ||
+      (expression?.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'this')
+    )
   }
 
   canInitializeReadonlyClassField(expression: AnyNode): boolean {
@@ -3012,7 +3651,7 @@ class Checker {
   }
 
   findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {
-    return shape.fields.find(field => field.name === name) ?? null
+    return shape.fields.find((field) => field.name === name) ?? null
   }
 
   getCallableSymbol(callee: AnyNode): SymbolInfo | null {
@@ -3084,24 +3723,28 @@ class Checker {
 
   checkForOfStatement(statement: AnyNode): void {
     const iterableType = this.checkExpression(statement.iterable)
-    const mapEntryShape = iterableType === 'map'
-      ? this.createMapEntryShape(this.resolveExpressionMapType(statement.iterable), statement.nameLoc)
-      : null
-    const elementType = iterableType === 'array'
-      ? this.resolveExpressionArrayElementType(statement.iterable) ?? 'unknown'
-      : iterableType === 'set'
-        ? this.resolveExpressionSetElementType(statement.iterable) ?? 'unknown'
-        : iterableType === 'map'
-          ? 'object'
-          : 'unknown'
-    const elementDeclaredType = iterableType === 'array'
-      ? this.resolveExpressionArrayElementDeclaredType(statement.iterable) ?? elementType
-      : iterableType === 'set'
-        ? elementType
-        : iterableType === 'map'
-          ? 'object'
-          : 'unknown'
-    const declared = statement.declaredType == null ? null : this.resolveDeclaredType(statement.declaredType, statement.nameLoc)
+    const mapEntryShape =
+      iterableType === 'map'
+        ? this.createMapEntryShape(this.resolveExpressionMapType(statement.iterable), statement.nameLoc)
+        : null
+    const elementType =
+      iterableType === 'array'
+        ? (this.resolveExpressionArrayElementType(statement.iterable) ?? 'unknown')
+        : iterableType === 'set'
+          ? (this.resolveExpressionSetElementType(statement.iterable) ?? 'unknown')
+          : iterableType === 'map'
+            ? 'object'
+            : 'unknown'
+    const elementDeclaredType =
+      iterableType === 'array'
+        ? (this.resolveExpressionArrayElementDeclaredType(statement.iterable) ?? elementType)
+        : iterableType === 'set'
+          ? elementType
+          : iterableType === 'map'
+            ? 'object'
+            : 'unknown'
+    const declared =
+      statement.declaredType == null ? null : this.resolveDeclaredType(statement.declaredType, statement.nameLoc)
     const valueType = declared?.valueType ?? elementType
     const inferredDeclaredType = declared == null ? elementDeclaredType : statement.declaredType
     const shape = declared?.shape ?? mapEntryShape
@@ -3122,20 +3765,24 @@ class Checker {
     }
 
     this.withScope(() => {
-      this.declare(statement.name, {
-        kind: statement.kind,
-        mutable: statement.kind === 'let',
-        valueType,
-        nullable: declared?.nullable === true,
-        arrayElementType: declared?.arrayElementType ?? null,
-        arrayElementDeclaredType: declared?.arrayElementDeclaredType ?? null,
-        mapKeyType: declared?.mapKeyType ?? null,
-        mapValueType: declared?.mapValueType ?? null,
-        setElementType: declared?.setElementType ?? null,
-        functionType: declared?.functionType ?? null,
-        shape,
-        loc: statement.nameLoc
-      }, statement.nameLoc)
+      this.declare(
+        statement.name,
+        {
+          kind: statement.kind,
+          mutable: statement.kind === 'let',
+          valueType,
+          nullable: declared?.nullable === true,
+          arrayElementType: declared?.arrayElementType ?? null,
+          arrayElementDeclaredType: declared?.arrayElementDeclaredType ?? null,
+          mapKeyType: declared?.mapKeyType ?? null,
+          mapValueType: declared?.mapValueType ?? null,
+          setElementType: declared?.setElementType ?? null,
+          functionType: declared?.functionType ?? null,
+          shape,
+          loc: statement.nameLoc
+        },
+        statement.nameLoc
+      )
 
       this.withLoop(() => {
         this.checkScopedBody(statement.body)
@@ -3143,7 +3790,10 @@ class Checker {
     })
   }
 
-  createMapEntryShape(mapType: { key: ValueType | null, value: ValueType | null } | null, loc: SourceLocation): ObjectShapeInfo {
+  createMapEntryShape(
+    mapType: { key: ValueType | null; value: ValueType | null } | null,
+    loc: SourceLocation
+  ): ObjectShapeInfo {
     return {
       kind: 'object',
       fields: [
@@ -3170,7 +3820,11 @@ class Checker {
     let hasDefault = false
 
     if (!isSwitchableType(discriminantType)) {
-      this.report('CCJS_SWITCH_TYPE', `switch discriminant must be number, string or boolean, got ${discriminantType}`, statement.discriminant.loc)
+      this.report(
+        'CCJS_SWITCH_TYPE',
+        `switch discriminant must be number, string or boolean, got ${discriminantType}`,
+        statement.discriminant.loc
+      )
     }
 
     this.withBreakable(() => {
@@ -3185,7 +3839,11 @@ class Checker {
           const caseType = this.checkExpression(item.test)
 
           if (!isMatchingSwitchCaseType(caseType, discriminantType)) {
-            this.report('CCJS_SWITCH_TYPE', `switch case type ${caseType} does not match discriminant type ${discriminantType}`, item.test.loc)
+            this.report(
+              'CCJS_SWITCH_TYPE',
+              `switch case type ${caseType} does not match discriminant type ${discriminantType}`,
+              item.test.loc
+            )
           }
         }
 
@@ -3383,7 +4041,7 @@ class Checker {
           nullable: false,
           functionType: {
             ...shape,
-            params: shape.params.map(param => {
+            params: shape.params.map((param) => {
               const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
 
               return {
@@ -3455,7 +4113,7 @@ class Checker {
   resolveObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
     return {
       ...shape,
-      fields: shape.fields.map(field => {
+      fields: shape.fields.map((field) => {
         const fieldInfo = this.resolveDeclaredType(field.valueType, field.loc)
 
         return {
@@ -3550,7 +4208,9 @@ class Checker {
     return null
   }
 
-  resolveExpressionMapType(expression: AnyNode | null | undefined): { key: ValueType | null, value: ValueType | null } | null {
+  resolveExpressionMapType(
+    expression: AnyNode | null | undefined
+  ): { key: ValueType | null; value: ValueType | null } | null {
     if (expression == null) {
       return null
     }
@@ -3608,27 +4268,27 @@ class Checker {
     }
 
     if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      return expression.valueType === 'set' ? expression.setElementType ?? null : null
+      return expression.valueType === 'set' ? (expression.setElementType ?? null) : null
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const symbol = this.scope.resolve(expression.path[0])
 
-      return symbol?.valueType === 'set' ? symbol.setElementType ?? null : null
+      return symbol?.valueType === 'set' ? (symbol.setElementType ?? null) : null
     }
 
     if (expression.type === 'MemberExpression') {
       const shape = this.resolveExpressionShape(expression.object)
       const field = shape == null ? null : this.findShapeField(shape, expression.property)
 
-      return field?.valueType === 'set' ? field.setElementType ?? null : null
+      return field?.valueType === 'set' ? (field.setElementType ?? null) : null
     }
 
     if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
       const shape = this.resolveExpressionShape(expression.object)
       const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
 
-      return field?.valueType === 'set' ? field.setElementType ?? null : null
+      return field?.valueType === 'set' ? (field.setElementType ?? null) : null
     }
 
     return null
@@ -3640,27 +4300,27 @@ class Checker {
     }
 
     if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      return expression.valueType === 'promise' ? expression.promiseValueType ?? null : null
+      return expression.valueType === 'promise' ? (expression.promiseValueType ?? null) : null
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const symbol = this.scope.resolve(expression.path[0])
 
-      return symbol?.valueType === 'promise' ? symbol.promiseValueType ?? null : null
+      return symbol?.valueType === 'promise' ? (symbol.promiseValueType ?? null) : null
     }
 
     if (expression.type === 'MemberExpression') {
       const shape = this.resolveExpressionShape(expression.object)
       const field = shape == null ? null : this.findShapeField(shape, expression.property)
 
-      return field?.valueType === 'promise' ? field.promiseValueType ?? null : null
+      return field?.valueType === 'promise' ? (field.promiseValueType ?? null) : null
     }
 
     if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
       const shape = this.resolveExpressionShape(expression.object)
       const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
 
-      return field?.valueType === 'promise' ? field.promiseValueType ?? null : null
+      return field?.valueType === 'promise' ? (field.promiseValueType ?? null) : null
     }
 
     return null
@@ -3686,7 +4346,12 @@ class Checker {
     }
   }
 
-  withReturnContext(returnType: ValueType, returnNullable: boolean, returnPromiseValueType: ValueType | null, callback: () => void): void {
+  withReturnContext(
+    returnType: ValueType,
+    returnNullable: boolean,
+    returnPromiseValueType: ValueType | null,
+    callback: () => void
+  ): void {
     const previousReturnType = this.currentReturnType
     const previousReturnNullable = this.currentReturnNullable
     const previousReturnPromiseValueType = this.currentReturnPromiseValueType
@@ -3728,11 +4393,16 @@ class Checker {
     }
   }
 
-  checkAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, loc: SourceLocation, expectedNullable = false, actualNullable = false): void {
+  checkAssignableType(
+    actual: ValueType | null | undefined,
+    expected: ValueType | null | undefined,
+    loc: SourceLocation,
+    expectedNullable = false,
+    actualNullable = false
+  ): void {
     if (!isAssignableType(actual, expected, expectedNullable, actualNullable)) {
-      const actualLabel = actualNullable && actual !== 'null' && actual !== 'unknown' && actual != null
-        ? `${actual} | null`
-        : actual
+      const actualLabel =
+        actualNullable && actual !== 'null' && actual !== 'unknown' && actual != null ? `${actual} | null` : actual
 
       this.report('CCJS_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
     }
@@ -3809,7 +4479,12 @@ function isEqualityComparableType(left: ValueType, right: ValueType): boolean {
   return ['boolean', 'number', 'string', 'null'].includes(left) && left === right
 }
 
-function isAssignableType(actual: ValueType | null | undefined, expected: ValueType | null | undefined, expectedNullable = false, actualNullable = false): boolean {
+function isAssignableType(
+  actual: ValueType | null | undefined,
+  expected: ValueType | null | undefined,
+  expectedNullable = false,
+  actualNullable = false
+): boolean {
   if (actual == null || expected == null || actual === 'unknown' || expected === 'unknown') {
     return true
   }
@@ -3845,7 +4520,7 @@ function nullableTypeNameFromTypeName(name: string): string | null {
   return match?.[1] ?? null
 }
 
-function mapTypeNamesFromTypeName(name: string): { key: string, value: string } | null {
+function mapTypeNamesFromTypeName(name: string): { key: string; value: string } | null {
   const match = /^map<(.+)>$/.exec(name)
 
   if (match == null) {
@@ -3896,7 +4571,7 @@ function splitGenericArgs(value: string): string[] {
 
   args.push(value.slice(start))
 
-  return args.map(arg => arg.trim()).filter(Boolean)
+  return args.map((arg) => arg.trim()).filter(Boolean)
 }
 
 function commonArrayElementType(types: ValueType[]): ValueType {
@@ -3906,11 +4581,13 @@ function commonArrayElementType(types: ValueType[]): ValueType {
     return 'unknown'
   }
 
-  return types.every(type => type === first) ? first : 'unknown'
+  return types.every((type) => type === first) ? first : 'unknown'
 }
 
 function isBuiltinValueType(name: string): boolean {
-  return ['array', 'boolean', 'bytes', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(name)
+  return ['array', 'boolean', 'bytes', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(
+    name
+  )
 }
 
 function isBytesTypeName(name: string): boolean {
@@ -3928,7 +4605,21 @@ function promiseStaticMethodName(callee: AnyNode): string | null {
 }
 
 function fsRuntimeMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'MemberExpression' || !['readFile', 'readFileBytes', 'readFileBytesSync', 'readFileSync', 'readDir', 'readDirSync', 'writeFile', 'writeFileBytes', 'writeFileBytesSync', 'writeFileSync'].includes(callee.property)) {
+  if (
+    callee.type !== 'MemberExpression' ||
+    ![
+      'readFile',
+      'readFileBytes',
+      'readFileBytesSync',
+      'readFileSync',
+      'readDir',
+      'readDirSync',
+      'writeFile',
+      'writeFileBytes',
+      'writeFileBytesSync',
+      'writeFileSync'
+    ].includes(callee.property)
+  ) {
     return null
   }
 
@@ -3948,15 +4639,25 @@ function jsonRuntimeMethodName(callee: AnyNode): string | null {
 }
 
 function isJsonParseDeclaredType(valueType: ValueType): boolean {
-  return valueType === 'array' || valueType === 'boolean' || valueType === 'number' || valueType === 'object' || valueType === 'string'
+  return (
+    valueType === 'array' ||
+    valueType === 'boolean' ||
+    valueType === 'number' ||
+    valueType === 'object' ||
+    valueType === 'string'
+  )
 }
 
 function isMathRuntimeMethod(callee: AnyNode): boolean {
-  return callee.type === 'MemberExpression'
-    && callee.object?.type === 'Reference'
-    && callee.object.path.length === 1
-    && callee.object.path[0] === 'Math'
-    && (mathNullaryMethods.has(callee.property) || mathUnaryMethods.has(callee.property) || mathBinaryMethods.has(callee.property))
+  return (
+    callee.type === 'MemberExpression' &&
+    callee.object?.type === 'Reference' &&
+    callee.object.path.length === 1 &&
+    callee.object.path[0] === 'Math' &&
+    (mathNullaryMethods.has(callee.property) ||
+      mathUnaryMethods.has(callee.property) ||
+      mathBinaryMethods.has(callee.property))
+  )
 }
 
 function timerRuntimeMethodName(callee: AnyNode): string | null {
@@ -3964,7 +4665,11 @@ function timerRuntimeMethodName(callee: AnyNode): string | null {
     return null
   }
 
-  return ['clearImmediate', 'clearInterval', 'clearTimeout', 'setImmediate', 'setInterval', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+  return ['clearImmediate', 'clearInterval', 'clearTimeout', 'setImmediate', 'setInterval', 'setTimeout'].includes(
+    callee.path[0]
+  )
+    ? callee.path[0]
+    : null
 }
 
 function timerClearMethodName(method: string): string | null {

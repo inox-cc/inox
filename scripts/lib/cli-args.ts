@@ -29,14 +29,16 @@ type ParsedOptions = {
   options: CliOptions
 }
 
-type ParseResult<T> = {
-  ok: true
-  plan: T
-  value: T
-} | {
-  ok: false
-  error: string
-}
+type ParseResult<T> =
+  | {
+      ok: true
+      plan: T
+      value: T
+    }
+  | {
+      ok: false
+      error: string
+    }
 
 export const usage = `Usage:
   ccjs <entry>

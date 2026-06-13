@@ -12,7 +12,7 @@ type CommandResult = {
   stderr: string
 }
 
-test('C runtime value/object/array skeleton compiles and runs', async t => {
+test('C runtime value/object/array skeleton compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -25,7 +25,9 @@ test('C runtime value/object/array skeleton compiles and runs', async t => {
   const output = join(dir, 'runtime-smoke')
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include <stdlib.h>
 #include "ccjs/allocator.h"
 #include "ccjs/array.h"
@@ -85,7 +87,8 @@ int main(void) {
   printf("%.*s %.0f %.0f %.0f %zu\\n", (int)string->len, string->bytes, score.as.number, first.as.number, popped.as.number, array_len);
   return 0;
 }
-`)
+`
+    )
 
     const compile = await runCommand('cc', [
       '-Iruntime/c/include',
@@ -117,7 +120,7 @@ int main(void) {
   }
 })
 
-test('C runtime JSON parse and stringify compiles and runs', async t => {
+test('C runtime JSON parse and stringify compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -130,7 +133,9 @@ test('C runtime JSON parse and stringify compiles and runs', async t => {
   const output = join(dir, 'json-runtime')
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "ccjs/allocator.h"
@@ -196,7 +201,8 @@ int main(void) {
   ccjs_release(value);
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -214,7 +220,7 @@ int main(void) {
   }
 })
 
-test('C runtime binary bytes value compiles and runs', async t => {
+test('C runtime binary bytes value compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -227,7 +233,9 @@ test('C runtime binary bytes value compiles and runs', async t => {
   const output = join(dir, 'binary-runtime')
 
   try {
-    await writeFile(source, `#include <stdint.h>
+    await writeFile(
+      source,
+      `#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "ccjs/allocator.h"
@@ -283,7 +291,8 @@ int main(void) {
   ccjs_release(bytes);
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -301,7 +310,7 @@ int main(void) {
   }
 })
 
-test('C runtime Map and Set helpers compile and run', async t => {
+test('C runtime Map and Set helpers compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -314,7 +323,9 @@ test('C runtime Map and Set helpers compile and run', async t => {
   const output = join(dir, 'collections-runtime')
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include <stdlib.h>
 #include "ccjs/allocator.h"
 #include "ccjs/map.h"
@@ -422,7 +433,8 @@ int main(void) {
 
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -440,7 +452,7 @@ int main(void) {
   }
 })
 
-test('C runtime release frees nested object and array references', async t => {
+test('C runtime release frees nested object and array references', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -453,7 +465,9 @@ test('C runtime release frees nested object and array references', async t => {
   const output = join(dir, 'release-smoke')
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include <stdlib.h>
 #include "ccjs/allocator.h"
 #include "ccjs/array.h"
@@ -513,7 +527,8 @@ int main(void) {
   printf("%d %d %d\\n", state.allocs, state.frees, state.allocs - state.frees);
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -531,7 +546,7 @@ int main(void) {
   }
 })
 
-test('C runtime callback object invokes and releases context', async t => {
+test('C runtime callback object invokes and releases context', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -544,7 +559,9 @@ test('C runtime callback object invokes and releases context', async t => {
   const output = join(dir, 'callback-smoke')
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include <stdlib.h>
 #include "ccjs/callback.h"
 
@@ -621,7 +638,8 @@ int main(void) {
   printf("%d %d %.0f %.0f %d %d\\n", callback.calls, callback.finalized, callback.total, out.as.number, alloc.allocs, alloc.frees);
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -639,7 +657,7 @@ int main(void) {
   }
 })
 
-test('C runtime Promise microtasks settle asynchronously', async t => {
+test('C runtime Promise microtasks settle asynchronously', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -652,7 +670,9 @@ test('C runtime Promise microtasks settle asynchronously', async t => {
   const output = join(dir, 'promise-runtime')
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include <stdlib.h>
 #include "ccjs/allocator.h"
 #include "ccjs/promise.h"
@@ -719,7 +739,8 @@ int main(void) {
   printf("%d %d %d %d\\n", log.count, log.values[0], log.values[1], log.values[2]);
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -737,7 +758,7 @@ int main(void) {
   }
 })
 
-test('C runtime Promise chains fulfillment and rejection recovery', async t => {
+test('C runtime Promise chains fulfillment and rejection recovery', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -750,7 +771,9 @@ test('C runtime Promise chains fulfillment and rejection recovery', async t => {
   const output = join(dir, 'promise-chain-runtime')
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include <stdlib.h>
 #include "ccjs/allocator.h"
 #include "ccjs/promise.h"
@@ -876,7 +899,8 @@ int main(void) {
   printf("%d %d %d %d %d %d %d\\n", log.count, log.values[0], log.values[1], log.values[2], log.values[3], log.finalized, propagated_value);
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -894,7 +918,7 @@ int main(void) {
   }
 })
 
-test('generated C reports unhandled Promise rejections', async t => {
+test('generated C reports unhandled Promise rejections', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -907,12 +931,15 @@ test('generated C reports unhandled Promise rejections', async t => {
   const output = join(dir, 'unhandled-promise')
 
   try {
-    const result = compileSource(`export async function main(): Promise<void> {
+    const result = compileSource(
+      `export async function main(): Promise<void> {
   Promise.reject('boom')
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -933,7 +960,7 @@ test('generated C reports unhandled Promise rejections', async t => {
   }
 })
 
-test('C runtime loop polls immediates and timers by turn', async t => {
+test('C runtime loop polls immediates and timers by turn', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -946,7 +973,9 @@ test('C runtime loop polls immediates and timers by turn', async t => {
   const output = join(dir, 'loop-runtime')
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include <stdlib.h>
 #include "ccjs/allocator.h"
 #include "ccjs/loop.h"
@@ -1043,7 +1072,8 @@ int main(void) {
   printf("%d %d %d %d %d %d\\n", log.count, log.values[0], log.values[1], log.values[2], log.values[3], log.finalized);
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -1061,7 +1091,7 @@ int main(void) {
   }
 })
 
-test('C runtime time adapter keeps Date.now on monotonic delta', async t => {
+test('C runtime time adapter keeps Date.now on monotonic delta', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1074,7 +1104,9 @@ test('C runtime time adapter keeps Date.now on monotonic delta', async t => {
   const output = join(dir, 'time-runtime')
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include "ccjs/time.h"
 
 typedef struct clock_state {
@@ -1113,7 +1145,8 @@ int main(void) {
   printf("%.0f %.0f %.0f %.0f %d\\n", p0, date1, date2, date3, state.wall_reads);
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -1131,7 +1164,7 @@ int main(void) {
   }
 })
 
-test('C runtime fs adapter resolves async file promises through the loop', async t => {
+test('C runtime fs adapter resolves async file promises through the loop', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1147,7 +1180,9 @@ test('C runtime fs adapter resolves async file promises through the loop', async
   const defaultPathLen = Buffer.byteLength(defaultPath)
 
   try {
-    await writeFile(source, `#include <stdio.h>
+    await writeFile(
+      source,
+      `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "ccjs/allocator.h"
@@ -1327,7 +1362,8 @@ int main(void) {
   ccjs_fs_clear_adapter();
   return 0;
 }
-`)
+`
+    )
 
     const compile = await compileRuntimeProgram(source, output)
 
@@ -1336,7 +1372,10 @@ int main(void) {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'hello fs hello fs 2 2 2 beta.txt saved FsError ERR_FS_OPERATION filesystem operation failed\n')
+    assert.equal(
+      run.stdout,
+      'hello fs hello fs 2 2 2 beta.txt saved FsError ERR_FS_OPERATION filesystem operation failed\n'
+    )
   } finally {
     await rm(dir, {
       recursive: true,
@@ -1345,7 +1384,7 @@ int main(void) {
   }
 })
 
-test('generated C fs promise calls compile and run with runtime sources', async t => {
+test('generated C fs promise calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1358,13 +1397,16 @@ test('generated C fs promise calls compile and run with runtime sources', async 
   const output = join(dir, 'fs-codegen')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const read = fs.readFile('/tmp/value.txt', 'utf8')
   fs.writeFile('/tmp/out.txt', 'saved')
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -1384,7 +1426,7 @@ test('generated C fs promise calls compile and run with runtime sources', async 
   }
 })
 
-test('generated C simple classes compile and run with runtime sources', async t => {
+test('generated C simple classes compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1397,7 +1439,8 @@ test('generated C simple classes compile and run with runtime sources', async t 
   const output = join(dir, 'class-codegen')
 
   try {
-    const result = compileSource(`class User {
+    const result = compileSource(
+      `class User {
   readonly id: number
   name: string
 
@@ -1430,9 +1473,11 @@ export function main(): void {
   const name = user.label()
   console.log(value, name)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -1452,7 +1497,7 @@ export function main(): void {
   }
 })
 
-test('generated C timer calls drain from main loop', async t => {
+test('generated C timer calls drain from main loop', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1465,7 +1510,8 @@ test('generated C timer calls drain from main loop', async t => {
   const output = join(dir, 'timers-codegen')
 
   try {
-    const result = compileSource(`function onImmediate(): void {
+    const result = compileSource(
+      `function onImmediate(): void {
   console.log('immediate')
 }
 
@@ -1495,9 +1541,11 @@ export function main(): void {
     setTimeout(onTimeout, 1)
   })
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -1517,7 +1565,7 @@ export function main(): void {
   }
 })
 
-test('generated C fs readDir awaits hosted directory entries', async t => {
+test('generated C fs readDir awaits hosted directory entries', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1536,7 +1584,8 @@ test('generated C fs readDir awaits hosted directory entries', async t => {
     await writeFile(join(entriesDir, 'beta.txt'), '')
     await writeFile(join(entriesDir, 'alpha.txt'), '')
 
-    const result = compileSource(`export async function main(): Promise<void> {
+    const result = compileSource(
+      `export async function main(): Promise<void> {
   const entries = await fs.readDir(${JSON.stringify(entriesDir)})
   const names = entries.sort()
   console.log(names[0], names[1])
@@ -1547,9 +1596,11 @@ test('generated C fs readDir awaits hosted directory entries', async t => {
     console.log(error.name, error.code, error.message)
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -1569,7 +1620,7 @@ test('generated C fs readDir awaits hosted directory entries', async t => {
   }
 })
 
-test('generated C fs binary helpers copy hosted bytes', async t => {
+test('generated C fs binary helpers copy hosted bytes', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1587,13 +1638,16 @@ test('generated C fs binary helpers copy hosted bytes', async t => {
   try {
     await writeFile(input, data)
 
-    const result = compileSource(`export async function main(): Promise<void> {
+    const result = compileSource(
+      `export async function main(): Promise<void> {
   const bytes = await fs.readFileBytes(${JSON.stringify(input)})
   await fs.writeFileBytes(${JSON.stringify(copied)}, bytes)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -1613,7 +1667,7 @@ test('generated C fs binary helpers copy hosted bytes', async t => {
   }
 })
 
-test('generated C fs sync helpers copy hosted files and read entries', async t => {
+test('generated C fs sync helpers copy hosted files and read entries', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1638,7 +1692,8 @@ test('generated C fs sync helpers copy hosted files and read entries', async t =
     await writeFile(textInput, 'sync text')
     await writeFile(bytesInput, data)
 
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const text = fs.readFileSync(${JSON.stringify(textInput)})
   fs.writeFileSync(${JSON.stringify(textCopied)}, text)
   const bytes = fs.readFileBytesSync(${JSON.stringify(bytesInput)})
@@ -1647,9 +1702,11 @@ test('generated C fs sync helpers copy hosted files and read entries', async t =
   const names = entries.sort()
   console.log(names[0], names[1])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -1671,7 +1728,7 @@ test('generated C fs sync helpers copy hosted files and read entries', async t =
   }
 })
 
-test('generated C async await over settled promises compiles and runs', async t => {
+test('generated C async await over settled promises compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1684,7 +1741,8 @@ test('generated C async await over settled promises compiles and runs', async t 
   const output = join(dir, 'await-codegen')
 
   try {
-    const result = compileSource(`async function getValue(): Promise<number> {
+    const result = compileSource(
+      `async function getValue(): Promise<number> {
   return Promise.resolve(3)
 }
 
@@ -1828,9 +1886,11 @@ export async function main(): Promise<void> {
     console.log(error)
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -1841,7 +1901,10 @@ export async function main(): Promise<void> {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ok\n2\n3\n3\ndone\ndone\n4\n8\n15\n12\n14\n20\n95\n96\n97\n98\n3\nloaded\nfail\nplain fail\nError stored error\nasync fail\nasync number fail\nasync fail\n')
+    assert.equal(
+      run.stdout,
+      'ok\n2\n3\n3\ndone\ndone\n4\n8\n15\n12\n14\n20\n95\n96\n97\n98\n3\nloaded\nfail\nplain fail\nError stored error\nasync fail\nasync number fail\nasync fail\n'
+    )
   } finally {
     await rm(dir, {
       recursive: true,
@@ -1850,7 +1913,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C captured Promise callbacks compile and run', async t => {
+test('generated C captured Promise callbacks compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1863,7 +1926,8 @@ test('generated C captured Promise callbacks compile and run', async t => {
   const output = join(dir, 'promise-callback-capture')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -1901,9 +1965,11 @@ export async function main(): Promise<void> {
   })
   console.log(await objectLogged)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -1923,7 +1989,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C Promise callbacks with try catch finally compile and run', async t => {
+test('generated C Promise callbacks with try catch finally compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1936,7 +2002,8 @@ test('generated C Promise callbacks with try catch finally compile and run', asy
   const output = join(dir, 'promise-callback-try')
 
   try {
-    const result = compileSource(`export async function main(): Promise<void> {
+    const result = compileSource(
+      `export async function main(): Promise<void> {
   const handled = Promise.resolve(3).then(value => {
     try {
       if (value > 2) {
@@ -1966,9 +2033,11 @@ test('generated C Promise callbacks with try catch finally compile and run', asy
 
   console.log(await handled, await finalized)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -1988,7 +2057,7 @@ test('generated C Promise callbacks with try catch finally compile and run', asy
   }
 })
 
-test('generated C async task frame over awaited Promise.resolve compiles and runs', async t => {
+test('generated C async task frame over awaited Promise.resolve compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2001,7 +2070,8 @@ test('generated C async task frame over awaited Promise.resolve compiles and run
   const output = join(dir, 'async-task-frame')
 
   try {
-    const result = compileSource(`async function compute(): Promise<number> {
+    const result = compileSource(
+      `async function compute(): Promise<number> {
   const value = await Promise.resolve(2)
 
   return Promise.resolve(value + 3)
@@ -2012,9 +2082,11 @@ export async function main(): Promise<void> {
   console.log(await compute())
   console.log(await promise)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2034,7 +2106,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame preserves parameters across resume', async t => {
+test('generated C async task frame preserves parameters across resume', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2047,7 +2119,8 @@ test('generated C async task frame preserves parameters across resume', async t 
   const output = join(dir, 'async-task-frame-params')
 
   try {
-    const result = compileSource(`async function addLater(input: number, delta: number): Promise<number> {
+    const result = compileSource(
+      `async function addLater(input: number, delta: number): Promise<number> {
   const value = await Promise.resolve(input)
 
   return Promise.resolve(value + delta)
@@ -2058,9 +2131,11 @@ export async function main(): Promise<void> {
   const promise = addLater(5, 6)
   console.log(await promise)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2080,7 +2155,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame awaits local Promise variables', async t => {
+test('generated C async task frame awaits local Promise variables', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2093,7 +2168,8 @@ test('generated C async task frame awaits local Promise variables', async t => {
   const output = join(dir, 'async-task-frame-local-promise')
 
   try {
-    const result = compileSource(`async function addLater(input: number, delta: number): Promise<number> {
+    const result = compileSource(
+      `async function addLater(input: number, delta: number): Promise<number> {
   const pending = Promise.resolve(input)
   const value = await pending
 
@@ -2105,9 +2181,11 @@ export async function main(): Promise<void> {
   const promise = addLater(5, 6)
   console.log(await promise)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2127,7 +2205,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C boolean async task frame compiles and runs', async t => {
+test('generated C boolean async task frame compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2140,7 +2218,8 @@ test('generated C boolean async task frame compiles and runs', async t => {
   const output = join(dir, 'async-task-frame-bool')
 
   try {
-    const result = compileSource(`async function flip(flag: boolean): Promise<boolean> {
+    const result = compileSource(
+      `async function flip(flag: boolean): Promise<boolean> {
   const value = await Promise.resolve(flag)
 
   return Promise.resolve(!value)
@@ -2150,9 +2229,11 @@ export async function main(): Promise<void> {
   console.log(await flip(false))
   console.log(await flip(true))
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2172,7 +2253,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame awaits local Promise chains', async t => {
+test('generated C async task frame awaits local Promise chains', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2185,7 +2266,8 @@ test('generated C async task frame awaits local Promise chains', async t => {
   const output = join(dir, 'async-task-frame-chain')
 
   try {
-    const result = compileSource(`async function addChain(input: number, delta: number): Promise<number> {
+    const result = compileSource(
+      `async function addChain(input: number, delta: number): Promise<number> {
   const pending = Promise.resolve(input).then(value => value + 2)
   const value = await pending
 
@@ -2197,9 +2279,11 @@ export async function main(): Promise<void> {
   const promise = addChain(5, 6)
   console.log(await promise)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2219,7 +2303,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame awaits captured local Promise chains', async t => {
+test('generated C async task frame awaits captured local Promise chains', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2232,7 +2316,8 @@ test('generated C async task frame awaits captured local Promise chains', async 
   const output = join(dir, 'async-task-frame-captured-chain')
 
   try {
-    const result = compileSource(`async function addChain(input: number, delta: number): Promise<number> {
+    const result = compileSource(
+      `async function addChain(input: number, delta: number): Promise<number> {
   const pending = Promise.resolve(input).then(value => value + delta)
   const value = await pending
 
@@ -2244,9 +2329,11 @@ export async function main(): Promise<void> {
   const promise = addChain(5, 6)
   console.log(await promise)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2266,7 +2353,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame direct return values compile and run', async t => {
+test('generated C async task frame direct return values compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2279,7 +2366,8 @@ test('generated C async task frame direct return values compile and run', async 
   const output = join(dir, 'async-task-frame-direct-return')
 
   try {
-    const result = compileSource(`async function addLater(input: number, delta: number): Promise<number> {
+    const result = compileSource(
+      `async function addLater(input: number, delta: number): Promise<number> {
   const value = await Promise.resolve(input)
 
   return value + delta
@@ -2290,9 +2378,11 @@ export async function main(): Promise<void> {
   const promise = addLater(5, 6)
   console.log(await promise)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2312,7 +2402,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame direct managed return values compile and run', async t => {
+test('generated C async task frame direct managed return values compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2325,7 +2415,8 @@ test('generated C async task frame direct managed return values compile and run'
   const output = join(dir, 'async-task-frame-direct-managed-return')
 
   try {
-    const result = compileSource(`async function work(): Promise<Buffer> {
+    const result = compileSource(
+      `async function work(): Promise<Buffer> {
   try {
     try {
       const value: number = await Promise.resolve(3)
@@ -2342,9 +2433,11 @@ export async function main(): Promise<void> {
   const result: Buffer = await work()
   console.log(result.toString())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2364,7 +2457,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C multiple-await async task frame compiles and runs', async t => {
+test('generated C multiple-await async task frame compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2377,7 +2470,8 @@ test('generated C multiple-await async task frame compiles and runs', async t =>
   const output = join(dir, 'async-task-frame-multi-await')
 
   try {
-    const result = compileSource(`async function addTwo(input: number, delta: number): Promise<number> {
+    const result = compileSource(
+      `async function addTwo(input: number, delta: number): Promise<number> {
   const first = await Promise.resolve(input)
   const second = await Promise.resolve(first + delta)
 
@@ -2389,9 +2483,11 @@ export async function main(): Promise<void> {
   const promise = addTwo(5, 6)
   console.log(await promise)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2411,7 +2507,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame awaits local async tasks and plain Promise helpers', async t => {
+test('generated C async task frame awaits local async tasks and plain Promise helpers', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2424,7 +2520,8 @@ test('generated C async task frame awaits local async tasks and plain Promise he
   const output = join(dir, 'async-task-frame-promise-sources')
 
   try {
-    const result = compileSource(`async function immediate(input: number): Promise<number> {
+    const result = compileSource(
+      `async function immediate(input: number): Promise<number> {
   return input
 }
 
@@ -2452,9 +2549,11 @@ export async function main(): Promise<void> {
   const promise = compute(5)
   console.log(await promise)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2474,7 +2573,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame awaits managed immediate async helpers', async t => {
+test('generated C async task frame awaits managed immediate async helpers', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2490,7 +2589,8 @@ test('generated C async task frame awaits managed immediate async helpers', asyn
   try {
     await writeFile(input, Buffer.from([7, 8, 9]))
 
-    const result = compileSource(`async function sameText(input: string): Promise<string> {
+    const result = compileSource(
+      `async function sameText(input: string): Promise<string> {
   return input
 }
 
@@ -2509,9 +2609,11 @@ async function copyText(input: string, path: string): Promise<string> {
 export async function main(): Promise<void> {
   console.log(await copyText('managed', ${JSON.stringify(input)}))
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2531,7 +2633,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame rejected awaits reject returned promises', async t => {
+test('generated C async task frame rejected awaits reject returned promises', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2544,7 +2646,8 @@ test('generated C async task frame rejected awaits reject returned promises', as
   const output = join(dir, 'async-task-frame-reject')
 
   try {
-    const result = compileSource(`function failNumber(): Promise<number> {
+    const result = compileSource(
+      `function failNumber(): Promise<number> {
   return Promise.reject('task fail')
 }
 
@@ -2574,9 +2677,11 @@ export async function main(): Promise<void> {
     console.log(error)
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2596,7 +2701,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame try catch finally around awaited promises', async t => {
+test('generated C async task frame try catch finally around awaited promises', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2609,7 +2714,8 @@ test('generated C async task frame try catch finally around awaited promises', a
   const output = join(dir, 'async-task-frame-try')
 
   try {
-    const result = compileSource(`async function recover(): Promise<number> {
+    const result = compileSource(
+      `async function recover(): Promise<number> {
   try {
     const value: number = await Promise.reject('inner fail')
 
@@ -2642,9 +2748,11 @@ export async function main(): Promise<void> {
     console.log('outer', error)
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2664,7 +2772,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame string prefix locals compile and run', async t => {
+test('generated C async task frame string prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2677,7 +2785,8 @@ test('generated C async task frame string prefix locals compile and run', async 
   const output = join(dir, 'async-task-frame-prefix-string')
 
   try {
-    const result = compileSource(`async function work(count: number): Promise<string> {
+    const result = compileSource(
+      `async function work(count: number): Promise<string> {
   try {
     const prefix: string = String(count)
     try {
@@ -2711,9 +2820,11 @@ export async function main(): Promise<void> {
   console.log(await work(4))
   console.log(await literal())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2733,7 +2844,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame array prefix locals compile and run', async t => {
+test('generated C async task frame array prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2746,7 +2857,8 @@ test('generated C async task frame array prefix locals compile and run', async t
   const output = join(dir, 'async-task-frame-prefix-array')
 
   try {
-    const result = compileSource(`async function work(): Promise<Array<number>> {
+    const result = compileSource(
+      `async function work(): Promise<Array<number>> {
   try {
     const prefix: number[] = [2, 4]
     try {
@@ -2765,9 +2877,11 @@ export async function main(): Promise<void> {
   const result: number[] = await work()
   console.log(result[0], result[1])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2787,7 +2901,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame bytes prefix locals compile and run', async t => {
+test('generated C async task frame bytes prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2800,7 +2914,8 @@ test('generated C async task frame bytes prefix locals compile and run', async t
   const output = join(dir, 'async-task-frame-prefix-bytes')
 
   try {
-    const result = compileSource(`async function work(): Promise<Buffer> {
+    const result = compileSource(
+      `async function work(): Promise<Buffer> {
   try {
     const prefix: Buffer = Buffer.from('abc', 'utf8')
     try {
@@ -2820,9 +2935,11 @@ export async function main(): Promise<void> {
   const text = result.toString()
   console.log(result[0], result[1], text)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2842,7 +2959,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame inner body prefix locals compile and run', async t => {
+test('generated C async task frame inner body prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2855,7 +2972,8 @@ test('generated C async task frame inner body prefix locals compile and run', as
   const output = join(dir, 'async-task-frame-inner-prefix-local')
 
   try {
-    const result = compileSource(`async function work(): Promise<Buffer> {
+    const result = compileSource(
+      `async function work(): Promise<Buffer> {
   try {
     try {
       const prefix: Buffer = Buffer.from('ok', 'utf8')
@@ -2874,9 +2992,11 @@ export async function main(): Promise<void> {
   const result: Buffer = await work()
   console.log(result.length, result.toString())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2896,7 +3016,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame post await inner managed locals compile and run', async t => {
+test('generated C async task frame post await inner managed locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2909,7 +3029,8 @@ test('generated C async task frame post await inner managed locals compile and r
   const output = join(dir, 'async-task-frame-inner-managed-local')
 
   try {
-    const result = compileSource(`async function work(): Promise<Buffer> {
+    const result = compileSource(
+      `async function work(): Promise<Buffer> {
   try {
     try {
       const value: number = await Promise.resolve(3)
@@ -2928,9 +3049,11 @@ export async function main(): Promise<void> {
   const result: Buffer = await work()
   console.log(result.toString())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -2950,7 +3073,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame post await inner scalar locals compile and run', async t => {
+test('generated C async task frame post await inner scalar locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -2963,7 +3086,8 @@ test('generated C async task frame post await inner scalar locals compile and ru
   const output = join(dir, 'async-task-frame-inner-scalar-local')
 
   try {
-    const result = compileSource(`async function work(): Promise<number> {
+    const result = compileSource(
+      `async function work(): Promise<number> {
   try {
     try {
       const value: number = await Promise.resolve(3)
@@ -2981,9 +3105,11 @@ test('generated C async task frame post await inner scalar locals compile and ru
 export async function main(): Promise<void> {
   console.log(await work())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3003,7 +3129,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame post await locals before post-nested returns compile and run', async t => {
+test('generated C async task frame post await locals before post-nested returns compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3016,7 +3142,8 @@ test('generated C async task frame post await locals before post-nested returns 
   const output = join(dir, 'async-task-frame-inner-local-before-post-return')
 
   try {
-    const result = compileSource(`async function work(): Promise<number> {
+    const result = compileSource(
+      `async function work(): Promise<number> {
   try {
     try {
       const value: number = await Promise.resolve(3)
@@ -3035,9 +3162,11 @@ test('generated C async task frame post await locals before post-nested returns 
 export async function main(): Promise<void> {
   console.log(await work())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3057,7 +3186,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame post await managed locals before post-nested returns compile and run', async t => {
+test('generated C async task frame post await managed locals before post-nested returns compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3070,7 +3199,8 @@ test('generated C async task frame post await managed locals before post-nested 
   const output = join(dir, 'async-task-frame-inner-managed-local-before-post-return')
 
   try {
-    const result = compileSource(`async function work(): Promise<number> {
+    const result = compileSource(
+      `async function work(): Promise<number> {
   try {
     try {
       const value: number = await Promise.resolve(3)
@@ -3089,9 +3219,11 @@ test('generated C async task frame post await managed locals before post-nested 
 export async function main(): Promise<void> {
   console.log(await work())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3111,7 +3243,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame object prefix locals compile and run', async t => {
+test('generated C async task frame object prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3124,7 +3256,8 @@ test('generated C async task frame object prefix locals compile and run', async 
   const output = join(dir, 'async-task-frame-prefix-object')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string,
   score: number
 }
@@ -3148,9 +3281,11 @@ export async function main(): Promise<void> {
   const result: User = await work()
   console.log(result.name, result.score)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3170,7 +3305,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame Map prefix locals compile and run', async t => {
+test('generated C async task frame Map prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3183,7 +3318,8 @@ test('generated C async task frame Map prefix locals compile and run', async t =
   const output = join(dir, 'async-task-frame-prefix-map')
 
   try {
-    const result = compileSource(`async function work(): Promise<Map<string, number>> {
+    const result = compileSource(
+      `async function work(): Promise<Map<string, number>> {
   try {
     const prefix: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
     try {
@@ -3202,9 +3338,11 @@ export async function main(): Promise<void> {
   const result: Map<string, number> = await work()
   console.log(result.get('Grace') ?? 0, result.size)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3224,7 +3362,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame Set prefix locals compile and run', async t => {
+test('generated C async task frame Set prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3237,7 +3375,8 @@ test('generated C async task frame Set prefix locals compile and run', async t =
   const output = join(dir, 'async-task-frame-prefix-set')
 
   try {
-    const result = compileSource(`async function work(): Promise<Set<string>> {
+    const result = compileSource(
+      `async function work(): Promise<Set<string>> {
   try {
     const prefix: Set<string> = new Set(['Ada', 'Grace'])
     try {
@@ -3256,9 +3395,11 @@ export async function main(): Promise<void> {
   const result: Set<string> = await work()
   console.log(result.has('Grace'), result.size)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3278,7 +3419,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame post try managed locals compile and run', async t => {
+test('generated C async task frame post try managed locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3291,7 +3432,8 @@ test('generated C async task frame post try managed locals compile and run', asy
   const output = join(dir, 'async-task-frame-post-managed-local')
 
   try {
-    const result = compileSource(`async function work(): Promise<Buffer> {
+    const result = compileSource(
+      `async function work(): Promise<Buffer> {
   try {
     try {
       const value: number = await Promise.resolve(3)
@@ -3310,9 +3452,11 @@ export async function main(): Promise<void> {
   const result: Buffer = await work()
   console.log(result.toString())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3332,7 +3476,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame catch managed locals compile and run', async t => {
+test('generated C async task frame catch managed locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3345,7 +3489,8 @@ test('generated C async task frame catch managed locals compile and run', async 
   const output = join(dir, 'async-task-frame-catch-managed-local')
 
   try {
-    const result = compileSource(`async function work(): Promise<Buffer> {
+    const result = compileSource(
+      `async function work(): Promise<Buffer> {
   try {
     try {
       const value: Buffer = await Promise.reject('inner')
@@ -3367,9 +3512,11 @@ export async function main(): Promise<void> {
   const result: Buffer = await work()
   console.log(result.toString())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3389,7 +3536,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frame catch direct managed returns compile and run', async t => {
+test('generated C async task frame catch direct managed returns compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3402,7 +3549,8 @@ test('generated C async task frame catch direct managed returns compile and run'
   const output = join(dir, 'async-task-frame-catch-direct-managed-return')
 
   try {
-    const result = compileSource(`async function work(): Promise<Buffer> {
+    const result = compileSource(
+      `async function work(): Promise<Buffer> {
   try {
     try {
       const value: Buffer = await Promise.reject('inner')
@@ -3422,9 +3570,11 @@ export async function main(): Promise<void> {
   const result: Buffer = await work()
   console.log(result.toString())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3444,7 +3594,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C nested async finalizer throw fallback compiles and runs', async t => {
+test('generated C nested async finalizer throw fallback compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3457,7 +3607,8 @@ test('generated C nested async finalizer throw fallback compiles and runs', asyn
   const output = join(dir, 'async-finalizer-throw-fallback')
 
   try {
-    const result = compileSource(`async function work(): Promise<number> {
+    const result = compileSource(
+      `async function work(): Promise<number> {
   try {
     try {
       const value: number = await Promise.resolve(1)
@@ -3475,9 +3626,11 @@ export async function main(): Promise<void> {
   const promise = work()
   console.log(await promise)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3497,7 +3650,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C async task frames await fs promises with runtime sources', async t => {
+test('generated C async task frames await fs promises with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3522,7 +3675,8 @@ test('generated C async task frames await fs promises with runtime sources', asy
     await writeFile(join(entriesDir, 'one.txt'), '')
     await writeFile(join(entriesDir, 'two.txt'), '')
 
-    const result = compileSource(`async function copyText(input: string, output: string): Promise<string> {
+    const result = compileSource(
+      `async function copyText(input: string, output: string): Promise<string> {
   const text = await fs.readFile(input, 'utf8')
   await fs.writeFile(output, text)
 
@@ -3548,9 +3702,11 @@ export async function main(): Promise<void> {
   await listEntries(${JSON.stringify(entriesDir)})
   console.log('listed')
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3572,7 +3728,7 @@ export async function main(): Promise<void> {
   }
 })
 
-test('generated C object literal lowering compiles and runs with runtime sources', async t => {
+test('generated C object literal lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3585,13 +3741,16 @@ test('generated C object literal lowering compiles and runs with runtime sources
   const output = join(dir, 'object-literal')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { name: 'Ada', score: 42 }
   console.log('ok')
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3611,7 +3770,7 @@ test('generated C object literal lowering compiles and runs with runtime sources
   }
 })
 
-test('generated C early return runs through cleanup label with runtime sources', async t => {
+test('generated C early return runs through cleanup label with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3624,14 +3783,17 @@ test('generated C early return runs through cleanup label with runtime sources',
   const output = join(dir, 'early-return-cleanup')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { name: 'Ada' }
   return
   console.log('unreachable')
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3651,7 +3813,7 @@ test('generated C early return runs through cleanup label with runtime sources',
   }
 })
 
-test('generated C top-level wrapper cleanup compiles and runs with runtime sources', async t => {
+test('generated C top-level wrapper cleanup compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3664,11 +3826,14 @@ test('generated C top-level wrapper cleanup compiles and runs with runtime sourc
   const output = join(dir, 'wrapper-cleanup')
 
   try {
-    const result = compileSource(`const user = { name: 'Ada' }
+    const result = compileSource(
+      `const user = { name: 'Ada' }
 console.log('ok')
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3688,7 +3853,7 @@ console.log('ok')
   }
 })
 
-test('generated C number return cleanup compiles and runs with runtime sources', async t => {
+test('generated C number return cleanup compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3701,7 +3866,8 @@ test('generated C number return cleanup compiles and runs with runtime sources',
   const output = join(dir, 'number-return-cleanup')
 
   try {
-    const result = compileSource(`function getScore(): number {
+    const result = compileSource(
+      `function getScore(): number {
   const user = { score: 42 }
   const score = user.score
   return score
@@ -3710,9 +3876,11 @@ test('generated C number return cleanup compiles and runs with runtime sources',
 export function main(): void {
   console.log(getScore())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3732,7 +3900,7 @@ export function main(): void {
   }
 })
 
-test('generated C prepared for clauses compile and run with runtime sources', async t => {
+test('generated C prepared for clauses compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3745,7 +3913,8 @@ test('generated C prepared for clauses compile and run with runtime sources', as
   const output = join(dir, 'for-prepared')
 
   try {
-    const result = compileSource(`function start(label: string): number {
+    const result = compileSource(
+      `function start(label: string): number {
   return 0
 }
 
@@ -3766,9 +3935,11 @@ export function main(): void {
 
   console.log(total)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3788,7 +3959,7 @@ export function main(): void {
   }
 })
 
-test('generated C continue statements compile and run with runtime sources', async t => {
+test('generated C continue statements compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3801,7 +3972,8 @@ test('generated C continue statements compile and run with runtime sources', asy
   const output = join(dir, 'continue')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   let total = 0
 
   for (let index = 0; index < 5; index = index + 1) {
@@ -3814,9 +3986,11 @@ test('generated C continue statements compile and run with runtime sources', asy
 
   console.log(total)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3836,7 +4010,7 @@ test('generated C continue statements compile and run with runtime sources', asy
   }
 })
 
-test('generated C string-returning for initializer compiles and runs with runtime sources', async t => {
+test('generated C string-returning for initializer compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3849,7 +4023,8 @@ test('generated C string-returning for initializer compiles and runs with runtim
   const output = join(dir, 'for-string-init')
 
   try {
-    const result = compileSource(`function getName(): string {
+    const result = compileSource(
+      `function getName(): string {
   return 'Ada'
 }
 
@@ -3860,9 +4035,11 @@ export function main(): void {
     console.log(name)
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3882,7 +4059,7 @@ export function main(): void {
   }
 })
 
-test('generated C prepared conditions compile and run with runtime sources', async t => {
+test('generated C prepared conditions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3895,7 +4072,8 @@ test('generated C prepared conditions compile and run with runtime sources', asy
   const output = join(dir, 'prepared-conditions')
 
   try {
-    const result = compileSource(`function isReady(label: string): boolean {
+    const result = compileSource(
+      `function isReady(label: string): boolean {
   return true
 }
 
@@ -3928,9 +4106,11 @@ export function main(): void {
 
   console.log(index)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3950,7 +4130,7 @@ export function main(): void {
   }
 })
 
-test('generated C prepared scalar assignment compiles and runs with runtime sources', async t => {
+test('generated C prepared scalar assignment compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -3963,7 +4143,8 @@ test('generated C prepared scalar assignment compiles and runs with runtime sour
   const output = join(dir, 'prepared-assignment')
 
   try {
-    const result = compileSource(`function nextIndex(index: number, label: string): number {
+    const result = compileSource(
+      `function nextIndex(index: number, label: string): number {
   return index + 1
 }
 
@@ -3972,9 +4153,11 @@ export function main(): void {
   index = nextIndex(index, 'step')
   console.log(index)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -3994,7 +4177,7 @@ export function main(): void {
   }
 })
 
-test('generated C named callback values compile and run with runtime sources', async t => {
+test('generated C named callback values compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4007,7 +4190,8 @@ test('generated C named callback values compile and run with runtime sources', a
   const output = join(dir, 'callback')
 
   try {
-    const result = compileSource(`function run(callback: Function): void {
+    const result = compileSource(
+      `function run(callback: Function): void {
   callback()
 }
 
@@ -4019,9 +4203,11 @@ export function main(): void {
   const callback: Function = hello
   run(callback)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4041,7 +4227,7 @@ export function main(): void {
   }
 })
 
-test('generated C non-capturing inline callback values compile and run with runtime sources', async t => {
+test('generated C non-capturing inline callback values compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4054,7 +4240,8 @@ test('generated C non-capturing inline callback values compile and run with runt
   const output = join(dir, 'inline-pointer-callback')
 
   try {
-    const result = compileSource(`function run(callback: Function): void {
+    const result = compileSource(
+      `function run(callback: Function): void {
   callback()
 }
 
@@ -4063,9 +4250,11 @@ export function main(): void {
     console.log('inline')
   })
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4085,7 +4274,7 @@ export function main(): void {
   }
 })
 
-test('generated C capturing plain callback arguments compile and run with runtime sources', async t => {
+test('generated C capturing plain callback arguments compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4098,7 +4287,8 @@ test('generated C capturing plain callback arguments compile and run with runtim
   const output = join(dir, 'capturing-plain-callback')
 
   try {
-    const result = compileSource(`type NumberCallback = (value: number) => void;
+    const result = compileSource(
+      `type NumberCallback = (value: number) => void;
 
 function runPlain(callback: Function): void {
   callback()
@@ -4118,9 +4308,11 @@ export function main(): void {
     console.log(value + offset)
   })
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4140,7 +4332,7 @@ export function main(): void {
   }
 })
 
-test('generated C captured callback variables compile and run with runtime sources', async t => {
+test('generated C captured callback variables compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4153,7 +4345,8 @@ test('generated C captured callback variables compile and run with runtime sourc
   const output = join(dir, 'captured-callback-variable')
 
   try {
-    const result = compileSource(`type NumberCallback = (value: number) => void;
+    const result = compileSource(
+      `type NumberCallback = (value: number) => void;
 
 function run(callback: Function): void {
   callback()
@@ -4176,9 +4369,11 @@ export function main(): void {
   run(callback)
   runNumber(numberCallback)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4198,7 +4393,7 @@ export function main(): void {
   }
 })
 
-test('generated C mutable numeric callback captures compile and run with runtime sources', async t => {
+test('generated C mutable numeric callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4211,7 +4406,8 @@ test('generated C mutable numeric callback captures compile and run with runtime
   const output = join(dir, 'mutable-callback-capture')
 
   try {
-    const result = compileSource(`function run(callback: Function): void {
+    const result = compileSource(
+      `function run(callback: Function): void {
   callback()
 }
 
@@ -4224,9 +4420,11 @@ export function main(): void {
   run(callback)
   console.log(count)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4246,7 +4444,7 @@ export function main(): void {
   }
 })
 
-test('generated C mutable numeric callback parameter captures compile and run with runtime sources', async t => {
+test('generated C mutable numeric callback parameter captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4259,7 +4457,8 @@ test('generated C mutable numeric callback parameter captures compile and run wi
   const output = join(dir, 'mutable-callback-param')
 
   try {
-    const result = compileSource(`function run(seed: number): void {
+    const result = compileSource(
+      `function run(seed: number): void {
   const callback: Function = () => {
     seed = seed + 1
     console.log(seed)
@@ -4271,9 +4470,11 @@ test('generated C mutable numeric callback parameter captures compile and run wi
 export function main(): void {
   run(1)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4293,7 +4494,7 @@ export function main(): void {
   }
 })
 
-test('generated C mutable string callback captures compile and run with runtime sources', async t => {
+test('generated C mutable string callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4306,7 +4507,8 @@ test('generated C mutable string callback captures compile and run with runtime 
   const output = join(dir, 'mutable-string-callback')
 
   try {
-    const result = compileSource(`function run(callback: Function): void {
+    const result = compileSource(
+      `function run(callback: Function): void {
   callback()
 }
 
@@ -4319,9 +4521,11 @@ export function main(): void {
   run(callback)
   console.log(label)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4341,7 +4545,7 @@ export function main(): void {
   }
 })
 
-test('generated C mutable object callback captures compile and run with runtime sources', async t => {
+test('generated C mutable object callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4354,7 +4558,8 @@ test('generated C mutable object callback captures compile and run with runtime 
   const output = join(dir, 'mutable-object-callback')
 
   try {
-    const result = compileSource(`type Person = {
+    const result = compileSource(
+      `type Person = {
   name: string
 }
 
@@ -4371,9 +4576,11 @@ export function main(): void {
   run(callback)
   console.log(person.name)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4393,7 +4600,7 @@ export function main(): void {
   }
 })
 
-test('generated C typed callback aliases compile and run with runtime sources', async t => {
+test('generated C typed callback aliases compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4406,7 +4613,8 @@ test('generated C typed callback aliases compile and run with runtime sources', 
   const output = join(dir, 'typed-callback')
 
   try {
-    const result = compileSource(`type NumberCallback = (value: number) => void;
+    const result = compileSource(
+      `type NumberCallback = (value: number) => void;
 
 function run(callback: NumberCallback): void {
   callback(7)
@@ -4420,9 +4628,11 @@ export function main(): void {
   const callback: NumberCallback = hello
   run(callback)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4442,7 +4652,7 @@ export function main(): void {
   }
 })
 
-test('generated C string callback aliases compile and run with runtime sources', async t => {
+test('generated C string callback aliases compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4455,7 +4665,8 @@ test('generated C string callback aliases compile and run with runtime sources',
   const output = join(dir, 'string-callback')
 
   try {
-    const result = compileSource(`type StringCallback = (value: string) => void;
+    const result = compileSource(
+      `type StringCallback = (value: string) => void;
 
 function run(callback: StringCallback): void {
   callback('typed')
@@ -4469,9 +4680,11 @@ export function main(): void {
   const callback: StringCallback = hello
   run(callback)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4491,7 +4704,7 @@ export function main(): void {
   }
 })
 
-test('generated C object callback aliases compile and run with runtime sources', async t => {
+test('generated C object callback aliases compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4504,7 +4717,8 @@ test('generated C object callback aliases compile and run with runtime sources',
   const output = join(dir, 'object-callback')
 
   try {
-    const result = compileSource(`type Person = {
+    const result = compileSource(
+      `type Person = {
   name: string
 };
 
@@ -4525,9 +4739,11 @@ export function main(): void {
   const callback: PersonCallback = hello
   run(callback, person)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4547,7 +4763,7 @@ export function main(): void {
   }
 })
 
-test('generated C capturing runtime callback arrows compile and run with runtime sources', async t => {
+test('generated C capturing runtime callback arrows compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4560,7 +4776,8 @@ test('generated C capturing runtime callback arrows compile and run with runtime
   const output = join(dir, 'capturing-callback')
 
   try {
-    const result = compileSource(`type StringCallback = (value: string) => void;
+    const result = compileSource(
+      `type StringCallback = (value: string) => void;
 
 function run(callback: StringCallback): void {
   callback('Ada')
@@ -4573,9 +4790,11 @@ export function main(): void {
   }
   run(callback)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4595,7 +4814,7 @@ export function main(): void {
   }
 })
 
-test('generated C inline runtime callback arguments compile and run with runtime sources', async t => {
+test('generated C inline runtime callback arguments compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4608,7 +4827,8 @@ test('generated C inline runtime callback arguments compile and run with runtime
   const output = join(dir, 'inline-callback')
 
   try {
-    const result = compileSource(`type StringCallback = (value: string) => void;
+    const result = compileSource(
+      `type StringCallback = (value: string) => void;
 
 function run(callback: StringCallback): void {
   callback('direct')
@@ -4620,9 +4840,11 @@ export function main(): void {
     console.log(prefix, value)
   })
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4642,7 +4864,7 @@ export function main(): void {
   }
 })
 
-test('generated C retained runtime callback captures compile and run with runtime sources', async t => {
+test('generated C retained runtime callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4655,7 +4877,8 @@ test('generated C retained runtime callback captures compile and run with runtim
   const output = join(dir, 'retained-callback')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -4673,9 +4896,11 @@ export function main(): void {
   }
   run(callback)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4695,7 +4920,7 @@ export function main(): void {
   }
 })
 
-test('generated C string equality comparisons compile and run with runtime sources', async t => {
+test('generated C string equality comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4708,7 +4933,8 @@ test('generated C string equality comparisons compile and run with runtime sourc
   const output = join(dir, 'string-equality')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -4725,9 +4951,11 @@ export function main(): void {
   const differentCall = getName() !== values[1]
   console.log(sameLocal, sameRuntime, differentCall)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4747,7 +4975,7 @@ export function main(): void {
   }
 })
 
-test('generated C string concatenation compiles and runs with runtime sources', async t => {
+test('generated C string concatenation compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4760,7 +4988,8 @@ test('generated C string concatenation compiles and runs with runtime sources', 
   const output = join(dir, 'string-concat')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -4774,9 +5003,11 @@ export function main(): void {
   const message = name + ' ' + getName() + '!'
   console.log(message)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4796,7 +5027,7 @@ export function main(): void {
   }
 })
 
-test('generated C string length compiles and runs with runtime sources', async t => {
+test('generated C string length compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4809,7 +5040,8 @@ test('generated C string length compiles and runs with runtime sources', async t
   const output = join(dir, 'string-length')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -4828,9 +5060,11 @@ export function main(): void {
   const unicode = 'A😀é'
   console.log('Ada'.length, length(name), user.name.length, getName().length, message.length, unicode.length)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4850,7 +5084,7 @@ export function main(): void {
   }
 })
 
-test('generated C string predicate methods compile and run with runtime sources', async t => {
+test('generated C string predicate methods compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4863,7 +5097,8 @@ test('generated C string predicate methods compile and run with runtime sources'
   const output = join(dir, 'string-predicates')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -4881,9 +5116,11 @@ export function main(): void {
   const message = name + '!'
   console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getName().endsWith('e'), message.endsWith('!'), name.includes('z'))
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4903,7 +5140,7 @@ export function main(): void {
   }
 })
 
-test('generated C string slice compiles and runs with runtime sources', async t => {
+test('generated C string slice compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4916,7 +5153,8 @@ test('generated C string slice compiles and runs with runtime sources', async t 
   const output = join(dir, 'string-slice')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -4935,9 +5173,11 @@ export function main(): void {
   const unicode = 'A😀é'
   console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99), unicode.slice(1, 2), unicode.slice(2), name.slice(-2), name.slice(-99, 2), unicode.slice(-2, -1))
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -4957,7 +5197,7 @@ export function main(): void {
   }
 })
 
-test('generated C string split compiles and runs with runtime sources', async t => {
+test('generated C string split compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -4970,7 +5210,8 @@ test('generated C string split compiles and runs with runtime sources', async t 
   const output = join(dir, 'string-split')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   names: string
 }
 
@@ -4980,9 +5221,11 @@ export function main(): void {
   const initials = user.names.split(',').map(name => name.slice(0, 1)).sort()
   console.log(names[0], names[1], initials[0], initials[1], 'abc'.split('')[1], 'A😀é'.split('')[1])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5002,7 +5245,7 @@ export function main(): void {
   }
 })
 
-test('generated C string trim compiles and runs with runtime sources', async t => {
+test('generated C string trim compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5015,7 +5258,8 @@ test('generated C string trim compiles and runs with runtime sources', async t =
   const output = join(dir, 'string-trim')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -5035,9 +5279,11 @@ export function main(): void {
   const historicMongolianVowelSeparator = '\u180eAda\u180e'.trim() === '\u180eAda\u180e'
   console.log(' Ada '.trim(), clean(name), user.name.trim(), getName().trim(), message.trim(), unicode.trim(), historicMongolianVowelSeparator)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5057,7 +5303,7 @@ export function main(): void {
   }
 })
 
-test('generated C String conversion compiles and runs with runtime sources', async t => {
+test('generated C String conversion compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5070,7 +5316,8 @@ test('generated C String conversion compiles and runs with runtime sources', asy
   const output = join(dir, 'string-conversion')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -5088,9 +5335,11 @@ export function main(): void {
   const local = 'Ada'
   console.log(String('Ada'), String(local), String(name), label(42), flag(true), String(false), String(null), String(name).length)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5110,7 +5359,7 @@ export function main(): void {
   }
 })
 
-test('generated C Number conversion compiles and runs with runtime sources', async t => {
+test('generated C Number conversion compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5123,16 +5372,19 @@ test('generated C Number conversion compiles and runs with runtime sources', asy
   const output = join(dir, 'number-conversion')
 
   try {
-    const result = compileSource(`function parse(text: string): number | null {
+    const result = compileSource(
+      `function parse(text: string): number | null {
   return Number(text)
 }
 
 export function main(): void {
   console.log(Number('') ?? 9, Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('nope') ?? 7, Number('1x') ?? 8, parse('-3.25') ?? 0, Number('1e309') ?? 0, Number('-Infinity') ?? 0, Number('\u00a0+.5e2\u3000') ?? 0, Number('\ufeff') ?? 9, Number('\u180e') ?? 6)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5152,7 +5404,7 @@ export function main(): void {
   }
 })
 
-test('generated C numeric casts compile and run with runtime sources', async t => {
+test('generated C numeric casts compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5165,7 +5417,8 @@ test('generated C numeric casts compile and run with runtime sources', async t =
   const output = join(dir, 'numeric-casts')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const signedValue = i32(3.9)
   const negative = i32(-3.9)
   const unsignedValue = u32(-0.5)
@@ -5174,9 +5427,11 @@ test('generated C numeric casts compile and run with runtime sources', async t =
   const preserved = f64(1.25) === 1.25
   console.log(signedValue, negative, unsignedValue, wide, rounded, preserved)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5196,7 +5451,7 @@ test('generated C numeric casts compile and run with runtime sources', async t =
   }
 })
 
-test('generated C Math.random os backend compiles and runs with runtime sources', async t => {
+test('generated C Math.random os backend compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5209,16 +5464,19 @@ test('generated C Math.random os backend compiles and runs with runtime sources'
   const output = join(dir, 'random-os')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const value = Math.random()
   console.log(value >= 0, value < 1)
 }
-`, {
-      target: 'c',
-      random: {
-        backend: 'os'
+`,
+      {
+        target: 'c',
+        random: {
+          backend: 'os'
+        }
       }
-    })
+    )
 
     await writeFile(source, result.code)
 
@@ -5238,7 +5496,7 @@ test('generated C Math.random os backend compiles and runs with runtime sources'
   }
 })
 
-test('generated C time globals compile and run with runtime sources', async t => {
+test('generated C time globals compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5251,14 +5509,17 @@ test('generated C time globals compile and run with runtime sources', async t =>
   const output = join(dir, 'time-globals')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const started = Date.now()
   const elapsed = performance.now()
   console.log(started >= 0, elapsed >= 0)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5278,7 +5539,7 @@ test('generated C time globals compile and run with runtime sources', async t =>
   }
 })
 
-test('generated C array literal lowering compiles and runs with runtime sources', async t => {
+test('generated C array literal lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5291,13 +5552,16 @@ test('generated C array literal lowering compiles and runs with runtime sources'
   const output = join(dir, 'array-literal')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [1, 2, 3]
   console.log('ok')
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5317,7 +5581,7 @@ test('generated C array literal lowering compiles and runs with runtime sources'
   }
 })
 
-test('generated C Array.push statements compile and run with runtime sources', async t => {
+test('generated C Array.push statements compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5330,7 +5594,8 @@ test('generated C Array.push statements compile and run with runtime sources', a
   const output = join(dir, 'array-push')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values: number[] = [1, 2]
   values.push(3)
   values.push(4)
@@ -5340,9 +5605,11 @@ test('generated C Array.push statements compile and run with runtime sources', a
   names.push('Grace')
   console.log(names.length, names[1])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5362,7 +5629,7 @@ test('generated C Array.push statements compile and run with runtime sources', a
   }
 })
 
-test('generated C Array.pop expressions compile and run with runtime sources', async t => {
+test('generated C Array.pop expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5375,7 +5642,8 @@ test('generated C Array.pop expressions compile and run with runtime sources', a
   const output = join(dir, 'array-pop')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values: number[] = [1, 2]
   const last = values.pop() ?? 0
   console.log(values.length, last)
@@ -5388,9 +5656,11 @@ test('generated C Array.pop expressions compile and run with runtime sources', a
   const none = names.pop() ?? 'empty'
   console.log(names.length, name, none)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5410,7 +5680,7 @@ test('generated C Array.pop expressions compile and run with runtime sources', a
   }
 })
 
-test('generated C Array.sort without comparator compiles and runs with runtime sources', async t => {
+test('generated C Array.sort without comparator compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5423,7 +5693,8 @@ test('generated C Array.sort without comparator compiles and runs with runtime s
   const output = join(dir, 'array-sort')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [10, 2, 1]
   const sorted = values.sort()
   console.log(sorted[0], sorted[1], sorted[2])
@@ -5432,9 +5703,11 @@ test('generated C Array.sort without comparator compiles and runs with runtime s
   names.sort()
   console.log(names[0], names[1])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5454,7 +5727,7 @@ test('generated C Array.sort without comparator compiles and runs with runtime s
   }
 })
 
-test('generated C Array.sort comparator callbacks compile and run with runtime sources', async t => {
+test('generated C Array.sort comparator callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5467,7 +5740,8 @@ test('generated C Array.sort comparator callbacks compile and run with runtime s
   const output = join(dir, 'array-sort-callback')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [3, 1, 2]
   values.sort((left, right) => left - right)
   console.log(values[0], values[1], values[2])
@@ -5491,9 +5765,11 @@ test('generated C Array.sort comparator callbacks compile and run with runtime s
   const chained = [5, 1, 4, 2].filter(value => value > 1).sort((left, right) => left - right).map(value => value * 10)
   console.log(chained.length, chained[0], chained[1], chained[2])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5513,7 +5789,7 @@ test('generated C Array.sort comparator callbacks compile and run with runtime s
   }
 })
 
-test('generated C Array.filter expression callbacks compile and run with runtime sources', async t => {
+test('generated C Array.filter expression callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5526,7 +5802,8 @@ test('generated C Array.filter expression callbacks compile and run with runtime
   const output = join(dir, 'array-filter')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [1, 2, 3, 4]
   const middle = values.filter((value, index) => value > 1 && index < 3)
   console.log(middle.length, middle[0], middle[1])
@@ -5539,9 +5816,11 @@ test('generated C Array.filter expression callbacks compile and run with runtime
   const aNames = names.filter(name => name.startsWith('A'))
   console.log(aNames.length, aNames[0], aNames[1])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5561,7 +5840,7 @@ test('generated C Array.filter expression callbacks compile and run with runtime
   }
 })
 
-test('generated C Array.map expression callbacks compile and run with runtime sources', async t => {
+test('generated C Array.map expression callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5574,7 +5853,8 @@ test('generated C Array.map expression callbacks compile and run with runtime so
   const output = join(dir, 'array-map')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [1, 2, 3]
   const doubled = values.map((value, index) => value * 2 + index)
   console.log(doubled.length, doubled[0], doubled[1], doubled[2])
@@ -5595,9 +5875,11 @@ test('generated C Array.map expression callbacks compile and run with runtime so
   const mappedSorted = values.map(value => String(value * 10)).sort()
   console.log(mappedSorted.length, mappedSorted[0], mappedSorted[1], mappedSorted[2])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5617,7 +5899,7 @@ test('generated C Array.map expression callbacks compile and run with runtime so
   }
 })
 
-test('generated C Array block-body callbacks compile and run with runtime sources', async t => {
+test('generated C Array block-body callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5630,7 +5912,8 @@ test('generated C Array block-body callbacks compile and run with runtime source
   const output = join(dir, 'array-block-callbacks')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [3, 1, 2]
   const result = values
     .sort((left, right) => {
@@ -5677,9 +5960,11 @@ test('generated C Array block-body callbacks compile and run with runtime source
 
   console.log(initials.length, initials[0], initials[1])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5699,7 +5984,7 @@ test('generated C Array block-body callbacks compile and run with runtime source
   }
 })
 
-test('generated C Array methods over object fields compile and run with runtime sources', async t => {
+test('generated C Array methods over object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5712,7 +5997,8 @@ test('generated C Array methods over object fields compile and run with runtime 
   const output = join(dir, 'array-field-methods')
 
   try {
-    const result = compileSource(`type Box = {
+    const result = compileSource(
+      `type Box = {
   values: number[],
   names: string[]
 }
@@ -5726,9 +6012,11 @@ export function main(): void {
   console.log(last, numbers.length, numbers[0], numbers[1])
   console.log(initials.length, initials[0], initials[1])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5748,7 +6036,7 @@ export function main(): void {
   }
 })
 
-test('generated C array length lowering compiles and runs with runtime sources', async t => {
+test('generated C array length lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5761,13 +6049,16 @@ test('generated C array length lowering compiles and runs with runtime sources',
   const output = join(dir, 'array-length')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [1, 2, 3]
   console.log(values.length, [4, 5].length)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5787,7 +6078,7 @@ test('generated C array length lowering compiles and runs with runtime sources',
   }
 })
 
-test('generated C runtime array length compiles and runs with runtime sources', async t => {
+test('generated C runtime array length compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5800,7 +6091,8 @@ test('generated C runtime array length compiles and runs with runtime sources', 
   const output = join(dir, 'runtime-array-length')
 
   try {
-    const result = compileSource(`type Box = {
+    const result = compileSource(
+      `type Box = {
   values: number[]
 }
 
@@ -5808,9 +6100,11 @@ export function main(): void {
   const box: Box = { values: [1, 2, 3] }
   console.log(box.values.length)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5830,7 +6124,7 @@ export function main(): void {
   }
 })
 
-test('generated C runtime array index reads compile and run with runtime sources', async t => {
+test('generated C runtime array index reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5843,7 +6137,8 @@ test('generated C runtime array index reads compile and run with runtime sources
   const output = join(dir, 'runtime-array-index')
 
   try {
-    const result = compileSource(`type Box = {
+    const result = compileSource(
+      `type Box = {
   values: number[],
   flags: boolean[],
   names: string[]
@@ -5854,9 +6149,11 @@ export function main(): void {
   const name = box.names[0]
   console.log(box.values[1], box.flags[0], name)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5876,7 +6173,7 @@ export function main(): void {
   }
 })
 
-test('generated C runtime array locals compile and run with runtime sources', async t => {
+test('generated C runtime array locals compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5889,7 +6186,8 @@ test('generated C runtime array locals compile and run with runtime sources', as
   const output = join(dir, 'runtime-array-locals')
 
   try {
-    const result = compileSource(`type Box = {
+    const result = compileSource(
+      `type Box = {
   values: number[],
   names: string[]
 }
@@ -5900,9 +6198,11 @@ export function main(): void {
   const names = box.names
   console.log(values[1], names[0])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5922,7 +6222,7 @@ export function main(): void {
   }
 })
 
-test('generated C for of over runtime array locals compiles and runs with runtime sources', async t => {
+test('generated C for of over runtime array locals compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5935,7 +6235,8 @@ test('generated C for of over runtime array locals compiles and runs with runtim
   const output = join(dir, 'runtime-array-for-of')
 
   try {
-    const result = compileSource(`type Box = {
+    const result = compileSource(
+      `type Box = {
   values: number[],
   names: string[]
 }
@@ -5954,9 +6255,11 @@ export function main(): void {
   }
   console.log(total, letters)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -5976,7 +6279,7 @@ export function main(): void {
   }
 })
 
-test('generated C for of over runtime array expressions compiles and runs with runtime sources', async t => {
+test('generated C for of over runtime array expressions compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -5989,7 +6292,8 @@ test('generated C for of over runtime array expressions compiles and runs with r
   const output = join(dir, 'runtime-array-expression-for-of')
 
   try {
-    const result = compileSource(`type Box = {
+    const result = compileSource(
+      `type Box = {
   values: number[],
   names: string[]
 }
@@ -6006,9 +6310,11 @@ export function main(): void {
   }
   console.log(total, letters)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6028,7 +6334,7 @@ export function main(): void {
   }
 })
 
-test('generated C for of array lowering compiles and runs with runtime sources', async t => {
+test('generated C for of array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6041,7 +6347,8 @@ test('generated C for of array lowering compiles and runs with runtime sources',
   const output = join(dir, 'for-of-array')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [1, 2, 3]
   let total = 0
 
@@ -6051,9 +6358,11 @@ test('generated C for of array lowering compiles and runs with runtime sources',
 
   console.log(total)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6073,7 +6382,7 @@ test('generated C for of array lowering compiles and runs with runtime sources',
   }
 })
 
-test('generated C for of string array lowering compiles and runs with runtime sources', async t => {
+test('generated C for of string array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6086,16 +6395,19 @@ test('generated C for of string array lowering compiles and runs with runtime so
   const output = join(dir, 'for-of-string-array')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const names = ['Ada', 'Grace']
 
   for (const name of names) {
     console.log(name)
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6115,7 +6427,7 @@ test('generated C for of string array lowering compiles and runs with runtime so
   }
 })
 
-test('generated C for of Set lowering compiles and runs with runtime sources', async t => {
+test('generated C for of Set lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6128,7 +6440,8 @@ test('generated C for of Set lowering compiles and runs with runtime sources', a
   const output = join(dir, 'for-of-set')
 
   try {
-    const result = compileSource(`type Bag = {
+    const result = compileSource(
+      `type Bag = {
   names: Set<string>
 }
 
@@ -6157,9 +6470,11 @@ export function main(): void {
 
   console.log(total, letters, sawAda, sawGrace)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6179,7 +6494,7 @@ export function main(): void {
   }
 })
 
-test('generated C for of Map lowering compiles and runs with runtime sources', async t => {
+test('generated C for of Map lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6192,7 +6507,8 @@ test('generated C for of Map lowering compiles and runs with runtime sources', a
   const output = join(dir, 'for-of-map')
 
   try {
-    const result = compileSource(`type Bag = {
+    const result = compileSource(
+      `type Bag = {
   scores: Map<string, number>
 }
 
@@ -6221,9 +6537,11 @@ export function main(): void {
 
   console.log(total, letters, ada, grace, alan)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6243,7 +6561,7 @@ export function main(): void {
   }
 })
 
-test('generated C inline for of array lowering compiles and runs with runtime sources', async t => {
+test('generated C inline for of array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6256,7 +6574,8 @@ test('generated C inline for of array lowering compiles and runs with runtime so
   const output = join(dir, 'for-of-inline-array')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   let total = 0
 
   for (const value of [1, 2, 3]) {
@@ -6265,9 +6584,11 @@ test('generated C inline for of array lowering compiles and runs with runtime so
 
   console.log(total)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6287,7 +6608,7 @@ test('generated C inline for of array lowering compiles and runs with runtime so
   }
 })
 
-test('generated C inline for of string array lowering compiles and runs with runtime sources', async t => {
+test('generated C inline for of string array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6300,14 +6621,17 @@ test('generated C inline for of string array lowering compiles and runs with run
   const output = join(dir, 'for-of-inline-string-array')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   for (const name of ['Ada', 'Grace']) {
     console.log(name)
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6327,7 +6651,7 @@ test('generated C inline for of string array lowering compiles and runs with run
   }
 })
 
-test('generated C object field access lowering compiles and runs with runtime sources', async t => {
+test('generated C object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6340,15 +6664,18 @@ test('generated C object field access lowering compiles and runs with runtime so
   const output = join(dir, 'object-field')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { score: 42, active: true }
   const score = user.score
   const active = user.active
   console.log(score, active)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6368,7 +6695,7 @@ test('generated C object field access lowering compiles and runs with runtime so
   }
 })
 
-test('generated C string object field access lowering compiles and runs with runtime sources', async t => {
+test('generated C string object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6381,14 +6708,17 @@ test('generated C string object field access lowering compiles and runs with run
   const output = join(dir, 'object-string-field')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { name: 'Ada', score: 42 }
   const name = user.name
   console.log(name)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6408,7 +6738,7 @@ test('generated C string object field access lowering compiles and runs with run
   }
 })
 
-test('generated C object field assignment lowering compiles and runs with runtime sources', async t => {
+test('generated C object field assignment lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6421,7 +6751,8 @@ test('generated C object field assignment lowering compiles and runs with runtim
   const output = join(dir, 'object-field-assignment')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { score: 1, active: false, name: 'Ada' }
   user.score = 42
   user.active = true
@@ -6431,9 +6762,11 @@ test('generated C object field assignment lowering compiles and runs with runtim
   const name = user.name
   console.log(score, active, name)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6453,7 +6786,7 @@ test('generated C object field assignment lowering compiles and runs with runtim
   }
 })
 
-test('generated C string index object field reads compile and run with runtime sources', async t => {
+test('generated C string index object field reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6466,16 +6799,19 @@ test('generated C string index object field reads compile and run with runtime s
   const output = join(dir, 'object-index-field')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { score: 42, active: true, name: 'Ada' }
   const score = user['score']
   const active = user['active']
   const name = user['name']
   console.log(score, active, name)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6495,7 +6831,7 @@ test('generated C string index object field reads compile and run with runtime s
   }
 })
 
-test('generated C string index object field assignments compile and run with runtime sources', async t => {
+test('generated C string index object field assignments compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6508,7 +6844,8 @@ test('generated C string index object field assignments compile and run with run
   const output = join(dir, 'object-index-assignment')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { score: 1, active: false, name: 'Ada' }
   user['score'] = 42
   user['active'] = true
@@ -6518,9 +6855,11 @@ test('generated C string index object field assignments compile and run with run
   const name = user['name']
   console.log(score, active, name)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6540,7 +6879,7 @@ test('generated C string index object field assignments compile and run with run
   }
 })
 
-test('generated C array index access lowering compiles and runs with runtime sources', async t => {
+test('generated C array index access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6553,15 +6892,18 @@ test('generated C array index access lowering compiles and runs with runtime sou
   const output = join(dir, 'array-index')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [42, true]
   const score = values[0]
   const active = values[1]
   console.log(score, active)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6581,7 +6923,7 @@ test('generated C array index access lowering compiles and runs with runtime sou
   }
 })
 
-test('generated C array index assignment lowering compiles and runs with runtime sources', async t => {
+test('generated C array index assignment lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6594,7 +6936,8 @@ test('generated C array index assignment lowering compiles and runs with runtime
   const output = join(dir, 'array-assignment')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = [1, false]
   values[0] = 42
   values[1] = true
@@ -6602,9 +6945,11 @@ test('generated C array index assignment lowering compiles and runs with runtime
   const active = values[1]
   console.log(score, active)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6624,7 +6969,7 @@ test('generated C array index assignment lowering compiles and runs with runtime
   }
 })
 
-test('generated C string array index reads compile and run with runtime sources', async t => {
+test('generated C string array index reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6637,15 +6982,18 @@ test('generated C string array index reads compile and run with runtime sources'
   const output = join(dir, 'string-array')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const values = ['Ada']
   values[0] = 'Grace'
   const name = values[0]
   console.log(name)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6665,7 +7013,7 @@ test('generated C string array index reads compile and run with runtime sources'
   }
 })
 
-test('generated C runtime string local propagation compiles and runs with runtime sources', async t => {
+test('generated C runtime string local propagation compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6678,15 +7026,18 @@ test('generated C runtime string local propagation compiles and runs with runtim
   const output = join(dir, 'runtime-string-local')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { name: 'Ada' }
   const name = user.name
   const again = name
   console.log(again)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6706,7 +7057,7 @@ test('generated C runtime string local propagation compiles and runs with runtim
   }
 })
 
-test('generated C nullable string nullish coalescing compiles and runs with runtime sources', async t => {
+test('generated C nullable string nullish coalescing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6719,16 +7070,19 @@ test('generated C nullable string nullish coalescing compiles and runs with runt
   const output = join(dir, 'nullable-string-nullish')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   let name: string | null = null
   console.log(name ?? 'Ada', name === null)
   name = 'Grace'
   const display = name ?? 'Ada'
   console.log(display, name !== null)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6748,7 +7102,7 @@ test('generated C nullable string nullish coalescing compiles and runs with runt
   }
 })
 
-test('generated C nullable runtime optional access compiles and runs with runtime sources', async t => {
+test('generated C nullable runtime optional access compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6761,7 +7115,8 @@ test('generated C nullable runtime optional access compiles and runs with runtim
   const output = join(dir, 'nullable-optional-access')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string
 }
 
@@ -6782,9 +7137,11 @@ export function main(): void {
   const maybeScores: Map<string, number> | null = scores
   console.log(missingName, memberName, indexName, arrayName, emptyName, maybeScores !== null)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6804,7 +7161,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable scalar nullish coalescing compiles and runs with runtime sources', async t => {
+test('generated C nullable scalar nullish coalescing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6817,7 +7174,8 @@ test('generated C nullable scalar nullish coalescing compiles and runs with runt
   const output = join(dir, 'nullable-scalar-nullish')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   score: number,
   active: boolean
 }
@@ -6842,9 +7200,11 @@ export function main(): void {
   const emptyValues: number[] | null = null
   console.log(maybeValues?.[0] ?? 5, emptyValues?.[0] ?? 5)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6864,7 +7224,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable scalar function ABI compiles and runs with runtime sources', async t => {
+test('generated C nullable scalar function ABI compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6877,7 +7237,8 @@ test('generated C nullable scalar function ABI compiles and runs with runtime so
   const output = join(dir, 'nullable-scalar-abi')
 
   try {
-    const result = compileSource(`function maybeScore(seed: number): number | null {
+    const result = compileSource(
+      `function maybeScore(seed: number): number | null {
   if (seed > 0) {
     return seed + 1
   }
@@ -6906,9 +7267,11 @@ export function main(): void {
   printScore(second, active)
   printScore(7 + 1, false)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6928,7 +7291,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable scalar branch narrowing compiles and runs with runtime sources', async t => {
+test('generated C nullable scalar branch narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -6941,7 +7304,8 @@ test('generated C nullable scalar branch narrowing compiles and runs with runtim
   const output = join(dir, 'nullable-scalar-branch-narrowing')
 
   try {
-    const result = compileSource(`function printScore(score: number | null, active: boolean | null): void {
+    const result = compileSource(
+      `function printScore(score: number | null, active: boolean | null): void {
   if (score !== null) {
     console.log(score + 1)
   } else {
@@ -6966,9 +7330,11 @@ export function main(): void {
   }
   console.log(value ?? 9)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -6988,7 +7354,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable scalar logical narrowing compiles and runs with runtime sources', async t => {
+test('generated C nullable scalar logical narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7001,7 +7367,8 @@ test('generated C nullable scalar logical narrowing compiles and runs with runti
   const output = join(dir, 'nullable-scalar-logical-narrowing')
 
   try {
-    const result = compileSource(`function printScore(score: number | null, backup: number | null): void {
+    const result = compileSource(
+      `function printScore(score: number | null, backup: number | null): void {
   if (score !== null && score > 2) {
     console.log(score + 1)
   } else {
@@ -7020,9 +7387,11 @@ export function main(): void {
   printScore(null, null)
   printScore(1, 0)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7042,7 +7411,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable scalar early return narrowing compiles and runs with runtime sources', async t => {
+test('generated C nullable scalar early return narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7055,7 +7424,8 @@ test('generated C nullable scalar early return narrowing compiles and runs with 
   const output = join(dir, 'nullable-scalar-early-return-narrowing')
 
   try {
-    const result = compileSource(`function printScore(score: number | null, active: boolean | null): void {
+    const result = compileSource(
+      `function printScore(score: number | null, active: boolean | null): void {
   if (score === null) {
     console.log(0)
     return
@@ -7085,9 +7455,11 @@ export function main(): void {
   printHigh(null)
   printHigh(1)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7107,7 +7479,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable scalar loop narrowing compiles and runs with runtime sources', async t => {
+test('generated C nullable scalar loop narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7120,7 +7492,8 @@ test('generated C nullable scalar loop narrowing compiles and runs with runtime 
   const output = join(dir, 'nullable-scalar-loop-narrowing')
 
   try {
-    const result = compileSource(`function printLoop(score: number | null, active: boolean | null): void {
+    const result = compileSource(
+      `function printLoop(score: number | null, active: boolean | null): void {
   while (score !== null && score > 0) {
     console.log(score)
     score = score - 1
@@ -7136,9 +7509,11 @@ export function main(): void {
   printLoop(2, true)
   printLoop(null, null)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7158,7 +7533,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable callback optional calls compile and run with runtime sources', async t => {
+test('generated C nullable callback optional calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7171,7 +7546,8 @@ test('generated C nullable callback optional calls compile and run with runtime 
   const output = join(dir, 'nullable-callback-optional-call')
 
   try {
-    const result = compileSource(`type Named = (name: string) => void;
+    const result = compileSource(
+      `type Named = (name: string) => void;
 
 function maybeLog(callback: Function | null): void {
   callback?.()
@@ -7205,9 +7581,11 @@ export function main(): void {
   maybeNamed(named)
   maybeNamed(null)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7227,7 +7605,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable callback optional call results compile and run with runtime sources', async t => {
+test('generated C nullable callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7240,7 +7618,8 @@ test('generated C nullable callback optional call results compile and run with r
   const output = join(dir, 'nullable-callback-optional-call-result')
 
   try {
-    const result = compileSource(`type Score = (value: number) => number;
+    const result = compileSource(
+      `type Score = (value: number) => number;
 type Ready = () => boolean;
 
 function addOne(value: number): number {
@@ -7261,9 +7640,11 @@ export function main(): void {
   printValues(addOne, isReady)
   printValues(null, null)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7283,7 +7664,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable arrow callback optional call results compile and run with runtime sources', async t => {
+test('generated C nullable arrow callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7296,7 +7677,8 @@ test('generated C nullable arrow callback optional call results compile and run 
   const output = join(dir, 'nullable-arrow-callback-optional-call-result')
 
   try {
-    const result = compileSource(`type Score = (value: number) => number;
+    const result = compileSource(
+      `type Score = (value: number) => number;
 type Ready = () => boolean;
 
 function printValues(score: Score | null, ready: Ready | null): void {
@@ -7312,9 +7694,11 @@ export function main(): void {
   printValues(score, ready)
   printValues(null, null)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7334,7 +7718,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable block arrow callback optional call results compile and run with runtime sources', async t => {
+test('generated C nullable block arrow callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7347,7 +7731,8 @@ test('generated C nullable block arrow callback optional call results compile an
   const output = join(dir, 'nullable-block-arrow-callback-optional-call-result')
 
   try {
-    const result = compileSource(`type Score = (value: number) => number;
+    const result = compileSource(
+      `type Score = (value: number) => number;
 type Ready = () => boolean;
 
 function printValues(score: Score | null, ready: Ready | null): void {
@@ -7376,9 +7761,11 @@ export function main(): void {
   printValues(score, ready)
   printValues(null, null)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7398,7 +7785,7 @@ export function main(): void {
   }
 })
 
-test('generated C runtime callback returns through finally compile and run with runtime sources', async t => {
+test('generated C runtime callback returns through finally compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7411,7 +7798,8 @@ test('generated C runtime callback returns through finally compile and run with 
   const output = join(dir, 'callback-return-finally')
 
   try {
-    const result = compileSource(`type Score = (value: number) => number;
+    const result = compileSource(
+      `type Score = (value: number) => number;
 type Name = () => string;
 
 function printScore(score: Score | null): void {
@@ -7446,9 +7834,11 @@ export function main(): void {
   printScore(null)
   printName(null)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7468,7 +7858,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable string callback optional call results compile and run with runtime sources', async t => {
+test('generated C nullable string callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7481,7 +7871,8 @@ test('generated C nullable string callback optional call results compile and run
   const output = join(dir, 'nullable-string-callback-optional-call-result')
 
   try {
-    const result = compileSource(`type Name = () => string;
+    const result = compileSource(
+      `type Name = () => string;
 
 function getName(): string {
   return 'Ada'
@@ -7499,9 +7890,11 @@ export function main(): void {
   const arrow: Name | null = () => 'Grace'
   printName(arrow)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7521,7 +7914,7 @@ export function main(): void {
   }
 })
 
-test('generated C nullable object callback optional call results compile and run with runtime sources', async t => {
+test('generated C nullable object callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7534,7 +7927,8 @@ test('generated C nullable object callback optional call results compile and run
   const output = join(dir, 'nullable-object-callback-optional-call-result')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string,
   id: number
 }
@@ -7560,9 +7954,11 @@ export function main(): void {
   }
   printUser(arrow)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7582,7 +7978,7 @@ export function main(): void {
   }
 })
 
-test('generated C local string throw try catch finally compiles and runs with runtime sources', async t => {
+test('generated C local string throw try catch finally compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7595,7 +7991,8 @@ test('generated C local string throw try catch finally compiles and runs with ru
   const output = join(dir, 'try-catch-finally')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   try {
     throw 'boom'
   } catch (error) {
@@ -7604,9 +8001,11 @@ test('generated C local string throw try catch finally compiles and runs with ru
     console.log('finally')
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7626,7 +8025,7 @@ test('generated C local string throw try catch finally compiles and runs with ru
   }
 })
 
-test('generated C lightweight Error objects compile and run with runtime sources', async t => {
+test('generated C lightweight Error objects compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7639,7 +8038,8 @@ test('generated C lightweight Error objects compile and run with runtime sources
   const output = join(dir, 'error-object')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const root = new Error('root', { code: 'E_ROOT' })
   const created = new Error('created', { code: 'E_CREATED', cause: root })
   console.log(created.name, created.message, created.code)
@@ -7652,9 +8052,11 @@ test('generated C lightweight Error objects compile and run with runtime sources
     console.log('finally')
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7674,7 +8076,7 @@ test('generated C lightweight Error objects compile and run with runtime sources
   }
 })
 
-test('generated C interfunction throws compile and run with runtime sources', async t => {
+test('generated C interfunction throws compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7687,7 +8089,8 @@ test('generated C interfunction throws compile and run with runtime sources', as
   const output = join(dir, 'interfunction-throw')
 
   try {
-    const result = compileSource(`export function failString(): void {
+    const result = compileSource(
+      `export function failString(): void {
   throw 'boom'
 }
 
@@ -7724,9 +8127,11 @@ export function main(): void {
     console.log(error)
   }
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7746,7 +8151,7 @@ export function main(): void {
   }
 })
 
-test('generated C return through finally compiles and runs with runtime sources', async t => {
+test('generated C return through finally compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7759,7 +8164,8 @@ test('generated C return through finally compiles and runs with runtime sources'
   const output = join(dir, 'return-finally')
 
   try {
-    const result = compileSource(`function getScore(): number {
+    const result = compileSource(
+      `function getScore(): number {
   try {
     return 7
   } finally {
@@ -7780,9 +8186,11 @@ export function main(): void {
   console.log(getScore())
   stop()
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7802,7 +8210,7 @@ export function main(): void {
   }
 })
 
-test('generated C break and continue through finally compile and run with runtime sources', async t => {
+test('generated C break and continue through finally compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7815,7 +8223,8 @@ test('generated C break and continue through finally compile and run with runtim
   const output = join(dir, 'break-continue-finally')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   let index = 0
   while (index < 4) {
     index = index + 1
@@ -7833,9 +8242,11 @@ test('generated C break and continue through finally compile and run with runtim
   }
   console.log('done', index)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7855,7 +8266,7 @@ test('generated C break and continue through finally compile and run with runtim
   }
 })
 
-test('generated C runtime string assignment references compile and run with runtime sources', async t => {
+test('generated C runtime string assignment references compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7868,7 +8279,8 @@ test('generated C runtime string assignment references compile and run with runt
   const output = join(dir, 'runtime-string-assignment')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const source = { name: 'Ada' }
   const name = source.name
   const target = { name: 'Bob' }
@@ -7879,9 +8291,11 @@ test('generated C runtime string assignment references compile and run with runt
   const arrayName = values[0]
   console.log(objectName, arrayName)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7901,7 +8315,7 @@ test('generated C runtime string assignment references compile and run with runt
   }
 })
 
-test('generated C string-returning assignment calls compile and run with runtime sources', async t => {
+test('generated C string-returning assignment calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7914,7 +8328,8 @@ test('generated C string-returning assignment calls compile and run with runtime
   const output = join(dir, 'string-return-assignment')
 
   try {
-    const result = compileSource(`function getName(): string {
+    const result = compileSource(
+      `function getName(): string {
   return 'Ada'
 }
 
@@ -7925,9 +8340,11 @@ export function main(): void {
   values[0] = getName()
   console.log(target.name, values[0])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7947,7 +8364,7 @@ export function main(): void {
   }
 })
 
-test('generated C runtime string params compile and run with runtime sources', async t => {
+test('generated C runtime string params compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -7960,7 +8377,8 @@ test('generated C runtime string params compile and run with runtime sources', a
   const output = join(dir, 'runtime-string-params')
 
   try {
-    const result = compileSource(`function greet(name: string): void {
+    const result = compileSource(
+      `function greet(name: string): void {
   console.log(name)
 }
 
@@ -7974,9 +8392,11 @@ export function main(): void {
   greet(user.name)
   console.log(echo(user.name))
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -7996,7 +8416,7 @@ export function main(): void {
   }
 })
 
-test('generated C prepared string args in number expressions compile and run with runtime sources', async t => {
+test('generated C prepared string args in number expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8009,7 +8429,8 @@ test('generated C prepared string args in number expressions compile and run wit
   const output = join(dir, 'prepared-number-calls')
 
   try {
-    const result = compileSource(`function length(name: string): number {
+    const result = compileSource(
+      `function length(name: string): number {
   return 3
 }
 
@@ -8018,9 +8439,11 @@ export function main(): void {
   const total = length('Ada') + length(user.name)
   console.log(length(user.name), total)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8040,7 +8463,7 @@ export function main(): void {
   }
 })
 
-test('generated C runtime string return compiles and runs with runtime sources', async t => {
+test('generated C runtime string return compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8053,7 +8476,8 @@ test('generated C runtime string return compiles and runs with runtime sources',
   const output = join(dir, 'runtime-string-return')
 
   try {
-    const result = compileSource(`function getName(): string {
+    const result = compileSource(
+      `function getName(): string {
   const user = { name: 'Ada' }
   return user.name
 }
@@ -8062,9 +8486,11 @@ export function main(): void {
   const name = getName()
   console.log(name)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8084,7 +8510,7 @@ export function main(): void {
   }
 })
 
-test('generated C runtime string index returns compile and run with runtime sources', async t => {
+test('generated C runtime string index returns compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8097,7 +8523,8 @@ test('generated C runtime string index returns compile and run with runtime sour
   const output = join(dir, 'runtime-string-index-return')
 
   try {
-    const result = compileSource(`function getObjectName(): string {
+    const result = compileSource(
+      `function getObjectName(): string {
   const user = { name: 'Ada' }
   return user['name']
 }
@@ -8110,9 +8537,11 @@ function getArrayName(): string {
 export function main(): void {
   console.log(getObjectName(), getArrayName())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8132,7 +8561,7 @@ export function main(): void {
   }
 })
 
-test('generated C direct console log string return compiles and runs with runtime sources', async t => {
+test('generated C direct console log string return compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8145,16 +8574,19 @@ test('generated C direct console log string return compiles and runs with runtim
   const output = join(dir, 'direct-string-return-log')
 
   try {
-    const result = compileSource(`function getName(): string {
+    const result = compileSource(
+      `function getName(): string {
   return 'Ada'
 }
 
 export function main(): void {
   console.log(getName())
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8174,7 +8606,7 @@ export function main(): void {
   }
 })
 
-test('generated C console log template interpolation compiles and runs with runtime sources', async t => {
+test('generated C console log template interpolation compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8187,15 +8619,18 @@ test('generated C console log template interpolation compiles and runs with runt
   const output = join(dir, 'template-log')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { name: 'Ada', score: 7 }
   const suffix = 'ok'
   const ready = true
   console.log(\`hello \${user.name} \${suffix} score \${user.score} ready \${ready}\`)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8215,7 +8650,7 @@ test('generated C console log template interpolation compiles and runs with runt
   }
 })
 
-test('generated C direct console log member and index expressions compile and run with runtime sources', async t => {
+test('generated C direct console log member and index expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8228,14 +8663,17 @@ test('generated C direct console log member and index expressions compile and ru
   const output = join(dir, 'direct-console')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { score: 42, active: true, name: 'Ada' }
   const values = [7, false, 'Grace']
   console.log(user.score, user.active, user.name, user['name'], values[0], values[1], values[2])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8255,7 +8693,7 @@ test('generated C direct console log member and index expressions compile and ru
   }
 })
 
-test('generated C member and index reads inside scalar expressions compile and run with runtime sources', async t => {
+test('generated C member and index reads inside scalar expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8268,16 +8706,19 @@ test('generated C member and index reads inside scalar expressions compile and r
   const output = join(dir, 'scalar-member-expr')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { score: 7, active: true }
   const values = [3, true]
   const total = user.score + values[0]
   const same = user.active === values[1]
   console.log(total, same)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8297,7 +8738,7 @@ test('generated C member and index reads inside scalar expressions compile and r
   }
 })
 
-test('generated C optional object member and index access compile and run with runtime sources', async t => {
+test('generated C optional object member and index access compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8310,14 +8751,17 @@ test('generated C optional object member and index access compile and run with r
   const output = join(dir, 'optional-member')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const user = { name: 'Ada', score: 7 }
   const name = user?.name
   console.log(name, user?.['score'])
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8337,7 +8781,7 @@ test('generated C optional object member and index access compile and run with r
   }
 })
 
-test('generated C typed object shape lowering compiles and runs with runtime sources', async t => {
+test('generated C typed object shape lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8350,7 +8794,8 @@ test('generated C typed object shape lowering compiles and runs with runtime sou
   const output = join(dir, 'typed-object')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   readonly id: number,
   name: string
 }
@@ -8360,9 +8805,11 @@ export function main(): void {
   const id = user.id
   console.log(id)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8382,7 +8829,7 @@ export function main(): void {
   }
 })
 
-test('generated C JSON parse and stringify compile and run with runtime sources', async t => {
+test('generated C JSON parse and stringify compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8395,7 +8842,8 @@ test('generated C JSON parse and stringify compile and run with runtime sources'
   const output = join(dir, 'json')
 
   try {
-    const result = compileSource(`type User = {
+    const result = compileSource(
+      `type User = {
   name: string,
   score: number
 }
@@ -8407,9 +8855,11 @@ export function main(): void {
   const text = JSON.stringify(user)
   console.log(user.name, user.score, text, parsedScore, active)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8429,7 +8879,7 @@ export function main(): void {
   }
 })
 
-test('generated C Buffer and Uint8Array APIs compile and run with runtime sources', async t => {
+test('generated C Buffer and Uint8Array APIs compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8442,7 +8892,8 @@ test('generated C Buffer and Uint8Array APIs compile and run with runtime source
   const output = join(dir, 'binary-api')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const bytes = Buffer.from('hi', 'utf8')
   const out = new Uint8Array(4)
   out[0] = bytes[0]
@@ -8454,9 +8905,11 @@ test('generated C Buffer and Uint8Array APIs compile and run with runtime source
   const text = bytes.toString()
   console.log(bytes.length, out[0], out[1], slice.length, slice[1], tail[0], tail[1], clamp.length, clamp[1], text)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8476,7 +8929,7 @@ test('generated C Buffer and Uint8Array APIs compile and run with runtime source
   }
 })
 
-test('generated C crypto.getRandomValues compiles and runs with runtime sources', async t => {
+test('generated C crypto.getRandomValues compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8489,14 +8942,17 @@ test('generated C crypto.getRandomValues compiles and runs with runtime sources'
   const output = join(dir, 'crypto-random')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const bytes = Buffer.alloc(8)
   const filled = crypto.getRandomValues(bytes)
   console.log(filled.length, bytes.length, filled[0] >= 0, filled[0] < 256)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8516,7 +8972,7 @@ test('generated C crypto.getRandomValues compiles and runs with runtime sources'
   }
 })
 
-test('generated C Map and Set methods compile and run with runtime sources', async t => {
+test('generated C Map and Set methods compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8529,7 +8985,8 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
   const output = join(dir, 'collections')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const scores: Map<string, number> = new Map()
   scores.set('Ada', 7)
   const score = scores.get('Ada') ?? 0
@@ -8552,9 +9009,11 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
   names.clear()
   console.log(names.has('Grace'), names.size)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8574,7 +9033,7 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
   }
 })
 
-test('generated C Map and Set method chains compile and run with runtime sources', async t => {
+test('generated C Map and Set method chains compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8587,7 +9046,8 @@ test('generated C Map and Set method chains compile and run with runtime sources
   const output = join(dir, 'collection-chains')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const scores: Map<string, number> = new Map()
   const score = scores.set('Ada', 7).get('Ada') ?? 0
   const hasScore = scores.set('Grace', 9).has('Grace')
@@ -8598,9 +9058,11 @@ test('generated C Map and Set method chains compile and run with runtime sources
 
   console.log(score, hasScore, hasName, removed, names.size)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8620,7 +9082,7 @@ test('generated C Map and Set method chains compile and run with runtime sources
   }
 })
 
-test('generated C collection values cross function boundaries with runtime sources', async t => {
+test('generated C collection values cross function boundaries with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8633,7 +9095,8 @@ test('generated C collection values cross function boundaries with runtime sourc
   const output = join(dir, 'collection-boundaries')
 
   try {
-    const result = compileSource(`function makeNums(): number[] {
+    const result = compileSource(
+      `function makeNums(): number[] {
   const nums = [2, 3, 5]
 
   return nums
@@ -8699,9 +9162,11 @@ export function main(): void {
 
   console.log(sumFromNums, sumFromCall, totalFromScores, totalFromCall, scores.size, seenFromSeen, seenSizeFromCall)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8721,7 +9186,7 @@ export function main(): void {
   }
 })
 
-test('generated C Map and Set array literal constructors compile and run with runtime sources', async t => {
+test('generated C Map and Set array literal constructors compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8734,7 +9199,8 @@ test('generated C Map and Set array literal constructors compile and run with ru
   const output = join(dir, 'collection-constructors')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
   const names: Set<string> = new Set(['Ada', 'Grace'])
   const adaScore = scores.get('Ada') ?? 0
@@ -8742,9 +9208,11 @@ test('generated C Map and Set array literal constructors compile and run with ru
 
   console.log(adaScore, graceScore, names.has('Ada'), names.has('Grace'), scores.size, names.size)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8764,7 +9232,7 @@ test('generated C Map and Set array literal constructors compile and run with ru
   }
 })
 
-test('generated C Map and Set object fields compile and run with runtime sources', async t => {
+test('generated C Map and Set object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8777,7 +9245,8 @@ test('generated C Map and Set object fields compile and run with runtime sources
   const output = join(dir, 'collection-fields')
 
   try {
-    const result = compileSource(`type Bag = {
+    const result = compileSource(
+      `type Bag = {
   scores: Map<string, number>,
   labels: Map<string, string>,
   names: Set<string>
@@ -8797,9 +9266,11 @@ export function main(): void {
 
   console.log(adaScore, graceScore, label, hasAda, bag.scores.size, bag.names.size)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8819,7 +9290,7 @@ export function main(): void {
   }
 })
 
-test('generated C Map bracket syntax compiles and runs with runtime sources', async t => {
+test('generated C Map bracket syntax compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -8832,7 +9303,8 @@ test('generated C Map bracket syntax compiles and runs with runtime sources', as
   const output = join(dir, 'map-brackets')
 
   try {
-    const result = compileSource(`export function main(): void {
+    const result = compileSource(
+      `export function main(): void {
   const scores: Map<string, number> = new Map()
   scores['Ada'] = 7
   const score = scores['Ada'] ?? 0
@@ -8840,9 +9312,11 @@ test('generated C Map bracket syntax compiles and runs with runtime sources', as
 
   console.log(score, missing, scores.size)
 }
-`, {
-      target: 'c'
-    })
+`,
+      {
+        target: 'c'
+      }
+    )
 
     await writeFile(source, result.code)
 
@@ -8886,7 +9360,7 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
 }
 
 function runCommand(command: string, args: string[]): Promise<CommandResult> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: new URL('..', import.meta.url),
       stdio: ['ignore', 'pipe', 'pipe']
@@ -8894,22 +9368,22 @@ function runCommand(command: string, args: string[]): Promise<CommandResult> {
     let stdout = ''
     let stderr = ''
 
-    child.stdout.on('data', chunk => {
+    child.stdout.on('data', (chunk) => {
       stdout += chunk
     })
 
-    child.stderr.on('data', chunk => {
+    child.stderr.on('data', (chunk) => {
       stderr += chunk
     })
 
-    child.on('error', error => {
+    child.on('error', (error) => {
       resolve({
         code: 127,
         stdout,
         stderr: error.message
       })
     })
-    child.on('exit', code => {
+    child.on('exit', (code) => {
       resolve({
         code: code ?? 1,
         stdout,

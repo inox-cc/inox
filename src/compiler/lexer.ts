@@ -40,7 +40,30 @@ const keywords = new Set([
 
 const threeCharPunctuators = new Set(['===', '!=='])
 const twoCharPunctuators = new Set(['==', '!=', '<=', '>=', '&&', '||', '??', '?.', '=>'])
-const punctuators = new Set(['(', ')', '{', '}', '[', ']', ':', ';', '.', ',', '=', '+', '-', '*', '/', '%', '<', '>', '!', '&', '|', '?'])
+const punctuators = new Set([
+  '(',
+  ')',
+  '{',
+  '}',
+  '[',
+  ']',
+  ':',
+  ';',
+  '.',
+  ',',
+  '=',
+  '+',
+  '-',
+  '*',
+  '/',
+  '%',
+  '<',
+  '>',
+  '!',
+  '&',
+  '|',
+  '?'
+])
 
 export function tokenize(source: string): Token[] {
   const tokens: Token[] = []
@@ -72,7 +95,7 @@ export function tokenize(source: string): Token[] {
       continue
     }
 
-    if (char === '\'' || char === '"') {
+    if (char === "'" || char === '"') {
       tokens.push(readString(char))
       continue
     }
@@ -97,10 +120,12 @@ export function tokenize(source: string): Token[] {
       continue
     }
 
-    diagnostics.push(diagnostic('CCJS_UNKNOWN_CHAR', `unknown character ${JSON.stringify(char)}`, {
-      line,
-      column
-    }))
+    diagnostics.push(
+      diagnostic('CCJS_UNKNOWN_CHAR', `unknown character ${JSON.stringify(char)}`, {
+        line,
+        column
+      })
+    )
     advance(char)
   }
 
@@ -133,10 +158,12 @@ export function tokenize(source: string): Token[] {
       }
     }
 
-    diagnostics.push(diagnostic('CCJS_UNTERMINATED_STRING', 'unterminated string literal', {
-      line: startLine,
-      column: startColumn
-    }))
+    diagnostics.push(
+      diagnostic('CCJS_UNTERMINATED_STRING', 'unterminated string literal', {
+        line: startLine,
+        column: startColumn
+      })
+    )
 
     return makeToken('string', value, startLine, startColumn, startIndex)
   }
@@ -165,10 +192,12 @@ export function tokenize(source: string): Token[] {
       }
     }
 
-    diagnostics.push(diagnostic('CCJS_UNTERMINATED_TEMPLATE', 'unterminated template literal', {
-      line: startLine,
-      column: startColumn
-    }))
+    diagnostics.push(
+      diagnostic('CCJS_UNTERMINATED_TEMPLATE', 'unterminated template literal', {
+        line: startLine,
+        column: startColumn
+      })
+    )
 
     return makeToken('template', raw, startLine, startColumn, startIndex)
   }

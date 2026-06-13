@@ -1,6 +1,14 @@
 import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrGlobalUsages } from './ir.ts'
-import type { AnyNode, CompileOptions, Diagnostic, IrGlobalUsage, IrProgram, RuntimeCapabilities, SourceLocation } from './types.ts'
+import type {
+  AnyNode,
+  CompileOptions,
+  Diagnostic,
+  IrGlobalUsage,
+  IrProgram,
+  RuntimeCapabilities,
+  SourceLocation
+} from './types.ts'
 
 type RequiredCapability = {
   key: keyof RuntimeCapabilities
@@ -41,11 +49,9 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
       continue
     }
 
-    diagnostics.push(diagnostic(
-      'CCJS_CAPABILITY',
-      `embedded profile requires ${usage.name} capability for ${usage.path}`,
-      usage.loc
-    ))
+    diagnostics.push(
+      diagnostic('CCJS_CAPABILITY', `embedded profile requires ${usage.name} capability for ${usage.path}`, usage.loc)
+    )
     reported.add(key)
   }
 
@@ -58,19 +64,21 @@ function collectCapabilityUsages(programs: IrProgram[], options: CompileOptions)
   const globalUsages = collectIrGlobalUsages(programs)
 
   return [
-    ...globalUsages.flatMap(usage => {
+    ...globalUsages.flatMap((usage) => {
       const required = requiredCapabilityForGlobalUsage(usage)
 
       return required == null
         ? []
-        : [{
-            ...required,
-            path: usage.path.join('.'),
-            loc: usage.loc
-          }]
+        : [
+            {
+              ...required,
+              path: usage.path.join('.'),
+              loc: usage.loc
+            }
+          ]
     }),
     ...collectEntropyCapabilityUsages(globalUsages, options),
-    ...programs.flatMap(program => collectHeapCapabilityUsages(program.body))
+    ...programs.flatMap((program) => collectHeapCapabilityUsages(program.body))
   ]
 }
 

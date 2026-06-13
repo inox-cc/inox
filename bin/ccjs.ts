@@ -7,7 +7,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CompileError, formatDiagnostics } from '../src/compiler/diagnostics.ts'
 import { compileFile } from '../src/compiler/index.ts'
-import type { CompileOptions, RandomOptions, RuntimeBudgets, RuntimeCapabilities, RuntimeProfile } from '../src/compiler/types.ts'
+import type {
+  CompileOptions,
+  RandomOptions,
+  RuntimeBudgets,
+  RuntimeCapabilities,
+  RuntimeProfile
+} from '../src/compiler/types.ts'
 import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
 import type { CliPlan } from '../scripts/lib/cli-args.ts'
 
@@ -29,19 +35,10 @@ type CompileCOptions = {
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const cRuntimeSourceGroups = {
-  async: [
-    'runtime/c/src/async/loop.c',
-    'runtime/c/src/async/promise.c'
-  ],
-  binary: [
-    'runtime/c/src/binary/binary.c'
-  ],
-  fs: [
-    'runtime/c/src/fs/fs.c'
-  ],
-  json: [
-    'runtime/c/src/json/json.c'
-  ],
+  async: ['runtime/c/src/async/loop.c', 'runtime/c/src/async/promise.c'],
+  binary: ['runtime/c/src/binary/binary.c'],
+  fs: ['runtime/c/src/fs/fs.c'],
+  json: ['runtime/c/src/json/json.c'],
   managed: [
     'runtime/c/src/core/value.c',
     'runtime/c/src/core/allocator.c',
@@ -52,9 +49,7 @@ const cRuntimeSourceGroups = {
     'runtime/c/src/collections/map.c',
     'runtime/c/src/collections/set.c'
   ],
-  time: [
-    'runtime/c/src/time/time.c'
-  ]
+  time: ['runtime/c/src/time/time.c']
 }
 const configFileNames = ['ccjs.config.json', 'ccjs.json']
 
@@ -73,7 +68,7 @@ try {
   if (plan.help) {
     console.log(usage)
   } else if (plan.command === 'test') {
-    process.exitCode = await spawnAndWait('npm', ['run', 'check'])
+    process.exitCode = await spawnAndWait('pnpm', ['run', 'check'])
   } else if (plan.command === 'run') {
     await runEntry(plan)
   } else if (plan.command === 'emit' && plan.emit != null) {
@@ -234,13 +229,13 @@ function cRuntimeSourcesForCode(code: string): string[] {
   }
 
   if (
-    usesCHeader(code, 'array')
-    || usesCHeader(code, 'callback')
-    || usesCHeader(code, 'map')
-    || usesCHeader(code, 'object')
-    || usesCHeader(code, 'set')
-    || usesCHeader(code, 'string')
-    || usesCHeader(code, 'value')
+    usesCHeader(code, 'array') ||
+    usesCHeader(code, 'callback') ||
+    usesCHeader(code, 'map') ||
+    usesCHeader(code, 'object') ||
+    usesCHeader(code, 'set') ||
+    usesCHeader(code, 'string') ||
+    usesCHeader(code, 'value')
   ) {
     groups.add('managed')
   }
@@ -248,7 +243,7 @@ function cRuntimeSourcesForCode(code: string): string[] {
   return Object.entries(cRuntimeSourceGroups)
     .filter(([group]) => groups.has(group as keyof typeof cRuntimeSourceGroups))
     .flatMap(([, sources]) => sources)
-    .map(file => join(repoRoot, file))
+    .map((file) => join(repoRoot, file))
 }
 
 function usesCHeader(code: string, name: string): boolean {
@@ -390,10 +385,7 @@ function validateRandomConfig(value: unknown, fileName: string): void {
     throw invalidConfig('random.backend must be "simple", "xorshift32" or "os"')
   }
 
-  if (
-    random?.seed != null
-    && (!Number.isInteger(random.seed) || random.seed < 0 || random.seed > 0xffffffff)
-  ) {
+  if (random?.seed != null && (!Number.isInteger(random.seed) || random.seed < 0 || random.seed > 0xffffffff)) {
     throw invalidConfig('random.seed must be an integer from 0 to 4294967295')
   }
 }
@@ -403,12 +395,12 @@ function validateConfigFlags(value: unknown, path: string, fileName: string): vo
     return
   }
 
-  if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
     throw new Error(`invalid ${fileName}: ${path} must be a string or an array of strings`)
   }
 }
 
-function cCompilerCommand(config: CConfig): { command: string, args: string[] } {
+function cCompilerCommand(config: CConfig): { command: string; args: string[] } {
   const envValue = process.env.CC?.trim()
   const configValue = typeof config?.c?.cc === 'string' ? config.c.cc.trim() : ''
   const value = envValue == null || envValue === '' ? configValue : envValue
@@ -527,7 +519,7 @@ function spawnAndWait(command: string, args: string[]): Promise<number> {
     })
 
     child.on('error', reject)
-    child.on('exit', code => {
+    child.on('exit', (code) => {
       resolve(code ?? 1)
     })
   })

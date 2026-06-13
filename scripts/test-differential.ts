@@ -12,14 +12,16 @@ if (files.length === 0) {
   console.error('C fixture smoke checks failed\n- missing fixtures under tests/differential')
   process.exitCode = 1
 } else if (!cAvailable) {
-  console.log(`C fixture smoke checks skipped (${files.length} fixture${files.length === 1 ? '' : 's'}, cc unavailable)`)
+  console.log(
+    `C fixture smoke checks skipped (${files.length} fixture${files.length === 1 ? '' : 's'}, cc unavailable)`
+  )
 } else {
   for (const file of files) {
     await checkSmokeFixture(file)
   }
 
   if (failures.length > 0) {
-    console.error(['C fixture smoke checks failed', ...failures.map(failure => `- ${failure}`)].join('\n'))
+    console.error(['C fixture smoke checks failed', ...failures.map((failure) => `- ${failure}`)].join('\n'))
     process.exitCode = 1
   } else {
     console.log(`C fixture smoke checks passed (${files.length} fixture${files.length === 1 ? '' : 's'})`)
@@ -45,11 +47,7 @@ function checkSuccessful(rel: string, result: CommandResult): boolean {
 }
 
 function runFixture(file: string): Promise<CommandResult> {
-  return runCommand(process.execPath, [
-    'bin/ccjs.ts',
-    'run',
-    file
-  ])
+  return runCommand(process.execPath, ['bin/ccjs.ts', 'run', file])
 }
 
 async function canRunC(): Promise<boolean> {
@@ -70,7 +68,7 @@ async function findDifferentialFiles(dir: string): Promise<string[]> {
     const path = join(dir, entry.name)
 
     if (entry.isDirectory()) {
-      files.push(...await findDifferentialFiles(path))
+      files.push(...(await findDifferentialFiles(path)))
     } else if (entry.isFile() && entry.name.endsWith('.ts')) {
       files.push(path)
     }

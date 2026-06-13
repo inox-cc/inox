@@ -20,10 +20,12 @@ await runSnapshotSuite({
 function createCodegenOutput(path: string, source: string): SnapshotOutput {
   return {
     path: path.replace(/\.input\.ts$/, '.expected.c'),
-    content: snapshotText(compileSource(source, {
-      target: 'c',
-      callMain: false
-    }).code)
+    content: snapshotText(
+      compileSource(source, {
+        target: 'c',
+        callMain: false
+      }).code
+    )
   }
 }
 

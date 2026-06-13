@@ -85,10 +85,12 @@ await runSnapshotSuite({
       callMain: false
     }).hir
 
-    return [{
-      path: path.replace(/\.ts$/, '.hir.json'),
-      content: `${JSON.stringify(createHirSnapshot(hir), null, 2)}\n`
-    }]
+    return [
+      {
+        path: path.replace(/\.ts$/, '.hir.json'),
+        content: `${JSON.stringify(createHirSnapshot(hir), null, 2)}\n`
+      }
+    ]
   }
 })
 
@@ -100,12 +102,15 @@ function createHirSnapshot(hir: ProgramNode): HirSnapshot {
 }
 
 function snapshotNode(node: AnyNode): SnapshotNode {
-  return withLocation({
-    type: String(node.type ?? '<unknown>'),
-    ...snapshotScalarFields(node),
-    ...snapshotTypeFields(node),
-    ...snapshotChildren(node)
-  }, node.loc)
+  return withLocation(
+    {
+      type: String(node.type ?? '<unknown>'),
+      ...snapshotScalarFields(node),
+      ...snapshotTypeFields(node),
+      ...snapshotChildren(node)
+    },
+    node.loc
+  )
 }
 
 function snapshotScalarFields(node: AnyNode): Partial<SnapshotNode> {
@@ -128,7 +133,9 @@ function snapshotTypeFields(node: AnyNode): Partial<SnapshotNode> {
     ...(typeof node.valueType !== 'string' ? {} : { valueType: node.valueType }),
     ...(node.nullable == null ? {} : { nullable: Boolean(node.nullable) }),
     ...(node.arrayElementType == null ? {} : { arrayElementType: stringOrNull(node.arrayElementType) }),
-    ...(node.arrayElementDeclaredType == null ? {} : { arrayElementDeclaredType: stringOrNull(node.arrayElementDeclaredType) }),
+    ...(node.arrayElementDeclaredType == null
+      ? {}
+      : { arrayElementDeclaredType: stringOrNull(node.arrayElementDeclaredType) }),
     ...(node.mapKeyType == null ? {} : { mapKeyType: stringOrNull(node.mapKeyType) }),
     ...(node.mapValueType == null ? {} : { mapValueType: stringOrNull(node.mapValueType) }),
     ...(node.setElementType == null ? {} : { setElementType: stringOrNull(node.setElementType) }),
@@ -179,11 +186,14 @@ function snapshotBody(node: AnyNode): Pick<SnapshotNode, 'body'> {
   return {}
 }
 
-function snapshotProperty(property: AnyNode): { key: string, value: SnapshotNode, loc?: SourceLocation } {
-  return withLocation({
-    key: String(property.key ?? '<unknown>'),
-    value: snapshotNode(property.value)
-  }, property.loc)
+function snapshotProperty(property: AnyNode): { key: string; value: SnapshotNode; loc?: SourceLocation } {
+  return withLocation(
+    {
+      key: String(property.key ?? '<unknown>'),
+      value: snapshotNode(property.value)
+    },
+    property.loc
+  )
 }
 
 function snapshotShapeFields(node: AnyNode): Pick<SnapshotNode, 'fields'> {
@@ -199,17 +209,20 @@ function snapshotShapeFields(node: AnyNode): Pick<SnapshotNode, 'fields'> {
 }
 
 function snapshotField(field: AnyNode): SnapshotField {
-  return withLocation({
-    name: String(field.name ?? '<anonymous>'),
-    ...(field.readonly == null ? {} : { readonly: Boolean(field.readonly) }),
-    ...(field.declaredType == null ? {} : { declaredType: String(field.declaredType) }),
-    ...(field.valueType == null ? {} : { valueType: String(field.valueType) }),
-    ...(field.nullable == null ? {} : { nullable: Boolean(field.nullable) }),
-    ...(field.arrayElementType == null ? {} : { arrayElementType: stringOrNull(field.arrayElementType) }),
-    ...(field.mapKeyType == null ? {} : { mapKeyType: stringOrNull(field.mapKeyType) }),
-    ...(field.mapValueType == null ? {} : { mapValueType: stringOrNull(field.mapValueType) }),
-    ...(field.setElementType == null ? {} : { setElementType: stringOrNull(field.setElementType) })
-  }, field.loc)
+  return withLocation(
+    {
+      name: String(field.name ?? '<anonymous>'),
+      ...(field.readonly == null ? {} : { readonly: Boolean(field.readonly) }),
+      ...(field.declaredType == null ? {} : { declaredType: String(field.declaredType) }),
+      ...(field.valueType == null ? {} : { valueType: String(field.valueType) }),
+      ...(field.nullable == null ? {} : { nullable: Boolean(field.nullable) }),
+      ...(field.arrayElementType == null ? {} : { arrayElementType: stringOrNull(field.arrayElementType) }),
+      ...(field.mapKeyType == null ? {} : { mapKeyType: stringOrNull(field.mapKeyType) }),
+      ...(field.mapValueType == null ? {} : { mapValueType: stringOrNull(field.mapValueType) }),
+      ...(field.setElementType == null ? {} : { setElementType: stringOrNull(field.setElementType) })
+    },
+    field.loc
+  )
 }
 
 function isSnapshotScalar(value: unknown): value is string | number | boolean | null {
@@ -220,9 +233,14 @@ function stringOrNull(value: unknown): string | null {
   return value == null ? null : String(value)
 }
 
-function withLocation<T extends Record<string, unknown>>(value: T, loc: SourceLocation | undefined): T & { loc?: SourceLocation } {
-  return loc == null ? value : {
-    ...value,
-    loc
-  }
+function withLocation<T extends Record<string, unknown>>(
+  value: T,
+  loc: SourceLocation | undefined
+): T & { loc?: SourceLocation } {
+  return loc == null
+    ? value
+    : {
+        ...value,
+        loc
+      }
 }

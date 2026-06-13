@@ -1,4 +1,18 @@
-import type { AnyNode, IrFeature, IrFunctionDeclaration, IrFunctionEffect, IrGlobalUsage, IrProgram, IrRuntimeRequirement, IrSyntaxFeatureUsage, IrThrowValueType, IrTopLevelItem, IrTopLevelItemKind, ModuleGraph, ProgramNode } from './types.ts'
+import type {
+  AnyNode,
+  IrFeature,
+  IrFunctionDeclaration,
+  IrFunctionEffect,
+  IrGlobalUsage,
+  IrProgram,
+  IrRuntimeRequirement,
+  IrSyntaxFeatureUsage,
+  IrThrowValueType,
+  IrTopLevelItem,
+  IrTopLevelItemKind,
+  ModuleGraph,
+  ProgramNode
+} from './types.ts'
 
 const jsStdGlobalRoots = new Set([
   'Array',
@@ -68,122 +82,161 @@ export function lowerHirToIr(program: ProgramNode): IrProgram {
 }
 
 export function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
-  return graph.modules.flatMap(module => module.ir == null
-    ? []
-    : [{
-        path: module.path,
-        ir: module.ir
-      }])
+  return graph.modules.flatMap((module) =>
+    module.ir == null
+      ? []
+      : [
+          {
+            path: module.path,
+            ir: module.ir
+          }
+        ]
+  )
 }
 
 export function collectIrPrograms(records: IrModuleRecord[]): IrProgram[] {
-  return records.map(record => record.ir)
+  return records.map((record) => record.ir)
 }
 
 export function findIrEntryProgram(records: IrModuleRecord[], entry: string): IrProgram | null {
-  return records.find(record => record.path === entry)?.ir ?? null
+  return records.find((record) => record.path === entry)?.ir ?? null
 }
 
 export function collectIrFeatureRequirements(programs: Array<{ features: IrFeature[] }>): IrFeature[] {
-  return [...new Set(programs.flatMap(program => program.features))].sort()
+  return [...new Set(programs.flatMap((program) => program.features))].sort()
 }
 
-export function collectIrFunctionEffects(programs: Array<{ body: AnyNode[], topLevelItems: IrTopLevelItem[] }>): IrFunctionEffect[] {
-  return collectFunctionEffects(programs.flatMap(program => collectIrTopLevelNodes(program, 'function')))
+export function collectIrFunctionEffects(
+  programs: Array<{ body: AnyNode[]; topLevelItems: IrTopLevelItem[] }>
+): IrFunctionEffect[] {
+  return collectFunctionEffects(programs.flatMap((program) => collectIrTopLevelNodes(program, 'function')))
 }
 
-export function collectIrStoredFunctionEffects(programs: Array<{ functionEffects: IrFunctionEffect[] }>): IrFunctionEffect[] {
-  return programs.flatMap(program => program.functionEffects)
+export function collectIrStoredFunctionEffects(
+  programs: Array<{ functionEffects: IrFunctionEffect[] }>
+): IrFunctionEffect[] {
+  return programs.flatMap((program) => program.functionEffects)
 }
 
-export function collectIrRuntimeRequirements(programs: Array<{ runtimeRequirements: IrRuntimeRequirement[] }>): IrRuntimeRequirement[] {
-  return [...new Set(programs.flatMap(program => program.runtimeRequirements))].sort()
+export function collectIrRuntimeRequirements(
+  programs: Array<{ runtimeRequirements: IrRuntimeRequirement[] }>
+): IrRuntimeRequirement[] {
+  return [...new Set(programs.flatMap((program) => program.runtimeRequirements))].sort()
 }
 
-export function collectIrSyntaxFeatureUsages(programs: Array<{ syntaxFeatures: IrSyntaxFeatureUsage[] }>): IrSyntaxFeatureUsage[] {
-  return programs.flatMap(program => program.syntaxFeatures)
+export function collectIrSyntaxFeatureUsages(
+  programs: Array<{ syntaxFeatures: IrSyntaxFeatureUsage[] }>
+): IrSyntaxFeatureUsage[] {
+  return programs.flatMap((program) => program.syntaxFeatures)
 }
 
-export function collectIrLocalThrowValueTypes(statement: AnyNode | null | undefined, options: IrLocalThrowValueTypeOptions = {}): IrThrowValueType[] {
+export function collectIrLocalThrowValueTypes(
+  statement: AnyNode | null | undefined,
+  options: IrLocalThrowValueTypeOptions = {}
+): IrThrowValueType[] {
   const functionThrowValueTypes = new Map<string, IrThrowValueType[]>(
-    [...(options.functionThrowValueTypes ?? new Map<string, IrThrowValueType[]>())]
-      .map(([name, types]) => [name, [...types]])
+    [...(options.functionThrowValueTypes ?? new Map<string, IrThrowValueType[]>())].map(([name, types]) => [
+      name,
+      [...types]
+    ])
   )
   const functionNames = new Set(functionThrowValueTypes.keys())
   const errorObjectNames = new Set(options.errorObjectNames ?? [])
 
-  return uniqueThrowValueTypes(collectEscapingThrowValueTypesFromStatement(statement, functionThrowValueTypes, functionNames, errorObjectNames, false))
+  return uniqueThrowValueTypes(
+    collectEscapingThrowValueTypesFromStatement(
+      statement,
+      functionThrowValueTypes,
+      functionNames,
+      errorObjectNames,
+      false
+    )
+  )
 }
 
 export function collectIrGlobalUsages(programs: Array<{ globalUsages: IrGlobalUsage[] }>): IrGlobalUsage[] {
-  return programs.flatMap(program => program.globalUsages)
+  return programs.flatMap((program) => program.globalUsages)
 }
 
 export function collectIrGlobalRoots(programs: Array<{ globalUsages: IrGlobalUsage[] }>): string[] {
-  return [...new Set(collectIrGlobalUsages(programs).map(usage => usage.root))].sort()
+  return [...new Set(collectIrGlobalUsages(programs).map((usage) => usage.root))].sort()
 }
 
-export function collectIrFunctionDeclarations(programs: Array<{ functionDeclarations: IrFunctionDeclaration[] }>): IrFunctionDeclaration[] {
-  return programs.flatMap(program => program.functionDeclarations)
+export function collectIrFunctionDeclarations(
+  programs: Array<{ functionDeclarations: IrFunctionDeclaration[] }>
+): IrFunctionDeclaration[] {
+  return programs.flatMap((program) => program.functionDeclarations)
 }
 
-export function collectIrFunctionNodeEntries(programs: Array<{
-  body: AnyNode[]
-  functionDeclarations: IrFunctionDeclaration[]
-  topLevelItems: IrTopLevelItem[]
-}>): IrFunctionNodeEntry[] {
-  return programs.flatMap(program => {
+export function collectIrFunctionNodeEntries(
+  programs: Array<{
+    body: AnyNode[]
+    functionDeclarations: IrFunctionDeclaration[]
+    topLevelItems: IrTopLevelItem[]
+  }>
+): IrFunctionNodeEntry[] {
+  return programs.flatMap((program) => {
     const declarationsByName = new Map<string, IrFunctionDeclaration[]>()
 
     for (const declaration of program.functionDeclarations) {
-      declarationsByName.set(declaration.name, [
-        ...(declarationsByName.get(declaration.name) ?? []),
-        declaration
-      ])
+      declarationsByName.set(declaration.name, [...(declarationsByName.get(declaration.name) ?? []), declaration])
     }
 
     return collectIrTopLevelNodeEntries(program)
-      .filter(item => item.kind === 'function')
-      .flatMap(item => {
+      .filter((item) => item.kind === 'function')
+      .flatMap((item) => {
         const name = typeof item.node.name === 'string' ? item.node.name : ''
         const declarations = declarationsByName.get(name)
         const declaration = declarations?.shift()
 
         return declaration == null
           ? []
-          : [{
-              declaration,
-              node: item.node
-            }]
+          : [
+              {
+                declaration,
+                node: item.node
+              }
+            ]
       })
   })
 }
 
 export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, name: string): boolean {
-  return program?.functionDeclarations.some(item => item.name === name) === true
+  return program?.functionDeclarations.some((item) => item.name === name) === true
 }
 
-export function collectIrTopLevelNodeEntries(program: { body: AnyNode[], topLevelItems: IrTopLevelItem[] }): IrTopLevelNodeEntry[] {
-  return program.topLevelItems.flatMap(item => {
+export function collectIrTopLevelNodeEntries(program: {
+  body: AnyNode[]
+  topLevelItems: IrTopLevelItem[]
+}): IrTopLevelNodeEntry[] {
+  return program.topLevelItems.flatMap((item) => {
     const node = program.body[item.index]
 
     return node == null
       ? []
-      : [{
-          kind: item.kind,
-          node
-        }]
+      : [
+          {
+            kind: item.kind,
+            node
+          }
+        ]
   })
 }
 
-export function collectIrTopLevelNodes(program: { body: AnyNode[], topLevelItems: IrTopLevelItem[] }, kind: IrTopLevelItemKind): AnyNode[] {
+export function collectIrTopLevelNodes(
+  program: { body: AnyNode[]; topLevelItems: IrTopLevelItem[] },
+  kind: IrTopLevelItemKind
+): AnyNode[] {
   return collectIrTopLevelNodeEntries(program)
-    .filter(item => item.kind === kind)
-    .map(item => item.node)
+    .filter((item) => item.kind === kind)
+    .map((item) => item.node)
 }
 
-export function collectIrTopLevelNodesFromPrograms(programs: Array<{ body: AnyNode[], topLevelItems: IrTopLevelItem[] }>, kind: IrTopLevelItemKind): AnyNode[] {
-  return programs.flatMap(program => collectIrTopLevelNodes(program, kind))
+export function collectIrTopLevelNodesFromPrograms(
+  programs: Array<{ body: AnyNode[]; topLevelItems: IrTopLevelItem[] }>,
+  kind: IrTopLevelItemKind
+): AnyNode[] {
+  return programs.flatMap((program) => collectIrTopLevelNodes(program, kind))
 }
 
 function collectIrFeatures(program: ProgramNode): IrFeature[] {
@@ -226,7 +279,13 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
       requirements.add('callback-values')
       requirements.add('managed-values')
       requirements.add('timers')
-    } else if (feature === 'array-pop-null' || feature === 'map-get-null' || feature === 'map-index-set' || feature === 'number-from-string-null' || feature === 'numeric-casts') {
+    } else if (
+      feature === 'array-pop-null' ||
+      feature === 'map-get-null' ||
+      feature === 'map-index-set' ||
+      feature === 'number-from-string-null' ||
+      feature === 'numeric-casts'
+    ) {
       continue
     } else {
       requirements.add(feature)
@@ -265,12 +324,15 @@ function topLevelItemKind(item: AnyNode): IrTopLevelItemKind {
 }
 
 function collectFunctionDeclarations(program: ProgramNode, topLevelItems: IrTopLevelItem[]): IrFunctionDeclaration[] {
-  return collectIrTopLevelNodes({
-    body: program.body,
-    topLevelItems
-  }, 'function')
+  return collectIrTopLevelNodes(
+    {
+      body: program.body,
+      topLevelItems
+    },
+    'function'
+  )
     .filter((item): item is AnyNode & { name: string } => typeof item.name === 'string')
-    .map(item => ({
+    .map((item) => ({
       name: item.name,
       exported: item.exported === true,
       async: item.async === true,
@@ -278,7 +340,9 @@ function collectFunctionDeclarations(program: ProgramNode, topLevelItems: IrTopL
       returnType: item.returnType,
       returnNullable: item.returnNullable === true,
       ...(item.returnArrayElementType == null ? {} : { returnArrayElementType: item.returnArrayElementType }),
-      ...(item.returnArrayElementDeclaredType == null ? {} : { returnArrayElementDeclaredType: item.returnArrayElementDeclaredType }),
+      ...(item.returnArrayElementDeclaredType == null
+        ? {}
+        : { returnArrayElementDeclaredType: item.returnArrayElementDeclaredType }),
       ...(item.returnMapKeyType == null ? {} : { returnMapKeyType: item.returnMapKeyType }),
       ...(item.returnMapValueType == null ? {} : { returnMapValueType: item.returnMapValueType }),
       ...(item.returnPromiseValueType == null ? {} : { returnPromiseValueType: item.returnPromiseValueType }),
@@ -420,15 +484,23 @@ function visitSyntaxFeatureUsage(node: unknown, usages: IrSyntaxFeatureUsage[]):
 }
 
 function collectFunctionEffects(functions: AnyNode[]): IrFunctionEffect[] {
-  const functionNames = new Set(functions.map(item => item.name))
-  const functionThrowValueTypes = new Map<string, IrThrowValueType[]>(functions.map(item => [item.name, []]))
+  const functionNames = new Set(functions.map((item) => item.name))
+  const functionThrowValueTypes = new Map<string, IrThrowValueType[]>(functions.map((item) => [item.name, []]))
   let changed = true
 
   while (changed) {
     changed = false
 
     for (const item of functions) {
-      const types = uniqueThrowValueTypes(collectEscapingThrowValueTypesFromStatements(item.body, functionThrowValueTypes, functionNames, new Set(), false))
+      const types = uniqueThrowValueTypes(
+        collectEscapingThrowValueTypesFromStatements(
+          item.body,
+          functionThrowValueTypes,
+          functionNames,
+          new Set(),
+          false
+        )
+      )
       const previous = functionThrowValueTypes.get(item.name) ?? []
 
       if (!sameThrowValueTypes(previous, types)) {
@@ -438,7 +510,7 @@ function collectFunctionEffects(functions: AnyNode[]): IrFunctionEffect[] {
     }
   }
 
-  return functions.map(item => {
+  return functions.map((item) => {
     const throwValueTypes = functionThrowValueTypes.get(item.name) ?? []
 
     return {
@@ -456,7 +528,15 @@ function collectEscapingThrowValueTypesFromStatements(
   errorObjectNames: Set<string>,
   hasErrorTarget: boolean
 ): IrThrowValueType[] {
-  return statements.flatMap(statement => collectEscapingThrowValueTypesFromStatement(statement, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+  return statements.flatMap((statement) =>
+    collectEscapingThrowValueTypesFromStatement(
+      statement,
+      functionThrowValueTypes,
+      functionNames,
+      errorObjectNames,
+      hasErrorTarget
+    )
+  )
 }
 
 function collectEscapingThrowValueTypesFromStatement(
@@ -475,7 +555,13 @@ function collectEscapingThrowValueTypesFromStatement(
   }
 
   if (statement.type === 'VariableDeclaration') {
-    const types = collectEscapingThrowValueTypesFromExpression(statement.init, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+    const types = collectEscapingThrowValueTypesFromExpression(
+      statement.init,
+      functionThrowValueTypes,
+      functionNames,
+      errorObjectNames,
+      hasErrorTarget
+    )
 
     if (isErrorValueExpressionForAnalysis(statement.init, errorObjectNames)) {
       errorObjectNames.add(statement.name)
@@ -485,56 +571,164 @@ function collectEscapingThrowValueTypesFromStatement(
   }
 
   if (statement.type === 'ExpressionStatement') {
-    return collectEscapingThrowValueTypesFromExpression(statement.expression, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+    return collectEscapingThrowValueTypesFromExpression(
+      statement.expression,
+      functionThrowValueTypes,
+      functionNames,
+      errorObjectNames,
+      hasErrorTarget
+    )
   }
 
   if (statement.type === 'ReturnStatement') {
-    return collectEscapingThrowValueTypesFromExpression(statement.argument, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+    return collectEscapingThrowValueTypesFromExpression(
+      statement.argument,
+      functionThrowValueTypes,
+      functionNames,
+      errorObjectNames,
+      hasErrorTarget
+    )
   }
 
   if (statement.type === 'BlockStatement') {
-    return collectEscapingThrowValueTypesFromStatements(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+    return collectEscapingThrowValueTypesFromStatements(
+      statement.body,
+      functionThrowValueTypes,
+      functionNames,
+      new Set(errorObjectNames),
+      hasErrorTarget
+    )
   }
 
   if (statement.type === 'IfStatement') {
     return [
-      ...collectEscapingThrowValueTypesFromExpression(statement.condition, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.consequent, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.alternate, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+      ...collectEscapingThrowValueTypesFromExpression(
+        statement.condition,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromStatement(
+        statement.consequent,
+        functionThrowValueTypes,
+        functionNames,
+        new Set(errorObjectNames),
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromStatement(
+        statement.alternate,
+        functionThrowValueTypes,
+        functionNames,
+        new Set(errorObjectNames),
+        hasErrorTarget
+      )
     ]
   }
 
   if (statement.type === 'WhileStatement') {
     return [
-      ...collectEscapingThrowValueTypesFromExpression(statement.condition, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+      ...collectEscapingThrowValueTypesFromExpression(
+        statement.condition,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromStatement(
+        statement.body,
+        functionThrowValueTypes,
+        functionNames,
+        new Set(errorObjectNames),
+        hasErrorTarget
+      )
     ]
   }
 
   if (statement.type === 'ForStatement') {
     return [
       ...(statement.init?.type === 'VariableDeclaration'
-        ? collectEscapingThrowValueTypesFromStatement(statement.init, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
-        : collectEscapingThrowValueTypesFromExpression(statement.init, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)),
-      ...collectEscapingThrowValueTypesFromExpression(statement.test, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromExpression(statement.update, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+        ? collectEscapingThrowValueTypesFromStatement(
+            statement.init,
+            functionThrowValueTypes,
+            functionNames,
+            new Set(errorObjectNames),
+            hasErrorTarget
+          )
+        : collectEscapingThrowValueTypesFromExpression(
+            statement.init,
+            functionThrowValueTypes,
+            functionNames,
+            errorObjectNames,
+            hasErrorTarget
+          )),
+      ...collectEscapingThrowValueTypesFromExpression(
+        statement.test,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromExpression(
+        statement.update,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromStatement(
+        statement.body,
+        functionThrowValueTypes,
+        functionNames,
+        new Set(errorObjectNames),
+        hasErrorTarget
+      )
     ]
   }
 
   if (statement.type === 'ForOfStatement') {
     return [
-      ...collectEscapingThrowValueTypesFromExpression(statement.iterable, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+      ...collectEscapingThrowValueTypesFromExpression(
+        statement.iterable,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromStatement(
+        statement.body,
+        functionThrowValueTypes,
+        functionNames,
+        new Set(errorObjectNames),
+        hasErrorTarget
+      )
     ]
   }
 
   if (statement.type === 'SwitchStatement') {
     return [
-      ...collectEscapingThrowValueTypesFromExpression(statement.discriminant, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...statement.cases.flatMap(item => [
-        ...collectEscapingThrowValueTypesFromExpression(item.test, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-        ...collectEscapingThrowValueTypesFromStatements(item.consequent, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+      ...collectEscapingThrowValueTypesFromExpression(
+        statement.discriminant,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...statement.cases.flatMap((item) => [
+        ...collectEscapingThrowValueTypesFromExpression(
+          item.test,
+          functionThrowValueTypes,
+          functionNames,
+          errorObjectNames,
+          hasErrorTarget
+        ),
+        ...collectEscapingThrowValueTypesFromStatements(
+          item.consequent,
+          functionThrowValueTypes,
+          functionNames,
+          new Set(errorObjectNames),
+          hasErrorTarget
+        )
       ])
     ]
   }
@@ -543,9 +737,27 @@ function collectEscapingThrowValueTypesFromStatement(
     const blockHasTarget = statement.handler != null ? true : hasErrorTarget
 
     return [
-      ...collectEscapingThrowValueTypesFromStatement(statement.block, functionThrowValueTypes, functionNames, new Set(errorObjectNames), blockHasTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.handler?.body, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromStatement(statement.finalizer, functionThrowValueTypes, functionNames, new Set(errorObjectNames), hasErrorTarget)
+      ...collectEscapingThrowValueTypesFromStatement(
+        statement.block,
+        functionThrowValueTypes,
+        functionNames,
+        new Set(errorObjectNames),
+        blockHasTarget
+      ),
+      ...collectEscapingThrowValueTypesFromStatement(
+        statement.handler?.body,
+        functionThrowValueTypes,
+        functionNames,
+        new Set(errorObjectNames),
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromStatement(
+        statement.finalizer,
+        functionThrowValueTypes,
+        functionNames,
+        new Set(errorObjectNames),
+        hasErrorTarget
+      )
     ]
   }
 
@@ -564,77 +776,183 @@ function collectEscapingThrowValueTypesFromExpression(
   }
 
   if (expression.type === 'CallExpression') {
-    const callTypes = !hasErrorTarget && expression.callee.type === 'Reference' && expression.callee.path.length === 1 && functionNames.has(expression.callee.path[0])
-      ? functionThrowValueTypes.get(expression.callee.path[0]) ?? []
-      : []
+    const callTypes =
+      !hasErrorTarget &&
+      expression.callee.type === 'Reference' &&
+      expression.callee.path.length === 1 &&
+      functionNames.has(expression.callee.path[0])
+        ? (functionThrowValueTypes.get(expression.callee.path[0]) ?? [])
+        : []
 
     return [
       ...callTypes,
-      ...collectEscapingThrowValueTypesFromExpression(expression.callee, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...expression.args.flatMap(arg => collectEscapingThrowValueTypesFromExpression(arg, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+      ...collectEscapingThrowValueTypesFromExpression(
+        expression.callee,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...expression.args.flatMap((arg) =>
+        collectEscapingThrowValueTypesFromExpression(
+          arg,
+          functionThrowValueTypes,
+          functionNames,
+          errorObjectNames,
+          hasErrorTarget
+        )
+      )
     ]
   }
 
   if (expression.type === 'NewExpression' || expression.type === 'OptionalCallExpression') {
     return [
-      ...collectEscapingThrowValueTypesFromExpression(expression.callee, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...expression.args.flatMap(arg => collectEscapingThrowValueTypesFromExpression(arg, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+      ...collectEscapingThrowValueTypesFromExpression(
+        expression.callee,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...expression.args.flatMap((arg) =>
+        collectEscapingThrowValueTypesFromExpression(
+          arg,
+          functionThrowValueTypes,
+          functionNames,
+          errorObjectNames,
+          hasErrorTarget
+        )
+      )
     ]
   }
 
   if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
-    return collectEscapingThrowValueTypesFromExpression(expression.object, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+    return collectEscapingThrowValueTypesFromExpression(
+      expression.object,
+      functionThrowValueTypes,
+      functionNames,
+      errorObjectNames,
+      hasErrorTarget
+    )
   }
 
   if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
     return [
-      ...collectEscapingThrowValueTypesFromExpression(expression.object, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromExpression(expression.index, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+      ...collectEscapingThrowValueTypesFromExpression(
+        expression.object,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromExpression(
+        expression.index,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      )
     ]
   }
 
   if (expression.type === 'AssignmentExpression') {
     return [
-      ...collectEscapingThrowValueTypesFromExpression(expression.target, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromExpression(expression.value, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+      ...collectEscapingThrowValueTypesFromExpression(
+        expression.target,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromExpression(
+        expression.value,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      )
     ]
   }
 
   if (expression.type === 'BinaryExpression') {
     return [
-      ...collectEscapingThrowValueTypesFromExpression(expression.left, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget),
-      ...collectEscapingThrowValueTypesFromExpression(expression.right, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+      ...collectEscapingThrowValueTypesFromExpression(
+        expression.left,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      ),
+      ...collectEscapingThrowValueTypesFromExpression(
+        expression.right,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      )
     ]
   }
 
   if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
-    return collectEscapingThrowValueTypesFromExpression(expression.argument, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget)
+    return collectEscapingThrowValueTypesFromExpression(
+      expression.argument,
+      functionThrowValueTypes,
+      functionNames,
+      errorObjectNames,
+      hasErrorTarget
+    )
   }
 
   if (expression.type === 'ArrayLiteral') {
-    return expression.elements.flatMap(item => collectEscapingThrowValueTypesFromExpression(item, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+    return expression.elements.flatMap((item) =>
+      collectEscapingThrowValueTypesFromExpression(
+        item,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      )
+    )
   }
 
   if (expression.type === 'ObjectLiteral') {
-    return expression.properties.flatMap(property => collectEscapingThrowValueTypesFromExpression(property.value, functionThrowValueTypes, functionNames, errorObjectNames, hasErrorTarget))
+    return expression.properties.flatMap((property) =>
+      collectEscapingThrowValueTypesFromExpression(
+        property.value,
+        functionThrowValueTypes,
+        functionNames,
+        errorObjectNames,
+        hasErrorTarget
+      )
+    )
   }
 
   return []
 }
 
-function inferThrowValueTypeForAnalysis(expression: AnyNode | null | undefined, errorObjectNames: Set<string>): IrThrowValueType {
+function inferThrowValueTypeForAnalysis(
+  expression: AnyNode | null | undefined,
+  errorObjectNames: Set<string>
+): IrThrowValueType {
   if (isErrorValueExpressionForAnalysis(expression, errorObjectNames)) {
     return 'error'
   }
 
-  if (expression?.type === 'StringLiteral' || expression?.type === 'TemplateLiteral' || expression?.valueType === 'string') {
+  if (
+    expression?.type === 'StringLiteral' ||
+    expression?.type === 'TemplateLiteral' ||
+    expression?.valueType === 'string'
+  ) {
     return 'string'
   }
 
   return 'other'
 }
 
-function isErrorValueExpressionForAnalysis(expression: AnyNode | null | undefined, errorObjectNames: Set<string>): boolean {
+function isErrorValueExpressionForAnalysis(
+  expression: AnyNode | null | undefined,
+  errorObjectNames: Set<string>
+): boolean {
   if (isErrorConstructorExpression(expression)) {
     return true
   }
@@ -643,10 +961,12 @@ function isErrorValueExpressionForAnalysis(expression: AnyNode | null | undefine
 }
 
 function isErrorConstructorExpression(expression: AnyNode | null | undefined): boolean {
-  return expression?.type === 'NewExpression'
-    && expression.callee?.type === 'Reference'
-    && expression.callee.path.length === 1
-    && expression.callee.path[0] === 'Error'
+  return (
+    expression?.type === 'NewExpression' &&
+    expression.callee?.type === 'Reference' &&
+    expression.callee.path.length === 1 &&
+    expression.callee.path[0] === 'Error'
+  )
 }
 
 function uniqueThrowValueTypes(types: IrThrowValueType[]): IrThrowValueType[] {
@@ -654,7 +974,7 @@ function uniqueThrowValueTypes(types: IrThrowValueType[]): IrThrowValueType[] {
 }
 
 function sameThrowValueTypes(left: IrThrowValueType[], right: IrThrowValueType[]): boolean {
-  return left.length === right.length && left.every(item => right.includes(item))
+  return left.length === right.length && left.every((item) => right.includes(item))
 }
 
 function visitNode(node: unknown, features: Set<IrFeature>): void {
@@ -718,7 +1038,11 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     recordCallableSignatureFeatures(node, features)
   }
 
-  if (node.type === 'VariableDeclaration' && node.valueType === 'function' && (node.nullable === true || isRuntimeFunctionType(node.functionType))) {
+  if (
+    node.type === 'VariableDeclaration' &&
+    node.valueType === 'function' &&
+    (node.nullable === true || isRuntimeFunctionType(node.functionType))
+  ) {
     features.add('callback-values')
     features.add('runtime-values')
   }
@@ -766,7 +1090,11 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     features.add('map-get-null')
   }
 
-  if (node.type === 'AssignmentExpression' && node.target?.type === 'IndexExpression' && node.target.collectionKind === 'map') {
+  if (
+    node.type === 'AssignmentExpression' &&
+    node.target?.type === 'IndexExpression' &&
+    node.target.collectionKind === 'map'
+  ) {
     features.add('collections')
     features.add('runtime-values')
     features.add('map-index-set')
@@ -792,7 +1120,10 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
       features.add('runtime-values')
     }
 
-    if (['===', '!==', '==', '!='].includes(node.operator) && (mayBeStringBytesOperand(node.left) || mayBeStringBytesOperand(node.right))) {
+    if (
+      ['===', '!==', '==', '!='].includes(node.operator) &&
+      (mayBeStringBytesOperand(node.left) || mayBeStringBytesOperand(node.right))
+    ) {
       features.add('string-bytes')
     }
   }
@@ -947,9 +1278,11 @@ function isObjectFieldExpression(expression: AnyNode | null | undefined): boolea
     return expression.object?.shape?.kind === 'object'
   }
 
-  return (expression?.type === 'IndexExpression' || expression?.type === 'OptionalIndexExpression')
-    && expression.object?.shape?.kind === 'object'
-    && expression.collectionKind !== 'map'
+  return (
+    (expression?.type === 'IndexExpression' || expression?.type === 'OptionalIndexExpression') &&
+    expression.object?.shape?.kind === 'object' &&
+    expression.collectionKind !== 'map'
+  )
 }
 
 function collectionMethodCallName(expression: AnyNode): string | null {
@@ -957,7 +1290,9 @@ function collectionMethodCallName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['add', 'clear', 'delete', 'get', 'has', 'set'].includes(expression.callee.property) ? expression.callee.property : null
+  return ['add', 'clear', 'delete', 'get', 'has', 'set'].includes(expression.callee.property)
+    ? expression.callee.property
+    : null
 }
 
 function arrayMethodCallName(expression: AnyNode): string | null {
@@ -965,25 +1300,33 @@ function arrayMethodCallName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['filter', 'map', 'pop', 'push', 'sort'].includes(expression.callee.property) ? expression.callee.property : null
+  return ['filter', 'map', 'pop', 'push', 'sort'].includes(expression.callee.property)
+    ? expression.callee.property
+    : null
 }
 
 function isStringConversionCall(expression: AnyNode): boolean {
-  return expression.callee?.type === 'Reference'
-    && expression.callee.path.length === 1
-    && expression.callee.path[0] === 'String'
+  return (
+    expression.callee?.type === 'Reference' &&
+    expression.callee.path.length === 1 &&
+    expression.callee.path[0] === 'String'
+  )
 }
 
 function isNumberConversionCall(expression: AnyNode): boolean {
-  return expression.callee?.type === 'Reference'
-    && expression.callee.path.length === 1
-    && expression.callee.path[0] === 'Number'
+  return (
+    expression.callee?.type === 'Reference' &&
+    expression.callee.path.length === 1 &&
+    expression.callee.path[0] === 'Number'
+  )
 }
 
 function isNumericCastCall(expression: AnyNode): boolean {
-  return expression.callee?.type === 'Reference'
-    && expression.callee.path.length === 1
-    && ['i32', 'u32', 'u64', 'f32', 'f64'].includes(expression.callee.path[0])
+  return (
+    expression.callee?.type === 'Reference' &&
+    expression.callee.path.length === 1 &&
+    ['i32', 'u32', 'u64', 'f32', 'f64'].includes(expression.callee.path[0])
+  )
 }
 
 function stringRuntimeMethodName(expression: AnyNode): string | null {
@@ -991,7 +1334,9 @@ function stringRuntimeMethodName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['endsWith', 'includes', 'slice', 'split', 'startsWith', 'trim'].includes(expression.callee.property) ? expression.callee.property : null
+  return ['endsWith', 'includes', 'slice', 'split', 'startsWith', 'trim'].includes(expression.callee.property)
+    ? expression.callee.property
+    : null
 }
 
 function timeRuntimeCallName(callee: AnyNode): string | null {
@@ -1019,7 +1364,20 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
     return null
   }
 
-  return ['readFile', 'readFileBytes', 'readFileBytesSync', 'readFileSync', 'readDir', 'readDirSync', 'writeFile', 'writeFileBytes', 'writeFileBytesSync', 'writeFileSync'].includes(callee.property) ? `fs.${callee.property}` : null
+  return [
+    'readFile',
+    'readFileBytes',
+    'readFileBytesSync',
+    'readFileSync',
+    'readDir',
+    'readDirSync',
+    'writeFile',
+    'writeFileBytes',
+    'writeFileBytesSync',
+    'writeFileSync'
+  ].includes(callee.property)
+    ? `fs.${callee.property}`
+    : null
 }
 
 function jsonRuntimeCallName(callee: AnyNode): string | null {
@@ -1039,7 +1397,11 @@ function timerRuntimeCallName(callee: AnyNode): string | null {
     return null
   }
 
-  return ['clearImmediate', 'clearInterval', 'clearTimeout', 'setImmediate', 'setInterval', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+  return ['clearImmediate', 'clearInterval', 'clearTimeout', 'setImmediate', 'setInterval', 'setTimeout'].includes(
+    callee.path[0]
+  )
+    ? callee.path[0]
+    : null
 }
 
 function mayBeStringBytesOperand(expression: AnyNode | null | undefined): boolean {
@@ -1051,13 +1413,25 @@ function mayBeStringBytesOperand(expression: AnyNode | null | undefined): boolea
     return true
   }
 
-  return expression.type != null
-    && ['StringLiteral', 'TemplateLiteral', 'Reference', 'MemberExpression', 'IndexExpression', 'CallExpression', 'BinaryExpression'].includes(expression.type)
+  return (
+    expression.type != null &&
+    [
+      'StringLiteral',
+      'TemplateLiteral',
+      'Reference',
+      'MemberExpression',
+      'IndexExpression',
+      'CallExpression',
+      'BinaryExpression'
+    ].includes(expression.type)
+  )
 }
 
 function isRuntimeFunctionType(functionType: AnyNode | null | undefined): boolean {
-  return functionType != null
-    && functionType.returnType === 'void'
-    && functionType.params.some(param => ['string', 'object'].includes(param.valueType))
-    && functionType.params.every(param => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
+  return (
+    functionType != null &&
+    functionType.returnType === 'void' &&
+    functionType.params.some((param) => ['string', 'object'].includes(param.valueType)) &&
+    functionType.params.every((param) => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
+  )
 }

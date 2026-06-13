@@ -54,8 +54,14 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
   if (target === 'c') {
     const graph = await buildModuleGraph(entry)
     const irModules = collectIrModuleRecords(graph)
-    checkCProfileCapabilities(irModules.map(module => module.ir), options)
-    checkCCompileBudgets(irModules.map(module => module.ir), options)
+    checkCProfileCapabilities(
+      irModules.map((module) => module.ir),
+      options
+    )
+    checkCCompileBudgets(
+      irModules.map((module) => module.ir),
+      options
+    )
 
     return {
       target,

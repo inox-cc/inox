@@ -52,16 +52,23 @@ export async function runSnapshotSuite(options: SnapshotSuiteOptions): Promise<v
   }
 
   if (failures.length > 0) {
-    console.error([`${options.title} failed`, ...failures.map(failure => `- ${failure}`)].join('\n'))
+    console.error([`${options.title} failed`, ...failures.map((failure) => `- ${failure}`)].join('\n'))
     process.exitCode = 1
   } else {
     const action = options.update ? 'updated' : 'passed'
 
-    console.log(`${options.title} ${action} (${formatCount(files.length, 'source')}, ${formatCount(outputCount, 'snapshot')})`)
+    console.log(
+      `${options.title} ${action} (${formatCount(files.length, 'source')}, ${formatCount(outputCount, 'snapshot')})`
+    )
   }
 }
 
-async function checkSnapshotOutput(sourceRel: string, output: SnapshotOutput, options: SnapshotSuiteOptions, failures: string[]): Promise<void> {
+async function checkSnapshotOutput(
+  sourceRel: string,
+  output: SnapshotOutput,
+  options: SnapshotSuiteOptions,
+  failures: string[]
+): Promise<void> {
   if (options.update) {
     await mkdir(dirname(output.path), {
       recursive: true
@@ -74,7 +81,9 @@ async function checkSnapshotOutput(sourceRel: string, output: SnapshotOutput, op
     const expected = await readFile(output.path, 'utf8')
 
     if (expected !== output.content) {
-      failures.push(`${sourceRel}: snapshot mismatch at ${relative(rootDir, output.path)}; run ${options.updateCommand}`)
+      failures.push(
+        `${sourceRel}: snapshot mismatch at ${relative(rootDir, output.path)}; run ${options.updateCommand}`
+      )
     }
   } catch (error) {
     if (isNodeError(error) && error.code === 'ENOENT') {
@@ -96,7 +105,7 @@ async function findSnapshotSources(dir: string, sourceSuffix: string): Promise<s
     const path = join(dir, entry.name)
 
     if (entry.isDirectory()) {
-      files.push(...await findSnapshotSources(path, sourceSuffix))
+      files.push(...(await findSnapshotSources(path, sourceSuffix)))
     } else if (entry.isFile() && entry.name.endsWith(sourceSuffix)) {
       files.push(path)
     }

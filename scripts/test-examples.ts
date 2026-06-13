@@ -6,8 +6,8 @@ import { rootDir } from './lib/repo-checks.ts'
 
 const examplesDir = join(rootDir, 'examples')
 const files = (await readdir(examplesDir))
-  .filter(file => file.endsWith('.ts'))
-  .map(file => join(examplesDir, file))
+  .filter((file) => file.endsWith('.ts'))
+  .map((file) => join(examplesDir, file))
   .sort()
 const failures: string[] = []
 let stdoutChecks = 0
@@ -30,10 +30,12 @@ for (const file of files) {
 }
 
 if (failures.length > 0) {
-  console.error(['Example checks failed', ...failures.map(failure => `- ${failure}`)].join('\n'))
+  console.error(['Example checks failed', ...failures.map((failure) => `- ${failure}`)].join('\n'))
   process.exitCode = 1
 } else {
-  console.log(`Example checks passed (${files.length} example${files.length === 1 ? '' : 's'}, ${stdoutChecks} stdout check${stdoutChecks === 1 ? '' : 's'})`)
+  console.log(
+    `Example checks passed (${files.length} example${files.length === 1 ? '' : 's'}, ${stdoutChecks} stdout check${stdoutChecks === 1 ? '' : 's'})`
+  )
 }
 
 async function checkExample(file: string, rel: string, metadata: Map<string, string>): Promise<void> {
@@ -51,13 +53,7 @@ async function checkExample(file: string, rel: string, metadata: Map<string, str
   }
 
   for (const target of targets) {
-    const result = await runCommand(process.execPath, [
-      'bin/ccjs.ts',
-      'run',
-      file,
-      '--target',
-      target
-    ])
+    const result = await runCommand(process.execPath, ['bin/ccjs.ts', 'run', file, '--target', target])
     const expectedStdout = `${metadata.get('stdout') ?? ''}\n`
     const stdout = normalizeNewlines(result.stdout)
 
@@ -67,7 +63,9 @@ async function checkExample(file: string, rel: string, metadata: Map<string, str
     }
 
     if (stdout !== expectedStdout) {
-      failures.push(`${rel}: expected stdout ${JSON.stringify(expectedStdout)} for target ${target}, got ${JSON.stringify(stdout)}`)
+      failures.push(
+        `${rel}: expected stdout ${JSON.stringify(expectedStdout)} for target ${target}, got ${JSON.stringify(stdout)}`
+      )
       continue
     }
 

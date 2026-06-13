@@ -120,17 +120,17 @@ export async function findFixtureFiles(): Promise<string[]> {
     return []
   }
 
-  return findFiles(root, file => file.endsWith('.ts') || file.endsWith('.js'))
+  return findFiles(root, (file) => file.endsWith('.ts') || file.endsWith('.js'))
 }
 
 export function formatFailures(title: string, failures: string[]): string {
-  return [title, ...failures.map(failure => `- ${failure}`)].join('\n')
+  return [title, ...failures.map((failure) => `- ${failure}`)].join('\n')
 }
 
 async function checkDocIndex(failures: string[], dir: string): Promise<void> {
   const indexPath = `${dir}/README.md`
   const index = await readFile(join(rootDir, indexPath), 'utf8')
-  const docs = await findFiles(join(rootDir, dir), file => file.endsWith('.md'))
+  const docs = await findFiles(join(rootDir, dir), (file) => file.endsWith('.md'))
 
   for (const doc of docs) {
     const rel = relative(join(rootDir, dir), doc)
@@ -166,7 +166,7 @@ async function findFiles(dir: string, predicate: (path: string) => boolean): Pro
     const path = join(dir, entry.name)
 
     if (entry.isDirectory()) {
-      files.push(...await findFiles(path, predicate))
+      files.push(...(await findFiles(path, predicate)))
     } else if (entry.isFile() && predicate(path)) {
       files.push(path)
     }

@@ -21,9 +21,11 @@ export function diagnostic(code: string, message: string, token?: Partial<Source
 }
 
 export function formatDiagnostics(diagnostics: Diagnostic[]): string {
-  return diagnostics.map(item => {
-    return `${item.line}:${item.column} ${item.code}: ${item.message}`
-  }).join('\n')
+  return diagnostics
+    .map((item) => {
+      return `${item.line}:${item.column} ${item.code}: ${item.message}`
+    })
+    .join('\n')
 }
 
 export function throwDiagnostics(diagnostics: Diagnostic[]): void {

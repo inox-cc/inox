@@ -1,6 +1,14 @@
 import { join } from 'node:path'
 import { compileSource } from '../src/compiler/index.ts'
-import type { AnyNode, IrFunctionDeclaration, IrGlobalUsage, IrProgram, IrSyntaxFeatureUsage, IrTopLevelItem, SourceLocation } from '../src/compiler/types.ts'
+import type {
+  AnyNode,
+  IrFunctionDeclaration,
+  IrGlobalUsage,
+  IrProgram,
+  IrSyntaxFeatureUsage,
+  IrTopLevelItem,
+  SourceLocation
+} from '../src/compiler/types.ts'
 import { rootDir } from './lib/repo-checks.ts'
 import { runSnapshotSuite } from './lib/snapshot-runner.ts'
 
@@ -106,10 +114,12 @@ await runSnapshotSuite({
       callMain: false
     }).ir
 
-    return [{
-      path: path.replace(/\.ts$/, '.ir.json'),
-      content: `${JSON.stringify(createIrSnapshot(ir), null, 2)}\n`
-    }]
+    return [
+      {
+        path: path.replace(/\.ts$/, '.ir.json'),
+        content: `${JSON.stringify(createIrSnapshot(ir), null, 2)}\n`
+      }
+    ]
   }
 })
 
@@ -120,7 +130,7 @@ function createIrSnapshot(ir: IrProgram): IrSnapshot {
     runtimeRequirements: ir.runtimeRequirements,
     topLevelItems: ir.topLevelItems.map(snapshotTopLevelItem),
     functionDeclarations: ir.functionDeclarations.map(snapshotFunctionDeclaration),
-    functionEffects: ir.functionEffects.map(effect => ({
+    functionEffects: ir.functionEffects.map((effect) => ({
       name: effect.name,
       throws: effect.throws,
       throwValueTypes: effect.throwValueTypes
@@ -132,22 +142,28 @@ function createIrSnapshot(ir: IrProgram): IrSnapshot {
 }
 
 function snapshotTopLevelItem(item: IrTopLevelItem): SnapshotTopLevelItem {
-  return withLocation({
-    kind: item.kind,
-    index: item.index
-  }, item.loc)
+  return withLocation(
+    {
+      kind: item.kind,
+      index: item.index
+    },
+    item.loc
+  )
 }
 
 function snapshotFunctionDeclaration(declaration: IrFunctionDeclaration): SnapshotFunctionDeclaration {
-  return withLocation({
-    name: declaration.name,
-    exported: declaration.exported,
-    async: declaration.async,
-    params: declaration.params.map(snapshotParam),
-    returnType: declaration.returnType,
-    returnNullable: declaration.returnNullable,
-    ...(declaration.returnShape == null ? {} : { returnShape: declaration.returnShape })
-  }, declaration.loc)
+  return withLocation(
+    {
+      name: declaration.name,
+      exported: declaration.exported,
+      async: declaration.async,
+      params: declaration.params.map(snapshotParam),
+      returnType: declaration.returnType,
+      returnNullable: declaration.returnNullable,
+      ...(declaration.returnShape == null ? {} : { returnShape: declaration.returnShape })
+    },
+    declaration.loc
+  )
 }
 
 function snapshotParam(param: AnyNode): SnapshotParam {
@@ -157,7 +173,9 @@ function snapshotParam(param: AnyNode): SnapshotParam {
     ...(param.valueType == null ? {} : { valueType: String(param.valueType) }),
     ...(param.nullable == null ? {} : { nullable: Boolean(param.nullable) }),
     ...(param.arrayElementType == null ? {} : { arrayElementType: stringOrNull(param.arrayElementType) }),
-    ...(param.arrayElementDeclaredType == null ? {} : { arrayElementDeclaredType: stringOrNull(param.arrayElementDeclaredType) }),
+    ...(param.arrayElementDeclaredType == null
+      ? {}
+      : { arrayElementDeclaredType: stringOrNull(param.arrayElementDeclaredType) }),
     ...(param.mapKeyType == null ? {} : { mapKeyType: stringOrNull(param.mapKeyType) }),
     ...(param.mapValueType == null ? {} : { mapValueType: stringOrNull(param.mapValueType) }),
     ...(param.setElementType == null ? {} : { setElementType: stringOrNull(param.setElementType) }),
@@ -166,43 +184,55 @@ function snapshotParam(param: AnyNode): SnapshotParam {
 }
 
 function snapshotSyntaxFeatureUsage(usage: IrSyntaxFeatureUsage): SnapshotSyntaxFeatureUsage {
-  return withLocation({
-    feature: usage.feature
-  }, usage.loc)
+  return withLocation(
+    {
+      feature: usage.feature
+    },
+    usage.loc
+  )
 }
 
 function snapshotGlobalUsage(usage: IrGlobalUsage): SnapshotGlobalUsage {
-  return withLocation({
-    root: usage.root,
-    path: usage.path
-  }, usage.loc)
+  return withLocation(
+    {
+      root: usage.root,
+      path: usage.path
+    },
+    usage.loc
+  )
 }
 
 function snapshotBodyItem(item: AnyNode, index: number): SnapshotBodyItem {
-  return withLocation({
-    index,
-    type: String(item.type ?? '<unknown>'),
-    ...(typeof item.name !== 'string' ? {} : { name: item.name }),
-    ...(typeof item.exported !== 'boolean' ? {} : { exported: item.exported }),
-    ...(typeof item.async !== 'boolean' ? {} : { async: item.async }),
-    ...(typeof item.kind !== 'string' ? {} : { declarationKind: item.kind }),
-    ...(Array.isArray(item.declarations) ? { declarations: item.declarations.map(declarationName) } : {}),
-    ...snapshotBodyFields(item)
-  }, item.loc)
+  return withLocation(
+    {
+      index,
+      type: String(item.type ?? '<unknown>'),
+      ...(typeof item.name !== 'string' ? {} : { name: item.name }),
+      ...(typeof item.exported !== 'boolean' ? {} : { exported: item.exported }),
+      ...(typeof item.async !== 'boolean' ? {} : { async: item.async }),
+      ...(typeof item.kind !== 'string' ? {} : { declarationKind: item.kind }),
+      ...(Array.isArray(item.declarations) ? { declarations: item.declarations.map(declarationName) } : {}),
+      ...snapshotBodyFields(item)
+    },
+    item.loc
+  )
 }
 
 function snapshotField(field: AnyNode): SnapshotField {
-  return withLocation({
-    name: String(field.name ?? '<anonymous>'),
-    ...(field.readonly == null ? {} : { readonly: Boolean(field.readonly) }),
-    ...(field.declaredType == null ? {} : { declaredType: String(field.declaredType) }),
-    ...(field.valueType == null ? {} : { valueType: String(field.valueType) }),
-    ...(field.nullable == null ? {} : { nullable: Boolean(field.nullable) }),
-    ...(field.arrayElementType == null ? {} : { arrayElementType: stringOrNull(field.arrayElementType) }),
-    ...(field.mapKeyType == null ? {} : { mapKeyType: stringOrNull(field.mapKeyType) }),
-    ...(field.mapValueType == null ? {} : { mapValueType: stringOrNull(field.mapValueType) }),
-    ...(field.setElementType == null ? {} : { setElementType: stringOrNull(field.setElementType) })
-  }, field.loc)
+  return withLocation(
+    {
+      name: String(field.name ?? '<anonymous>'),
+      ...(field.readonly == null ? {} : { readonly: Boolean(field.readonly) }),
+      ...(field.declaredType == null ? {} : { declaredType: String(field.declaredType) }),
+      ...(field.valueType == null ? {} : { valueType: String(field.valueType) }),
+      ...(field.nullable == null ? {} : { nullable: Boolean(field.nullable) }),
+      ...(field.arrayElementType == null ? {} : { arrayElementType: stringOrNull(field.arrayElementType) }),
+      ...(field.mapKeyType == null ? {} : { mapKeyType: stringOrNull(field.mapKeyType) }),
+      ...(field.mapValueType == null ? {} : { mapValueType: stringOrNull(field.mapValueType) }),
+      ...(field.setElementType == null ? {} : { setElementType: stringOrNull(field.setElementType) })
+    },
+    field.loc
+  )
 }
 
 function snapshotShape(shape: AnyNode): SnapshotShape {
@@ -244,9 +274,14 @@ function stringOrNull(value: unknown): string | null {
   return value == null ? null : String(value)
 }
 
-function withLocation<T extends Record<string, unknown>>(value: T, loc: SourceLocation | undefined): T & { loc?: SourceLocation } {
-  return loc == null ? value : {
-    ...value,
-    loc
-  }
+function withLocation<T extends Record<string, unknown>>(
+  value: T,
+  loc: SourceLocation | undefined
+): T & { loc?: SourceLocation } {
+  return loc == null
+    ? value
+    : {
+        ...value,
+        loc
+      }
 }

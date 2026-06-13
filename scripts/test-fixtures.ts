@@ -29,12 +29,13 @@ for (const file of files) {
 }
 
 if (failures.length > 0) {
-  console.error(['Fixture checks failed', ...failures.map(failure => `- ${failure}`)].join('\n'))
+  console.error(['Fixture checks failed', ...failures.map((failure) => `- ${failure}`)].join('\n'))
   process.exitCode = 1
 } else {
-  const stdoutSummary = stdoutChecks.passed + stdoutChecks.skipped === 0
-    ? ''
-    : `, ${stdoutChecks.passed} stdout check${stdoutChecks.passed === 1 ? '' : 's'}${stdoutChecks.skipped === 0 ? '' : `, ${stdoutChecks.skipped} skipped`}`
+  const stdoutSummary =
+    stdoutChecks.passed + stdoutChecks.skipped === 0
+      ? ''
+      : `, ${stdoutChecks.passed} stdout check${stdoutChecks.passed === 1 ? '' : 's'}${stdoutChecks.skipped === 0 ? '' : `, ${stdoutChecks.skipped} skipped`}`
 
   console.log(`Fixture checks passed (${files.length} fixture${files.length === 1 ? '' : 's'}${stdoutSummary})`)
 }
@@ -63,12 +64,16 @@ async function checkFixtureCompile(file: string, source: string, metadata: Map<s
       }
 
       if (expectation === 'pass') {
-        failures.push(`${rel}: expected pass for target ${target}, got ${error.diagnostics.map(item => item.code).join(', ')}`)
+        failures.push(
+          `${rel}: expected pass for target ${target}, got ${error.diagnostics.map((item) => item.code).join(', ')}`
+        )
         continue
       }
 
-      if (expectation === 'diagnostic' && !error.diagnostics.some(item => item.code === diagnostic)) {
-        failures.push(`${rel}: expected diagnostic ${diagnostic} for target ${target}, got ${error.diagnostics.map(item => item.code).join(', ')}`)
+      if (expectation === 'diagnostic' && !error.diagnostics.some((item) => item.code === diagnostic)) {
+        failures.push(
+          `${rel}: expected diagnostic ${diagnostic} for target ${target}, got ${error.diagnostics.map((item) => item.code).join(', ')}`
+        )
       }
     }
   }
@@ -80,23 +85,21 @@ async function checkFixtureStdout(file: string, rel: string, target: CompileTarg
     return
   }
 
-  const result = await runCommand(process.execPath, [
-    'bin/ccjs.ts',
-    'run',
-    file,
-    '--target',
-    target
-  ])
+  const result = await runCommand(process.execPath, ['bin/ccjs.ts', 'run', file, '--target', target])
   const expectedStdout = expected === '' ? '' : `${expected}\n`
   const stdout = normalizeNewlines(result.stdout)
 
   if (result.code !== 0) {
-    failures.push(`${rel}: expected stdout fixture to exit 0 for target ${target}, got ${result.code}: ${result.stderr.trim()}`)
+    failures.push(
+      `${rel}: expected stdout fixture to exit 0 for target ${target}, got ${result.code}: ${result.stderr.trim()}`
+    )
     return
   }
 
   if (stdout !== expectedStdout) {
-    failures.push(`${rel}: expected stdout ${JSON.stringify(expectedStdout)} for target ${target}, got ${JSON.stringify(stdout)}`)
+    failures.push(
+      `${rel}: expected stdout ${JSON.stringify(expectedStdout)} for target ${target}, got ${JSON.stringify(stdout)}`
+    )
     return
   }
 
