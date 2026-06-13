@@ -3175,6 +3175,59 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C nested async finalizer throw fallback compiles and runs', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-finalizer-throw-fallback-'))
+  const source = join(dir, 'async-finalizer-throw-fallback.c')
+  const output = join(dir, 'async-finalizer-throw-fallback')
+
+  try {
+    const result = compileSource(`async function work(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.resolve(1)
+      return value
+    } finally {
+      throw 'finally fail'
+    }
+  } catch (error) {
+    console.log(error)
+    return 9
+  }
+}
+
+export async function main(): Promise<void> {
+  const promise = work()
+  console.log(await promise)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'finally fail\n9\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async task frames await fs promises with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

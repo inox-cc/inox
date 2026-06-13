@@ -5387,6 +5387,34 @@ export async function main(): Promise<void> {
   })
 })
 
+test('keeps nested async finalizer throw paths on the non-task-frame fallback', () => {
+  const result = compileSource(`async function work(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.resolve(1)
+      return value
+    } finally {
+      throw 'finally fail'
+    }
+  } catch (error) {
+    console.log(error)
+    return 9
+  }
+}
+
+export async function main(): Promise<void> {
+  const promise = work()
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.doesNotMatch(result.code, /ccjs_async_task_work/)
+  assert.match(result.code, /ccjs_try_\d+_finally:/)
+  assert.match(result.code, /goto ccjs_try_\d+_catch;/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]
