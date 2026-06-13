@@ -36,6 +36,7 @@ double add(double left, double right) {
   double ccjs_return = 0;
   ccjs_return = (left + right);
   goto ccjs_cleanup;
+
 ccjs_cleanup:
   return ccjs_return;
 }
@@ -47,13 +48,31 @@ int main(void) {
   const double total = add(2, 3);
   ccjs_release(ccjs_value_0);
   ccjs_value_0 = ccjs_undefined_value();
-  if (ccjs_string_from_number(&ccjs_default_allocator, total, &ccjs_value_0) != CCJS_OK) goto ccjs_cleanup;
+
+  if (ccjs_string_from_number(&ccjs_default_allocator, total, &ccjs_value_0) != CCJS_OK) {
+    goto ccjs_cleanup;
+  }
+
   ccjs_string* ccjs_template_string_1 = (ccjs_string*)ccjs_value_0.as.ref;
   ccjs_release(ccjs_value_2);
   ccjs_value_2 = ccjs_undefined_value();
-  if (ccjs_string_concat_parts(&ccjs_default_allocator, "total ", 6, ccjs_template_string_1->bytes, ccjs_template_string_1->len, &ccjs_value_2) != CCJS_OK) goto ccjs_cleanup;
+
+  if (
+    ccjs_string_concat_parts(
+      &ccjs_default_allocator,
+      "total ",
+      6,
+      ccjs_template_string_1->bytes,
+      ccjs_template_string_1->len,
+      &ccjs_value_2
+    ) != CCJS_OK
+  ) {
+    goto ccjs_cleanup;
+  }
+
   ccjs_string* ccjs_log_string_3 = (ccjs_string*)ccjs_value_2.as.ref;
   printf("%.*s\n", (int)ccjs_log_string_3->len, ccjs_log_string_3->bytes);
+
 ccjs_cleanup:
   ccjs_release(ccjs_value_2);
   ccjs_release(ccjs_value_0);

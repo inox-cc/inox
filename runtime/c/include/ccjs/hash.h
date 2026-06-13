@@ -83,8 +83,7 @@ static inline bool ccjs_hash_value_equal(ccjs_value left, ccjs_value right) {
     ccjs_string* left_string = (ccjs_string*)left.as.ref;
     ccjs_string* right_string = (ccjs_string*)right.as.ref;
 
-    return left_string->len == right_string->len
-      && memcmp(left_string->bytes, right_string->bytes, left_string->len) == 0;
+    return left_string->len == right_string->len && memcmp(left_string->bytes, right_string->bytes, left_string->len) == 0;
   }
 
   if (left.tag == CCJS_TAG_NUMBER) {

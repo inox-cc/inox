@@ -7,11 +7,7 @@ typedef struct ccjs_microtask {
   struct ccjs_microtask* next;
 } ccjs_microtask;
 
-typedef enum ccjs_timer_kind {
-  CCJS_TIMER_IMMEDIATE,
-  CCJS_TIMER_TIMEOUT,
-  CCJS_TIMER_INTERVAL
-} ccjs_timer_kind;
+typedef enum ccjs_timer_kind { CCJS_TIMER_IMMEDIATE, CCJS_TIMER_TIMEOUT, CCJS_TIMER_INTERVAL } ccjs_timer_kind;
 
 struct ccjs_timer_handle {
   ccjs_loop* loop;
@@ -114,12 +110,8 @@ void ccjs_loop_dispose(ccjs_loop* loop) {
   loop->timer_count = 0;
 }
 
-ccjs_status ccjs_loop_queue_microtask(
-  ccjs_loop* loop,
-  ccjs_microtask_fn run,
-  void* context,
-  ccjs_microtask_finalizer_fn finalizer
-) {
+ccjs_status
+ccjs_loop_queue_microtask(ccjs_loop* loop, ccjs_microtask_fn run, void* context, ccjs_microtask_finalizer_fn finalizer) {
   if (loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || run == 0) {
     return CCJS_ERR_TYPE;
   }
@@ -297,7 +289,8 @@ static ccjs_status ccjs_loop_new_handle(
     return CCJS_ERR_TYPE;
   }
 
-  ccjs_timer_handle* handle = loop->allocator->alloc(loop->allocator->user, sizeof(ccjs_timer_handle), _Alignof(ccjs_timer_handle));
+  ccjs_timer_handle* handle =
+    loop->allocator->alloc(loop->allocator->user, sizeof(ccjs_timer_handle), _Alignof(ccjs_timer_handle));
 
   if (handle == 0) {
     if (out != 0) {

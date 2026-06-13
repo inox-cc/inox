@@ -43,7 +43,10 @@ void ccjs_release(ccjs_value value) {
       }
 
       if (object->shape->fields != 0) {
-        allocator->free(allocator->user, (void*)object->shape->fields, sizeof(ccjs_field_info) * object->shape->field_count, _Alignof(ccjs_field_info));
+        allocator->free(
+          allocator->user, (void*)object->shape->fields, sizeof(ccjs_field_info) * object->shape->field_count,
+          _Alignof(ccjs_field_info)
+        );
       }
 
       allocator->free(allocator->user, (void*)object->shape, sizeof(ccjs_shape), _Alignof(ccjs_shape));

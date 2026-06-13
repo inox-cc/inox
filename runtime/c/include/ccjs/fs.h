@@ -27,13 +27,7 @@ typedef ccjs_status (*ccjs_fs_read_dir_fn)(
   size_t path_len,
   ccjs_value* out
 );
-typedef ccjs_status (*ccjs_fs_write_file_fn)(
-  void* user,
-  const char* path,
-  size_t path_len,
-  const char* bytes,
-  size_t byte_len
-);
+typedef ccjs_status (*ccjs_fs_write_file_fn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
 
 typedef struct ccjs_fs_adapter {
   void* user;
@@ -54,14 +48,8 @@ ccjs_status ccjs_fs_write_file_bytes_sync(const char* path, size_t path_len, ccj
 ccjs_status ccjs_fs_read_file(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out);
 ccjs_status ccjs_fs_read_file_bytes(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out);
 ccjs_status ccjs_fs_read_dir(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out);
-ccjs_status ccjs_fs_write_file(
-  ccjs_loop* loop,
-  const char* path,
-  size_t path_len,
-  const char* bytes,
-  size_t byte_len,
-  ccjs_promise** out
-);
+ccjs_status
+ccjs_fs_write_file(ccjs_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, ccjs_promise** out);
 ccjs_status ccjs_fs_write_file_bytes(ccjs_loop* loop, const char* path, size_t path_len, ccjs_value bytes, ccjs_promise** out);
 
 #endif

@@ -7,11 +7,7 @@
 
 typedef struct ccjs_promise ccjs_promise;
 
-typedef enum ccjs_promise_state {
-  CCJS_PROMISE_PENDING,
-  CCJS_PROMISE_FULFILLED,
-  CCJS_PROMISE_REJECTED
-} ccjs_promise_state;
+typedef enum ccjs_promise_state { CCJS_PROMISE_PENDING, CCJS_PROMISE_FULFILLED, CCJS_PROMISE_REJECTED } ccjs_promise_state;
 
 typedef ccjs_status (*ccjs_promise_reaction_fn)(void* context, ccjs_value value);
 typedef ccjs_status (*ccjs_promise_chain_fn)(void* context, ccjs_value value, ccjs_value* out);

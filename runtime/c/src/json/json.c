@@ -61,13 +61,7 @@ static ccjs_status ccjs_json_buffer_reserve(ccjs_json_buffer* buffer, size_t nee
     next_cap *= 2;
   }
 
-  char* next = buffer->allocator->realloc(
-    buffer->allocator->user,
-    buffer->bytes,
-    buffer->cap,
-    next_cap,
-    _Alignof(char)
-  );
+  char* next = buffer->allocator->realloc(buffer->allocator->user, buffer->bytes, buffer->cap, next_cap, _Alignof(char));
 
   if (next == 0) {
     return CCJS_ERR_OOM;
@@ -185,10 +179,7 @@ static ccjs_status ccjs_json_buffer_push_utf8(ccjs_json_buffer* buffer, uint32_t
   }
 
   if (codepoint <= 0x7ff) {
-    char bytes[] = {
-      (char)(0xc0 | (codepoint >> 6)),
-      (char)(0x80 | (codepoint & 0x3f))
-    };
+    char bytes[] = { (char)(0xc0 | (codepoint >> 6)), (char)(0x80 | (codepoint & 0x3f)) };
 
     return ccjs_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
   }
@@ -198,22 +189,15 @@ static ccjs_status ccjs_json_buffer_push_utf8(ccjs_json_buffer* buffer, uint32_t
       return CCJS_ERR_TYPE;
     }
 
-    char bytes[] = {
-      (char)(0xe0 | (codepoint >> 12)),
-      (char)(0x80 | ((codepoint >> 6) & 0x3f)),
-      (char)(0x80 | (codepoint & 0x3f))
-    };
+    char bytes[] = { (char)(0xe0 | (codepoint >> 12)), (char)(0x80 | ((codepoint >> 6) & 0x3f)),
+                     (char)(0x80 | (codepoint & 0x3f)) };
 
     return ccjs_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
   }
 
   if (codepoint <= 0x10ffff) {
-    char bytes[] = {
-      (char)(0xf0 | (codepoint >> 18)),
-      (char)(0x80 | ((codepoint >> 12) & 0x3f)),
-      (char)(0x80 | ((codepoint >> 6) & 0x3f)),
-      (char)(0x80 | (codepoint & 0x3f))
-    };
+    char bytes[] = { (char)(0xf0 | (codepoint >> 18)), (char)(0x80 | ((codepoint >> 12) & 0x3f)),
+                     (char)(0x80 | ((codepoint >> 6) & 0x3f)), (char)(0x80 | (codepoint & 0x3f)) };
 
     return ccjs_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
   }
@@ -221,14 +205,13 @@ static ccjs_status ccjs_json_buffer_push_utf8(ccjs_json_buffer* buffer, uint32_t
   return CCJS_ERR_TYPE;
 }
 
-static ccjs_status ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t* out_len, bool nul_terminated) {
+static ccjs_status
+ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t* out_len, bool nul_terminated) {
   if (parser == 0 || out_bytes == 0 || out_len == 0 || !ccjs_json_match_byte(parser, '"')) {
     return CCJS_ERR_TYPE;
   }
 
-  ccjs_json_buffer buffer = {
-    .allocator = parser->allocator
-  };
+  ccjs_json_buffer buffer = { .allocator = parser->allocator };
 
   while (parser->pos < parser->len) {
     unsigned char value = (unsigned char)parser->bytes[parser->pos];
@@ -478,7 +461,8 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
 
       if (len == cap) {
         size_t next_cap = cap == 0 ? 4 : cap * 2;
-        char** next_names = allocator->realloc(allocator->user, names, sizeof(char*) * cap, sizeof(char*) * next_cap, _Alignof(char*));
+        char** next_names =
+          allocator->realloc(allocator->user, names, sizeof(char*) * cap, sizeof(char*) * next_cap, _Alignof(char*));
 
         if (next_names == 0) {
           status = CCJS_ERR_OOM;
@@ -486,7 +470,9 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
         }
 
         names = next_names;
-        ccjs_value* next_values = allocator->realloc(allocator->user, values, sizeof(ccjs_value) * cap, sizeof(ccjs_value) * next_cap, _Alignof(ccjs_value));
+        ccjs_value* next_values = allocator->realloc(
+          allocator->user, values, sizeof(ccjs_value) * cap, sizeof(ccjs_value) * next_cap, _Alignof(ccjs_value)
+        );
 
         if (next_values == 0) {
           status = CCJS_ERR_OOM;
@@ -564,7 +550,8 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
     if (shape == 0) {
       status = CCJS_ERR_OOM;
     } else {
-      ccjs_field_info* fields = len == 0 ? 0 : allocator->alloc(allocator->user, sizeof(ccjs_field_info) * len, _Alignof(ccjs_field_info));
+      ccjs_field_info* fields =
+        len == 0 ? 0 : allocator->alloc(allocator->user, sizeof(ccjs_field_info) * len, _Alignof(ccjs_field_info));
 
       if (len != 0 && fields == 0) {
         allocator->free(allocator->user, shape, sizeof(ccjs_shape), _Alignof(ccjs_shape));
@@ -601,7 +588,9 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
           } else {
             for (uint32_t index = 0; index < shape->field_count; index += 1) {
               if (shape->fields[index].name != 0) {
-                allocator->free(allocator->user, (void*)shape->fields[index].name, strlen(shape->fields[index].name) + 1, _Alignof(char));
+                allocator->free(
+                  allocator->user, (void*)shape->fields[index].name, strlen(shape->fields[index].name) + 1, _Alignof(char)
+                );
               }
             }
 
@@ -730,17 +719,16 @@ static ccjs_status ccjs_json_parse_value(ccjs_json_parser* parser, size_t depth,
 }
 
 ccjs_status ccjs_json_parse(ccjs_allocator* allocator, const char* bytes, size_t len, ccjs_value* out) {
-  if (allocator == 0 || allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0 || out == 0 || (bytes == 0 && len != 0)) {
+  if (
+    allocator == 0 || allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0 || out == 0 ||
+    (bytes == 0 && len != 0)
+  ) {
     return CCJS_ERR_TYPE;
   }
 
   *out = ccjs_undefined_value();
 
-  ccjs_json_parser parser = {
-    .allocator = allocator,
-    .bytes = bytes == 0 ? "" : bytes,
-    .len = len
-  };
+  ccjs_json_parser parser = { .allocator = allocator, .bytes = bytes == 0 ? "" : bytes, .len = len };
   ccjs_status status = ccjs_json_parse_value(&parser, 0, out);
 
   if (status != CCJS_OK) {
@@ -760,7 +748,8 @@ ccjs_status ccjs_json_parse(ccjs_allocator* allocator, const char* bytes, size_t
   return CCJS_OK;
 }
 
-static ccjs_status ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth);
+static ccjs_status
+ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth);
 
 static bool ccjs_json_stringify_stack_contains(const ccjs_json_stringify_stack* stack, const ccjs_ref* ref) {
   if (stack == 0 || ref == 0) {
@@ -859,7 +848,8 @@ static ccjs_status ccjs_json_stringify_number(ccjs_json_buffer* buffer, double n
   return ccjs_json_buffer_push_bytes(buffer, temp, (size_t)written);
 }
 
-static ccjs_status ccjs_json_stringify_array(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
+static ccjs_status
+ccjs_json_stringify_array(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
   ccjs_array* array = (ccjs_array*)value.as.ref;
   ccjs_status status = ccjs_json_stringify_stack_push(stack, value.as.ref);
 
@@ -896,7 +886,8 @@ done:
   return status;
 }
 
-static ccjs_status ccjs_json_stringify_object(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
+static ccjs_status
+ccjs_json_stringify_object(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
   ccjs_object* object = (ccjs_object*)value.as.ref;
   ccjs_status status = ccjs_json_stringify_stack_push(stack, value.as.ref);
 
@@ -942,7 +933,8 @@ done:
   return status;
 }
 
-static ccjs_status ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
+static ccjs_status
+ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
   if (depth > CCJS_JSON_MAX_DEPTH) {
     return CCJS_ERR_UNSUPPORTED;
   }
@@ -952,9 +944,7 @@ static ccjs_status ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_json
   }
 
   if (value.tag == CCJS_TAG_BOOL) {
-    return value.as.boolean
-      ? ccjs_json_buffer_push_bytes(buffer, "true", 4)
-      : ccjs_json_buffer_push_bytes(buffer, "false", 5);
+    return value.as.boolean ? ccjs_json_buffer_push_bytes(buffer, "true", 4) : ccjs_json_buffer_push_bytes(buffer, "false", 5);
   }
 
   if (value.tag == CCJS_TAG_NUMBER) {
@@ -984,9 +974,7 @@ ccjs_status ccjs_json_stringify(ccjs_allocator* allocator, ccjs_value value, ccj
   }
 
   *out = ccjs_undefined_value();
-  ccjs_json_buffer buffer = {
-    .allocator = allocator
-  };
+  ccjs_json_buffer buffer = { .allocator = allocator };
   ccjs_json_stringify_stack stack = { 0 };
   ccjs_status status = ccjs_json_stringify_value(&buffer, &stack, value, 0);
 

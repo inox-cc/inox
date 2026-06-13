@@ -36,9 +36,12 @@ static ccjs_status ccjs_fs_copy_bytes(ccjs_allocator* allocator, const char* byt
 #ifndef CCJS_FS_DISABLE_HOST
 static ccjs_status ccjs_fs_copy_host_bytes(const char* bytes, size_t len, char** out);
 static ccjs_status ccjs_fs_default_read_file_data(const char* path, size_t path_len, char** out_bytes, size_t* out_len);
-static ccjs_status ccjs_fs_default_read_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
-static ccjs_status ccjs_fs_default_read_file_bytes(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
-static ccjs_status ccjs_fs_default_read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+static ccjs_status
+ccjs_fs_default_read_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+static ccjs_status
+ccjs_fs_default_read_file_bytes(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+static ccjs_status
+ccjs_fs_default_read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_default_write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
 #endif
 static ccjs_status ccjs_fs_queue_request(
@@ -168,14 +171,8 @@ ccjs_status ccjs_fs_read_dir(ccjs_loop* loop, const char* path, size_t path_len,
   return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_DIR, path, path_len, 0, 0, out);
 }
 
-ccjs_status ccjs_fs_write_file(
-  ccjs_loop* loop,
-  const char* path,
-  size_t path_len,
-  const char* bytes,
-  size_t byte_len,
-  ccjs_promise** out
-) {
+ccjs_status
+ccjs_fs_write_file(ccjs_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, ccjs_promise** out) {
   return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, bytes, byte_len, out);
 }
 
@@ -320,7 +317,8 @@ static ccjs_status ccjs_fs_default_read_file_data(const char* path, size_t path_
   return CCJS_OK;
 }
 
-static ccjs_status ccjs_fs_default_read_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+static ccjs_status
+ccjs_fs_default_read_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
   (void)user;
 
   if (allocator == 0 || out == 0) {
@@ -340,7 +338,8 @@ static ccjs_status ccjs_fs_default_read_file(void* user, ccjs_allocator* allocat
   return status;
 }
 
-static ccjs_status ccjs_fs_default_read_file_bytes(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+static ccjs_status
+ccjs_fs_default_read_file_bytes(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
   (void)user;
 
   if (allocator == 0 || out == 0) {
@@ -360,7 +359,8 @@ static ccjs_status ccjs_fs_default_read_file_bytes(void* user, ccjs_allocator* a
   return status;
 }
 
-static ccjs_status ccjs_fs_default_read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+static ccjs_status
+ccjs_fs_default_read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
   (void)user;
 
   if (allocator == 0 || out == 0) {
@@ -476,7 +476,10 @@ static ccjs_status ccjs_fs_queue_request(
 
   *out = 0;
 
-  if (loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || (path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
+  if (
+    loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || (path == 0 && path_len != 0) ||
+    (bytes == 0 && byte_len != 0)
+  ) {
     return CCJS_ERR_TYPE;
   }
 
@@ -601,11 +604,9 @@ static ccjs_status ccjs_fs_reject_status(ccjs_loop* loop, ccjs_promise* promise,
 }
 
 static ccjs_status ccjs_fs_error_from_status(ccjs_allocator* allocator, ccjs_status status, ccjs_value* out) {
-  static const ccjs_field_info fields[] = {
-    { "name", CCJS_FIELD_READONLY },
-    { "message", CCJS_FIELD_READONLY },
-    { "code", CCJS_FIELD_READONLY }
-  };
+  static const ccjs_field_info fields[] = { { "name", CCJS_FIELD_READONLY },
+                                            { "message", CCJS_FIELD_READONLY },
+                                            { "code", CCJS_FIELD_READONLY } };
   static const ccjs_shape shape = { 3, fields };
 
   if (allocator == 0 || out == 0) {

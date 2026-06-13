@@ -61,47 +61,32 @@ typedef struct ccjs_value {
 } ccjs_value;
 
 static inline ccjs_value ccjs_undefined_value(void) {
-  ccjs_value value = {
-    .tag = CCJS_TAG_UNDEFINED
-  };
+  ccjs_value value = { .tag = CCJS_TAG_UNDEFINED };
 
   return value;
 }
 
 static inline ccjs_value ccjs_null_value(void) {
-  ccjs_value value = {
-    .tag = CCJS_TAG_NULL
-  };
+  ccjs_value value = { .tag = CCJS_TAG_NULL };
 
   return value;
 }
 
 static inline ccjs_value ccjs_bool_value(bool boolean) {
-  ccjs_value value = {
-    .tag = CCJS_TAG_BOOL,
-    .as.boolean = boolean
-  };
+  ccjs_value value = { .tag = CCJS_TAG_BOOL, .as.boolean = boolean };
 
   return value;
 }
 
 static inline ccjs_value ccjs_number_value(ccjs_number number) {
-  ccjs_value value = {
-    .tag = CCJS_TAG_NUMBER,
-    .as.number = number
-  };
+  ccjs_value value = { .tag = CCJS_TAG_NUMBER, .as.number = number };
 
   return value;
 }
 
 static inline bool ccjs_is_ref_value(ccjs_value value) {
-  return value.tag == CCJS_TAG_STRING
-    || value.tag == CCJS_TAG_OBJECT
-    || value.tag == CCJS_TAG_ARRAY
-    || value.tag == CCJS_TAG_BYTES
-    || value.tag == CCJS_TAG_FUNCTION
-    || value.tag == CCJS_TAG_MAP
-    || value.tag == CCJS_TAG_SET;
+  return value.tag == CCJS_TAG_STRING || value.tag == CCJS_TAG_OBJECT || value.tag == CCJS_TAG_ARRAY ||
+         value.tag == CCJS_TAG_BYTES || value.tag == CCJS_TAG_FUNCTION || value.tag == CCJS_TAG_MAP || value.tag == CCJS_TAG_SET;
 }
 
 void ccjs_retain(ccjs_value value);

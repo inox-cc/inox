@@ -88,10 +88,7 @@ static ccjs_status ccjs_array_reserve(ccjs_array* array, size_t cap) {
   }
 
   ccjs_value* items = array->header.allocator->realloc(
-    array->header.allocator->user,
-    array->items,
-    sizeof(ccjs_value) * array->cap,
-    sizeof(ccjs_value) * next_cap,
+    array->header.allocator->user, array->items, sizeof(ccjs_value) * array->cap, sizeof(ccjs_value) * next_cap,
     _Alignof(ccjs_value)
   );
 

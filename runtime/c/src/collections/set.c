@@ -39,11 +39,7 @@ static ccjs_status ccjs_set_rehash(ccjs_set* set, size_t next_cap) {
   }
 
   ccjs_allocator* allocator = set->header.allocator;
-  ccjs_set_entry* entries = allocator->alloc(
-    allocator->user,
-    sizeof(ccjs_set_entry) * next_cap,
-    _Alignof(ccjs_set_entry)
-  );
+  ccjs_set_entry* entries = allocator->alloc(allocator->user, sizeof(ccjs_set_entry) * next_cap, _Alignof(ccjs_set_entry));
 
   if (entries == 0) {
     return CCJS_ERR_OOM;
@@ -70,12 +66,7 @@ static ccjs_status ccjs_set_rehash(ccjs_set* set, size_t next_cap) {
   }
 
   if (allocator->free != 0 && set->entries != 0) {
-    allocator->free(
-      allocator->user,
-      set->entries,
-      sizeof(ccjs_set_entry) * set->cap,
-      _Alignof(ccjs_set_entry)
-    );
+    allocator->free(allocator->user, set->entries, sizeof(ccjs_set_entry) * set->cap, _Alignof(ccjs_set_entry));
   }
 
   set->entries = entries;
@@ -273,10 +264,7 @@ void ccjs_set_dispose(ccjs_set* set) {
 
   if (set->header.allocator != 0 && set->header.allocator->free != 0 && set->entries != 0) {
     set->header.allocator->free(
-      set->header.allocator->user,
-      set->entries,
-      sizeof(ccjs_set_entry) * set->cap,
-      _Alignof(ccjs_set_entry)
+      set->header.allocator->user, set->entries, sizeof(ccjs_set_entry) * set->cap, _Alignof(ccjs_set_entry)
     );
   }
 }

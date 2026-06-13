@@ -12,11 +12,7 @@ static ccjs_number ccjs_default_wall_now_ms(void* user);
 static ccjs_number ccjs_timespec_ms(const struct timespec* value);
 static void ccjs_time_ensure_initialized(void);
 
-static ccjs_time_adapter ccjs_time_current_adapter = {
-  0,
-  ccjs_default_monotonic_now_ms,
-  ccjs_default_wall_now_ms
-};
+static ccjs_time_adapter ccjs_time_current_adapter = { 0, ccjs_default_monotonic_now_ms, ccjs_default_wall_now_ms };
 static int ccjs_time_initialized = 0;
 static ccjs_number ccjs_performance_base_ms = 0;
 static ccjs_number ccjs_wall_base_ms = 0;
@@ -36,11 +32,7 @@ void ccjs_time_set_adapter(ccjs_time_adapter adapter) {
 }
 
 void ccjs_time_reset_adapter(void) {
-  ccjs_time_adapter adapter = {
-    0,
-    ccjs_default_monotonic_now_ms,
-    ccjs_default_wall_now_ms
-  };
+  ccjs_time_adapter adapter = { 0, ccjs_default_monotonic_now_ms, ccjs_default_wall_now_ms };
 
   ccjs_time_set_adapter(adapter);
 }
@@ -61,7 +53,8 @@ ccjs_number ccjs_performance_now(void) {
 ccjs_number ccjs_date_now(void) {
   ccjs_time_ensure_initialized();
 
-  return ccjs_wall_base_ms + (ccjs_time_current_adapter.monotonic_now_ms(ccjs_time_current_adapter.user) - ccjs_wall_base_monotonic_ms);
+  return ccjs_wall_base_ms +
+         (ccjs_time_current_adapter.monotonic_now_ms(ccjs_time_current_adapter.user) - ccjs_wall_base_monotonic_ms);
 }
 
 void ccjs_time_sleep_ms(ccjs_number delay_ms) {
@@ -86,10 +79,7 @@ void ccjs_time_sleep_ms(ccjs_number delay_ms) {
     nanoseconds = 0;
   }
 
-  struct timespec request = {
-    seconds,
-    nanoseconds
-  };
+  struct timespec request = { seconds, nanoseconds };
 
   while (nanosleep(&request, &request) != 0 && errno == EINTR) {
   }

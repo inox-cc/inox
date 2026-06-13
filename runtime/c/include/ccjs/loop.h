@@ -32,12 +32,8 @@ struct ccjs_loop {
 
 ccjs_status ccjs_loop_init(ccjs_loop* loop, ccjs_allocator* allocator);
 void ccjs_loop_dispose(ccjs_loop* loop);
-ccjs_status ccjs_loop_queue_microtask(
-  ccjs_loop* loop,
-  ccjs_microtask_fn run,
-  void* context,
-  ccjs_microtask_finalizer_fn finalizer
-);
+ccjs_status
+ccjs_loop_queue_microtask(ccjs_loop* loop, ccjs_microtask_fn run, void* context, ccjs_microtask_finalizer_fn finalizer);
 ccjs_status ccjs_loop_drain_microtasks(ccjs_loop* loop);
 ccjs_status ccjs_loop_queue_immediate(
   ccjs_loop* loop,

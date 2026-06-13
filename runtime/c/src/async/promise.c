@@ -130,9 +130,7 @@ ccjs_status ccjs_promise_then(
   }
 
   ccjs_promise_reaction* reaction = promise->loop->allocator->alloc(
-    promise->loop->allocator->user,
-    sizeof(ccjs_promise_reaction),
-    _Alignof(ccjs_promise_reaction)
+    promise->loop->allocator->user, sizeof(ccjs_promise_reaction), _Alignof(ccjs_promise_reaction)
   );
 
   if (reaction == 0) {
@@ -174,9 +172,7 @@ ccjs_status ccjs_promise_chain(
   }
 
   ccjs_promise_reaction* reaction = promise->loop->allocator->alloc(
-    promise->loop->allocator->user,
-    sizeof(ccjs_promise_reaction),
-    _Alignof(ccjs_promise_reaction)
+    promise->loop->allocator->user, sizeof(ccjs_promise_reaction), _Alignof(ccjs_promise_reaction)
   );
 
   if (reaction == 0) {
@@ -332,9 +328,7 @@ static ccjs_status ccjs_promise_add_reaction(ccjs_promise* promise, ccjs_promise
 
 static ccjs_status ccjs_promise_schedule_reaction(ccjs_promise* promise, ccjs_promise_reaction* reaction) {
   ccjs_promise_reaction_task* task = promise->loop->allocator->alloc(
-    promise->loop->allocator->user,
-    sizeof(ccjs_promise_reaction_task),
-    _Alignof(ccjs_promise_reaction_task)
+    promise->loop->allocator->user, sizeof(ccjs_promise_reaction_task), _Alignof(ccjs_promise_reaction_task)
   );
 
   if (task == 0) {
@@ -346,12 +340,8 @@ static ccjs_status ccjs_promise_schedule_reaction(ccjs_promise* promise, ccjs_pr
   task->reaction = reaction;
   ccjs_promise_retain(promise);
 
-  ccjs_status status = ccjs_loop_queue_microtask(
-    promise->loop,
-    ccjs_promise_run_reaction,
-    task,
-    ccjs_promise_reaction_task_finalizer
-  );
+  ccjs_status status =
+    ccjs_loop_queue_microtask(promise->loop, ccjs_promise_run_reaction, task, ccjs_promise_reaction_task_finalizer);
 
   if (status != CCJS_OK) {
     ccjs_promise_reaction_task_finalizer(task);
@@ -379,9 +369,8 @@ static ccjs_status ccjs_promise_run_reaction(void* context) {
     return CCJS_ERR_TYPE;
   }
 
-  return task->reaction->kind == CCJS_PROMISE_REACTION_CHAIN
-    ? ccjs_promise_run_chain_reaction(task)
-    : ccjs_promise_run_observer_reaction(task);
+  return task->reaction->kind == CCJS_PROMISE_REACTION_CHAIN ? ccjs_promise_run_chain_reaction(task) :
+                                                               ccjs_promise_run_observer_reaction(task);
 }
 
 static ccjs_status ccjs_promise_run_observer_reaction(ccjs_promise_reaction_task* task) {
@@ -389,9 +378,8 @@ static ccjs_status ccjs_promise_run_observer_reaction(ccjs_promise_reaction_task
     return CCJS_ERR_TYPE;
   }
 
-  ccjs_promise_reaction_fn callback = task->promise->state == CCJS_PROMISE_FULFILLED
-    ? task->reaction->on_fulfilled
-    : task->reaction->on_rejected;
+  ccjs_promise_reaction_fn callback = task->promise->state == CCJS_PROMISE_FULFILLED ? task->reaction->on_fulfilled :
+                                                                                       task->reaction->on_rejected;
 
   if (callback == 0) {
     return CCJS_OK;
@@ -406,14 +394,12 @@ static ccjs_status ccjs_promise_run_chain_reaction(ccjs_promise_reaction_task* t
   }
 
   ccjs_promise_state state = task->promise->state;
-  ccjs_promise_chain_fn callback = state == CCJS_PROMISE_FULFILLED
-    ? task->reaction->chain_fulfilled
-    : task->reaction->chain_rejected;
+  ccjs_promise_chain_fn callback = state == CCJS_PROMISE_FULFILLED ? task->reaction->chain_fulfilled :
+                                                                     task->reaction->chain_rejected;
 
   if (callback == 0) {
-    return state == CCJS_PROMISE_FULFILLED
-      ? ccjs_promise_resolve(task->reaction->child, task->promise->result)
-      : ccjs_promise_reject(task->reaction->child, task->promise->result);
+    return state == CCJS_PROMISE_FULFILLED ? ccjs_promise_resolve(task->reaction->child, task->promise->result) :
+                                             ccjs_promise_reject(task->reaction->child, task->promise->result);
   }
 
   ccjs_value next = ccjs_undefined_value();
@@ -456,9 +442,6 @@ static void ccjs_promise_free_reaction(ccjs_promise* promise, ccjs_promise_react
   ccjs_promise_release(reaction->child);
 
   promise->loop->allocator->free(
-    promise->loop->allocator->user,
-    reaction,
-    sizeof(ccjs_promise_reaction),
-    _Alignof(ccjs_promise_reaction)
+    promise->loop->allocator->user, reaction, sizeof(ccjs_promise_reaction), _Alignof(ccjs_promise_reaction)
   );
 }

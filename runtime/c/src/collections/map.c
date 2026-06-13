@@ -10,7 +10,8 @@ static void ccjs_map_init_entries(ccjs_map_entry* entries, size_t cap) {
   }
 }
 
-static ccjs_status ccjs_map_insert_existing(ccjs_map_entry* entries, size_t cap, ccjs_value key, ccjs_value value, uint64_t hash) {
+static ccjs_status
+ccjs_map_insert_existing(ccjs_map_entry* entries, size_t cap, ccjs_value key, ccjs_value value, uint64_t hash) {
   if (entries == 0 || cap == 0) {
     return CCJS_ERR_TYPE;
   }
@@ -41,11 +42,7 @@ static ccjs_status ccjs_map_rehash(ccjs_map* map, size_t next_cap) {
   }
 
   ccjs_allocator* allocator = map->header.allocator;
-  ccjs_map_entry* entries = allocator->alloc(
-    allocator->user,
-    sizeof(ccjs_map_entry) * next_cap,
-    _Alignof(ccjs_map_entry)
-  );
+  ccjs_map_entry* entries = allocator->alloc(allocator->user, sizeof(ccjs_map_entry) * next_cap, _Alignof(ccjs_map_entry));
 
   if (entries == 0) {
     return CCJS_ERR_OOM;
@@ -72,12 +69,7 @@ static ccjs_status ccjs_map_rehash(ccjs_map* map, size_t next_cap) {
   }
 
   if (allocator->free != 0 && map->entries != 0) {
-    allocator->free(
-      allocator->user,
-      map->entries,
-      sizeof(ccjs_map_entry) * map->cap,
-      _Alignof(ccjs_map_entry)
-    );
+    allocator->free(allocator->user, map->entries, sizeof(ccjs_map_entry) * map->cap, _Alignof(ccjs_map_entry));
   }
 
   map->entries = entries;
@@ -267,10 +259,7 @@ void ccjs_map_dispose(ccjs_map* map) {
 
   if (map->header.allocator != 0 && map->header.allocator->free != 0 && map->entries != 0) {
     map->header.allocator->free(
-      map->header.allocator->user,
-      map->entries,
-      sizeof(ccjs_map_entry) * map->cap,
-      _Alignof(ccjs_map_entry)
+      map->header.allocator->user, map->entries, sizeof(ccjs_map_entry) * map->cap, _Alignof(ccjs_map_entry)
     );
   }
 }

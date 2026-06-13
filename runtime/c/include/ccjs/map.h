@@ -7,11 +7,7 @@
 #include "ccjs/allocator.h"
 #include "ccjs/value.h"
 
-typedef enum ccjs_map_slot_state {
-  CCJS_MAP_SLOT_EMPTY,
-  CCJS_MAP_SLOT_OCCUPIED,
-  CCJS_MAP_SLOT_TOMBSTONE
-} ccjs_map_slot_state;
+typedef enum ccjs_map_slot_state { CCJS_MAP_SLOT_EMPTY, CCJS_MAP_SLOT_OCCUPIED, CCJS_MAP_SLOT_TOMBSTONE } ccjs_map_slot_state;
 
 typedef struct ccjs_map_entry {
   ccjs_value key;
