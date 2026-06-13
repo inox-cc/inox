@@ -1083,7 +1083,7 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
       result.runtimeStrings.add(statement.name)
     }
 
-    if (isSupportedAsyncTaskFramePrefixLocalType(valueType)) {
+    if (isSupportedAsyncTaskFramePrefixLocal(statement, valueType, result)) {
       locals.push({
         name: statement.name,
         type: valueType,
@@ -1103,7 +1103,15 @@ function isSupportedAsyncTaskPrefixLocalType(valueType) {
 }
 
 function isSupportedAsyncTaskFramePrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
+}
+
+function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
+  if (!isSupportedAsyncTaskFramePrefixLocalType(valueType)) {
+    return false
+  }
+
+  return valueType !== 'string' || resolveRuntimeStringReference(statement.init, context) != null
 }
 
 function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
@@ -1147,10 +1155,18 @@ function createAsyncTaskExpressionContext(context, params, awaits) {
 
   for (const param of params) {
     result.variables.set(param.name, param.valueType)
+
+    if (param.valueType === 'string') {
+      result.runtimeStrings.add(param.name)
+    }
   }
 
   for (const item of awaits ?? []) {
     result.variables.set(item.name, item.type)
+
+    if (item.type === 'string') {
+      result.runtimeStrings.add(item.name)
+    }
   }
 
   return result
@@ -1506,7 +1522,18 @@ function registerAsyncTaskPrefixLocals(wrapper, context) {
 }
 
 function emitAsyncTaskStorePrefixLocalLines(wrapper) {
-  return wrapper.prefixLocals.map(local => `frame->${local.fieldName} = ${local.name};`)
+  return wrapper.prefixLocals.flatMap(local => {
+    if (local.type === 'string') {
+      return [
+        ...emitPrepareOwnedValueWrite(`frame->${local.fieldName}`),
+        `frame->${local.fieldName}.tag = CCJS_TAG_STRING;`,
+        `frame->${local.fieldName}.as.ref = (ccjs_ref*)&${local.name}->header;`,
+        `ccjs_retain(frame->${local.fieldName});`
+      ]
+    }
+
+    return [`frame->${local.fieldName} = ${local.name};`]
+  })
 }
 
 function emitAsyncTaskVisibleLocalReads(wrapper, count, options = { includePrefixLocals: true }) {
@@ -2305,6 +2332,7 @@ function emitAsyncTaskFinalizerDeclaration(wrapper) {
     '  if (frame == 0) return;',
     '  if (frame->awaited != 0) ccjs_promise_release(frame->awaited);',
     ...wrapper.params.filter(param => isManagedRuntimeReturnType(param.valueType)).map(param => `  ccjs_release(frame->${param.fieldName});`),
+    ...wrapper.prefixLocals.filter(local => isManagedRuntimeReturnType(local.type)).map(local => `  ccjs_release(frame->${local.fieldName});`),
     ...wrapper.awaits.filter(item => item.fieldName != null && isManagedRuntimeReturnType(item.type)).map(item => `  ccjs_release(frame->${item.fieldName});`),
     '  if (frame->promise != 0) ccjs_promise_release(frame->promise);',
     '  if (frame->ccjs_loop != 0 && frame->ccjs_loop->allocator != 0) {',
