@@ -4860,6 +4860,33 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "middle finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/)
 })
 
+test('lowers nested async task frame try prefix declarations into awaited expressions', () => {
+  const result = compileSource(`async function work(): Promise<number> {
+  try {
+    const seed: number = 3
+    try {
+      const value: number = await Promise.resolve(seed)
+      return value
+    } finally {
+      console.log('outer finally')
+    }
+  } finally {
+    console.log('done')
+  }
+}
+
+export async function main(): Promise<void> {
+  const promise = work()
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_start\(ccjs_loop\* ccjs_loop, ccjs_promise\*\* out\) \{[\s\S]*double seed = 3;[\s\S]*status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(seed\)\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*printf\("%s\\n", "done"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]

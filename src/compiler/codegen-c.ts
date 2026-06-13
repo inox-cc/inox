@@ -915,7 +915,13 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     return null
   }
 
-  const awaits = resolveAsyncTaskAwaitSteps(innerTryStatements.slice(0, -1), context)
+  const prefixContext = createAsyncTaskPrefixExpressionContext(context, params, tryChainResult.prefixStatements)
+
+  if (prefixContext == null) {
+    return null
+  }
+
+  const awaits = resolveAsyncTaskAwaitSteps(innerTryStatements.slice(0, -1), prefixContext)
 
   if (awaits == null) {
     return null
@@ -1008,6 +1014,34 @@ function collectAsyncTaskTryFinalizerStatements(finalizers, fromIndex, toIndex) 
   }
 
   return statements
+}
+
+function createAsyncTaskPrefixExpressionContext(context, params, prefixStatements) {
+  const result = createAsyncTaskExpressionContext(context, params, [])
+
+  for (const statement of prefixStatements) {
+    if (statement?.type !== 'VariableDeclaration') {
+      continue
+    }
+
+    const valueType = statement.valueType ?? inferExpressionType(statement.init, result)
+
+    if (!isSupportedAsyncTaskPrefixLocalType(valueType)) {
+      return null
+    }
+
+    result.variables.set(statement.name, valueType)
+
+    if (valueType === 'string') {
+      result.runtimeStrings.add(statement.name)
+    }
+  }
+
+  return result
+}
+
+function isSupportedAsyncTaskPrefixLocalType(valueType) {
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
 }
 
 function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
@@ -1340,10 +1374,13 @@ function emitAsyncTaskWrapperDeclaration(wrapper, baseContext) {
 
 function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', 0)
-  const schedule = emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
-    cleanup: 'start',
-    final: wrapper.awaits.length === 1
-  })
+  const prefixAndScheduleLines = withVariableScope(context, () => [
+    ...emitStatementList(wrapper.prefixStatements ?? [], context),
+    ...emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
+      cleanup: 'start',
+      final: wrapper.awaits.length === 1
+    })
+  ])
   const lines = [
     `static ccjs_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`,
     '  if (ccjs_loop == 0 || ccjs_loop->allocator == 0 || out == 0) return CCJS_ERR_TYPE;',
@@ -1365,8 +1402,7 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     '  ccjs_promise_retain(frame->promise);',
     '  *out = frame->promise;',
     ...emitAsyncTaskVisibleLocalReads(wrapper, 0).map(line => `  ${line}`),
-    ...emitAsyncTaskTryStatementList(wrapper.prefixStatements ?? [], wrapper, baseContext, 0).map(line => `  ${line}`),
-    ...schedule.map(line => `  ${line}`),
+    ...prefixAndScheduleLines.map(line => `  ${line}`),
     '  return CCJS_OK;',
     '}'
   ]
