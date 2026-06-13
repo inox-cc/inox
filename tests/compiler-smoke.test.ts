@@ -6531,6 +6531,21 @@ test('lowers Promise callbacks with try catch finally to C runtime promises', ()
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &finalized\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
+test('diagnoses timer scheduling inside C Promise callbacks without loop context', () => {
+  assertDiagnostic(`export function main(): void {
+  const pending = Promise.resolve(1).then(value => {
+    setTimeout(() => {
+      console.log(value)
+    }, 1)
+
+    return value
+  })
+}
+`, 'CCJS_C_TIMER_CALLBACK', {
+    target: 'c'
+  })
+})
+
 test('compiles C collection values across function boundaries', () => {
   const result = compileSource(`function makeNums(): number[] {
   const nums = [2, 3, 5]
