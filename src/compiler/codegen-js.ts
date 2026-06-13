@@ -150,6 +150,14 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
     helperLines.push(...emitNumberFromStringHelper(options))
   }
 
+  if (features.has('numeric-casts')) {
+    if (helperLines.length > 0) {
+      helperLines.push('')
+    }
+
+    helperLines.push(...emitNumericCastHelpers(options))
+  }
+
   if (helperLines.length > 0) {
     if (lines.length > 0) {
       lines.push('')
@@ -287,6 +295,96 @@ function emitNumberFromStringHelper(options: JsEmitOptions): string[] {
         '',
         '  const value = Number(text)',
         '  return Number.isNaN(value) ? null : value',
+        '}'
+      ]
+}
+
+function emitNumericCastHelpers(options: JsEmitOptions): string[] {
+  return options.emitTypes === true
+    ? [
+        'function ccjsNumericCastTrunc(value: number): number {',
+        '  if (value !== value || (value - value) !== 0) {',
+        '    throw new Error(\'ccjs numeric cast requires a finite number\')',
+        '  }',
+        '',
+        '  if (value < 0) {',
+        '    return Math.ceil(value)',
+        '  }',
+        '',
+        '  return Math.floor(value)',
+        '}',
+        '',
+        'function ccjsCheckedIntegerCast(value: number, min: number, max: number): number {',
+        '  const truncated = ccjsNumericCastTrunc(value)',
+        '',
+        '  if (truncated < min || truncated > max) {',
+        '    throw new Error(\'ccjs numeric cast overflow\')',
+        '  }',
+        '',
+        '  return truncated',
+        '}',
+        '',
+        'function ccjsI32(value: number): number {',
+        '  return ccjsCheckedIntegerCast(value, -2147483648, 2147483647)',
+        '}',
+        '',
+        'function ccjsU32(value: number): number {',
+        '  return ccjsCheckedIntegerCast(value, 0, 4294967295)',
+        '}',
+        '',
+        'function ccjsU64(value: number): number {',
+        '  return ccjsCheckedIntegerCast(value, 0, 9007199254740991)',
+        '}',
+        '',
+        'function ccjsF32(value: number): number {',
+        '  return Math.fround(value)',
+        '}',
+        '',
+        'function ccjsF64(value: number): number {',
+        '  return value',
+        '}'
+      ]
+    : [
+        'function ccjsNumericCastTrunc(value) {',
+        '  if (value !== value || (value - value) !== 0) {',
+        '    throw new Error(\'ccjs numeric cast requires a finite number\')',
+        '  }',
+        '',
+        '  if (value < 0) {',
+        '    return Math.ceil(value)',
+        '  }',
+        '',
+        '  return Math.floor(value)',
+        '}',
+        '',
+        'function ccjsCheckedIntegerCast(value, min, max) {',
+        '  const truncated = ccjsNumericCastTrunc(value)',
+        '',
+        '  if (truncated < min || truncated > max) {',
+        '    throw new Error(\'ccjs numeric cast overflow\')',
+        '  }',
+        '',
+        '  return truncated',
+        '}',
+        '',
+        'function ccjsI32(value) {',
+        '  return ccjsCheckedIntegerCast(value, -2147483648, 2147483647)',
+        '}',
+        '',
+        'function ccjsU32(value) {',
+        '  return ccjsCheckedIntegerCast(value, 0, 4294967295)',
+        '}',
+        '',
+        'function ccjsU64(value) {',
+        '  return ccjsCheckedIntegerCast(value, 0, 9007199254740991)',
+        '}',
+        '',
+        'function ccjsF32(value) {',
+        '  return Math.fround(value)',
+        '}',
+        '',
+        'function ccjsF64(value) {',
+        '  return value',
         '}'
       ]
 }
@@ -773,6 +871,10 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
       return `ccjsNumberFromString(${emitExpression(expression.args[0], options)})`
     }
 
+    if (isNumericCastCall(expression)) {
+      return `${numericCastHelperName(expression.numericCast ?? expression.callee.path[0])}(${emitExpression(expression.args[0], options)})`
+    }
+
     if (isStringSliceCall(expression)) {
       const args = expression.args.map(arg => emitExpression(arg, options))
 
@@ -908,6 +1010,34 @@ function isNumberConversionCall(expression: AnyNode): boolean {
     && expression.callee.path.length === 1
     && expression.callee.path[0] === 'Number'
     && expression.args.length === 1
+}
+
+function isNumericCastCall(expression: AnyNode): boolean {
+  return expression.type === 'CallExpression'
+    && expression.callee.type === 'Reference'
+    && expression.callee.path.length === 1
+    && ['i32', 'u32', 'u64', 'f32', 'f64'].includes(expression.callee.path[0])
+    && expression.args.length === 1
+}
+
+function numericCastHelperName(cast: string): string {
+  if (cast === 'u32') {
+    return 'ccjsU32'
+  }
+
+  if (cast === 'u64') {
+    return 'ccjsU64'
+  }
+
+  if (cast === 'f32') {
+    return 'ccjsF32'
+  }
+
+  if (cast === 'f64') {
+    return 'ccjsF64'
+  }
+
+  return 'ccjsI32'
 }
 
 function isStringLengthExpression(expression: AnyNode): boolean {

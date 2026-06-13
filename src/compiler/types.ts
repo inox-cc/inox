@@ -36,6 +36,7 @@ export type IrFeature =
   | 'map-index-set'
   | 'map-get-null'
   | 'number-from-string-null'
+  | 'numeric-casts'
   | 'objects'
   | 'runtime-values'
   | 'string-bytes'

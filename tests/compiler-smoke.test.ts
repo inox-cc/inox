@@ -5860,7 +5860,7 @@ test('lowers Date.now and performance.now to the C time runtime', () => {
 
 test('lowers supported Math calls to C helpers', () => {
   const result = compileSource(`export function main(): void {
-  const value = Math.floor(3.8) + Math.ceil(2.1) + Math.round(1.6) + Math.trunc(4.9) + Math.abs(-5) + Math.min(8, 2) + Math.max(1, 6) + Math.sqrt(9) + Math.sin(0) + Math.cos(0) + Math.random()
+  const value = Math.floor(3.8) + Math.ceil(2.1) + Math.round(1.6) + Math.trunc(4.9) + Math.fround(16777217) + Math.abs(-5) + Math.min(8, 2) + Math.max(1, 6) + Math.sqrt(9) + Math.sin(0) + Math.cos(0) + Math.random()
   console.log(value)
 }
 `, {
@@ -5872,6 +5872,7 @@ test('lowers supported Math calls to C helpers', () => {
     'Math.ceil',
     'Math.cos',
     'Math.floor',
+    'Math.fround',
     'Math.max',
     'Math.min',
     'Math.random',
@@ -5883,6 +5884,7 @@ test('lowers supported Math calls to C helpers', () => {
   assert.match(result.code, /#include <stdint\.h>/)
   assert.match(result.code, /static uint32_t ccjs_math_random_state = 0x6d2b79f5u;/)
   assert.match(result.code, /static double ccjs_math_floor\(double value\)/)
+  assert.match(result.code, /static double ccjs_math_fround\(double value\)/)
   assert.match(result.code, /static double ccjs_math_max\(double left, double right\)/)
   assert.match(result.code, /static double ccjs_math_sqrt\(double value\)/)
   assert.match(result.code, /static double ccjs_math_random\(void\)/)
@@ -5890,6 +5892,7 @@ test('lowers supported Math calls to C helpers', () => {
   assert.match(result.code, /ccjs_math_ceil\(2\.1\)/)
   assert.match(result.code, /ccjs_math_round\(1\.6\)/)
   assert.match(result.code, /ccjs_math_trunc\(4\.9\)/)
+  assert.match(result.code, /ccjs_math_fround\(16777217\)/)
   assert.match(result.code, /ccjs_math_abs\(\(-5\)\)/)
   assert.match(result.code, /ccjs_math_min\(8, 2\)/)
   assert.match(result.code, /ccjs_math_max\(1, 6\)/)
@@ -8009,6 +8012,55 @@ export function main(): void {
   assertDiagnostic(`export function main(): void {
   const text: string | null = null
   Number(text)
+}
+`, 'CCJS_TYPE_MISMATCH')
+})
+
+test('checks numeric casts as typed number calls', () => {
+  const source = `function convert(value: number): number {
+  return i32(value) + u32(value) + u64(value) + f32(value) + f64(value)
+}
+
+export function main(): void {
+  const value = convert(3.9)
+  console.log(value)
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+  const ts = compileSource(source, {
+    target: 'ts'
+  })
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.deepEqual(js.ir.features, [
+    'numeric-casts'
+  ])
+  assert.match(js.code, /function ccjsCheckedIntegerCast\(value, min, max\) \{/)
+  assert.match(js.code, /return \(\(\(\(ccjsI32\(value\) \+ ccjsU32\(value\)\) \+ ccjsU64\(value\)\) \+ ccjsF32\(value\)\) \+ ccjsF64\(value\)\)/)
+  assert.match(ts.code, /function ccjsCheckedIntegerCast\(value: number, min: number, max: number\): number \{/)
+  assert.match(ts.code, /function ccjsF32\(value: number\): number \{/)
+  assert.match(c.code, /long long ccjs_i32_truncated_\d+ = \(long long\)ccjs_i32_value_\d+;/)
+  assert.match(c.code, /ccjs_u32_truncated_\d+ < 0LL \|\| ccjs_u32_truncated_\d+ > 4294967295LL/)
+  assert.match(c.code, /ccjs_u64_truncated_\d+ < 0LL \|\| ccjs_u64_truncated_\d+ > 9007199254740991LL/)
+  assert.match(c.code, /double ccjs_f32_\d+ = \(double\)\(\(float\)value\);/)
+
+  assertDiagnostic(`export function main(): void {
+  i32()
+}
+`, 'CCJS_ARG_COUNT')
+
+  assertDiagnostic(`export function main(): void {
+  i32('1')
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const value: number | null = null
+  f64(value)
 }
 `, 'CCJS_TYPE_MISMATCH')
 })

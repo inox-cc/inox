@@ -18,7 +18,7 @@ const cArrayMethods = new Set([
 ])
 
 const cMathNullaryMethods = new Set(['random'])
-const cMathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'round', 'sin', 'sqrt', 'trunc'])
+const cMathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'fround', 'round', 'sin', 'sqrt', 'trunc'])
 const cMathBinaryMethods = new Set(['max', 'min'])
 const defaultRandomSeed = 0x6d2b79f5
 
@@ -360,6 +360,10 @@ function emitMathHelpers(random: RandomOptions = {}) {
     '',
     'static double ccjs_math_trunc(double value) {',
     '  return (double)((long long)value);',
+    '}',
+    '',
+    'static double ccjs_math_fround(double value) {',
+    '  return (double)((float)value);',
     '}',
     '',
     'static double ccjs_math_min(double left, double right) {',
@@ -9498,6 +9502,12 @@ function emitPreparedNumberExpression(expression, context) {
       return binaryCall
     }
 
+    const numericCast = emitPreparedNumericCastExpression(expression, context)
+
+    if (numericCast != null) {
+      return numericCast
+    }
+
     if (isStringPredicateCall(expression, context)) {
       return emitPreparedStringPredicateCall(expression, context)
     }
@@ -9836,6 +9846,85 @@ function emitPreparedStringPredicateCall(expression, context) {
     ],
     expression: `(${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}) ? 1 : 0)`
   }
+}
+
+function emitPreparedNumericCastExpression(expression, context) {
+  if (!isNumericCastCall(expression, context)) {
+    return null
+  }
+
+  const cast = expression.callee.path[0]
+  const value = emitPreparedNumberExpression(expression.args[0], context)
+
+  if (cast === 'f64') {
+    return value
+  }
+
+  if (cast === 'f32') {
+    const result = nextCName(context, 'ccjs_f32')
+
+    return {
+      lines: [
+        ...value.lines,
+        `double ${result} = (double)((float)${value.expression});`
+      ],
+      expression: result
+    }
+  }
+
+  const limits = numericIntegerCastLimits(cast)
+
+  if (limits == null) {
+    return null
+  }
+
+  const raw = nextCName(context, `ccjs_${cast}_value`)
+  const truncated = nextCName(context, `ccjs_${cast}_truncated`)
+  const result = nextCName(context, `ccjs_${cast}`)
+
+  return {
+    lines: [
+      ...value.lines,
+      `double ${raw} = ${value.expression};`,
+      emitRuntimeTypeCheck(`${raw} != ${raw} || (${raw} - ${raw}) != 0`, context),
+      emitRuntimeTypeCheck(`${raw} <= ${limits.preMin} || ${raw} >= ${limits.preMax}`, context),
+      `long long ${truncated} = (long long)${raw};`,
+      emitRuntimeTypeCheck(`${truncated} < ${limits.min}LL || ${truncated} > ${limits.max}LL`, context),
+      `double ${result} = (double)${truncated};`
+    ],
+    expression: result
+  }
+}
+
+function numericIntegerCastLimits(cast) {
+  if (cast === 'i32') {
+    return {
+      preMin: '-2147483649.0',
+      preMax: '2147483648.0',
+      min: '-2147483648',
+      max: '2147483647'
+    }
+  }
+
+  if (cast === 'u32') {
+    return {
+      preMin: '-1.0',
+      preMax: '4294967296.0',
+      min: '0',
+      max: '4294967295'
+    }
+  }
+
+  if (cast === 'u64') {
+    return {
+      preMin: '-1.0',
+      preMax: '9007199254740992.0',
+      min: '0',
+      max: '9007199254740991'
+    }
+  }
+
+  return null
 }
 
 function emitPreparedStringBytesOperand(expression, context, tempPrefix = 'ccjs_cmp_string') {
@@ -11939,6 +12028,14 @@ function isNumberConversionCall(expression, context) {
   }
 
   return inferExpressionType(expression.args[0], context) === 'string'
+}
+
+function isNumericCastCall(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'Reference' || expression.callee.path.length !== 1 || !['i32', 'u32', 'u64', 'f32', 'f64'].includes(expression.callee.path[0]) || expression.args.length !== 1) {
+    return false
+  }
+
+  return inferExpressionType(expression.args[0], context) === 'number'
 }
 
 function isStringTrimCall(expression, context) {

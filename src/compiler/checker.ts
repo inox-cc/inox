@@ -187,8 +187,9 @@ const globals = new Map<string, SymbolInfo>([
 ])
 
 const mathNullaryMethods = new Set(['random'])
-const mathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'round', 'sin', 'sqrt', 'trunc'])
+const mathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'fround', 'round', 'sin', 'sqrt', 'trunc'])
 const mathBinaryMethods = new Set(['max', 'min'])
+const numericCastNames = new Set(['i32', 'u32', 'u64', 'f32', 'f64'])
 
 export function checkProgram(program: ProgramNode): { ast: ProgramNode } {
   const checker = new Checker(program)
@@ -1286,6 +1287,12 @@ class Checker {
 
     if (numberConversionType != null) {
       return numberConversionType
+    }
+
+    const numericCastType = this.checkNumericCastCall(expression)
+
+    if (numericCastType != null) {
+      return numericCastType
     }
 
     const stringTrimType = this.checkStringTrimCall(expression)
@@ -2440,6 +2447,26 @@ class Checker {
     }
 
     this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+
+    return 'number'
+  }
+
+  checkNumericCastCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1 || !numericCastNames.has(expression.callee.path[0])) {
+      return null
+    }
+
+    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+
+    expression.valueType = 'number'
+    expression.numericCast = expression.callee.path[0]
+
+    if (expression.args.length !== 1) {
+      this.report('CCJS_ARG_COUNT', `${expression.callee.path[0]} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      return 'number'
+    }
+
+    this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
 
     return 'number'
   }

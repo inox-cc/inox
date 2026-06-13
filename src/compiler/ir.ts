@@ -222,7 +222,7 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
       requirements.add('callback-values')
       requirements.add('managed-values')
       requirements.add('timers')
-    } else if (feature === 'array-pop-null' || feature === 'map-get-null' || feature === 'map-index-set' || feature === 'number-from-string-null') {
+    } else if (feature === 'array-pop-null' || feature === 'map-get-null' || feature === 'map-index-set' || feature === 'number-from-string-null' || feature === 'numeric-casts') {
       continue
     } else {
       requirements.add(feature)
@@ -860,6 +860,10 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('string-bytes')
   }
 
+  if (isNumericCastCall(expression)) {
+    features.add('numeric-casts')
+  }
+
   if (binaryRuntimeMethodName(expression) != null) {
     features.add('binary')
     features.add('runtime-values')
@@ -957,6 +961,12 @@ function isNumberConversionCall(expression: AnyNode): boolean {
   return expression.callee?.type === 'Reference'
     && expression.callee.path.length === 1
     && expression.callee.path[0] === 'Number'
+}
+
+function isNumericCastCall(expression: AnyNode): boolean {
+  return expression.callee?.type === 'Reference'
+    && expression.callee.path.length === 1
+    && ['i32', 'u32', 'u64', 'f32', 'f64'].includes(expression.callee.path[0])
 }
 
 function stringRuntimeMethodName(expression: AnyNode): string | null {

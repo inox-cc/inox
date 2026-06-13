@@ -5150,6 +5150,50 @@ export function main(): void {
   }
 })
 
+test('generated C numeric casts compile and run with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-numeric-casts-'))
+  const source = join(dir, 'numeric-casts.c')
+  const output = join(dir, 'numeric-casts')
+
+  try {
+    const result = compileSource(`export function main(): void {
+  const signedValue = i32(3.9)
+  const negative = i32(-3.9)
+  const unsignedValue = u32(-0.5)
+  const wide = u64(42.9)
+  const rounded = f32(16777217) === 16777216
+  const preserved = f64(1.25) === 1.25
+  console.log(signedValue, negative, unsignedValue, wide, rounded, preserved)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3 -3 0 42 1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C time globals compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
