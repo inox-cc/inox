@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { emitCBundleFromIrModules, emitCFromIr } from '../src/compiler/codegen-c.ts'
-import { emitJsBundleFromIrModules, emitJsFromIr, emitTsBundleFromIrModules, emitTsFromIr } from '../src/compiler/codegen-js.ts'
+import { emitJsBundleFromIrModules, emitJsFromIr } from '../src/compiler/codegen-js.ts'
 import { CompileError } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../src/compiler/index.ts'
 import { collectIrFeatureRequirements, collectIrFunctionEffects, collectIrFunctionNodeEntries, collectIrGlobalRoots, collectIrLocalThrowValueTypes, collectIrModuleRecords, collectIrPrograms, collectIrTopLevelNodeEntries, collectIrTopLevelNodesFromPrograms, findIrEntryProgram } from '../src/compiler/ir.ts'
@@ -1072,7 +1072,7 @@ test('compiles if else blocks to JS and C', () => {
 
   assert.match(js.code, /if \(\(1 < 2\)\) \{/)
   assert.match(js.code, /} else \{/)
-  assert.match(c.code, /if \(\(1 < 2\)\) \{/)
+  assert.match(c.code, /if \(1 < 2\) \{/)
   assert.match(c.code, /text = "yes";/)
 })
 
@@ -1097,7 +1097,7 @@ test('compiles while loops to JS and C', () => {
   })
 
   assert.match(js.code, /while \(\(index < 4\)\) \{/)
-  assert.match(c.code, /while \(\(index < 4\)\) \{/)
+  assert.match(c.code, /while \(index < 4\) \{/)
   assert.match(c.code, /total = \(total \+ index\);/)
 })
 
@@ -1158,7 +1158,7 @@ test('prepares owned C runtime values before rewriting them inside loops', () =>
     target: 'c'
   })
 
-  assert.match(result.code, /while \(\(index < 2\)\) \{[\s\S]*ccjs_release\(user\);\n    user = ccjs_undefined_value\(\);\n    if \(ccjs_object_new/)
+  assert.match(result.code, /while \(index < 2\) \{[\s\S]*ccjs_release\(user\);\n    user = ccjs_undefined_value\(\);\n    if \(ccjs_object_new/)
   assert.match(result.code, /ccjs_release\(ccjs_value_\d+\);\n    ccjs_value_\d+ = ccjs_undefined_value\(\);\n    if \(ccjs_string_from_literal/)
   assert.match(result.code, /ccjs_release\(ccjs_log_value_\d+\);\n    ccjs_log_value_\d+ = ccjs_undefined_value\(\);\n    if \(ccjs_object_get_known/)
 })
@@ -1262,7 +1262,7 @@ export function main(): void {
 
   assert.match(result.code, /\{\n\s+ccjs_release\(ccjs_value_\d+\);\n\s+ccjs_value_\d+ = ccjs_undefined_value\(\);\n\s+ccjs_value_\d+ = getName\(\);/)
   assert.match(result.code, /const ccjs_string\* name = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;\n\s+for \(;;\) \{/)
-  assert.match(result.code, /if \(!\(\(index < 1\)\)\) break;/)
+  assert.match(result.code, /if \(!\(index < 1\)\) break;/)
   assert.doesNotMatch(result.code, /if \((ccjs_value_\d+)\.tag != CCJS_TAG_STRING \|\| \1\.as\.ref == 0\) goto ccjs_cleanup;\n\s+if \(\1\.tag != CCJS_TAG_STRING \|\| \1\.as\.ref == 0\) goto ccjs_cleanup;/)
 })
 
@@ -1283,13 +1283,13 @@ test('compiles for of loops over arrays to JS and C', () => {
   })
 
   assert.match(js.code, /for \(const value of values\) \{/)
-  const ts = compileSource(source, {
-    target: 'ts',
+  const jsNoMain = compileSource(source, {
+    target: 'js',
     callMain: false
   })
 
-  assert.match(ts.code, /for \(const value of values\) \{/)
-  assert.doesNotThrow(() => compileSource(ts.code, {
+  assert.match(jsNoMain.code, /for \(const value of values\) \{/)
+  assert.doesNotThrow(() => compileSource(jsNoMain.code, {
     target: 'js',
     callMain: false
   }))
@@ -1303,7 +1303,7 @@ test('compiles for of loops over arrays to JS and C', () => {
   assert.match(c.code, /double value = ccjs_for_value_\d+\.as\.number;/)
 })
 
-test('checks explicit typed for of bindings in TS source and output', () => {
+test('checks explicit typed for of bindings in TypeScript source and JS output', () => {
   const source = `type User = {
   readonly id: number,
   name: string
@@ -1320,14 +1320,14 @@ export function main(): void {
   const js = compileSource(source, {
     target: 'js'
   })
-  const ts = compileSource(source, {
-    target: 'ts',
+  const jsNoMain = compileSource(source, {
+    target: 'js',
     callMain: false
   })
 
   assert.match(js.code, /for \(const user of users\) \{/)
-  assert.match(ts.code, /for \(const user of users\) \{/)
-  assert.doesNotThrow(() => compileSource(ts.code, {
+  assert.match(jsNoMain.code, /for \(const user of users\) \{/)
+  assert.doesNotThrow(() => compileSource(jsNoMain.code, {
     target: 'js',
     callMain: false
   }))
@@ -1360,7 +1360,7 @@ test('compiles for of loops over string arrays to C', () => {
   assert.match(c.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
 
-test('compiles for of loops over Set values to JS TS and C', () => {
+test('compiles for of loops over Set values to JS and C', () => {
   const source = `type Bag = {
   names: Set<string>
 }
@@ -1386,20 +1386,11 @@ export function main(): void {
   const js = compileSource(source, {
     target: 'js'
   })
-  const ts = compileSource(source, {
-    target: 'ts',
-    callMain: false
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
   assert.match(js.code, /for \(const value of values\.add\(4\)\) \{/)
-  assert.match(ts.code, /const values: Set<number> = new Set\(\[1, 2, 3\]\)/)
-  assert.doesNotThrow(() => compileSource(ts.code, {
-    target: 'js',
-    callMain: false
-  }))
   assert.match(c.code, /ccjs_set_add\(values, ccjs_number_value\(4\)\)/)
   assert.match(c.code, /ccjs_set\* ccjs_for_set_\d+ = \(ccjs_set\*\)values\.as\.ref;/)
   assert.match(c.code, /CCJS_SET_SLOT_OCCUPIED/)
@@ -1430,8 +1421,8 @@ export function main(): void {
   const js = compileSource(source, {
     target: 'js'
   })
-  const ts = compileSource(source, {
-    target: 'ts',
+  const jsNoMain = compileSource(source, {
+    target: 'js',
     callMain: false
   })
   const c = compileSource(source, {
@@ -1440,8 +1431,8 @@ export function main(): void {
 
   assert.match(js.code, /for \(const ccjsMapEntry_entry of bag\["scores"\]\.set\("Alan", 5\)\) \{/)
   assert.match(js.code, /const entry = \{ key: ccjsMapEntry_entry\[0\], value: ccjsMapEntry_entry\[1\] \}/)
-  assert.match(ts.code, /for \(const ccjsMapEntry_entry of bag\["scores"\]\.set\("Alan", 5\)\) \{/)
-  assert.doesNotThrow(() => compileSource(ts.code, {
+  assert.match(jsNoMain.code, /for \(const ccjsMapEntry_entry of bag\["scores"\]\.set\("Alan", 5\)\) \{/)
+  assert.doesNotThrow(() => compileSource(jsNoMain.code, {
     target: 'js',
     callMain: false
   }))
@@ -1782,7 +1773,7 @@ const count = 1
   }), [])
 })
 
-test('drives TS type alias emission from target-neutral IR top-level type items', () => {
+test('tracks type aliases as target-neutral IR top-level type items', () => {
   const source = `type User = {
   readonly id: number,
   name: string
@@ -1793,24 +1784,21 @@ export function main(): void {
   console.log(user.name)
 }
 `
-  const ts = compileSource(source, {
-    target: 'ts',
+  const plainJs = compileSource(source, {
+    target: 'js',
     callMain: false
   })
   const withoutTypeItems = {
-    ...ts.ir,
-    topLevelItems: ts.ir.topLevelItems.filter(item => item.kind !== 'type')
+    ...plainJs.ir,
+    topLevelItems: plainJs.ir.topLevelItems.filter(item => item.kind !== 'type')
   }
 
-  assert.deepEqual(ts.ir.topLevelItems.map(item => item.kind), ['type', 'function'])
-  assert.match(ts.code, /type User = \{/)
-  assert.match(ts.code, /export function main\(\): void \{/)
-  assert.doesNotMatch(emitTsFromIr(withoutTypeItems, {
+  assert.deepEqual(plainJs.ir.topLevelItems.map(item => item.kind), ['type', 'function'])
+  assert.doesNotMatch(plainJs.code, /type User = \{/)
+  assert.match(plainJs.code, /export function main\(\) \{/)
+  assert.match(emitJsFromIr(withoutTypeItems, {
     callMain: false
-  }), /type User = \{/)
-  assert.match(emitTsFromIr(withoutTypeItems, {
-    callMain: false
-  }), /export function main\(\): void \{/)
+  }), /export function main\(\) \{/)
 })
 
 test('drives C function collection from target-neutral IR body', () => {
@@ -1867,7 +1855,7 @@ test('collects IR top-level function nodes across stored programs', () => {
   ], 'function'), [])
 })
 
-test('emits single-file JS TS and C directly from target-neutral IR programs', () => {
+test('emits single-file JS and C directly from target-neutral IR programs', () => {
   const result = compileSource(`export function main(): void {
   console.log('hello')
 }
@@ -1876,9 +1864,6 @@ test('emits single-file JS TS and C directly from target-neutral IR programs', (
   })
 
   assert.match(emitJsFromIr(result.ir), /const ccjsMainResult = main\(\)/)
-  assert.match(emitTsFromIr(result.ir, {
-    callMain: false
-  }), /export function main\(\): void \{/)
   assert.match(emitCFromIr(result.ir), /void ccjs_main\(void\) \{/)
 })
 
@@ -1912,7 +1897,7 @@ test('collects target-neutral IR feature requirements', () => {
   assert.match(result.code, /#include "ccjs\/time\.h"/)
 })
 
-test('drives JS TS helper prelude from stored target-neutral IR features', () => {
+test('drives JS helper prelude from stored target-neutral IR features', () => {
   const result = compileSource(`export function main(): void {
   const values = [1]
   const value = values.pop()
@@ -1939,9 +1924,6 @@ test('drives JS TS helper prelude from stored target-neutral IR features', () =>
   const js = emitJsFromIr(storedFeaturesOnly, {
     callMain: false
   })
-  const ts = emitTsFromIr(storedFeaturesOnly, {
-    callMain: false
-  })
 
   assert.deepEqual(collectIrFeatureRequirements([storedFeaturesOnly]), [
     'array-pop-null',
@@ -1953,9 +1935,6 @@ test('drives JS TS helper prelude from stored target-neutral IR features', () =>
   assert.match(js, /function ccjsArrayPop\(array\) \{/)
   assert.match(js, /function ccjsMapGet\(map, key\) \{/)
   assert.match(js, /function ccjsMapSet\(map, key, value\) \{/)
-  assert.match(ts, /function ccjsArrayPop<T>\(array: T\[\]\): T \| null \{/)
-  assert.match(ts, /function ccjsMapGet<K, V>\(map: Map<K, V>, key: K\): V \| null \{/)
-  assert.match(ts, /function ccjsMapSet<K, V>\(map: Map<K, V>, key: K, value: V\): V \{/)
   assert.doesNotMatch(emitJsFromIr(withoutFeatures, {
     callMain: false
   }), /function ccjs(?:ArrayPop|MapGet|MapSet)/)
@@ -2280,71 +2259,6 @@ export function main(): void {
   assert.equal(add.returnType, 'number')
   assert.deepEqual(add.params.map(param => param.valueType), ['number', 'number'])
   assert.match(result.code, /function add\(left, right\)/)
-})
-
-test('emits readable typed TS type aliases function and method signatures', () => {
-  const source = `type User = {
-  readonly id: number,
-  name: string
-}
-
-type Bag = {
-  names: string[],
-  scores: Map<string, number>,
-  tags: Set<string>,
-  nickname: string | null
-}
-
-type Formatter = (user: User, bag: Bag) => string
-
-class Greeter {
-  greet(user: User): string {
-    return user.name
-  }
-}
-
-function add(left: number, right: number): number {
-  return left + right
-}
-
-function render(user: User): User {
-  return user
-}
-
-export function main(): void {
-  const greeter = new Greeter()
-  const total = add(2, 3)
-  const names = ['Ada']
-  const scores: Map<string, number> = new Map()
-  const user: User = { id: 1, name: 'Ada' }
-  const formatter: Formatter = (user, bag) => user.name + bag.names[0]
-  let maybe: string | null = null
-  console.log(greeter.greet(user), formatter(user, { names, scores, tags: new Set(), nickname: null }), render(user).name, total, names[0], scores.has('Ada'), maybe)
-}
-`
-  const js = compileSource(source, {
-    target: 'js'
-  })
-  const ts = compileSource(source, {
-    target: 'ts'
-  })
-
-  assert.match(js.code, /function add\(left, right\) \{/)
-  assert.doesNotMatch(js.code, /left: number/)
-  assert.doesNotMatch(js.code, /type User/)
-  assert.match(ts.code, /type User = \{\n  readonly id: number,\n  name: string,\n\}/)
-  assert.match(ts.code, /type Bag = \{\n  names: string\[\],\n  scores: Map<string, number>,\n  tags: Set<string>,\n  nickname: string \| null,\n\}/)
-  assert.match(ts.code, /type Formatter = \(user: User, bag: Bag\) => string/)
-  assert.match(ts.code, /greet\(user: User\): string \{/)
-  assert.match(ts.code, /function add\(left: number, right: number\): number \{/)
-  assert.match(ts.code, /function render\(user: User\): User \{/)
-  assert.match(ts.code, /export function main\(\): void \{/)
-  assert.match(ts.code, /const total: number = add\(2, 3\)/)
-  assert.match(ts.code, /const names: string\[\] = \["Ada"\]/)
-  assert.match(ts.code, /const scores: Map<string, number> = new Map\(\)/)
-  assert.match(ts.code, /const user: User = \{ id: 1, name: "Ada" \}/)
-  assert.match(ts.code, /const formatter: Formatter = \(user: User, bag: Bag\): string => \(user\.name \+ bag\.names\[0\]\)/)
-  assert.match(ts.code, /let maybe: string \| null = null/)
 })
 
 test('drives C function signature metadata from target-neutral IR declarations', () => {
@@ -3120,9 +3034,9 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(result.code, /if \(\(!\(score\.tag == CCJS_TAG_NULL\)\)\) \{/)
+  assert.match(result.code, /if \(!\(score\.tag == CCJS_TAG_NULL\)\) \{/)
   assert.match(result.code, /\(score\.as\.number \+ 1\)/)
-  assert.match(result.code, /if \(\(active\.tag == CCJS_TAG_NULL\)\) \{/)
+  assert.match(result.code, /if \(active\.tag == CCJS_TAG_NULL\) \{/)
   assert.match(result.code, /\(active\.as\.boolean \? 1 : 0\)/)
 
   assertDiagnostic(`export function main(): void {
@@ -3879,10 +3793,6 @@ export function main(): void {
   const js = compileSource(source, {
     target: 'js'
   })
-  const ts = compileSource(source, {
-    target: 'ts'
-  })
-
   assert.match(js.code, /class User \{/)
   assert.match(js.code, /\n  id\n  name\n/)
   assert.match(js.code, /constructor\(id, name\) \{/)
@@ -3894,12 +3804,8 @@ export function main(): void {
   assert.match(js.code, /label\(\) \{/)
   assert.match(js.code, /const user = new User\(1, "Ada"\)/)
   assert.match(js.code, /const value = user\.total\(2\)/)
-  assert.match(ts.code, /readonly id: number/)
-  assert.match(ts.code, /name: string/)
-  assert.match(ts.code, /rename\(next: string\): void/)
-  assert.match(ts.code, /score\(extra: number\): number/)
-  assert.match(ts.code, /total\(extra: number\): number/)
-  assert.match(ts.code, /label\(\): string/)
+  assert.doesNotMatch(js.code, /readonly id: number/)
+  assert.doesNotMatch(js.code, /rename\(next: string\)/)
   assert.deepEqual(js.ir.syntaxFeatures.map(item => item.feature), ['class'])
 
   const c = compileSource(source, {
@@ -5606,13 +5512,6 @@ test('compiles arrow functions and chain calls to JS and C', () => {
   assert.match(js.code, /\(left, right\) => \(left - right\)/)
   assert.match(js.code, /value => \(value > 1\)/)
   assert.match(js.code, /value => \(value \* 2\)/)
-  const ts = compileSource(source, {
-    target: 'ts'
-  })
-
-  assert.match(ts.code, /\.sort\(\(left: number, right: number\): number => \(left - right\)\)/)
-  assert.match(ts.code, /\.filter\(\(value: number\): boolean => \(value > 1\)\)/)
-  assert.match(ts.code, /\.map\(\(value: number\): number => \(value \* 2\)\)/)
   const c = compileSource(source, {
     target: 'c'
   })
@@ -5644,20 +5543,20 @@ test('injects Node fs prelude when fs is referenced', () => {
   assert.doesNotMatch(withoutGlobalUsage, /import \* as fs from 'node:fs\/promises'/)
 })
 
-test('maps fs binary helpers to Buffer-compatible TS and C runtime calls', () => {
-  const ts = compileSource(`export async function main(): Promise<void> {
+test('maps fs binary helpers to Buffer-compatible JS and C runtime calls', () => {
+  const js = compileSource(`export async function main(): Promise<void> {
   const bytes: Buffer = await fs.readFileBytes('/tmp/value.bin')
   const view: Uint8Array = bytes
   await fs.writeFileBytes('/tmp/out.bin', view)
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
 
-  assert.match(ts.code, /import \* as fs from 'node:fs\/promises'/)
-  assert.match(ts.code, /const bytes: Buffer = await fs\.readFile\("\/tmp\/value\.bin"\)/)
-  assert.match(ts.code, /const view: Uint8Array = bytes/)
-  assert.match(ts.code, /await fs\.writeFile\("\/tmp\/out\.bin", view\)/)
+  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
+  assert.match(js.code, /const bytes = await fs\.readFile\("\/tmp\/value\.bin"\)/)
+  assert.match(js.code, /const view = bytes/)
+  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.bin", view\)/)
 
   const c = compileSource(`export async function main(): Promise<void> {
   const bytes = await fs.readFileBytes('/tmp/value.bin')
@@ -5745,26 +5644,26 @@ test('types and lowers crypto.getRandomValues as a bytes-preserving call', () =>
   console.log(filled.length)
 }
 `
-  const ts = compileSource(source, {
-    target: 'ts'
+  const js = compileSource(source, {
+    target: 'js'
   })
 
-  assert.deepEqual(ts.ir.features, [
+  assert.deepEqual(js.ir.features, [
     'binary',
     'crypto',
     'runtime-values',
     'string-bytes'
   ])
-  assert.deepEqual(ts.ir.runtimeRequirements, [
+  assert.deepEqual(js.ir.runtimeRequirements, [
     'binary',
     'managed-values',
     'string-bytes'
   ])
-  assert.deepEqual(ts.ir.globalUsages.map(usage => usage.path.join('.')), [
+  assert.deepEqual(js.ir.globalUsages.map(usage => usage.path.join('.')), [
     'Buffer.alloc',
     'crypto.getRandomValues'
   ])
-  assert.match(ts.code, /const filled: Buffer = crypto\.getRandomValues\(bytes\)/)
+  assert.match(js.code, /const filled = crypto\.getRandomValues\(bytes\)/)
 
   const c = compileSource(source, {
     target: 'c'
@@ -5818,7 +5717,7 @@ function stripCryptoRuntimeMetadata(node: unknown): void {
 }
 
 test('maps fs sync helpers to Node fs and C runtime calls', () => {
-  const ts = compileSource(`export function main(): void {
+  const js = compileSource(`export function main(): void {
   const text = fs.readFileSync('/tmp/value.txt')
   const bytes: Buffer = fs.readFileBytesSync('/tmp/value.bin')
   const entries = fs.readDirSync('/tmp')
@@ -5827,16 +5726,16 @@ test('maps fs sync helpers to Node fs and C runtime calls', () => {
   console.log(entries[0])
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
 
-  assert.doesNotMatch(ts.code, /node:fs\/promises/)
-  assert.match(ts.code, /import \* as ccjsFsSync from 'node:fs'/)
-  assert.match(ts.code, /const text: string = ccjsFsSync\.readFileSync\("\/tmp\/value\.txt", 'utf8'\)/)
-  assert.match(ts.code, /const bytes: Buffer = ccjsFsSync\.readFileSync\("\/tmp\/value\.bin"\)/)
-  assert.match(ts.code, /const entries: string\[\] = ccjsFsSync\.readdirSync\("\/tmp"\)/)
-  assert.match(ts.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.txt", text, 'utf8'\)/)
-  assert.match(ts.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.bin", bytes\)/)
+  assert.doesNotMatch(js.code, /node:fs\/promises/)
+  assert.match(js.code, /import \* as ccjsFsSync from 'node:fs'/)
+  assert.match(js.code, /const text = ccjsFsSync\.readFileSync\("\/tmp\/value\.txt", 'utf8'\)/)
+  assert.match(js.code, /const bytes = ccjsFsSync\.readFileSync\("\/tmp\/value\.bin"\)/)
+  assert.match(js.code, /const entries = ccjsFsSync\.readdirSync\("\/tmp"\)/)
+  assert.match(js.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.txt", text, 'utf8'\)/)
+  assert.match(js.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.bin", bytes\)/)
 
   const c = compileSource(`export function main(): void {
   const text = fs.readFileSync('/tmp/value.txt')
@@ -6559,7 +6458,7 @@ export function main(): void {
   }
 })
 
-test('emits JS TS and C bundles directly from target-neutral IR module records', async () => {
+test('emits JS and C bundles directly from target-neutral IR module records', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-bundle-ir-entrypoints-'))
 
   try {
@@ -6584,9 +6483,6 @@ export function main(): void {
     const js = emitJsBundleFromIrModules(irModules, result.graph.entry, {
       callMain: false
     })
-    const ts = emitTsBundleFromIrModules(irModules, result.graph.entry, {
-      callMain: false
-    })
     const c = emitCBundleFromIrModules(irModules, result.graph.entry)
     const jsWithLibEntry = emitJsBundleFromIrModules(irModules, libEntry)
     const cWithLibEntry = emitCBundleFromIrModules(irModules, libEntry)
@@ -6597,8 +6493,6 @@ export function main(): void {
     assert.match(js, /function greet\(\) \{/)
     assert.match(js, /function main\(\) \{/)
     assert.doesNotMatch(js, /const ccjsMainResult/)
-    assert.match(ts, /function greet\(\): void \{/)
-    assert.match(ts, /function main\(\): void \{/)
     assert.match(c, /void greet\(void\);/)
     assert.match(c, /void ccjs_main\(void\);/)
     assert.match(c, /int main\(void\) \{\n  ccjs_main\(\);/)
@@ -6642,50 +6536,6 @@ export function main(): void {
     assert.match(code, /function greet\(\)/)
     assert.match(code, /function main\(\)/)
     assert.match(code, /const ccjsMainResult = main\(\)/)
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('drives TS bundle type aliases from stored target-neutral IR programs', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-bundle-type-ir-'))
-
-  try {
-    await writeFile(join(dir, 'types.ts'), `export type User = {
-  readonly id: number,
-  name: string
-}
-`)
-    await writeFile(join(dir, 'main.ts'), `import type { User } from './types.ts'
-
-export function main(): void {
-  const user: User = { id: 1, name: 'Ada' }
-  console.log(user.name)
-}
-`)
-
-    const result = await compileFile(join(dir, 'main.ts'), {
-      target: 'ts',
-      callMain: false
-    })
-    const graph = {
-      ...result.graph,
-      modules: result.graph.modules.map(module => ({
-        ...module,
-        hir: null
-      }))
-    }
-    const code = emitTsBundleFromIrModules(collectIrModuleRecords(graph), graph.entry, {
-      callMain: false
-    })
-
-    assert.deepEqual(result.graph.modules.flatMap(module => module.ir?.topLevelItems.map(item => item.kind) ?? []), ['type', 'import', 'type', 'function'])
-    assert.equal([...code.matchAll(/type User = \{/g)].length, 1)
-    assert.match(code, /function main\(\): void \{/)
-    assert.doesNotMatch(code, /const ccjsMainResult/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -7104,7 +6954,7 @@ test('checks Array sort filter map as typed chain calls', () => {
   })
 
   assert.match(c.code, /ccjs_sort_compare_\d+ = \(left - right\);/)
-  assert.match(c.code, /if \(\(value > index\)\) \{/)
+  assert.match(c.code, /if \(value > index\) \{/)
   assert.match(c.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \+ 1\)\)\)/)
 
   const branchedC = compileSource(`export function main(): void {
@@ -7147,10 +6997,10 @@ test('checks Array sort filter map as typed chain calls', () => {
   console.log(result.length)
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
 
-  assert.match(multiStatementFilter.code, /const result: number\[\] = values\.filter\(\(value: number\): boolean => \{/)
+  assert.match(multiStatementFilter.code, /const result = values\.filter\(value => \{/)
 
   assertDiagnostic(`export function main(): void {
   const values: number[] = [1]
@@ -7207,13 +7057,13 @@ test('checks Array pop as a nullable typed mutating call', () => {
 `, {
     target: 'js'
   })
-  const ts = compileSource(`export function main(): void {
+  const js = compileSource(`export function main(): void {
   const names: string[] = ['Ada']
   const name: string | null = names.pop()
   console.log(name ?? 'missing')
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
   const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
@@ -7236,8 +7086,8 @@ test('checks Array pop as a nullable typed mutating call', () => {
   assert.match(result.code, /function ccjsArrayPop\(array\) \{/)
   assert.match(result.code, /const value = ccjsArrayPop\(values\)/)
   assert.match(result.code, /const fallback = \(ccjsArrayPop\(values\) \?\? 0\)/)
-  assert.match(ts.code, /function ccjsArrayPop<T>\(array: T\[\]\): T \| null \{/)
-  assert.match(ts.code, /const name: string \| null = ccjsArrayPop\(names\)/)
+  assert.match(js.code, /function ccjsArrayPop\(array\) \{/)
+  assert.match(js.code, /const name = ccjsArrayPop\(names\)/)
 
   assertDiagnostic(`export function main(): void {
   const values: number[] = [1]
@@ -7278,13 +7128,13 @@ export function main(): void {
     target: 'js'
   })
   const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const ts = compileSource(`export function main(): void {
+  const js = compileSource(`export function main(): void {
   const scores: Map<string, number> = new Map()
   const maybeScore: number | null = scores.get('Ada')
   console.log(maybeScore ?? 0)
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
   assert.ok(main)
   const scores = main.body.find(item => item.type === 'VariableDeclaration' && item.name === 'scores')
@@ -7330,8 +7180,8 @@ export function main(): void {
   ])
   assert.match(result.code, /function ccjsMapGet\(map, key\) \{/)
   assert.match(result.code, /const maybeScore = ccjsMapGet\(scores\.set\("Ada", 7\), "Ada"\)/)
-  assert.match(ts.code, /function ccjsMapGet<K, V>\(map: Map<K, V>, key: K\): V \| null \{/)
-  assert.match(ts.code, /const maybeScore: number \| null = ccjsMapGet\(scores, "Ada"\)/)
+  assert.match(js.code, /function ccjsMapGet\(map, key\) \{/)
+  assert.match(js.code, /const maybeScore = ccjsMapGet\(scores, "Ada"\)/)
   assert.match(result.code, /\.add\("Ada"\)\.has\("Ada"\)/)
   assert.match(result.code, /const clearedScores = scores\.clear\(\)/)
   assert.match(result.code, /const clearedNames = names\.clear\(\)/)
@@ -7405,7 +7255,7 @@ export function main(): void {
   })
 })
 
-test('tracks Promise generic metadata through checker, IR and TS emission', () => {
+test('tracks Promise generic metadata through checker and IR', () => {
   const result = compileSource(`function makeValue(): Promise<number> {
   return Promise.resolve(7)
 }
@@ -7416,11 +7266,7 @@ export function main(): void {
   console.log(value, inferred)
 }
 `, {
-    target: 'ts'
-  })
-  const aliasResult = compileSource(`type Loader = () => Promise<string>
-`, {
-    target: 'ts'
+    target: 'js'
   })
   const makeValue = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'makeValue')
   const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
@@ -7444,10 +7290,9 @@ export function main(): void {
   assert.deepEqual(result.ir.runtimeRequirements, [
     'async-runtime'
   ])
-  assert.match(result.code, /function makeValue\(\): Promise<number> \{/)
-  assert.match(result.code, /const value: Promise<number> = Promise\.resolve\(1\)/)
-  assert.match(result.code, /const inferred: Promise<string> = Promise\.resolve\("ok"\)/)
-  assert.match(aliasResult.code, /type Loader = \(\) => Promise<string>/)
+  assert.match(result.code, /function makeValue\(\) \{/)
+  assert.match(result.code, /const value = Promise\.resolve\(1\)/)
+  assert.match(result.code, /const inferred = Promise\.resolve\("ok"\)/)
 
   assertDiagnostic(`export function main(): void {
   const value: Promise<number> = Promise.resolve('nope')
@@ -7470,7 +7315,7 @@ test('checks Promise then catch as typed chain calls', () => {
   console.log(doubled, recovered, chained)
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
   const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
   const doubled = main?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'doubled')
@@ -7490,9 +7335,9 @@ test('checks Promise then catch as typed chain calls', () => {
   assert.equal(chained?.valueType, 'promise')
   assert.equal(chained?.promiseValueType, 'string')
   assert.equal(result.ir.features.includes('async-runtime'), true)
-  assert.match(result.code, /const doubled: Promise<number> = source\.then\(\(value: number\): number => \(value \* 2\)\)/)
-  assert.match(result.code, /const recovered: Promise<string> = failed\.catch\(\(error\): string => "ok"\)/)
-  assert.match(result.code, /const chained: Promise<string> = source\.then\(\(value: number\): number => \(value \+ 1\)\)\.catch\(\(error\): number => 0\)\.then\(\(value: number\): string => String\(value\)\)/)
+  assert.match(result.code, /const doubled = source\.then\(value => \(value \* 2\)\)/)
+  assert.match(result.code, /const recovered = failed\.catch\(error => "ok"\)/)
+  assert.match(result.code, /const chained = source\.then\(value => \(value \+ 1\)\)\.catch\(error => 0\)\.then\(value => String\(value\)\)/)
 
   const multiStatement = compileSource(`export function main(): void {
   const promise = Promise.resolve(1).then(value => {
@@ -7504,13 +7349,13 @@ test('checks Promise then catch as typed chain calls', () => {
   console.log(promise)
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
   const multiMain = multiStatement.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
   const multiPromise = multiMain?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'promise')
 
   assert.equal(multiPromise?.promiseValueType, 'number')
-  assert.match(multiStatement.code, /const promise: Promise<number> = Promise\.resolve\(1\)\.then\(\(value: number\): number => \{/)
+  assert.match(multiStatement.code, /const promise = Promise\.resolve\(1\)\.then\(value => \{/)
 
   const branchStatement = compileSource(`export function main(): void {
   const promise = Promise.resolve(1).then(value => {
@@ -7524,13 +7369,13 @@ test('checks Promise then catch as typed chain calls', () => {
   console.log(promise)
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
   const branchMain = branchStatement.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
   const branchPromise = branchMain?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'promise')
 
   assert.equal(branchPromise?.promiseValueType, 'number')
-  assert.match(branchStatement.code, /const promise: Promise<number> = Promise\.resolve\(1\)\.then\(\(value: number\): number => \{/)
+  assert.match(branchStatement.code, /const promise = Promise\.resolve\(1\)\.then\(value => \{/)
 
   const switchStatement = compileSource(`export function main(): void {
   const promise = Promise.resolve(2).then(value => {
@@ -7547,13 +7392,13 @@ test('checks Promise then catch as typed chain calls', () => {
   console.log(promise)
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
   const switchMain = switchStatement.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
   const switchPromise = switchMain?.body.find(item => item.type === 'VariableDeclaration' && item.name === 'promise')
 
   assert.equal(switchPromise?.promiseValueType, 'number')
-  assert.match(switchStatement.code, /const promise: Promise<number> = Promise\.resolve\(2\)\.then\(\(value: number\): number => \{/)
+  assert.match(switchStatement.code, /const promise = Promise\.resolve\(2\)\.then\(value => \{/)
 
   assertDiagnostic(`export function main(): void {
   const source: Promise<number> = Promise.resolve(2)
@@ -7638,13 +7483,13 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   assert.match(result.code, /\*out = ccjs_number_value\(\(value \* 3\)\);/)
   assert.match(result.code, /const double doubled = \(value \* 2\);/)
   assert.match(result.code, /\*out = ccjs_number_value\(doubled\);/)
-  assert.match(result.code, /if \(\(value > 5\)\) \{\n    \(\*out\) = ccjs_number_value\(\(value \* 2\)\);\n    goto ccjs_promise_callback_cleanup;\n  \}/)
+  assert.match(result.code, /if \(value > 5\) \{\n    \(\*out\) = ccjs_number_value\(\(value \* 2\)\);\n    goto ccjs_promise_callback_cleanup;\n  \}/)
   assert.match(result.code, /\(\*out\) = ccjs_number_value\(value\);\n  goto ccjs_promise_callback_cleanup;\nccjs_promise_callback_cleanup:/)
   assert.match(result.code, /switch \(\(int\)value\) \{\n    case \(int\)2: \{\n      \(\*out\) = ccjs_number_value\(\(value \* 10\)\);\n      goto ccjs_promise_callback_cleanup;/)
   assert.match(result.code, /\*out = ccjs_number_value\(96\);/)
   assert.match(result.code, /const double recovered = 97;/)
   assert.match(result.code, /\*out = ccjs_number_value\(recovered\);/)
-  assert.match(result.code, /if \(\(1 == 1\)\) \{\n    \(\*out\) = ccjs_number_value\(98\);\n    goto ccjs_promise_callback_cleanup;\n  \}/)
+  assert.match(result.code, /if \(1 == 1\) \{\n    \(\*out\) = ccjs_number_value\(98\);\n    goto ccjs_promise_callback_cleanup;\n  \}/)
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &doubled\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &blockDoubled\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &multiDoubled\) != CCJS_OK\) goto ccjs_cleanup;/)
@@ -7691,7 +7536,7 @@ test('lowers Promise callback loop bodies to C runtime promises', () => {
     target: 'c'
   })
 
-  assert.match(result.code, /while \(\(value > 0\)\) \{/)
+  assert.match(result.code, /while \(value > 0\) \{/)
   assert.match(result.code, /for \(double index = 0; \(index < value\); \(index = \(index \+ 1\)\)\) \{/)
   assert.match(result.code, /goto ccjs_continue_\d+;/)
   assert.match(result.code, /\(\*out\) = ccjs_number_value\(total\);\n  goto ccjs_promise_callback_cleanup;/)
@@ -7975,14 +7820,14 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
 `, {
     target: 'js'
   })
-  const ts = compileSource(`export function main(): void {
+  const js = compileSource(`export function main(): void {
   const headers: Map<string, string> = new Map()
   headers['content-type'] = 'application/json'
   const contentType: string | null = headers['content-type']
   console.log(contentType ?? 'missing')
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
   const main = result.hir.body.find(item => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
@@ -8008,9 +7853,9 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
   assert.match(result.code, /function ccjsMapSet\(map, key, value\) \{/)
   assert.match(result.code, /ccjsMapSet\(headers, "content-type", "application\/json"\)/)
   assert.match(result.code, /const contentType = ccjsMapGet\(headers, "content-type"\)/)
-  assert.match(ts.code, /function ccjsMapGet<K, V>\(map: Map<K, V>, key: K\): V \| null \{/)
-  assert.match(ts.code, /function ccjsMapSet<K, V>\(map: Map<K, V>, key: K, value: V\): V \{/)
-  assert.match(ts.code, /const contentType: string \| null = ccjsMapGet\(headers, "content-type"\)/)
+  assert.match(js.code, /function ccjsMapGet\(map, key\) \{/)
+  assert.match(js.code, /function ccjsMapSet\(map, key, value\) \{/)
+  assert.match(js.code, /const contentType = ccjsMapGet\(headers, "content-type"\)/)
 
   assertDiagnostic(`export function main(): void {
   const headers: Map<string, string> = new Map()
@@ -8094,12 +7939,12 @@ test('checks string split as a string array call', () => {
   console.log(first)
 }
 `, {
-    target: 'ts'
+    target: 'js'
   })
 
-  assert.match(result.code, /function ccjsStringSplit\(value: string, separator: string\): string\[\] \{/)
-  assert.match(result.code, /const parts: string\[\] = ccjsStringSplit\("Ada,Grace", ","\)/)
-  assert.match(result.code, /const first: string = parts\[0\]/)
+  assert.match(result.code, /function ccjsStringSplit\(value, separator\) \{/)
+  assert.match(result.code, /const parts = ccjsStringSplit\("Ada,Grace", ","\)/)
+  assert.match(result.code, /const first = parts\[0\]/)
   assert.equal(result.hir.body[0].body[0].valueType, 'array')
   assert.equal(result.hir.body[0].body[0].arrayElementType, 'string')
 
@@ -8173,18 +8018,11 @@ export function main(): void {
   const js = compileSource(source, {
     target: 'js'
   })
-  const ts = compileSource(source, {
-    target: 'ts'
-  })
-
   assert.match(js.code, /function ccjsNumberFromString\(text\) \{/)
   assert.match(js.code, /Number\.isNaN\(value\) \? null : value/)
   assert.doesNotMatch(js.code, /Number\.isFinite/)
   assert.match(js.code, /return ccjsNumberFromString\(text\)/)
   assert.match(js.code, /const port = \(ccjsNumberFromString\("8080"\) \?\? 3000\)/)
-  assert.match(ts.code, /function ccjsNumberFromString\(text: string\): number \| null \{/)
-  assert.match(ts.code, /function parsePort\(text: string\): number \| null \{/)
-  assert.match(ts.code, /const port: number = \(ccjsNumberFromString\("8080"\) \?\? 3000\)/)
 
   assertDiagnostic(`export function main(): void {
   Number()
@@ -8203,7 +8041,7 @@ export function main(): void {
 `, 'CCJS_TYPE_MISMATCH')
 })
 
-test('checks numeric casts as typed number calls', () => {
+test('checks numeric casts as number calls', () => {
   const source = `function convert(value: number): number {
   return i32(value) + u32(value) + u64(value) + f32(value) + f64(value)
 }
@@ -8216,9 +8054,6 @@ export function main(): void {
   const js = compileSource(source, {
     target: 'js'
   })
-  const ts = compileSource(source, {
-    target: 'ts'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
@@ -8228,8 +8063,7 @@ export function main(): void {
   ])
   assert.match(js.code, /function ccjsCheckedIntegerCast\(value, min, max\) \{/)
   assert.match(js.code, /return \(\(\(\(ccjsI32\(value\) \+ ccjsU32\(value\)\) \+ ccjsU64\(value\)\) \+ ccjsF32\(value\)\) \+ ccjsF64\(value\)\)/)
-  assert.match(ts.code, /function ccjsCheckedIntegerCast\(value: number, min: number, max: number\): number \{/)
-  assert.match(ts.code, /function ccjsF32\(value: number\): number \{/)
+  assert.match(js.code, /function ccjsF32\(value\) \{/)
   assert.match(c.code, /long long ccjs_i32_truncated_\d+ = \(long long\)ccjs_i32_value_\d+;/)
   assert.match(c.code, /ccjs_u32_truncated_\d+ < 0LL \|\| ccjs_u32_truncated_\d+ > 4294967295LL/)
   assert.match(c.code, /ccjs_u64_truncated_\d+ < 0LL \|\| ccjs_u64_truncated_\d+ > 9007199254740991LL/)
@@ -8564,55 +8398,6 @@ export function main(): void {
   }
 })
 
-test('compiles a static ESM module graph to typed TS bundle', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-modules-'))
-
-  try {
-    await writeFile(join(dir, 'types.ts'), `export type User = {
-  readonly id: number,
-  name: string
-}
-`)
-    await writeFile(join(dir, 'lib.ts'), `import type { User as Person } from './types.ts'
-
-type Formatter = (user: Person) => string
-
-const label: Formatter = user => user.name
-
-export function greet(user: Person): void {
-  console.log(label(user))
-}
-`)
-    await writeFile(join(dir, 'main.ts'), `import type { User } from './types.ts'
-import { greet } from './lib.ts'
-
-export function main(): void {
-  const user: User = { id: 1, name: 'Ada' }
-  greet(user)
-}
-`)
-
-    const result = await compileFile(join(dir, 'main.ts'), {
-      target: 'ts'
-    })
-
-    assert.equal([...result.code.matchAll(/type User = \{/g)].length, 1)
-    assert.match(result.code, /type User = \{\n  readonly id: number,\n  name: string,\n\}/)
-    assert.match(result.code, /type Person = \{\n  readonly id: number,\n  name: string,\n\}/)
-    assert.match(result.code, /type Formatter = \(user: Person\) => string/)
-    assert.match(result.code, /const label: Formatter = \(user: Person\): string => user\.name/)
-    assert.match(result.code, /function greet\(user: Person\): void \{/)
-    assert.match(result.code, /function main\(\): void \{/)
-    assert.match(result.code, /const user: User = \{ id: 1, name: "Ada" \}/)
-    assert.doesNotMatch(result.code, /export function/)
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
 test('compiles a static ESM module graph to C bundle', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
 
@@ -8786,7 +8571,7 @@ export function main(): void {
 function assertDiagnostic(source: string, code: string, options: { target?: CompileTarget } = {}): void {
   assert.throws(() => {
     compileSource(source, {
-      target: options.target ?? 'ts'
+      target: options.target ?? 'js'
     })
   }, error => {
     if (!(error instanceof CompileError)) {

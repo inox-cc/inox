@@ -5598,7 +5598,7 @@ function emitIfStatement(statement, context) {
   const narrowing = resolveNullableScalarConditionNarrowing(statement.condition, context)
   const lines = [
     ...condition.lines,
-    `if (${condition.expression}) {`,
+    `if ${emitCConditionClause(condition.expression)} {`,
     ...withVariableScope(context, () => withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.consequent, context))).map(line => `  ${line}`)
   ]
 
@@ -5623,7 +5623,7 @@ function emitWhileStatement(statement, context) {
 
   if (condition.lines.length === 0) {
     return [
-      `while (${condition.expression}) {`,
+      `while ${emitCConditionClause(condition.expression)} {`,
       ...body.map(line => `  ${line}`),
       ...emitContinueTargetLabel(continueLabel, context),
       '}',
@@ -5634,7 +5634,7 @@ function emitWhileStatement(statement, context) {
   return [
     'while (1) {',
     ...condition.lines.map(line => `  ${line}`),
-    `  if (!(${condition.expression})) break;`,
+    `  if ${emitCNegatedConditionClause(condition.expression)} break;`,
     ...body.map(line => `  ${line}`),
     ...emitContinueTargetLabel(continueLabel, context),
     '}',
@@ -5677,7 +5677,7 @@ function emitForStatement(statement, context) {
     lines.push(...test.lines.map(line => `    ${line}`))
 
     if (test.expression !== '') {
-      lines.push(`    if (!(${test.expression})) break;`)
+      lines.push(`    if ${emitCNegatedConditionClause(test.expression)} break;`)
     }
 
     lines.push(...body.map(line => `    ${line}`))
@@ -5694,6 +5694,44 @@ function emitForStatement(statement, context) {
 
     return lines
   })
+}
+
+function emitCConditionClause(expression: string): string {
+  const trimmed = expression.trim()
+
+  return isWrappedCExpression(trimmed) ? trimmed : `(${trimmed})`
+}
+
+function emitCNegatedConditionClause(expression: string): string {
+  return `(!${emitCConditionClause(expression)})`
+}
+
+function isWrappedCExpression(expression: string): boolean {
+  if (!expression.startsWith('(') || !expression.endsWith(')')) {
+    return false
+  }
+
+  let depth = 0
+
+  for (let index = 0; index < expression.length; index += 1) {
+    const char = expression[index]
+
+    if (char === '(') {
+      depth += 1
+    } else if (char === ')') {
+      depth -= 1
+
+      if (depth === 0 && index < expression.length - 1) {
+        return false
+      }
+    }
+
+    if (depth < 0) {
+      return false
+    }
+  }
+
+  return depth === 0
 }
 
 function emitForOfStatement(statement, context) {
@@ -9821,7 +9859,7 @@ function emitPreparedLogicalExpression(expression, context) {
       lines: [
         ...left.lines,
         `double ${temp} = 0;`,
-        `if (${left.expression}) {`,
+        `if ${emitCConditionClause(left.expression)} {`,
         ...right.lines.map(line => `  ${line}`),
         `  ${temp} = ${right.expression};`,
         '}'
@@ -9834,7 +9872,7 @@ function emitPreparedLogicalExpression(expression, context) {
     lines: [
       ...left.lines,
       `double ${temp} = 0;`,
-      `if (${left.expression}) {`,
+      `if ${emitCConditionClause(left.expression)} {`,
       `  ${temp} = 1;`,
       '} else {',
       ...right.lines.map(line => `  ${line}`),
@@ -12804,7 +12842,7 @@ function emitArrayCallbackStatementLines(statement, doneLabel, emitReturn, conte
   const consequent = emitArrayCallbackStatementLines(statement.consequent, doneLabel, emitReturn, context)
   const lines = [
     ...condition.lines,
-    `if (${condition.expression}) {`,
+    `if ${emitCConditionClause(condition.expression)} {`,
     ...consequent.map(line => `  ${line}`),
     '}'
   ]
@@ -12832,7 +12870,7 @@ function emitArrayFilterReturnLines(expression, out, value, context) {
 
   return [
     ...predicate.lines,
-    `if (${predicate.expression}) {`,
+    `if ${emitCConditionClause(predicate.expression)} {`,
     `  ${emitStatusCheck(`ccjs_array_push(${out}, ${value})`, context)}`,
     '}'
   ]

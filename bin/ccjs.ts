@@ -9,7 +9,7 @@ import { CompileError, formatDiagnostics } from '../src/compiler/diagnostics.ts'
 import { compileFile } from '../src/compiler/index.ts'
 import type { CompileOptions, RandomOptions, RuntimeBudgets, RuntimeCapabilities, RuntimeProfile } from '../src/compiler/types.ts'
 import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
-import type { CliPlan, CliTarget } from '../scripts/lib/cli-args.ts'
+import type { CliPlan } from '../scripts/lib/cli-args.ts'
 
 type CConfig = {
   budgets?: RuntimeBudgets
@@ -77,12 +77,10 @@ try {
   } else if (plan.command === 'run') {
     await runEntry(plan)
   } else if (plan.command === 'emit' && plan.emit != null) {
-    await writeCompiledSource(plan, plan.emit)
+    await writeCompiledSource(plan)
   } else if (plan.command === 'build') {
     if (plan.target === 'c') {
       await buildCExecutable(plan)
-    } else if (plan.target != null) {
-      await writeCompiledSource(plan, plan.target)
     }
   }
 } catch (error) {
@@ -96,37 +94,7 @@ try {
 }
 
 async function runEntry(plan: CliPlan): Promise<void> {
-  const target = plan.target ?? 'ts'
-  const entry = requireEntry(plan)
-
-  if (target === 'c') {
-    await runCEntry(plan)
-    return
-  }
-
-  const result = await compileFile(entry, {
-    target: 'ts'
-  })
-  const tempDir = await mkdtemp(join(tmpdir(), 'ccjs-'))
-  const file = join(tempDir, 'main.ts')
-
-  await writeFile(join(tempDir, 'package.json'), `${JSON.stringify({
-    type: 'module'
-  }, null, 2)}\n`)
-  await writeFile(file, result.code)
-
-  try {
-    process.exitCode = await spawnAndWait(process.execPath, [file])
-  } finally {
-    if (plan.keep) {
-      console.error(`kept ${tempDir}`)
-    } else {
-      await rm(tempDir, {
-        recursive: true,
-        force: true
-      })
-    }
-  }
+  await runCEntry(plan)
 }
 
 async function runCEntry(plan: CliPlan): Promise<void> {
@@ -157,15 +125,15 @@ async function runCEntry(plan: CliPlan): Promise<void> {
   }
 }
 
-async function writeCompiledSource(plan: CliPlan, target: CliTarget): Promise<void> {
+async function writeCompiledSource(plan: CliPlan): Promise<void> {
   const entry = requireEntry(plan)
-  const config = target === 'c' ? await loadConfig() : {}
+  const config = await loadConfig()
   const result = await compileFile(entry, {
-    target,
+    target: 'c',
     callMain: false,
-    ...(target === 'c' ? cCompileOptions(config) : {})
+    ...cCompileOptions(config)
   })
-  const out = plan.out ?? defaultEmitOutput(entry, target)
+  const out = plan.out ?? defaultEmitOutput(entry, 'c')
   const dir = dirname(out)
 
   if (dir !== '.') {

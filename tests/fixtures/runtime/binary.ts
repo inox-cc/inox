@@ -1,4 +1,4 @@
-// @targets c,ts
+// @targets c
 // @expect pass
 // @stdout binary 2 7 9 hi
 

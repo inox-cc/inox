@@ -1,4 +1,4 @@
-// @targets ts
+// @targets c
 // @expect pass
 
 export function main(): void {

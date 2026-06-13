@@ -1,4 +1,4 @@
-// @targets js,ts
+// @targets js
 // @platforms hosted,node
 // @features fetch,fs,http,timers
 // @expect pass

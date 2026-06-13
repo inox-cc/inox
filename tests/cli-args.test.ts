@@ -41,20 +41,25 @@ test('build requires target', () => {
   const result = parseCliArgs(['build', 'index.ts'])
 
   assert.equal(result.ok, false)
-  assert.equal(result.error, 'build requires --target ts|c')
+  assert.equal(result.error, 'build requires --target c')
 })
 
-test('rejects removed js target', () => {
+test('rejects removed js and ts targets', () => {
   const emit = parseCliArgs(['index.ts', '--emit', 'js'])
   const target = parseCliArgs(['run', 'index.ts', '--target', 'js'])
+  const emitTs = parseCliArgs(['index.ts', '--emit', 'ts'])
+  const targetTs = parseCliArgs(['run', 'index.ts', '--target', 'ts'])
 
   assert.equal(emit.ok, false)
-  assert.equal(emit.error, '--emit expects c or ts')
+  assert.equal(emit.error, '--emit expects c')
   assert.equal(target.ok, false)
-  assert.equal(target.error, '--target expects c or ts')
+  assert.equal(target.error, '--target expects c')
+  assert.equal(emitTs.ok, false)
+  assert.equal(emitTs.error, '--emit expects c')
+  assert.equal(targetTs.ok, false)
+  assert.equal(targetTs.error, '--target expects c')
 })
 
 test('emit does not overwrite same-extension input by default', () => {
-  assert.equal(defaultEmitOutput('src/index.ts', 'ts'), 'src/index.out.ts')
   assert.equal(defaultEmitOutput('src/index.ts', 'c'), 'src/index.c')
 })

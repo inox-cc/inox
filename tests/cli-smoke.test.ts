@@ -895,7 +895,14 @@ test('ccjs run --target c --keep keeps temporary C artifacts', async t => {
   }
 })
 
-test('ccjs run --keep writes temporary ts output by default', async () => {
+test('ccjs run --keep writes temporary C output by default', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
   const result = await runCli(['tests/fixtures/parser/valid/hello.ts', '--keep'])
   const match = result.stderr.match(/kept (.+)\n?$/)
 
@@ -906,35 +913,12 @@ test('ccjs run --keep writes temporary ts output by default', async () => {
   const dir = match[1]
 
   try {
-    const ts = await readFile(join(dir, 'main.ts'), 'utf8')
-    const pkg = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'))
+    const c = await readFile(join(dir, 'main.c'), 'utf8')
+    const run = await runCommand(join(dir, 'main'), [])
 
-    assert.match(ts, /function main\(\): void/)
-    assert.equal(pkg.type, 'module')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('ccjs run --target ts writes runnable temporary ts output', async () => {
-  const result = await runCli(['tests/fixtures/parser/valid/hello.ts', '--target', 'ts', '--keep'])
-  const match = result.stderr.match(/kept (.+)\n?$/)
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'hello\n')
-  assert.ok(match)
-
-  const dir = match[1]
-
-  try {
-    const ts = await readFile(join(dir, 'main.ts'), 'utf8')
-    const pkg = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'))
-
-    assert.match(ts, /function main\(\): void/)
-    assert.equal(pkg.type, 'module')
+    assert.match(c, /int main\(void\)/)
+    assert.equal(run.code, 0)
+    assert.equal(run.stdout, 'hello\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -982,14 +966,6 @@ test('ccjs file resolves directory index imports', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs composite expressions', async () => {
-  const result = await runCli(['tests/fixtures/runtime/composite-expressions.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'Grace 5 true\n')
-  assert.equal(result.stderr, '')
-})
-
 test('ccjs file runs if else blocks', async () => {
   const result = await runCli(['tests/fixtures/runtime/if-else.ts'])
 
@@ -1022,14 +998,6 @@ test('ccjs file runs continue statements', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs for of loops', async () => {
-  const result = await runCli(['tests/fixtures/runtime/for-of.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, '6\n')
-  assert.equal(result.stderr, '')
-})
-
 test('ccjs file runs switch statements', async () => {
   const result = await runCli(['tests/fixtures/runtime/switch.ts'])
 
@@ -1038,99 +1006,11 @@ test('ccjs file runs switch statements', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs callbacks', async () => {
-  const result = await runCli(['tests/fixtures/runtime/callback.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'callback\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs optional chaining', async () => {
-  const result = await runCli(['tests/fixtures/runtime/optional-chaining.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'Ada undefined called\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs nullish coalescing', async () => {
-  const result = await runCli(['tests/fixtures/runtime/nullish-coalescing.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'Ada Grace\n')
-  assert.equal(result.stderr, '')
-})
-
 test('ccjs file runs try catch finally', async () => {
   const result = await runCli(['tests/fixtures/runtime/try-catch.ts'])
 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'caught boom\nfinally\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs Error objects', async () => {
-  const result = await runCli(['tests/fixtures/runtime/error-object.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'boom\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs simple classes', async () => {
-  const result = await runCli(['tests/fixtures/runtime/class.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'Ada\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs async await', async () => {
-  const result = await runCli(['tests/fixtures/runtime/async-await.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, '2\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs arrow function chains', async () => {
-  const result = await runCli(['tests/fixtures/runtime/arrow-chain.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, '4 6\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs JS stdlib globals', async () => {
-  const result = await runCli(['tests/fixtures/runtime/js-stdlib.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'true true\ntrue 42\nhello Ada\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs fetch and timers', async () => {
-  const result = await runCli(['tests/fixtures/runtime/fetch-timers.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'hello\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs fs globals', async () => {
-  const result = await runCli(['tests/fixtures/runtime/fs.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'hello fs\n')
-  assert.equal(result.stderr, '')
-})
-
-test('ccjs file runs JSON and binary globals', async () => {
-  const result = await runCli(['tests/fixtures/runtime/json-binary.ts'])
-
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, 'Ada true 2 3 3\n')
   assert.equal(result.stderr, '')
 })
 

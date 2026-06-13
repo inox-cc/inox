@@ -1,9 +1,9 @@
 import { basename, dirname, extname, join } from 'node:path'
 
 const commands = new Set(['build', 'run', 'test'])
-const emitTargets = new Set(['c', 'ts'])
+const emitTargets = new Set(['c'])
 
-export type CliTarget = 'c' | 'ts'
+export type CliTarget = 'c'
 
 export type CliCommand = 'build' | 'emit' | 'help' | 'run' | 'test'
 
@@ -41,9 +41,8 @@ type ParseResult<T> = {
 export const usage = `Usage:
   ccjs <entry>
   ccjs <entry> --emit c [-o output.c]
-  ccjs run <entry> [--target ts|c] [--keep]
+  ccjs run <entry> [--target c] [--keep]
   ccjs build <entry> --target c [-o executable]
-  ccjs build <entry> --target ts [-o output]
   ccjs test
 
 Examples:
@@ -107,7 +106,7 @@ export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
   const finalCommand: CliCommand = emit == null ? command : 'emit'
 
   if (command === 'build' && target == null) {
-    return fail('build requires --target ts|c')
+    return fail('build requires --target c')
   }
 
   return ok({
@@ -157,7 +156,7 @@ function parseOptions(tokens: string[]): ParseResult<ParsedOptions> {
       i += 1
 
       if (!isCliTarget(value)) {
-        return fail('--emit expects c or ts')
+        return fail('--emit expects c')
       }
 
       options.emit = value
@@ -166,7 +165,7 @@ function parseOptions(tokens: string[]): ParseResult<ParsedOptions> {
       i += 1
 
       if (!isCliTarget(value)) {
-        return fail('--target expects c or ts')
+        return fail('--target expects c')
       }
 
       options.target = value

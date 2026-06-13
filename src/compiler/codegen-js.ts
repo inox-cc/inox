@@ -4,7 +4,6 @@ import type { AnyNode, IrProgram } from './types.ts'
 
 type JsEmitOptions = {
   callMain?: boolean
-  emitTypes?: boolean
   stripExports?: boolean
 }
 
@@ -26,13 +25,6 @@ export function emitJsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string
   }
 
   return `${lines.join('\n')}\n`
-}
-
-export function emitTsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string {
-  return emitJsFromIr(ir, {
-    ...options,
-    emitTypes: true
-  })
 }
 
 export function emitJsBundleFromIrModules(irModules: IrModuleRecord[], entry: string, options: JsEmitOptions = {}): string {
@@ -61,13 +53,6 @@ export function emitJsBundleFromIrModules(irModules: IrModuleRecord[], entry: st
   }
 
   return `${lines.join('\n')}\n`
-}
-
-export function emitTsBundleFromIrModules(irModules: IrModuleRecord[], entry: string, options: JsEmitOptions = {}): string {
-  return emitJsBundleFromIrModules(irModules, entry, {
-    ...options,
-    emitTypes: true
-  })
 }
 
 function emitProgramBody(ir: IrProgram, options: JsEmitOptions = {}): string[] {
@@ -178,215 +163,115 @@ function isFsSyncUsagePath(path: string): boolean {
 }
 
 function emitArrayPopHelper(options: JsEmitOptions): string[] {
-  return options.emitTypes === true
-    ? [
-        'function ccjsArrayPop<T>(array: T[]): T | null {',
-        '  return array.length === 0 ? null : array.pop()!',
-        '}'
-      ]
-    : [
-        'function ccjsArrayPop(array) {',
-        '  return array.length === 0 ? null : array.pop()',
-        '}'
-      ]
+  return [
+    'function ccjsArrayPop(array) {',
+    '  return array.length === 0 ? null : array.pop()',
+    '}'
+  ]
 }
 
 function emitMapGetHelper(options: JsEmitOptions): string[] {
-  return options.emitTypes === true
-    ? [
-        'function ccjsMapGet<K, V>(map: Map<K, V>, key: K): V | null {',
-        '  return map.has(key) ? map.get(key)! : null',
-        '}'
-      ]
-    : [
-        'function ccjsMapGet(map, key) {',
-        '  return map.has(key) ? map.get(key) : null',
-        '}'
-      ]
+  return [
+    'function ccjsMapGet(map, key) {',
+    '  return map.has(key) ? map.get(key) : null',
+    '}'
+  ]
 }
 
 function emitMapSetHelper(options: JsEmitOptions): string[] {
-  return options.emitTypes === true
-    ? [
-        'function ccjsMapSet<K, V>(map: Map<K, V>, key: K, value: V): V {',
-        '  map.set(key, value)',
-        '  return value',
-        '}'
-      ]
-    : [
-        'function ccjsMapSet(map, key, value) {',
-        '  map.set(key, value)',
-        '  return value',
-        '}'
-      ]
+  return [
+    'function ccjsMapSet(map, key, value) {',
+    '  map.set(key, value)',
+    '  return value',
+    '}'
+  ]
 }
 
 function emitStringUnicodeHelpers(options: JsEmitOptions): string[] {
-  return options.emitTypes === true
-    ? [
-        'function ccjsStringLength(value: string): number {',
-        '  return Array.from(value).length',
-        '}',
-        '',
-        'function ccjsStringSlice(value: string, start: number, end: number | null): string {',
-        '  if (end === null) {',
-        '    return Array.from(value).slice(start).join(\'\')',
-        '  }',
-        '',
-        '  return Array.from(value).slice(start, end).join(\'\')',
-        '}',
-        '',
-        'function ccjsStringSplit(value: string, separator: string): string[] {',
-        '  if (separator === \'\') {',
-        '    return Array.from(value)',
-        '  }',
-        '',
-        '  return value.split(separator)',
-        '}'
-      ]
-    : [
-        'function ccjsStringLength(value) {',
-        '  return Array.from(value).length',
-        '}',
-        '',
-        'function ccjsStringSlice(value, start, end) {',
-        '  if (end === null) {',
-        '    return Array.from(value).slice(start).join(\'\')',
-        '  }',
-        '',
-        '  return Array.from(value).slice(start, end).join(\'\')',
-        '}',
-        '',
-        'function ccjsStringSplit(value, separator) {',
-        '  if (separator === \'\') {',
-        '    return Array.from(value)',
-        '  }',
-        '',
-        '  return value.split(separator)',
-        '}'
-      ]
+  return [
+    'function ccjsStringLength(value) {',
+    '  return Array.from(value).length',
+    '}',
+    '',
+    'function ccjsStringSlice(value, start, end) {',
+    '  if (end === null) {',
+    '    return Array.from(value).slice(start).join(\'\')',
+    '  }',
+    '',
+    '  return Array.from(value).slice(start, end).join(\'\')',
+    '}',
+    '',
+    'function ccjsStringSplit(value, separator) {',
+    '  if (separator === \'\') {',
+    '    return Array.from(value)',
+    '  }',
+    '',
+    '  return value.split(separator)',
+    '}'
+  ]
 }
 
 function emitNumberFromStringHelper(options: JsEmitOptions): string[] {
-  return options.emitTypes === true
-    ? [
-        'function ccjsNumberFromString(text: string): number | null {',
-        '  if (/^[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
-        '    return 0',
-        '  }',
-        '',
-        '  if (!/^[ \\t\\n\\r\\f\\v]*[+-]?(?:(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?|Infinity)[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
-        '    return null',
-        '  }',
-        '',
-        '  const value = Number(text)',
-        '  return Number.isNaN(value) ? null : value',
-        '}'
-      ]
-    : [
-        'function ccjsNumberFromString(text) {',
-        '  if (/^[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
-        '    return 0',
-        '  }',
-        '',
-        '  if (!/^[ \\t\\n\\r\\f\\v]*[+-]?(?:(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?|Infinity)[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
-        '    return null',
-        '  }',
-        '',
-        '  const value = Number(text)',
-        '  return Number.isNaN(value) ? null : value',
-        '}'
-      ]
+  return [
+    'function ccjsNumberFromString(text) {',
+    '  if (/^[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
+    '    return 0',
+    '  }',
+    '',
+    '  if (!/^[ \\t\\n\\r\\f\\v]*[+-]?(?:(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?|Infinity)[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
+    '    return null',
+    '  }',
+    '',
+    '  const value = Number(text)',
+    '  return Number.isNaN(value) ? null : value',
+    '}'
+  ]
 }
 
 function emitNumericCastHelpers(options: JsEmitOptions): string[] {
-  return options.emitTypes === true
-    ? [
-        'function ccjsNumericCastTrunc(value: number): number {',
-        '  if (value !== value || (value - value) !== 0) {',
-        '    throw new Error(\'ccjs numeric cast requires a finite number\')',
-        '  }',
-        '',
-        '  if (value < 0) {',
-        '    return Math.ceil(value)',
-        '  }',
-        '',
-        '  return Math.floor(value)',
-        '}',
-        '',
-        'function ccjsCheckedIntegerCast(value: number, min: number, max: number): number {',
-        '  const truncated = ccjsNumericCastTrunc(value)',
-        '',
-        '  if (truncated < min || truncated > max) {',
-        '    throw new Error(\'ccjs numeric cast overflow\')',
-        '  }',
-        '',
-        '  return truncated',
-        '}',
-        '',
-        'function ccjsI32(value: number): number {',
-        '  return ccjsCheckedIntegerCast(value, -2147483648, 2147483647)',
-        '}',
-        '',
-        'function ccjsU32(value: number): number {',
-        '  return ccjsCheckedIntegerCast(value, 0, 4294967295)',
-        '}',
-        '',
-        'function ccjsU64(value: number): number {',
-        '  return ccjsCheckedIntegerCast(value, 0, 9007199254740991)',
-        '}',
-        '',
-        'function ccjsF32(value: number): number {',
-        '  return Math.fround(value)',
-        '}',
-        '',
-        'function ccjsF64(value: number): number {',
-        '  return value',
-        '}'
-      ]
-    : [
-        'function ccjsNumericCastTrunc(value) {',
-        '  if (value !== value || (value - value) !== 0) {',
-        '    throw new Error(\'ccjs numeric cast requires a finite number\')',
-        '  }',
-        '',
-        '  if (value < 0) {',
-        '    return Math.ceil(value)',
-        '  }',
-        '',
-        '  return Math.floor(value)',
-        '}',
-        '',
-        'function ccjsCheckedIntegerCast(value, min, max) {',
-        '  const truncated = ccjsNumericCastTrunc(value)',
-        '',
-        '  if (truncated < min || truncated > max) {',
-        '    throw new Error(\'ccjs numeric cast overflow\')',
-        '  }',
-        '',
-        '  return truncated',
-        '}',
-        '',
-        'function ccjsI32(value) {',
-        '  return ccjsCheckedIntegerCast(value, -2147483648, 2147483647)',
-        '}',
-        '',
-        'function ccjsU32(value) {',
-        '  return ccjsCheckedIntegerCast(value, 0, 4294967295)',
-        '}',
-        '',
-        'function ccjsU64(value) {',
-        '  return ccjsCheckedIntegerCast(value, 0, 9007199254740991)',
-        '}',
-        '',
-        'function ccjsF32(value) {',
-        '  return Math.fround(value)',
-        '}',
-        '',
-        'function ccjsF64(value) {',
-        '  return value',
-        '}'
-      ]
+  return [
+    'function ccjsNumericCastTrunc(value) {',
+    '  if (value !== value || (value - value) !== 0) {',
+    '    throw new Error(\'ccjs numeric cast requires a finite number\')',
+    '  }',
+    '',
+    '  if (value < 0) {',
+    '    return Math.ceil(value)',
+    '  }',
+    '',
+    '  return Math.floor(value)',
+    '}',
+    '',
+    'function ccjsCheckedIntegerCast(value, min, max) {',
+    '  const truncated = ccjsNumericCastTrunc(value)',
+    '',
+    '  if (truncated < min || truncated > max) {',
+    '    throw new Error(\'ccjs numeric cast overflow\')',
+    '  }',
+    '',
+    '  return truncated',
+    '}',
+    '',
+    'function ccjsI32(value) {',
+    '  return ccjsCheckedIntegerCast(value, -2147483648, 2147483647)',
+    '}',
+    '',
+    'function ccjsU32(value) {',
+    '  return ccjsCheckedIntegerCast(value, 0, 4294967295)',
+    '}',
+    '',
+    'function ccjsU64(value) {',
+    '  return ccjsCheckedIntegerCast(value, 0, 9007199254740991)',
+    '}',
+    '',
+    'function ccjsF32(value) {',
+    '  return Math.fround(value)',
+    '}',
+    '',
+    'function ccjsF64(value) {',
+    '  return value',
+    '}'
+  ]
 }
 
 function emitFunction(node: AnyNode, options: JsEmitOptions = {}): string[] {
@@ -421,10 +306,6 @@ function emitClass(node: AnyNode, options: JsEmitOptions = {}): string[] {
 }
 
 function emitClassField(field: AnyNode, options: JsEmitOptions = {}): string {
-  if (options.emitTypes === true) {
-    return `${field.readonly ? 'readonly ' : ''}${field.name}: ${emitTsValueType(field.declaredType ?? field.valueType, field)}`
-  }
-
   return field.name
 }
 
@@ -441,180 +322,19 @@ function emitMethod(method: AnyNode, options: JsEmitOptions = {}): string[] {
 }
 
 function emitFunctionParams(params: AnyNode[], options: JsEmitOptions = {}): string {
-  return params.map(param => options.emitTypes === true
-    ? `${param.name}: ${emitTsValueType(param.declaredType ?? param.valueType, param)}`
-    : param.name).join(', ')
+  return params.map(param => param.name).join(', ')
 }
 
 function emitReturnTypeAnnotation(node: AnyNode, options: JsEmitOptions = {}): string {
-  return options.emitTypes === true ? `: ${emitTsValueType(node.declaredReturnType ?? node.returnType, {
-    arrayElementType: node.returnArrayElementType,
-    mapKeyType: node.returnMapKeyType,
-    mapValueType: node.returnMapValueType,
-    promiseValueType: node.returnPromiseValueType,
-    nullable: node.returnNullable,
-    setElementType: node.returnSetElementType
-  })}` : ''
-}
-
-function emitTsValueType(valueType: string | null | undefined, metadata: AnyNode = {}): string {
-  const baseType = emitTsBaseType(valueType, metadata)
-
-  return metadata.nullable === true && baseType !== 'null' && !baseType.endsWith(' | null')
-    ? `${baseType} | null`
-    : baseType
-}
-
-function emitTsBaseType(valueType: string | null | undefined, metadata: AnyNode): string {
-  const nullableType = genericTypeArgs(valueType, 'nullable')
-
-  if (nullableType.length === 1) {
-    return `${emitTsValueType(nullableType[0])} | null`
-  }
-
-  if (valueType === 'array') {
-    return emitTsArrayType(metadata.arrayElementType ?? 'unknown')
-  }
-
-  const arrayType = genericTypeArgs(valueType, 'array')
-
-  if (arrayType.length === 1) {
-    return emitTsArrayType(arrayType[0])
-  }
-
-  if (valueType === 'map') {
-    return `Map<${emitTsValueType(metadata.mapKeyType ?? 'unknown')}, ${emitTsValueType(metadata.mapValueType ?? 'unknown')}>`
-  }
-
-  const mapType = genericTypeArgs(valueType, 'map')
-
-  if (mapType.length === 2) {
-    return `Map<${emitTsValueType(mapType[0])}, ${emitTsValueType(mapType[1])}>`
-  }
-
-  if (valueType === 'set') {
-    return `Set<${emitTsValueType(metadata.setElementType ?? 'unknown')}>`
-  }
-
-  const setType = genericTypeArgs(valueType, 'set')
-
-  if (setType.length === 1) {
-    return `Set<${emitTsValueType(setType[0])}>`
-  }
-
-  if (valueType === 'promise') {
-    return `Promise<${emitTsValueType(metadata.promiseValueType ?? 'unknown')}>`
-  }
-
-  const promiseType = genericTypeArgs(valueType, 'promise')
-
-  if (promiseType.length === 1) {
-    return `Promise<${emitTsValueType(promiseType[0])}>`
-  }
-
-  if (valueType === 'function') {
-    return 'Function'
-  }
-
-  if (valueType === 'object') {
-    return 'object'
-  }
-
-  if (valueType === 'bytes') {
-    return 'Buffer'
-  }
-
-  if (valueType === 'timer') {
-    return 'ReturnType<typeof setTimeout>'
-  }
-
-  return valueType ?? 'unknown'
-}
-
-function emitTsArrayType(elementType: string): string {
-  const type = emitTsValueType(elementType)
-
-  return type.includes(' | ') ? `(${type})[]` : `${type}[]`
-}
-
-function genericTypeArgs(valueType: string | null | undefined, name: string): string[] {
-  const match = new RegExp(`^${name}<(.+)>$`).exec(valueType ?? '')
-
-  return match == null ? [] : splitGenericArgs(match[1])
-}
-
-function splitGenericArgs(value: string): string[] {
-  const args: string[] = []
-  let depth = 0
-  let start = 0
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]
-
-    if (char === '<') {
-      depth += 1
-    } else if (char === '>') {
-      depth -= 1
-    } else if (char === ',' && depth === 0) {
-      args.push(value.slice(start, index))
-      start = index + 1
-    }
-  }
-
-  args.push(value.slice(start))
-
-  return args.map(arg => arg.trim()).filter(Boolean)
+  return ''
 }
 
 function emitVariableTypeAnnotation(statement: AnyNode, options: JsEmitOptions = {}): string {
-  if (options.emitTypes !== true) {
-    return ''
-  }
-
-  const type = emitTsValueType(statement.declaredType ?? statement.valueType, statement)
-
-  return type === 'unknown' ? '' : `: ${type}`
+  return ''
 }
 
 function emitTypeAlias(statement: AnyNode, options: JsEmitOptions = {}): string[] {
-  if (options.emitTypes !== true || shouldSkipSyntheticTypeAlias(statement)) {
-    return []
-  }
-
-  const exported = statement.exported && !options.stripExports
-  const prefix = `${exported ? 'export ' : ''}type ${statement.name} = `
-  const valueType = statement.valueType
-
-  if (valueType?.kind === 'object') {
-    return [
-      `${prefix}{`,
-      ...valueType.fields.map(field => `  ${field.readonly ? 'readonly ' : ''}${field.name}: ${emitTsValueType(field.valueType, field)},`),
-      '}'
-    ]
-  }
-
-  if (valueType?.kind === 'function') {
-    const params = valueType.params
-      .map(param => `${param.name}: ${emitTsValueType(param.valueType, param)}`)
-      .join(', ')
-    const returnType = emitTsValueType(valueType.returnType, {
-      ...valueType,
-      arrayElementType: valueType.returnArrayElementType,
-      mapKeyType: valueType.returnMapKeyType,
-      mapValueType: valueType.returnMapValueType,
-      nullable: valueType.returnNullable,
-      promiseValueType: valueType.returnPromiseValueType,
-      setElementType: valueType.returnSetElementType
-    })
-
-    return [`${prefix}(${params}) => ${returnType}`]
-  }
-
-  return [`${prefix}unknown`]
-}
-
-function shouldSkipSyntheticTypeAlias(statement: AnyNode): boolean {
-  return statement.syntheticTypeImport === true && statement.importedName === statement.name
+  return []
 }
 
 function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
@@ -939,34 +659,13 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
 }
 
 function emitArrowFunctionParams(expression: AnyNode, options: JsEmitOptions = {}): string {
-  if (options.emitTypes !== true) {
-    return expression.params.length === 1
-      ? expression.params[0].name
-      : `(${expression.params.map(param => param.name).join(', ')})`
-  }
-
-  return `(${expression.params.map(param => {
-    const type = emitTsValueType(param.declaredType ?? param.valueType, param)
-
-    return type === 'unknown' ? param.name : `${param.name}: ${type}`
-  }).join(', ')})`
+  return expression.params.length === 1
+    ? expression.params[0].name
+    : `(${expression.params.map(param => param.name).join(', ')})`
 }
 
 function emitArrowReturnTypeAnnotation(expression: AnyNode, options: JsEmitOptions = {}): string {
-  if (options.emitTypes !== true) {
-    return ''
-  }
-
-  const type = emitTsValueType(expression.declaredReturnType ?? expression.returnType, {
-    arrayElementType: expression.returnArrayElementType,
-    mapKeyType: expression.returnMapKeyType,
-    mapValueType: expression.returnMapValueType,
-    promiseValueType: expression.returnPromiseValueType,
-    nullable: expression.returnNullable,
-    setElementType: expression.returnSetElementType
-  })
-
-  return type === 'unknown' ? '' : `: ${type}`
+  return ''
 }
 
 function emitJsOperator(operator: string): string {

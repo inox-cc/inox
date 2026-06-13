@@ -1,10 +1,7 @@
 import { readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import type { CompileTarget } from '../src/compiler/types.ts'
 import { rootDir } from './lib/repo-checks.ts'
-import { normalizeNewlines, runCommand, type CommandResult } from './lib/run-command.ts'
-
-type RunnableTarget = Extract<CompileTarget, 'ts' | 'c'>
+import { runCommand, type CommandResult } from './lib/run-command.ts'
 
 const fixtureRoot = join(rootDir, 'tests/differential')
 const files = await findDifferentialFiles(fixtureRoot)
@@ -12,62 +9,46 @@ const failures: string[] = []
 const cAvailable = await canRunC()
 
 if (files.length === 0) {
-  console.error('Differential checks failed\n- missing differential fixtures under tests/differential')
+  console.error('C fixture smoke checks failed\n- missing fixtures under tests/differential')
   process.exitCode = 1
 } else if (!cAvailable) {
-  console.log(`Differential checks skipped (${files.length} fixture${files.length === 1 ? '' : 's'}, cc unavailable)`)
+  console.log(`C fixture smoke checks skipped (${files.length} fixture${files.length === 1 ? '' : 's'}, cc unavailable)`)
 } else {
   for (const file of files) {
-    await checkDifferentialFixture(file)
+    await checkSmokeFixture(file)
   }
 
   if (failures.length > 0) {
-    console.error(['Differential checks failed', ...failures.map(failure => `- ${failure}`)].join('\n'))
+    console.error(['C fixture smoke checks failed', ...failures.map(failure => `- ${failure}`)].join('\n'))
     process.exitCode = 1
   } else {
-    console.log(`Differential checks passed (${files.length} fixture${files.length === 1 ? '' : 's'})`)
+    console.log(`C fixture smoke checks passed (${files.length} fixture${files.length === 1 ? '' : 's'})`)
   }
 }
 
-async function checkDifferentialFixture(file: string): Promise<void> {
+async function checkSmokeFixture(file: string): Promise<void> {
   const rel = relative(rootDir, file)
-  const ts = await runFixture(file, 'ts')
-  const c = await runFixture(file, 'c')
+  const c = await runFixture(file)
 
-  if (!checkSuccessful(rel, 'ts', ts) || !checkSuccessful(rel, 'c', c)) {
+  if (!checkSuccessful(rel, c)) {
     return
   }
-
-  const tsStdout = normalizeNewlines(ts.stdout)
-  const cStdout = normalizeNewlines(c.stdout)
-  const tsStderr = normalizeNewlines(ts.stderr)
-  const cStderr = normalizeNewlines(c.stderr)
-
-  if (tsStdout !== cStdout) {
-    failures.push(`${rel}: stdout mismatch between ts ${JSON.stringify(tsStdout)} and c ${JSON.stringify(cStdout)}`)
-  }
-
-  if (tsStderr !== cStderr) {
-    failures.push(`${rel}: stderr mismatch between ts ${JSON.stringify(tsStderr)} and c ${JSON.stringify(cStderr)}`)
-  }
 }
 
-function checkSuccessful(rel: string, target: RunnableTarget, result: CommandResult): boolean {
+function checkSuccessful(rel: string, result: CommandResult): boolean {
   if (result.code === 0) {
     return true
   }
 
-  failures.push(`${rel}: expected ${target} run to exit 0, got ${result.code}: ${result.stderr.trim()}`)
+  failures.push(`${rel}: expected c run to exit 0, got ${result.code}: ${result.stderr.trim()}`)
   return false
 }
 
-function runFixture(file: string, target: RunnableTarget): Promise<CommandResult> {
+function runFixture(file: string): Promise<CommandResult> {
   return runCommand(process.execPath, [
     'bin/ccjs.ts',
     'run',
-    file,
-    '--target',
-    target
+    file
   ])
 }
 
