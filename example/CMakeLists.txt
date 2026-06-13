@@ -8,9 +8,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 find_program(NODE_EXECUTABLE node REQUIRED)
 
 set(CCJS_CLI "../bin/ccjs.ts")
-set(CCJS_RUNTIME_DIR "../runtime/c")
 set(CCJS_ENTRY "src/index.ts")
 set(CCJS_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../runtime/c" "${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
 
 file(GLOB_RECURSE CCJS_TS_SOURCES CONFIGURE_DEPENDS
   "src/*.ts"
@@ -37,28 +38,6 @@ foreach(CCJS_TS_SOURCE IN LISTS CCJS_TS_SOURCES)
     list(APPEND CCJS_GENERATED_HEADERS "${CCJS_GENERATED_DIR}/${CCJS_REL_DIR}/${CCJS_NAME_WE}.h")
   endif()
 endforeach()
-
-set(CCJS_RUNTIME_SOURCES
-  "${CCJS_RUNTIME_DIR}/src/arrays/array.c"
-  "${CCJS_RUNTIME_DIR}/src/async/loop.c"
-  "${CCJS_RUNTIME_DIR}/src/async/promise.c"
-  "${CCJS_RUNTIME_DIR}/src/binary/binary.c"
-  "${CCJS_RUNTIME_DIR}/src/collections/map.c"
-  "${CCJS_RUNTIME_DIR}/src/collections/set.c"
-  "${CCJS_RUNTIME_DIR}/src/core/allocator.c"
-  "${CCJS_RUNTIME_DIR}/src/core/callback.c"
-  "${CCJS_RUNTIME_DIR}/src/core/value.c"
-  "${CCJS_RUNTIME_DIR}/src/fs/fs.c"
-  "${CCJS_RUNTIME_DIR}/src/json/json.c"
-  "${CCJS_RUNTIME_DIR}/src/objects/object.c"
-  "${CCJS_RUNTIME_DIR}/src/strings/string.c"
-  "${CCJS_RUNTIME_DIR}/src/time/time.c"
-)
-
-add_library(ccjs_runtime STATIC ${CCJS_RUNTIME_SOURCES})
-target_include_directories(ccjs_runtime PUBLIC
-  "${CCJS_RUNTIME_DIR}/include"
-)
 
 add_custom_command(
   OUTPUT ${CCJS_GENERATED_SOURCES}
