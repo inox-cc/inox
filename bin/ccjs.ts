@@ -418,8 +418,8 @@ function validateRandomConfig(value: unknown, fileName: string): void {
 
   const random = value as CConfig['random']
 
-  if (random?.backend != null && !['simple', 'xorshift32'].includes(random.backend)) {
-    throw invalidConfig('random.backend must be "simple" or "xorshift32"')
+  if (random?.backend != null && !['simple', 'xorshift32', 'os'].includes(random.backend)) {
+    throw invalidConfig('random.backend must be "simple", "xorshift32" or "os"')
   }
 
   if (

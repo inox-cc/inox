@@ -109,6 +109,41 @@ test('ccjs file --emit c reads Math.random seed config', async () => {
   }
 })
 
+test('ccjs file --emit c reads Math.random os backend config', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-random-os-config-test-'))
+  const out = join(dir, 'random.c')
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  const value = Math.random()
+  console.log(value)
+}
+`)
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      random: {
+        backend: 'os'
+      }
+    }, null, 2)}\n`)
+
+    const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const c = await readFile(out, 'utf8')
+
+    assert.match(c, /static int ccjs_math_random_os_u32\(uint32_t\* out\)/)
+    assert.match(c, /arc4random\(\)|getrandom\(out, sizeof\(\*out\), 0\)|rand_s\(&value\)/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs file --emit c reads embedded profile capability config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-capability-config-test-'))
   const out = join(dir, 'time.c')
@@ -582,6 +617,35 @@ test('ccjs build --target c reports invalid random seed config', async () => {
 
     assert.equal(result.code, 1)
     assert.match(result.stderr, /invalid ccjs\.config\.json: random\.seed must be an integer from 0 to 4294967295/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('ccjs build --target c reports invalid random backend config', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  const value = Math.random()
+  console.log(value)
+}
+`)
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      random: {
+        backend: 'native'
+      }
+    }, null, 2)}\n`)
+
+    const result = await runCli(['build', 'main.ts', '--target', 'c'], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 1)
+    assert.match(result.stderr, /invalid ccjs\.config\.json: random\.backend must be "simple", "xorshift32" or "os"/)
   } finally {
     await rm(dir, {
       recursive: true,

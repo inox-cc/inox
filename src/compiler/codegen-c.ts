@@ -231,6 +231,7 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsy
 
   if (needsMathRuntime) {
     lines.push('#include <stdint.h>')
+    lines.push(...emitMathRandomHeaders(options.random))
   }
 
   if (needsStringHeader) {
@@ -410,7 +411,76 @@ function emitMathHelpers(random: RandomOptions = {}) {
   ]
 }
 
+function emitMathRandomHeaders(random: RandomOptions = {}) {
+  if ((random.backend ?? 'simple') !== 'os') {
+    return []
+  }
+
+  return [
+    '#if defined(_WIN32) && defined(_MSC_VER)',
+    '#define _CRT_RAND_S',
+    '#endif',
+    '#if defined(_WIN32)',
+    '#include <stdlib.h>',
+    '#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)',
+    '#include <stdlib.h>',
+    '#else',
+    '#include <fcntl.h>',
+    '#include <unistd.h>',
+    '#if defined(__linux__)',
+    '#include <sys/random.h>',
+    '#endif',
+    '#endif'
+  ]
+}
+
 function emitRandomBackendHelper(backend: NonNullable<RandomOptions['backend']>) {
+  if (backend === 'os') {
+    return [
+      'static int ccjs_math_random_os_u32(uint32_t* out) {',
+      '#if defined(_WIN32) && defined(_MSC_VER)',
+      '  unsigned int value = 0;',
+      '  if (rand_s(&value) != 0) return 0;',
+      '  *out = (uint32_t)value;',
+      '  return 1;',
+      '#elif defined(_WIN32)',
+      '  (void)out;',
+      '  return 0;',
+      '#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)',
+      '  *out = arc4random();',
+      '  return 1;',
+      '#else',
+      '#if defined(__linux__)',
+      '  if (getrandom(out, sizeof(*out), 0) == (ssize_t)sizeof(*out)) return 1;',
+      '#endif',
+      '  int fd = open("/dev/urandom", O_RDONLY);',
+      '  if (fd < 0) return 0;',
+      '  unsigned char* bytes = (unsigned char*)out;',
+      '  size_t filled = 0;',
+      '  while (filled < sizeof(*out)) {',
+      '    ssize_t count = read(fd, bytes + filled, sizeof(*out) - filled);',
+      '    if (count <= 0) {',
+      '      close(fd);',
+      '      return 0;',
+      '    }',
+      '    filled += (size_t)count;',
+      '  }',
+      '  close(fd);',
+      '  return 1;',
+      '#endif',
+      '}',
+      '',
+      'static double ccjs_math_random(void) {',
+      '  uint32_t value = 0;',
+      '  if (!ccjs_math_random_os_u32(&value)) {',
+      '    ccjs_math_random_state = ccjs_math_random_state * 1664525u + 1013904223u;',
+      '    value = ccjs_math_random_state;',
+      '  }',
+      '  return (double)(value >> 8) / 16777216.0;',
+      '}'
+    ]
+  }
+
   if (backend === 'xorshift32') {
     return [
       'static double ccjs_math_random(void) {',
@@ -434,7 +504,7 @@ function emitRandomBackendHelper(backend: NonNullable<RandomOptions['backend']>)
 }
 
 function emitRandomSeedLiteral(random: RandomOptions = {}): string {
-  if (random.backend != null && !['simple', 'xorshift32'].includes(random.backend)) {
+  if (random.backend != null && !['simple', 'xorshift32', 'os'].includes(random.backend)) {
     throw new Error(`unsupported random backend ${JSON.stringify(random.backend)}`)
   }
 

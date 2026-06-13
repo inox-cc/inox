@@ -5950,6 +5950,32 @@ test('configures C Math.random xorshift32 backend through compiler options', () 
   assert.doesNotMatch(result.code, /1664525u \+ 1013904223u/)
 })
 
+test('configures C Math.random os backend through compiler options', () => {
+  const result = compileSource(`export function main(): void {
+  const value = Math.random()
+  console.log(value)
+}
+`, {
+    target: 'c',
+    random: {
+      backend: 'os',
+      seed: 1
+    }
+  })
+
+  assert.match(result.code, /#define _CRT_RAND_S/)
+  assert.match(result.code, /#include <sys\/random\.h>/)
+  assert.match(result.code, /static uint32_t ccjs_math_random_state = 0x00000001u;/)
+  assert.match(result.code, /static int ccjs_math_random_os_u32\(uint32_t\* out\)/)
+  assert.match(result.code, /rand_s\(&value\)/)
+  assert.match(result.code, /\*out = arc4random\(\);/)
+  assert.match(result.code, /getrandom\(out, sizeof\(\*out\), 0\)/)
+  assert.match(result.code, /open\("\/dev\/urandom", O_RDONLY\)/)
+  assert.match(result.code, /if \(!ccjs_math_random_os_u32\(&value\)\) \{/)
+  assert.match(result.code, /ccjs_math_random_state = ccjs_math_random_state \* 1664525u \+ 1013904223u;/)
+  assert.doesNotMatch(result.code, /value \^= value << 13;/)
+})
+
 test('lowers fs readFile, readDir and writeFile to the C fs runtime', () => {
   const result = compileSource(`export function main(): void {
   const read = fs.readFile('/tmp/value.txt', 'utf8')
