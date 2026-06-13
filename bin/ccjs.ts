@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CompileError, formatDiagnostics } from '../src/compiler/diagnostics.ts'
 import { compileFile } from '../src/compiler/index.ts'
-import type { CompileOptions, RuntimeBudgets, RuntimeCapabilities, RuntimeProfile } from '../src/compiler/types.ts'
+import type { CompileOptions, RandomOptions, RuntimeBudgets, RuntimeCapabilities, RuntimeProfile } from '../src/compiler/types.ts'
 import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
 import type { CliPlan, CliTarget } from '../scripts/lib/cli-args.ts'
 
@@ -20,10 +20,7 @@ type CConfig = {
     ldflags?: string | string[]
   }
   profile?: RuntimeProfile
-  random?: {
-    backend?: 'simple'
-    seed?: number
-  }
+  random?: RandomOptions
 }
 
 type CompileCOptions = {
@@ -421,8 +418,8 @@ function validateRandomConfig(value: unknown, fileName: string): void {
 
   const random = value as CConfig['random']
 
-  if (random?.backend != null && random.backend !== 'simple') {
-    throw invalidConfig('random.backend must be "simple"')
+  if (random?.backend != null && !['simple', 'xorshift32'].includes(random.backend)) {
+    throw invalidConfig('random.backend must be "simple" or "xorshift32"')
   }
 
   if (

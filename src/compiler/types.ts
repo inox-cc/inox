@@ -200,7 +200,7 @@ export type ModuleGraph = {
 export type CompileTarget = 'c' | 'js' | 'ts'
 
 export type RandomOptions = {
-  backend?: 'simple'
+  backend?: 'simple' | 'xorshift32'
   seed?: number
 }
 

@@ -85,7 +85,7 @@ test('ccjs file --emit c reads Math.random seed config', async () => {
 `)
     await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
       random: {
-        backend: 'simple',
+        backend: 'xorshift32',
         seed: 1
       }
     }, null, 2)}\n`)
@@ -100,6 +100,7 @@ test('ccjs file --emit c reads Math.random seed config', async () => {
     const c = await readFile(out, 'utf8')
 
     assert.match(c, /static uint32_t ccjs_math_random_state = 0x00000001u;/)
+    assert.match(c, /value \^= value << 13;/)
   } finally {
     await rm(dir, {
       recursive: true,

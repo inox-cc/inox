@@ -335,6 +335,7 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsy
 
 function emitMathHelpers(random: RandomOptions = {}) {
   const randomSeed = emitRandomSeedLiteral(random)
+  const randomBackend = random.backend ?? 'simple'
 
   return [
     'static double ccjs_math_abs(double value) {',
@@ -399,6 +400,26 @@ function emitMathHelpers(random: RandomOptions = {}) {
     '',
     `static uint32_t ccjs_math_random_state = ${randomSeed};`,
     '',
+    ...emitRandomBackendHelper(randomBackend)
+  ]
+}
+
+function emitRandomBackendHelper(backend: NonNullable<RandomOptions['backend']>) {
+  if (backend === 'xorshift32') {
+    return [
+      'static double ccjs_math_random(void) {',
+      '  if (ccjs_math_random_state == 0u) ccjs_math_random_state = 0x6d2b79f5u;',
+      '  uint32_t value = ccjs_math_random_state;',
+      '  value ^= value << 13;',
+      '  value ^= value >> 17;',
+      '  value ^= value << 5;',
+      '  ccjs_math_random_state = value;',
+      '  return (double)(value >> 8) / 16777216.0;',
+      '}'
+    ]
+  }
+
+  return [
     'static double ccjs_math_random(void) {',
     '  ccjs_math_random_state = ccjs_math_random_state * 1664525u + 1013904223u;',
     '  return (double)(ccjs_math_random_state >> 8) / 16777216.0;',
@@ -407,7 +428,7 @@ function emitMathHelpers(random: RandomOptions = {}) {
 }
 
 function emitRandomSeedLiteral(random: RandomOptions = {}): string {
-  if (random.backend != null && random.backend !== 'simple') {
+  if (random.backend != null && !['simple', 'xorshift32'].includes(random.backend)) {
     throw new Error(`unsupported random backend ${JSON.stringify(random.backend)}`)
   }
 
