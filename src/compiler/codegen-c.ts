@@ -1103,11 +1103,11 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
 }
 
 function isSupportedAsyncTaskPrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'array'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'array'
 }
 
 function isSupportedAsyncTaskFramePrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'array'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'array'
 }
 
 function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
