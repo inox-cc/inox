@@ -46,6 +46,7 @@ const requiredFiles: string[] = [
   'runtime/c/CMakeLists.txt',
   'runtime/c/src/arrays/array.c',
   'runtime/c/src/async/loop.c',
+  'runtime/c/src/async/loop-libuv.c',
   'runtime/c/src/async/promise.c',
   'runtime/c/src/binary/binary.c',
   'runtime/c/src/collections/map.c',

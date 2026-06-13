@@ -16,6 +16,7 @@ typedef void (*ccjs_loop_callback_finalizer_fn)(void* context);
 
 struct ccjs_loop {
   ccjs_allocator* allocator;
+  void* backend;
   void* microtask_head;
   void* microtask_tail;
   void* immediate_head;
