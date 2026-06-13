@@ -2475,9 +2475,11 @@ test('drives C async runtime headers from target-neutral IR requirements', () =>
 
   assert.match(code, /#include "ccjs\/loop\.h"/)
   assert.match(code, /#include "ccjs\/promise\.h"/)
+  assert.match(code, /#include "ccjs\/time\.h"/)
   assert.match(code, /static ccjs_allocator ccjs_default_allocator = \{/)
   assert.doesNotMatch(withoutAsyncRuntime, /#include "ccjs\/loop\.h"/)
   assert.doesNotMatch(withoutAsyncRuntime, /#include "ccjs\/promise\.h"/)
+  assert.doesNotMatch(withoutAsyncRuntime, /#include "ccjs\/time\.h"/)
 })
 
 test('drives C collection headers from target-neutral IR requirements', () => {
@@ -2971,14 +2973,17 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n {2}char\* prefix;\n\} ccjs_callback_context_\d+;/)
+  assert.match(
+    c.code,
+    /typedef struct ccjs_callback_context_\d+ \{\n {2}const char\* prefix;\n\} ccjs_callback_context_\d+;/
+  )
   assert.match(c.code, /static void ccjs_callback_context_\d+_finalize\(void\* context\);/)
   assert.match(
     c.code,
     /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/
   )
   assert.match(c.code, /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)context;/)
-  assert.match(c.code, /char\* prefix = captured->prefix;/)
+  assert.match(c.code, /const char\* prefix = captured->prefix;/)
   assert.match(
     c.code,
     /ccjs_callback_context_\d+\* ccjs_callback_ctx_\d+ = ccjs_default_alloc\(0, sizeof\(ccjs_callback_context_\d+\), _Alignof\(ccjs_callback_context_\d+\)\);/
@@ -3084,7 +3089,10 @@ export function main(): void {
 
   assert.match(c.code, /void run\(ccjs_value callback\);/)
   assert.match(c.code, /if \(callback\.tag != CCJS_TAG_FUNCTION \|\| callback\.as\.ref == 0\) goto ccjs_cleanup;/)
-  assert.match(c.code, /typedef struct ccjs_callback_context_\d+ \{\n {2}char\* label;\n\} ccjs_callback_context_\d+;/)
+  assert.match(
+    c.code,
+    /typedef struct ccjs_callback_context_\d+ \{\n {2}const char\* label;\n\} ccjs_callback_context_\d+;/
+  )
   assert.match(
     c.code,
     /static ccjs_status ccjs_callback_arrow_\d+\(void\* context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/
@@ -9027,6 +9035,35 @@ export async function main(): Promise<void> {
   )
 })
 
+test('lowers Promise constructor timer resolves and template update placeholders to C', () => {
+  const result = compileSource(
+    `function makeText(): Promise<string> {
+  return new Promise((resolve) => {
+    const prefix = 'ready'
+    const count = 7
+
+    setTimeout(() => {
+      resolve(\`\${prefix} \${String(count)}\`)
+    }, 1)
+  })
+}
+
+const text = await makeText()
+let i = 0
+console.log(text, \`interval \${++i}\`)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_promise\* resolve;/)
+  assert.match(result.code, /ccjs_promise_retain\(ccjs_callback_ctx_\d+->resolve\);/)
+  assert.match(result.code, /ccjs_promise_resolve\(resolve, ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_performance_now\(\)\)/)
+  assert.match(result.code, /ccjs_string_from_number\(&ccjs_default_allocator, \(\+\+i\), &ccjs_value_\d+\)/)
+})
+
 test('checks Promise then catch as typed chain calls', () => {
   const result = compileSource(
     `export function main(): void {
@@ -9404,7 +9441,7 @@ export async function main(): Promise<void> {
   )
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}char\* literal;\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}const char\* literal;\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
   )
   assert.match(
     result.code,
@@ -9428,7 +9465,7 @@ export async function main(): Promise<void> {
     /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}double extra = captured->extra;/
   )
   assert.match(result.code, /double ok = captured->ok;/)
-  assert.match(result.code, /char\* literal = captured->literal;/)
+  assert.match(result.code, /const char\* literal = captured->literal;/)
   assert.match(result.code, /ccjs_string\* label = \(ccjs_string\*\)captured->label\.as\.ref;/)
   assert.match(result.code, /ccjs_value user = captured->user;/)
   assert.match(result.code, /ccjs_promise_callback_ctx_\d+->literal = literal;/)
@@ -10570,7 +10607,7 @@ clearImmediate(immediate)
     /ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_scheduleLater_\d+, &ccjs_loop, 0, &ccjs_callback_\d+\)/
   )
   assert.match(result.code, /while \(ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
-  assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_loop\.now_ms \+ 1\)/)
+  assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_performance_now\(\)\)/)
 
   assertDiagnostic(
     `export function main(): void {

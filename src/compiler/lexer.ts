@@ -43,7 +43,7 @@ const keywords = new Set([
 ])
 
 const threeCharPunctuators = new Set(['===', '!=='])
-const twoCharPunctuators = new Set(['==', '!=', '<=', '>=', '&&', '||', '??', '?.', '=>'])
+const twoCharPunctuators = new Set(['==', '!=', '<=', '>=', '&&', '||', '??', '?.', '=>', '++', '--'])
 const punctuators = new Set([
   '(',
   ')',

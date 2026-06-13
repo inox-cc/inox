@@ -1,5 +1,10 @@
 #include "ccjs/time.h"
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <errno.h>
+#endif
 #include <time.h>
 
 static ccjs_number ccjs_default_monotonic_now_ms(void* user);
@@ -57,6 +62,38 @@ ccjs_number ccjs_date_now(void) {
   ccjs_time_ensure_initialized();
 
   return ccjs_wall_base_ms + (ccjs_time_current_adapter.monotonic_now_ms(ccjs_time_current_adapter.user) - ccjs_wall_base_monotonic_ms);
+}
+
+void ccjs_time_sleep_ms(ccjs_number delay_ms) {
+  if (delay_ms != delay_ms || delay_ms <= 0) {
+    return;
+  }
+
+#if defined(_WIN32)
+  DWORD milliseconds = delay_ms < 1 ? 1 : (DWORD)delay_ms;
+
+  Sleep(milliseconds);
+#else
+  time_t seconds = (time_t)(delay_ms / 1000.0);
+  long nanoseconds = (long)((delay_ms - ((ccjs_number)seconds * 1000.0)) * 1000000.0);
+
+  if (nanoseconds < 0) {
+    nanoseconds = 0;
+  }
+
+  if (nanoseconds > 999999999L) {
+    seconds += 1;
+    nanoseconds = 0;
+  }
+
+  struct timespec request = {
+    seconds,
+    nanoseconds
+  };
+
+  while (nanosleep(&request, &request) != 0 && errno == EINTR) {
+  }
+#endif
 }
 
 static void ccjs_time_ensure_initialized(void) {

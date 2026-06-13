@@ -936,6 +936,18 @@ class Parser {
       return this.parseNewExpression(this.previous())
     }
 
+    if (this.isValue('++') || this.isValue('--')) {
+      const operator = this.advance()
+
+      return {
+        type: 'UpdateExpression',
+        operator: operator.value,
+        argument: this.parseUnary(),
+        prefix: true,
+        loc: locFromToken(operator)
+      }
+    }
+
     if (this.isValue('!') || this.isValue('-')) {
       const operator = this.advance()
 
@@ -1016,6 +1028,18 @@ class Parser {
           type: 'IndexExpression',
           object: expression,
           index,
+          loc: expression.loc
+        }
+        continue
+      }
+
+      if (this.isValue('++') || this.isValue('--')) {
+        const operator = this.advance()
+        expression = {
+          type: 'UpdateExpression',
+          operator: operator.value,
+          argument: expression,
+          prefix: false,
           loc: expression.loc
         }
         continue

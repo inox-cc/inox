@@ -291,7 +291,7 @@ function emitCModuleSource(
     needsJsonRuntime ||
     signatureRuntimeTypes.size > 0 ||
     runtimeRequirements.has('managed-values')
-  const needsTimeRuntime = runtimeRequirements.has('clocks')
+  const needsTimeRuntime = runtimeRequirements.has('clocks') || needsAsyncRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsStringHeader =
@@ -794,7 +794,7 @@ function emitCUnit(
     needsClassRuntime ||
     needsJsonRuntime ||
     runtimeRequirements.has('managed-values')
-  const needsTimeRuntime = runtimeRequirements.has('clocks')
+  const needsTimeRuntime = runtimeRequirements.has('clocks') || needsAsyncRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
@@ -4738,7 +4738,11 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
       return
     }
 
-    if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
+    if (
+      expression.type === 'UnaryExpression' ||
+      expression.type === 'UpdateExpression' ||
+      expression.type === 'AwaitExpression'
+    ) {
       visitExpression(expression.argument, scopes)
       return
     }
@@ -4751,6 +4755,39 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
     if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
       visitExpression(expression.object, scopes)
       visitExpression(expression.index, scopes)
+      return
+    }
+
+    if (expression.type === 'NewExpression' && isPromiseConstructorExpression(expression)) {
+      visitExpression(expression.callee, scopes)
+
+      const executor = expression.args[0]
+
+      if (executor?.type === 'ArrowFunctionExpression') {
+        const scope = new Map()
+
+        for (const [index, param] of executor.params.entries()) {
+          declare(scope, param.name, {
+            name: param.name,
+            valueType: 'promise-settlement',
+            promiseSettlementKind: index === 1 ? 'reject' : 'resolve',
+            loc: param.loc,
+            mutable: false
+          })
+        }
+
+        const executorScopes = [...scopes, scope]
+
+        if (executor.expressionBody) {
+          visitExpression(executor.body, executorScopes)
+        } else {
+          executor.body.forEach((statement) => visitStatement(statement, executorScopes))
+        }
+
+        return
+      }
+
+      expression.args.forEach((arg) => visitExpression(arg, scopes))
       return
     }
 
@@ -5062,7 +5099,11 @@ function collectPromiseChainWrappers(irPrograms: IrProgram[], context) {
       return
     }
 
-    if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
+    if (
+      expression.type === 'UnaryExpression' ||
+      expression.type === 'UpdateExpression' ||
+      expression.type === 'AwaitExpression'
+    ) {
       visitExpression(expression.argument, scopes)
       return
     }
@@ -5272,6 +5313,14 @@ function collectArrowCaptures(expression, outerScopes, context) {
       return
     }
 
+    if (node.type === 'TemplateLiteral') {
+      for (const expression of collectTemplatePlaceholderExpressions(node)) {
+        visitExpression(expression)
+      }
+
+      return
+    }
+
     if (node.type === 'Reference') {
       addReference(node)
       return
@@ -5306,7 +5355,7 @@ function collectArrowCaptures(expression, outerScopes, context) {
       return
     }
 
-    if (node.type === 'UnaryExpression' || node.type === 'AwaitExpression') {
+    if (node.type === 'UnaryExpression' || node.type === 'UpdateExpression' || node.type === 'AwaitExpression') {
       visitExpression(node.argument)
       return
     }
@@ -5608,6 +5657,12 @@ function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper) {
     lines.push(`  ccjs_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
   }
 
+  for (const capture of wrapper.captures.filter(isPromiseSettlementRuntimeArrowCapture)) {
+    lines.push(`  if (captured->${emitRuntimeArrowCaptureField(capture)} != 0) {`)
+    lines.push(`    ccjs_promise_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
+    lines.push('  }')
+  }
+
   lines.push(
     `  ccjs_default_free(0, context, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
   )
@@ -5717,6 +5772,17 @@ function emitRuntimeArrowCallbackContextLocals(wrapper, context) {
   }
 
   for (const capture of wrapper.captures) {
+    if (capture.valueType === 'promise-settlement') {
+      const promise = capture.name
+
+      context.promiseConstructorHandlers.set(capture.name, {
+        kind: capture.promiseSettlementKind ?? 'resolve',
+        promise
+      })
+      lines.push(`ccjs_promise* ${promise} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+      continue
+    }
+
     context.variables.set(capture.name, capture.valueType)
 
     if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
@@ -5805,8 +5871,12 @@ function emitRuntimeArrowCaptureCType(capture) {
     return 'ccjs_value'
   }
 
+  if (capture.valueType === 'promise-settlement') {
+    return 'ccjs_promise*'
+  }
+
   if (capture.valueType === 'string') {
-    return 'char*'
+    return 'const char*'
   }
 
   if (capture.valueType === 'timer') {
@@ -5822,6 +5892,10 @@ function emitRuntimeArrowCaptureField(capture) {
 
 function isRetainedRuntimeArrowCapture(capture) {
   return capture.runtimeManaged === true && ['string', 'object'].includes(capture.valueType) && !capture.mutable
+}
+
+function isPromiseSettlementRuntimeArrowCapture(capture) {
+  return capture.valueType === 'promise-settlement'
 }
 
 function isSupportedMutableRuntimeArrowCapture(capture, context) {
@@ -6413,6 +6487,12 @@ function emitStatement(statement, context) {
     const value = emitCAwaitValueExpression(statement.expression, context)
 
     return value.lines
+  }
+
+  if (statement.type === 'ExpressionStatement' && statement.expression.type === 'UpdateExpression') {
+    const value = emitPreparedUpdateExpression(statement.expression, context)
+
+    return [...value.lines, `${value.expression};`]
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
@@ -10914,6 +10994,54 @@ function trimTemplatePlaceholder(value, loc) {
   }
 }
 
+function collectTemplatePlaceholderExpressions(expression) {
+  if (expression?.type !== 'TemplateLiteral' || !expression.raw.includes('${')) {
+    return []
+  }
+
+  const diagnostics: Diagnostic[] = []
+  const parts = parseTemplateLiteralParts(expression.raw, { diagnostics }, expression.loc)
+  const result: any[] = []
+
+  for (const part of parts) {
+    if (part.type !== 'placeholder' || part.value === '') {
+      continue
+    }
+
+    const parsed = parseTemplatePlaceholderCaptureExpression(part.value, part.loc)
+
+    if (parsed != null) {
+      result.push(parsed)
+    }
+  }
+
+  return result
+}
+
+function parseTemplatePlaceholderCaptureExpression(value, loc) {
+  const prefix = 'const __ccjs_template = '
+
+  try {
+    const program = parse(tokenize(`${prefix}${value}`, loc?.file == null ? {} : { file: loc.file }))
+    const statement = program.body[0]
+    const expression = statement?.type === 'VariableDeclaration' ? statement.init : null
+
+    if (program.body.length !== 1 || expression == null) {
+      return null
+    }
+
+    shiftTemplatePlaceholderExpressionLocations(expression, loc, prefix.length)
+
+    return expression
+  } catch (error) {
+    if (error instanceof CompileError) {
+      return null
+    }
+
+    throw error
+  }
+}
+
 function parseTemplatePlaceholderExpression(value, loc, context) {
   if (value === '') {
     context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'empty template placeholder in C template literal', loc))
@@ -11426,6 +11554,10 @@ function emitPreparedNumberExpression(expression, context) {
       lines: argument.lines,
       expression: `(${expression.operator}${argument.expression})`
     }
+  }
+
+  if (expression?.type === 'UpdateExpression') {
+    return emitPreparedUpdateExpression(expression, context)
   }
 
   if (expression?.type === 'BinaryExpression') {
@@ -12036,6 +12168,25 @@ function emitPreparedStringBytesOperand(expression, context, tempPrefix = 'ccjs_
     lines: [],
     bytes: '""',
     length: '0'
+  }
+}
+
+function emitPreparedUpdateExpression(expression, context) {
+  const reference = emitReference(expression.argument, context)
+  const operator = expression.operator === '--' ? '--' : '++'
+
+  if (expression.prefix !== false) {
+    return {
+      lines: [],
+      expression: `(${operator}${reference})`
+    }
+  }
+
+  const previous = nextCName(context, 'ccjs_update_previous')
+
+  return {
+    lines: [`double ${previous} = ${reference};`, `${reference}${operator};`],
+    expression: previous
   }
 }
 
@@ -13455,7 +13606,8 @@ function emitCAwaitValueExpression(expression, context) {
       ...promise.lines,
       ...emitPrepareOwnedValueWrite(value),
       `while (ccjs_promise_get_state(${promise.expression}) == CCJS_PROMISE_PENDING && ccjs_loop_has_work(${emitEventLoopReference(context)})) {`,
-      `  ${emitStatusCheck(`ccjs_loop_poll(${emitEventLoopReference(context)}, 0)`, context)}`,
+      ...emitEventLoopSleepUntilNextTimerLines(context, '  '),
+      `  ${emitStatusCheck(`ccjs_loop_poll(${emitEventLoopReference(context)}, ${emitEventLoopNextTimeExpression(context)})`, context)}`,
       '}',
       ...emitAwaitRejectedPromiseLines(promise.expression, promise.rejectionValueType ?? 'unknown', context),
       `if (ccjs_promise_get_state(${promise.expression}) != CCJS_PROMISE_FULFILLED) ${emitFailureStatement(context)}`,
@@ -13876,11 +14028,11 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
       )
     }
 
-    if (!['number', 'boolean', 'string', 'object', 'timer'].includes(capture.valueType)) {
+    if (!['number', 'boolean', 'string', 'object', 'timer', 'promise-settlement'].includes(capture.valueType)) {
       context.diagnostics.push(
         diagnostic(
           'CCJS_C_FUNCTION_VALUE',
-          'capturing C callbacks currently support only const number/boolean/string/object/timer bindings',
+          'capturing C callbacks currently support only const number/boolean/string/object/timer bindings and Promise resolve/reject handlers',
           wrapper.expression.loc
         )
       )
@@ -13935,6 +14087,24 @@ function emitRuntimeArrowCaptureStoreLines(capture, contextName, context) {
     }
 
     return [`${field} = ${capture.name};`, `ccjs_retain(${field});`]
+  }
+
+  if (capture.valueType === 'promise-settlement') {
+    const handler = context.promiseConstructorHandlers.get(capture.name)
+
+    if (handler == null) {
+      context.diagnostics.push(
+        diagnostic(
+          'CCJS_C_FUNCTION_VALUE',
+          'Promise resolve/reject handlers can only be captured inside Promise constructor executors',
+          capture.loc
+        )
+      )
+
+      return [`${field} = 0;`]
+    }
+
+    return [`${field} = ${handler.promise};`, `if (${field} != 0) ccjs_promise_retain(${field});`]
   }
 
   return [`${field} = ${capture.name};`]
@@ -14212,6 +14382,10 @@ function inferExpressionType(expression, context) {
 
   if (expression?.type === 'UnaryExpression') {
     return expression.operator === '!' ? 'boolean' : 'number'
+  }
+
+  if (expression?.type === 'UpdateExpression') {
+    return 'number'
   }
 
   if (expression?.type === 'BinaryExpression') {
@@ -16562,7 +16736,8 @@ function emitEventLoopInit(context) {
 
   return [
     `if (ccjs_loop_init(&ccjs_loop, &ccjs_default_allocator) != CCJS_OK) ${emitFailureStatement(context)}`,
-    'ccjs_loop_active = 1;'
+    'ccjs_loop_active = 1;',
+    `ccjs_loop.now_ms = ${emitEventLoopCurrentTimeExpression()};`
   ]
 }
 
@@ -16575,7 +16750,8 @@ function emitEventLoopDrain(context) {
 
   return [
     `while (ccjs_loop_has_work(${loop})) {`,
-    `  ${emitStatusCheck(`ccjs_loop_poll(${loop}, ccjs_loop.now_ms + 1)`, context)}`,
+    ...emitEventLoopSleepUntilNextTimerLines(context, '  '),
+    `  ${emitStatusCheck(`ccjs_loop_poll(${loop}, ${emitEventLoopCurrentTimeExpression()})`, context)}`,
     '}'
   ]
 }
@@ -16588,6 +16764,28 @@ function emitEventLoopCleanup(context) {
 
 function emitEventLoopReference(context) {
   return context.externalEventLoop ? 'ccjs_loop' : '&ccjs_loop'
+}
+
+function emitEventLoopNextTimeExpression(context) {
+  return emitEventLoopCurrentTimeExpression()
+}
+
+function emitEventLoopCurrentTimeExpression() {
+  return 'ccjs_performance_now()'
+}
+
+function emitEventLoopSleepUntilNextTimerLines(context, indent = '') {
+  const loop = emitEventLoopReference(context)
+
+  return [
+    `${indent}{`,
+    `${indent}  ccjs_number ccjs_next_due_ms = 0;`,
+    `${indent}  ccjs_number ccjs_now_ms = ${emitEventLoopCurrentTimeExpression()};`,
+    `${indent}  if (ccjs_loop_pending_microtasks(${loop}) == 0 && ccjs_loop_pending_immediates(${loop}) == 0 && ccjs_loop_next_timer_due_ms(${loop}, &ccjs_next_due_ms) && ccjs_next_due_ms > ccjs_now_ms) {`,
+    `${indent}    ccjs_time_sleep_ms(ccjs_next_due_ms - ccjs_now_ms);`,
+    `${indent}  }`,
+    `${indent}}`
+  ]
 }
 
 function emitBoxedValueCleanup(context) {

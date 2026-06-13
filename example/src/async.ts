@@ -3,6 +3,8 @@ export function asyncText(): Promise<string> {
     const str1 = 'ccjs cmake example'
     const num = 123
 
-    resolve(`${str1} 😀 ${String(num)}`)
+    setTimeout(() => {
+      resolve(`${str1} 😀 ${String(num)}`)
+    }, 1000)
   })
 }

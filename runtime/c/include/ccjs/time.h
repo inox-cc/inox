@@ -14,5 +14,6 @@ void ccjs_time_reset_adapter(void);
 void ccjs_time_resync_wall_clock(void);
 ccjs_number ccjs_performance_now(void);
 ccjs_number ccjs_date_now(void);
+void ccjs_time_sleep_ms(ccjs_number delay_ms);
 
 #endif

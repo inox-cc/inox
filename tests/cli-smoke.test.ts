@@ -402,7 +402,10 @@ export function value(): number {
 export function asyncText(): Promise<string> {
   return new Promise((resolve) => {
     const label = 'ready'
-    resolve(\`\${label} \${String(value())}\`)
+
+    setTimeout(() => {
+      resolve(\`\${label} \${String(value())}\`)
+    }, 1)
   })
 }
 `

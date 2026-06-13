@@ -836,6 +836,14 @@ function lowerExpression(expression: AnyNode, context: LowerContext = { types: n
     }
   }
 
+  if (expression.type === 'UpdateExpression') {
+    return {
+      ...expression,
+      argument: lowerExpression(expression.argument, context),
+      valueType: 'number'
+    }
+  }
+
   if (expression.type === 'BinaryExpression') {
     const left = lowerExpression(expression.left, context)
     const right = lowerExpression(expression.right, context)

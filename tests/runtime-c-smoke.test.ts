@@ -1533,13 +1533,13 @@ function schedule(): void {
 schedule()
 const cancelledImmediate = setImmediate(onTimeout)
 clearImmediate(cancelledImmediate)
-const interval = setInterval(onInterval, 1)
+const interval = setInterval(onInterval, 10)
 setTimeout(() => {
   clearInterval(interval)
   console.log('cleared')
-}, 2)
+}, 20)
 setImmediate(() => {
-  setTimeout(onTimeout, 1)
+  setTimeout(onTimeout, 10)
 })
 
 `,
@@ -1557,7 +1557,7 @@ setImmediate(() => {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'interval\ninterval\ncleared\ntimeout\n')
+    assert.equal(run.stdout, 'interval\ntimeout\ninterval\ncleared\n')
   } finally {
     await rm(dir, {
       recursive: true,

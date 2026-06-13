@@ -629,6 +629,12 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
     return `${emitExpression(expression.target, options)} = ${emitExpression(expression.value, options)}`
   }
 
+  if (expression.type === 'UpdateExpression') {
+    const argument = emitExpression(expression.argument, options)
+
+    return expression.prefix ? `${expression.operator}${argument}` : `${argument}${expression.operator}`
+  }
+
   if (expression.type === 'BinaryExpression') {
     return `(${emitExpression(expression.left, options)} ${emitJsOperator(expression.operator)} ${emitExpression(expression.right, options)})`
   }

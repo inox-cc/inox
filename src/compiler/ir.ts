@@ -893,7 +893,11 @@ function collectEscapingThrowValueTypesFromExpression(
     ]
   }
 
-  if (expression.type === 'UnaryExpression' || expression.type === 'AwaitExpression') {
+  if (
+    expression.type === 'UnaryExpression' ||
+    expression.type === 'UpdateExpression' ||
+    expression.type === 'AwaitExpression'
+  ) {
     return collectEscapingThrowValueTypesFromExpression(
       expression.argument,
       functionThrowValueTypes,

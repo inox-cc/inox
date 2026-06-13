@@ -254,6 +254,31 @@ size_t ccjs_loop_pending_timers(const ccjs_loop* loop) {
   return loop == 0 ? 0 : loop->timer_count;
 }
 
+int ccjs_loop_next_timer_due_ms(const ccjs_loop* loop, ccjs_number* out) {
+  if (loop == 0 || out == 0) {
+    return 0;
+  }
+
+  int found = 0;
+  ccjs_number next_due_ms = 0;
+  ccjs_timer_handle* handle = (ccjs_timer_handle*)loop->timer_head;
+
+  while (handle != 0) {
+    if (handle->active && (!found || handle->due_ms < next_due_ms)) {
+      next_due_ms = handle->due_ms;
+      found = 1;
+    }
+
+    handle = handle->next;
+  }
+
+  if (found) {
+    *out = next_due_ms;
+  }
+
+  return found;
+}
+
 static ccjs_number ccjs_loop_clamp_delay(ccjs_number delay_ms) {
   return delay_ms != delay_ms || delay_ms < 0 ? 0 : delay_ms;
 }

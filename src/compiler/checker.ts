@@ -1018,6 +1018,10 @@ class Checker {
       return this.checkAssignment(expression)
     }
 
+    if (expression.type === 'UpdateExpression') {
+      return this.checkUpdateExpression(expression)
+    }
+
     if (expression.type === 'BinaryExpression') {
       return this.checkBinaryExpression(expression)
     }
@@ -1092,6 +1096,34 @@ class Checker {
     }
 
     return valueType
+  }
+
+  checkUpdateExpression(expression: AnyNode): ValueType {
+    const targetType = this.checkExpression(expression.argument)
+
+    this.checkAssignableType(targetType, 'number', expression.argument.loc)
+
+    if (expression.argument.type === 'Reference') {
+      const symbol = this.resolveReference(expression.argument)
+
+      if (symbol != null && expression.argument.path.length === 1 && !symbol.mutable) {
+        this.report(
+          'CCJS_ASSIGN_CONST',
+          `cannot assign to ${symbol.kind} binding ${expression.argument.path[0]}`,
+          expression.argument.loc
+        )
+      }
+
+      return 'number'
+    }
+
+    if (expression.argument.type === 'MemberExpression' || expression.argument.type === 'IndexExpression') {
+      return 'number'
+    }
+
+    this.report('CCJS_INVALID_ASSIGNMENT_TARGET', 'update target must be a binding or field', expression.loc)
+
+    return 'number'
   }
 
   checkBinaryExpression(expression: AnyNode): ValueType {

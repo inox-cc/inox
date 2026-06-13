@@ -8,3 +8,12 @@ const total = scaleScore(base, 3)
 console.log('hello', userName(), 'score', total)
 const str = await asyncText()
 console.log('text', str)
+let i = 0
+
+const interval = setInterval(() => {
+  console.log(`interval ${++i}`)
+}, 1000)
+
+setTimeout(() => {
+  clearInterval(interval)
+}, 3100)

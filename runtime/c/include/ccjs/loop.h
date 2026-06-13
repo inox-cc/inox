@@ -67,5 +67,6 @@ int ccjs_loop_has_work(const ccjs_loop* loop);
 size_t ccjs_loop_pending_microtasks(const ccjs_loop* loop);
 size_t ccjs_loop_pending_immediates(const ccjs_loop* loop);
 size_t ccjs_loop_pending_timers(const ccjs_loop* loop);
+int ccjs_loop_next_timer_due_ms(const ccjs_loop* loop, ccjs_number* out);
 
 #endif
