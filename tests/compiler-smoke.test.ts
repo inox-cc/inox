@@ -526,6 +526,35 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "null", 4, &ccjs_value_\d+\)/)
 })
 
+test('lowers C Number conversion to nullable number parsing', () => {
+  const result = compileSource(`export function main(): void {
+  const port = Number('8080') ?? 3000
+  const fallback = Number('nope') ?? 3000
+  console.log(port, fallback)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.deepEqual(result.ir.features, [
+    'number-from-string-null',
+    'runtime-values',
+    'string-bytes'
+  ])
+  assert.match(result.code, /ccjs_string_to_number\("8080", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_to_number\("nope", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /if \(ccjs_value_\d+\.tag == CCJS_TAG_NULL\) \{/)
+  assert.match(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_NUMBER/)
+
+  assertDiagnostic(`export function main(): void {
+  const port = Number('8080')
+  console.log(port)
+}
+`, 'CCJS_C_NULLISH', {
+    target: 'c'
+  })
+})
+
 test('lowers known C object field access to runtime calls', () => {
   const result = compileSource(`export function main(): void {
   const user = { score: 42, active: true }
@@ -7909,6 +7938,47 @@ export function main(): void {
 
   assertDiagnostic(`export function main(): void {
   String({ name: 'Ada' })
+}
+`, 'CCJS_TYPE_MISMATCH')
+})
+
+test('checks Number conversion as a nullable typed number call', () => {
+  const source = `function parsePort(text: string): number | null {
+  return Number(text)
+}
+
+export function main(): void {
+  const port = Number('8080') ?? 3000
+  console.log(parsePort('42') ?? port)
+}
+`
+  const js = compileSource(source, {
+    target: 'js'
+  })
+  const ts = compileSource(source, {
+    target: 'ts'
+  })
+
+  assert.match(js.code, /function ccjsNumberFromString\(text\) \{/)
+  assert.match(js.code, /return ccjsNumberFromString\(text\)/)
+  assert.match(js.code, /const port = \(ccjsNumberFromString\("8080"\) \?\? 3000\)/)
+  assert.match(ts.code, /function ccjsNumberFromString\(text: string\): number \| null \{/)
+  assert.match(ts.code, /function parsePort\(text: string\): number \| null \{/)
+  assert.match(ts.code, /const port: number = \(ccjsNumberFromString\("8080"\) \?\? 3000\)/)
+
+  assertDiagnostic(`export function main(): void {
+  Number()
+}
+`, 'CCJS_ARG_COUNT')
+
+  assertDiagnostic(`export function main(): void {
+  Number(42)
+}
+`, 'CCJS_TYPE_MISMATCH')
+
+  assertDiagnostic(`export function main(): void {
+  const text: string | null = null
+  Number(text)
 }
 `, 'CCJS_TYPE_MISMATCH')
 })

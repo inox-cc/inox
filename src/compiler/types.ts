@@ -35,6 +35,7 @@ export type IrFeature =
   | 'json'
   | 'map-index-set'
   | 'map-get-null'
+  | 'number-from-string-null'
   | 'objects'
   | 'runtime-values'
   | 'string-bytes'

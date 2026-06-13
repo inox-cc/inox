@@ -222,7 +222,7 @@ function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement
       requirements.add('callback-values')
       requirements.add('managed-values')
       requirements.add('timers')
-    } else if (feature === 'array-pop-null' || feature === 'map-get-null' || feature === 'map-index-set') {
+    } else if (feature === 'array-pop-null' || feature === 'map-get-null' || feature === 'map-index-set' || feature === 'number-from-string-null') {
       continue
     } else {
       requirements.add(feature)
@@ -854,6 +854,12 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('string-bytes')
   }
 
+  if (isNumberConversionCall(expression)) {
+    features.add('number-from-string-null')
+    features.add('runtime-values')
+    features.add('string-bytes')
+  }
+
   if (binaryRuntimeMethodName(expression) != null) {
     features.add('binary')
     features.add('runtime-values')
@@ -945,6 +951,12 @@ function isStringConversionCall(expression: AnyNode): boolean {
   return expression.callee?.type === 'Reference'
     && expression.callee.path.length === 1
     && expression.callee.path[0] === 'String'
+}
+
+function isNumberConversionCall(expression: AnyNode): boolean {
+  return expression.callee?.type === 'Reference'
+    && expression.callee.path.length === 1
+    && expression.callee.path[0] === 'Number'
 }
 
 function stringRuntimeMethodName(expression: AnyNode): string | null {

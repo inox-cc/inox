@@ -7821,6 +7821,12 @@ function emitCValueExpression(expression, context) {
     return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
   }
 
+  const numberConversion = emitCNumberConversionValueExpression(expression, context)
+
+  if (numberConversion != null) {
+    return numberConversion
+  }
+
   if (isNullableScalarRuntimeExpression(expression, context)) {
     return emitPreparedNullableScalarRuntimeValueExpression(expression, context)
   }
@@ -8167,6 +8173,12 @@ function emitPreparedNullableScalarRuntimeValueExpression(expression, context) {
 
   if (expression?.type === 'OptionalCallExpression') {
     return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
+  }
+
+  const numberConversion = emitCNumberConversionValueExpression(expression, context)
+
+  if (numberConversion != null) {
+    return numberConversion
   }
 
   const mapIndexGet = emitPreparedMapIndexGetExpression(expression, context)
@@ -8603,6 +8615,25 @@ function emitCStringConversionValueExpression(expression, context) {
       ...value.lines,
       ...emitPrepareOwnedValueWrite(temp),
       emitStatusCheck(helper, context)
+    ],
+    expression: temp
+  }
+}
+
+function emitCNumberConversionValueExpression(expression, context) {
+  if (!isNumberConversionCall(expression, context)) {
+    return null
+  }
+
+  const value = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_number_conversion')
+  const temp = nextCName(context, 'ccjs_value')
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...value.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_string_to_number(${value.bytes}, ${value.length}, &${temp})`, context)
     ],
     expression: temp
   }
@@ -9936,6 +9967,12 @@ function emitPreparedCallExpression(expression, context) {
 
   if (mathCall != null) {
     return mathCall
+  }
+
+  const numberConversion = emitCNumberConversionValueExpression(expression, context)
+
+  if (numberConversion != null) {
+    return numberConversion
   }
 
   const classMethodCall = emitPreparedClassMethodCallExpression(expression, context)
@@ -11482,6 +11519,10 @@ function inferExpressionType(expression, context) {
     return 'number'
   }
 
+  if (isNumberConversionCall(expression, context)) {
+    return 'number'
+  }
+
   if (isErrorConstructorExpression(expression)) {
     return 'object'
   }
@@ -11818,6 +11859,10 @@ function isNullableRuntimeExpression(expression, context) {
     return context.nullableVariables.has(expression.path[0])
   }
 
+  if (isNumberConversionCall(expression, context)) {
+    return true
+  }
+
   if (expression?.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
     return context.functionReturnNullables.get(expression.callee.path[0]) === true
   }
@@ -11856,6 +11901,14 @@ function isStringConversionCall(expression, context) {
   }
 
   return ['boolean', 'null', 'number', 'string'].includes(inferExpressionType(expression.args[0], context))
+}
+
+function isNumberConversionCall(expression, context) {
+  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'Reference' || expression.callee.path.length !== 1 || expression.callee.path[0] !== 'Number' || expression.args.length !== 1) {
+    return false
+  }
+
+  return inferExpressionType(expression.args[0], context) === 'string'
 }
 
 function isStringTrimCall(expression, context) {

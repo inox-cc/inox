@@ -134,6 +134,14 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
     helperLines.push(...emitMapSetHelper(options))
   }
 
+  if (features.has('number-from-string-null')) {
+    if (helperLines.length > 0) {
+      helperLines.push('')
+    }
+
+    helperLines.push(...emitNumberFromStringHelper(options))
+  }
+
   if (helperLines.length > 0) {
     if (lines.length > 0) {
       lines.push('')
@@ -193,6 +201,30 @@ function emitMapSetHelper(options: JsEmitOptions): string[] {
         'function ccjsMapSet(map, key, value) {',
         '  map.set(key, value)',
         '  return value',
+        '}'
+      ]
+}
+
+function emitNumberFromStringHelper(options: JsEmitOptions): string[] {
+  return options.emitTypes === true
+    ? [
+        'function ccjsNumberFromString(text: string): number | null {',
+        '  if (!/^[ \\t\\n\\r\\f\\v]*[+-]?(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
+        '    return null',
+        '  }',
+        '',
+        '  const value = Number(text)',
+        '  return Number.isFinite(value) ? value : null',
+        '}'
+      ]
+    : [
+        'function ccjsNumberFromString(text) {',
+        '  if (!/^[ \\t\\n\\r\\f\\v]*[+-]?(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
+        '    return null',
+        '  }',
+        '',
+        '  const value = Number(text)',
+        '  return Number.isFinite(value) ? value : null',
         '}'
       ]
 }
@@ -671,6 +703,10 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
       return `ccjsMapGet(${emitExpression(expression.callee.object, options)}, ${emitExpression(expression.args[0], options)})`
     }
 
+    if (isNumberConversionCall(expression)) {
+      return `ccjsNumberFromString(${emitExpression(expression.args[0], options)})`
+    }
+
     return `${emitExpression(expression.callee, options)}(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
   }
 
@@ -783,6 +819,14 @@ function isMapGetCall(expression: AnyNode): boolean {
     && expression.callee.type === 'MemberExpression'
     && expression.callee.property === 'get'
     && expression.nullable === true
+    && expression.args.length === 1
+}
+
+function isNumberConversionCall(expression: AnyNode): boolean {
+  return expression.type === 'CallExpression'
+    && expression.callee.type === 'Reference'
+    && expression.callee.path.length === 1
+    && expression.callee.path[0] === 'Number'
     && expression.args.length === 1
 }
 

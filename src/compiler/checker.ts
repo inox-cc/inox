@@ -1280,6 +1280,12 @@ class Checker {
       return stringConversionType
     }
 
+    const numberConversionType = this.checkNumberConversionCall(expression)
+
+    if (numberConversionType != null) {
+      return numberConversionType
+    }
+
     const stringTrimType = this.checkStringTrimCall(expression)
 
     if (stringTrimType != null) {
@@ -2414,6 +2420,26 @@ class Checker {
     }
 
     return 'string'
+  }
+
+  checkNumberConversionCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1 || expression.callee.path[0] !== 'Number') {
+      return null
+    }
+
+    const argTypes = expression.args.map(arg => this.checkExpression(arg))
+
+    expression.valueType = 'number'
+    expression.nullable = true
+
+    if (expression.args.length !== 1) {
+      this.report('CCJS_ARG_COUNT', `Number expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      return 'number'
+    }
+
+    this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
+
+    return 'number'
   }
 
   checkStringTrimCall(expression: AnyNode): ValueType | null {

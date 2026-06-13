@@ -1,3 +1,4 @@
+#include <float.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -53,6 +54,134 @@ ccjs_status ccjs_string_from_number(ccjs_allocator* allocator, double value, ccj
   return ccjs_string_from_literal(allocator, buffer, (size_t)len, out);
 }
 
+static bool ccjs_string_is_ascii_trim_space(char value) {
+  return value == ' '
+    || value == '\t'
+    || value == '\n'
+    || value == '\r'
+    || value == '\f'
+    || value == '\v';
+}
+
+static bool ccjs_string_is_ascii_digit(char value) {
+  return value >= '0' && value <= '9';
+}
+
+ccjs_status ccjs_string_to_number(const char* value_bytes, size_t value_len, ccjs_value* out) {
+  if (out != 0) {
+    *out = ccjs_null_value();
+  }
+
+  if (out == 0 || (value_bytes == 0 && value_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  size_t start = 0;
+  size_t end = value_len;
+
+  while (start < end && ccjs_string_is_ascii_trim_space(bytes[start])) {
+    start += 1;
+  }
+
+  while (end > start && ccjs_string_is_ascii_trim_space(bytes[end - 1])) {
+    end -= 1;
+  }
+
+  if (start == end) {
+    return CCJS_OK;
+  }
+
+  size_t pos = start;
+  bool negative = false;
+
+  if (bytes[pos] == '+' || bytes[pos] == '-') {
+    negative = bytes[pos] == '-';
+    pos += 1;
+  }
+
+  double value = 0;
+  size_t digits = 0;
+
+  while (pos < end && ccjs_string_is_ascii_digit(bytes[pos])) {
+    const double digit = (double)(bytes[pos] - '0');
+
+    if (value > (DBL_MAX - digit) / 10.0) {
+      return CCJS_OK;
+    }
+
+    value = value * 10.0 + digit;
+    digits += 1;
+    pos += 1;
+  }
+
+  if (pos < end && bytes[pos] == '.') {
+    pos += 1;
+    double scale = 0.1;
+
+    while (pos < end && ccjs_string_is_ascii_digit(bytes[pos])) {
+      value += (double)(bytes[pos] - '0') * scale;
+      scale /= 10.0;
+      digits += 1;
+      pos += 1;
+    }
+  }
+
+  if (digits == 0) {
+    return CCJS_OK;
+  }
+
+  if (pos < end && (bytes[pos] == 'e' || bytes[pos] == 'E')) {
+    pos += 1;
+    bool exponent_negative = false;
+
+    if (pos < end && (bytes[pos] == '+' || bytes[pos] == '-')) {
+      exponent_negative = bytes[pos] == '-';
+      pos += 1;
+    }
+
+    if (pos >= end || !ccjs_string_is_ascii_digit(bytes[pos])) {
+      return CCJS_OK;
+    }
+
+    size_t exponent = 0;
+
+    while (pos < end && ccjs_string_is_ascii_digit(bytes[pos])) {
+      if (exponent < 400) {
+        exponent = exponent * 10 + (size_t)(bytes[pos] - '0');
+
+        if (exponent > 400) {
+          exponent = 400;
+        }
+      }
+
+      pos += 1;
+    }
+
+    if (exponent_negative) {
+      for (size_t index = 0; index < exponent; index += 1) {
+        value /= 10.0;
+      }
+    } else {
+      for (size_t index = 0; index < exponent; index += 1) {
+        if (value > DBL_MAX / 10.0) {
+          return CCJS_OK;
+        }
+
+        value *= 10.0;
+      }
+    }
+  }
+
+  if (pos != end || value > DBL_MAX) {
+    return CCJS_OK;
+  }
+
+  *out = ccjs_number_value(negative ? -value : value);
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_string_concat_parts(
   ccjs_allocator* allocator,
   const char* left_bytes,
@@ -106,15 +235,6 @@ ccjs_status ccjs_string_concat_parts(
   out->as.ref = &string->header;
 
   return CCJS_OK;
-}
-
-static bool ccjs_string_is_ascii_trim_space(char value) {
-  return value == ' '
-    || value == '\t'
-    || value == '\n'
-    || value == '\r'
-    || value == '\f'
-    || value == '\v';
 }
 
 ccjs_status ccjs_string_trim_parts(ccjs_allocator* allocator, const char* value_bytes, size_t value_len, ccjs_value* out) {

@@ -5106,6 +5106,48 @@ export function main(): void {
   }
 })
 
+test('generated C Number conversion compiles and runs with runtime sources', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-number-conversion-'))
+  const source = join(dir, 'number-conversion.c')
+  const output = join(dir, 'number-conversion')
+
+  try {
+    const result = compileSource(`function parse(text: string): number | null {
+  return Number(text)
+}
+
+export function main(): void {
+  console.log(Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('nope') ?? 7, Number('1x') ?? 8, parse('-3.25') ?? 0)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 50 7 8 -3.25\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C time globals compile and run with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
