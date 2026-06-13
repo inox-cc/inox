@@ -950,14 +950,19 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
 
   const finalizers = collectAsyncTaskTryFinalizers(tryChain)
   const handlerIndex = findAsyncTaskNearestTryHandlerIndex(tryChain)
-
-  if (hasPostNestedStatements && handlerIndex > tryChainResult.postNestedOwnerIndex) {
-    return null
-  }
-
   const handlerSource = handlerIndex < 0 ? null : tryChain[handlerIndex].handler
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
   const successStatements = hasPostNestedStatements ? postNestedStatements.slice(0, -1) : []
+  const successFinalizerStatements = hasPostNestedStatements
+    ? collectAsyncTaskTryFinalizerStatements(finalizers, tryChainResult.postNestedOwnerIndex, 0)
+    : handlerIndex < 0
+    ? collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, 0)
+    : collectAsyncTaskTryFinalizerStatements(finalizers, handlerIndex, 0)
+  const handlerFinalizerStatements = handlerIndex < 0
+    ? []
+    : hasPostNestedStatements
+    ? collectAsyncTaskTryFinalizerStatements(finalizers, handlerIndex, 0)
+    : successFinalizerStatements
 
   if (
     (handlerSource != null && handler == null)
@@ -981,11 +986,8 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     tryRegion: {
       handler,
       preHandlerFinalizerStatements: handlerIndex < 0 ? [] : collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, handlerIndex + 1),
-      finalizerStatements: hasPostNestedStatements
-        ? collectAsyncTaskTryFinalizerStatements(finalizers, tryChainResult.postNestedOwnerIndex, 0)
-        : handlerIndex < 0
-        ? collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, 0)
-        : collectAsyncTaskTryFinalizerStatements(finalizers, handlerIndex, 0)
+      finalizerStatements: successFinalizerStatements,
+      handlerFinalizerStatements
     }
   }
 }
@@ -2186,7 +2188,7 @@ function emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount) {
     return []
   }
 
-  return emitAsyncTaskTryStatementList(wrapper.tryRegion.finalizerStatements, wrapper, baseContext, visibleAwaitCount)
+  return emitAsyncTaskTryStatementList(wrapper.tryRegion.handlerFinalizerStatements ?? wrapper.tryRegion.finalizerStatements, wrapper, baseContext, visibleAwaitCount)
 }
 
 function emitAsyncTaskTryStatementList(statements, wrapper, baseContext, visibleAwaitCount) {

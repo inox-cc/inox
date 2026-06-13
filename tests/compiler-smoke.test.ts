@@ -4945,6 +4945,37 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(9\)\);/)
 })
 
+test('lowers nested async task frame post try statements with inner catch', () => {
+  const result = compileSource(`async function work(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.reject('inner')
+    } catch (error) {
+      console.log(error)
+      return 9
+    } finally {
+      console.log('inner finally')
+    }
+    console.log('after inner')
+    return 7
+  } finally {
+    console.log('outer finally')
+  }
+}
+
+export async function main(): Promise<void> {
+  const promise = work()
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.equal((result.code.match(/printf\("%s\\n", "inner finally"\);/g) ?? []).length, 2)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "after inner"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(9\)\);/)
+})
+
 test('lowers nested async task frame prefix locals into post try statements', () => {
   const result = compileSource(`async function work(): Promise<number> {
   try {
