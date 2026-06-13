@@ -740,6 +740,7 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
       finalizerName: `ccjs_async_task_${cName}_finalize`,
       params,
       awaits: body.awaits,
+      prefixStatements: body.prefixStatements ?? [],
       returnExpression: body.returnExpression,
       returnType: body.returnType,
       tryRegion: body.tryRegion ?? null
@@ -835,6 +836,7 @@ function resolveAsyncTaskWrapperBody(statement, declaration: IrFunctionDeclarati
 
   return {
     awaits,
+    prefixStatements: [],
     returnExpression,
     returnType,
     tryRegion: null
@@ -886,6 +888,7 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
 
   return {
     awaits,
+    prefixStatements: [],
     returnExpression,
     returnType,
     tryRegion: {
@@ -897,12 +900,13 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
 }
 
 function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, returnType) {
-  const tryChain = collectAsyncTaskNestedTryChain(tryStatement)
+  const tryChainResult = collectAsyncTaskNestedTryChain(tryStatement)
 
-  if (tryChain == null || tryChain.length < 2) {
+  if (tryChainResult == null || tryChainResult.chain.length < 2) {
     return null
   }
 
+  const tryChain = tryChainResult.chain
   const innerTry = tryChain[tryChain.length - 1]
   const innerTryStatements = innerTry.block?.body ?? []
   const returnStatement = innerTryStatements.at(-1)
@@ -931,6 +935,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
 
   if (
     (handlerSource != null && handler == null)
+    || hasUnsupportedAsyncTaskTryControlFlow(tryChainResult.prefixStatements)
     || finalizers.some(statements => hasUnsupportedAsyncTaskTryControlFlow(statements))
   ) {
     return null
@@ -938,6 +943,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
 
   return {
     awaits,
+    prefixStatements: tryChainResult.prefixStatements,
     returnExpression,
     returnType,
     tryRegion: {
@@ -952,6 +958,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
 
 function collectAsyncTaskNestedTryChain(tryStatement) {
   const chain: any[] = []
+  const prefixStatements: any[] = []
   let current: any = tryStatement
 
   while (current?.type === 'TryStatement') {
@@ -962,13 +969,18 @@ function collectAsyncTaskNestedTryChain(tryStatement) {
     chain.push(current)
 
     const body = current.block?.body ?? []
+    const nestedTry = body.at(-1)
 
-    if (body.length === 1 && body[0]?.type === 'TryStatement') {
-      current = body[0]
+    if (nestedTry?.type === 'TryStatement') {
+      prefixStatements.push(...body.slice(0, -1))
+      current = nestedTry
       continue
     }
 
-    return chain
+    return {
+      chain,
+      prefixStatements
+    }
   }
 
   return null
@@ -1353,6 +1365,7 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     '  ccjs_promise_retain(frame->promise);',
     '  *out = frame->promise;',
     ...emitAsyncTaskVisibleLocalReads(wrapper, 0).map(line => `  ${line}`),
+    ...emitAsyncTaskTryStatementList(wrapper.prefixStatements ?? [], wrapper, baseContext, 0).map(line => `  ${line}`),
     ...schedule.map(line => `  ${line}`),
     '  return CCJS_OK;',
     '}'
