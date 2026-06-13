@@ -785,6 +785,7 @@ function isSupportedAsyncTaskValueType(valueType) {
     || valueType === 'boolean'
     || valueType === 'string'
     || valueType === 'bytes'
+    || valueType === 'object'
     || valueType === 'array'
     || valueType === 'void'
 }
@@ -1077,7 +1078,7 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
       return null
     }
 
-    result.variables.set(statement.name, valueType)
+    registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, result)
 
     if (valueType === 'string' && isRuntimeStringPrefixLocalDeclaration(statement, result)) {
       result.runtimeStrings.add(statement.name)
@@ -1087,6 +1088,9 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
       locals.push({
         name: statement.name,
         type: valueType,
+        shape: valueType === 'object'
+          ? statement.shape ?? statement.init?.shape ?? null
+          : undefined,
         arrayElementType: valueType === 'array'
           ? statement.arrayElementType ?? statement.init?.arrayElementType ?? resolveRuntimeArrayElementType(statement.init, result) ?? 'unknown'
           : undefined,
@@ -1103,11 +1107,11 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
 }
 
 function isSupportedAsyncTaskPrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'array'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array'
 }
 
 function isSupportedAsyncTaskFramePrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'array'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array'
 }
 
 function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
@@ -1181,23 +1185,21 @@ function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
 function createAsyncTaskExpressionContext(context, params, awaits) {
   const result = {
     ...context,
+    mapTypes: new Map(context.mapTypes ?? []),
+    objectShapes: new Map(context.objectShapes ?? []),
+    runtimeArrayElementTypes: new Map(context.runtimeArrayElementTypes ?? []),
+    setElementTypes: new Map(context.setElementTypes ?? []),
     variables: new Map(context.variables ?? []),
     runtimeStrings: new Set(context.runtimeStrings ?? [])
   }
 
   for (const param of params) {
-    result.variables.set(param.name, param.valueType)
-
-    if (param.valueType === 'string') {
-      result.runtimeStrings.add(param.name)
-    }
+    registerAsyncTaskLocalMetadata(param.name, param.valueType, param, result)
   }
 
   for (const item of awaits ?? []) {
-    result.variables.set(item.name, item.type)
-
-    if (item.type === 'string') {
-      result.runtimeStrings.add(item.name)
+    if (item.name != null) {
+      registerAsyncTaskLocalMetadata(item.name, item.type, item, result)
     }
   }
 
@@ -1280,6 +1282,9 @@ function resolveAsyncTaskDirectAwaitStep(statement, context, index) {
     name: statement.name,
     type: awaitedType,
     fieldName: `local_${emitCIdentifier(statement.name)}`,
+    shape: awaitedType === 'object'
+      ? statement.shape ?? statement.init.shape ?? awaitedExpression?.shape ?? null
+      : undefined,
     arrayElementType: statement.arrayElementType ?? statement.init.arrayElementType ?? awaitedExpression?.arrayElementType ?? 'unknown',
     awaitedExpression: awaitedPromiseExpression == null ? awaitedExpression : null,
     awaitedPromiseExpression
@@ -1333,6 +1338,9 @@ function resolveAsyncTaskLocalPromiseAwaitStep(promiseStatement, awaitStatement,
     name: awaitStatement.name,
     type: awaitedType,
     fieldName: `local_${emitCIdentifier(awaitStatement.name)}`,
+    shape: awaitedType === 'object'
+      ? awaitStatement.shape ?? awaitStatement.init.shape ?? awaitedPromiseExpression.shape ?? null
+      : undefined,
     arrayElementType: awaitStatement.arrayElementType ?? awaitStatement.init.arrayElementType ?? awaitedPromiseExpression.arrayElementType,
     awaitedExpression: null,
     awaitedPromiseExpression
@@ -1607,6 +1615,8 @@ function registerAsyncTaskLocalMetadata(name, valueType, item, context) {
 
   if (valueType === 'string') {
     context.runtimeStrings.add(name)
+  } else if (valueType === 'object') {
+    registerObjectShape(context, name, item.shape)
   } else if (valueType === 'array') {
     context.runtimeArrayElementTypes.set(name, item.arrayElementType ?? 'unknown')
   }

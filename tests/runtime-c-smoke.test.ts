@@ -2790,6 +2790,65 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame object prefix locals compile and run', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-prefix-object-'))
+  const source = join(dir, 'async-task-frame-prefix-object.c')
+  const output = join(dir, 'async-task-frame-prefix-object')
+
+  try {
+    const result = compileSource(`type User = {
+  name: string,
+  score: number
+}
+
+async function work(): Promise<User> {
+  try {
+    const prefix: User = { name: 'Ada', score: 7 }
+    try {
+      const value: number = await Promise.resolve(3)
+    } finally {
+      console.log(prefix.name)
+    }
+    console.log(prefix.score)
+    return prefix
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const result: User = await work()
+  console.log(result.name, result.score)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\n7\nouter\nAda 7\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async task frames await fs promises with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
