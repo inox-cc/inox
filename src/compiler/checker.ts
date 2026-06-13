@@ -3157,6 +3157,12 @@ class Checker {
   }
 
   checkNewExpression(expression: AnyNode): ValueType {
+    const promiseType = this.checkPromiseConstructorExpression(expression)
+
+    if (promiseType != null) {
+      return promiseType
+    }
+
     const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
@@ -3249,6 +3255,113 @@ class Checker {
     expression.className = expression.callee.path[0]
     expression.shape = symbol.shape ?? null
     return 'object'
+  }
+
+  checkPromiseConstructorExpression(expression: AnyNode): ValueType | null {
+    if (
+      expression.callee.type !== 'Reference' ||
+      expression.callee.path.length !== 1 ||
+      expression.callee.path[0] !== 'Promise' ||
+      this.scope.resolve('Promise') != null
+    ) {
+      return null
+    }
+
+    if (expression.args.length !== 1) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `Promise constructor expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    const executor = expression.args[0]
+    let promiseValueType: ValueType = 'unknown'
+
+    if (executor == null) {
+      expression.valueType = 'promise'
+      expression.promiseValueType = promiseValueType
+      return 'promise'
+    }
+
+    if (executor.type !== 'ArrowFunctionExpression') {
+      this.checkAssignableType(this.checkExpression(executor), 'function', executor.loc)
+      expression.valueType = 'promise'
+      expression.promiseValueType = promiseValueType
+      return 'promise'
+    }
+
+    this.checkArrowFunctionExpression(executor, promiseExecutorFunctionType())
+
+    const resolveName = executor.params[0]?.name
+    promiseValueType = resolveName == null ? 'unknown' : this.resolvePromiseExecutorValueType(executor, resolveName)
+    expression.valueType = 'promise'
+    expression.promiseValueType = promiseValueType
+
+    return 'promise'
+  }
+
+  resolvePromiseExecutorValueType(executor: AnyNode, resolveName: string): ValueType {
+    const types: ValueType[] = []
+    const visit = (node: AnyNode | AnyNode[] | null | undefined): void => {
+      if (node == null) {
+        return
+      }
+
+      if (Array.isArray(node)) {
+        node.forEach(visit)
+        return
+      }
+
+      if (typeof node !== 'object') {
+        return
+      }
+
+      if (
+        node.type === 'CallExpression' &&
+        node.callee?.type === 'Reference' &&
+        node.callee.path.length === 1 &&
+        node.callee.path[0] === resolveName
+      ) {
+        types.push(node.args[0] == null ? 'void' : this.inferCheckedExpressionType(node.args[0]))
+      }
+
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'loc' || key === 'callee') {
+          continue
+        }
+
+        visit(value as AnyNode | AnyNode[])
+      }
+    }
+
+    visit(executor.expressionBody ? executor.body : executor.body)
+
+    return commonValueType(types)
+  }
+
+  inferCheckedExpressionType(expression: AnyNode): ValueType {
+    if (expression.valueType != null && expression.valueType !== 'unknown') {
+      return expression.valueType
+    }
+
+    if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
+      return 'string'
+    }
+
+    if (expression.type === 'NumberLiteral') {
+      return 'number'
+    }
+
+    if (expression.type === 'BooleanLiteral') {
+      return 'boolean'
+    }
+
+    if (expression.type === 'NullLiteral') {
+      return 'null'
+    }
+
+    return this.checkExpression(expression)
   }
 
   checkErrorConstructorExpression(expression: AnyNode, argTypes: ValueType[]): void {
@@ -4601,6 +4714,10 @@ function splitGenericArgs(value: string): string[] {
 }
 
 function commonArrayElementType(types: ValueType[]): ValueType {
+  return commonValueType(types)
+}
+
+function commonValueType(types: ValueType[]): ValueType {
   const [first] = types
 
   if (first == null) {
@@ -4608,6 +4725,34 @@ function commonArrayElementType(types: ValueType[]): ValueType {
   }
 
   return types.every((type) => type === first) ? first : 'unknown'
+}
+
+function promiseExecutorFunctionType(): AnyNode {
+  return {
+    kind: 'function',
+    params: [
+      {
+        name: 'resolve',
+        valueType: 'function',
+        functionType: promiseSettlementFunctionType()
+      },
+      {
+        name: 'reject',
+        valueType: 'function',
+        functionType: promiseSettlementFunctionType()
+      }
+    ],
+    returnType: 'void',
+    returnNullable: false
+  }
+}
+
+function promiseSettlementFunctionType(): AnyNode {
+  return {
+    kind: 'function',
+    returnType: 'void',
+    returnNullable: false
+  }
 }
 
 function isBuiltinValueType(name: string): boolean {

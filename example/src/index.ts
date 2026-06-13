@@ -6,4 +6,5 @@ const base = addScore(12, 8)
 const total = scaleScore(base, 3)
 
 console.log('hello', userName(), 'score', total)
-console.log('text', asyncText())
+const str = await asyncText()
+console.log('text', str)

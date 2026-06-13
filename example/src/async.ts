@@ -1,6 +1,8 @@
-export function asyncText(): string {
-  const str1 = 'ccjs cmake example'
-  const num = 123
+export function asyncText(): Promise<string> {
+  return new Promise((resolve) => {
+    const str1 = 'ccjs cmake example'
+    const num = 123
 
-  return `${str1} 😀 ${String(num)}`
+    resolve(`${str1} 😀 ${String(num)}`)
+  })
 }

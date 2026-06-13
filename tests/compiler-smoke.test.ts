@@ -8986,6 +8986,47 @@ export function main(): void {
   )
 })
 
+test('tracks Promise constructor generic metadata through checker and IR', () => {
+  const result = compileSource(
+    `function makeText(): Promise<string> {
+  return new Promise((resolve) => {
+    const prefix = 'ok'
+    resolve(\`\${prefix} \${String(7)}\`)
+  })
+}
+
+export async function main(): Promise<void> {
+  const value = await makeText()
+  console.log(value)
+}
+`,
+    {
+      target: 'js'
+    }
+  )
+  const makeText = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'makeText')
+  const returnStatement = makeText?.body.find((item) => item.type === 'ReturnStatement')
+  const makeTextDeclaration = result.ir.functionDeclarations.find((item) => item.name === 'makeText')
+
+  assert.ok(returnStatement)
+  assert.equal(returnStatement.argument.valueType, 'promise')
+  assert.equal(returnStatement.argument.promiseValueType, 'string')
+  assert.equal(makeTextDeclaration?.returnType, 'promise')
+  assert.equal(makeTextDeclaration?.returnPromiseValueType, 'string')
+  assert.match(result.code, /return new Promise\(resolve => \{/)
+
+  assertDiagnostic(
+    `export function main(): void {
+  const value: Promise<number> = new Promise((resolve) => {
+    resolve('nope')
+  })
+  console.log(value)
+}
+`,
+    'CCJS_TYPE_MISMATCH'
+  )
+})
+
 test('checks Promise then catch as typed chain calls', () => {
   const result = compileSource(
     `export function main(): void {

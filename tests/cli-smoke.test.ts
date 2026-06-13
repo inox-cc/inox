@@ -398,6 +398,13 @@ test('ccjs module graph --emit c --out-dir --entry writes and builds modular C s
 export function value(): number {
   return 4
 }
+
+export function asyncText(): Promise<string> {
+  return new Promise((resolve) => {
+    const label = 'ready'
+    resolve(\`\${label} \${String(value())}\`)
+  })
+}
 `
     )
     await writeFile(
@@ -411,11 +418,13 @@ export function greet(): void {
     )
     await writeFile(
       join(src, 'main.ts'),
-      `import { value } from './dep.ts'
+      `import { asyncText, value } from './dep.ts'
 import { greet } from './util.ts'
 
 console.log('main', value())
 greet()
+const text = await asyncText()
+console.log('text', text)
 `
     )
 
@@ -456,7 +465,7 @@ greet()
     const run = await runCommand(out, [])
 
     assert.equal(run.code, 0)
-    assert.equal(run.stdout, 'dep init\nmain 4\nvalue 4\n')
+    assert.equal(run.stdout, 'dep init\nmain 4\nvalue 4\ntext ready 4\n')
   } finally {
     await rm(dir, {
       recursive: true,
