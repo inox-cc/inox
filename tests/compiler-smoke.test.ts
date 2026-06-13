@@ -5777,6 +5777,14 @@ test('types and lowers crypto.getRandomValues as a bytes-preserving call', () =>
   assert.match(c.code, /if \(ccjs_crypto_get_random_values\(bytes\) != CCJS_OK\) goto ccjs_cleanup;/)
   assert.match(c.code, /ccjs_retain\(ccjs_crypto_bytes_\d+\);/)
 
+  const withoutCryptoMetadata = JSON.parse(JSON.stringify(c.ir))
+  stripCryptoRuntimeMetadata(withoutCryptoMetadata)
+  assert.throws(() => emitCFromIr(withoutCryptoMetadata), (error: unknown) => {
+    assert.ok(error instanceof CompileError)
+    assert.equal(error.diagnostics[0]?.code, 'CCJS_C_JS_GLOBAL')
+    return true
+  })
+
   assertDiagnostic(`export function main(): void {
   crypto.getRandomValues('text')
 }
@@ -5787,6 +5795,27 @@ test('types and lowers crypto.getRandomValues as a bytes-preserving call', () =>
 }
 `, 'CCJS_ARG_COUNT')
 })
+
+function stripCryptoRuntimeMetadata(node: unknown): void {
+  if (node == null || typeof node !== 'object') {
+    return
+  }
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      stripCryptoRuntimeMetadata(item)
+    }
+    return
+  }
+
+  const record = node as Record<string, unknown>
+
+  delete record.cryptoRuntimeMethod
+
+  for (const value of Object.values(record)) {
+    stripCryptoRuntimeMetadata(value)
+  }
+}
 
 test('maps fs sync helpers to Node fs and C runtime calls', () => {
   const ts = compileSource(`export function main(): void {

@@ -10652,7 +10652,7 @@ function emitPreparedJsonScalarParseExpression(expression, context) {
 }
 
 function emitPreparedCryptoCallExpression(expression, context, options: { discard?: boolean } = {}) {
-  if (cCryptoRuntimeCallName(expression?.callee) !== 'getRandomValues') {
+  if (cryptoRuntimeMethodName(expression) !== 'getRandomValues') {
     return null
   }
 
@@ -11833,7 +11833,7 @@ function inferExpressionType(expression, context) {
     return expression.valueType ?? (cJsonRuntimeCallName(expression.callee) === 'parse' ? 'object' : 'string')
   }
 
-  if (expression?.type === 'CallExpression' && cCryptoRuntimeCallName(expression.callee) === 'getRandomValues') {
+  if (cryptoRuntimeMethodName(expression) === 'getRandomValues') {
     return 'bytes'
   }
 
@@ -14290,6 +14290,14 @@ function isBinaryRuntimeCall(expression) {
   return expression?.type === 'CallExpression'
     && typeof expression.binaryRuntimeMethod === 'string'
     && binaryRuntimeMethodName(expression.callee) === expression.binaryRuntimeMethod
+}
+
+function cryptoRuntimeMethodName(expression) {
+  if (expression?.type !== 'CallExpression' || typeof expression.cryptoRuntimeMethod !== 'string') {
+    return null
+  }
+
+  return cCryptoRuntimeCallName(expression.callee) === expression.cryptoRuntimeMethod ? expression.cryptoRuntimeMethod : null
 }
 
 function isBufferFromCall(expression) {

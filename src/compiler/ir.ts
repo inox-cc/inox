@@ -832,7 +832,7 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('runtime-values')
   }
 
-  if (cryptoRuntimeCallName(expression.callee) != null) {
+  if (cryptoRuntimeMethodName(expression) != null) {
     features.add('crypto')
     features.add('runtime-values')
   }
@@ -934,12 +934,12 @@ function binaryRuntimeMethodName(expression: AnyNode): string | null {
   return typeof expression.binaryRuntimeMethod === 'string' ? expression.binaryRuntimeMethod : null
 }
 
-function cryptoRuntimeCallName(callee: AnyNode): string | null {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1 || callee.object.path[0] !== 'crypto') {
+function cryptoRuntimeMethodName(expression: AnyNode): string | null {
+  if (expression.type !== 'CallExpression' || expression.callee?.type !== 'MemberExpression') {
     return null
   }
 
-  return callee.property === 'getRandomValues' ? callee.property : null
+  return typeof expression.cryptoRuntimeMethod === 'string' ? expression.cryptoRuntimeMethod : null
 }
 
 function isObjectFieldExpression(expression: AnyNode | null | undefined): boolean {
