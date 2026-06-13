@@ -4971,6 +4971,33 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*ccjs_value suffix = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t\*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*printf\("%g\\n", \(\(double\)value\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, suffix\);[\s\S]*ccjs_release\(suffix\);[\s\S]*return status;/)
 })
 
+test('lowers nested async task frame post await scalar locals into inner try returns', () => {
+  const result = compileSource(`async function work(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.resolve(3)
+      const total: number = value + 4
+      console.log(total)
+      return total
+    } finally {
+      console.log('inner')
+    }
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  console.log(await work())
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /typedef struct ccjs_async_task_work_frame \{[\s\S]*double local_value;[\s\S]*\} ccjs_async_task_work_frame;/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*const double total = \(value \+ 4\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(total\)\);/)
+})
+
 test('lowers nested async task frame post try statements through finalizers', () => {
   const result = compileSource(`async function work(): Promise<number> {
   try {
