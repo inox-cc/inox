@@ -1087,6 +1087,9 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
       locals.push({
         name: statement.name,
         type: valueType,
+        arrayElementType: valueType === 'array'
+          ? statement.arrayElementType ?? statement.init?.arrayElementType ?? resolveRuntimeArrayElementType(statement.init, result) ?? 'unknown'
+          : undefined,
         fieldName: `prefix_${emitCIdentifier(statement.name)}`,
         forceRuntimeStringDeclaration: valueType === 'string' && isRawStringLiteralExpression(statement.init)
       })
@@ -1100,11 +1103,11 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
 }
 
 function isSupportedAsyncTaskPrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'array'
 }
 
 function isSupportedAsyncTaskFramePrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'array'
 }
 
 function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
@@ -1573,6 +1576,14 @@ function emitAsyncTaskStorePrefixLocalLines(wrapper) {
         ...emitPrepareOwnedValueWrite(`frame->${local.fieldName}`),
         `frame->${local.fieldName}.tag = CCJS_TAG_STRING;`,
         `frame->${local.fieldName}.as.ref = (ccjs_ref*)&${local.name}->header;`,
+        `ccjs_retain(frame->${local.fieldName});`
+      ]
+    }
+
+    if (isManagedRuntimeReturnType(local.type)) {
+      return [
+        ...emitPrepareOwnedValueWrite(`frame->${local.fieldName}`),
+        `frame->${local.fieldName} = ${local.name};`,
         `ccjs_retain(frame->${local.fieldName});`
       ]
     }
@@ -2274,8 +2285,13 @@ function emitAsyncTaskTryStatementList(statements, wrapper, baseContext, visible
   }
 
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', visibleAwaitCount)
+  const lines = withVariableScope(context, () => emitStatementList(statements, context))
 
-  return withVariableScope(context, () => emitStatementList(statements, context))
+  return [
+    ...emitOwnedValueDeclarations(context),
+    ...lines,
+    ...emitOwnedValueCleanup(context)
+  ]
 }
 
 function emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, call) {
