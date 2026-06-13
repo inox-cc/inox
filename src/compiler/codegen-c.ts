@@ -2476,13 +2476,6 @@ function emitAsyncTaskTryRejectCase(wrapper, item, baseContext) {
     lines.push('  }')
   }
 
-  const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, item.index)
-
-  if (handler.param != null) {
-    context.variables.set(handler.param, 'string')
-    context.runtimeStrings.add(handler.param)
-  }
-
   lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index).map(line => `  ${line}`))
   lines.push(...emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, item.index).map(line => `  ${line}`))
 
@@ -2490,20 +2483,7 @@ function emitAsyncTaskTryRejectCase(wrapper, item, baseContext) {
     lines.push(`  ccjs_string* ${handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
   }
 
-  if (hasAsyncTaskStatementLocalDeclarations(handler.statements ?? [])) {
-    lines.push(...emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler).map(line => `  ${line}`))
-    lines.push('}')
-
-    return lines
-  }
-
-  lines.push(...emitStatementList(handler.statements, context).map(line => `  ${line}`))
-
-  const returnValue = emitPreparedAsyncTaskValueExpression(handler.returnExpression, wrapper.returnType, context)
-
-  lines.push(...returnValue.lines.map(line => `  ${line}`))
-  lines.push(...emitAsyncTaskTryFinallyLines(wrapper, baseContext, item.index).map(line => `  ${line}`))
-  lines.push(...emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, `ccjs_promise_resolve(frame->promise, ${returnValue.expression})`).map(line => `  ${line}`))
+  lines.push(...emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler).map(line => `  ${line}`))
   lines.push('}')
 
   return lines

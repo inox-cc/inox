@@ -3120,6 +3120,61 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame catch direct managed returns compile and run', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-catch-direct-managed-return-'))
+  const source = join(dir, 'async-task-frame-catch-direct-managed-return.c')
+  const output = join(dir, 'async-task-frame-catch-direct-managed-return')
+
+  try {
+    const result = compileSource(`async function work(): Promise<Buffer> {
+  try {
+    try {
+      const value: Buffer = await Promise.reject('inner')
+      return value
+    } catch (error) {
+      console.log(error)
+      return Buffer.from('ok', 'utf8')
+    } finally {
+      console.log('inner finally')
+    }
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const result: Buffer = await work()
+  console.log(result.toString())
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'inner\ninner finally\nouter\nok\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async task frames await fs promises with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 
