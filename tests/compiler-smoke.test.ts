@@ -7323,6 +7323,22 @@ export function main(): void {
   interval.ref()
 }
 `, 'CCJS_TIMER_REF_UNREF')
+
+  assertDiagnostic(`export function main(): void {
+  setTimeout(async () => {
+    await Promise.resolve(1)
+  }, 1)
+}
+`, 'CCJS_ASYNC_TIMER_CALLBACK')
+
+  assertDiagnostic(`async function later(): Promise<void> {
+  await Promise.resolve(1)
+}
+
+export function main(): void {
+  setImmediate(later)
+}
+`, 'CCJS_ASYNC_TIMER_CALLBACK')
 })
 
 test('rejects unknown imported exports', async () => {

@@ -1886,6 +1886,11 @@ class Checker {
       return 'unknown'
     }
 
+    if (expression.async === true) {
+      this.report('CCJS_ASYNC_CALLBACK', 'async Promise callbacks are not supported in the current compiler slice; use a named async helper and await it explicitly', expression.loc)
+      return 'unknown'
+    }
+
     if (expression.params.length > params.length) {
       this.report('CCJS_ARG_COUNT', `${label} expects at most ${params.length} parameter(s), got ${expression.params.length}`, expression.loc)
     }
@@ -2135,6 +2140,11 @@ class Checker {
     }
 
     if (arg.type === 'ArrowFunctionExpression') {
+      if (arg.async === true) {
+        this.report('CCJS_ASYNC_TIMER_CALLBACK', 'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly', arg.loc)
+        return
+      }
+
       this.checkArrowFunctionExpression(arg, functionType)
       return
     }
@@ -2145,6 +2155,11 @@ class Checker {
 
     if (symbol?.params != null && symbol.params.length !== functionType.params.length) {
       this.report('CCJS_ARG_COUNT', `function callback expects ${functionType.params.length} argument(s), got ${symbol.params.length}`, arg.loc)
+    }
+
+    if (symbol?.async === true || symbol?.returnType === 'promise') {
+      this.report('CCJS_ASYNC_TIMER_CALLBACK', 'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly', arg.loc)
+      return
     }
 
     if (symbol != null && symbol.returnType != null) {
@@ -2275,6 +2290,11 @@ class Checker {
 
       this.checkAssignableType(callbackType, 'function', expression.loc)
 
+      return 'unknown'
+    }
+
+    if (expression.async === true) {
+      this.report('CCJS_ASYNC_CALLBACK', 'async Array callbacks are not supported in the current compiler slice; use a synchronous callback', expression.loc)
       return 'unknown'
     }
 
@@ -2624,6 +2644,11 @@ class Checker {
   }
 
   checkArrowFunctionExpression(expression: AnyNode, functionType: AnyNode | null = null): void {
+    if (expression.async === true) {
+      this.report('CCJS_ASYNC_CALLBACK', 'async arrow callbacks are not supported in the current compiler slice; use an async function declaration', expression.loc)
+      return
+    }
+
     let actualReturnType: ValueType = functionType?.returnType ?? 'unknown'
 
     this.withScope(() => {

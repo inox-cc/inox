@@ -794,6 +794,10 @@ class Parser {
   }
 
   parseAssignment(): AnyNode {
+    if (this.isAsyncArrowFunctionStart()) {
+      return this.parseArrowFunction(true)
+    }
+
     if (this.isArrowFunctionStart()) {
       return this.parseArrowFunction()
     }
@@ -812,14 +816,20 @@ class Parser {
     return expression
   }
 
-  parseArrowFunction(): AnyNode {
+  parseArrowFunction(isAsync = false): AnyNode {
     const start = this.current()
+
+    if (isAsync) {
+      this.expectKeyword('async', 'CCJS_EXPECTED_ARROW', 'expected async before async arrow function')
+    }
+
     const params = this.parseArrowParameters()
     this.expectValue('=>', 'CCJS_EXPECTED_ARROW', 'expected => in arrow function')
     const body = this.isValue('{') ? this.parseBlock() : this.parseExpression()
 
     return {
       type: 'ArrowFunctionExpression',
+      async: isAsync,
       params,
       body,
       expressionBody: !Array.isArray(body),
@@ -1492,6 +1502,38 @@ class Parser {
     let depth = 0
 
     for (let offset = 0; this.peek(offset).type !== 'eof'; offset += 1) {
+      const token = this.peek(offset)
+
+      if (token.value === '(') {
+        depth += 1
+      } else if (token.value === ')') {
+        depth -= 1
+
+        if (depth === 0) {
+          return this.peek(offset + 1).value === '=>'
+        }
+      }
+    }
+
+    return false
+  }
+
+  isAsyncArrowFunctionStart(): boolean {
+    if (!this.isKeywordValue('async')) {
+      return false
+    }
+
+    if (this.peek(1).type === 'identifier' && this.peek(2).value === '=>') {
+      return true
+    }
+
+    if (this.peek(1).value !== '(') {
+      return false
+    }
+
+    let depth = 0
+
+    for (let offset = 1; this.peek(offset).type !== 'eof'; offset += 1) {
       const token = this.peek(offset)
 
       if (token.value === '(') {
