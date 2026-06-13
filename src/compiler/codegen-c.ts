@@ -938,10 +938,6 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   const handlerSource = innerTry.handler ?? tryStatement.handler
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
 
-  if (innerTry.handler != null && tryStatement.handler != null) {
-    return null
-  }
-
   if (
     (handlerSource != null && handler == null)
     || hasUnsupportedAsyncTaskTryControlFlow(innerFinalizerStatements)
@@ -956,8 +952,8 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     returnType,
     tryRegion: {
       handler,
-      preHandlerFinalizerStatements: tryStatement.handler != null ? innerFinalizerStatements : [],
-      finalizerStatements: tryStatement.handler != null
+      preHandlerFinalizerStatements: innerTry.handler == null && tryStatement.handler != null ? innerFinalizerStatements : [],
+      finalizerStatements: innerTry.handler == null && tryStatement.handler != null
         ? outerFinalizerStatements
         : [
             ...innerFinalizerStatements,

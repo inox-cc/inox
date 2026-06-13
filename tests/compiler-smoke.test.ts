@@ -4765,6 +4765,35 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/)
 })
 
+test('lowers nested async task frame inner catch under outer catch', () => {
+  const result = compileSource(`async function work(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.reject('inner')
+      return value
+    } catch (error) {
+      console.log(error)
+      return 7
+    }
+  } catch (error) {
+    console.log(error)
+    return 9
+  }
+}
+
+export async function main(): Promise<void> {
+  const promise = work()
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_start\(ccjs_loop\* ccjs_loop, ccjs_promise\*\* out\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/)
+  assert.doesNotMatch(result.code, /ccjs_number_value\(9\)/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]
