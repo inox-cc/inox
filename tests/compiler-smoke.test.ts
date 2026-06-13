@@ -4409,6 +4409,33 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_propagate_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "finally propagate"\);[\s\S]*status = ccjs_promise_reject\(frame->promise, ccjs_error\);/)
 })
 
+test('lowers nested async task frame try finally finalizers', () => {
+  const result = compileSource(`async function compute(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.resolve(3)
+      return value
+    } finally {
+      console.log('inner finally')
+    }
+  } finally {
+    console.log('outer finally')
+  }
+}
+
+export async function main(): Promise<void> {
+  const promise = compute()
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_async_task_compute_start\(ccjs_loop\* ccjs_loop, ccjs_promise\*\* out\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_compute_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_compute_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = ccjs_promise_reject\(frame->promise, ccjs_error\);/)
+})
+
 test('lowers fs awaits through async task frames', () => {
   const result = compileSource(`async function loadText(path: string): Promise<string> {
   const text = await fs.readFile(path, 'utf8')

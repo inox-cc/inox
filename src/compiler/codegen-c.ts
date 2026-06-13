@@ -847,6 +847,12 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
   }
 
   const tryStatement = statement.body[0]
+  const nestedTryFinallyBody = resolveAsyncTaskNestedTryFinallyWrapperBody(tryStatement, context, params, returnType)
+
+  if (nestedTryFinallyBody != null) {
+    return nestedTryFinallyBody
+  }
+
   const tryStatements = tryStatement.block?.body ?? []
   const returnStatement = tryStatements.at(-1)
 
@@ -885,6 +891,64 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
     tryRegion: {
       handler,
       finalizerStatements
+    }
+  }
+}
+
+function resolveAsyncTaskNestedTryFinallyWrapperBody(tryStatement, context, params, returnType) {
+  if (tryStatement.handler != null || tryStatement.finalizer == null) {
+    return null
+  }
+
+  const outerTryStatements = tryStatement.block?.body ?? []
+
+  if (outerTryStatements.length !== 1 || outerTryStatements[0]?.type !== 'TryStatement') {
+    return null
+  }
+
+  const innerTry = outerTryStatements[0]
+
+  if (innerTry.handler != null || innerTry.finalizer == null) {
+    return null
+  }
+
+  const innerTryStatements = innerTry.block?.body ?? []
+  const returnStatement = innerTryStatements.at(-1)
+
+  if (returnStatement?.type !== 'ReturnStatement') {
+    return null
+  }
+
+  const awaits = resolveAsyncTaskAwaitSteps(innerTryStatements.slice(0, -1), context)
+
+  if (awaits == null) {
+    return null
+  }
+
+  const returnContext = createAsyncTaskExpressionContext(context, params, awaits)
+  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
+
+  if (returnType !== 'void' && returnExpression == null) {
+    return null
+  }
+
+  const innerFinalizerStatements = innerTry.finalizer?.body ?? []
+  const outerFinalizerStatements = tryStatement.finalizer?.body ?? []
+
+  if (hasUnsupportedAsyncTaskTryControlFlow(innerFinalizerStatements) || hasUnsupportedAsyncTaskTryControlFlow(outerFinalizerStatements)) {
+    return null
+  }
+
+  return {
+    awaits,
+    returnExpression,
+    returnType,
+    tryRegion: {
+      handler: null,
+      finalizerStatements: [
+        ...innerFinalizerStatements,
+        ...outerFinalizerStatements
+      ]
     }
   }
 }
