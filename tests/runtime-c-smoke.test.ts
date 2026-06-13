@@ -2903,6 +2903,60 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame Set prefix locals compile and run', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-prefix-set-'))
+  const source = join(dir, 'async-task-frame-prefix-set.c')
+  const output = join(dir, 'async-task-frame-prefix-set')
+
+  try {
+    const result = compileSource(`async function work(): Promise<Set<string>> {
+  try {
+    const prefix: Set<string> = new Set(['Ada', 'Grace'])
+    try {
+      const value: number = await Promise.resolve(3)
+    } finally {
+      console.log(prefix.has('Ada'))
+    }
+    console.log(prefix.has('Grace'), prefix.size)
+    return prefix
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const result: Set<string> = await work()
+  console.log(result.has('Grace'), result.size)
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1\n1 2\nouter\n1 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async task frames await fs promises with runtime sources', async t => {
   const probe = await runCommand('cc', ['--version'])
 

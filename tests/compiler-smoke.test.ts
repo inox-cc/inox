@@ -5224,6 +5224,36 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static void ccjs_async_task_work_finalize\(void\* context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/)
 })
 
+test('lowers nested async task frame Set prefix locals into post try statements', () => {
+  const result = compileSource(`async function work(): Promise<Set<string>> {
+  try {
+    const prefix: Set<string> = new Set(['Ada', 'Grace'])
+    try {
+      const value: number = await Promise.resolve(3)
+    } finally {
+      console.log(prefix.has('Ada'))
+    }
+    console.log(prefix.has('Grace'), prefix.size)
+    return prefix
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const result: Set<string> = await work()
+  console.log(result.has('Grace'), result.size)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_start\(ccjs_loop\* ccjs_loop, ccjs_promise\*\* out\) \{[\s\S]*ccjs_value prefix = ccjs_undefined_value\(\);[\s\S]*ccjs_set_new\(&ccjs_default_allocator, &prefix\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value prefix = frame->prefix_prefix;[\s\S]*ccjs_set_has\(prefix, ccjs_value_\d+, &ccjs_set_has_\d+\)[\s\S]*ccjs_set_has\(prefix, ccjs_value_\d+, &ccjs_set_has_\d+\)[\s\S]*ccjs_set_size\(prefix, &ccjs_set_size_\d+\)[\s\S]*return ccjs_promise_resolve\(frame->promise, prefix\);/)
+  assert.match(result.code, /static void ccjs_async_task_work_finalize\(void\* context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]

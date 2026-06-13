@@ -788,6 +788,7 @@ function isSupportedAsyncTaskValueType(valueType) {
     || valueType === 'object'
     || valueType === 'array'
     || valueType === 'map'
+    || valueType === 'set'
     || valueType === 'void'
 }
 
@@ -1101,6 +1102,9 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
         mapValueType: valueType === 'map'
           ? statement.mapValueType ?? resolveRuntimeMapType(statement.init, result)?.value ?? statement.init?.mapValueType ?? 'unknown'
           : undefined,
+        setElementType: valueType === 'set'
+          ? statement.setElementType ?? resolveRuntimeSetElementType(statement.init, result) ?? statement.init?.setElementType ?? 'unknown'
+          : undefined,
         fieldName: `prefix_${emitCIdentifier(statement.name)}`,
         forceRuntimeStringDeclaration: valueType === 'string' && isRawStringLiteralExpression(statement.init)
       })
@@ -1114,11 +1118,11 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
 }
 
 function isSupportedAsyncTaskPrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array' || valueType === 'map'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array' || valueType === 'map' || valueType === 'set'
 }
 
 function isSupportedAsyncTaskFramePrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array' || valueType === 'map'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array' || valueType === 'map' || valueType === 'set'
 }
 
 function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
@@ -1299,6 +1303,9 @@ function resolveAsyncTaskDirectAwaitStep(statement, context, index) {
     mapValueType: awaitedType === 'map'
       ? statement.mapValueType ?? statement.init.mapValueType ?? awaitedExpression?.mapValueType ?? 'unknown'
       : undefined,
+    setElementType: awaitedType === 'set'
+      ? statement.setElementType ?? statement.init.setElementType ?? awaitedExpression?.setElementType ?? 'unknown'
+      : undefined,
     awaitedExpression: awaitedPromiseExpression == null ? awaitedExpression : null,
     awaitedPromiseExpression
   }
@@ -1360,6 +1367,9 @@ function resolveAsyncTaskLocalPromiseAwaitStep(promiseStatement, awaitStatement,
       : undefined,
     mapValueType: awaitedType === 'map'
       ? awaitStatement.mapValueType ?? awaitStatement.init.mapValueType ?? awaitedPromiseExpression.mapValueType ?? 'unknown'
+      : undefined,
+    setElementType: awaitedType === 'set'
+      ? awaitStatement.setElementType ?? awaitStatement.init.setElementType ?? awaitedPromiseExpression.setElementType ?? 'unknown'
       : undefined,
     awaitedExpression: null,
     awaitedPromiseExpression
@@ -1643,6 +1653,8 @@ function registerAsyncTaskLocalMetadata(name, valueType, item, context) {
       key: item.mapKeyType ?? 'unknown',
       value: item.mapValueType ?? 'unknown'
     })
+  } else if (valueType === 'set') {
+    context.setElementTypes.set(name, item.setElementType ?? 'unknown')
   }
 }
 
