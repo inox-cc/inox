@@ -787,6 +787,7 @@ function isSupportedAsyncTaskValueType(valueType) {
     || valueType === 'bytes'
     || valueType === 'object'
     || valueType === 'array'
+    || valueType === 'map'
     || valueType === 'void'
 }
 
@@ -1094,6 +1095,12 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
         arrayElementType: valueType === 'array'
           ? statement.arrayElementType ?? statement.init?.arrayElementType ?? resolveRuntimeArrayElementType(statement.init, result) ?? 'unknown'
           : undefined,
+        mapKeyType: valueType === 'map'
+          ? statement.mapKeyType ?? resolveRuntimeMapType(statement.init, result)?.key ?? statement.init?.mapKeyType ?? 'unknown'
+          : undefined,
+        mapValueType: valueType === 'map'
+          ? statement.mapValueType ?? resolveRuntimeMapType(statement.init, result)?.value ?? statement.init?.mapValueType ?? 'unknown'
+          : undefined,
         fieldName: `prefix_${emitCIdentifier(statement.name)}`,
         forceRuntimeStringDeclaration: valueType === 'string' && isRawStringLiteralExpression(statement.init)
       })
@@ -1107,11 +1114,11 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
 }
 
 function isSupportedAsyncTaskPrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array' || valueType === 'map'
 }
 
 function isSupportedAsyncTaskFramePrefixLocalType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'bytes' || valueType === 'object' || valueType === 'array' || valueType === 'map'
 }
 
 function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
@@ -1286,6 +1293,12 @@ function resolveAsyncTaskDirectAwaitStep(statement, context, index) {
       ? statement.shape ?? statement.init.shape ?? awaitedExpression?.shape ?? null
       : undefined,
     arrayElementType: statement.arrayElementType ?? statement.init.arrayElementType ?? awaitedExpression?.arrayElementType ?? 'unknown',
+    mapKeyType: awaitedType === 'map'
+      ? statement.mapKeyType ?? statement.init.mapKeyType ?? awaitedExpression?.mapKeyType ?? 'unknown'
+      : undefined,
+    mapValueType: awaitedType === 'map'
+      ? statement.mapValueType ?? statement.init.mapValueType ?? awaitedExpression?.mapValueType ?? 'unknown'
+      : undefined,
     awaitedExpression: awaitedPromiseExpression == null ? awaitedExpression : null,
     awaitedPromiseExpression
   }
@@ -1342,6 +1355,12 @@ function resolveAsyncTaskLocalPromiseAwaitStep(promiseStatement, awaitStatement,
       ? awaitStatement.shape ?? awaitStatement.init.shape ?? awaitedPromiseExpression.shape ?? null
       : undefined,
     arrayElementType: awaitStatement.arrayElementType ?? awaitStatement.init.arrayElementType ?? awaitedPromiseExpression.arrayElementType,
+    mapKeyType: awaitedType === 'map'
+      ? awaitStatement.mapKeyType ?? awaitStatement.init.mapKeyType ?? awaitedPromiseExpression.mapKeyType ?? 'unknown'
+      : undefined,
+    mapValueType: awaitedType === 'map'
+      ? awaitStatement.mapValueType ?? awaitStatement.init.mapValueType ?? awaitedPromiseExpression.mapValueType ?? 'unknown'
+      : undefined,
     awaitedExpression: null,
     awaitedPromiseExpression
   }
@@ -1619,6 +1638,11 @@ function registerAsyncTaskLocalMetadata(name, valueType, item, context) {
     registerObjectShape(context, name, item.shape)
   } else if (valueType === 'array') {
     context.runtimeArrayElementTypes.set(name, item.arrayElementType ?? 'unknown')
+  } else if (valueType === 'map') {
+    context.mapTypes.set(name, {
+      key: item.mapKeyType ?? 'unknown',
+      value: item.mapValueType ?? 'unknown'
+    })
   }
 }
 
