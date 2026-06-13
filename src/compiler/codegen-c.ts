@@ -731,6 +731,7 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
 
     const cName = emitCIdentifier(declaration.name)
     const successPhases = createAsyncTaskSuccessPhases(body)
+    const tryPhases = createAsyncTaskTryPhases(body.tryRegion, successPhases)
     const wrapper = {
       key: declaration.name,
       functionName: declaration.name,
@@ -744,6 +745,7 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
       prefixStatements: body.prefixStatements ?? [],
       prefixLocals: body.prefixLocals ?? [],
       successPhases,
+      tryPhases,
       returnExpression: body.returnExpression,
       returnType: body.returnType,
       tryRegion: body.tryRegion ?? null
@@ -766,6 +768,45 @@ function createAsyncTaskSuccessPhases(body) {
 }
 
 function appendAsyncTaskSuccessPhase(phases, kind, statements) {
+  if ((statements?.length ?? 0) === 0) {
+    return
+  }
+
+  phases.push({
+    kind,
+    statements
+  })
+}
+
+function createAsyncTaskTryPhases(tryRegion, successPhases) {
+  if (tryRegion == null) {
+    return []
+  }
+
+  const phases: any[] = []
+  const successPrefixFinalizerStatements = successPhases
+    .filter(phase => phase.kind === 'prefix-finalizer')
+    .flatMap(phase => phase.statements)
+  const successFinalizerStatements = [
+    ...(successPrefixFinalizerStatements.length > 0 ? [] : tryRegion.preHandlerFinalizerStatements ?? []),
+    ...(tryRegion.finalizerStatements ?? [])
+  ]
+  const rejectFinalizerStatements = [
+    ...successPrefixFinalizerStatements,
+    ...(tryRegion.preHandlerFinalizerStatements ?? []),
+    ...(tryRegion.finalizerStatements ?? [])
+  ]
+  const handlerFinalizerStatements = tryRegion.handlerFinalizerStatements ?? tryRegion.finalizerStatements
+
+  appendAsyncTaskTryPhase(phases, 'success-finalizer', successFinalizerStatements)
+  appendAsyncTaskTryPhase(phases, 'reject-finalizer', rejectFinalizerStatements)
+  appendAsyncTaskTryPhase(phases, 'handler-prelude', tryRegion.preHandlerFinalizerStatements)
+  appendAsyncTaskTryPhase(phases, 'handler-finalizer', handlerFinalizerStatements)
+
+  return phases
+}
+
+function appendAsyncTaskTryPhase(phases, kind, statements) {
   if ((statements?.length ?? 0) === 0) {
     return
   }
@@ -2374,9 +2415,10 @@ function collectAsyncTaskSuccessPhaseStatements(wrapper, kinds: string[] | null 
     .flatMap(phase => phase.statements)
 }
 
-function hasAsyncTaskSuccessPhase(wrapper, kind) {
-  return (wrapper.successPhases ?? [])
-    .some(phase => phase.kind === kind && phase.statements.length > 0)
+function collectAsyncTaskTryPhaseStatements(wrapper, kind) {
+  return (wrapper.tryPhases ?? [])
+    .filter(phase => phase.kind === kind)
+    .flatMap(phase => phase.statements)
 }
 
 function emitAsyncTaskFulfilledValueCheck(wrapper, item) {
@@ -2431,14 +2473,7 @@ function emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitC
     return []
   }
 
-  const preHandlerFinalizerStatements = hasAsyncTaskSuccessPhase(wrapper, 'prefix-finalizer')
-    ? []
-    : wrapper.tryRegion.preHandlerFinalizerStatements ?? []
-
-  return emitAsyncTaskTryStatementList([
-    ...preHandlerFinalizerStatements,
-    ...wrapper.tryRegion.finalizerStatements
-  ], wrapper, baseContext, visibleAwaitCount)
+  return emitAsyncTaskTryStatementList(collectAsyncTaskTryPhaseStatements(wrapper, 'success-finalizer'), wrapper, baseContext, visibleAwaitCount)
 }
 
 function emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, visibleAwaitCount) {
@@ -2474,11 +2509,7 @@ function emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, visibleAwaitCo
     return []
   }
 
-  return emitAsyncTaskTryStatementList([
-    ...collectAsyncTaskSuccessPhaseStatements(wrapper, ['prefix-finalizer']),
-    ...(wrapper.tryRegion.preHandlerFinalizerStatements ?? []),
-    ...wrapper.tryRegion.finalizerStatements
-  ], wrapper, baseContext, visibleAwaitCount)
+  return emitAsyncTaskTryStatementList(collectAsyncTaskTryPhaseStatements(wrapper, 'reject-finalizer'), wrapper, baseContext, visibleAwaitCount)
 }
 
 function emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, visibleAwaitCount) {
@@ -2486,7 +2517,7 @@ function emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, visibleAwaitC
     return []
   }
 
-  return emitAsyncTaskTryStatementList(wrapper.tryRegion.preHandlerFinalizerStatements ?? [], wrapper, baseContext, visibleAwaitCount)
+  return emitAsyncTaskTryStatementList(collectAsyncTaskTryPhaseStatements(wrapper, 'handler-prelude'), wrapper, baseContext, visibleAwaitCount)
 }
 
 function emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount) {
@@ -2494,7 +2525,7 @@ function emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount) {
     return []
   }
 
-  return emitAsyncTaskTryStatementList(wrapper.tryRegion.handlerFinalizerStatements ?? wrapper.tryRegion.finalizerStatements, wrapper, baseContext, visibleAwaitCount)
+  return emitAsyncTaskTryStatementList(collectAsyncTaskTryPhaseStatements(wrapper, 'handler-finalizer'), wrapper, baseContext, visibleAwaitCount)
 }
 
 function emitAsyncTaskTryStatementList(statements, wrapper, baseContext, visibleAwaitCount) {
