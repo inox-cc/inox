@@ -926,19 +926,25 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   const returnStatement = hasPostNestedStatements
     ? postNestedStatements.at(-1)
     : innerTryStatements.at(-1)
+  const innerAwaitStatements = hasPostNestedStatements ? innerTryStatements : innerTryStatements.slice(0, -1)
+  const innerPrefixResult = splitAsyncTaskLeadingPrefixStatements(innerAwaitStatements)
 
-  if (returnStatement?.type !== 'ReturnStatement') {
+  if (returnStatement?.type !== 'ReturnStatement' || innerPrefixResult == null) {
     return null
   }
 
-  const prefixResult = resolveAsyncTaskPrefixLocals(context, params, tryChainResult.prefixStatements)
+  const prefixStatements = [
+    ...tryChainResult.prefixStatements,
+    ...innerPrefixResult.prefixStatements
+  ]
+  const prefixResult = resolveAsyncTaskPrefixLocals(context, params, prefixStatements)
 
   if (prefixResult == null) {
     return null
   }
 
   const prefixContext = prefixResult.context
-  const awaits = resolveAsyncTaskAwaitSteps(hasPostNestedStatements ? innerTryStatements : innerTryStatements.slice(0, -1), prefixContext)
+  const awaits = resolveAsyncTaskAwaitSteps(innerPrefixResult.awaitStatements, prefixContext)
 
   if (awaits == null) {
     return null
@@ -970,7 +976,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
 
   if (
     (handlerSource != null && handler == null)
-    || hasUnsupportedAsyncTaskTryControlFlow(tryChainResult.prefixStatements)
+    || hasUnsupportedAsyncTaskTryControlFlow(prefixStatements)
     || hasUnsupportedAsyncTaskTryControlFlow(successStatements)
     || finalizers.some(statements => hasUnsupportedAsyncTaskTryControlFlow(statements))
   ) {
@@ -979,7 +985,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
 
   return {
     awaits,
-    prefixStatements: tryChainResult.prefixStatements,
+    prefixStatements,
     prefixLocals: prefixResult.locals,
     successPrefixFinalizerStatements: hasPostNestedStatements
       ? collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, tryChainResult.postNestedOwnerIndex + 1)
@@ -994,6 +1000,47 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
       handlerFinalizerStatements
     }
   }
+}
+
+function splitAsyncTaskLeadingPrefixStatements(statements) {
+  const prefixStatements: any[] = []
+  let index = 0
+
+  while (index < statements.length) {
+    const statement = statements[index]
+    const nextStatement = statements[index + 1]
+
+    if (
+      isAsyncTaskDirectAwaitStatementShape(statement)
+      || isAsyncTaskStatementAwaitShape(statement)
+      || isAsyncTaskLocalPromiseAwaitShape(statement, nextStatement)
+    ) {
+      break
+    }
+
+    prefixStatements.push(statement)
+    index += 1
+  }
+
+  return {
+    prefixStatements,
+    awaitStatements: statements.slice(index)
+  }
+}
+
+function isAsyncTaskDirectAwaitStatementShape(statement) {
+  return statement?.type === 'VariableDeclaration' && statement.init?.type === 'AwaitExpression'
+}
+
+function isAsyncTaskStatementAwaitShape(statement) {
+  return statement?.type === 'ExpressionStatement' && statement.expression?.type === 'AwaitExpression'
+}
+
+function isAsyncTaskLocalPromiseAwaitShape(promiseStatement, awaitStatement) {
+  return promiseStatement?.type === 'VariableDeclaration'
+    && promiseStatement.init?.valueType === 'promise'
+    && awaitStatement?.type === 'VariableDeclaration'
+    && awaitStatement.init?.type === 'AwaitExpression'
 }
 
 function collectAsyncTaskNestedTryChain(tryStatement) {

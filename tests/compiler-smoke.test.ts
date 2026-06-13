@@ -4913,6 +4913,36 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*printf\("%s\\n", "done"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/)
 })
 
+test('lowers nested async task frame inner body prefix locals into awaited expressions', () => {
+  const result = compileSource(`async function work(): Promise<Buffer> {
+  try {
+    try {
+      const prefix: Buffer = Buffer.from('ok', 'utf8')
+      const pending: Promise<number> = Promise.resolve(prefix.length)
+      const value: number = await pending
+      return prefix
+    } finally {
+      console.log('inner')
+    }
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const result: Buffer = await work()
+  console.log(result.length, result.toString())
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value prefix_prefix;[\s\S]*double local_value;[\s\S]*\} ccjs_async_task_work_frame;/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_start\(ccjs_loop\* ccjs_loop, ccjs_promise\*\* out\) \{[\s\S]*ccjs_value prefix = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t\*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*ccjs_retain\(frame->prefix_prefix\);[\s\S]*ccjs_bytes_len\(prefix, &ccjs_bytes_len_\d+\)[\s\S]*status = ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(\(\(double\)ccjs_bytes_len_\d+\)\), &frame->awaited\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value prefix = frame->prefix_prefix;[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, prefix\);/)
+  assert.match(result.code, /static void ccjs_async_task_work_finalize\(void\* context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/)
+})
+
 test('lowers nested async task frame post try statements through finalizers', () => {
   const result = compileSource(`async function work(): Promise<number> {
   try {

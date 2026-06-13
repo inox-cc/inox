@@ -2842,6 +2842,60 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame inner body prefix locals compile and run', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-inner-prefix-local-'))
+  const source = join(dir, 'async-task-frame-inner-prefix-local.c')
+  const output = join(dir, 'async-task-frame-inner-prefix-local')
+
+  try {
+    const result = compileSource(`async function work(): Promise<Buffer> {
+  try {
+    try {
+      const prefix: Buffer = Buffer.from('ok', 'utf8')
+      const pending: Promise<number> = Promise.resolve(prefix.length)
+      const value: number = await pending
+      return prefix
+    } finally {
+      console.log('inner')
+    }
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const result: Buffer = await work()
+  console.log(result.length, result.toString())
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'inner\nouter\n2 ok\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C async task frame object prefix locals compile and run', async t => {
   const probe = await runCommand('cc', ['--version'])
 
