@@ -4217,6 +4217,31 @@ export async function main(): Promise<void> {
   assert.doesNotMatch(result.code, /addLater\(2, 4\)/)
 })
 
+test('lowers async task frame direct managed return values to C', () => {
+  const result = compileSource(`async function work(): Promise<Buffer> {
+  try {
+    try {
+      const value: number = await Promise.resolve(3)
+      return Buffer.from('ok', 'utf8')
+    } finally {
+      console.log('inner')
+    }
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const result: Buffer = await work()
+  console.log(result.toString())
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value ccjs_bytes_\d+ = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t\*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_bytes_\d+\);[\s\S]*ccjs_release\(ccjs_bytes_\d+\);[\s\S]*return status;/)
+})
+
 test('lowers multiple awaits in async task frames to C state switches', () => {
   const result = compileSource(`async function addTwo(input: number, delta: number): Promise<number> {
   const first = await Promise.resolve(input)

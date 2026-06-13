@@ -2312,6 +2312,58 @@ export async function main(): Promise<void> {
   }
 })
 
+test('generated C async task frame direct managed return values compile and run', async t => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-direct-managed-return-'))
+  const source = join(dir, 'async-task-frame-direct-managed-return.c')
+  const output = join(dir, 'async-task-frame-direct-managed-return')
+
+  try {
+    const result = compileSource(`async function work(): Promise<Buffer> {
+  try {
+    try {
+      const value: number = await Promise.resolve(3)
+      return Buffer.from('ok', 'utf8')
+    } finally {
+      console.log('inner')
+    }
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const result: Buffer = await work()
+  console.log(result.toString())
+}
+`, {
+      target: 'c'
+    })
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'inner\nouter\nok\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C multiple-await async task frame compiles and runs', async t => {
   const probe = await runCommand('cc', ['--version'])
 

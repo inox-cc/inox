@@ -2191,7 +2191,8 @@ function emitAsyncTaskResumeDeclaration(wrapper, baseContext) {
   const returnValue = hasAsyncTaskStatementLocalDeclarations(wrapper.successStatements ?? [])
     ? null
     : emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
-  const cases = wrapper.awaits.flatMap(item => emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue))
+  const returnValueOwnedValues = returnValue == null ? [] : [...context.ownedValues]
+  const cases = wrapper.awaits.flatMap(item => emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue, returnValueOwnedValues))
 
   return [
     `static ccjs_status ${wrapper.resumeName}(void* context, ccjs_value ccjs_value_input) {`,
@@ -2207,7 +2208,7 @@ function emitAsyncTaskResumeDeclaration(wrapper, baseContext) {
   ]
 }
 
-function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
+function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue, returnValueOwnedValues) {
   const nextItem = wrapper.awaits[item.index + 1] ?? null
   const valueCheck = emitAsyncTaskFulfilledValueCheck(wrapper, item)
   const lines = [
@@ -2224,6 +2225,14 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
     lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1).map(line => `  ${line}`))
     if (returnValue == null) {
       lines.push(...emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext).map(line => `  ${line}`))
+    } else if (returnValueOwnedValues.length > 0) {
+      lines.push(...returnValueOwnedValues.map(name => `  ccjs_value ${name} = ccjs_undefined_value();`))
+      lines.push(...emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
+      lines.push(...returnValue.lines.map(line => `  ${line}`))
+      lines.push(...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
+      lines.push(`  status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+      lines.push(...returnValueOwnedValues.toReversed().map(name => `  ccjs_release(${name});`))
+      lines.push('  return status;')
     } else {
       lines.push(...emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
       lines.push(...returnValue.lines.map(line => `  ${line}`))
