@@ -4682,6 +4682,30 @@ export async function main(): Promise<void> {
   assert.match(errorResult.code, /if \(ccjs_object_get_known\(error, 1, &ccjs_log_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
+test('rejects nested async catch state-machine gaps with stable diagnostics', () => {
+  assertDiagnostic(`async function work(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.reject('inner')
+      return value
+    } catch (error) {
+      console.log(error)
+      return 7
+    }
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const promise = work()
+  console.log(await promise)
+}
+`, 'CCJS_C_ASYNC', {
+    target: 'c'
+  })
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]

@@ -5006,6 +5006,10 @@ function emitSwitchCaseLabel(expression, context) {
 }
 
 function emitTryStatement(statement, context) {
+  if (statement.handler != null && currentErrorTarget(context) != null && containsAwaitExpression(statement.block)) {
+    context.diagnostics.push(diagnostic('CCJS_C_ASYNC', 'nested async try/catch state-machine lowering is not supported by the current C backend slice', statement.loc))
+  }
+
   registerErrorChannel(context)
 
   const id = nextCName(context, 'ccjs_try')
@@ -5676,7 +5680,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
   }
 
   if (!['number', 'boolean'].includes(inferred)) {
-    context.diagnostics.push(diagnostic(cUnsupportedExpressionCode(inferred), 'this expression is not supported by the current C backend slice', statement.loc))
+    context.diagnostics.push(diagnostic(cUnsupportedVariableDeclarationCode(statement, inferred), 'this expression is not supported by the current C backend slice', statement.loc))
 
     return {
       lines: [],
@@ -10891,6 +10895,34 @@ function cUnsupportedExpressionCode(type) {
   }
 
   return 'CCJS_C_UNSUPPORTED_EXPR'
+}
+
+function cUnsupportedVariableDeclarationCode(statement, type) {
+  if (statement?.init?.type === 'AwaitExpression') {
+    return 'CCJS_C_ASYNC'
+  }
+
+  return cUnsupportedExpressionCode(type)
+}
+
+function containsAwaitExpression(node) {
+  if (node == null) {
+    return false
+  }
+
+  if (Array.isArray(node)) {
+    return node.some(item => containsAwaitExpression(item))
+  }
+
+  if (typeof node !== 'object') {
+    return false
+  }
+
+  if (node.type === 'AwaitExpression') {
+    return true
+  }
+
+  return Object.values(node).some(value => containsAwaitExpression(value))
 }
 
 function isOptionalChainExpression(expression) {
