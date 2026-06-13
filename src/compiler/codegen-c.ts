@@ -742,6 +742,7 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
       awaits: body.awaits,
       prefixStatements: body.prefixStatements ?? [],
       prefixLocals: body.prefixLocals ?? [],
+      successPreFinalizerStatements: body.successPreFinalizerStatements ?? [],
       successPrefixFinalizerStatements: body.successPrefixFinalizerStatements ?? [],
       successStatements: body.successStatements ?? [],
       returnExpression: body.returnExpression,
@@ -844,6 +845,7 @@ function resolveAsyncTaskWrapperBody(statement, declaration: IrFunctionDeclarati
     awaits,
     prefixStatements: [],
     prefixLocals: [],
+    successPreFinalizerStatements: [],
     successPrefixFinalizerStatements: [],
     successStatements: [],
     returnExpression,
@@ -899,6 +901,7 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
     awaits,
     prefixStatements: [],
     prefixLocals: [],
+    successPreFinalizerStatements: [],
     successPrefixFinalizerStatements: [],
     successStatements: [],
     returnExpression,
@@ -946,11 +949,14 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   const prefixContext = prefixResult.context
   const awaitResult = resolveAsyncTaskAwaitStepsAndTrailingStatements(innerPrefixResult.awaitStatements, prefixContext)
 
-  if (awaitResult == null || (hasPostNestedStatements && awaitResult.trailingStatements.length > 0)) {
+  if (awaitResult == null) {
     return null
   }
 
   const awaits = awaitResult.awaits
+  const successPreFinalizerStatements = hasPostNestedStatements
+    ? awaitResult.trailingStatements
+    : []
   const successStatements = hasPostNestedStatements
     ? postNestedStatements.slice(0, -1)
     : awaitResult.trailingStatements
@@ -980,6 +986,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   if (
     (handlerSource != null && handler == null)
     || hasUnsupportedAsyncTaskTryControlFlow(prefixStatements)
+    || hasUnsupportedAsyncTaskTryControlFlow(successPreFinalizerStatements)
     || hasUnsupportedAsyncTaskTryControlFlow(successStatements)
     || finalizers.some(statements => hasUnsupportedAsyncTaskTryControlFlow(statements))
   ) {
@@ -990,6 +997,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     awaits,
     prefixStatements,
     prefixLocals: prefixResult.locals,
+    successPreFinalizerStatements,
     successPrefixFinalizerStatements: hasPostNestedStatements
       ? collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, tryChainResult.postNestedOwnerIndex + 1)
       : [],
@@ -2402,6 +2410,7 @@ function emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitC
 
 function emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, visibleAwaitCount) {
   return emitAsyncTaskTryStatementList([
+    ...(wrapper.successPreFinalizerStatements ?? []),
     ...(wrapper.successPrefixFinalizerStatements ?? []),
     ...(wrapper.successStatements ?? [])
   ], wrapper, baseContext, visibleAwaitCount)
@@ -2412,6 +2421,7 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext
   const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, visibleAwaitCount)
   const result = withVariableScope(context, () => {
     const preludeLines = emitStatementList([
+      ...(wrapper.successPreFinalizerStatements ?? []),
       ...(wrapper.successPrefixFinalizerStatements ?? []),
       ...(wrapper.successStatements ?? [])
     ], context)

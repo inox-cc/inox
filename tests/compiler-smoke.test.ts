@@ -4998,6 +4998,33 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*const double total = \(value \+ 4\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(total\)\);/)
 })
 
+test('lowers nested async task frame post await locals before post-nested returns', () => {
+  const result = compileSource(`async function work(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.resolve(3)
+      const total: number = value + 4
+      console.log(total)
+    } finally {
+      console.log('inner')
+    }
+    console.log('after')
+    return 9
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  console.log(await work())
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*const double total = \(value \+ 4\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "after"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(9\)\);/)
+})
+
 test('lowers nested async task frame post try statements through finalizers', () => {
   const result = compileSource(`async function work(): Promise<number> {
   try {
