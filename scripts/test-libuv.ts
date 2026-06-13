@@ -10,7 +10,9 @@ const expectedStdout = 'hello cmake score 60\ntext ccjs cmake example 😀 123\n
 try {
   await access(uvHeaderPath)
 } catch {
-  console.log('Libuv checks skipped: third_party/libuv is not initialized. Run `pnpm run bootstrap:libuv` to enable them.')
+  console.log(
+    'Libuv checks skipped: third_party/libuv is not initialized. Run `pnpm run libuv:bootstrap` to enable them.'
+  )
   process.exit(0)
 }
 
@@ -24,13 +26,7 @@ if (cmakeProbe.code !== 0) {
 const buildDir = await mkdtemp(join(tmpdir(), 'ccjs-libuv-cmake-'))
 
 try {
-  await checkCommand('configure libuv example', 'cmake', [
-    '-S',
-    'example',
-    '-B',
-    buildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
-  ])
+  await checkCommand('configure libuv example', 'cmake', ['-S', 'example', '-B', buildDir, '-DCCJS_LOOP_BACKEND=libuv'])
   await checkCommand('build libuv example', 'cmake', ['--build', buildDir])
 
   const run = await runCommand(join(buildDir, 'ccjs_cmake_example'), [])
@@ -39,7 +35,9 @@ try {
   if (run.code !== 0) {
     fail('run libuv example', run)
   } else if (stdout !== expectedStdout) {
-    console.error(`Libuv example stdout mismatch.\nExpected: ${JSON.stringify(expectedStdout)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Libuv example stdout mismatch.\nExpected: ${JSON.stringify(expectedStdout)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exitCode = 1
   } else {
     console.log('Libuv checks passed')

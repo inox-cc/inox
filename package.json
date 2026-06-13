@@ -9,9 +9,12 @@
     "ccjs": "./bin/ccjs.ts"
   },
   "scripts": {
-    "bootstrap:libuv": "node scripts/bootstrap-libuv.ts",
+    "example": "pnpm run example:prepare && cmake --build example/build && ./example/build/ccjs_cmake_example",
+    "example:libuv": "pnpm run example:prepare-libuv && cmake --build example/build-libuv && ./example/build-libuv/ccjs_cmake_example",
+    "example:prepare": "cmake -S example -B example/build",
+    "example:prepare-libuv": "pnpm run libuv:bootstrap && cmake -S example -B example/build-libuv -DCCJS_LOOP_BACKEND=libuv",
+    "libuv:bootstrap": "node scripts/bootstrap-libuv.ts",
     "build": "node scripts/build.ts",
-    "example": "cmake --build example/build && ./example/build/ccjs_cmake_example",
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",

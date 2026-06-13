@@ -1,3 +1,5 @@
 example/build/**
+example/build-libuv/**
 tests/fixtures/**
 tests/snapshots/**
+third_party/**
