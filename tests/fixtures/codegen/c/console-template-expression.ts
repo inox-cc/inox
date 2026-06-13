@@ -1,7 +1,6 @@
 // @targets c
-// @expect diagnostic
-// @diagnostic CCJS_C_STRING_EXPR
+// @expect pass
+// @stdout hello Ada!
 
 const name = 'Ada'
 console.log(`hello ${name + '!'}`)
-

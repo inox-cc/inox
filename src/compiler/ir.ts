@@ -1084,6 +1084,11 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     recordCallFeatures(node, features)
   }
 
+  if (node.type === 'TemplateLiteral' && node.raw.includes('${')) {
+    features.add('runtime-values')
+    features.add('string-bytes')
+  }
+
   if (node.type === 'IndexExpression' && node.collectionKind === 'map' && node.nullable === true) {
     features.add('collections')
     features.add('runtime-values')

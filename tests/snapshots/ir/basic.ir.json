@@ -2,11 +2,13 @@
   "version": 1,
   "features": [
     "objects",
-    "runtime-values"
+    "runtime-values",
+    "string-bytes"
   ],
   "runtimeRequirements": [
     "managed-values",
-    "objects"
+    "objects",
+    "string-bytes"
   ],
   "topLevelItems": [
     {

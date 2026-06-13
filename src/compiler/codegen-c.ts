@@ -13,6 +13,8 @@ import {
   collectIrTopLevelNodesFromPrograms,
   findIrEntryProgram
 } from './ir.ts'
+import { tokenize } from './lexer.ts'
+import { parse } from './parser.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from './ir.ts'
 import type {
   AnyNode,
@@ -8674,6 +8676,10 @@ function emitCValueExpression(expression, context) {
     return emitCStringConcatValueExpression(expression, context)
   }
 
+  if (expression?.type === 'TemplateLiteral') {
+    return emitCTemplateLiteralValueExpression(expression, context)
+  }
+
   if (expression?.type === 'ArrayLiteral') {
     return emitCArrayLiteralValueExpression(expression, context)
   }
@@ -9519,6 +9525,137 @@ function emitCStringConcatValueExpression(expression, context) {
   }
 }
 
+function emitCTemplateLiteralValueExpression(expression, context) {
+  const parts = parseTemplateLiteralParts(expression.raw, context, expression.loc)
+  const operands = parts
+    .map((part) => {
+      if (part.type === 'text') {
+        return {
+          lines: [],
+          bytes: cStringLiteral(part.value),
+          length: `${utf8ByteLength(part.value)}`
+        }
+      }
+
+      const placeholder = parseTemplatePlaceholderExpression(part.value, part.loc, context)
+
+      return placeholder == null ? null : emitPreparedTemplatePlaceholderBytesOperand(placeholder, context)
+    })
+    .filter((operand) => operand != null)
+
+  if (operands.length === 0) {
+    const temp = nextCName(context, 'ccjs_value')
+    registerOwnedValue(context, temp)
+
+    return {
+      lines: [
+        ...emitPrepareOwnedValueWrite(temp),
+        emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, "", 0, &${temp})`, context)
+      ],
+      expression: temp
+    }
+  }
+
+  const lines = operands.flatMap((operand) => operand.lines)
+
+  if (operands.length === 1) {
+    const [operand] = operands
+    const temp = nextCName(context, 'ccjs_value')
+    registerOwnedValue(context, temp)
+
+    return {
+      lines: [
+        ...lines,
+        ...emitPrepareOwnedValueWrite(temp),
+        emitStatusCheck(
+          `ccjs_string_from_literal(&ccjs_default_allocator, ${operand.bytes}, ${operand.length}, &${temp})`,
+          context
+        )
+      ],
+      expression: temp
+    }
+  }
+
+  let current = operands[0]
+  let currentValue = ''
+
+  for (const operand of operands.slice(1)) {
+    const temp = nextCName(context, 'ccjs_value')
+    registerOwnedValue(context, temp)
+
+    if (currentValue !== '') {
+      const string = nextCName(context, 'ccjs_template_string')
+
+      lines.push(`ccjs_string* ${string} = (ccjs_string*)${currentValue}.as.ref;`)
+      current = {
+        lines: [],
+        bytes: `${string}->bytes`,
+        length: `${string}->len`
+      }
+    }
+
+    lines.push(
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(
+        `ccjs_string_concat_parts(&ccjs_default_allocator, ${current.bytes}, ${current.length}, ${operand.bytes}, ${operand.length}, &${temp})`,
+        context
+      )
+    )
+
+    currentValue = temp
+  }
+
+  return {
+    lines,
+    expression: currentValue
+  }
+}
+
+function emitPreparedTemplatePlaceholderBytesOperand(expression, context) {
+  const type = inferExpressionType(expression, context)
+
+  if (type === 'string') {
+    return emitPreparedStringBytesOperand(expression, context, 'ccjs_template_string')
+  }
+
+  if (type === 'number' || type === 'boolean' || type === 'null') {
+    const value = emitCStringConversionValueExpression(
+      {
+        type: 'CallExpression',
+        callee: {
+          type: 'Reference',
+          path: ['String'],
+          loc: expression.loc
+        },
+        args: [expression],
+        loc: expression.loc
+      },
+      context
+    )
+    const string = nextCName(context, 'ccjs_template_string')
+
+    return {
+      lines: [...value.lines, `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`],
+      bytes: `${string}->bytes`,
+      length: `${string}->len`
+    }
+  }
+
+  context.diagnostics.push(
+    diagnostic(
+      cUnsupportedExpressionCode(type),
+      'template placeholders currently support string, number, boolean and null expressions in C',
+      expression?.loc
+    )
+  )
+
+  return {
+    lines: [],
+    bytes: '""',
+    length: '0'
+  }
+}
+
 function emitCStringConversionValueExpression(expression, context) {
   const [arg] = expression.args
   const type = inferExpressionType(arg, context)
@@ -9921,10 +10058,6 @@ function emitConsoleLogStatement(args, context) {
 }
 
 function emitConsoleLogValue(expression, context) {
-  if (expression?.type === 'TemplateLiteral' && expression.raw.includes('${')) {
-    return emitTemplateLogValue(expression, context)
-  }
-
   const type = inferExpressionType(expression, context)
 
   if (type === 'string') {
@@ -9950,54 +10083,30 @@ function emitConsoleLogValue(expression, context) {
   }
 }
 
-function emitTemplateLogValue(expression, context) {
-  const lines: string[] = []
-  const formats: string[] = []
-  const values: string[] = []
-  const parts = parseTemplateLogParts(expression.raw, context, expression.loc)
-
-  for (const part of parts) {
-    if (part.type === 'text') {
-      formats.push(part.value.replaceAll('%', '%%'))
-      continue
-    }
-
-    const placeholder = parseTemplatePlaceholder(part.value, expression.loc, context)
-
-    if (placeholder == null) {
-      continue
-    }
-
-    const value = emitConsoleLogValue(placeholder, context)
-
-    lines.push(...value.lines)
-    formats.push(value.format)
-    values.push(...value.values)
-  }
-
-  return {
-    lines,
-    format: formats.join(''),
-    values
-  }
-}
-
-function parseTemplateLogParts(raw, context, loc) {
-  const body = raw.slice(1, -1)
-  const parts: { type: string; value: string }[] = []
+function parseTemplateLiteralParts(raw, context, loc) {
+  const parts: { type: string; value: string; loc?: SourceLocation }[] = []
   let text = ''
-  let index = 0
+  let index = 1
+  const end = raw.endsWith('`') ? raw.length - 1 : raw.length
+  let line = loc?.line ?? 1
+  let column = (loc?.column ?? 1) + 1
 
-  while (index < body.length) {
-    const char = body[index]
+  while (index < end) {
+    const char = raw[index]
 
     if (char === '\\') {
-      text += body.slice(index, index + 2)
+      text += raw.slice(index, Math.min(index + 2, end))
+      advanceTemplateLocation(char)
+
+      if (index + 1 < end) {
+        advanceTemplateLocation(raw[index + 1])
+      }
+
       index += 2
       continue
     }
 
-    if (char === '$' && body[index + 1] === '{') {
+    if (char === '$' && raw[index + 1] === '{') {
       if (text !== '') {
         parts.push({
           type: 'text',
@@ -10006,24 +10115,82 @@ function parseTemplateLogParts(raw, context, loc) {
         text = ''
       }
 
-      const end = body.indexOf('}', index + 2)
+      advanceTemplateLocation('$')
+      advanceTemplateLocation('{')
+      index += 2
 
-      if (end === -1) {
+      const placeholderStart = index
+      const placeholderLoc = currentTemplateLocation()
+      let depth = 0
+      let quote: string | null = null
+
+      while (index < end) {
+        const current = raw[index]
+
+        if (quote != null) {
+          advanceTemplateLocation(current)
+
+          if (current === '\\' && index + 1 < end) {
+            index += 1
+            advanceTemplateLocation(raw[index])
+          } else if (current === quote) {
+            quote = null
+          }
+
+          index += 1
+          continue
+        }
+
+        if (current === '"' || current === "'" || current === '`') {
+          quote = current
+          advanceTemplateLocation(current)
+          index += 1
+          continue
+        }
+
+        if (current === '{') {
+          depth += 1
+          advanceTemplateLocation(current)
+          index += 1
+          continue
+        }
+
+        if (current === '}') {
+          if (depth === 0) {
+            break
+          }
+
+          depth -= 1
+          advanceTemplateLocation(current)
+          index += 1
+          continue
+        }
+
+        advanceTemplateLocation(current)
+        index += 1
+      }
+
+      if (index >= end) {
         context.diagnostics.push(
-          diagnostic('CCJS_C_STRING_EXPR', 'unterminated template placeholder in C console.log', loc)
+          diagnostic('CCJS_C_STRING_EXPR', 'unterminated template placeholder in C template literal', loc)
         )
         return parts
       }
 
+      const placeholder = trimTemplatePlaceholder(raw.slice(placeholderStart, index), placeholderLoc)
+
       parts.push({
         type: 'placeholder',
-        value: body.slice(index + 2, end).trim()
+        value: placeholder.value,
+        loc: placeholder.loc
       })
-      index = end + 1
+      advanceTemplateLocation('}')
+      index += 1
       continue
     }
 
     text += char
+    advanceTemplateLocation(char)
     index += 1
   }
 
@@ -10035,64 +10202,186 @@ function parseTemplateLogParts(raw, context, loc) {
   }
 
   return parts
+
+  function currentTemplateLocation(): SourceLocation {
+    return {
+      ...(loc?.file == null ? {} : { file: loc.file }),
+      line,
+      column
+    }
+  }
+
+  function advanceTemplateLocation(char: string): void {
+    if (char === '\n') {
+      line += 1
+      column = 1
+      return
+    }
+
+    column += 1
+  }
 }
 
-function parseTemplatePlaceholder(value, loc, context) {
+function trimTemplatePlaceholder(value, loc) {
+  let index = 0
+  let line = loc.line
+  let column = loc.column
+
+  while (index < value.length && /\s/.test(value[index])) {
+    if (value[index] === '\n') {
+      line += 1
+      column = 1
+    } else {
+      column += 1
+    }
+
+    index += 1
+  }
+
+  return {
+    value: value.slice(index).trimEnd(),
+    loc: {
+      ...(loc.file == null ? {} : { file: loc.file }),
+      line,
+      column
+    }
+  }
+}
+
+function parseTemplatePlaceholderExpression(value, loc, context) {
   if (value === '') {
-    context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'empty template placeholder in C console.log', loc))
+    context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'empty template placeholder in C template literal', loc))
     return null
   }
 
-  if (/^-?\d+(?:\.\d+)?$/.test(value)) {
-    return {
-      type: 'NumberLiteral',
-      value,
-      loc
-    }
-  }
+  const prefix = 'const __ccjs_template = '
 
-  if (value === 'true' || value === 'false') {
-    return {
-      type: 'BooleanLiteral',
-      value: value === 'true',
-      loc
-    }
-  }
+  try {
+    const program = parse(tokenize(`${prefix}${value}`, loc.file == null ? {} : { file: loc.file }))
+    const statement = program.body[0]
+    const expression = statement?.type === 'VariableDeclaration' ? statement.init : null
 
-  const names = value.split('.')
-
-  if (!names.every((name) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name))) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_STRING_EXPR',
-        'C console.log template placeholders currently support only identifiers and dotted members',
-        loc
+    if (program.body.length !== 1 || expression == null) {
+      context.diagnostics.push(
+        diagnostic('CCJS_C_STRING_EXPR', 'template placeholder must contain exactly one expression', loc)
       )
-    )
-    return null
+      return null
+    }
+
+    shiftTemplatePlaceholderExpressionLocations(expression, loc, prefix.length)
+
+    return validateTemplatePlaceholderExpressionReferences(expression, context) ? expression : null
+  } catch (error) {
+    if (error instanceof CompileError) {
+      const first = error.diagnostics[0]
+
+      context.diagnostics.push(
+        diagnostic(
+          first?.code ?? 'CCJS_C_STRING_EXPR',
+          first == null
+            ? 'invalid template placeholder expression'
+            : `invalid template placeholder expression: ${first.message}`,
+          loc
+        )
+      )
+
+      return null
+    }
+
+    throw error
+  }
+}
+
+function validateTemplatePlaceholderExpressionReferences(expression, context) {
+  const reported = new Set<string>()
+  let valid = true
+
+  visit(expression, null, '')
+
+  return valid
+
+  function visit(value, parent, key) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item, parent, key)
+      }
+
+      return
+    }
+
+    if (value == null || typeof value !== 'object') {
+      return
+    }
+
+    if (value.type === 'Reference') {
+      const name = value.path[0]
+
+      if (!isKnownTemplatePlaceholderReference(value, parent, key, context)) {
+        const reportKey = `${name}:${value.loc?.line ?? 1}:${value.loc?.column ?? 1}`
+
+        if (!reported.has(reportKey)) {
+          reported.add(reportKey)
+          context.diagnostics.push(diagnostic('CCJS_UNKNOWN_NAME', `unknown name ${name}`, value.loc))
+        }
+
+        valid = false
+      }
+    }
+
+    for (const [childKey, child] of Object.entries(value)) {
+      if (childKey === 'loc' || childKey.endsWith('Loc')) {
+        continue
+      }
+
+      visit(child, value, childKey)
+    }
+  }
+}
+
+function isKnownTemplatePlaceholderReference(expression, parent, key, context) {
+  const name = expression.path[0]
+
+  return (
+    context.variables.has(expression.path.join('.')) ||
+    context.variables.has(name) ||
+    context.functionNames.has(name) ||
+    isCJsGlobalRoot(name, context) ||
+    (key === 'callee' &&
+      parent?.type === 'CallExpression' &&
+      expression.path.length === 1 &&
+      ['Number', 'String'].includes(name))
+  )
+}
+
+function shiftTemplatePlaceholderExpressionLocations(value, loc, prefixLength) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      shiftTemplatePlaceholderExpressionLocations(item, loc, prefixLength)
+    }
+
+    return
   }
 
-  if (!context.variables.has(names[0])) {
-    context.diagnostics.push(diagnostic('CCJS_UNKNOWN_NAME', `unknown name ${names[0]}`, loc))
-    return null
+  if (value == null || typeof value !== 'object') {
+    return
   }
 
-  let expression: AnyNode = {
-    type: 'Reference',
-    path: [names[0]],
-    loc
-  }
+  if (typeof value.line === 'number' && typeof value.column === 'number') {
+    const lineOffset = value.line - 1
 
-  for (const property of names.slice(1)) {
-    expression = {
-      type: 'MemberExpression',
-      object: expression,
-      property,
-      loc
+    value.line = loc.line + lineOffset
+    value.column = lineOffset === 0 ? loc.column + value.column - prefixLength - 1 : value.column
+
+    if (loc.file == null) {
+      delete value.file
+    } else {
+      value.file = loc.file
     }
   }
 
-  return expression
+  for (const child of Object.values(value)) {
+    shiftTemplatePlaceholderExpressionLocations(child, loc, prefixLength)
+  }
 }
 
 function emitStringLogValue(expression, context) {
@@ -11013,18 +11302,13 @@ function emitPreparedStringBytesOperand(expression, context, tempPrefix = 'ccjs_
   }
 
   if (expression?.type === 'TemplateLiteral') {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_STRING_EXPR',
-        'template string comparison operands with placeholders are not supported by the current C backend slice',
-        expression.loc
-      )
-    )
+    const value = emitCTemplateLiteralValueExpression(expression, context)
+    const string = nextCName(context, tempPrefix)
 
     return {
-      lines: [],
-      bytes: '""',
-      length: '0'
+      lines: [...value.lines, `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`],
+      bytes: `${string}->bytes`,
+      length: `${string}->len`
     }
   }
 
@@ -13364,6 +13648,7 @@ function isRuntimeProducedStringExpression(expression, context) {
     (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') ||
     (expression?.type === 'AwaitExpression' && inferExpressionType(expression, context) === 'string') ||
     isStringConcatExpression(expression, context) ||
+    (expression?.type === 'TemplateLiteral' && expression.raw.includes('${')) ||
     (isNullishCoalescingExpression(expression) && canLowerCNullishCoalescingExpression(expression, context)) ||
     isBoxedRuntimeStringReference(expression, context)
   )

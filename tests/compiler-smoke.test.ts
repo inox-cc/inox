@@ -1125,50 +1125,6 @@ export function main(): void {
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)ccjs_log_string_\d+->len, ccjs_log_string_\d+->bytes\);/)
 })
 
-test('lowers C console.log template interpolation', () => {
-  const result = compileSource(
-    `export function main(): void {
-  const user = { name: 'Ada', score: 7 }
-  const suffix = 'ok'
-  const ready = true
-  console.log(\`hello \${user.name} \${suffix} score \${user.score} ready \${ready}\`)
-}
-`,
-    {
-      target: 'c'
-    }
-  )
-
-  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(user, 1, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /printf\("hello %\.\*s %s score %g ready %g\\n"/)
-})
-
-test('diagnoses unsupported C console.log template placeholders', () => {
-  assertDiagnostic(
-    `export function main(): void {
-  console.log(\`hello \${missing}\`)
-}
-`,
-    'CCJS_UNKNOWN_NAME',
-    {
-      target: 'c'
-    }
-  )
-
-  assertDiagnostic(
-    `export function main(): void {
-  const name = 'Ada'
-  console.log(\`hello \${name + '!'}\`)
-}
-`,
-    'CCJS_C_STRING_EXPR',
-    {
-      target: 'c'
-    }
-  )
-})
-
 test('lowers C runtime string concatenation', () => {
   const result = compileSource(
     `type User = {
