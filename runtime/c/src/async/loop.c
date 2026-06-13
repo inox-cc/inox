@@ -389,7 +389,13 @@ static ccjs_status ccjs_loop_run_handle(ccjs_timer_handle* handle, ccjs_number n
   handle->running = 0;
 
   if (handle->kind == CCJS_TIMER_INTERVAL && handle->active) {
-    handle->due_ms = now_ms + handle->interval_ms;
+    ccjs_number next_due_ms = handle->due_ms + handle->interval_ms;
+
+    if (handle->interval_ms > 0 && next_due_ms < now_ms) {
+      next_due_ms = now_ms + handle->interval_ms;
+    }
+
+    handle->due_ms = next_due_ms;
   } else {
     ccjs_loop_deactivate_handle(handle);
     ccjs_loop_finalize_handle(handle);
