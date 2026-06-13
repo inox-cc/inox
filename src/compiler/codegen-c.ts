@@ -945,17 +945,18 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   }
 
   const returnContext = createAsyncTaskExpressionContext(context, params, hasPostNestedStatements ? prefixResult.locals : [...prefixResult.locals, ...awaits])
+  const finalizers = collectAsyncTaskTryFinalizers(tryChain)
+  const handlerIndex = findAsyncTaskNearestTryHandlerIndex(tryChain)
+  const handlerSource = handlerIndex < 0 ? null : tryChain[handlerIndex].handler
+  const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
+  const successStatements = hasPostNestedStatements ? postNestedStatements.slice(0, -1) : []
+  registerAsyncTaskStatementListLocals(returnContext, successStatements)
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
 
   if (returnType !== 'void' && returnExpression == null) {
     return null
   }
 
-  const finalizers = collectAsyncTaskTryFinalizers(tryChain)
-  const handlerIndex = findAsyncTaskNearestTryHandlerIndex(tryChain)
-  const handlerSource = handlerIndex < 0 ? null : tryChain[handlerIndex].handler
-  const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
-  const successStatements = hasPostNestedStatements ? postNestedStatements.slice(0, -1) : []
   const successFinalizerStatements = hasPostNestedStatements
     ? collectAsyncTaskTryFinalizerStatements(finalizers, tryChainResult.postNestedOwnerIndex, 0)
     : handlerIndex < 0
@@ -1114,6 +1115,22 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
   return {
     context: result,
     locals
+  }
+}
+
+function registerAsyncTaskStatementListLocals(context, statements) {
+  for (const statement of statements) {
+    if (statement?.type !== 'VariableDeclaration') {
+      continue
+    }
+
+    const valueType = statement.valueType ?? inferExpressionType(statement.init, context)
+
+    registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
+
+    if (valueType === 'string' && isRuntimeStringPrefixLocalDeclaration(statement, context)) {
+      context.runtimeStrings.add(statement.name)
+    }
   }
 }
 
@@ -2169,7 +2186,9 @@ function emitPreparedAsyncTaskValueExpression(expression, valueType, context) {
 
 function emitAsyncTaskResumeDeclaration(wrapper, baseContext) {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, wrapper.awaits.length)
-  const returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
+  const returnValue = hasAsyncTaskStatementLocalDeclarations(wrapper.successStatements ?? [])
+    ? null
+    : emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
   const cases = wrapper.awaits.flatMap(item => emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue))
 
   return [
@@ -2201,10 +2220,14 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
 
   if (nextItem == null) {
     lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1).map(line => `  ${line}`))
-    lines.push(...emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
-    lines.push(...returnValue.lines.map(line => `  ${line}`))
-    lines.push(...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
-    lines.push(`  return ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+    if (returnValue == null) {
+      lines.push(...emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext).map(line => `  ${line}`))
+    } else {
+      lines.push(...emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
+      lines.push(...returnValue.lines.map(line => `  ${line}`))
+      lines.push(...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1).map(line => `  ${line}`))
+      lines.push(`  return ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+    }
     lines.push('}')
     return lines
   }
@@ -2226,6 +2249,10 @@ function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue) {
   lines.push('}')
 
   return lines
+}
+
+function hasAsyncTaskStatementLocalDeclarations(statements) {
+  return statements.some(statement => statement?.type === 'VariableDeclaration' && isManagedRuntimeReturnType(statement.valueType))
 }
 
 function emitAsyncTaskFulfilledValueCheck(wrapper, item) {
@@ -2295,6 +2322,33 @@ function emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, visibleAwaitC
     ...(wrapper.successPrefixFinalizerStatements ?? []),
     ...(wrapper.successStatements ?? [])
   ], wrapper, baseContext, visibleAwaitCount)
+}
+
+function emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext) {
+  const visibleAwaitCount = item.index + 1
+  const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, visibleAwaitCount)
+  const result = withVariableScope(context, () => {
+    const preludeLines = emitStatementList([
+      ...(wrapper.successPrefixFinalizerStatements ?? []),
+      ...(wrapper.successStatements ?? [])
+    ], context)
+    const returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
+
+    return {
+      preludeLines,
+      returnValue
+    }
+  })
+
+  return [
+    ...emitOwnedValueDeclarations(context),
+    ...result.preludeLines,
+    ...result.returnValue.lines,
+    ...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitCount),
+    `status = ccjs_promise_resolve(frame->promise, ${result.returnValue.expression});`,
+    ...emitOwnedValueCleanup(context),
+    'return status;'
+  ]
 }
 
 function emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, visibleAwaitCount) {
