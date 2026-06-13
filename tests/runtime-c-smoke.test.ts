@@ -5082,7 +5082,7 @@ export function main(): void {
   const user: User = { name: 'Ada' }
   const name = user.name
   const local = 'Ada'
-  console.log(String('Ada'), String(local), String(name), label(42), flag(true), String(false), String(name).length)
+  console.log(String('Ada'), String(local), String(name), label(42), flag(true), String(false), String(null), String(name).length)
 }
 `, {
       target: 'c'
@@ -5097,7 +5097,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'Ada Ada Ada 42 true false 3\n')
+    assert.equal(run.stdout, 'Ada Ada Ada 42 true false null 3\n')
   } finally {
     await rm(dir, {
       recursive: true,

@@ -494,7 +494,7 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_trim_parts\(&ccjs_default_allocator, message->bytes, message->len, &ccjs_value_\d+\)/)
 })
 
-test('lowers C String conversion for string number and boolean values', () => {
+test('lowers C String conversion for string number boolean and null values', () => {
   const result = compileSource(`type User = {
   name: string
 }
@@ -511,7 +511,7 @@ export function main(): void {
   const user: User = { name: 'Ada' }
   const name = user.name
   const local = 'Ada'
-  console.log(String('Ada'), String(local), String(name), label(42), flag(true), String(false), String(name).length)
+  console.log(String('Ada'), String(local), String(name), label(42), flag(true), String(false), String(null), String(name).length)
 }
 `, {
     target: 'c'
@@ -523,6 +523,7 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_from_number\(&ccjs_default_allocator, value, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_string_from_bool\(&ccjs_default_allocator, \(value\) != 0, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_string_from_bool\(&ccjs_default_allocator, \(0\) != 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "null", 4, &ccjs_value_\d+\)/)
 })
 
 test('lowers known C object field access to runtime calls', () => {
@@ -7893,7 +7894,7 @@ test('checks String conversion as a typed string call', () => {
 }
 
 export function main(): void {
-  console.log(label(42), String(true), String('Ada'))
+  console.log(label(42), String(true), String('Ada'), String(null))
 }
 `, {
     target: 'js'

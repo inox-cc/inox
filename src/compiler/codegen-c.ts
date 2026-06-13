@@ -8583,6 +8583,16 @@ function emitCStringConversionValueExpression(expression, context) {
     }
   }
 
+  if (type === 'null') {
+    return {
+      lines: [
+        ...emitPrepareOwnedValueWrite(temp),
+        emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, "null", 4, &${temp})`, context)
+      ],
+      expression: temp
+    }
+  }
+
   const value = emitPreparedNumberExpression(arg, context)
   const helper = type === 'boolean'
     ? `ccjs_string_from_bool(&ccjs_default_allocator, (${value.expression}) != 0, &${temp})`
@@ -11845,7 +11855,7 @@ function isStringConversionCall(expression, context) {
     return false
   }
 
-  return ['boolean', 'number', 'string'].includes(inferExpressionType(expression.args[0], context))
+  return ['boolean', 'null', 'number', 'string'].includes(inferExpressionType(expression.args[0], context))
 }
 
 function isStringTrimCall(expression, context) {

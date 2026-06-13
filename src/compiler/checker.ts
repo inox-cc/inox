@@ -2409,7 +2409,7 @@ class Checker {
       return 'string'
     }
 
-    if (!['boolean', 'number', 'string'].includes(argTypes[0])) {
+    if (!['boolean', 'null', 'number', 'string'].includes(argTypes[0])) {
       this.report('CCJS_TYPE_MISMATCH', `cannot convert ${argTypes[0]} to string with String`, expression.args[0].loc)
     }
 
