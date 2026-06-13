@@ -1079,7 +1079,7 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
 
     result.variables.set(statement.name, valueType)
 
-    if (valueType === 'string') {
+    if (valueType === 'string' && isRuntimeStringPrefixLocalDeclaration(statement, result)) {
       result.runtimeStrings.add(statement.name)
     }
 
@@ -1111,7 +1111,31 @@ function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
     return false
   }
 
-  return valueType !== 'string' || resolveRuntimeStringReference(statement.init, context) != null
+  return valueType !== 'string' || isRuntimeStringPrefixLocalDeclaration(statement, context)
+}
+
+function isRuntimeStringPrefixLocalDeclaration(statement, context) {
+  const expression = statement?.init
+
+  if (resolveRuntimeStringReference(expression, context) != null || isRuntimeProducedStringExpression(expression, context)) {
+    return true
+  }
+
+  if (isMemberAccessExpression(expression)) {
+    const member = resolveKnownObjectMember(expression, context)
+
+    return member?.valueType === 'string'
+  }
+
+  if (isIndexAccessExpression(expression)) {
+    const element = resolveKnownArrayIndex(expression, context)
+    const field = resolveKnownObjectIndex(expression, context)
+    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+
+    return element?.valueType === 'string' || field?.valueType === 'string' || runtimeElement?.valueType === 'string'
+  }
+
+  return false
 }
 
 function resolveAsyncTaskTryHandler(handler, context, params, returnType) {

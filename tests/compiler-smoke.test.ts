@@ -5036,6 +5036,36 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static void ccjs_async_task_work_finalize\(void\* context\) \{[\s\S]*ccjs_release\(frame->param_label\);[\s\S]*ccjs_release\(frame->prefix_prefix\);/)
 })
 
+test('lowers nested async task frame produced string prefix locals into post try statements', () => {
+  const result = compileSource(`async function work(count: number): Promise<string> {
+  try {
+    const prefix: string = String(count)
+    try {
+      const value: number = await Promise.resolve(3)
+    } finally {
+      console.log(prefix)
+    }
+    console.log(prefix)
+    return prefix
+  } finally {
+    console.log(count)
+  }
+}
+
+export async function main(): Promise<void> {
+  const promise = work(4)
+  console.log(await promise)
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /typedef struct ccjs_async_task_work_frame \{[\s\S]*double param_count;[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_start\(ccjs_loop\* ccjs_loop, double ccjs_arg_count, ccjs_promise\*\* out\) \{[\s\S]*const ccjs_string\* prefix = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;[\s\S]*frame->prefix_prefix\.tag = CCJS_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(ccjs_ref\*\)&prefix->header;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/)
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_string\* prefix = \(ccjs_string\*\)frame->prefix_prefix\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_value_\d+\);/)
+  assert.match(result.code, /static void ccjs_async_task_work_finalize\(void\* context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]
