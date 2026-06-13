@@ -1728,6 +1728,10 @@ function emitAsyncTaskPromiseChainCallbackContext(asyncWrapper, chainWrapper, co
   lines.push(...emitAsyncTaskScheduleStatusCheck(asyncWrapper, options).map(line => `  ${line}`))
   lines.push('}')
 
+  if (chainWrapper.needsEventLoop === true) {
+    lines.push(`${contextName}->ccjs_loop = ccjs_loop;`)
+  }
+
   for (const capture of chainWrapper.captures) {
     lines.push(...emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
   }
@@ -2870,6 +2874,29 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
     }
 
     if (expression.type === 'ArrowFunctionExpression') {
+      const scope = new Map()
+
+      for (const param of expression.params) {
+        declare(scope, param.name, {
+          name: param.name,
+          valueType: param.valueType,
+          declaration: param,
+          functionType: param.functionType,
+          nullable: param.nullable === true,
+          shape: param.shape,
+          runtimeManaged: ['string', 'object'].includes(param.valueType),
+          mutable: false
+        })
+      }
+
+      const arrowScopes = [...scopes, scope]
+
+      if (expression.expressionBody) {
+        visitExpression(expression.body, arrowScopes)
+      } else {
+        expression.body.forEach(statement => visitStatement(statement, arrowScopes))
+      }
+
       return
     }
   }
@@ -3001,6 +3028,7 @@ function collectPromiseChainWrappers(irPrograms: IrProgram[], context) {
       expression: callback,
       returnType: callback.returnType ?? expression.promiseValueType ?? 'unknown',
       returnShape: callback.returnShape ?? null,
+      needsEventLoop: functionUsesExternalEventLoop(callback, context.externalEventLoopFunctions),
       captures
     }
 
@@ -9691,6 +9719,11 @@ function emitPromiseChainCallbackContext(wrapper, context) {
 
   lines.push(`${wrapper.contextTypeName}* ${contextName} = ccjs_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`)
   lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
+
+  if (wrapper.needsEventLoop === true) {
+    registerEventLoop(context)
+    lines.push(`${contextName}->ccjs_loop = ${emitEventLoopReference(context)};`)
+  }
 
   for (const capture of wrapper.captures) {
     lines.push(...emitRuntimeArrowCaptureStoreLines(capture, contextName, context))

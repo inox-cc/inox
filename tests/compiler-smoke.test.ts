@@ -6531,8 +6531,8 @@ test('lowers Promise callbacks with try catch finally to C runtime promises', ()
   assert.match(result.code, /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &finalized\) != CCJS_OK\) goto ccjs_cleanup;/)
 })
 
-test('diagnoses timer scheduling inside C Promise callbacks without loop context', () => {
-  assertDiagnostic(`export function main(): void {
+test('passes loop context to C Promise callbacks that schedule timers', () => {
+  const result = compileSource(`export function main(): void {
   const pending = Promise.resolve(1).then(value => {
     setTimeout(() => {
       console.log(value)
@@ -6541,9 +6541,17 @@ test('diagnoses timer scheduling inside C Promise callbacks without loop context
     return value
   })
 }
-`, 'CCJS_C_TIMER_CALLBACK', {
+`, {
     target: 'c'
   })
+
+  assert.match(result.code, /typedef struct ccjs_promise_chain_context_\d+ \{\n  ccjs_loop\* ccjs_loop;\n\} ccjs_promise_chain_context_\d+;/)
+  assert.match(result.code, /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n  if \(captured->ccjs_loop == 0\) return CCJS_ERR_TYPE;\n  ccjs_loop\* ccjs_loop = captured->ccjs_loop;/)
+  assert.match(result.code, /typedef struct ccjs_callback_context_\d+ \{\n  double value;\n\} ccjs_callback_context_\d+;/)
+  assert.match(result.code, /ccjs_promise_callback_ctx_\d+->ccjs_loop = ccjs_loop;/)
+  assert.match(result.code, /ccjs_callback_ctx_\d+->value = value;/)
+  assert.match(result.code, /ccjs_loop_set_timeout\(ccjs_loop, 1, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, 0\)/)
+  assert.match(result.code, /ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &pending\)/)
 })
 
 test('compiles C collection values across function boundaries', () => {
