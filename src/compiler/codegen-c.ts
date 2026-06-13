@@ -897,22 +897,13 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
 }
 
 function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, returnType) {
-  if (tryStatement.handler == null && tryStatement.finalizer == null) {
+  const tryChain = collectAsyncTaskNestedTryChain(tryStatement)
+
+  if (tryChain == null || tryChain.length < 2) {
     return null
   }
 
-  const outerTryStatements = tryStatement.block?.body ?? []
-
-  if (outerTryStatements.length !== 1 || outerTryStatements[0]?.type !== 'TryStatement') {
-    return null
-  }
-
-  const innerTry = outerTryStatements[0]
-
-  if (innerTry.handler == null && innerTry.finalizer == null) {
-    return null
-  }
-
+  const innerTry = tryChain[tryChain.length - 1]
   const innerTryStatements = innerTry.block?.body ?? []
   const returnStatement = innerTryStatements.at(-1)
 
@@ -933,15 +924,14 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     return null
   }
 
-  const innerFinalizerStatements = innerTry.finalizer?.body ?? []
-  const outerFinalizerStatements = tryStatement.finalizer?.body ?? []
-  const handlerSource = innerTry.handler ?? tryStatement.handler
+  const finalizers = collectAsyncTaskTryFinalizers(tryChain)
+  const handlerIndex = findAsyncTaskNearestTryHandlerIndex(tryChain)
+  const handlerSource = handlerIndex < 0 ? null : tryChain[handlerIndex].handler
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
 
   if (
     (handlerSource != null && handler == null)
-    || hasUnsupportedAsyncTaskTryControlFlow(innerFinalizerStatements)
-    || hasUnsupportedAsyncTaskTryControlFlow(outerFinalizerStatements)
+    || finalizers.some(statements => hasUnsupportedAsyncTaskTryControlFlow(statements))
   ) {
     return null
   }
@@ -952,15 +942,60 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     returnType,
     tryRegion: {
       handler,
-      preHandlerFinalizerStatements: innerTry.handler == null && tryStatement.handler != null ? innerFinalizerStatements : [],
-      finalizerStatements: innerTry.handler == null && tryStatement.handler != null
-        ? outerFinalizerStatements
-        : [
-            ...innerFinalizerStatements,
-            ...outerFinalizerStatements
-          ]
+      preHandlerFinalizerStatements: handlerIndex < 0 ? [] : collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, handlerIndex + 1),
+      finalizerStatements: handlerIndex < 0
+        ? collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, 0)
+        : collectAsyncTaskTryFinalizerStatements(finalizers, handlerIndex, 0)
     }
   }
+}
+
+function collectAsyncTaskNestedTryChain(tryStatement) {
+  const chain: any[] = []
+  let current: any = tryStatement
+
+  while (current?.type === 'TryStatement') {
+    if (current.handler == null && current.finalizer == null) {
+      return null
+    }
+
+    chain.push(current)
+
+    const body = current.block?.body ?? []
+
+    if (body.length === 1 && body[0]?.type === 'TryStatement') {
+      current = body[0]
+      continue
+    }
+
+    return chain
+  }
+
+  return null
+}
+
+function collectAsyncTaskTryFinalizers(tryChain) {
+  return tryChain.map(item => item.finalizer?.body ?? [])
+}
+
+function findAsyncTaskNearestTryHandlerIndex(tryChain) {
+  for (let index = tryChain.length - 1; index >= 0; index -= 1) {
+    if (tryChain[index].handler != null) {
+      return index
+    }
+  }
+
+  return -1
+}
+
+function collectAsyncTaskTryFinalizerStatements(finalizers, fromIndex, toIndex) {
+  const statements: any[] = []
+
+  for (let index = fromIndex; index >= toIndex; index -= 1) {
+    statements.push(...finalizers[index])
+  }
+
+  return statements
 }
 
 function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
