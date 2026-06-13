@@ -741,6 +741,7 @@ function collectAsyncTaskWrappers(functions: IrFunctionNodeEntry[], context) {
       params,
       awaits: body.awaits,
       prefixStatements: body.prefixStatements ?? [],
+      prefixLocals: body.prefixLocals ?? [],
       successPrefixFinalizerStatements: body.successPrefixFinalizerStatements ?? [],
       successStatements: body.successStatements ?? [],
       returnExpression: body.returnExpression,
@@ -839,6 +840,7 @@ function resolveAsyncTaskWrapperBody(statement, declaration: IrFunctionDeclarati
   return {
     awaits,
     prefixStatements: [],
+    prefixLocals: [],
     successPrefixFinalizerStatements: [],
     successStatements: [],
     returnExpression,
@@ -893,6 +895,7 @@ function resolveAsyncTaskTryWrapperBody(statement, context, params, returnType) 
   return {
     awaits,
     prefixStatements: [],
+    prefixLocals: [],
     successPrefixFinalizerStatements: [],
     successStatements: [],
     returnExpression,
@@ -929,19 +932,20 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     return null
   }
 
-  const prefixContext = createAsyncTaskPrefixExpressionContext(context, params, tryChainResult.prefixStatements)
+  const prefixResult = resolveAsyncTaskPrefixLocals(context, params, tryChainResult.prefixStatements)
 
-  if (prefixContext == null) {
+  if (prefixResult == null) {
     return null
   }
 
+  const prefixContext = prefixResult.context
   const awaits = resolveAsyncTaskAwaitSteps(hasPostNestedStatements ? innerTryStatements : innerTryStatements.slice(0, -1), prefixContext)
 
   if (awaits == null) {
     return null
   }
 
-  const returnContext = createAsyncTaskExpressionContext(context, params, hasPostNestedStatements ? [] : awaits)
+  const returnContext = createAsyncTaskExpressionContext(context, params, hasPostNestedStatements ? prefixResult.locals : [...prefixResult.locals, ...awaits])
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
 
   if (returnType !== 'void' && returnExpression == null) {
@@ -966,6 +970,7 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   return {
     awaits,
     prefixStatements: tryChainResult.prefixStatements,
+    prefixLocals: prefixResult.locals,
     successPrefixFinalizerStatements: hasPostNestedStatements
       ? collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, tryChainResult.postNestedOwnerIndex + 1)
       : [],
@@ -1054,8 +1059,9 @@ function collectAsyncTaskTryFinalizerStatements(finalizers, fromIndex, toIndex) 
   return statements
 }
 
-function createAsyncTaskPrefixExpressionContext(context, params, prefixStatements) {
+function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
   const result = createAsyncTaskExpressionContext(context, params, [])
+  const locals: any[] = []
 
   for (const statement of prefixStatements) {
     if (statement?.type !== 'VariableDeclaration') {
@@ -1073,13 +1079,28 @@ function createAsyncTaskPrefixExpressionContext(context, params, prefixStatement
     if (valueType === 'string') {
       result.runtimeStrings.add(statement.name)
     }
+
+    if (isSupportedAsyncTaskFramePrefixLocalType(valueType)) {
+      locals.push({
+        name: statement.name,
+        type: valueType,
+        fieldName: `prefix_${emitCIdentifier(statement.name)}`
+      })
+    }
   }
 
-  return result
+  return {
+    context: result,
+    locals
+  }
 }
 
 function isSupportedAsyncTaskPrefixLocalType(valueType) {
   return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
+}
+
+function isSupportedAsyncTaskFramePrefixLocalType(valueType) {
+  return valueType === 'number' || valueType === 'boolean'
 }
 
 function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
@@ -1376,6 +1397,7 @@ function emitAsyncTaskFrameType(wrapper) {
     '  ccjs_promise* awaited;',
     '  int state;',
     ...wrapper.params.map(param => `  ${emitAsyncTaskStorageCType(param.valueType)} ${param.fieldName};`),
+    ...wrapper.prefixLocals.map(local => `  ${emitAsyncTaskStorageCType(local.type)} ${local.fieldName};`),
     ...wrapper.awaits.filter(item => item.fieldName != null).map(item => `  ${emitAsyncTaskStorageCType(item.type)} ${item.fieldName};`),
     `} ${wrapper.frameTypeName};`
   ]
@@ -1414,6 +1436,7 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', 0)
   const prefixAndScheduleLines = withVariableScope(context, () => [
     ...emitStatementList(wrapper.prefixStatements ?? [], context),
+    ...emitAsyncTaskStorePrefixLocalLines(wrapper),
     ...emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
       cleanup: 'start',
       final: wrapper.awaits.length === 1
@@ -1430,6 +1453,7 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     '  frame->awaited = 0;',
     '  frame->state = 0;',
     ...wrapper.params.map(param => `  frame->${param.fieldName} = ${param.argName};`),
+    ...wrapper.prefixLocals.map(local => `  frame->${local.fieldName} = ${emitAsyncTaskStorageInit(local.type)};`),
     ...wrapper.awaits.filter(item => item.fieldName != null).map(item => `  frame->${item.fieldName} = ${emitAsyncTaskStorageInit(item.type)};`),
     '  ccjs_status status = ccjs_promise_new(ccjs_loop, &frame->promise);',
     '  if (status != CCJS_OK) {',
@@ -1439,7 +1463,7 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
     ...wrapper.params.filter(param => isManagedRuntimeReturnType(param.valueType)).map(param => `  ccjs_retain(frame->${param.fieldName});`),
     '  ccjs_promise_retain(frame->promise);',
     '  *out = frame->promise;',
-    ...emitAsyncTaskVisibleLocalReads(wrapper, 0).map(line => `  ${line}`),
+    ...emitAsyncTaskVisibleLocalReads(wrapper, 0, { includePrefixLocals: false }).map(line => `  ${line}`),
     ...prefixAndScheduleLines.map(line => `  ${line}`),
     '  return CCJS_OK;',
     '}'
@@ -1472,9 +1496,22 @@ function registerAsyncTaskAwaitLocals(wrapper, context, count) {
   }
 }
 
-function emitAsyncTaskVisibleLocalReads(wrapper, count) {
+function registerAsyncTaskPrefixLocals(wrapper, context) {
+  for (const local of wrapper.prefixLocals) {
+    registerAsyncTaskLocalMetadata(local.name, local.type, local, context)
+  }
+}
+
+function emitAsyncTaskStorePrefixLocalLines(wrapper) {
+  return wrapper.prefixLocals.map(local => `frame->${local.fieldName} = ${local.name};`)
+}
+
+function emitAsyncTaskVisibleLocalReads(wrapper, count, options = { includePrefixLocals: true }) {
   return [
     ...wrapper.params.flatMap(param => emitAsyncTaskVisibleLocalRead(param.name, param.valueType, param.fieldName)),
+    ...(options.includePrefixLocals === false
+      ? []
+      : wrapper.prefixLocals.flatMap(local => emitAsyncTaskVisibleLocalRead(local.name, local.type, local.fieldName))),
     ...wrapper.awaits.slice(0, count).flatMap(item => item.name == null ? [] : emitAsyncTaskVisibleLocalRead(item.name, item.type, item.fieldName))
   ]
 }
@@ -1507,6 +1544,7 @@ function createAsyncTaskEmitContext(baseContext, wrapper, returnType, visibleAwa
   context.externalEventLoop = true
   context.eventLoopUsed = true
   registerAsyncTaskParams(wrapper, context)
+  registerAsyncTaskPrefixLocals(wrapper, context)
   registerAsyncTaskAwaitLocals(wrapper, context, visibleAwaitCount)
 
   return context
