@@ -5281,6 +5281,36 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value suffix = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t\*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*ccjs_bytes_len\(suffix, &ccjs_bytes_len_\d+\)[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, suffix\);[\s\S]*ccjs_release\(suffix\);[\s\S]*return status;/)
 })
 
+test('lowers nested async task frame catch managed locals into returns', () => {
+  const result = compileSource(`async function work(): Promise<Buffer> {
+  try {
+    try {
+      const value: Buffer = await Promise.reject('inner')
+      return value
+    } catch (error) {
+      const suffix: Buffer = Buffer.from('ok', 'utf8')
+      console.log(error)
+      console.log(suffix.length)
+      return suffix
+    } finally {
+      console.log('inner finally')
+    }
+  } finally {
+    console.log('outer')
+  }
+}
+
+export async function main(): Promise<void> {
+  const result: Buffer = await work()
+  console.log(result.toString())
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /static ccjs_status ccjs_async_task_work_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;[\s\S]*ccjs_value suffix = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t\*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*ccjs_bytes_len\(suffix, &ccjs_bytes_len_\d+\)[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, suffix\);[\s\S]*ccjs_release\(suffix\);[\s\S]*return status;/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]

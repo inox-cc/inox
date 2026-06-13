@@ -1185,8 +1185,9 @@ function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
 
   const statements = handler.body?.body ?? []
   const returnStatement = statements.at(-1)
+  const handlerStatements = statements.slice(0, -1)
 
-  if (returnStatement?.type !== 'ReturnStatement' || hasUnsupportedAsyncTaskTryControlFlow(statements.slice(0, -1))) {
+  if (returnStatement?.type !== 'ReturnStatement' || hasUnsupportedAsyncTaskTryControlFlow(handlerStatements)) {
     return null
   }
 
@@ -1197,6 +1198,7 @@ function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
     catchContext.runtimeStrings.add(handler.param)
   }
 
+  registerAsyncTaskStatementListLocals(catchContext, handlerStatements)
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, catchContext)
 
   if (returnExpression == null) {
@@ -1205,7 +1207,7 @@ function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
 
   return {
     param: handler.param,
-    statements: statements.slice(0, -1),
+    statements: handlerStatements,
     returnExpression
   }
 }
@@ -2479,6 +2481,13 @@ function emitAsyncTaskTryRejectCase(wrapper, item, baseContext) {
     lines.push(`  ccjs_string* ${handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
   }
 
+  if (hasAsyncTaskStatementLocalDeclarations(handler.statements ?? [])) {
+    lines.push(...emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler).map(line => `  ${line}`))
+    lines.push('}')
+
+    return lines
+  }
+
   lines.push(...emitStatementList(handler.statements, context).map(line => `  ${line}`))
 
   const returnValue = emitPreparedAsyncTaskValueExpression(handler.returnExpression, wrapper.returnType, context)
@@ -2489,6 +2498,37 @@ function emitAsyncTaskTryRejectCase(wrapper, item, baseContext) {
   lines.push('}')
 
   return lines
+}
+
+function emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler) {
+  const visibleAwaitCount = item.index
+  const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, visibleAwaitCount)
+
+  if (handler.param != null) {
+    context.variables.set(handler.param, 'string')
+    context.runtimeStrings.add(handler.param)
+  }
+
+  const result = withVariableScope(context, () => {
+    const handlerLines = emitStatementList(handler.statements ?? [], context)
+    const returnValue = emitPreparedAsyncTaskValueExpression(handler.returnExpression, wrapper.returnType, context)
+
+    return {
+      handlerLines,
+      returnValue
+    }
+  })
+
+  return [
+    ...emitOwnedValueDeclarations(context),
+    ...result.handlerLines,
+    ...result.returnValue.lines,
+    ...emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount),
+    `status = ccjs_promise_resolve(frame->promise, ${result.returnValue.expression});`,
+    ...emitOwnedValueCleanup(context),
+    ...(item.index < wrapper.awaits.length - 1 ? [`${wrapper.finalizerName}(frame);`] : []),
+    'return status;'
+  ]
 }
 
 function emitAsyncTaskFinalizerDeclaration(wrapper) {
