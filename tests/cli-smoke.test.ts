@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -366,6 +366,97 @@ test('ccjs module graph --emit c writes bundled C source', async () => {
     assert.match(c, /void greet\(void\);/)
     assert.match(c, /int main\(void\)/)
     assert.match(c, /greet\(\);/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('ccjs module graph --emit c --out-dir --entry writes and builds modular C sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-modular-c-test-'))
+  const src = join(dir, 'src')
+  const generated = join(dir, 'generated')
+  const out = join(dir, 'main')
+
+  try {
+    await mkdir(src, {
+      recursive: true
+    })
+    await writeFile(
+      join(src, 'dep.ts'),
+      `console.log('dep init')
+
+export function value(): number {
+  return 4
+}
+`
+    )
+    await writeFile(
+      join(src, 'util.ts'),
+      `import { value as readValue } from './dep.ts'
+
+export function greet(): void {
+  console.log('value', readValue())
+}
+`
+    )
+    await writeFile(
+      join(src, 'main.ts'),
+      `import { value } from './dep.ts'
+import { greet } from './util.ts'
+
+console.log('main', value())
+greet()
+`
+    )
+
+    const result = await runCli(['src/main.ts', '--emit', 'c', '--out-dir', generated, '--entry'], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${generated}\n`)
+
+    const mainC = await readFile(join(generated, 'src/main.c'), 'utf8')
+    const depC = await readFile(join(generated, 'src/dep.c'), 'utf8')
+    const depH = await readFile(join(generated, 'src/dep.h'), 'utf8')
+    const utilC = await readFile(join(generated, 'src/util.c'), 'utf8')
+    const depInit = /ccjs_mod_src_dep_ts_[a-f0-9]{8}_init/.exec(depH)?.[0]
+
+    assert.match(mainC, /#include "dep\.h"/)
+    assert.match(mainC, /#include "util\.h"/)
+    assert.match(mainC, /int main\(void\)/)
+    assert.match(depC, /static bool ccjs_initialized = false;/)
+    assert.ok(depInit)
+    assert.match(depC, new RegExp(`void ${depInit}\\(void\\)`))
+    assert.match(utilC, new RegExp(`${depInit}\\(\\);`))
+
+    const build = await runCommand('cc', [
+      '-I',
+      join(repoRoot, 'runtime/c/include'),
+      join(generated, 'src/main.c'),
+      join(generated, 'src/dep.c'),
+      join(generated, 'src/util.c'),
+      ...cRuntimeSources(),
+      '-o',
+      out
+    ])
+
+    assert.equal(build.code, 0, build.stderr)
+
+    const run = await runCommand(out, [])
+
+    assert.equal(run.code, 0)
+    assert.equal(run.stdout, 'dep init\nmain 4\nvalue 4\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -1253,6 +1344,25 @@ function runCommand(command: string, args: string[], options: RunOptions = {}): 
       })
     })
   })
+}
+
+function cRuntimeSources(): string[] {
+  return [
+    'runtime/c/src/arrays/array.c',
+    'runtime/c/src/async/loop.c',
+    'runtime/c/src/async/promise.c',
+    'runtime/c/src/binary/binary.c',
+    'runtime/c/src/collections/map.c',
+    'runtime/c/src/collections/set.c',
+    'runtime/c/src/core/allocator.c',
+    'runtime/c/src/core/callback.c',
+    'runtime/c/src/core/value.c',
+    'runtime/c/src/fs/fs.c',
+    'runtime/c/src/json/json.c',
+    'runtime/c/src/objects/object.c',
+    'runtime/c/src/strings/string.c',
+    'runtime/c/src/time/time.c'
+  ].map((source) => join(repoRoot, source))
 }
 
 function escapeRegExp(value: string): string {

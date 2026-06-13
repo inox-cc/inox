@@ -1,6 +1,6 @@
 import { checkCCompileBudgets } from './budgets.ts'
 import { checkCProfileCapabilities } from './capabilities.ts'
-import { emitCBundleFromIrModules, emitCFromIr } from './codegen-c.ts'
+import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
 import { emitJsBundleFromIrModules, emitJsFromIr } from './codegen-js.ts'
 import { checkProgram } from './checker.ts'
 import { collectIrModuleRecords, lowerHirToIr } from './ir.ts'
@@ -9,6 +9,17 @@ import { lowerProgram } from './lower.ts'
 import { buildModuleGraph } from './module-graph.ts'
 import { parse } from './parser.ts'
 import type { CompileOptions, FileCompileResult, SourceCompileResult } from './types.ts'
+import type { CModuleOutputFile } from './codegen-c.ts'
+
+type CModuleCompileOptions = CompileOptions & {
+  sourceRoot?: string
+}
+
+export type CModuleCompileResult = {
+  target: 'c'
+  graph: FileCompileResult['graph']
+  files: CModuleOutputFile[]
+}
 
 export function compileSource(source: string, options: CompileOptions = {}): SourceCompileResult {
   const target = options.target ?? 'c'
@@ -86,4 +97,30 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
   }
 
   throw new Error(`Unsupported target ${target}`)
+}
+
+export async function compileFileToCModules(
+  entry: string,
+  options: CModuleCompileOptions = {}
+): Promise<CModuleCompileResult> {
+  const graph = await buildModuleGraph(entry)
+  const irModules = collectIrModuleRecords(graph)
+
+  checkCProfileCapabilities(
+    irModules.map((module) => module.ir),
+    options
+  )
+  checkCCompileBudgets(
+    irModules.map((module) => module.ir),
+    options
+  )
+
+  return {
+    target: 'c',
+    graph,
+    files: emitCModuleFilesFromGraph(graph, {
+      random: options.random,
+      sourceRoot: options.sourceRoot
+    })
+  }
 }

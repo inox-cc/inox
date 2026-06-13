@@ -12,6 +12,8 @@ test('ccjs index.ts defaults to run command', () => {
     emit: null,
     target: null,
     out: null,
+    outDir: null,
+    entryMode: false,
     keep: false
   })
 })
@@ -26,6 +28,8 @@ test('ccjs index.ts --emit c compiles source without running', () => {
     emit: 'c',
     target: 'c',
     out: 'index.c',
+    outDir: null,
+    entryMode: false,
     keep: false
   })
 })
@@ -35,6 +39,29 @@ test('emit accepts explicit output path', () => {
 
   assert.equal(result.ok, true)
   assert.equal(result.plan.out, 'build/index.c')
+})
+
+test('emit accepts modular C output directory with entry marker', () => {
+  const result = parseCliArgs(['src/index.ts', '--emit', 'c', '--out-dir', 'generated', '--entry'])
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.plan, {
+    command: 'emit',
+    entry: 'src/index.ts',
+    emit: 'c',
+    target: 'c',
+    out: null,
+    outDir: 'generated',
+    entryMode: true,
+    keep: false
+  })
+})
+
+test('modular C output requires entry marker', () => {
+  const result = parseCliArgs(['src/index.ts', '--emit', 'c', '--out-dir', 'generated'])
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, '--out-dir requires --entry')
 })
 
 test('build requires target', () => {

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CompileError, formatDiagnostics } from '../src/compiler/diagnostics.ts'
-import { compileFile } from '../src/compiler/index.ts'
+import { compileFile, compileFileToCModules } from '../src/compiler/index.ts'
 import type {
   CompileOptions,
   RandomOptions,
@@ -123,6 +123,32 @@ async function runCEntry(plan: CliPlan): Promise<void> {
 async function writeCompiledSource(plan: CliPlan): Promise<void> {
   const entry = requireEntry(plan)
   const config = await loadConfig()
+
+  if (plan.outDir != null && plan.entryMode) {
+    const result = await compileFileToCModules(entry, {
+      target: 'c',
+      callMain: false,
+      sourceRoot: process.cwd(),
+      ...cCompileOptions(config)
+    })
+
+    for (const file of result.files) {
+      const out = join(plan.outDir, file.path)
+      const dir = dirname(out)
+
+      if (dir !== '.') {
+        await mkdir(dir, {
+          recursive: true
+        })
+      }
+
+      await writeFile(out, file.code)
+    }
+
+    console.log(plan.outDir)
+    return
+  }
+
   const result = await compileFile(entry, {
     target: 'c',
     callMain: false,

@@ -13,6 +13,8 @@ export type CliPlan = {
   emit?: CliTarget | null
   target?: CliTarget | null
   out?: string | null
+  outDir?: string | null
+  entryMode?: boolean
   keep?: boolean
   help?: boolean
 }
@@ -21,6 +23,8 @@ type CliOptions = {
   emit?: CliTarget
   target?: CliTarget
   out?: string
+  outDir?: string
+  entryMode?: boolean
   keep?: boolean
 }
 
@@ -43,6 +47,7 @@ type ParseResult<T> =
 export const usage = `Usage:
   ccjs <entry>
   ccjs <entry> --emit c [-o output.c]
+  ccjs <entry> --emit c --out-dir generated --entry
   ccjs run <entry> [--target c] [--keep]
   ccjs build <entry> --target c [-o executable]
   ccjs test
@@ -51,6 +56,7 @@ Examples:
   ccjs index.ts
   ccjs index.ts --emit c
   ccjs index.ts --emit c -o build/index.c
+  ccjs src/index.ts --emit c --out-dir generated --entry
   ccjs run src/main.ts
   ccjs build src/main.ts --target c -o build/main`
 
@@ -78,6 +84,8 @@ export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
       emit: null,
       target: null,
       out: null,
+      outDir: null,
+      entryMode: false,
       keep: false
     })
   }
@@ -104,11 +112,29 @@ export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
   const entry = positionals[0]
   const emit = options.emit ?? null
   const target = options.target ?? emit ?? null
-  const out = options.out ?? (emit == null ? null : defaultEmitOutput(entry, emit))
+  const outDir = options.outDir ?? null
+  const entryMode = options.entryMode ?? false
+  const out = options.out ?? (emit == null || outDir != null ? null : defaultEmitOutput(entry, emit))
   const finalCommand: CliCommand = emit == null ? command : 'emit'
 
   if (command === 'build' && target == null) {
     return fail('build requires --target c')
+  }
+
+  if (options.out != null && outDir != null) {
+    return fail('use either -o/--out or --out-dir')
+  }
+
+  if (outDir != null && emit !== 'c') {
+    return fail('--out-dir requires --emit c')
+  }
+
+  if (outDir != null && !entryMode) {
+    return fail('--out-dir requires --entry')
+  }
+
+  if (entryMode && outDir == null) {
+    return fail('--entry requires --out-dir')
   }
 
   return ok({
@@ -117,6 +143,8 @@ export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
     emit,
     target,
     out,
+    outDir,
+    entryMode,
     keep: options.keep ?? false
   })
 }
@@ -138,6 +166,8 @@ export function formatCliPlan(plan: CliPlan): string {
     `target: ${plan.target ?? '-'}`,
     `emit: ${plan.emit ?? '-'}`,
     `out: ${plan.out ?? '-'}`,
+    `outDir: ${plan.outDir ?? '-'}`,
+    `entryMode: ${plan.entryMode ? 'yes' : 'no'}`,
     `keep: ${plan.keep ? 'yes' : 'no'}`
   ]
 
@@ -180,6 +210,17 @@ function parseOptions(tokens: string[]): ParseResult<ParsedOptions> {
       }
 
       options.out = value
+    } else if (token === '--out-dir') {
+      const value = tokens[i + 1]
+      i += 1
+
+      if (value == null || value.startsWith('-')) {
+        return fail(`${token} expects a path`)
+      }
+
+      options.outDir = value
+    } else if (token === '--entry') {
+      options.entryMode = true
     } else if (token.startsWith('-')) {
       return fail(`unknown option ${token}`)
     } else {

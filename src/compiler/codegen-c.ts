@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { dirname, extname, isAbsolute, join, normalize, posix as pathPosix, relative, resolve, sep } from 'node:path'
 import { CompileError, diagnostic } from './diagnostics.ts'
 import {
   collectIrFunctionDeclarations,
@@ -10,6 +12,7 @@ import {
   collectIrStoredFunctionEffects,
   collectIrSyntaxFeatureUsages,
   collectIrTopLevelNodeEntries,
+  collectIrTopLevelNodes,
   collectIrTopLevelNodesFromPrograms,
   findIrEntryProgram
 } from './ir.ts'
@@ -24,6 +27,8 @@ import type {
   IrGlobalUsage,
   IrProgram,
   IrSyntaxFeatureUsage,
+  ModuleGraph,
+  ModuleRecord,
   RandomOptions,
   SourceLocation
 } from './types.ts'
@@ -36,9 +41,39 @@ const cMathNullaryMethods = new Set(['random'])
 const cMathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'fround', 'round', 'sin', 'sqrt', 'trunc'])
 const cMathBinaryMethods = new Set(['max', 'min'])
 const defaultRandomSeed = 0x6d2b79f5
+const cModuleSourceExtensions = ['', '.ts', '.js']
 
 type CEmitOptions = {
   random?: RandomOptions
+}
+
+export type CModuleOutputFile = {
+  kind: 'header' | 'source'
+  path: string
+  sourcePath: string
+  code: string
+}
+
+type CModuleEmitOptions = CEmitOptions & {
+  sourceRoot?: string
+}
+
+type CModulePlan = {
+  record: ModuleRecord
+  ir: IrProgram
+  isEntry: boolean
+  relativeSourcePath: string
+  sourcePath: string
+  headerPath: string
+  symbolPrefix: string
+  headerGuard: string
+  initName: string | null
+  imports: CModuleImportPlan[]
+}
+
+type CModuleImportPlan = {
+  declaration: AnyNode
+  module: CModulePlan
 }
 
 type AsyncTaskSuccessPhaseKind = 'pre-finalizer' | 'prefix-finalizer' | 'body'
@@ -111,6 +146,604 @@ export function emitCBundleFromIrModules(
   const entryIr = findIrEntryProgram(irModules, entry)
 
   return emitCUnit(irPrograms, entryIr, options, entryIrPrograms)
+}
+
+export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEmitOptions = {}): CModuleOutputFile[] {
+  const diagnostics: Diagnostic[] = []
+  const plans = createCModulePlans(graph, options, diagnostics)
+  const files = plans.flatMap((plan) => emitCModuleFiles(plan, plans, options, diagnostics))
+
+  if (diagnostics.length > 0) {
+    throw new CompileError(diagnostics)
+  }
+
+  return files
+}
+
+function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, diagnostics: Diagnostic[]): CModulePlan[] {
+  const modulePaths = new Set(graph.modules.map((module) => module.path))
+  const sourceRoot = resolve(options.sourceRoot ?? commonDirectory(graph.modules.map((module) => module.path)))
+  const plans: CModulePlan[] = graph.modules.flatMap((record) => {
+    if (record.ir == null) {
+      return []
+    }
+
+    const relativeSourcePath = relativeCModuleSourcePath(sourceRoot, record.path)
+    const sourcePath = replaceCModuleExtension(relativeSourcePath, '.c')
+    const headerPath = replaceCModuleExtension(relativeSourcePath, '.h')
+    const symbolPrefix = cModuleSymbolPrefix(relativeSourcePath, record.path)
+
+    return [
+      {
+        record,
+        ir: record.ir,
+        isEntry: record.path === graph.entry,
+        relativeSourcePath,
+        sourcePath,
+        headerPath,
+        symbolPrefix,
+        headerGuard: `${symbolPrefix.toUpperCase()}_H`,
+        initName: record.path === graph.entry ? null : `${symbolPrefix}_init`,
+        imports: []
+      }
+    ]
+  })
+  const plansByPath = new Map(plans.map((plan) => [plan.record.path, plan]))
+
+  for (const plan of plans) {
+    plan.imports = plan.record.imports.flatMap((declaration) => {
+      if (declaration.typeOnly) {
+        return []
+      }
+
+      const importedPath = resolveKnownCModuleImport(plan.record.path, declaration.source, modulePaths)
+      const importedModule = importedPath == null ? null : plansByPath.get(importedPath)
+
+      if (importedModule == null) {
+        diagnostics.push(
+          diagnostic(
+            'CCJS_C_MODULE_IMPORT',
+            `cannot resolve generated C module for ${declaration.source}`,
+            declaration.loc
+          )
+        )
+        return []
+      }
+
+      reportUnsupportedCModuleImports(declaration, importedModule, diagnostics)
+
+      return [
+        {
+          declaration,
+          module: importedModule
+        }
+      ]
+    })
+  }
+
+  return plans
+}
+
+function emitCModuleFiles(
+  plan: CModulePlan,
+  plans: CModulePlan[],
+  options: CModuleEmitOptions,
+  diagnostics: Diagnostic[]
+): CModuleOutputFile[] {
+  return [
+    {
+      kind: 'source',
+      path: plan.sourcePath,
+      sourcePath: plan.record.path,
+      code: emitCModuleSource(plan, plans, options, diagnostics)
+    },
+    {
+      kind: 'header',
+      path: plan.headerPath,
+      sourcePath: plan.record.path,
+      code: emitCModuleHeader(plan, plans, diagnostics)
+    }
+  ]
+}
+
+function emitCModuleSource(
+  plan: CModulePlan,
+  plans: CModulePlan[],
+  options: CModuleEmitOptions,
+  diagnostics: Diagnostic[]
+): string {
+  const irPrograms = [plan.ir]
+  const functionEntries = collectIrFunctionNodeEntries(irPrograms)
+  const functions = functionEntries.map((entry) => entry.node)
+  const context = createCModuleBaseContext(plan, plans, diagnostics)
+  const runtimeRequirements = new Set(collectIrRuntimeRequirements(irPrograms))
+  const globalUsages = collectIrGlobalUsages(irPrograms)
+  const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
+  const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
+  const needsCallbackRuntime =
+    [...context.callbackWrappers.values()].some(isRuntimeCallbackWrapper) ||
+    runtimeRequirements.has('callback-values') ||
+    signatureRuntimeTypes.has('function')
+  const needsFsRuntime = runtimeRequirements.has('fs')
+  const needsJsonRuntime = runtimeRequirements.has('json')
+  const needsTimerRuntime = runtimeRequirements.has('timers')
+  const needsAsyncRuntime =
+    runtimeRequirements.has('async-runtime') ||
+    needsFsRuntime ||
+    needsTimerRuntime ||
+    signatureRuntimeTypes.has('promise')
+  const needsCollectionRuntime =
+    runtimeRequirements.has('collections') ||
+    signatureRuntimeTypes.has('array') ||
+    signatureRuntimeTypes.has('map') ||
+    signatureRuntimeTypes.has('set')
+  const needsBinaryRuntime = runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
+  const needsClassRuntime = context.classInfos.size > 0
+  const needsObjectRuntime =
+    runtimeRequirements.has('objects') || needsFsRuntime || needsClassRuntime || signatureRuntimeTypes.has('object')
+  const needsRuntime =
+    context.throwingFunctions.size > 0 ||
+    needsAsyncRuntime ||
+    needsCallbackRuntime ||
+    needsCollectionRuntime ||
+    needsObjectRuntime ||
+    needsClassRuntime ||
+    needsJsonRuntime ||
+    signatureRuntimeTypes.size > 0 ||
+    runtimeRequirements.has('managed-values')
+  const needsTimeRuntime = runtimeRequirements.has('clocks')
+  const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
+  const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
+  const needsStringHeader =
+    runtimeRequirements.has('string-bytes') || needsFsRuntime || signatureRuntimeTypes.has('string')
+  const classMethods = collectClassMethods(context)
+
+  context.unhandledRejectionFlag = needsAsyncRuntime ? `${plan.symbolPrefix}_unhandled_rejection` : null
+  reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
+  reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
+
+  const lines = [
+    `#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath)}"`,
+    ...uniqueCModuleImports(plan.imports)
+      .filter((item) => item.module.headerPath !== plan.headerPath)
+      .map((item) => `#include "${relativeCIncludePath(plan.sourcePath, item.module.headerPath)}"`),
+    ''
+  ]
+
+  lines.push(
+    ...emitCPrelude(
+      needsRuntime,
+      needsTimeRuntime,
+      needsMathRuntime,
+      needsCryptoRuntime,
+      needsAsyncRuntime,
+      needsCallbackRuntime,
+      needsStringHeader,
+      needsCollectionRuntime,
+      needsBinaryRuntime,
+      needsObjectRuntime,
+      needsFsRuntime,
+      needsJsonRuntime,
+      needsTimerRuntime,
+      options
+    )
+  )
+
+  emitCModuleDeclarations(lines, functions, classMethods, context)
+
+  for (const wrapper of context.asyncTaskWrappers.values()) {
+    lines.push(...emitAsyncTaskWrapperDeclaration(wrapper, context))
+    lines.push('')
+  }
+
+  for (const wrapper of context.callbackWrappers.values()) {
+    lines.push(
+      ...(wrapper.kind === 'plain-arrow'
+        ? emitPlainArrowCallbackWrapperDeclaration(wrapper, context)
+        : emitRuntimeCallbackWrapperDeclaration(wrapper, context))
+    )
+    lines.push('')
+  }
+
+  for (const wrapper of context.promiseChainWrappers.values()) {
+    lines.push(...emitPromiseChainCallbackWrapperDeclaration(wrapper, context))
+    lines.push('')
+  }
+
+  for (const item of functions) {
+    lines.push(...emitFunctionDeclaration(item, context))
+    lines.push('')
+  }
+
+  for (const { info, method } of classMethods) {
+    lines.push(...emitClassMethodDeclaration(info, method, context))
+    lines.push('')
+  }
+
+  if (!plan.isEntry && plan.initName != null) {
+    lines.push(...emitCModuleInitFunction(plan, context))
+  } else {
+    lines.push(...emitCModuleMainFunction(plan, context))
+  }
+
+  return `${lines.join('\n')}\n`
+}
+
+function emitCModuleHeader(plan: CModulePlan, plans: CModulePlan[], diagnostics: Diagnostic[]): string {
+  const context = createCModuleBaseContext(plan, plans, diagnostics)
+  const exportedFunctions = collectCModuleExportedFunctions(plan)
+  const lines = [
+    `#ifndef ${plan.headerGuard}`,
+    `#define ${plan.headerGuard}`,
+    '',
+    '#include "ccjs/value.h"',
+    '#include "ccjs/loop.h"',
+    '#include "ccjs/promise.h"',
+    ''
+  ]
+
+  if (plan.initName != null) {
+    lines.push(`void ${plan.initName}(void);`)
+  }
+
+  for (const item of exportedFunctions) {
+    lines.push(`${emitFunctionHead(item, context)};`)
+  }
+
+  lines.push('')
+  lines.push(`#endif`)
+
+  return `${lines.join('\n')}\n`
+}
+
+function emitCModuleDeclarations(lines: string[], functions, classMethods, context): void {
+  const arrowCallbackWrappers = [...context.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
+  const promiseChainCallbackWrappers = [...context.promiseChainWrappers.values()].filter(
+    isPromiseChainCallbackWrapperWithContext
+  )
+
+  for (const wrapper of context.asyncTaskWrappers.values()) {
+    lines.push(...emitAsyncTaskFrameType(wrapper))
+    lines.push('')
+  }
+
+  for (const wrapper of arrowCallbackWrappers) {
+    lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
+    lines.push('')
+  }
+
+  for (const wrapper of promiseChainCallbackWrappers) {
+    lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
+    lines.push('')
+  }
+
+  if (context.unhandledRejectionFlag != null) {
+    lines.push(`static int ${context.unhandledRejectionFlag} = 0;`)
+    lines.push('')
+  }
+
+  for (const item of functions) {
+    lines.push(`${emitFunctionHead(item, context)};`)
+  }
+
+  for (const { info, method } of classMethods) {
+    lines.push(`${emitClassMethodHead(info, method, context)};`)
+  }
+
+  for (const wrapper of context.asyncTaskWrappers.values()) {
+    lines.push(...emitAsyncTaskWrapperPrototypes(wrapper))
+  }
+
+  for (const wrapper of context.callbackWrappers.values()) {
+    if (wrapper.kind === 'plain-arrow') {
+      lines.push(`${emitPlainArrowCallbackWrapperHead(wrapper)};`)
+      continue
+    }
+
+    if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+      lines.push(`static void ${wrapper.finalizerName}(void* context);`)
+    }
+
+    lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)};`)
+  }
+
+  for (const wrapper of context.promiseChainWrappers.values()) {
+    if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
+      lines.push(`static void ${wrapper.finalizerName}(void* context);`)
+    }
+
+    lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
+  }
+
+  if (
+    functions.length > 0 ||
+    classMethods.length > 0 ||
+    context.asyncTaskWrappers.size > 0 ||
+    context.callbackWrappers.size > 0 ||
+    context.promiseChainWrappers.size > 0
+  ) {
+    lines.push('')
+  }
+}
+
+function createCModuleBaseContext(plan: CModulePlan, plans: CModulePlan[], diagnostics: Diagnostic[]) {
+  const irPrograms = [plan.ir]
+  const importedDeclarations = collectCModuleImportedFunctionDeclarations(plan)
+  const functionEntries = collectIrFunctionNodeEntries(irPrograms)
+  const functions = functionEntries.map((entry) => entry.node)
+  const functionDeclarations = [...collectIrFunctionDeclarations(irPrograms), ...importedDeclarations]
+  const functionEffects = [
+    ...collectIrStoredFunctionEffects(irPrograms),
+    ...collectImportedCModuleFunctionEffects(plan)
+  ]
+  const globalRoots = collectIrGlobalRoots(irPrograms)
+  const jsGlobalRoots = new Set(globalRoots)
+  const context = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
+
+  context.functionNames = createCModuleFunctionNames(plan)
+  context.classInfos = createClassInfos(collectIrTopLevelNodes(plan.ir, 'class'), diagnostics)
+  context.externalEventLoopFunctions = collectExternalEventLoopFunctions(functions)
+  context.callbackWrappers = collectCallbackWrappers(irPrograms, context)
+  context.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, context)
+  context.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, context)
+
+  return context
+}
+
+function collectCModuleContextRuntimeTypes(context): Set<string> {
+  const types = new Set<string>()
+
+  for (const type of context.functionReturnTypes.values()) {
+    if (isManagedRuntimeReturnType(type) || type === 'promise') {
+      types.add(type)
+    }
+  }
+
+  for (const params of context.functionParams.values()) {
+    for (const param of params) {
+      if (isManagedRuntimeReturnType(param.valueType) || param.valueType === 'promise') {
+        types.add(param.valueType)
+      }
+    }
+  }
+
+  return types
+}
+
+function emitCModuleInitFunction(plan: CModulePlan, baseContext): string[] {
+  const context = createFunctionContext(baseContext, 'void')
+  const body = collectIrTopLevelNodes(plan.ir, 'statement')
+  const initCalls = emitCModuleImportInitCalls(plan)
+  const bodyLines = emitStatementList(body, context)
+  const lines = [
+    `void ${plan.initName}(void) {`,
+    '  static bool ccjs_initialized = false;',
+    '  if (ccjs_initialized) return;',
+    '  ccjs_initialized = true;',
+    ...initCalls.map((line) => `  ${line}`)
+  ]
+
+  lines.push(...emitLoopFlowDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitReturnValueDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitReturnFlowDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitEventLoopDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitOwnedValueDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitOwnedPromiseDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitErrorChannelDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitBoxedValueDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitEventLoopInit(context).map((line) => `  ${line}`))
+  lines.push(...bodyLines.map((line) => `  ${line}`))
+  lines.push(...emitEventLoopDrain(context).map((line) => `  ${line}`))
+
+  if (shouldEmitCleanupLabel(context)) {
+    lines.push('ccjs_cleanup:')
+    lines.push(...emitOwnedValueCleanup(context).map((line) => `  ${line}`))
+    lines.push(...emitOwnedPromiseCleanup(context).map((line) => `  ${line}`))
+    lines.push(...emitEventLoopCleanup(context).map((line) => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map((line) => `  ${line}`))
+  }
+
+  lines.push('  return;')
+  lines.push('}')
+
+  return lines
+}
+
+function emitCModuleMainFunction(plan: CModulePlan, baseContext): string[] {
+  const context = createFunctionContext(baseContext, 'number')
+  const body = collectIrTopLevelNodes(plan.ir, 'statement')
+  const initCalls = emitCModuleImportInitCalls(plan)
+  const bodyLines = emitStatementList(body, context)
+  const lines = ['int main(void) {']
+
+  lines.push(...emitLoopFlowDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitReturnValueDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitReturnFlowDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitEventLoopDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitOwnedValueDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitOwnedPromiseDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitErrorChannelDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitBoxedValueDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitEventLoopInit(context).map((line) => `  ${line}`))
+  lines.push(...initCalls.map((line) => `  ${line}`))
+  lines.push(...bodyLines.map((line) => `  ${line}`))
+  lines.push(...emitEventLoopDrain(context).map((line) => `  ${line}`))
+
+  if (shouldEmitCleanupLabel(context)) {
+    lines.push('ccjs_cleanup:')
+    lines.push(...emitOwnedValueCleanup(context).map((line) => `  ${line}`))
+    lines.push(...emitOwnedPromiseCleanup(context).map((line) => `  ${line}`))
+    lines.push(...emitEventLoopCleanup(context).map((line) => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map((line) => `  ${line}`))
+  }
+
+  lines.push(`  return ${emitMainReturnExpression(context)};`)
+  lines.push('}')
+
+  return lines
+}
+
+function emitCModuleImportInitCalls(plan: CModulePlan): string[] {
+  return plan.imports.flatMap((item) => (item.module.initName == null ? [] : [`${item.module.initName}();`]))
+}
+
+function collectCModuleExportedFunctions(plan: CModulePlan): AnyNode[] {
+  const exportedNames = new Set(
+    plan.ir.functionDeclarations.filter((declaration) => declaration.exported).map((declaration) => declaration.name)
+  )
+
+  return collectIrTopLevelNodes(plan.ir, 'function').filter((item) => exportedNames.has(item.name))
+}
+
+function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFunctionDeclaration[] {
+  return plan.imports.flatMap((item) =>
+    item.declaration.specifiers.flatMap((specifier) => {
+      const declaration = item.module.ir.functionDeclarations.find(
+        (candidate) => candidate.name === specifier.imported && candidate.exported
+      )
+
+      return declaration == null ? [] : [declaration]
+    })
+  )
+}
+
+function collectImportedCModuleFunctionEffects(plan: CModulePlan): IrFunctionEffect[] {
+  const effects: IrFunctionEffect[] = []
+
+  for (const item of plan.imports) {
+    const importedNames = new Set(item.declaration.specifiers.map((specifier) => specifier.imported))
+
+    effects.push(...item.module.ir.functionEffects.filter((effect) => importedNames.has(effect.name)))
+  }
+
+  return effects
+}
+
+function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
+  const names = new Map<string, string>()
+  const localNames = new Set(plan.ir.functionDeclarations.map((declaration) => declaration.name))
+
+  for (const declaration of plan.ir.functionDeclarations) {
+    names.set(declaration.name, emitCModuleFunctionName(plan, declaration.name))
+  }
+
+  for (const item of plan.imports) {
+    for (const specifier of item.declaration.specifiers) {
+      names.set(specifier.imported, emitCModuleFunctionName(item.module, specifier.imported))
+
+      if (!localNames.has(specifier.local)) {
+        names.set(specifier.local, emitCModuleFunctionName(item.module, specifier.imported))
+      }
+    }
+  }
+
+  return names
+}
+
+function emitCModuleFunctionName(plan: CModulePlan, name: string): string {
+  return `${plan.symbolPrefix}_${emitCFunctionName(name)}`
+}
+
+function reportUnsupportedCModuleImports(
+  declaration: AnyNode,
+  importedModule: CModulePlan,
+  diagnostics: Diagnostic[]
+): void {
+  for (const specifier of declaration.specifiers) {
+    const exported = importedModule.record.exports.get(specifier.imported)
+
+    if (exported == null || exported.type === 'FunctionDeclaration') {
+      continue
+    }
+
+    diagnostics.push(
+      diagnostic(
+        'CCJS_C_MODULE_IMPORT',
+        'modular C output currently supports importing exported functions only',
+        specifier.loc
+      )
+    )
+  }
+}
+
+function uniqueCModuleImports(imports: CModuleImportPlan[]): CModuleImportPlan[] {
+  const seen = new Set<string>()
+  const unique: CModuleImportPlan[] = []
+
+  for (const item of imports) {
+    if (seen.has(item.module.headerPath)) {
+      continue
+    }
+
+    seen.add(item.module.headerPath)
+    unique.push(item)
+  }
+
+  return unique
+}
+
+function resolveKnownCModuleImport(from: string, specifier: string, modulePaths: Set<string>): string | null {
+  const normalized = normalize(resolve(dirname(from), specifier))
+  const candidates =
+    extname(normalized) === ''
+      ? [
+          ...cModuleSourceExtensions.map((extension) => `${normalized}${extension}`),
+          ...cModuleSourceExtensions.map((extension) => join(normalized, `index${extension}`))
+        ]
+      : [normalized]
+
+  return candidates.find((candidate) => modulePaths.has(candidate)) ?? null
+}
+
+function relativeCModuleSourcePath(sourceRoot: string, file: string): string {
+  const relativePath = normalize(relative(sourceRoot, file))
+
+  if (relativePath !== '' && !relativePath.startsWith('..') && !isAbsolute(relativePath)) {
+    return toCPath(relativePath)
+  }
+
+  return toCPath(join('external', `${shortCModuleHash(file)}_${emitCIdentifier(file)}`))
+}
+
+function replaceCModuleExtension(path: string, extension: '.c' | '.h'): string {
+  const currentExtension = pathPosix.extname(path)
+
+  return currentExtension === '' ? `${path}${extension}` : `${path.slice(0, -currentExtension.length)}${extension}`
+}
+
+function cModuleSymbolPrefix(relativeSourcePath: string, sourcePath: string): string {
+  return `ccjs_mod_${emitCIdentifier(relativeSourcePath)}_${shortCModuleHash(sourcePath)}`
+}
+
+function shortCModuleHash(value: string): string {
+  return createHash('sha256').update(value).digest('hex').slice(0, 8)
+}
+
+function relativeCIncludePath(fromSourcePath: string, toHeaderPath: string): string {
+  const includePath = pathPosix.relative(pathPosix.dirname(fromSourcePath), toHeaderPath)
+
+  return includePath === '' ? pathPosix.basename(toHeaderPath) : includePath
+}
+
+function toCPath(path: string): string {
+  return sep === '/' ? path : path.split(sep).join('/')
+}
+
+function commonDirectory(paths: string[]): string {
+  if (paths.length === 0) {
+    return '.'
+  }
+
+  const [first, ...rest] = paths.map((item) => resolve(item).split(sep))
+  let length = first.length
+
+  for (const path of rest) {
+    while (length > 0 && first.slice(0, length).join(sep) !== path.slice(0, length).join(sep)) {
+      length -= 1
+    }
+  }
+
+  return first.slice(0, length).join(sep) || sep
 }
 
 function emitCUnit(
