@@ -781,27 +781,38 @@ function createAsyncTaskBodyPlan(body): AsyncTaskBodyPlan {
   const tryRegion = body.tryRegion ?? null
   const awaits = body.awaits
   const prefixLocals = body.prefixLocals ?? []
+  const tryPhases = createAsyncTaskTryPhases(tryRegion, successPhases)
+  const tryHandler = tryRegion?.handler ?? null
+  const livePrefixLocalNames = collectAsyncTaskLiveAcrossSuspensionNames({
+    awaits,
+    successPhases,
+    tryPhases,
+    returnExpression: body.returnExpression,
+    tryHandler
+  })
 
   return {
     awaits,
     prefixStatements: body.prefixStatements ?? [],
     prefixLocals,
-    frameLocals: createAsyncTaskFrameLocals(prefixLocals, awaits),
+    frameLocals: createAsyncTaskFrameLocals(prefixLocals, awaits, livePrefixLocalNames),
     successPhases,
-    tryPhases: createAsyncTaskTryPhases(tryRegion, successPhases),
+    tryPhases,
     returnExpression: body.returnExpression,
     returnType: body.returnType,
     hasTryRegion: tryRegion != null,
-    tryHandler: tryRegion?.handler ?? null
+    tryHandler
   }
 }
 
-function createAsyncTaskFrameLocals(prefixLocals, awaits): AsyncTaskFrameLocal[] {
+function createAsyncTaskFrameLocals(prefixLocals, awaits, livePrefixLocalNames): AsyncTaskFrameLocal[] {
   return [
-    ...prefixLocals.map(local => ({
-      ...local,
-      kind: 'prefix' as const
-    })),
+    ...prefixLocals
+      .filter(local => livePrefixLocalNames.has(local.name))
+      .map(local => ({
+        ...local,
+        kind: 'prefix' as const
+      })),
     ...awaits
       .filter(item => item.fieldName != null)
       .map(item => ({
@@ -809,6 +820,57 @@ function createAsyncTaskFrameLocals(prefixLocals, awaits): AsyncTaskFrameLocal[]
         kind: 'await' as const
       }))
   ]
+}
+
+function collectAsyncTaskLiveAcrossSuspensionNames({ awaits, successPhases, tryPhases, returnExpression, tryHandler }) {
+  return collectAsyncTaskReferencedNames([
+    ...awaits.slice(1).flatMap(item => [item.awaitedExpression, item.awaitedPromiseExpression]),
+    ...successPhases.flatMap(phase => phase.statements),
+    ...tryPhases.flatMap(phase => phase.statements),
+    returnExpression,
+    ...(tryHandler == null ? [] : [
+      ...(tryHandler.statements ?? []),
+      tryHandler.returnExpression
+    ])
+  ])
+}
+
+function collectAsyncTaskReferencedNames(nodes) {
+  const names = new Set<string>()
+  const visit = node => {
+    if (node == null) {
+      return
+    }
+
+    if (Array.isArray(node)) {
+      node.forEach(visit)
+      return
+    }
+
+    if (typeof node !== 'object') {
+      return
+    }
+
+    if (node.type === 'Reference') {
+      if (node.path.length === 1) {
+        names.add(node.path[0])
+      }
+
+      return
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'loc' || key === 'shape' || key === 'functionType') {
+        continue
+      }
+
+      visit(value)
+    }
+  }
+
+  visit(nodes)
+
+  return names
 }
 
 function createAsyncTaskSuccessPhases(body): AsyncTaskPhase[] {

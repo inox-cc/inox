@@ -4910,6 +4910,7 @@ export async function main(): Promise<void> {
   })
 
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_start\(ccjs_loop\* ccjs_loop, ccjs_promise\*\* out\) \{[\s\S]*double seed = 3;[\s\S]*status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(seed\)\);/)
+  assert.doesNotMatch(result.code, /prefix_seed/)
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_resume\(void\* context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*printf\("%s\\n", "done"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/)
 })
 
