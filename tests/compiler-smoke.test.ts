@@ -5364,6 +5364,29 @@ export async function main(): Promise<void> {
   assert.match(result.code, /static ccjs_status ccjs_async_task_work_reject\(void\* context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;[\s\S]*ccjs_value ccjs_bytes_\d+ = ccjs_undefined_value\(\);[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t\*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_bytes_\d+\);[\s\S]*ccjs_release\(ccjs_bytes_\d+\);[\s\S]*return status;/)
 })
 
+test('reports nested async task frame catch throw paths as unsupported', () => {
+  assertDiagnostic(`async function work(): Promise<number> {
+  try {
+    try {
+      const value: number = await Promise.reject('inner')
+      return value
+    } catch (error) {
+      throw 'catch fail'
+    }
+  } catch (error) {
+    console.log(error)
+    return 9
+  }
+}
+
+export async function main(): Promise<void> {
+  console.log(await work())
+}
+`, 'CCJS_C_ASYNC', {
+    target: 'c'
+  })
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]
