@@ -431,17 +431,20 @@ export function main(): void {
   const user: User = { name: 'Ada' }
   const name = user.name
   const message = name + '!'
-  console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99))
+  console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99), name.slice(-2))
 }
 `, {
     target: 'c'
   })
 
-  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, name->bytes, name->len, \(size_t\)\(1\), \(size_t\)\(3\), &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, "Ada", 3, \(size_t\)\(1\), \(size_t\)\(3\), &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, ccjs_slice_string_\d+->bytes, ccjs_slice_string_\d+->len, \(size_t\)\(0\), \(size_t\)\(1\), &ccjs_value_\d+\)/)
-  assert.match(result.code, /size_t ccjs_slice_end_\d+ = ccjs_string_code_point_length_parts\(message->bytes, message->len\);/)
-  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, message->bytes, message->len, \(size_t\)\(3\), \(size_t\)\(\(\(double\)ccjs_slice_end_\d+\)\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /size_t ccjs_slice_length_\d+ = ccjs_string_code_point_length_parts\(name->bytes, name->len\);/)
+  assert.match(result.code, /double ccjs_slice_start_raw_\d+ = 1;/)
+  assert.match(result.code, /double ccjs_slice_start_raw_\d+ = \(-2\);/)
+  assert.match(result.code, /if \(ccjs_slice_end_\d+ < ccjs_slice_start_\d+\) ccjs_slice_end_\d+ = ccjs_slice_start_\d+;/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, name->bytes, name->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, "Ada", 3, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, ccjs_slice_string_\d+->bytes, ccjs_slice_string_\d+->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, message->bytes, message->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/)
 })
 
 test('lowers C string split for literals and runtime strings', () => {
@@ -466,7 +469,7 @@ export function main(): void {
     'string-bytes'
   ])
   assert.match(result.code, /ccjs_string_split_parts\(&ccjs_default_allocator, ccjs_split_string_\d+->bytes, ccjs_split_string_\d+->len, ",", 1, &ccjs_split_array_\d+\)/)
-  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, name->bytes, name->len, \(size_t\)\(0\), \(size_t\)\(1\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, name->bytes, name->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/)
 })
 
 test('lowers C string trim for literals and runtime strings', () => {
@@ -5706,7 +5709,9 @@ test('lowers Buffer and Uint8Array APIs to C binary runtime calls', () => {
   assert.match(result.code, /ccjs_bytes_new\(&ccjs_default_allocator, \(size_t\)\(4\), &ccjs_bytes_\d+\)/)
   assert.match(result.code, /ccjs_bytes_get\(bytes, \(size_t\)\(0\), &ccjs_byte_\d+\)/)
   assert.match(result.code, /ccjs_bytes_set\(out, \(size_t\)\(1\), \(uint8_t\)\(7\)\)/)
-  assert.match(result.code, /ccjs_bytes_slice\(out, \(size_t\)\(0\), \(size_t\)\(2\), &ccjs_bytes_slice_\d+\)/)
+  assert.match(result.code, /double ccjs_bytes_start_raw_\d+ = 0;/)
+  assert.match(result.code, /double ccjs_bytes_end_raw_\d+ = 2;/)
+  assert.match(result.code, /ccjs_bytes_slice\(out, ccjs_bytes_start_\d+, ccjs_bytes_end_\d+, &ccjs_bytes_slice_\d+\)/)
   assert.match(result.code, /ccjs_bytes_to_string\(&ccjs_default_allocator, bytes, &ccjs_bytes_string_\d+\)/)
 
   const arrayLiteral = compileSource(`export function main(): void {

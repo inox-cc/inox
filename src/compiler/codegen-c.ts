@@ -8810,13 +8810,15 @@ function emitCStringTrimValueExpression(expression, context) {
 function emitCStringSliceValueExpression(expression, context) {
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_slice_string')
   const start = emitPreparedNumberExpression(expression.args[0], context)
-  const defaultEnd = nextCName(context, 'ccjs_slice_end')
+  const lengthName = nextCName(context, 'ccjs_slice_length')
+  const startRaw = nextCName(context, 'ccjs_slice_start_raw')
+  const startIndex = nextCName(context, 'ccjs_slice_start')
+  const endRaw = nextCName(context, 'ccjs_slice_end_raw')
+  const endIndex = nextCName(context, 'ccjs_slice_end')
   const end = expression.args[1] == null
     ? {
-        lines: [
-          `size_t ${defaultEnd} = ccjs_string_code_point_length_parts(${value.bytes}, ${value.length});`
-        ],
-        expression: `((double)${defaultEnd})`
+        lines: [],
+        expression: `((double)${lengthName})`
       }
     : emitPreparedNumberExpression(expression.args[1], context)
   const temp = nextCName(context, 'ccjs_value')
@@ -8826,12 +8828,42 @@ function emitCStringSliceValueExpression(expression, context) {
     lines: [
       ...value.lines,
       ...start.lines,
+      `size_t ${lengthName} = ccjs_string_code_point_length_parts(${value.bytes}, ${value.length});`,
       ...end.lines,
+      `double ${startRaw} = ${start.expression};`,
+      `double ${endRaw} = ${end.expression};`,
+      ...emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_slice_start'),
+      ...emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'ccjs_slice_end'),
+      `if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`,
       ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(`ccjs_string_slice_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, (size_t)(${start.expression}), (size_t)(${end.expression}), &${temp})`, context)
+      emitStatusCheck(`ccjs_string_slice_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${startIndex}, ${endIndex}, &${temp})`, context)
     ],
     expression: temp
   }
+}
+
+function emitSliceIndexNormalizationLines(rawName, lengthName, outName, context, prefix) {
+  const integerName = nextCName(context, `${prefix}_integer`)
+  const fromEndName = nextCName(context, `${prefix}_from_end`)
+
+  return [
+    `size_t ${outName} = 0;`,
+    `if (${rawName} != ${rawName}) {`,
+    `  ${outName} = 0;`,
+    `} else if (${rawName} <= -((double)${lengthName})) {`,
+    `  ${outName} = 0;`,
+    `} else if (${rawName} >= ((double)${lengthName})) {`,
+    `  ${outName} = ${lengthName};`,
+    '} else {',
+    `  long long ${integerName} = (long long)${rawName};`,
+    `  if (${integerName} < 0) {`,
+    `    long long ${fromEndName} = (long long)${lengthName} + ${integerName};`,
+    `    ${outName} = ${fromEndName} < 0 ? 0 : (size_t)${fromEndName};`,
+    '  } else {',
+    `    ${outName} = (size_t)${integerName};`,
+    '  }',
+    '}'
+  ]
 }
 
 function emitCStringSplitValueExpression(expression, context) {
@@ -8940,7 +8972,11 @@ function emitCBytesSliceValueExpression(expression, context) {
   const end = expression.args[1] == null
     ? null
     : emitPreparedNumberExpression(expression.args[1], context)
-  const endName = end == null ? nextCName(context, 'ccjs_bytes_len') : null
+  const lengthName = nextCName(context, 'ccjs_bytes_len')
+  const startRaw = nextCName(context, 'ccjs_bytes_start_raw')
+  const startIndex = nextCName(context, 'ccjs_bytes_start')
+  const endRaw = nextCName(context, 'ccjs_bytes_end_raw')
+  const endIndex = nextCName(context, 'ccjs_bytes_end')
   const temp = nextCName(context, 'ccjs_bytes_slice')
   registerOwnedValue(context, temp)
 
@@ -8948,14 +8984,16 @@ function emitCBytesSliceValueExpression(expression, context) {
     lines: [
       ...receiver.lines,
       ...start.lines,
-      ...(end == null
-        ? [
-            `size_t ${endName} = 0;`,
-            emitStatusCheck(`ccjs_bytes_len(${receiver.expression}, &${endName})`, context)
-          ]
-        : end.lines),
+      ...(end == null ? [] : end.lines),
+      `size_t ${lengthName} = 0;`,
+      emitStatusCheck(`ccjs_bytes_len(${receiver.expression}, &${lengthName})`, context),
+      `double ${startRaw} = ${start.expression};`,
+      `double ${endRaw} = ${end == null ? `((double)${lengthName})` : end.expression};`,
+      ...emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_bytes_start'),
+      ...emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'ccjs_bytes_end'),
+      `if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`,
       ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(`ccjs_bytes_slice(${receiver.expression}, (size_t)(${start.expression}), ${end == null ? endName : `(size_t)(${end.expression})`}, &${temp})`, context),
+      emitStatusCheck(`ccjs_bytes_slice(${receiver.expression}, ${startIndex}, ${endIndex}, &${temp})`, context),
       emitRuntimeValueCheck(temp, 'CCJS_TAG_BYTES', context)
     ],
     expression: temp

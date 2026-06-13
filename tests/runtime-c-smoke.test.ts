@@ -4933,7 +4933,7 @@ export function main(): void {
   const name = user.name
   const message = name + '!'
   const unicode = 'A😀é'
-  console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99), unicode.slice(1, 2), unicode.slice(2))
+  console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99), unicode.slice(1, 2), unicode.slice(2), name.slice(-2), name.slice(-99, 2), unicode.slice(-2, -1))
 }
 `, {
       target: 'c'
@@ -4948,7 +4948,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'da da A rac ! Ada 😀 é\n')
+    assert.equal(run.stdout, 'da da A rac ! Ada 😀 é da Ad 😀\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -8449,8 +8449,10 @@ test('generated C Buffer and Uint8Array APIs compile and run with runtime source
   out[1] = 7
   out[2] = 9
   const slice = out.slice(1, 3)
+  const tail = out.slice(-2)
+  const clamp = out.slice(-99, 2)
   const text = bytes.toString()
-  console.log(bytes.length, out[0], out[1], slice.length, slice[1], text)
+  console.log(bytes.length, out[0], out[1], slice.length, slice[1], tail[0], tail[1], clamp.length, clamp[1], text)
 }
 `, {
       target: 'c'
@@ -8465,7 +8467,7 @@ test('generated C Buffer and Uint8Array APIs compile and run with runtime source
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '2 104 7 2 9 hi\n')
+    assert.equal(run.stdout, '2 104 7 2 9 9 0 2 7 hi\n')
   } finally {
     await rm(dir, {
       recursive: true,
