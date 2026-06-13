@@ -928,10 +928,6 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
     return null
   }
 
-  if (hasPostNestedStatements && tryChain.some(item => item.handler != null)) {
-    return null
-  }
-
   const prefixResult = resolveAsyncTaskPrefixLocals(context, params, tryChainResult.prefixStatements)
 
   if (prefixResult == null) {
@@ -954,6 +950,11 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
 
   const finalizers = collectAsyncTaskTryFinalizers(tryChain)
   const handlerIndex = findAsyncTaskNearestTryHandlerIndex(tryChain)
+
+  if (hasPostNestedStatements && handlerIndex > tryChainResult.postNestedOwnerIndex) {
+    return null
+  }
+
   const handlerSource = handlerIndex < 0 ? null : tryChain[handlerIndex].handler
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
   const successStatements = hasPostNestedStatements ? postNestedStatements.slice(0, -1) : []
@@ -2143,8 +2144,12 @@ function emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitC
     return []
   }
 
+  const preHandlerFinalizerStatements = (wrapper.successPrefixFinalizerStatements?.length ?? 0) > 0
+    ? []
+    : wrapper.tryRegion.preHandlerFinalizerStatements ?? []
+
   return emitAsyncTaskTryStatementList([
-    ...(wrapper.tryRegion.preHandlerFinalizerStatements ?? []),
+    ...preHandlerFinalizerStatements,
     ...wrapper.tryRegion.finalizerStatements
   ], wrapper, baseContext, visibleAwaitCount)
 }
