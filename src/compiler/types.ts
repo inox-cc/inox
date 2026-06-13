@@ -208,6 +208,7 @@ export type RandomOptions = {
 export type RuntimeProfile = 'embedded' | 'hosted'
 
 export type RuntimeCapabilities = {
+  entropy?: boolean
   fs?: boolean
   heap?: boolean
   monotonicClock?: boolean

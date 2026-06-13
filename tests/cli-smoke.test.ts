@@ -144,6 +144,58 @@ test('ccjs file --emit c reads Math.random os backend config', async () => {
   }
 })
 
+test('ccjs file --emit c checks embedded entropy capability for Math.random os backend', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-random-entropy-config-test-'))
+  const out = join(dir, 'random.c')
+
+  try {
+    await writeFile(join(dir, 'main.ts'), `export function main(): void {
+  const value = Math.random()
+  console.log(value)
+}
+`)
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      profile: 'embedded',
+      random: {
+        backend: 'os'
+      }
+    }, null, 2)}\n`)
+
+    const missing = await runCli(['main.ts', '--emit', 'c', '-o', out], {
+      cwd: dir
+    })
+
+    assert.equal(missing.code, 1)
+    assert.match(missing.stderr, /CCJS_CAPABILITY: embedded profile requires entropy capability for Math\.random/)
+
+    await writeFile(join(dir, 'ccjs.config.json'), `${JSON.stringify({
+      profile: 'embedded',
+      capabilities: {
+        entropy: true
+      },
+      random: {
+        backend: 'os'
+      }
+    }, null, 2)}\n`)
+
+    const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const c = await readFile(out, 'utf8')
+
+    assert.match(c, /ccjs_math_random_os_u32/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs file --emit c reads embedded profile capability config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-capability-config-test-'))
   const out = join(dir, 'time.c')

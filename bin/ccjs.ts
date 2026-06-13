@@ -392,7 +392,7 @@ function validateCapabilitiesConfig(value: unknown, fileName: string): void {
   }
 
   const capabilities = value as RuntimeCapabilities
-  const allowed = new Set(['fs', 'heap', 'monotonicClock', 'timers', 'wallClock'])
+  const allowed = new Set(['entropy', 'fs', 'heap', 'monotonicClock', 'timers', 'wallClock'])
 
   for (const [key, enabled] of Object.entries(capabilities)) {
     if (!allowed.has(key)) {

@@ -30,7 +30,7 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
   const diagnostics: Diagnostic[] = []
   const reported = new Set<string>()
 
-  for (const usage of collectCapabilityUsages(programs)) {
+  for (const usage of collectCapabilityUsages(programs, options)) {
     if (capabilities[usage.key] === true) {
       continue
     }
@@ -54,9 +54,11 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
   }
 }
 
-function collectCapabilityUsages(programs: IrProgram[]): CapabilityUsage[] {
+function collectCapabilityUsages(programs: IrProgram[], options: CompileOptions): CapabilityUsage[] {
+  const globalUsages = collectIrGlobalUsages(programs)
+
   return [
-    ...collectIrGlobalUsages(programs).flatMap(usage => {
+    ...globalUsages.flatMap(usage => {
       const required = requiredCapabilityForGlobalUsage(usage)
 
       return required == null
@@ -67,8 +69,24 @@ function collectCapabilityUsages(programs: IrProgram[]): CapabilityUsage[] {
             loc: usage.loc
           }]
     }),
+    ...collectRandomCapabilityUsages(globalUsages, options),
     ...programs.flatMap(program => collectHeapCapabilityUsages(program.body))
   ]
+}
+
+function collectRandomCapabilityUsages(globalUsages: IrGlobalUsage[], options: CompileOptions): CapabilityUsage[] {
+  if (options.random?.backend !== 'os') {
+    return []
+  }
+
+  return globalUsages
+    .filter(usage => usage.path.join('.') === 'Math.random')
+    .map(usage => ({
+      key: 'entropy',
+      name: 'entropy',
+      path: 'Math.random',
+      loc: usage.loc
+    }))
 }
 
 function collectHeapCapabilityUsages(node: unknown): CapabilityUsage[] {

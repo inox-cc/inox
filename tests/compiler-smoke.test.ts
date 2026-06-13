@@ -6124,6 +6124,47 @@ export function main(): void {
   assert.match(enabled.code, /ccjs_loop_set_timeout/)
 })
 
+test('reports embedded entropy capability diagnostics for OS Math.random backend', () => {
+  const source = `export function main(): void {
+  const value = Math.random()
+  console.log(value)
+}
+`
+
+  assert.throws(() => {
+    compileSource(source, {
+      target: 'c',
+      profile: 'embedded',
+      random: {
+        backend: 'os'
+      }
+    })
+  }, error => {
+    if (!(error instanceof CompileError)) {
+      return false
+    }
+
+    assert.equal(error.diagnostics.every(item => item.code === 'CCJS_CAPABILITY'), true)
+    assert.deepEqual(error.diagnostics.map(item => item.message), [
+      'embedded profile requires entropy capability for Math.random'
+    ])
+    return true
+  })
+
+  const enabled = compileSource(source, {
+    target: 'c',
+    profile: 'embedded',
+    capabilities: {
+      entropy: true
+    },
+    random: {
+      backend: 'os'
+    }
+  })
+
+  assert.match(enabled.code, /ccjs_math_random_os_u32/)
+})
+
 test('reports embedded heap capability diagnostics for array-producing methods', () => {
   const source = `export function main(): void {
   const values = [1, 2, 3]
