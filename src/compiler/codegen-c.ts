@@ -944,18 +944,21 @@ function resolveAsyncTaskNestedTryWrapperBody(tryStatement, context, params, ret
   }
 
   const prefixContext = prefixResult.context
-  const awaits = resolveAsyncTaskAwaitSteps(innerPrefixResult.awaitStatements, prefixContext)
+  const awaitResult = resolveAsyncTaskAwaitStepsAndTrailingStatements(innerPrefixResult.awaitStatements, prefixContext)
 
-  if (awaits == null) {
+  if (awaitResult == null || (hasPostNestedStatements && awaitResult.trailingStatements.length > 0)) {
     return null
   }
 
+  const awaits = awaitResult.awaits
+  const successStatements = hasPostNestedStatements
+    ? postNestedStatements.slice(0, -1)
+    : awaitResult.trailingStatements
   const returnContext = createAsyncTaskExpressionContext(context, params, hasPostNestedStatements ? prefixResult.locals : [...prefixResult.locals, ...awaits])
   const finalizers = collectAsyncTaskTryFinalizers(tryChain)
   const handlerIndex = findAsyncTaskNearestTryHandlerIndex(tryChain)
   const handlerSource = handlerIndex < 0 ? null : tryChain[handlerIndex].handler
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
-  const successStatements = hasPostNestedStatements ? postNestedStatements.slice(0, -1) : []
   registerAsyncTaskStatementListLocals(returnContext, successStatements)
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
 
@@ -1304,6 +1307,16 @@ function hasUnsupportedAsyncTaskTryControlFlow(node) {
 }
 
 function resolveAsyncTaskAwaitSteps(statements, context) {
+  const result = resolveAsyncTaskAwaitStepsAndTrailingStatements(statements, context)
+
+  if (result == null || result.trailingStatements.length > 0) {
+    return null
+  }
+
+  return result.awaits
+}
+
+function resolveAsyncTaskAwaitStepsAndTrailingStatements(statements, context) {
   const awaits: Array<Record<string, any>> = []
 
   for (let index = 0; index < statements.length;) {
@@ -1333,10 +1346,22 @@ function resolveAsyncTaskAwaitSteps(statements, context) {
       continue
     }
 
-    return null
+    if (awaits.length === 0) {
+      return null
+    }
+
+    return {
+      awaits,
+      trailingStatements: statements.slice(index)
+    }
   }
 
-  return awaits.length === 0 ? null : awaits
+  return awaits.length === 0
+    ? null
+    : {
+        awaits,
+        trailingStatements: []
+      }
 }
 
 function resolveAsyncTaskDirectAwaitStep(statement, context, index) {
