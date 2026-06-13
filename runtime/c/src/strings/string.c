@@ -1,4 +1,5 @@
 #include <float.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -67,6 +68,113 @@ static bool ccjs_string_is_ascii_digit(char value) {
   return value >= '0' && value <= '9';
 }
 
+static bool ccjs_utf8_is_continuation(unsigned char value) {
+  return (value & 0xc0u) == 0x80u;
+}
+
+static size_t ccjs_utf8_next_len(const char* bytes, size_t len, size_t index) {
+  if (bytes == 0 || index >= len) {
+    return 0;
+  }
+
+  const unsigned char first = (unsigned char)bytes[index];
+
+  if (first < 0x80u) {
+    return 1;
+  }
+
+  if (first >= 0xc2u && first <= 0xdfu && index + 1 < len && ccjs_utf8_is_continuation((unsigned char)bytes[index + 1])) {
+    return 2;
+  }
+
+  if (first == 0xe0u && index + 2 < len) {
+    const unsigned char second = (unsigned char)bytes[index + 1];
+
+    if (second >= 0xa0u && second <= 0xbfu && ccjs_utf8_is_continuation((unsigned char)bytes[index + 2])) {
+      return 3;
+    }
+  }
+
+  if (first >= 0xe1u && first <= 0xecu && index + 2 < len && ccjs_utf8_is_continuation((unsigned char)bytes[index + 1]) && ccjs_utf8_is_continuation((unsigned char)bytes[index + 2])) {
+    return 3;
+  }
+
+  if (first == 0xedu && index + 2 < len) {
+    const unsigned char second = (unsigned char)bytes[index + 1];
+
+    if (second >= 0x80u && second <= 0x9fu && ccjs_utf8_is_continuation((unsigned char)bytes[index + 2])) {
+      return 3;
+    }
+  }
+
+  if (first >= 0xeeu && first <= 0xefu && index + 2 < len && ccjs_utf8_is_continuation((unsigned char)bytes[index + 1]) && ccjs_utf8_is_continuation((unsigned char)bytes[index + 2])) {
+    return 3;
+  }
+
+  if (first == 0xf0u && index + 3 < len) {
+    const unsigned char second = (unsigned char)bytes[index + 1];
+
+    if (second >= 0x90u && second <= 0xbfu && ccjs_utf8_is_continuation((unsigned char)bytes[index + 2]) && ccjs_utf8_is_continuation((unsigned char)bytes[index + 3])) {
+      return 4;
+    }
+  }
+
+  if (first >= 0xf1u && first <= 0xf3u && index + 3 < len && ccjs_utf8_is_continuation((unsigned char)bytes[index + 1]) && ccjs_utf8_is_continuation((unsigned char)bytes[index + 2]) && ccjs_utf8_is_continuation((unsigned char)bytes[index + 3])) {
+    return 4;
+  }
+
+  if (first == 0xf4u && index + 3 < len) {
+    const unsigned char second = (unsigned char)bytes[index + 1];
+
+    if (second >= 0x80u && second <= 0x8fu && ccjs_utf8_is_continuation((unsigned char)bytes[index + 2]) && ccjs_utf8_is_continuation((unsigned char)bytes[index + 3])) {
+      return 4;
+    }
+  }
+
+  return 1;
+}
+
+size_t ccjs_string_code_point_length_parts(const char* value_bytes, size_t value_len) {
+  if (value_bytes == 0 && value_len != 0) {
+    return 0;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  size_t index = 0;
+  size_t length = 0;
+
+  while (index < value_len) {
+    size_t step = ccjs_utf8_next_len(bytes, value_len, index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
+    length += 1;
+  }
+
+  return length;
+}
+
+static size_t ccjs_string_code_point_to_byte_offset(const char* bytes, size_t value_len, size_t offset) {
+  size_t index = 0;
+  size_t current = 0;
+
+  while (index < value_len && current < offset) {
+    size_t step = ccjs_utf8_next_len(bytes, value_len, index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
+    current += 1;
+  }
+
+  return index;
+}
+
 ccjs_status ccjs_string_to_number(const char* value_bytes, size_t value_len, ccjs_value* out) {
   if (out != 0) {
     *out = ccjs_null_value();
@@ -89,6 +197,7 @@ ccjs_status ccjs_string_to_number(const char* value_bytes, size_t value_len, ccj
   }
 
   if (start == end) {
+    *out = ccjs_number_value(0);
     return CCJS_OK;
   }
 
@@ -100,6 +209,11 @@ ccjs_status ccjs_string_to_number(const char* value_bytes, size_t value_len, ccj
     pos += 1;
   }
 
+  if (end - pos == 8 && memcmp(bytes + pos, "Infinity", 8) == 0) {
+    *out = ccjs_number_value(negative ? -HUGE_VAL : HUGE_VAL);
+    return CCJS_OK;
+  }
+
   double value = 0;
   size_t digits = 0;
 
@@ -107,10 +221,11 @@ ccjs_status ccjs_string_to_number(const char* value_bytes, size_t value_len, ccj
     const double digit = (double)(bytes[pos] - '0');
 
     if (value > (DBL_MAX - digit) / 10.0) {
-      return CCJS_OK;
+      value = HUGE_VAL;
+    } else {
+      value = value * 10.0 + digit;
     }
 
-    value = value * 10.0 + digit;
     digits += 1;
     pos += 1;
   }
@@ -165,15 +280,15 @@ ccjs_status ccjs_string_to_number(const char* value_bytes, size_t value_len, ccj
     } else {
       for (size_t index = 0; index < exponent; index += 1) {
         if (value > DBL_MAX / 10.0) {
-          return CCJS_OK;
+          value = HUGE_VAL;
+        } else {
+          value *= 10.0;
         }
-
-        value *= 10.0;
       }
     }
   }
 
-  if (pos != end || value > DBL_MAX) {
+  if (pos != end) {
     return CCJS_OK;
   }
 
@@ -270,21 +385,19 @@ ccjs_status ccjs_string_slice_parts(ccjs_allocator* allocator, const char* value
     return CCJS_ERR_TYPE;
   }
 
-  if (start > value_len) {
-    start = value_len;
-  }
-
-  if (end > value_len) {
-    end = value_len;
-  }
-
   if (end < start) {
     end = start;
   }
 
   const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  const size_t start_byte = ccjs_string_code_point_to_byte_offset(bytes, value_len, start);
+  size_t end_byte = ccjs_string_code_point_to_byte_offset(bytes, value_len, end);
 
-  return ccjs_string_from_literal(allocator, bytes + start, end - start, out);
+  if (end_byte < start_byte) {
+    end_byte = start_byte;
+  }
+
+  return ccjs_string_from_literal(allocator, bytes + start_byte, end_byte - start_byte, out);
 }
 
 static ccjs_status ccjs_string_split_push(ccjs_allocator* allocator, ccjs_value array, const char* bytes, size_t len) {
@@ -319,14 +432,22 @@ ccjs_status ccjs_string_split_parts(ccjs_allocator* allocator, const char* value
   }
 
   if (separator_len == 0) {
-    for (size_t index = 0; index < value_len; index += 1) {
-      status = ccjs_string_split_push(allocator, *out, bytes + index, 1);
+    for (size_t index = 0; index < value_len;) {
+      size_t step = ccjs_utf8_next_len(bytes, value_len, index);
+
+      if (step == 0) {
+        step = 1;
+      }
+
+      status = ccjs_string_split_push(allocator, *out, bytes + index, step);
 
       if (status != CCJS_OK) {
         ccjs_release(*out);
         *out = ccjs_undefined_value();
         return status;
       }
+
+      index += step;
     }
 
     return CCJS_OK;

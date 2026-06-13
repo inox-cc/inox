@@ -4825,7 +4825,8 @@ export function main(): void {
   const user: User = { name: 'Ada' }
   const name = user.name
   const message = name + '!'
-  console.log('Ada'.length, length(name), user.name.length, getName().length, message.length)
+  const unicode = 'A😀é'
+  console.log('Ada'.length, length(name), user.name.length, getName().length, message.length, unicode.length)
 }
 `, {
       target: 'c'
@@ -4840,7 +4841,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '3 3 3 5 4\n')
+    assert.equal(run.stdout, '3 3 3 5 4 3\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -4931,7 +4932,8 @@ export function main(): void {
   const user: User = { name: 'Ada' }
   const name = user.name
   const message = name + '!'
-  console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99))
+  const unicode = 'A😀é'
+  console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99), unicode.slice(1, 2), unicode.slice(2))
 }
 `, {
       target: 'c'
@@ -4946,7 +4948,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'da da A rac ! Ada\n')
+    assert.equal(run.stdout, 'da da A rac ! Ada 😀 é\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -4976,7 +4978,7 @@ export function main(): void {
   const user: User = { names: 'Ada,Grace' }
   const names = user.names.split(',')
   const initials = user.names.split(',').map(name => name.slice(0, 1)).sort()
-  console.log(names[0], names[1], initials[0], initials[1], 'abc'.split('')[1])
+  console.log(names[0], names[1], initials[0], initials[1], 'abc'.split('')[1], 'A😀é'.split('')[1])
 }
 `, {
       target: 'c'
@@ -4991,7 +4993,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'Ada Grace A G b\n')
+    assert.equal(run.stdout, 'Ada Grace A G b 😀\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -5124,7 +5126,7 @@ test('generated C Number conversion compiles and runs with runtime sources', asy
 }
 
 export function main(): void {
-  console.log(Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('nope') ?? 7, Number('1x') ?? 8, parse('-3.25') ?? 0)
+  console.log(Number('') ?? 9, Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('nope') ?? 7, Number('1x') ?? 8, parse('-3.25') ?? 0, Number('1e309') ?? 0, Number('-Infinity') ?? 0)
 }
 `, {
       target: 'c'
@@ -5139,7 +5141,7 @@ export function main(): void {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '42 50 7 8 -3.25\n')
+    assert.equal(run.stdout, '0 42 50 7 8 -3.25 inf -inf\n')
   } finally {
     await rm(dir, {
       recursive: true,

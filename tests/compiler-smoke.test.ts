@@ -375,9 +375,12 @@ export function main(): void {
   })
 
   assert.match(result.code, /#include <string\.h>/)
-  assert.match(result.code, /ccjs_return = \(\(double\)name->len\);/)
+  assert.match(result.code, /ccjs_string_code_point_length_parts\(name->bytes, name->len\)/)
+  assert.match(result.code, /ccjs_return = \(\(double\)ccjs_string_length_\d+\);/)
   assert.match(result.code, /ccjs_string\* ccjs_length_string_\d+ = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
-  assert.match(result.code, /printf\("%g %g %g %g %g\\n", \(\(double\)\(\(double\)3\)\), \(\(double\)length\(ccjs_value_\d+\)\), \(\(double\)\(\(double\)ccjs_length_string_\d+->len\)\), \(\(double\)\(\(double\)ccjs_length_string_\d+->len\)\), \(\(double\)\(\(double\)message->len\)\)\);/)
+  assert.match(result.code, /ccjs_string_code_point_length_parts\("Ada", 3\)/)
+  assert.match(result.code, /ccjs_string_code_point_length_parts\(ccjs_length_string_\d+->bytes, ccjs_length_string_\d+->len\)/)
+  assert.match(result.code, /ccjs_string_code_point_length_parts\(message->bytes, message->len\)/)
 })
 
 test('lowers C string predicate methods for literals and runtime strings', () => {
@@ -437,7 +440,8 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, name->bytes, name->len, \(size_t\)\(1\), \(size_t\)\(3\), &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, "Ada", 3, \(size_t\)\(1\), \(size_t\)\(3\), &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, ccjs_slice_string_\d+->bytes, ccjs_slice_string_\d+->len, \(size_t\)\(0\), \(size_t\)\(1\), &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, message->bytes, message->len, \(size_t\)\(3\), \(size_t\)\(message->len\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /size_t ccjs_slice_end_\d+ = ccjs_string_code_point_length_parts\(message->bytes, message->len\);/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, message->bytes, message->len, \(size_t\)\(3\), \(size_t\)\(\(\(double\)ccjs_slice_end_\d+\)\), &ccjs_value_\d+\)/)
 })
 
 test('lowers C string split for literals and runtime strings', () => {
@@ -6769,7 +6773,8 @@ export function main(): void {
     target: 'js'
   })
 
-  assert.match(result.code, /return name\.length/)
+  assert.match(result.code, /function ccjsStringLength\(value\) \{/)
+  assert.match(result.code, /return ccjsStringLength\(name\)/)
 
   assertDiagnostic(`export function main(): void {
   const name = 'Ada'
@@ -7876,7 +7881,8 @@ export function main(): void {
     target: 'js'
   })
 
-  assert.match(result.code, /return name\.slice\(1, 3\)/)
+  assert.match(result.code, /function ccjsStringSlice\(value, start, end\) \{/)
+  assert.match(result.code, /return ccjsStringSlice\(name, 1, 3\)/)
 
   assertDiagnostic(`export function main(): void {
   const name = 'Ada'
@@ -7901,7 +7907,8 @@ test('checks string split as a string array call', () => {
     target: 'ts'
   })
 
-  assert.match(result.code, /const parts: string\[\] = "Ada,Grace"\.split\(","\)/)
+  assert.match(result.code, /function ccjsStringSplit\(value: string, separator: string\): string\[\] \{/)
+  assert.match(result.code, /const parts: string\[\] = ccjsStringSplit\("Ada,Grace", ","\)/)
   assert.match(result.code, /const first: string = parts\[0\]/)
   assert.equal(result.hir.body[0].body[0].valueType, 'array')
   assert.equal(result.hir.body[0].body[0].arrayElementType, 'string')
@@ -7981,6 +7988,8 @@ export function main(): void {
   })
 
   assert.match(js.code, /function ccjsNumberFromString\(text\) \{/)
+  assert.match(js.code, /Number\.isNaN\(value\) \? null : value/)
+  assert.doesNotMatch(js.code, /Number\.isFinite/)
   assert.match(js.code, /return ccjsNumberFromString\(text\)/)
   assert.match(js.code, /const port = \(ccjsNumberFromString\("8080"\) \?\? 3000\)/)
   assert.match(ts.code, /function ccjsNumberFromString\(text: string\): number \| null \{/)

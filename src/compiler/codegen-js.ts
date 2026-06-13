@@ -134,6 +134,14 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
     helperLines.push(...emitMapSetHelper(options))
   }
 
+  if (features.has('string-bytes')) {
+    if (helperLines.length > 0) {
+      helperLines.push('')
+    }
+
+    helperLines.push(...emitStringUnicodeHelpers(options))
+  }
+
   if (features.has('number-from-string-null')) {
     if (helperLines.length > 0) {
       helperLines.push('')
@@ -205,26 +213,80 @@ function emitMapSetHelper(options: JsEmitOptions): string[] {
       ]
 }
 
+function emitStringUnicodeHelpers(options: JsEmitOptions): string[] {
+  return options.emitTypes === true
+    ? [
+        'function ccjsStringLength(value: string): number {',
+        '  return Array.from(value).length',
+        '}',
+        '',
+        'function ccjsStringSlice(value: string, start: number, end: number | null): string {',
+        '  if (end === null) {',
+        '    return Array.from(value).slice(start).join(\'\')',
+        '  }',
+        '',
+        '  return Array.from(value).slice(start, end).join(\'\')',
+        '}',
+        '',
+        'function ccjsStringSplit(value: string, separator: string): string[] {',
+        '  if (separator === \'\') {',
+        '    return Array.from(value)',
+        '  }',
+        '',
+        '  return value.split(separator)',
+        '}'
+      ]
+    : [
+        'function ccjsStringLength(value) {',
+        '  return Array.from(value).length',
+        '}',
+        '',
+        'function ccjsStringSlice(value, start, end) {',
+        '  if (end === null) {',
+        '    return Array.from(value).slice(start).join(\'\')',
+        '  }',
+        '',
+        '  return Array.from(value).slice(start, end).join(\'\')',
+        '}',
+        '',
+        'function ccjsStringSplit(value, separator) {',
+        '  if (separator === \'\') {',
+        '    return Array.from(value)',
+        '  }',
+        '',
+        '  return value.split(separator)',
+        '}'
+      ]
+}
+
 function emitNumberFromStringHelper(options: JsEmitOptions): string[] {
   return options.emitTypes === true
     ? [
         'function ccjsNumberFromString(text: string): number | null {',
-        '  if (!/^[ \\t\\n\\r\\f\\v]*[+-]?(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
+        '  if (/^[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
+        '    return 0',
+        '  }',
+        '',
+        '  if (!/^[ \\t\\n\\r\\f\\v]*[+-]?(?:(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?|Infinity)[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
         '    return null',
         '  }',
         '',
         '  const value = Number(text)',
-        '  return Number.isFinite(value) ? value : null',
+        '  return Number.isNaN(value) ? null : value',
         '}'
       ]
     : [
         'function ccjsNumberFromString(text) {',
-        '  if (!/^[ \\t\\n\\r\\f\\v]*[+-]?(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
+        '  if (/^[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
+        '    return 0',
+        '  }',
+        '',
+        '  if (!/^[ \\t\\n\\r\\f\\v]*[+-]?(?:(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?|Infinity)[ \\t\\n\\r\\f\\v]*$/.test(text)) {',
         '    return null',
         '  }',
         '',
         '  const value = Number(text)',
-        '  return Number.isFinite(value) ? value : null',
+        '  return Number.isNaN(value) ? null : value',
         '}'
       ]
 }
@@ -665,6 +727,10 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   if (expression.type === 'MemberExpression') {
+    if (isStringLengthExpression(expression)) {
+      return `ccjsStringLength(${emitExpression(expression.object, options)})`
+    }
+
     return `${emitExpression(expression.object, options)}.${expression.property}`
   }
 
@@ -705,6 +771,20 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
 
     if (isNumberConversionCall(expression)) {
       return `ccjsNumberFromString(${emitExpression(expression.args[0], options)})`
+    }
+
+    if (isStringSliceCall(expression)) {
+      const args = expression.args.map(arg => emitExpression(arg, options))
+
+      if (args.length === 1) {
+        args.push('null')
+      }
+
+      return `ccjsStringSlice(${emitExpression(expression.callee.object, options)}, ${args.join(', ')})`
+    }
+
+    if (isStringSplitCall(expression)) {
+      return `ccjsStringSplit(${emitExpression(expression.callee.object, options)}, ${emitExpression(expression.args[0], options)})`
     }
 
     return `${emitExpression(expression.callee, options)}(${expression.args.map(arg => emitExpression(arg, options)).join(', ')})`
@@ -827,6 +907,27 @@ function isNumberConversionCall(expression: AnyNode): boolean {
     && expression.callee.type === 'Reference'
     && expression.callee.path.length === 1
     && expression.callee.path[0] === 'Number'
+    && expression.args.length === 1
+}
+
+function isStringLengthExpression(expression: AnyNode): boolean {
+  return expression.type === 'MemberExpression'
+    && expression.property === 'length'
+    && expression.stringRuntimeMethod === 'length'
+}
+
+function isStringSliceCall(expression: AnyNode): boolean {
+  return expression.type === 'CallExpression'
+    && expression.callee.type === 'MemberExpression'
+    && expression.stringRuntimeMethod === 'slice'
+    && expression.args.length >= 1
+    && expression.args.length <= 2
+}
+
+function isStringSplitCall(expression: AnyNode): boolean {
+  return expression.type === 'CallExpression'
+    && expression.callee.type === 'MemberExpression'
+    && expression.stringRuntimeMethod === 'split'
     && expression.args.length === 1
 }
 

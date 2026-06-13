@@ -268,6 +268,8 @@ function emitCPrelude(needsRuntime, needsTimeRuntime, needsMathRuntime, needsAsy
       lines.push('#include "ccjs/set.h"')
     }
     lines.push('#include "ccjs/string.h"')
+  } else if (needsStringHeader) {
+    lines.push('#include "ccjs/string.h"')
   }
 
   if (needsTimeRuntime) {
@@ -8678,10 +8680,13 @@ function emitCStringTrimValueExpression(expression, context) {
 function emitCStringSliceValueExpression(expression, context) {
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_slice_string')
   const start = emitPreparedNumberExpression(expression.args[0], context)
+  const defaultEnd = nextCName(context, 'ccjs_slice_end')
   const end = expression.args[1] == null
     ? {
-        lines: [],
-        expression: value.length
+        lines: [
+          `size_t ${defaultEnd} = ccjs_string_code_point_length_parts(${value.bytes}, ${value.length});`
+        ],
+        expression: `((double)${defaultEnd})`
       }
     : emitPreparedNumberExpression(expression.args[1], context)
   const temp = nextCName(context, 'ccjs_value')
@@ -9603,10 +9608,14 @@ function emitPreparedStringLengthExpression(expression, context) {
   }
 
   const operand = emitPreparedStringBytesOperand(expression.object, context, 'ccjs_length_string')
+  const length = nextCName(context, 'ccjs_string_length')
 
   return {
-    lines: operand.lines,
-    expression: `((double)${operand.length})`
+    lines: [
+      ...operand.lines,
+      `size_t ${length} = ccjs_string_code_point_length_parts(${operand.bytes}, ${operand.length});`
+    ],
+    expression: `((double)${length})`
   }
 }
 

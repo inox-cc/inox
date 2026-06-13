@@ -921,6 +921,8 @@ class Checker {
     }
 
     if (objectType === 'string' && expression.property === 'length') {
+      expression.valueType = 'number'
+      expression.stringRuntimeMethod = 'length'
       return 'number'
     }
 
@@ -2461,6 +2463,9 @@ class Checker {
       this.report('CCJS_ARG_COUNT', `string.trim expects 0 argument(s), got ${expression.args.length}`, expression.loc)
     }
 
+    expression.valueType = 'string'
+    expression.stringRuntimeMethod = 'trim'
+
     return 'string'
   }
 
@@ -2483,6 +2488,9 @@ class Checker {
     for (const [index, argType] of argTypes.entries()) {
       this.checkAssignableType(argType, 'number', expression.args[index].loc)
     }
+
+    expression.valueType = 'string'
+    expression.stringRuntimeMethod = 'slice'
 
     return 'string'
   }
@@ -2510,6 +2518,7 @@ class Checker {
     expression.valueType = 'array'
     expression.arrayElementType = 'string'
     expression.arrayElementDeclaredType = 'string'
+    expression.stringRuntimeMethod = 'split'
 
     return 'array'
   }
@@ -2533,6 +2542,9 @@ class Checker {
     if (argTypes[0] != null) {
       this.checkAssignableType(argTypes[0], 'string', expression.args[0].loc, false, this.expressionCanBeNull(expression.args[0]))
     }
+
+    expression.valueType = 'boolean'
+    expression.stringRuntimeMethod = expression.callee.property
 
     return 'boolean'
   }
