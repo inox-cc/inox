@@ -4632,6 +4632,56 @@ export async function main(): Promise<void> {
   assert.match(result.code, /goto ccjs_try_\d+_catch;/)
 })
 
+test('lowers async throws after awaits to rejected local promises', () => {
+  const stringResult = compileSource(`async function failString(): Promise<string> {
+  const seed: number = await Promise.resolve(1)
+  throw 'bad'
+}
+
+export async function main(): Promise<void> {
+  const promise = failString()
+
+  try {
+    const value = await promise
+    console.log(value)
+  } catch (error) {
+    console.log(error)
+  }
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(stringResult.code, /ccjs_status ccjs_async_status_\d+ = failString\(&ccjs_async_result_\d+, &ccjs_error\);/)
+  assert.match(stringResult.code, /if \(ccjs_async_status_\d+ == CCJS_ERR_THROW\) \{\n    if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(stringResult.code, /if \(ccjs_promise_get_result\(promise, &ccjs_error\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(stringResult.code, /goto ccjs_try_\d+_catch;/)
+
+  const errorResult = compileSource(`async function failError(): Promise<string> {
+  const seed: number = await Promise.resolve(2)
+  throw new Error('boom')
+}
+
+export async function main(): Promise<void> {
+  const promise = failError()
+
+  try {
+    const value = await promise
+    console.log(value)
+  } catch (error) {
+    console.log(error.message)
+  }
+}
+`, {
+    target: 'c'
+  })
+
+  assert.match(errorResult.code, /ccjs_value ccjs_error_object_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(errorResult.code, /ccjs_status ccjs_async_status_\d+ = failError\(&ccjs_async_result_\d+, &ccjs_error\);/)
+  assert.match(errorResult.code, /if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\) goto ccjs_cleanup;/)
+  assert.match(errorResult.code, /if \(ccjs_object_get_known\(error, 1, &ccjs_log_value_\d+\) != CCJS_OK\) goto ccjs_cleanup;/)
+})
+
 test('compiles arrow functions and chain calls to JS and C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]
