@@ -26,8 +26,12 @@ type CEmitOptions = {
   random?: RandomOptions
 }
 
+type AsyncTaskSuccessPhaseKind = 'pre-finalizer' | 'prefix-finalizer' | 'body'
+type AsyncTaskTryPhaseKind = 'success-finalizer' | 'reject-finalizer' | 'handler-prelude' | 'handler-finalizer'
+type AsyncTaskPhaseKind = AsyncTaskSuccessPhaseKind | AsyncTaskTryPhaseKind
+
 type AsyncTaskPhase = {
-  kind: string
+  kind: AsyncTaskPhaseKind
   statements: any[]
 }
 
@@ -40,6 +44,19 @@ type AsyncTaskFrameLocal = Record<string, any> & {
   fieldName: string
 }
 
+type AsyncTaskTryHandlerPlan = {
+  param: string | null
+  statements: any[]
+  returnExpression: any
+}
+
+type AsyncTaskTryRegionDraft = {
+  handler: AsyncTaskTryHandlerPlan | null
+  preHandlerFinalizerStatements: any[]
+  successFinalizerStatements: any[]
+  handlerFinalizerStatements: any[]
+}
+
 type AsyncTaskBodyDraft = {
   awaits: any[]
   prefixStatements: any[]
@@ -49,7 +66,7 @@ type AsyncTaskBodyDraft = {
   successStatements: any[]
   returnExpression: any
   returnType: string
-  tryRegion: any | null
+  tryRegion: AsyncTaskTryRegionDraft | null
 }
 
 type AsyncTaskBodyPlan = {
@@ -61,7 +78,7 @@ type AsyncTaskBodyPlan = {
   returnExpression: any
   returnType: string
   hasTryRegion: boolean
-  tryHandler: any | null
+  tryHandler: AsyncTaskTryHandlerPlan | null
 }
 
 export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
@@ -892,7 +909,7 @@ function createAsyncTaskSuccessPhases(body): AsyncTaskPhase[] {
   return phases
 }
 
-function appendAsyncTaskSuccessPhase(phases: AsyncTaskPhase[], kind: string, statements) {
+function appendAsyncTaskSuccessPhase(phases: AsyncTaskPhase[], kind: AsyncTaskSuccessPhaseKind, statements) {
   if ((statements?.length ?? 0) === 0) {
     return
   }
@@ -903,7 +920,7 @@ function appendAsyncTaskSuccessPhase(phases: AsyncTaskPhase[], kind: string, sta
   })
 }
 
-function createAsyncTaskTryPhases(tryRegion, successPhases: AsyncTaskPhase[]): AsyncTaskPhase[] {
+function createAsyncTaskTryPhases(tryRegion: AsyncTaskTryRegionDraft | null, successPhases: AsyncTaskPhase[]): AsyncTaskPhase[] {
   if (tryRegion == null) {
     return []
   }
@@ -913,25 +930,24 @@ function createAsyncTaskTryPhases(tryRegion, successPhases: AsyncTaskPhase[]): A
     .filter(phase => phase.kind === 'prefix-finalizer')
     .flatMap(phase => phase.statements)
   const successFinalizerStatements = [
-    ...(successPrefixFinalizerStatements.length > 0 ? [] : tryRegion.preHandlerFinalizerStatements ?? []),
-    ...(tryRegion.finalizerStatements ?? [])
+    ...(successPrefixFinalizerStatements.length > 0 ? [] : tryRegion.preHandlerFinalizerStatements),
+    ...tryRegion.successFinalizerStatements
   ]
   const rejectFinalizerStatements = [
     ...successPrefixFinalizerStatements,
-    ...(tryRegion.preHandlerFinalizerStatements ?? []),
-    ...(tryRegion.finalizerStatements ?? [])
+    ...tryRegion.preHandlerFinalizerStatements,
+    ...tryRegion.successFinalizerStatements
   ]
-  const handlerFinalizerStatements = tryRegion.handlerFinalizerStatements ?? tryRegion.finalizerStatements
 
   appendAsyncTaskTryPhase(phases, 'success-finalizer', successFinalizerStatements)
   appendAsyncTaskTryPhase(phases, 'reject-finalizer', rejectFinalizerStatements)
   appendAsyncTaskTryPhase(phases, 'handler-prelude', tryRegion.preHandlerFinalizerStatements)
-  appendAsyncTaskTryPhase(phases, 'handler-finalizer', handlerFinalizerStatements)
+  appendAsyncTaskTryPhase(phases, 'handler-finalizer', tryRegion.handlerFinalizerStatements)
 
   return phases
 }
 
-function appendAsyncTaskTryPhase(phases: AsyncTaskPhase[], kind: string, statements) {
+function appendAsyncTaskTryPhase(phases: AsyncTaskPhase[], kind: AsyncTaskTryPhaseKind, statements) {
   if ((statements?.length ?? 0) === 0) {
     return
   }
@@ -1095,7 +1111,8 @@ function resolveAsyncTaskTryBodyPlan(statement, context, params, returnType) {
     tryRegion: {
       handler,
       preHandlerFinalizerStatements: [],
-      finalizerStatements
+      successFinalizerStatements: finalizerStatements,
+      handlerFinalizerStatements: finalizerStatements
     }
   })
 }
@@ -1193,7 +1210,7 @@ function resolveAsyncTaskNestedTryBodyPlan(tryStatement, context, params, return
     tryRegion: {
       handler,
       preHandlerFinalizerStatements: handlerIndex < 0 ? [] : collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, handlerIndex + 1),
-      finalizerStatements: successFinalizerStatements,
+      successFinalizerStatements,
       handlerFinalizerStatements
     }
   })
@@ -1450,7 +1467,7 @@ function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
   }
 
   return {
-    param: handler.param,
+    param: handler.param ?? null,
     statements: handlerStatements,
     returnExpression
   }
