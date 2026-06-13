@@ -9,6 +9,7 @@
     "ccjs": "./bin/ccjs.ts"
   },
   "scripts": {
+    "bootstrap:libuv": "node scripts/bootstrap-libuv.ts",
     "build": "node scripts/build.ts",
     "example": "cmake --build example/build && ./example/build/ccjs_cmake_example",
     "lint": "prettier . --write",
