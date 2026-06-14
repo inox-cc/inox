@@ -25,6 +25,7 @@
     "test:examples": "node scripts/test-examples.ts",
     "test:fixtures": "node scripts/test-fixtures.ts",
     "test:libuv": "node scripts/test-libuv.ts",
+    "test:network": "node scripts/test-libuv.ts --network-only",
     "test:capabilities": "node scripts/test-capabilities.ts",
     "test:hir-snapshots": "node scripts/test-hir-snapshots.ts",
     "test:ir-snapshots": "node scripts/test-ir-snapshots.ts",

@@ -10,6 +10,16 @@ import { normalizeNewlines, runCommand } from './lib/run-command.ts'
 import { rootDir } from './lib/repo-checks.ts'
 
 const uvHeaderPath = join(rootDir, 'third_party', 'libuv', 'include', 'uv.h')
+const mode = parseArgs(process.argv.slice(2))
+
+if (mode.help) {
+  console.log(`Usage:
+  pnpm run test:libuv
+  pnpm run test:network
+  node scripts/test-libuv.ts [--network-only]
+`)
+  process.exit(0)
+}
 
 try {
   await access(uvHeaderPath)
@@ -30,8 +40,11 @@ if (cmakeProbe.code !== 0) {
 const buildDir = await mkdtemp(join(tmpdir(), 'ccjs-libuv-cmake-'))
 
 try {
-  await checkLibuvTimerRuntime(buildDir)
-  await checkLibuvConsoleRuntime(buildDir)
+  if (!mode.networkOnly) {
+    await checkLibuvTimerRuntime(buildDir)
+    await checkLibuvConsoleRuntime(buildDir)
+  }
+
   await checkLibuvDgramRuntime(buildDir)
   await checkLibuvDgramConnectedRuntime(buildDir)
   await checkLibuvDgramOptionsRuntime(buildDir)
@@ -48,13 +61,43 @@ try {
   await checkLibuvCompiledFetchChunked(buildDir)
   await checkLibuvCompiledFetchRedirectMetadata(buildDir)
   await checkLibuvCompiledFetchAbort(buildDir)
-  await checkLibuvFsRuntime(buildDir)
-  console.log('Libuv checks passed')
+  await checkLibuvCompiledHttpFetchRoundTrip(buildDir)
+
+  if (!mode.networkOnly) {
+    await checkLibuvFsRuntime(buildDir)
+  }
+
+  console.log(mode.networkOnly ? 'Network checks passed' : 'Libuv checks passed')
 } finally {
   await rm(buildDir, {
     recursive: true,
     force: true
   })
+}
+
+function parseArgs(args: string[]): { help: boolean; networkOnly: boolean } {
+  let networkOnly = false
+
+  for (const arg of args) {
+    if (arg === '--help' || arg === '-h') {
+      return {
+        help: true,
+        networkOnly
+      }
+    }
+
+    if (arg === '--network-only') {
+      networkOnly = true
+    } else {
+      console.error(`Unknown option ${arg}`)
+      process.exit(1)
+    }
+  }
+
+  return {
+    help: false,
+    networkOnly
+  }
 }
 
 async function checkLibuvTimerRuntime(workDir: string): Promise<void> {
@@ -2424,7 +2467,7 @@ async function checkLibuvCompiledFetchRedirectMetadata(workDir: string): Promise
 
   const followUrl = `http://localhost:${address.port}/redirect?from=1`
   const manualUrl = `http://127.0.0.1:${address.port}/redirect`
-  const finalUrl = `http://127.0.0.1:${address.port}/final`
+  const finalUrl = `http://localhost:${address.port}/final`
   const source = `const follow = await fetch('${followUrl}')
 const followText = await follow.text()
 const contentType = follow.headers.get('content-type') ?? 'missing'
@@ -2483,6 +2526,146 @@ target_link_libraries(ccjs_libuv_compiled_fetch_redirect_smoke PRIVATE ccjs_runt
   } finally {
     await new Promise<void>((resolve) => {
       server.close(() => resolve())
+    })
+  }
+}
+
+async function checkLibuvCompiledHttpFetchRoundTrip(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'compiled-http-fetch-src')
+  const buildDir = join(workDir, 'compiled-http-fetch-build')
+  const port = await reserveTcpPort()
+  const serverSource = `import http from 'node:http'
+
+const server = http.createServer((req, res) => {
+  if (req.url === '/from-fetch') {
+    res.writeHead(200, {
+      'Content-Type': 'text/plain',
+      'X-CCJS': 'network'
+    })
+    res.end('http-fetch-ok')
+  } else {
+    res.statusCode = 404
+    res.end('missing')
+  }
+})
+
+server.listen(${port}, '127.0.0.1')
+`
+  const clientSource = `const response = await fetch('http://127.0.0.1:${port}/from-fetch')
+const text = await response.text()
+const trace = response.headers.get('x-ccjs') ?? 'missing'
+console.log(response.status, response.ok, trace, text)
+`
+  const compiledServer = compileSource(serverSource, {
+    target: 'c'
+  })
+  const compiledClient = compileSource(clientSource, {
+    target: 'c'
+  })
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_compiled_http_fetch_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_compiled_http_fetch_server generated-http-fetch-server.c)
+target_link_libraries(ccjs_libuv_compiled_http_fetch_server PRIVATE ccjs_runtime)
+add_executable(ccjs_libuv_compiled_http_fetch_client generated-http-fetch-client.c)
+target_link_libraries(ccjs_libuv_compiled_http_fetch_client PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(join(sourceDir, 'generated-http-fetch-server.c'), compiledServer.code)
+  await writeFile(join(sourceDir, 'generated-http-fetch-client.c'), compiledClient.code)
+
+  await checkCommand('configure compiled libuv http/fetch roundtrip smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    buildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build compiled libuv http/fetch roundtrip smoke', 'cmake', ['--build', buildDir])
+
+  const executable = join(buildDir, 'ccjs_libuv_compiled_http_fetch_server')
+  const child = spawn(executable, [], {
+    cwd: buildDir,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  let stdout = ''
+  let stderr = ''
+  let exited = false
+  let exitCode = 0
+  const exitPromise = new Promise<void>((resolve) => {
+    child.on('exit', (code) => {
+      exited = true
+      exitCode = code ?? 0
+      resolve()
+    })
+  })
+
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk
+  })
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk
+  })
+
+  try {
+    const rawResponse = await requestHttpWithRetries(port, '/from-fetch')
+
+    if (!rawResponse.includes('HTTP/1.1 200 OK') || !rawResponse.endsWith('http-fetch-ok')) {
+      throw new Error(`compiled HTTP server raw response mismatch: ${JSON.stringify(rawResponse)}`)
+    }
+
+    const run = await runCommand(join(buildDir, 'ccjs_libuv_compiled_http_fetch_client'), [])
+    const clientStdout = normalizeNewlines(run.stdout)
+    const expected = '200 1 network http-fetch-ok\n'
+
+    if (run.code !== 0) {
+      fail('run compiled libuv http/fetch client smoke', run)
+    }
+
+    if (clientStdout !== expected) {
+      console.error(
+        `Compiled libuv http/fetch client stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(
+          clientStdout
+        )}`
+      )
+      process.exit(1)
+    }
+  } catch (error) {
+    if (stdout.length > 0) {
+      process.stdout.write(stdout)
+    }
+
+    if (stderr.length > 0) {
+      process.stderr.write(stderr)
+    }
+
+    throw error
+  } finally {
+    if (!exited) {
+      child.kill('SIGTERM')
+      await Promise.race([exitPromise, sleep(2000)])
+    }
+
+    if (!exited) {
+      child.kill('SIGKILL')
+      await Promise.race([exitPromise, sleep(2000)])
+    }
+  }
+
+  if (exited && exitCode !== 0) {
+    fail('run compiled libuv http/fetch server smoke', {
+      code: exitCode,
+      stdout,
+      stderr
     })
   }
 }
