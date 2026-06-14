@@ -6,6 +6,7 @@ set(CCJS_LOOP_BACKEND "embedded" CACHE STRING "ccjs C runtime event loop backend
 set_property(CACHE CCJS_LOOP_BACKEND PROPERTY STRINGS embedded libuv)
 set(CCJS_TLS_BACKEND "none" CACHE STRING "ccjs C runtime TLS backend")
 set_property(CACHE CCJS_TLS_BACKEND PROPERTY STRINGS none boringssl openssl)
+option(CCJS_DEBUG_MEMORY "Enable ccjs debug memory counters and OOM injection helpers" OFF)
 set(CCJS_BORINGSSL_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../third_party/boringssl" CACHE PATH "BoringSSL source root")
 set(CCJS_TLS_CA_BUNDLE "" CACHE FILEPATH "TLS CA bundle path")
 set(CCJS_TLS_CA_PATH "" CACHE PATH "TLS CA directory path")
@@ -22,6 +23,7 @@ set(CCJS_RUNTIME_SOURCES
   "${CCJS_RUNTIME_DIR}/src/console/console.c"
   "${CCJS_RUNTIME_DIR}/src/core/allocator.c"
   "${CCJS_RUNTIME_DIR}/src/core/callback.c"
+  "${CCJS_RUNTIME_DIR}/src/core/debug.c"
   "${CCJS_RUNTIME_DIR}/src/core/value.c"
   "${CCJS_RUNTIME_DIR}/src/fs/fs.c"
   "${CCJS_RUNTIME_DIR}/src/json/json.c"
@@ -101,6 +103,10 @@ endif()
 
 if(CCJS_TLS_CA_PATH)
   target_compile_definitions(ccjs_runtime PUBLIC CCJS_TLS_CA_PATH="${CCJS_TLS_CA_PATH}")
+endif()
+
+if(CCJS_DEBUG_MEMORY)
+  target_compile_definitions(ccjs_runtime PUBLIC CCJS_DEBUG_MEMORY=1)
 endif()
 
 if(CCJS_LOOP_BACKEND STREQUAL "libuv")

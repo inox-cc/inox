@@ -1,5 +1,8 @@
 #include <stddef.h>
 #include <string.h>
+#ifdef CCJS_DEBUG_MEMORY
+#include "ccjs/debug.h"
+#endif
 #include "ccjs/object.h"
 
 ccjs_status ccjs_object_new(ccjs_allocator* allocator, const ccjs_shape* shape, ccjs_value* out) {
@@ -29,6 +32,9 @@ ccjs_status ccjs_object_new(ccjs_allocator* allocator, const ccjs_shape* shape, 
 
   out->tag = CCJS_TAG_OBJECT;
   out->as.ref = &object->header;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_created(CCJS_REF_OBJECT);
+#endif
 
   return CCJS_OK;
 }

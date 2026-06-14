@@ -715,6 +715,140 @@ int main(void) {
 })
 
 
+test('C runtime debug memory snapshots track refs promises callbacks and OOM', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-debug-memory-'))
+  const source = join(dir, 'debug-memory-smoke.c')
+  const output = join(dir, 'debug-memory-smoke')
+
+  try {
+    await writeFile(
+      source,
+      `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/callback.h"
+#include "ccjs/debug.h"
+#include "ccjs/loop.h"
+#include "ccjs/object.h"
+#include "ccjs/promise.h"
+#include "ccjs/string.h"
+
+static void* base_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* base_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void base_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static ccjs_status noop_callback(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out) {
+  (void)context;
+  (void)args;
+  (void)arg_count;
+  *out = ccjs_undefined_value();
+  return CCJS_OK;
+}
+
+int main(void) {
+  ccjs_allocator base = { 0, base_alloc, base_realloc, base_free };
+  ccjs_allocator allocator = ccjs_debug_allocator(&base);
+  ccjs_field_info fields[] = {
+    { "name", 0 }
+  };
+  ccjs_shape shape = { 1, fields };
+  ccjs_debug_memory_stats stats;
+  ccjs_value name;
+  ccjs_value user;
+  ccjs_value callback;
+  ccjs_loop loop;
+  ccjs_promise* promise;
+  ccjs_value oom_value = ccjs_undefined_value();
+
+  ccjs_debug_memory_reset();
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_alloc_count != 0 || stats.live_bytes != 0) return 1;
+
+  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 2;
+  if (ccjs_object_new(&allocator, &shape, &user) != CCJS_OK) return 3;
+  if (ccjs_object_set_known(user, 0, name) != CCJS_OK) return 4;
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.alloc_count != 2 || stats.free_count != 0) return 5;
+  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 1 || stats.live_refs_by_kind[CCJS_REF_OBJECT] != 1) return 6;
+  if (stats.retain_count != 1 || stats.release_count != 0) return 7;
+  if (stats.live_alloc_count != 2 || stats.live_bytes == 0 || stats.peak_live_bytes < stats.live_bytes) return 8;
+
+  ccjs_release(name);
+  ccjs_release(user);
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 0 || stats.live_refs_by_kind[CCJS_REF_OBJECT] != 0) return 9;
+  if (stats.live_alloc_count != 0 || stats.live_bytes != 0 || stats.alloc_count != stats.free_count) return 10;
+  if (stats.retain_count != 1 || stats.release_count != 3) return 11;
+
+  if (ccjs_callback_new(&allocator, noop_callback, 0, 0, &callback) != CCJS_OK) return 12;
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_callbacks != 1 || stats.live_refs_by_kind[CCJS_REF_FUNCTION] != 1) return 13;
+  ccjs_release(callback);
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_callbacks != 0 || stats.live_refs_by_kind[CCJS_REF_FUNCTION] != 0) return 14;
+
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 15;
+  if (ccjs_promise_new(&loop, &promise) != CCJS_OK) return 16;
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_promises != 1) return 17;
+  ccjs_promise_release(promise);
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_promises != 0 || stats.live_alloc_count != 0 || stats.alloc_count != stats.free_count) return 18;
+
+  ccjs_debug_memory_reset();
+  ccjs_debug_memory_set_oom_after(0);
+  if (ccjs_string_from_literal(&allocator, "boom", 4, &oom_value) != CCJS_ERR_OOM) return 19;
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.oom_failure_count != 1 || stats.alloc_count != 0 || stats.live_alloc_count != 0) return 20;
+  if (oom_value.tag != CCJS_TAG_UNDEFINED) return 21;
+  ccjs_debug_memory_clear_oom();
+
+  printf("%zu %zu %zu %zu\\n", stats.alloc_count, stats.free_count, stats.live_alloc_count, stats.oom_failure_count);
+  return 0;
+}
+`
+    )
+
+    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_DEBUG_MEMORY=1'])
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '0 0 0 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('C runtime callback object invokes and releases context', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

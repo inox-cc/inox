@@ -5,6 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "ccjs/array.h"
+#ifdef CCJS_DEBUG_MEMORY
+#include "ccjs/debug.h"
+#endif
 #include "ccjs/string.h"
 
 ccjs_status ccjs_string_from_literal(ccjs_allocator* allocator, const char* bytes, size_t len, ccjs_value* out) {
@@ -31,6 +34,9 @@ ccjs_status ccjs_string_from_literal(ccjs_allocator* allocator, const char* byte
 
   out->tag = CCJS_TAG_STRING;
   out->as.ref = &string->header;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_created(CCJS_REF_STRING);
+#endif
 
   return CCJS_OK;
 }
@@ -426,6 +432,9 @@ ccjs_status ccjs_string_concat_parts(
 
   out->tag = CCJS_TAG_STRING;
   out->as.ref = &string->header;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_created(CCJS_REF_STRING);
+#endif
 
   return CCJS_OK;
 }

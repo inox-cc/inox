@@ -1,5 +1,8 @@
 #include <string.h>
 #include "ccjs/binary.h"
+#ifdef CCJS_DEBUG_MEMORY
+#include "ccjs/debug.h"
+#endif
 #include "ccjs/string.h"
 
 static ccjs_status ccjs_bytes_allocate(ccjs_allocator* allocator, size_t len, ccjs_bytes** out);
@@ -156,6 +159,9 @@ static ccjs_status ccjs_bytes_allocate(ccjs_allocator* allocator, size_t len, cc
   bytes->header.allocator = allocator;
   bytes->len = len;
   *out = bytes;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_created(CCJS_REF_BYTES);
+#endif
 
   return CCJS_OK;
 }

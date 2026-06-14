@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "ccjs/array.h"
+#ifdef CCJS_DEBUG_MEMORY
+#include "ccjs/debug.h"
+#endif
 #include "ccjs/string.h"
 
 static void ccjs_array_sort_key(ccjs_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
@@ -144,6 +147,9 @@ ccjs_status ccjs_array_new(ccjs_allocator* allocator, size_t len, ccjs_value* ou
 
   out->tag = CCJS_TAG_ARRAY;
   out->as.ref = &array->header;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_created(CCJS_REF_ARRAY);
+#endif
 
   return CCJS_OK;
 }

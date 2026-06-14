@@ -1,3 +1,6 @@
+#ifdef CCJS_DEBUG_MEMORY
+#include "ccjs/debug.h"
+#endif
 #include "ccjs/promise.h"
 
 typedef enum ccjs_promise_reaction_kind {
@@ -62,6 +65,9 @@ ccjs_status ccjs_promise_new(ccjs_loop* loop, ccjs_promise** out) {
   promise->head = 0;
   promise->tail = 0;
   *out = promise;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_promise_created();
+#endif
 
   return CCJS_OK;
 }
@@ -92,6 +98,9 @@ void ccjs_promise_release(ccjs_promise* promise) {
   }
 
   ccjs_release(promise->result);
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_promise_destroyed();
+#endif
   promise->loop->allocator->free(promise->loop->allocator->user, promise, sizeof(ccjs_promise), _Alignof(ccjs_promise));
 }
 

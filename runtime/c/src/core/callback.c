@@ -1,4 +1,7 @@
 #include "ccjs/callback.h"
+#ifdef CCJS_DEBUG_MEMORY
+#include "ccjs/debug.h"
+#endif
 
 ccjs_status ccjs_callback_new(
   ccjs_allocator* allocator,
@@ -30,6 +33,9 @@ ccjs_status ccjs_callback_new(
 
   out->tag = CCJS_TAG_FUNCTION;
   out->as.ref = &callback->header;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_created(CCJS_REF_FUNCTION);
+#endif
 
   return CCJS_OK;
 }

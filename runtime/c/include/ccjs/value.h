@@ -39,7 +39,8 @@ typedef enum ccjs_ref_kind {
   CCJS_REF_BYTES,
   CCJS_REF_FUNCTION,
   CCJS_REF_MAP,
-  CCJS_REF_SET
+  CCJS_REF_SET,
+  CCJS_REF_KIND_COUNT
 } ccjs_ref_kind;
 
 typedef struct ccjs_ref {

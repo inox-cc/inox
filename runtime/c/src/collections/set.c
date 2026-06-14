@@ -1,3 +1,6 @@
+#ifdef CCJS_DEBUG_MEMORY
+#include "ccjs/debug.h"
+#endif
 #include "ccjs/hash.h"
 #include "ccjs/set.h"
 
@@ -312,6 +315,9 @@ ccjs_status ccjs_set_new(ccjs_allocator* allocator, ccjs_value* out) {
 
   out->tag = CCJS_TAG_SET;
   out->as.ref = &set->header;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_created(CCJS_REF_SET);
+#endif
 
   return CCJS_OK;
 }

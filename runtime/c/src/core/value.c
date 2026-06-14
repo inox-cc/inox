@@ -2,6 +2,9 @@
 #include "ccjs/array.h"
 #include "ccjs/binary.h"
 #include "ccjs/callback.h"
+#ifdef CCJS_DEBUG_MEMORY
+#include "ccjs/debug.h"
+#endif
 #include "ccjs/map.h"
 #include "ccjs/object.h"
 #include "ccjs/set.h"
@@ -9,6 +12,9 @@
 
 void ccjs_retain(ccjs_value value) {
   if (ccjs_is_ref_value(value) && value.as.ref != 0) {
+#ifdef CCJS_DEBUG_MEMORY
+    ccjs_debug_memory_record_retain();
+#endif
     value.as.ref->ref_count += 1;
   }
 }
@@ -19,6 +25,9 @@ void ccjs_release(ccjs_value value) {
   }
 
   value.as.ref->ref_count -= 1;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_release();
+#endif
 
   if (value.as.ref->ref_count > 0) {
     return;
@@ -72,6 +81,10 @@ void ccjs_release(ccjs_value value) {
   } else if (value.as.ref->kind == CCJS_REF_SET) {
     ccjs_set_dispose((ccjs_set*)value.as.ref);
   }
+
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_destroyed(value.as.ref->kind);
+#endif
 
   if (allocator != 0 && allocator->free != 0) {
     allocator->free(allocator->user, value.as.ref, value.as.ref->size, value.as.ref->align);
