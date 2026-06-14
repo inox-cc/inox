@@ -63,6 +63,7 @@ import {
   reportUnsupportedCSyntaxFeatures
 } from './diagnostics.ts'
 import { formatGeneratedC } from './format.ts'
+import { isCJsGlobalRoot, usesCJsGlobal } from './globals.ts'
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, escapeCString, utf8ByteLength } from './identifiers.ts'
 import {
   emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters,
@@ -104,6 +105,7 @@ import { cCryptoRuntimeCallName, cryptoRuntimeMethodName } from './stdlib/crypto
 import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from './stdlib/fetch.ts'
 import { cFsRuntimeConstantExpression, cFsRuntimeExpressionMethod, isAsyncFsRuntimeCallExpression } from './stdlib/fs.ts'
 import { cJsonRuntimeCallName } from './stdlib/json.ts'
+import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import {
   cTimerClearCallName,
   cTimerRuntimeCallName,
@@ -20266,28 +20268,6 @@ function updateKnownArrayElementValueType(element, valueType, context) {
   }
 }
 
-function usesCJsGlobal(expression, context) {
-  const root = rootReferenceName(expression)
-
-  return root != null && isCJsGlobalRoot(root, context)
-}
-
-function cTimeRuntimeCallName(callee) {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
-    return null
-  }
-
-  if (callee.object.path[0] === 'Date' && callee.property === 'now') {
-    return 'ccjs_date_now'
-  }
-
-  if (callee.object.path[0] === 'performance' && callee.property === 'now') {
-    return 'ccjs_performance_now'
-  }
-
-  return null
-}
-
 function isBytesSliceCall(expression, context) {
   return (
     isBinaryRuntimeCall(expression) &&
@@ -20311,26 +20291,6 @@ function isPromiseMethodCallExpression(expression, context) {
     ['catch', 'then'].includes(expression.callee.property) &&
     inferExpressionType(expression.callee.object, context) === 'promise'
   )
-}
-
-function isCJsGlobalRoot(name, context) {
-  return context.jsGlobalRoots.has(name)
-}
-
-function rootReferenceName(expression) {
-  if (expression?.type === 'Reference') {
-    return expression.path[0]
-  }
-
-  if (expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression') {
-    return rootReferenceName(expression.object)
-  }
-
-  if (expression?.type === 'IndexExpression' || expression?.type === 'OptionalIndexExpression') {
-    return rootReferenceName(expression.object)
-  }
-
-  return null
 }
 
 function isCStringRuntimeMethodName(name) {
