@@ -21,6 +21,7 @@ set(CCJS_RUNTIME_SOURCES
   "${CCJS_RUNTIME_DIR}/src/fs/fs.c"
   "${CCJS_RUNTIME_DIR}/src/json/json.c"
   "${CCJS_RUNTIME_DIR}/src/network/dgram.c"
+  "${CCJS_RUNTIME_DIR}/src/network/http.c"
   "${CCJS_RUNTIME_DIR}/src/network/net.c"
   "${CCJS_RUNTIME_DIR}/src/objects/object.c"
   "${CCJS_RUNTIME_DIR}/src/strings/string.c"

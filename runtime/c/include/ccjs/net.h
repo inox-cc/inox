@@ -41,6 +41,7 @@ void ccjs_net_socket_set_callbacks(
 ccjs_status ccjs_net_socket_read_start(ccjs_net_socket* socket);
 ccjs_status ccjs_net_socket_read_stop(ccjs_net_socket* socket);
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len);
+ccjs_status ccjs_net_socket_write_and_close(ccjs_net_socket* socket, const char* bytes, size_t len);
 void ccjs_net_socket_close(ccjs_net_socket* socket);
 
 #endif

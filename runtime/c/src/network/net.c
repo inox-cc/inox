@@ -11,6 +11,7 @@ typedef struct ccjs_net_write_request {
   ccjs_net_socket* socket;
   char* bytes;
   size_t len;
+  int close_after;
 } ccjs_net_write_request;
 
 typedef struct ccjs_net_connect_request {
@@ -41,6 +42,7 @@ struct ccjs_net_socket {
 
 static ccjs_status ccjs_net_ip4_addr(const char* host, int port, struct sockaddr_in* out);
 static ccjs_status ccjs_net_socket_init(ccjs_loop* loop, ccjs_net_socket** out);
+static ccjs_status ccjs_net_socket_write_internal(ccjs_net_socket* socket, const char* bytes, size_t len, int close_after);
 static void ccjs_net_connection_cb(uv_stream_t* server_handle, int status);
 static void ccjs_net_connect_cb(uv_connect_t* request, int status);
 static void ccjs_net_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
@@ -255,6 +257,14 @@ ccjs_status ccjs_net_socket_read_stop(ccjs_net_socket* socket) {
 }
 
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len) {
+  return ccjs_net_socket_write_internal(socket, bytes, len, 0);
+}
+
+ccjs_status ccjs_net_socket_write_and_close(ccjs_net_socket* socket, const char* bytes, size_t len) {
+  return ccjs_net_socket_write_internal(socket, bytes, len, 1);
+}
+
+static ccjs_status ccjs_net_socket_write_internal(ccjs_net_socket* socket, const char* bytes, size_t len, int close_after) {
   if (socket == 0 || socket->closing || (bytes == 0 && len != 0)) {
     return CCJS_ERR_TYPE;
   }
@@ -270,6 +280,7 @@ ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, si
   memset(request, 0, sizeof(ccjs_net_write_request));
   request->socket = socket;
   request->len = len;
+  request->close_after = close_after;
 
   if (len != 0) {
     request->bytes = allocator->alloc(allocator->user, len, _Alignof(char));
@@ -484,6 +495,10 @@ static void ccjs_net_write_cb(uv_write_t* request, int status) {
 
   ccjs_libuv_loop_release_request(socket->loop);
 
+  if (write->close_after) {
+    ccjs_net_socket_close(socket);
+  }
+
   if (write->bytes != 0) {
     socket->allocator->free(socket->allocator->user, write->bytes, write->len, _Alignof(char));
   }
@@ -623,6 +638,13 @@ ccjs_status ccjs_net_socket_read_stop(ccjs_net_socket* socket) {
 }
 
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len) {
+  (void)socket;
+  (void)bytes;
+  (void)len;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_write_and_close(ccjs_net_socket* socket, const char* bytes, size_t len) {
   (void)socket;
   (void)bytes;
   (void)len;

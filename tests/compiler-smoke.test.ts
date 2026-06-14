@@ -125,6 +125,21 @@ export function main(): void {
   assert.match(result.code, /#include "ccjs\/net\.h"/)
 })
 
+test('emits C http runtime include for node:http imports', () => {
+  const result = compileSource(
+    `import http from 'node:http'
+
+export function main(): void {
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /#include "ccjs\/http\.h"/)
+})
+
 test('compiles arrays, objects, member access and operators to JS', () => {
   const result = compileSource(
     `export function main(): void {

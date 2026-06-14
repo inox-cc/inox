@@ -45,6 +45,7 @@ try {
     await checkLibuvConsoleRuntime(buildDir)
     await checkLibuvDgramRuntime(buildDir)
     await checkLibuvNetRuntime(buildDir)
+    await checkLibuvHttpRuntime(buildDir)
     await checkLibuvFsRuntime(buildDir)
     console.log('Libuv checks passed')
   }
@@ -782,6 +783,143 @@ int main(void) {
 
   if (stdout !== expected) {
     console.error(`Libuv net smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    process.exit(1)
+  }
+}
+
+async function checkLibuvHttpRuntime(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'http-smoke-src')
+  const httpBuildDir = join(workDir, 'http-smoke-build')
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_http_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_http_smoke http-smoke.c)
+target_link_libraries(ccjs_libuv_http_smoke PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(
+    join(sourceDir, 'http-smoke.c'),
+    `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "ccjs/allocator.h"
+#include "ccjs/http.h"
+#include "ccjs/net.h"
+#include "ccjs/time.h"
+
+typedef struct test_state {
+  ccjs_http_server* server;
+  ccjs_net_socket* client;
+  int handled;
+  int client_connected;
+  char response[512];
+} test_state;
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static ccjs_status on_http(void* user, const ccjs_http_request* request, ccjs_http_response* response) {
+  test_state* state = (test_state*)user;
+  if (request->method_len != 3 || strncmp(request->method, "GET", 3) != 0) return CCJS_ERR_FIELD;
+  if (request->url_len != 6 || strncmp(request->url, "/hello", 6) != 0) return CCJS_ERR_FIELD;
+  state->handled += 1;
+  return ccjs_http_response_text(response, 200, "hello", 5);
+}
+
+static ccjs_status on_client_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
+  test_state* state = (test_state*)user;
+  size_t current = strlen(state->response);
+  size_t copy_len = current + len >= sizeof(state->response) ? sizeof(state->response) - current - 1 : len;
+  memcpy(state->response + current, bytes, copy_len);
+  state->response[current + copy_len] = '\\0';
+  if (strstr(state->response, "\\r\\n\\r\\nhello") != 0) {
+    ccjs_net_socket_close(socket);
+    ccjs_http_server_close(state->server);
+  }
+  return CCJS_OK;
+}
+
+static ccjs_status on_connect(void* user, ccjs_net_socket* socket, ccjs_status status) {
+  test_state* state = (test_state*)user;
+  if (status != CCJS_OK) return status;
+  state->client_connected += 1;
+  if (ccjs_net_socket_read_start(socket) != CCJS_OK) return CCJS_ERR_FIELD;
+  const char* request = "GET /hello HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\n\\r\\n";
+  return ccjs_net_socket_write(socket, request, strlen(request));
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_loop loop;
+  test_state state = { 0 };
+  int port = 0;
+  int guard = 0;
+
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
+  if (ccjs_http_server_new(&loop, on_http, &state, &state.server) != CCJS_OK) return 2;
+  if (ccjs_http_server_listen(state.server, "127.0.0.1", 0, 16) != CCJS_OK) return 3;
+  if (ccjs_http_server_local_port(state.server, &port) != CCJS_OK) return 4;
+  if (ccjs_net_connect(&loop, "127.0.0.1", port, on_connect, on_client_data, 0, &state, &state.client) != CCJS_OK) return 5;
+
+  while (ccjs_loop_has_work(&loop) && guard < 500) {
+    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 6;
+    guard += 1;
+  }
+
+  if (guard >= 500) return 7;
+  printf("%d %d %s\\n", state.client_connected, state.handled, strstr(state.response, "Content-Length: 5") != 0 ? "length" : "missing");
+  ccjs_loop_dispose(&loop);
+  return 0;
+}
+`
+  )
+
+  await checkCommand('configure libuv http smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    httpBuildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build libuv http smoke', 'cmake', ['--build', httpBuildDir])
+
+  const run = await runCommand(join(httpBuildDir, 'ccjs_libuv_http_smoke'), [])
+  const stdout = normalizeNewlines(run.stdout)
+
+  if (run.code !== 0) {
+    fail('run libuv http smoke', run)
+  }
+
+  const expected = '1 1 length\n'
+
+  if (stdout !== expected) {
+    console.error(`Libuv http smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
     process.exit(1)
   }
 }

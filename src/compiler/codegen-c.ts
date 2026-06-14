@@ -43,7 +43,17 @@ const cMathBinaryMethods = new Set(['max', 'min'])
 const defaultRandomSeed = 0x6d2b79f5
 const cModuleSourceExtensions = ['', '.ts', '.js']
 const generatedCColumnLimit = 130
-const runtimeBuiltinImportSources = new Set(['dgram', 'fs', 'net', 'node:dgram', 'node:fs', 'node:fs/promises', 'node:net'])
+const runtimeBuiltinImportSources = new Set([
+  'dgram',
+  'fs',
+  'http',
+  'net',
+  'node:dgram',
+  'node:fs',
+  'node:fs/promises',
+  'node:http',
+  'node:net'
+])
 
 type CEmitOptions = {
   random?: RandomOptions
@@ -911,6 +921,7 @@ function emitCModuleSource(
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
+  const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
   const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') || needsFsRuntime || signatureRuntimeTypes.has('string')
@@ -945,6 +956,7 @@ function emitCModuleSource(
       needsTimerRuntime,
       needsConsoleRuntime,
       needsDgramRuntime,
+      needsHttpRuntime,
       needsNetRuntime,
       options
     )
@@ -1424,6 +1436,7 @@ function emitCUnit(
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
+  const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
   const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
@@ -1445,6 +1458,7 @@ function emitCUnit(
     needsTimerRuntime,
     needsConsoleRuntime,
     needsDgramRuntime,
+    needsHttpRuntime,
     needsNetRuntime,
     options
   )
@@ -1572,6 +1586,7 @@ function emitCPrelude(
   needsTimerRuntime,
   needsConsoleRuntime,
   needsDgramRuntime,
+  needsHttpRuntime,
   needsNetRuntime,
   options: CEmitOptions = {}
 ) {
@@ -1584,6 +1599,10 @@ function emitCPrelude(
 
   if (needsDgramRuntime) {
     lines.push('#include "ccjs/dgram.h"')
+  }
+
+  if (needsHttpRuntime) {
+    lines.push('#include "ccjs/http.h"')
   }
 
   if (needsNetRuntime) {

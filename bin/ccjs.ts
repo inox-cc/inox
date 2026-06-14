@@ -40,6 +40,7 @@ const cRuntimeSourceGroups = {
   console: ['runtime/c/src/console/console.c'],
   dgram: ['runtime/c/src/network/dgram.c'],
   fs: ['runtime/c/src/fs/fs.c'],
+  http: ['runtime/c/src/network/http.c'],
   json: ['runtime/c/src/json/json.c'],
   net: ['runtime/c/src/network/net.c'],
   managed: [
@@ -252,6 +253,12 @@ function cRuntimeSourcesForCode(code: string): string[] {
   if (usesCHeader(code, 'net')) {
     groups.add('async')
     groups.add('net')
+  }
+
+  if (usesCHeader(code, 'http')) {
+    groups.add('async')
+    groups.add('net')
+    groups.add('http')
   }
 
   if (usesCHeader(code, 'loop') || usesCHeader(code, 'promise')) {
