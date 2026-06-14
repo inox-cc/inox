@@ -1,3 +1,4 @@
+import { visitAstLike } from './ast-visit.ts'
 import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrGlobalUsages } from './ir.ts'
 import type {
@@ -111,46 +112,20 @@ function collectEntropyCapabilityUsages(globalUsages: IrGlobalUsage[], options: 
 function collectHeapCapabilityUsages(node: unknown): CapabilityUsage[] {
   const usages: CapabilityUsage[] = []
 
-  visitHeapCapabilityUsages(node, usages)
+  visitAstLike(node, (item) => {
+    const arrayMethod = arrayProducingMethodName(item as AnyNode)
+
+    if (arrayMethod != null) {
+      usages.push({
+        key: 'heap',
+        name: 'heap',
+        path: `Array.${arrayMethod}`,
+        loc: (item as AnyNode).loc
+      })
+    }
+  })
 
   return usages
-}
-
-function visitHeapCapabilityUsages(node: unknown, usages: CapabilityUsage[]): void {
-  if (node == null) {
-    return
-  }
-
-  if (Array.isArray(node)) {
-    for (const item of node) {
-      visitHeapCapabilityUsages(item, usages)
-    }
-    return
-  }
-
-  if (typeof node !== 'object') {
-    return
-  }
-
-  const item = node as AnyNode
-  const arrayMethod = arrayProducingMethodName(item)
-
-  if (arrayMethod != null) {
-    usages.push({
-      key: 'heap',
-      name: 'heap',
-      path: `Array.${arrayMethod}`,
-      loc: item.loc
-    })
-  }
-
-  for (const [key, value] of Object.entries(item)) {
-    if (key === 'loc' || key === 'shape') {
-      continue
-    }
-
-    visitHeapCapabilityUsages(value, usages)
-  }
 }
 
 function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapability | null {

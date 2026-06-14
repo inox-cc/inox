@@ -5,7 +5,7 @@
     },
     "c": {
       "expect": "diagnostic",
-      "diagnostic": "CCJS_C_JS_GLOBAL"
+      "diagnostic": "CCJS_NOT_IMPLEMENTED"
     }
   }
 }
