@@ -1,5 +1,6 @@
 import type { AnyNode } from '../types.ts'
 import { indent } from './format.ts'
+import { emitFsRuntimeCallExpression, emitFsRuntimeConstantExpression } from './std/fs.ts'
 import { emitArrowFunctionParams, emitArrowReturnTypeAnnotation } from './types.ts'
 import type { JsEmitOptions } from './types.ts'
 
@@ -43,8 +44,10 @@ export function emitExpression(
   }
 
   if (expression.type === 'MemberExpression') {
-    if (expression.fsRuntimeConstant != null) {
-      return `ccjsFsSync.constants.${expression.fsRuntimeConstant}`
+    const fsRuntimeConstant = emitFsRuntimeConstantExpression(expression)
+
+    if (fsRuntimeConstant != null) {
+      return fsRuntimeConstant
     }
 
     if (isStringLengthExpression(expression)) {
@@ -75,7 +78,11 @@ export function emitExpression(
   }
 
   if (expression.type === 'CallExpression') {
-    const fsRuntimeCall = emitFsRuntimeCallExpression(expression, options, context)
+    const fsRuntimeCall = emitFsRuntimeCallExpression(
+      expression,
+      (item, nextOptions = options) => emitExpression(item, nextOptions, context),
+      options
+    )
 
     if (fsRuntimeCall != null) {
       return fsRuntimeCall
@@ -276,111 +283,6 @@ function isStringSplitCall(expression: AnyNode): boolean {
     expression.stringRuntimeMethod === 'split' &&
     expression.args.length === 1
   )
-}
-
-function emitFsRuntimeCallExpression(
-  expression: AnyNode,
-  options: JsEmitOptions,
-  context: JsExpressionEmitContext
-): string | null {
-  if (expression.fsRuntimeMethod === 'stat' || expression.fsRuntimeMethod === 'lstat') {
-    return `fs.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options, context)})`
-  }
-
-  if (expression.fsRuntimeMethod === 'realpath' || expression.fsRuntimeMethod === 'readlink') {
-    return `fs.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options, context)})`
-  }
-
-  if (expression.fsRuntimeMethod === 'access') {
-    return `fs.access(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (['appendFile', 'appendFileBytes', 'copyFile'].includes(expression.fsRuntimeMethod ?? '')) {
-    const method = expression.fsRuntimeMethod === 'appendFileBytes' ? 'appendFile' : expression.fsRuntimeMethod
-
-    return `fs.${method}(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (['mkdir', 'rename', 'rm', 'symlink', 'unlink'].includes(expression.fsRuntimeMethod ?? '')) {
-    return `fs.${expression.fsRuntimeMethod}(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'readFile') {
-    const args =
-      expression.args.length === 1
-        ? [emitExpression(expression.args[0], options, context), "'utf8'"]
-        : expression.args.map((arg) => emitExpression(arg, options, context))
-
-    return `fs.readFile(${args.join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'readFileBytes') {
-    return `fs.readFile(${emitExpression(expression.args[0], options, context)})`
-  }
-
-  if (expression.fsRuntimeMethod === 'readDir') {
-    return `fs.readdir(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'readDirDirents') {
-    return `fs.readdir(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'writeFile') {
-    return `fs.writeFile(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'writeFileBytes') {
-    return `fs.writeFile(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'statSync' || expression.fsRuntimeMethod === 'lstatSync') {
-    return `ccjsFsSync.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options, context)})`
-  }
-
-  if (expression.fsRuntimeMethod === 'realpathSync' || expression.fsRuntimeMethod === 'readlinkSync') {
-    return `ccjsFsSync.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options, context)})`
-  }
-
-  if (expression.fsRuntimeMethod === 'accessSync') {
-    return `ccjsFsSync.accessSync(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (['appendFileSync', 'appendFileBytesSync', 'copyFileSync'].includes(expression.fsRuntimeMethod ?? '')) {
-    const method = expression.fsRuntimeMethod === 'appendFileBytesSync' ? 'appendFileSync' : expression.fsRuntimeMethod
-
-    return `ccjsFsSync.${method}(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (['mkdirSync', 'renameSync', 'rmSync', 'symlinkSync', 'unlinkSync'].includes(expression.fsRuntimeMethod ?? '')) {
-    return `ccjsFsSync.${expression.fsRuntimeMethod}(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'readFileSync') {
-    return `ccjsFsSync.readFileSync(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'readFileBytesSync') {
-    return `ccjsFsSync.readFileSync(${emitExpression(expression.args[0], options, context)})`
-  }
-
-  if (expression.fsRuntimeMethod === 'readDirSync') {
-    return `ccjsFsSync.readdirSync(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'readDirDirentsSync') {
-    return `ccjsFsSync.readdirSync(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'writeFileSync') {
-    return `ccjsFsSync.writeFileSync(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  if (expression.fsRuntimeMethod === 'writeFileBytesSync') {
-    return `ccjsFsSync.writeFileSync(${expression.args.map((arg) => emitExpression(arg, options, context)).join(', ')})`
-  }
-
-  return null
 }
 
 function isMapIndexGet(expression: AnyNode): boolean {
