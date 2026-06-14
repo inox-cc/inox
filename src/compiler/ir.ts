@@ -1,3 +1,4 @@
+import { fsGlobalUsagePathForRuntimeMethod, fsRuntimeMethodForPath } from './stdlib/descriptors/fs.ts'
 import type {
   AnyNode,
   IrFeature,
@@ -1185,7 +1186,7 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('clocks')
   }
 
-  if (expression.fsRuntimeMethod != null || fsRuntimeCallName(expression.callee) != null) {
+  if (expression.fsRuntimeMethod != null || fsRuntimeMethodForPath(runtimeMemberExpressionPath(expression.callee)) != null) {
     features.add('fs')
   }
 
@@ -1381,122 +1382,6 @@ function timeRuntimeCallName(callee: AnyNode): string | null {
 
   if (callee.object.path[0] === 'performance' && callee.property === 'now') {
     return 'performance.now'
-  }
-
-  return null
-}
-
-function fsRuntimeCallName(callee: AnyNode): string | null {
-  const path = runtimeMemberExpressionPath(callee)
-
-  if (path == null || path[0] !== 'fs') {
-    return null
-  }
-
-  if (path.length === 3 && path[1] === 'promises') {
-    return [
-      'access',
-      'appendFile',
-      'copyFile',
-      'lstat',
-      'mkdir',
-      'readFile',
-      'readdir',
-      'readlink',
-      'realpath',
-      'rename',
-      'rm',
-      'stat',
-      'symlink',
-      'unlink',
-      'writeFile'
-    ].includes(path[2])
-      ? path.join('.')
-      : null
-  }
-
-  if (path.length !== 2) {
-    return null
-  }
-
-  return [
-    'accessSync',
-    'appendFileSync',
-    'copyFileSync',
-    'lstatSync',
-    'mkdirSync',
-    'readFileSync',
-    'readdirSync',
-    'readlinkSync',
-    'realpathSync',
-    'renameSync',
-    'rmSync',
-    'statSync',
-    'symlinkSync',
-    'unlinkSync',
-    'writeFileSync'
-  ].includes(path[1])
-    ? path.join('.')
-    : null
-}
-
-function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
-  if (
-    ['access', 'appendFile', 'copyFile', 'lstat', 'mkdir', 'readlink', 'realpath', 'rename', 'rm', 'stat', 'symlink', 'unlink'].includes(
-      method
-    )
-  ) {
-    return ['fs', 'promises', method]
-  }
-
-  if (method === 'appendFileBytes') {
-    return ['fs', 'promises', 'appendFile']
-  }
-
-  if (method === 'readFile' || method === 'readFileBytes') {
-    return ['fs', 'promises', 'readFile']
-  }
-
-  if (method === 'readDir' || method === 'readDirDirents') {
-    return ['fs', 'promises', 'readdir']
-  }
-
-  if (method === 'writeFile' || method === 'writeFileBytes') {
-    return ['fs', 'promises', 'writeFile']
-  }
-
-  if (method === 'readFileSync' || method === 'readFileBytesSync') {
-    return ['fs', 'readFileSync']
-  }
-
-  if (method === 'readDirSync' || method === 'readDirDirentsSync') {
-    return ['fs', 'readdirSync']
-  }
-
-  if (method === 'writeFileSync' || method === 'writeFileBytesSync') {
-    return ['fs', 'writeFileSync']
-  }
-
-  if (method === 'appendFileSync' || method === 'appendFileBytesSync') {
-    return ['fs', 'appendFileSync']
-  }
-
-  if (
-    [
-      'accessSync',
-      'copyFileSync',
-      'lstatSync',
-      'mkdirSync',
-      'readlinkSync',
-      'realpathSync',
-      'renameSync',
-      'rmSync',
-      'statSync',
-      'symlinkSync',
-      'unlinkSync'
-    ].includes(method)
-  ) {
-    return ['fs', method]
   }
 
   return null

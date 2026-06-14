@@ -8,6 +8,8 @@ import {
   promiseValueTypeNameFromTypeName,
   setElementTypeNameFromTypeName
 } from './type-names.ts'
+import { fsRuntimeCallInfoFromPath, unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
+import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -5680,156 +5682,8 @@ function promiseStaticMethodName(callee: AnyNode): string | null {
     : null
 }
 
-type FsRuntimeCallInfo = {
-  method: string
-  nodeName: string
-  path: string[]
-  root: string
-  viaPromises: boolean
-}
-
 function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
-  const path = memberExpressionPath(callee)
-
-  if (path == null || path.length < 2) {
-    return null
-  }
-
-  const nodeName = path[path.length - 1]
-
-  if (path.length === 3 && path[1] === 'promises') {
-    const method = nodeName === 'readdir' ? 'readDir' : nodeName
-
-    return [
-      'access',
-      'appendFile',
-      'copyFile',
-      'lstat',
-      'mkdir',
-      'readFile',
-      'readDir',
-      'readlink',
-      'realpath',
-      'rename',
-      'rm',
-      'stat',
-      'symlink',
-      'unlink',
-      'writeFile'
-    ].includes(method)
-      ? {
-          method,
-          nodeName,
-          path,
-          root: path[0],
-          viaPromises: true
-        }
-      : null
-  }
-
-  if (path.length !== 2) {
-    return null
-  }
-
-  const method =
-    nodeName === 'readdir'
-      ? 'readDir'
-      : nodeName === 'readdirSync'
-      ? 'readDirSync'
-      : [
-            'readFile',
-            'readFileBytes',
-            'readFileBytesSync',
-            'readFileSync',
-            'readDir',
-            'readDirSync',
-            'access',
-            'accessSync',
-            'appendFile',
-            'appendFileSync',
-            'copyFile',
-            'copyFileSync',
-            'lstat',
-            'lstatSync',
-            'mkdir',
-            'mkdirSync',
-            'readlink',
-            'readlinkSync',
-            'realpath',
-            'realpathSync',
-            'stat',
-            'statSync',
-            'rename',
-            'renameSync',
-            'rm',
-            'rmSync',
-            'symlink',
-            'symlinkSync',
-            'unlink',
-            'unlinkSync',
-            'writeFile',
-            'writeFileBytes',
-            'writeFileBytesSync',
-            'writeFileSync'
-          ].includes(nodeName)
-        ? nodeName
-        : null
-
-  return method == null
-    ? null
-    : {
-        method,
-        nodeName,
-        path,
-        root: path[0],
-        viaPromises: false
-      }
-}
-
-function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promisesApi: boolean): string | null {
-  if (
-    ['appendFileBytes', 'appendFileBytesSync', 'readFileBytes', 'readFileBytesSync', 'writeFileBytes', 'writeFileBytesSync'].includes(
-      info.method
-    )
-  ) {
-    return `function ${info.path.join('.')} is not part of Node fs; use fs.promises.readFile/writeFile or fs.readFileSync/writeFileSync`
-  }
-
-  if (info.method === 'readDir') {
-    if (info.nodeName === 'readDir') {
-      return `function ${info.path.join('.')} is not part of Node fs; use fs.promises.readdir or fs.readdirSync`
-    }
-
-    return promisesApi ? null : 'Node fs.readdir callback API is not supported yet; use fs.promises.readdir'
-  }
-
-  if (info.method === 'readDirSync' && info.nodeName === 'readDirSync') {
-    return `function ${info.path.join('.')} is not part of Node fs; use fs.readdirSync`
-  }
-
-  if (
-    [
-      'access',
-      'appendFile',
-      'copyFile',
-      'lstat',
-      'mkdir',
-      'readFile',
-      'readlink',
-      'realpath',
-      'rename',
-      'rm',
-      'stat',
-      'symlink',
-      'unlink',
-      'writeFile'
-    ].includes(info.method) &&
-    !promisesApi
-  ) {
-    return `Node ${info.path.join('.')} callback API is not supported yet; use fs.promises.${info.method}`
-  }
-
-  return null
+  return fsRuntimeCallInfoFromPath(memberExpressionPath(callee))
 }
 
 function memberExpressionPath(expression: AnyNode): string[] | null {

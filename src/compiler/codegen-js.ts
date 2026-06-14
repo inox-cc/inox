@@ -7,6 +7,12 @@ import {
   findIrEntryProgram,
   hasIrFunctionDeclaration
 } from './ir.ts'
+import {
+  isFsPromiseRuntimeMethod,
+  isFsPromiseUsagePath,
+  isFsSyncRuntimeMethod,
+  isFsSyncUsagePath
+} from './stdlib/descriptors/fs.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, IrProgram } from './types.ts'
 
@@ -168,97 +174,6 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
   }
 
   return lines
-}
-
-function isFsPromiseUsagePath(path: string): boolean {
-  return [
-    'fs.promises.access',
-    'fs.promises.appendFile',
-    'fs.promises.copyFile',
-    'fs.promises.lstat',
-    'fs.promises.mkdir',
-    'fs.promises.readFile',
-    'fs.promises.readdir',
-    'fs.promises.readlink',
-    'fs.promises.realpath',
-    'fs.promises.rename',
-    'fs.promises.rm',
-    'fs.promises.stat',
-    'fs.promises.symlink',
-    'fs.promises.unlink',
-    'fs.promises.writeFile'
-  ].includes(path)
-}
-
-function isFsSyncUsagePath(path: string): boolean {
-  return (
-    [
-      'fs.accessSync',
-      'fs.appendFileSync',
-      'fs.copyFileSync',
-      'fs.lstatSync',
-      'fs.mkdirSync',
-      'fs.readFileSync',
-      'fs.readdirSync',
-      'fs.readlinkSync',
-      'fs.realpathSync',
-      'fs.renameSync',
-      'fs.rmSync',
-      'fs.statSync',
-      'fs.symlinkSync',
-      'fs.unlinkSync',
-      'fs.writeFileSync'
-    ].includes(path) ||
-    path.startsWith('fs.constants.')
-  )
-}
-
-function isFsPromiseRuntimeMethod(method: string): boolean {
-  return [
-    'access',
-    'appendFile',
-    'appendFileBytes',
-    'copyFile',
-    'lstat',
-    'mkdir',
-    'readFile',
-    'readFileBytes',
-    'readDir',
-    'readDirDirents',
-    'readlink',
-    'realpath',
-    'rename',
-    'rm',
-    'stat',
-    'symlink',
-    'unlink',
-    'writeFile',
-    'writeFileBytes'
-  ].includes(method)
-}
-
-function isFsSyncRuntimeMethod(method: string): boolean {
-  return [
-    'accessSync',
-    'appendFileBytesSync',
-    'appendFileSync',
-    'copyFileSync',
-    'lstatSync',
-    'mkdirSync',
-    'readFileBytesSync',
-    'readFileSync',
-    'readDirSync',
-    'readDirDirentsSync',
-    'readlinkSync',
-    'realpathSync',
-    'renameSync',
-    'rmSync',
-    'statSync',
-    'symlinkSync',
-    'unlinkSync',
-    'writeFileBytesSync',
-    'writeFileSync'
-  ].includes(method)
 }
 
 function collectFsRuntimeMethods(programs: IrProgram[]): string[] {

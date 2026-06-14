@@ -1,3 +1,5 @@
+import { fsRuntimeCallInfoFromPath, isAsyncFsRuntimeMethod } from '../../stdlib/descriptors/fs.ts'
+
 export function cFsRuntimeExpressionMethod(expression: any): string | null {
   return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
 }
@@ -5,31 +7,7 @@ export function cFsRuntimeExpressionMethod(expression: any): string | null {
 export function isAsyncFsRuntimeCallExpression(expression: any): boolean {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  return (
-    method != null &&
-    expression?.valueType === 'promise' &&
-    [
-      'access',
-      'appendFile',
-      'appendFileBytes',
-      'copyFile',
-      'lstat',
-      'mkdir',
-      'readFile',
-      'readFileBytes',
-      'readDir',
-      'readDirDirents',
-      'readlink',
-      'realpath',
-      'rename',
-      'rm',
-      'stat',
-      'symlink',
-      'unlink',
-      'writeFile',
-      'writeFileBytes'
-    ].includes(method)
-  )
+  return method != null && expression?.valueType === 'promise' && isAsyncFsRuntimeMethod(method)
 }
 
 export function cFsRuntimeConstantExpression(expression: any): string | null {
@@ -61,61 +39,17 @@ function cFsRuntimeCallName(callee: any): string | null {
     return null
   }
 
-  if (path.length === 3 && path[1] === 'promises') {
-    if (path[2] === 'readdir') {
-      return 'readDir'
-    }
+  const info = fsRuntimeCallInfoFromPath(path)
 
-    return [
-      'access',
-      'appendFile',
-      'copyFile',
-      'lstat',
-      'mkdir',
-      'readFile',
-      'readlink',
-      'realpath',
-      'rename',
-      'rm',
-      'stat',
-      'symlink',
-      'unlink',
-      'writeFile'
-    ].includes(path[2])
-      ? path[2]
-      : null
-  }
-
-  if (path.length !== 2) {
+  if (info == null) {
     return null
   }
 
-  if (path[1] === 'readdir') {
-    return 'readDir'
+  if (info.mode === 'promise' || info.mode === 'sync' || (info.mode === 'callback' && info.nodeName === 'readdir')) {
+    return info.method
   }
 
-  if (path[1] === 'readdirSync') {
-    return 'readDirSync'
-  }
-
-  return [
-    'accessSync',
-    'appendFileSync',
-    'copyFileSync',
-    'lstatSync',
-    'mkdirSync',
-    'readFileSync',
-    'readlinkSync',
-    'realpathSync',
-    'renameSync',
-    'rmSync',
-    'statSync',
-    'symlinkSync',
-    'unlinkSync',
-    'writeFileSync'
-  ].includes(path[1])
-    ? path[1]
-    : null
+  return null
 }
 
 function cRuntimeMemberExpressionPath(expression: any): string[] | null {
