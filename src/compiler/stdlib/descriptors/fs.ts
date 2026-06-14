@@ -1,4 +1,4 @@
-export type FsRuntimeMode = 'callback' | 'extension' | 'promise' | 'sync'
+export type FsRuntimeMode = 'callback' | 'promise' | 'sync'
 
 export type FsRuntimeCallInfo = {
   method: string
@@ -7,6 +7,12 @@ export type FsRuntimeCallInfo = {
   root: string
   viaPromises: boolean
   mode: FsRuntimeMode
+}
+
+export type RemovedFsRuntimeMethodInfo = {
+  path: string[]
+  root: string
+  message: string
 }
 
 const promiseNodeMethods = new Map<string, string>([
@@ -63,15 +69,15 @@ const callbackNodeMethods = new Map<string, string>([
   ['writeFile', 'writeFile']
 ])
 
-const legacyExtensionMethods = new Set([
-  'appendFileBytes',
-  'appendFileBytesSync',
-  'readDir',
-  'readDirSync',
-  'readFileBytes',
-  'readFileBytesSync',
-  'writeFileBytes',
-  'writeFileBytesSync'
+const removedExtensionMethodMessages = new Map<string, string>([
+  ['appendFileBytes', 'use fs.promises.appendFile or fs.appendFileSync'],
+  ['appendFileBytesSync', 'use fs.appendFileSync'],
+  ['readDir', 'use fs.promises.readdir or fs.readdirSync'],
+  ['readDirSync', 'use fs.readdirSync'],
+  ['readFileBytes', 'use fs.promises.readFile or fs.readFileSync'],
+  ['readFileBytesSync', 'use fs.readFileSync'],
+  ['writeFileBytes', 'use fs.promises.writeFile or fs.writeFileSync'],
+  ['writeFileBytesSync', 'use fs.writeFileSync']
 ])
 
 const promiseRuntimeMethodNodePaths = new Map<string, string[]>([
@@ -173,16 +179,7 @@ export function fsRuntimeCallInfoFromPath(path: string[] | null | undefined): Fs
     }
   }
 
-  return legacyExtensionMethods.has(nodeName)
-    ? {
-        method: nodeName,
-        nodeName,
-        path,
-        root: path[0],
-        viaPromises: false,
-        mode: 'extension'
-      }
-    : null
+  return null
 }
 
 export function fsRuntimeMethodForPath(path: string[] | null | undefined): string | null {
@@ -213,25 +210,28 @@ export function isAsyncFsRuntimeMethod(method: string): boolean {
   return isFsPromiseRuntimeMethod(method)
 }
 
+export function removedFsRuntimeMethodInfoFromPath(
+  path: string[] | null | undefined
+): RemovedFsRuntimeMethodInfo | null {
+  if (path == null || path.length !== 2) {
+    return null
+  }
+
+  const nodeName = path[1]
+  const replacement = removedExtensionMethodMessages.get(nodeName)
+
+  return replacement == null
+    ? null
+    : {
+        path,
+        root: path[0],
+        message: `function ${path.join('.')} is not part of Node fs; ${replacement}`
+      }
+}
+
 export function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promisesApi: boolean): string | null {
-  if (
-    ['appendFileBytes', 'appendFileBytesSync', 'readFileBytes', 'readFileBytesSync', 'writeFileBytes', 'writeFileBytesSync'].includes(
-      info.method
-    )
-  ) {
-    return `function ${info.path.join('.')} is not part of Node fs; use fs.promises.readFile/writeFile or fs.readFileSync/writeFileSync`
-  }
-
   if (info.method === 'readDir') {
-    if (info.nodeName === 'readDir') {
-      return `function ${info.path.join('.')} is not part of Node fs; use fs.promises.readdir or fs.readdirSync`
-    }
-
     return promisesApi ? null : 'Node fs.readdir callback API is not supported yet; use fs.promises.readdir'
-  }
-
-  if (info.method === 'readDirSync' && info.nodeName === 'readDirSync') {
-    return `function ${info.path.join('.')} is not part of Node fs; use fs.readdirSync`
   }
 
   if (info.mode === 'callback' && !promisesApi) {

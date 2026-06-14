@@ -1,4 +1,5 @@
 import { fsRuntimeCallInfoFromPath, isAsyncFsRuntimeMethod } from '../../stdlib/descriptors/fs.ts'
+import { memberExpressionPath } from '../../member-paths.ts'
 
 export function cFsRuntimeExpressionMethod(expression: any): string | null {
   return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
@@ -33,7 +34,7 @@ export function cFsRuntimeConstantExpression(expression: any): string | null {
 }
 
 function cFsRuntimeCallName(callee: any): string | null {
-  const path = cRuntimeMemberExpressionPath(callee)
+  const path = memberExpressionPath(callee)
 
   if (path == null || path[0] !== 'fs') {
     return null
@@ -50,18 +51,4 @@ function cFsRuntimeCallName(callee: any): string | null {
   }
 
   return null
-}
-
-function cRuntimeMemberExpressionPath(expression: any): string[] | null {
-  if (expression?.type === 'Reference' && expression.path.length > 0) {
-    return expression.path
-  }
-
-  if (expression?.type !== 'MemberExpression') {
-    return null
-  }
-
-  const objectPath = cRuntimeMemberExpressionPath(expression.object)
-
-  return objectPath == null ? null : [...objectPath, expression.property]
 }

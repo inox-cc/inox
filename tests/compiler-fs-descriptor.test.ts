@@ -8,6 +8,7 @@ import {
   isFsPromiseUsagePath,
   isFsSyncRuntimeMethod,
   isFsSyncUsagePath,
+  removedFsRuntimeMethodInfoFromPath,
   unsupportedFsRuntimeMethodMessage
 } from '../src/compiler/stdlib/descriptors/fs.ts'
 
@@ -34,7 +35,7 @@ test('maps Node fs promise paths to runtime methods', () => {
 test('maps Node fs sync paths to runtime methods', () => {
   assert.equal(fsRuntimeCallInfoFromPath(['fs', 'readFileSync'])?.method, 'readFileSync')
   assert.equal(fsRuntimeCallInfoFromPath(['fs', 'readdirSync'])?.method, 'readDirSync')
-  assert.equal(fsRuntimeCallInfoFromPath(['fs', 'readDirSync'])?.mode, 'extension')
+  assert.equal(fsRuntimeCallInfoFromPath(['fs', 'readDirSync']), null)
 })
 
 test('classifies fs runtime methods and usage paths', () => {
@@ -56,17 +57,18 @@ test('maps runtime methods back to Node fs usage paths', () => {
 
 test('formats unsupported fs diagnostics from descriptor metadata', () => {
   const callbackInfo = fsRuntimeCallInfoFromPath(['fs', 'readFile'])
-  const legacyInfo = fsRuntimeCallInfoFromPath(['fs', 'readFileBytes'])
+  const removedInfo = removedFsRuntimeMethodInfoFromPath(['fs', 'readFileBytes'])
 
   assert.notEqual(callbackInfo, null)
-  assert.notEqual(legacyInfo, null)
+  assert.notEqual(removedInfo, null)
+  assert.equal(fsRuntimeCallInfoFromPath(['fs', 'readFileBytes']), null)
   assert.equal(
     unsupportedFsRuntimeMethodMessage(callbackInfo!, false),
     'Node fs.readFile callback API is not supported yet; use fs.promises.readFile'
   )
   assert.equal(unsupportedFsRuntimeMethodMessage(callbackInfo!, true), null)
   assert.equal(
-    unsupportedFsRuntimeMethodMessage(legacyInfo!, false),
-    'function fs.readFileBytes is not part of Node fs; use fs.promises.readFile/writeFile or fs.readFileSync/writeFileSync'
+    removedInfo?.message,
+    'function fs.readFileBytes is not part of Node fs; use fs.promises.readFile or fs.readFileSync'
   )
 })

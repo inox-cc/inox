@@ -11,6 +11,7 @@ import { fsRuntimeMethodForPath } from '../stdlib/descriptors/fs.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import { timerRuntimeMethodNameFromPath } from '../stdlib/descriptors/timers.ts'
+import { memberExpressionPath } from '../member-paths.ts'
 import type {
   AnyNode,
   IrFeature,
@@ -324,7 +325,7 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('clocks')
   }
 
-  if (expression.fsRuntimeMethod != null || fsRuntimeMethodForPath(runtimeMemberExpressionPath(expression.callee)) != null) {
+  if (expression.fsRuntimeMethod != null || fsRuntimeMethodForPath(memberExpressionPath(expression.callee)) != null) {
     features.add('fs')
   }
 
@@ -442,7 +443,7 @@ function cryptoRuntimeMethodName(expression: AnyNode): string | null {
     return null
   }
 
-  return cryptoRuntimeMethodNameFromPath(runtimeMemberExpressionPath(expression.callee)) === expression.cryptoRuntimeMethod
+  return cryptoRuntimeMethodNameFromPath(memberExpressionPath(expression.callee)) === expression.cryptoRuntimeMethod
     ? expression.cryptoRuntimeMethod
     : null
 }
@@ -510,25 +511,11 @@ function stringRuntimeMethodName(expression: AnyNode): string | null {
 }
 
 function timeRuntimeCallName(callee: AnyNode): string | null {
-  return timeRuntimeMethodNameFromPath(runtimeMemberExpressionPath(callee))
-}
-
-function runtimeMemberExpressionPath(expression: AnyNode): string[] | null {
-  if (expression?.type === 'Reference' && expression.path.length > 0) {
-    return expression.path
-  }
-
-  if (expression?.type !== 'MemberExpression') {
-    return null
-  }
-
-  const objectPath = runtimeMemberExpressionPath(expression.object)
-
-  return objectPath == null ? null : [...objectPath, expression.property]
+  return timeRuntimeMethodNameFromPath(memberExpressionPath(callee))
 }
 
 function jsonRuntimeCallName(callee: AnyNode): string | null {
-  return jsonRuntimeMethodNameFromPath(runtimeMemberExpressionPath(callee))
+  return jsonRuntimeMethodNameFromPath(memberExpressionPath(callee))
 }
 
 function timerRuntimeCallName(callee: AnyNode): string | null {

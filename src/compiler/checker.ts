@@ -21,15 +21,15 @@ import {
   numericCastNames
 } from './checker/builtins.ts'
 import { Scope } from './checker/scope.ts'
-import { fsRuntimeCallInfo, isFsRuntimeImportSymbol } from './checker/std/fs.ts'
+import { fsRuntimeCallInfo, isFsRuntimeImportSymbol, removedFsRuntimeMethodInfo } from './checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
-import { memberExpressionPath } from './checker/std/paths.ts'
 import {
   timerCallbackFunctionType,
   timerClearMethodName,
   timerRuntimeMethodName
 } from './checker/std/timers.ts'
+import { memberExpressionPath } from './member-paths.ts'
 import {
   arrayElementTypeNameFromTypeName,
   isBuiltinValueType,
@@ -2198,6 +2198,15 @@ class Checker {
   }
 
   checkFsCall(expression: AnyNode): ValueType | null {
+    const removedInfo = removedFsRuntimeMethodInfo(expression.callee)
+
+    if (removedInfo != null && this.isFsRuntimeRootName(removedInfo.root)) {
+      this.report('CCJS_FS_UNSUPPORTED', removedInfo.message, expression.loc)
+      expression.valueType = 'unknown'
+
+      return 'unknown'
+    }
+
     const info = fsRuntimeCallInfo(expression.callee)
 
     if (info == null || !this.isFsRuntimeRoot(info)) {
@@ -2655,7 +2664,11 @@ class Checker {
   }
 
   isFsRuntimeRoot(info: FsRuntimeCallInfo): boolean {
-    const symbol = this.scope.resolve(info.root)
+    return this.isFsRuntimeRootName(info.root)
+  }
+
+  isFsRuntimeRootName(root: string): boolean {
+    const symbol = this.scope.resolve(root)
 
     if (symbol == null) {
       return false

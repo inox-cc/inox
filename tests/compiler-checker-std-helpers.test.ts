@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { fsRuntimeCallInfo, isFsRuntimeImportSymbol } from '../src/compiler/checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from '../src/compiler/checker/std/json.ts'
 import { isMathRuntimeMethod } from '../src/compiler/checker/std/math.ts'
-import { memberExpressionPath } from '../src/compiler/checker/std/paths.ts'
+import { memberExpressionPath } from '../src/compiler/member-paths.ts'
 import {
   timerCallbackFunctionType,
   timerClearMethodName,
