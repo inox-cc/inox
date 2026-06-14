@@ -1378,6 +1378,133 @@ int main(void) {
   }
 })
 
+test('C runtime weak object fields release and preserve old value on OOM', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-weak-object-runtime-'))
+  const source = join(dir, 'weak-object-runtime-smoke.c')
+  const output = join(dir, 'weak-object-runtime-smoke')
+
+  try {
+    await writeFile(
+      source,
+      `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/debug.h"
+#include "ccjs/object.h"
+#include "ccjs/string.h"
+#include "ccjs/weak.h"
+
+static void* base_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* base_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void base_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static int expect_value_ref(ccjs_value value, ccjs_value expected) {
+  return value.tag == expected.tag && value.as.ref == expected.as.ref;
+}
+
+int main(void) {
+  ccjs_allocator base = { 0, base_alloc, base_realloc, base_free };
+  ccjs_allocator allocator = ccjs_debug_allocator(&base);
+  static const ccjs_field_info fields[] = {
+    { "parent", CCJS_FIELD_WEAK }
+  };
+  static const ccjs_shape shape = { 1, fields };
+  ccjs_debug_memory_stats stats;
+  ccjs_value old_name = ccjs_undefined_value();
+  ccjs_value new_name = ccjs_undefined_value();
+  ccjs_value holder = ccjs_undefined_value();
+  ccjs_value out = ccjs_undefined_value();
+
+  ccjs_debug_memory_reset();
+
+  if (ccjs_string_from_literal(&allocator, "old", 3, &old_name) != CCJS_OK) return 1;
+  if (ccjs_string_from_literal(&allocator, "new", 3, &new_name) != CCJS_OK) return 2;
+  if (ccjs_object_new(&allocator, &shape, &holder) != CCJS_OK) return 3;
+
+  if (ccjs_object_init_known(holder, 0, old_name) != CCJS_OK) return 4;
+  if (old_name.as.ref->weak_cell == 0 || old_name.as.ref->weak_cell->weak_count != 1) return 5;
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_weak_cells != 1) return 6;
+
+  ccjs_debug_memory_set_oom_after(0);
+  if (ccjs_object_set_known(holder, 0, new_name) != CCJS_ERR_OOM) return 7;
+  ccjs_debug_memory_clear_oom();
+  if (old_name.as.ref->weak_cell == 0 || old_name.as.ref->weak_cell->weak_count != 1) return 8;
+  if (new_name.as.ref->weak_cell != 0) return 9;
+  if (ccjs_object_get_known(holder, 0, &out) != CCJS_OK) return 10;
+  if (!expect_value_ref(out, old_name)) return 11;
+  ccjs_release(out);
+  out = ccjs_undefined_value();
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.oom_failure_count != 1 || stats.live_weak_cells != 1) return 12;
+
+  if (ccjs_object_set_known(holder, 0, new_name) != CCJS_OK) return 13;
+  if (old_name.as.ref->weak_cell == 0 || old_name.as.ref->weak_cell->weak_count != 0) return 14;
+  if (new_name.as.ref->weak_cell == 0 || new_name.as.ref->weak_cell->weak_count != 1) return 15;
+  if (ccjs_object_get_known(holder, 0, &out) != CCJS_OK) return 16;
+  if (!expect_value_ref(out, new_name)) return 17;
+  ccjs_release(out);
+  out = ccjs_undefined_value();
+
+  ccjs_release(holder);
+  holder = ccjs_undefined_value();
+  if (new_name.as.ref->weak_cell == 0 || new_name.as.ref->weak_cell->weak_count != 0) return 18;
+
+  ccjs_release(old_name);
+  old_name = ccjs_undefined_value();
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_weak_cells != 1) return 19;
+
+  ccjs_release(new_name);
+  new_name = ccjs_undefined_value();
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_weak_cells != 0 || stats.live_alloc_count != 0 || stats.alloc_count != stats.free_count) return 20;
+
+  printf("weak object ok\\n");
+  return 0;
+}
+`
+    )
+
+    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_ENABLE_WEAK=1', '-DCCJS_DEBUG_MEMORY=1'])
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'weak object ok\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('generated C weak object fields compile and run with weak runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
