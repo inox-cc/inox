@@ -50,6 +50,35 @@ const errorObjectShape: ObjectShapeInfo = {
   ]
 }
 
+const fsStatsObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'fs.Stats',
+  fields: [
+    {
+      name: 'size',
+      valueType: 'number',
+      readonly: true
+    },
+    {
+      name: 'mode',
+      valueType: 'number',
+      readonly: true
+    },
+    {
+      name: 'mtimeMs',
+      valueType: 'number',
+      readonly: true
+    }
+  ]
+}
+
+const fsConstantValues = new Map([
+  ['F_OK', 0],
+  ['X_OK', 1],
+  ['W_OK', 2],
+  ['R_OK', 4]
+])
+
 const globals = new Map<string, SymbolInfo>([
   [
     'console',
@@ -996,6 +1025,10 @@ class Checker {
         expression.arrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.argument)
       }
 
+      if (valueType === 'object') {
+        expression.shape = this.resolveExpressionShape(expression.argument)
+      }
+
       return valueType
     }
 
@@ -1148,6 +1181,12 @@ class Checker {
   }
 
   checkMemberExpression(expression: AnyNode): ValueType {
+    const fsConstantType = this.checkFsConstantMemberExpression(expression)
+
+    if (fsConstantType != null) {
+      return fsConstantType
+    }
+
     const objectType = this.checkExpression(expression.object)
 
     if (objectType === 'bytes' && expression.property === 'length') {
@@ -1639,6 +1678,12 @@ class Checker {
       return timerHandleMethodType
     }
 
+    const fsStatsMethodType = this.checkFsStatsMethodCall(expression)
+
+    if (fsStatsMethodType != null) {
+      return fsStatsMethodType
+    }
+
     const fsType = this.checkFsCall(expression)
 
     if (fsType != null) {
@@ -1974,6 +2019,51 @@ class Checker {
     return 'number'
   }
 
+  checkFsConstantMemberExpression(expression: AnyNode): ValueType | null {
+    const path = memberExpressionPath(expression)
+
+    if (path == null || path.length !== 3 || path[1] !== 'constants' || !fsConstantValues.has(path[2])) {
+      return null
+    }
+
+    const symbol = this.scope.resolve(path[0])
+
+    if (symbol == null || !isFsRuntimeImportSymbol(symbol)) {
+      return null
+    }
+
+    expression.fsRuntimeConstant = path[2]
+    expression.valueType = 'number'
+
+    return 'number'
+  }
+
+  checkFsStatsMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || !['isFile', 'isDirectory'].includes(expression.callee.property)) {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const shape = this.resolveExpressionShape(expression.callee.object)
+
+    if (objectType !== 'object' || shape?.builtin !== 'fs.Stats') {
+      return null
+    }
+
+    if (expression.args.length !== 0) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function Stats.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    expression.fsRuntimeMethod = expression.callee.property === 'isFile' ? 'statsIsFile' : 'statsIsDirectory'
+    expression.valueType = 'boolean'
+
+    return 'boolean'
+  }
+
   resolveClassMethodReceiverClassName(expression: AnyNode): string | null {
     if (this.isThisExpression(expression)) {
       return this.scope.resolve('this')?.className ?? expression.className ?? null
@@ -2003,6 +2093,36 @@ class Checker {
       expression.valueType = 'unknown'
 
       return 'unknown'
+    }
+
+    if (method === 'statSync' || method === 'lstatSync') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      expression.fsRuntimeMethod = method
+      expression.valueType = 'object'
+      expression.shape = fsStatsObjectShape
+
+      return 'object'
+    }
+
+    if (method === 'accessSync') {
+      if (expression.args.length < 1 || expression.args.length > 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsNumberArg(expression, 1)
+      expression.fsRuntimeMethod = 'accessSync'
+      expression.valueType = 'void'
+
+      return 'void'
     }
 
     if (method === 'readFileSync') {
@@ -2098,6 +2218,38 @@ class Checker {
       return 'promise'
     }
 
+    if (method === 'stat' || method === 'lstat') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      expression.fsRuntimeMethod = method
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'object'
+      expression.shape = fsStatsObjectShape
+
+      return 'promise'
+    }
+
+    if (method === 'access') {
+      if (expression.args.length < 1 || expression.args.length > 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsNumberArg(expression, 1)
+      expression.fsRuntimeMethod = 'access'
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'void'
+
+      return 'promise'
+    }
+
     if (method === 'readDir') {
       if (expression.args.length < 1 || expression.args.length > (info.nodeName === 'readdir' ? 2 : 1)) {
         this.report(
@@ -2183,6 +2335,16 @@ class Checker {
     }
 
     this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
+  }
+
+  checkFsNumberArg(expression: AnyNode, index: number): void {
+    const arg = expression.args[index]
+
+    if (arg == null) {
+      return
+    }
+
+    this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, this.expressionCanBeNull(arg))
   }
 
   checkJsonCall(expression: AnyNode, declared: ResolvedTypeInfo | null = null): ValueType | null {
@@ -4814,7 +4976,7 @@ function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
   if (path.length === 3 && path[1] === 'promises') {
     const method = nodeName === 'readdir' ? 'readDir' : nodeName
 
-    return ['readFile', 'readDir', 'writeFile'].includes(method)
+    return ['access', 'lstat', 'readFile', 'readDir', 'stat', 'writeFile'].includes(method)
       ? {
           method,
           nodeName,
@@ -4841,6 +5003,12 @@ function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
             'readFileSync',
             'readDir',
             'readDirSync',
+            'access',
+            'accessSync',
+            'lstat',
+            'lstatSync',
+            'stat',
+            'statSync',
             'writeFile',
             'writeFileBytes',
             'writeFileBytesSync',
@@ -4877,7 +5045,7 @@ function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promisesApi:
     return `function ${info.path.join('.')} is not part of Node fs; use fs.readdirSync`
   }
 
-  if ((info.method === 'readFile' || info.method === 'writeFile') && !promisesApi) {
+  if (['access', 'lstat', 'readFile', 'stat', 'writeFile'].includes(info.method) && !promisesApi) {
     return `Node ${info.path.join('.')} callback API is not supported yet; use fs.promises.${info.method}`
   }
 

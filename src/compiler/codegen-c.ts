@@ -2095,12 +2095,22 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'Promise' ||
     path === 'Promise.resolve' ||
     path === 'Promise.reject' ||
+    path === 'fs.promises.access' ||
+    path === 'fs.promises.lstat' ||
     path === 'fs.promises.readFile' ||
     path === 'fs.promises.readdir' ||
+    path === 'fs.promises.stat' ||
     path === 'fs.promises.writeFile' ||
+    path === 'fs.accessSync' ||
+    path === 'fs.lstatSync' ||
     path === 'fs.readFileSync' ||
     path === 'fs.readdirSync' ||
+    path === 'fs.statSync' ||
     path === 'fs.writeFileSync' ||
+    path === 'fs.constants.F_OK' ||
+    path === 'fs.constants.R_OK' ||
+    path === 'fs.constants.W_OK' ||
+    path === 'fs.constants.X_OK' ||
     path === 'JSON.parse' ||
     path === 'JSON.stringify' ||
     path === 'Buffer.alloc' ||
@@ -3362,7 +3372,7 @@ function isAsyncFsRuntimeCallExpression(expression) {
 
   return (
     expression?.valueType === 'promise' &&
-    ['readFile', 'readFileBytes', 'readDir', 'writeFile', 'writeFileBytes'].includes(method)
+    ['access', 'lstat', 'readFile', 'readFileBytes', 'readDir', 'stat', 'writeFile', 'writeFileBytes'].includes(method)
   )
 }
 
@@ -3774,6 +3784,15 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
     lines.push(`status = ccjs_fs_read_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'readDir') {
     lines.push(`status = ccjs_fs_read_dir(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'stat') {
+    lines.push(`status = ccjs_fs_stat(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'lstat') {
+    lines.push(`status = ccjs_fs_lstat(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'access') {
+    const mode = emitPreparedFsAccessModeExpression(expression, context)
+
+    lines.push(...mode.lines)
+    lines.push(`status = ccjs_fs_access(ccjs_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`)
   } else if (method === 'writeFileBytes') {
     const bytes = emitCValueExpression(expression.args[1], context)
 
@@ -12116,6 +12135,15 @@ function emitPreparedNumberExpression(expression, context) {
     return classMethodCall
   }
 
+  const fsConstant = cFsRuntimeConstantExpression(expression)
+
+  if (fsConstant != null) {
+    return {
+      lines: [],
+      expression: fsConstant
+    }
+  }
+
   if (expression?.type === 'NumberLiteral') {
     return {
       lines: [],
@@ -12902,6 +12930,12 @@ function emitPreparedCallExpression(expression, context) {
     return mathCall
   }
 
+  const fsStatsMethod = emitPreparedFsStatsMethodExpression(expression, context)
+
+  if (fsStatsMethod != null) {
+    return fsStatsMethod
+  }
+
   const numberConversion = emitCNumberConversionValueExpression(expression, context)
 
   if (numberConversion != null) {
@@ -13115,13 +13149,15 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
       context,
       out,
       expression.promiseValueType ??
-        (method === 'writeFile' || method === 'writeFileBytes'
+        (method === 'writeFile' || method === 'writeFileBytes' || method === 'access'
           ? 'void'
           : method === 'readDir'
             ? 'array'
-            : method === 'readFileBytes'
-              ? 'bytes'
-              : 'string'),
+            : method === 'stat' || method === 'lstat'
+              ? 'object'
+              : method === 'readFileBytes'
+                ? 'bytes'
+                : 'string'),
       'error'
     )
   }
@@ -13173,6 +13209,39 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
     }
   }
 
+  if (method === 'stat' || method === 'lstat') {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_${method}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'access') {
+    const mode = emitPreparedFsAccessModeExpression(expression, context)
+
+    lines.push(...mode.lines)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_access(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${mode.expression}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
   if (method === 'writeFileBytes') {
     const bytes = emitCValueExpression(expression.args[1], context)
 
@@ -13212,7 +13281,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 function emitPreparedFsSyncValueExpression(expression, context) {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (method == null || !['readFileBytesSync', 'readFileSync', 'readDirSync'].includes(method)) {
+  if (method == null || !['lstatSync', 'readFileBytesSync', 'readFileSync', 'readDirSync', 'statSync'].includes(method)) {
     return null
   }
 
@@ -13231,7 +13300,11 @@ function emitPreparedFsSyncValueExpression(expression, context) {
       ? `ccjs_fs_read_file_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
       : method === 'readFileBytesSync'
         ? `ccjs_fs_read_file_bytes_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-        : `ccjs_fs_read_dir_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+        : method === 'readDirSync'
+          ? `ccjs_fs_read_dir_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+          : method === 'statSync'
+            ? `ccjs_fs_stat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+            : `ccjs_fs_lstat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
 
   return {
     lines: [
@@ -13247,12 +13320,23 @@ function emitPreparedFsSyncValueExpression(expression, context) {
 function emitPreparedFsSyncStatementExpression(expression, context) {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (method == null || !['writeFileBytesSync', 'writeFileSync'].includes(method)) {
+  if (method == null || !['accessSync', 'writeFileBytesSync', 'writeFileSync'].includes(method)) {
     return null
   }
 
   const path = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines = [...path.lines]
+
+  if (method === 'accessSync') {
+    const mode = emitPreparedFsAccessModeExpression(expression, context)
+
+    lines.push(...mode.lines)
+    lines.push(emitStatusCheck(`ccjs_fs_access_sync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
+
+    return {
+      lines
+    }
+  }
 
   if (method === 'writeFileBytesSync') {
     const bytes = emitCValueExpression(expression.args[1], context)
@@ -13277,6 +13361,38 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
 
   return {
     lines
+  }
+}
+
+function emitPreparedFsAccessModeExpression(expression, context) {
+  if (expression.args[1] == null) {
+    return {
+      lines: [],
+      expression: 'CCJS_FS_F_OK'
+    }
+  }
+
+  const mode = emitPreparedNumberExpression(expression.args[1], context)
+
+  return {
+    lines: mode.lines,
+    expression: `((int)${mode.expression})`
+  }
+}
+
+function emitPreparedFsStatsMethodExpression(expression, context) {
+  const method = cFsRuntimeExpressionMethod(expression)
+
+  if (method !== 'statsIsFile' && method !== 'statsIsDirectory') {
+    return null
+  }
+
+  const receiver = emitCValueExpression(expression.callee.object, context)
+  const helper = method === 'statsIsFile' ? 'ccjs_fs_stats_is_file' : 'ccjs_fs_stats_is_directory'
+
+  return {
+    lines: receiver.lines,
+    expression: `(${helper}(${receiver.expression}) ? 1 : 0)`
   }
 }
 
@@ -17508,6 +17624,28 @@ function cFsRuntimeExpressionMethod(expression) {
   return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
 }
 
+function cFsRuntimeConstantExpression(expression) {
+  const name = expression?.fsRuntimeConstant
+
+  if (name === 'F_OK') {
+    return 'CCJS_FS_F_OK'
+  }
+
+  if (name === 'R_OK') {
+    return 'CCJS_FS_R_OK'
+  }
+
+  if (name === 'W_OK') {
+    return 'CCJS_FS_W_OK'
+  }
+
+  if (name === 'X_OK') {
+    return 'CCJS_FS_X_OK'
+  }
+
+  return null
+}
+
 function cFsRuntimeCallName(callee) {
   const path = cRuntimeMemberExpressionPath(callee)
 
@@ -17520,7 +17658,7 @@ function cFsRuntimeCallName(callee) {
       return 'readDir'
     }
 
-    return ['readFile', 'writeFile'].includes(path[2]) ? path[2] : null
+    return ['access', 'lstat', 'readFile', 'stat', 'writeFile'].includes(path[2]) ? path[2] : null
   }
 
   if (path.length !== 2) {
@@ -17535,7 +17673,7 @@ function cFsRuntimeCallName(callee) {
     return 'readDirSync'
   }
 
-  return ['readFileSync', 'writeFileSync'].includes(path[1])
+  return ['accessSync', 'lstatSync', 'readFileSync', 'statSync', 'writeFileSync'].includes(path[1])
     ? path[1]
     : null
 }

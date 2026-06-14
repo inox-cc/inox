@@ -134,11 +134,16 @@ int main(void) {
   ccjs_promise* read_entries = 0;
   ccjs_promise* read_bytes = 0;
   ccjs_promise* write_bytes = 0;
+  ccjs_promise* stat_file = 0;
+  ccjs_promise* lstat_dir = 0;
+  ccjs_promise* access_file = 0;
   ccjs_promise* missing = 0;
   ccjs_value bytes_to_write = ccjs_undefined_value();
   ccjs_value text_value = ccjs_undefined_value();
   ccjs_value entries_value = ccjs_undefined_value();
   ccjs_value bytes_value = ccjs_undefined_value();
+  ccjs_value stat_value = ccjs_undefined_value();
+  ccjs_value lstat_value = ccjs_undefined_value();
   ccjs_value missing_error = ccjs_undefined_value();
   ccjs_value missing_code = ccjs_undefined_value();
   unsigned char output_bytes[] = { 9, 8, 7, 6, 5, 4 };
@@ -152,33 +157,46 @@ int main(void) {
   if (ccjs_fs_read_dir(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &read_entries) != CCJS_OK) return 5;
   if (ccjs_fs_read_file_bytes(&loop, ${JSON.stringify(bytesInput)}, ${Buffer.byteLength(bytesInput)}, &read_bytes) != CCJS_OK) return 6;
   if (ccjs_fs_write_file_bytes(&loop, ${JSON.stringify(bytesOutput)}, ${Buffer.byteLength(bytesOutput)}, bytes_to_write, &write_bytes) != CCJS_OK) return 7;
-  if (ccjs_fs_read_file(&loop, ${JSON.stringify(missingInput)}, ${Buffer.byteLength(missingInput)}, &missing) != CCJS_OK) return 8;
-  if (!drain_loop(&loop)) return 9;
-  if (ccjs_promise_get_state(read_text) != CCJS_PROMISE_FULFILLED) return 10;
-  if (ccjs_promise_get_state(write_text) != CCJS_PROMISE_FULFILLED) return 11;
-  if (ccjs_promise_get_state(read_entries) != CCJS_PROMISE_FULFILLED) return 12;
-  if (ccjs_promise_get_state(read_bytes) != CCJS_PROMISE_FULFILLED) return 13;
-  if (ccjs_promise_get_state(write_bytes) != CCJS_PROMISE_FULFILLED) return 14;
-  if (ccjs_promise_get_state(missing) != CCJS_PROMISE_REJECTED) return 15;
-  if (ccjs_promise_get_result(read_text, &text_value) != CCJS_OK) return 16;
-  if (ccjs_promise_get_result(read_entries, &entries_value) != CCJS_OK) return 17;
-  if (ccjs_promise_get_result(read_bytes, &bytes_value) != CCJS_OK) return 18;
-  if (ccjs_promise_get_result(missing, &missing_error) != CCJS_OK) return 19;
-  if (ccjs_array_len(entries_value, &entries_len) != CCJS_OK) return 20;
-  if (ccjs_bytes_len(bytes_value, &bytes_len) != CCJS_OK) return 21;
-  if (ccjs_object_get(missing_error, "code", 4, &missing_code) != CCJS_OK) return 22;
+  if (ccjs_fs_stat(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, &stat_file) != CCJS_OK) return 8;
+  if (ccjs_fs_lstat(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &lstat_dir) != CCJS_OK) return 9;
+  if (ccjs_fs_access(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, CCJS_FS_R_OK, &access_file) != CCJS_OK) return 10;
+  if (ccjs_fs_read_file(&loop, ${JSON.stringify(missingInput)}, ${Buffer.byteLength(missingInput)}, &missing) != CCJS_OK) return 11;
+  if (!drain_loop(&loop)) return 12;
+  if (ccjs_promise_get_state(read_text) != CCJS_PROMISE_FULFILLED) return 13;
+  if (ccjs_promise_get_state(write_text) != CCJS_PROMISE_FULFILLED) return 14;
+  if (ccjs_promise_get_state(read_entries) != CCJS_PROMISE_FULFILLED) return 15;
+  if (ccjs_promise_get_state(read_bytes) != CCJS_PROMISE_FULFILLED) return 16;
+  if (ccjs_promise_get_state(write_bytes) != CCJS_PROMISE_FULFILLED) return 17;
+  if (ccjs_promise_get_state(stat_file) != CCJS_PROMISE_FULFILLED) return 18;
+  if (ccjs_promise_get_state(lstat_dir) != CCJS_PROMISE_FULFILLED) return 19;
+  if (ccjs_promise_get_state(access_file) != CCJS_PROMISE_FULFILLED) return 20;
+  if (ccjs_promise_get_state(missing) != CCJS_PROMISE_REJECTED) return 21;
+  if (ccjs_promise_get_result(read_text, &text_value) != CCJS_OK) return 22;
+  if (ccjs_promise_get_result(read_entries, &entries_value) != CCJS_OK) return 23;
+  if (ccjs_promise_get_result(read_bytes, &bytes_value) != CCJS_OK) return 24;
+  if (ccjs_promise_get_result(stat_file, &stat_value) != CCJS_OK) return 25;
+  if (ccjs_promise_get_result(lstat_dir, &lstat_value) != CCJS_OK) return 26;
+  if (ccjs_promise_get_result(missing, &missing_error) != CCJS_OK) return 27;
+  if (ccjs_array_len(entries_value, &entries_len) != CCJS_OK) return 28;
+  if (ccjs_bytes_len(bytes_value, &bytes_len) != CCJS_OK) return 29;
+  if (ccjs_object_get(missing_error, "code", 4, &missing_code) != CCJS_OK) return 30;
 
   ccjs_string* text = (ccjs_string*)text_value.as.ref;
   ccjs_string* code = (ccjs_string*)missing_code.as.ref;
-  printf("%.*s %zu %zu %.*s\\n", (int)text->len, text->bytes, entries_len, bytes_len, (int)code->len, code->bytes);
+  printf("%.*s %zu %zu %s %s %.*s\\n", (int)text->len, text->bytes, entries_len, bytes_len, ccjs_fs_stats_is_file(stat_value) ? "true" : "false", ccjs_fs_stats_is_directory(lstat_value) ? "true" : "false", (int)code->len, code->bytes);
 
   ccjs_release(missing_code);
   ccjs_release(missing_error);
+  ccjs_release(lstat_value);
+  ccjs_release(stat_value);
   ccjs_release(bytes_value);
   ccjs_release(entries_value);
   ccjs_release(text_value);
   ccjs_release(bytes_to_write);
   ccjs_promise_release(missing);
+  ccjs_promise_release(access_file);
+  ccjs_promise_release(lstat_dir);
+  ccjs_promise_release(stat_file);
   ccjs_promise_release(write_bytes);
   ccjs_promise_release(read_bytes);
   ccjs_promise_release(read_entries);
@@ -200,7 +218,7 @@ int main(void) {
     fail('run libuv fs smoke', run)
   }
 
-  const expected = 'uv text 2 6 ERR_FS_OPERATION\n'
+  const expected = 'uv text 2 6 true true ERR_FS_OPERATION\n'
 
   if (stdout !== expected) {
     console.error(`Libuv fs smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)

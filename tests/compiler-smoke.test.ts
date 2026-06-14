@@ -6935,6 +6935,70 @@ export function main(): void {
   assert.match(c.code, /ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\)/)
 })
 
+test('lowers Node fs stat lstat access and constants to the fs runtime', () => {
+  const js = compileSource(
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  const stats = await fs.promises.stat('/tmp/value.txt')
+  const link = await fs.promises.lstat('/tmp/link.txt')
+  await fs.promises.access('/tmp/value.txt', fs.constants.R_OK)
+  const syncStats = fs.statSync('/tmp/value.txt')
+  fs.accessSync('/tmp/value.txt', fs.constants.F_OK)
+  console.log(stats.size, link.mtimeMs, stats.isFile(), syncStats.isDirectory())
+}
+`,
+    {
+      target: 'js'
+    }
+  )
+
+  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
+  assert.match(js.code, /import \* as ccjsFsSync from 'node:fs'/)
+  assert.match(js.code, /const stats = await fs\.stat\("\/tmp\/value\.txt"\)/)
+  assert.match(js.code, /const link = await fs\.lstat\("\/tmp\/link\.txt"\)/)
+  assert.match(js.code, /await fs\.access\("\/tmp\/value\.txt", ccjsFsSync\.constants\.R_OK\)/)
+  assert.match(js.code, /const syncStats = ccjsFsSync\.statSync\("\/tmp\/value\.txt"\)/)
+  assert.match(js.code, /ccjsFsSync\.accessSync\("\/tmp\/value\.txt", ccjsFsSync\.constants\.F_OK\)/)
+
+  const c = compileSource(
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  const stats = await fs.promises.stat('/tmp/value.txt')
+  const link = await fs.promises.lstat('/tmp/link.txt')
+  await fs.promises.access('/tmp/value.txt', fs.constants.R_OK)
+  const syncStats = fs.statSync('/tmp/value.txt')
+  const ok = stats.isFile() && !syncStats.isDirectory()
+  console.log(stats.size, link.mode, ok)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const stats = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'stats')
+  const syncStats = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'syncStats')
+
+  assert.equal(stats?.valueType, 'object')
+  assert.equal(stats?.init?.shape?.builtin, 'fs.Stats')
+  assert.equal(syncStats?.init?.shape?.builtin, 'fs.Stats')
+  assert.deepEqual(
+    stats?.init?.shape?.fields.map((field) => field.name),
+    ['size', 'mode', 'mtimeMs']
+  )
+  assert.match(c.code, /ccjs_fs_stat\(&ccjs_loop, "\/tmp\/value\.txt", 14, &ccjs_promise_\d+\)/)
+  assert.match(c.code, /ccjs_fs_lstat\(&ccjs_loop, "\/tmp\/link\.txt", 13, &ccjs_promise_\d+\)/)
+  assert.match(c.code, /ccjs_fs_access\(&ccjs_loop, "\/tmp\/value\.txt", 14, \(\(int\)CCJS_FS_R_OK\), &ccjs_promise_\d+\)/)
+  assert.match(
+    c.code,
+    /if \(ccjs_fs_stat_sync\(&ccjs_default_allocator, "\/tmp\/value\.txt", 14, &ccjs_fs_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+  )
+  assert.match(c.code, /ccjs_fs_stats_is_file\(stats\)/)
+  assert.match(c.code, /ccjs_fs_stats_is_directory\(syncStats\)/)
+})
+
 test('lowers node:fs/promises imports to the fs runtime', () => {
   const js = compileSource(
     `import fs from 'node:fs/promises'

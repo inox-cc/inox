@@ -1137,6 +1137,10 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     features.add('runtime-values')
   }
 
+  if (node.type === 'MemberExpression' && node.fsRuntimeConstant != null) {
+    features.add('fs')
+  }
+
   if (node.type === 'OptionalCallExpression') {
     features.add('callback-values')
     features.add('runtime-values')
@@ -1390,17 +1394,23 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
   }
 
   if (path.length === 3 && path[1] === 'promises') {
-    return ['readFile', 'readdir', 'writeFile'].includes(path[2]) ? path.join('.') : null
+    return ['access', 'lstat', 'readFile', 'readdir', 'stat', 'writeFile'].includes(path[2]) ? path.join('.') : null
   }
 
   if (path.length !== 2) {
     return null
   }
 
-  return ['readFileSync', 'readdirSync', 'writeFileSync'].includes(path[1]) ? path.join('.') : null
+  return ['accessSync', 'lstatSync', 'readFileSync', 'readdirSync', 'statSync', 'writeFileSync'].includes(path[1])
+    ? path.join('.')
+    : null
 }
 
 function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
+  if (method === 'access' || method === 'lstat' || method === 'stat') {
+    return ['fs', 'promises', method]
+  }
+
   if (method === 'readFile' || method === 'readFileBytes') {
     return ['fs', 'promises', 'readFile']
   }
@@ -1423,6 +1433,10 @@ function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
 
   if (method === 'writeFileSync' || method === 'writeFileBytesSync') {
     return ['fs', 'writeFileSync']
+  }
+
+  if (method === 'accessSync' || method === 'lstatSync' || method === 'statSync') {
+    return ['fs', method]
   }
 
   return null

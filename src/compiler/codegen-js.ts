@@ -171,19 +171,40 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
 }
 
 function isFsPromiseUsagePath(path: string): boolean {
-  return ['fs.promises.readFile', 'fs.promises.readdir', 'fs.promises.writeFile'].includes(path)
+  return [
+    'fs.promises.access',
+    'fs.promises.lstat',
+    'fs.promises.readFile',
+    'fs.promises.readdir',
+    'fs.promises.stat',
+    'fs.promises.writeFile'
+  ].includes(path)
 }
 
 function isFsSyncUsagePath(path: string): boolean {
-  return ['fs.readFileSync', 'fs.readdirSync', 'fs.writeFileSync'].includes(path)
+  return (
+    ['fs.accessSync', 'fs.lstatSync', 'fs.readFileSync', 'fs.readdirSync', 'fs.statSync', 'fs.writeFileSync'].includes(path) ||
+    path.startsWith('fs.constants.')
+  )
 }
 
 function isFsPromiseRuntimeMethod(method: string): boolean {
-  return ['readFile', 'readFileBytes', 'readDir', 'writeFile', 'writeFileBytes'].includes(method)
+  return ['access', 'lstat', 'readFile', 'readFileBytes', 'readDir', 'stat', 'writeFile', 'writeFileBytes'].includes(
+    method
+  )
 }
 
 function isFsSyncRuntimeMethod(method: string): boolean {
-  return ['readFileBytesSync', 'readFileSync', 'readDirSync', 'writeFileBytesSync', 'writeFileSync'].includes(method)
+  return [
+    'accessSync',
+    'lstatSync',
+    'readFileBytesSync',
+    'readFileSync',
+    'readDirSync',
+    'statSync',
+    'writeFileBytesSync',
+    'writeFileSync'
+  ].includes(method)
 }
 
 function collectFsRuntimeMethods(programs: IrProgram[]): string[] {
@@ -580,6 +601,10 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   if (expression.type === 'MemberExpression') {
+    if (expression.fsRuntimeConstant != null) {
+      return `ccjsFsSync.constants.${expression.fsRuntimeConstant}`
+    }
+
     if (isStringLengthExpression(expression)) {
       return `ccjsStringLength(${emitExpression(expression.object, options)})`
     }
@@ -816,6 +841,14 @@ function isStringSplitCall(expression: AnyNode): boolean {
 }
 
 function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions): string | null {
+  if (expression.fsRuntimeMethod === 'stat' || expression.fsRuntimeMethod === 'lstat') {
+    return `fs.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options)})`
+  }
+
+  if (expression.fsRuntimeMethod === 'access') {
+    return `fs.access(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
+  }
+
   if (expression.fsRuntimeMethod === 'readFile') {
     const args =
       expression.args.length === 1
@@ -839,6 +872,14 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
 
   if (expression.fsRuntimeMethod === 'writeFileBytes') {
     return `fs.writeFile(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
+  }
+
+  if (expression.fsRuntimeMethod === 'statSync' || expression.fsRuntimeMethod === 'lstatSync') {
+    return `ccjsFsSync.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options)})`
+  }
+
+  if (expression.fsRuntimeMethod === 'accessSync') {
+    return `ccjsFsSync.accessSync(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.fsRuntimeMethod === 'readFileSync') {

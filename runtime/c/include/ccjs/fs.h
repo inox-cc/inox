@@ -1,10 +1,18 @@
 #ifndef CCJS_FS_H
 #define CCJS_FS_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include "ccjs/loop.h"
 #include "ccjs/promise.h"
 #include "ccjs/value.h"
+
+enum {
+  CCJS_FS_F_OK = 0,
+  CCJS_FS_X_OK = 1,
+  CCJS_FS_W_OK = 2,
+  CCJS_FS_R_OK = 4
+};
 
 typedef ccjs_status (*ccjs_fs_read_file_fn)(
   void* user,
@@ -27,6 +35,14 @@ typedef ccjs_status (*ccjs_fs_read_dir_fn)(
   size_t path_len,
   ccjs_value* out
 );
+typedef ccjs_status (*ccjs_fs_stat_fn)(
+  void* user,
+  ccjs_allocator* allocator,
+  const char* path,
+  size_t path_len,
+  ccjs_value* out
+);
+typedef ccjs_status (*ccjs_fs_access_fn)(void* user, const char* path, size_t path_len, int mode);
 typedef ccjs_status (*ccjs_fs_write_file_fn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
 
 typedef struct ccjs_fs_adapter {
@@ -35,6 +51,9 @@ typedef struct ccjs_fs_adapter {
   ccjs_fs_write_file_fn write_file;
   ccjs_fs_read_dir_fn read_dir;
   ccjs_fs_read_file_bytes_fn read_file_bytes;
+  ccjs_fs_stat_fn stat;
+  ccjs_fs_stat_fn lstat;
+  ccjs_fs_access_fn access;
 } ccjs_fs_adapter;
 
 void ccjs_fs_set_adapter(ccjs_fs_adapter adapter);
@@ -43,13 +62,23 @@ void ccjs_fs_clear_adapter(void);
 ccjs_status ccjs_fs_read_file_sync(ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 ccjs_status ccjs_fs_read_file_bytes_sync(ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 ccjs_status ccjs_fs_read_dir_sync(ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+ccjs_status ccjs_fs_stat_sync(ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+ccjs_status ccjs_fs_lstat_sync(ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+ccjs_status ccjs_fs_access_sync(const char* path, size_t path_len, int mode);
 ccjs_status ccjs_fs_write_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len);
 ccjs_status ccjs_fs_write_file_bytes_sync(const char* path, size_t path_len, ccjs_value bytes);
 ccjs_status ccjs_fs_read_file(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out);
 ccjs_status ccjs_fs_read_file_bytes(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out);
 ccjs_status ccjs_fs_read_dir(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out);
+ccjs_status ccjs_fs_stat(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out);
+ccjs_status ccjs_fs_lstat(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out);
+ccjs_status ccjs_fs_access(ccjs_loop* loop, const char* path, size_t path_len, int mode, ccjs_promise** out);
 ccjs_status
 ccjs_fs_write_file(ccjs_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, ccjs_promise** out);
 ccjs_status ccjs_fs_write_file_bytes(ccjs_loop* loop, const char* path, size_t path_len, ccjs_value bytes, ccjs_promise** out);
+ccjs_status
+ccjs_fs_stats_new(ccjs_allocator* allocator, double size, double mode, double mtime_ms, bool is_file, bool is_directory, ccjs_value* out);
+bool ccjs_fs_stats_is_file(ccjs_value stats);
+bool ccjs_fs_stats_is_directory(ccjs_value stats);
 
 #endif

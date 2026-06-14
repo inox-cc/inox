@@ -1383,6 +1383,139 @@ int main(void) {
   }
 })
 
+test('C runtime fs adapter supports stat lstat access and Stats helpers', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-stat-adapter-'))
+  const source = join(dir, 'fs-stat-adapter.c')
+  const output = join(dir, 'fs-stat-adapter')
+
+  try {
+    await writeFile(
+      source,
+      `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/fs.h"
+#include "ccjs/promise.h"
+
+typedef struct fs_state {
+  int stats;
+  int lstats;
+  int accesses;
+} fs_state;
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static ccjs_status stat_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+  fs_state* state = (fs_state*)user;
+  (void)path;
+  (void)path_len;
+  state->stats += 1;
+  return ccjs_fs_stats_new(allocator, 42, 33188, 1000, true, false, out);
+}
+
+static ccjs_status lstat_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+  fs_state* state = (fs_state*)user;
+  (void)path;
+  (void)path_len;
+  state->lstats += 1;
+  return ccjs_fs_stats_new(allocator, 7, 16877, 2000, false, true, out);
+}
+
+static ccjs_status access_file(void* user, const char* path, size_t path_len, int mode) {
+  fs_state* state = (fs_state*)user;
+  (void)path;
+  (void)path_len;
+  state->accesses += 1;
+  return mode == CCJS_FS_R_OK ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  fs_state state = { 0, 0, 0 };
+  ccjs_fs_adapter adapter = { &state, 0, 0, 0, 0, stat_file, lstat_file, access_file };
+  ccjs_loop loop;
+  ccjs_promise* stat_promise = 0;
+  ccjs_promise* lstat_promise = 0;
+  ccjs_promise* access_promise = 0;
+  ccjs_value sync_stat = ccjs_undefined_value();
+  ccjs_value sync_lstat = ccjs_undefined_value();
+  ccjs_value async_stat = ccjs_undefined_value();
+  ccjs_value async_lstat = ccjs_undefined_value();
+
+  ccjs_fs_set_adapter(adapter);
+  if (ccjs_fs_stat_sync(&allocator, "file", 4, &sync_stat) != CCJS_OK) return 1;
+  if (ccjs_fs_lstat_sync(&allocator, "dir", 3, &sync_lstat) != CCJS_OK) return 2;
+  if (ccjs_fs_access_sync("file", 4, CCJS_FS_R_OK) != CCJS_OK) return 3;
+  if (!ccjs_fs_stats_is_file(sync_stat)) return 4;
+  if (!ccjs_fs_stats_is_directory(sync_lstat)) return 5;
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 6;
+  if (ccjs_fs_stat(&loop, "file", 4, &stat_promise) != CCJS_OK) return 7;
+  if (ccjs_fs_lstat(&loop, "dir", 3, &lstat_promise) != CCJS_OK) return 8;
+  if (ccjs_fs_access(&loop, "file", 4, CCJS_FS_R_OK, &access_promise) != CCJS_OK) return 9;
+  if (ccjs_loop_poll(&loop, 0) != CCJS_OK) return 10;
+  if (ccjs_promise_get_state(stat_promise) != CCJS_PROMISE_FULFILLED) return 11;
+  if (ccjs_promise_get_state(lstat_promise) != CCJS_PROMISE_FULFILLED) return 12;
+  if (ccjs_promise_get_state(access_promise) != CCJS_PROMISE_FULFILLED) return 13;
+  if (ccjs_promise_get_result(stat_promise, &async_stat) != CCJS_OK) return 14;
+  if (ccjs_promise_get_result(lstat_promise, &async_lstat) != CCJS_OK) return 15;
+  if (!ccjs_fs_stats_is_file(async_stat)) return 16;
+  if (!ccjs_fs_stats_is_directory(async_lstat)) return 17;
+  printf("%d %d %d\\n", state.stats, state.lstats, state.accesses);
+  ccjs_release(async_lstat);
+  ccjs_release(async_stat);
+  ccjs_release(sync_lstat);
+  ccjs_release(sync_stat);
+  ccjs_promise_release(access_promise);
+  ccjs_promise_release(lstat_promise);
+  ccjs_promise_release(stat_promise);
+  ccjs_loop_dispose(&loop);
+  ccjs_fs_clear_adapter();
+  return 0;
+}
+`
+    )
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2 2 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('generated C fs.promises calls compile and run without libuv', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1707,8 +1840,10 @@ const bytes: Buffer = await fs.promises.readFile(${JSON.stringify(bytesInput)})
 await fs.promises.writeFile(${JSON.stringify(bytesCopied)}, bytes)
 
 const entries = await fs.promises.readdir(${JSON.stringify(entriesDir)})
+const stats = await fs.promises.stat(${JSON.stringify(textInput)})
+await fs.promises.access(${JSON.stringify(textInput)}, fs.constants.R_OK)
 const names = entries.sort()
-console.log(text, names[0], names[1], bytes.length)
+console.log(text, names[0], names[1], bytes.length, stats.isFile())
 
 `,
       {
@@ -1725,7 +1860,7 @@ console.log(text, names[0], names[1], bytes.length)
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'node text alpha.txt beta.txt 6\n')
+    assert.equal(run.stdout, 'node text alpha.txt beta.txt 6 1\n')
     assert.equal(await readFile(textCopied, 'utf8'), 'node text')
     assert.deepEqual(await readFile(bytesCopied), data)
   } finally {
@@ -1769,8 +1904,10 @@ fs.writeFileSync(${JSON.stringify(textCopied)}, text)
 const bytes = fs.readFileSync(${JSON.stringify(bytesInput)})
 fs.writeFileSync(${JSON.stringify(bytesCopied)}, bytes)
 const entries = fs.readdirSync(${JSON.stringify(entriesDir)})
+const stats = fs.statSync(${JSON.stringify(textInput)})
+fs.accessSync(${JSON.stringify(textInput)}, fs.constants.R_OK)
 const names = entries.sort()
-console.log(names[0], names[1])
+console.log(names[0], names[1], stats.isFile())
 
 `,
       {
@@ -1787,7 +1924,7 @@ console.log(names[0], names[1])
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'alpha.txt beta.txt\n')
+    assert.equal(run.stdout, 'alpha.txt beta.txt 1\n')
     assert.equal(await readFile(textCopied, 'utf8'), 'sync text')
     assert.deepEqual(await readFile(bytesCopied), data)
   } finally {
