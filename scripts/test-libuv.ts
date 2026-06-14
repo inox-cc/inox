@@ -1,6 +1,9 @@
+import { spawn } from 'node:child_process'
 import { access, mkdir, mkdtemp, readFile, readlink, realpath, rm, writeFile } from 'node:fs/promises'
+import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { compileSource } from '../src/compiler/index.ts'
 import { normalizeNewlines, runCommand } from './lib/run-command.ts'
 import { rootDir } from './lib/repo-checks.ts'
 
@@ -46,6 +49,7 @@ try {
     await checkLibuvDgramRuntime(buildDir)
     await checkLibuvNetRuntime(buildDir)
     await checkLibuvHttpRuntime(buildDir)
+    await checkLibuvCompiledHttpServer(buildDir)
     await checkLibuvFetchRuntime(buildDir)
     await checkLibuvFsRuntime(buildDir)
     console.log('Libuv checks passed')
@@ -939,6 +943,118 @@ int main(void) {
   }
 }
 
+async function checkLibuvCompiledHttpServer(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'compiled-http-src')
+  const httpBuildDir = join(workDir, 'compiled-http-build')
+  const port = await reserveTcpPort()
+  const source = `import http from 'node:http'
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ data: 'Hello World!' }))
+})
+
+server.listen(${port}, '127.0.0.1')
+`
+  const compiled = compileSource(source, {
+    target: 'c'
+  })
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_compiled_http_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_compiled_http_smoke generated-http-server.c)
+target_link_libraries(ccjs_libuv_compiled_http_smoke PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(join(sourceDir, 'generated-http-server.c'), compiled.code)
+
+  await checkCommand('configure compiled libuv http smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    httpBuildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build compiled libuv http smoke', 'cmake', ['--build', httpBuildDir])
+
+  const executable = join(httpBuildDir, 'ccjs_libuv_compiled_http_smoke')
+  const child = spawn(executable, [], {
+    cwd: httpBuildDir,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  let stdout = ''
+  let stderr = ''
+  let exited = false
+  let exitCode = 0
+  const exitPromise = new Promise<void>((resolve) => {
+    child.on('exit', (code) => {
+      exited = true
+      exitCode = code ?? 0
+      resolve()
+    })
+  })
+
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk
+  })
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk
+  })
+
+  try {
+    const response = await requestHttpWithRetries(port, '/')
+
+    if (!response.includes('HTTP/1.1 200 OK')) {
+      throw new Error(`compiled HTTP server status mismatch: ${JSON.stringify(response)}`)
+    }
+
+    if (!response.includes('Content-Type: application/json')) {
+      throw new Error(`compiled HTTP server content-type missing: ${JSON.stringify(response)}`)
+    }
+
+    if (!response.endsWith('{"data":"Hello World!"}')) {
+      throw new Error(`compiled HTTP server body mismatch: ${JSON.stringify(response)}`)
+    }
+  } catch (error) {
+    if (stdout.length > 0) {
+      process.stdout.write(stdout)
+    }
+
+    if (stderr.length > 0) {
+      process.stderr.write(stderr)
+    }
+
+    throw error
+  } finally {
+    if (!exited) {
+      child.kill('SIGTERM')
+      await Promise.race([exitPromise, sleep(2000)])
+    }
+
+    if (!exited) {
+      child.kill('SIGKILL')
+      await Promise.race([exitPromise, sleep(2000)])
+    }
+  }
+
+  if (exited && exitCode !== 0) {
+    fail('run compiled libuv http smoke', {
+      code: exitCode,
+      stdout,
+      stderr
+    })
+  }
+}
+
 async function checkLibuvFetchRuntime(workDir: string): Promise<void> {
   const sourceDir = join(workDir, 'fetch-smoke-src')
   const fetchBuildDir = join(workDir, 'fetch-smoke-build')
@@ -1078,6 +1194,76 @@ async function expectMissing(path: string): Promise<void> {
 
   console.error(`Expected ${path} to be removed`)
   process.exit(1)
+}
+
+async function reserveTcpPort(): Promise<number> {
+  const server = createServer()
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
+
+  const address = server.address()
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error == null ? resolve() : reject(error)))
+  })
+
+  if (address == null || typeof address === 'string') {
+    throw new Error('Expected TCP address with a numeric port')
+  }
+
+  return address.port
+}
+
+async function requestHttpWithRetries(port: number, path: string): Promise<string> {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      return await requestHttp(port, path)
+    } catch (error) {
+      lastError = error
+      await sleep(100)
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
+function requestHttp(port: number, path: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = connect({
+      host: '127.0.0.1',
+      port
+    })
+    let response = ''
+    const timer = setTimeout(() => {
+      socket.destroy()
+      reject(new Error(`Timed out waiting for compiled HTTP server on port ${port}`))
+    }, 2000)
+
+    socket.setEncoding('utf8')
+    socket.on('connect', () => {
+      socket.write(`GET ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`)
+    })
+    socket.on('data', (chunk) => {
+      response += chunk
+    })
+    socket.on('end', () => {
+      clearTimeout(timer)
+      resolve(normalizeNewlines(response))
+    })
+    socket.on('error', (error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+  })
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function checkCommand(label: string, command: string, args: string[]): Promise<void> {
