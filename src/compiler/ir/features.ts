@@ -50,6 +50,10 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
     } else if (feature === 'objects') {
       requirements.add('managed-values')
       requirements.add('objects')
+    } else if (feature === 'weak-references') {
+      requirements.add('managed-values')
+      requirements.add('objects')
+      requirements.add('weak-references')
     } else if (feature === 'fs') {
       requirements.add('async-runtime')
       requirements.add('fs')
@@ -185,6 +189,12 @@ function visitNode(node: unknown, features: Set<IrFeature>): void {
 function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
   if (node.nullable === true) {
     features.add('runtime-values')
+  }
+
+  if (node.ownership === 'weak') {
+    features.add('runtime-values')
+    features.add('objects')
+    features.add('weak-references')
   }
 
   if (node.valueType === 'promise' || node.returnType === 'promise') {

@@ -918,7 +918,14 @@ ccjs_json_stringify_object(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* 
     }
 
     if (status == CCJS_OK) {
-      status = ccjs_json_stringify_value(buffer, stack, object->fields[index], depth + 1);
+      ccjs_value field = ccjs_undefined_value();
+      status = ccjs_object_get_known(value, index, &field);
+
+      if (status == CCJS_OK) {
+        status = ccjs_json_stringify_value(buffer, stack, field, depth + 1);
+      }
+
+      ccjs_release(field);
     }
 
     if (status != CCJS_OK) {

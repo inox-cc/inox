@@ -6,7 +6,7 @@ import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
 import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
-import type { AnyNode, Diagnostic, IrGlobalUsage, IrProgram, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
+import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
 export function reportUnsupportedCSyntaxFeatures(
   _syntaxFeatures: IrSyntaxFeatureUsage[],
@@ -17,56 +17,6 @@ export function reportUnsupportedCGlobalUsages(globalUsages: IrGlobalUsage[], di
   for (const usage of globalUsages) {
     if (!isSupportedCGlobalUsage(usage, context)) {
       reportCJsGlobalDiagnostic(diagnostics, usage.loc)
-    }
-  }
-}
-
-export function reportUnsupportedCWeakFields(irPrograms: IrProgram[], diagnostics: Diagnostic[]): void {
-  const seen = new Set<string>()
-
-  for (const program of irPrograms) {
-    visitWeakFields(program.body)
-  }
-
-  function visitWeakFields(node: AnyNode | AnyNode[] | null | undefined): void {
-    if (node == null) {
-      return
-    }
-
-    if (Array.isArray(node)) {
-      for (const item of node) {
-        visitWeakFields(item)
-      }
-
-      return
-    }
-
-    if (typeof node !== 'object') {
-      return
-    }
-
-    if (node.ownership === 'weak') {
-      const loc = node.weakLoc ?? node.loc
-      const key = `${loc?.file ?? ''}:${loc?.line ?? 1}:${loc?.column ?? 1}:${node.name ?? ''}`
-
-      if (!seen.has(key)) {
-        seen.add(key)
-        diagnostics.push(
-          diagnostic(
-            'CCJS_WEAK_UNSUPPORTED',
-            'weak fields are parsed and checked, but C lowering for weak storage is not implemented yet',
-            loc
-          )
-        )
-      }
-    }
-
-    for (const [key, value] of Object.entries(node)) {
-      if (key === 'loc' || key === 'weakLoc' || key === 'shape') {
-        continue
-      }
-
-      visitWeakFields(value)
     }
   }
 }

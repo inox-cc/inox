@@ -5,8 +5,9 @@
 #include <stdint.h>
 #include "ccjs/allocator.h"
 #include "ccjs/value.h"
+#include "ccjs/weak.h"
 
-enum { CCJS_FIELD_READONLY = 1u << 0, CCJS_OBJECT_OWNED_SHAPE = 1u << 1 };
+enum { CCJS_FIELD_READONLY = 1u << 0, CCJS_OBJECT_OWNED_SHAPE = 1u << 1, CCJS_FIELD_WEAK = 1u << 2 };
 
 typedef struct ccjs_field_info {
   const char* name;
@@ -18,10 +19,15 @@ typedef struct ccjs_shape {
   const ccjs_field_info* fields;
 } ccjs_shape;
 
+typedef union ccjs_object_field {
+  ccjs_value strong;
+  ccjs_weak_ref weak;
+} ccjs_object_field;
+
 typedef struct ccjs_object {
   ccjs_ref header;
   const ccjs_shape* shape;
-  ccjs_value fields[];
+  ccjs_object_field fields[];
 } ccjs_object;
 
 ccjs_status ccjs_object_new(ccjs_allocator* allocator, const ccjs_shape* shape, ccjs_value* out);
@@ -30,5 +36,6 @@ ccjs_status ccjs_object_init_known(ccjs_value object, uint32_t index, ccjs_value
 ccjs_status ccjs_object_set_known(ccjs_value object, uint32_t index, ccjs_value value);
 ccjs_status ccjs_object_get(ccjs_value object, const char* name, size_t len, ccjs_value* out);
 ccjs_status ccjs_object_set(ccjs_value object, const char* name, size_t len, ccjs_value value);
+void ccjs_object_dispose_fields(ccjs_object* object);
 
 #endif

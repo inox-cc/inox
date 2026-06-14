@@ -60,8 +60,7 @@ import {
   isSupportedCMathGlobalUsage,
   reportCJsGlobalDiagnostic,
   reportUnsupportedCGlobalUsages,
-  reportUnsupportedCSyntaxFeatures,
-  reportUnsupportedCWeakFields
+  reportUnsupportedCSyntaxFeatures
 } from './diagnostics.ts'
 import { formatGeneratedC } from './format.ts'
 import {
@@ -309,7 +308,6 @@ function emitCModuleSource(
   context.unhandledRejectionFlag = needsAsyncRuntime ? `${plan.symbolPrefix}_unhandled_rejection` : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, context)
-  reportUnsupportedCWeakFields(irPrograms, diagnostics)
 
   const lines = [
     `#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath)}"`,
@@ -780,7 +778,6 @@ function emitCUnit(
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, baseContext)
-  reportUnsupportedCWeakFields(irPrograms, diagnostics)
   const lines = emitCPrelude(
     needsRuntime,
     needsTimeRuntime,
@@ -1049,6 +1046,7 @@ function resolveClassFields(classNode: AnyNode, constructor: AnyNode | null, ass
     return shapeFields.map((field) => ({
       name: field.name,
       readonly: field.readonly === true,
+      ownership: field.ownership ?? 'strong',
       valueType: field.valueType ?? 'unknown',
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
@@ -1069,6 +1067,7 @@ function resolveClassFields(classNode: AnyNode, constructor: AnyNode | null, ass
     fields.push({
       name: assignment.field,
       readonly: false,
+      ownership: 'strong',
       valueType: inferClassConstructorFieldType(assignment.value, constructor)
     })
   }
@@ -1110,6 +1109,20 @@ function inferClassConstructorFieldType(expression: AnyNode, constructor: AnyNod
   }
 
   return 'unknown'
+}
+
+function emitCFieldFlags(field: AnyNode): string {
+  const flags: string[] = []
+
+  if (field.readonly === true) {
+    flags.push('CCJS_FIELD_READONLY')
+  }
+
+  if (field.ownership === 'weak') {
+    flags.push('CCJS_FIELD_WEAK')
+  }
+
+  return flags.length === 0 ? '0' : flags.join(' | ')
 }
 
 function isThisFieldExpression(expression: AnyNode) {
@@ -11265,7 +11278,7 @@ function emitObjectVariableDeclaration(statement, context) {
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${field.readonly ? 'CCJS_FIELD_READONLY' : '0'} },`)
+    lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
   }
 
   lines.push('};')
@@ -11282,6 +11295,7 @@ function emitObjectVariableDeclaration(statement, context) {
     statement.name,
     fields.map((field) => ({
       name: field.name,
+      ownership: field.ownership ?? 'strong',
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
@@ -11325,7 +11339,7 @@ function emitJsonParseVariableDeclaration(statement, context) {
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${field.readonly ? 'CCJS_FIELD_READONLY' : '0'} },`)
+    lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
   }
 
   lines.push('};')
@@ -11419,7 +11433,7 @@ function emitCClassObjectInitLines(target, expression, info, context) {
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
   for (const field of info.fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${field.readonly ? 'CCJS_FIELD_READONLY' : '0'} },`)
+    lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
   }
 
   lines.push('};')
@@ -11455,6 +11469,7 @@ function registerClassObjectShape(context, name, info) {
     name,
     info.fields.map((field) => ({
       name: field.name,
+      ownership: field.ownership ?? 'strong',
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
@@ -11990,7 +12005,7 @@ function emitBoxedObjectVariableDeclaration(statement, context) {
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${field.readonly ? 'CCJS_FIELD_READONLY' : '0'} },`)
+    lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
   }
 
   lines.push('};')
@@ -12005,6 +12020,7 @@ function emitBoxedObjectVariableDeclaration(statement, context) {
     statement.name,
     fields.map((field) => ({
       name: field.name,
+      ownership: field.ownership ?? 'strong',
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
@@ -12896,7 +12912,7 @@ function emitCObjectLiteralValueExpression(expression, context, shape: AnyNode |
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${field.readonly ? 'CCJS_FIELD_READONLY' : '0'} },`)
+    lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
   }
 
   lines.push('};')
@@ -19906,6 +19922,7 @@ function registerObjectShape(context, name, shape) {
     name,
     shape.fields.map((field) => ({
       name: field.name,
+      ownership: field.ownership ?? 'strong',
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,

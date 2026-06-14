@@ -44,9 +44,7 @@ void ccjs_release(ccjs_value value) {
   if (value.as.ref->kind == CCJS_REF_OBJECT) {
     ccjs_object* object = (ccjs_object*)value.as.ref;
 
-    for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
-      ccjs_release(object->fields[index]);
-    }
+    ccjs_object_dispose_fields(object);
 
     if ((object->header.flags & CCJS_OBJECT_OWNED_SHAPE) != 0 && allocator != 0 && allocator->free != 0) {
       for (uint32_t index = 0; index < object->shape->field_count; index += 1) {

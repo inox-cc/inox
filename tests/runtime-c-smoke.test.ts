@@ -1379,6 +1379,58 @@ int main(void) {
 })
 
 
+test('generated C weak object fields compile and run with weak runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-generated-weak-'))
+  const source = join(dir, 'generated-weak.c')
+  const output = join(dir, 'generated-weak')
+
+  try {
+    const compiled = compileSource(`type Parent = {
+  name: string
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+const parent: Parent = { name: 'Ada' }
+const child: Child = { parent }
+const maybe = child.parent
+
+if (maybe != null) {
+  console.log('alive')
+}
+`)
+
+    assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
+    assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+
+    await writeFile(source, compiled.code)
+
+    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_ENABLE_WEAK=1'])
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'alive\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C simple classes compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

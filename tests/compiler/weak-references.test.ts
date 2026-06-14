@@ -4,8 +4,7 @@ import {
   assert,
   assertDiagnostic,
   compileSource,
-  compileSourceToIr,
-  CompileError
+  compileSourceToIr
 } from '../helpers/compiler-smoke.ts'
 
 test('parses weak fields as ownership metadata without reserving the weak name', () => {
@@ -60,18 +59,28 @@ function read(bad: Bad): void {
   )
 })
 
-test('rejects C lowering for weak object alias fields until weak storage lands', () => {
-  assertDiagnostic(
-    `type Node = {
-  weak parent: Node | null
+test('lowers weak object alias fields to C weak field metadata', () => {
+  const compiled = compileSource(`type Parent = {
+  name: string
 }
 
-function read(node: Node): void {
-  const parent = node.parent
+type Child = {
+  weak parent: Parent | null
 }
-`,
-    'CCJS_WEAK_UNSUPPORTED'
-  )
+
+export function main(): void {
+  const parent: Parent = { name: 'Ada' }
+  const child: Child = { parent }
+  const maybe = child.parent
+
+  if (maybe != null) {
+    console.log('alive')
+  }
+}
+`)
+
+  assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+  assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
 })
 
 test('rejects strong self ownership cycles before recursive type lowering', () => {
@@ -129,9 +138,7 @@ export function main(): void {}
 })
 
 test('does not report ownership cycles for weak back-references', () => {
-  assert.throws(
-    () => {
-      compileSource(`type Parent = {
+  const compiled = compileSource(`type Parent = {
   child: Child | null
 }
 
@@ -141,24 +148,32 @@ type Child = {
 
 export function main(): void {}
 `)
-    },
-    (error) => {
-      assert.ok(error instanceof CompileError)
-      assert.equal(error.diagnostics.some((item) => item.code === 'CCJS_OWNERSHIP_CYCLE'), false)
-      assert.equal(error.diagnostics.some((item) => item.code === 'CCJS_WEAK_UNSUPPORTED'), true)
-      return true
-    }
-  )
+
+  assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
 })
 
-test('rejects C lowering for weak class fields until weak storage lands', () => {
-  assertDiagnostic(
-    `class Node {
+test('lowers weak class fields to C weak field metadata', () => {
+  const compiled = compileSource(`class Node {
   weak parent: Node | null
+
+  constructor(parent: Node | null) {
+    this.parent = parent
+  }
 }
-`,
-    'CCJS_WEAK_UNSUPPORTED'
-  )
+
+export function main(): void {
+  const root = new Node(null)
+  const child = new Node(root)
+  const maybe = child.parent
+
+  if (maybe != null) {
+    console.log('alive')
+  }
+}
+`)
+
+  assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+  assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
 })
 
 test('still compiles a field named weak when it is not used as a modifier', () => {
