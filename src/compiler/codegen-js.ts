@@ -5,9 +5,17 @@ import {
   hasIrFunctionDeclaration
 } from './ir.ts'
 import { emitJsPrelude } from './js/prelude.ts'
+import {
+  emitArrowFunctionParams,
+  emitArrowReturnTypeAnnotation,
+  emitFunctionParams,
+  emitReturnTypeAnnotation,
+  emitTypeAlias,
+  emitVariableTypeAnnotation
+} from './js/types.ts'
 import type { IrModuleRecord } from './ir.ts'
 import type { AnyNode, IrProgram } from './types.ts'
-import type { JsEmitOptions } from './js/prelude.ts'
+import type { JsEmitOptions } from './js/types.ts'
 
 export function emitJsFromIr(ir: IrProgram, options: JsEmitOptions = {}): string {
   const lines: string[] = emitJsPrelude([ir], options)
@@ -120,22 +128,6 @@ function emitMethod(method: AnyNode, options: JsEmitOptions = {}): string[] {
   const body = method.body.flatMap((statement) => indent(emitStatement(statement, options)))
 
   return [head, ...body, '}']
-}
-
-function emitFunctionParams(params: AnyNode[], options: JsEmitOptions = {}): string {
-  return params.map((param) => param.name).join(', ')
-}
-
-function emitReturnTypeAnnotation(node: AnyNode, options: JsEmitOptions = {}): string {
-  return ''
-}
-
-function emitVariableTypeAnnotation(statement: AnyNode, options: JsEmitOptions = {}): string {
-  return ''
-}
-
-function emitTypeAlias(statement: AnyNode, options: JsEmitOptions = {}): string[] {
-  return []
 }
 
 function emitStatement(statement: AnyNode, options: JsEmitOptions = {}): string[] {
@@ -460,16 +452,6 @@ function emitExpression(expression: AnyNode, options: JsEmitOptions = {}): strin
   }
 
   return 'undefined'
-}
-
-function emitArrowFunctionParams(expression: AnyNode, options: JsEmitOptions = {}): string {
-  return expression.params.length === 1
-    ? expression.params[0].name
-    : `(${expression.params.map((param) => param.name).join(', ')})`
-}
-
-function emitArrowReturnTypeAnnotation(expression: AnyNode, options: JsEmitOptions = {}): string {
-  return ''
 }
 
 function emitJsOperator(operator: string): string {

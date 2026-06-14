@@ -10,11 +10,7 @@ import {
   isFsSyncUsagePath
 } from '../stdlib/descriptors/fs.ts'
 import type { AnyNode, IrProgram } from '../types.ts'
-
-export type JsEmitOptions = {
-  callMain?: boolean
-  stripExports?: boolean
-}
+import type { JsEmitOptions } from './types.ts'
 
 export function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): string[] {
   const lines: string[] = []
