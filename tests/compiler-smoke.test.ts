@@ -209,6 +209,31 @@ console.log(sendSize, recvSize)
   assert.match(result.code, /ccjs_dgram_ref\(socket\)/)
 })
 
+test('reports unsupported node:dgram compatibility shapes with dgram diagnostics', () => {
+  assertDiagnostic(
+    `import dgram from 'node:dgram'
+
+const socket = dgram.createSocket('udp6')
+`,
+    'CCJS_DGRAM_SOCKET',
+    {
+      target: 'c'
+    }
+  )
+
+  assertDiagnostic(
+    `import dgram from 'node:dgram'
+
+const socket = dgram.createSocket('udp4')
+socket.addMembership('224.0.0.1')
+`,
+    'CCJS_DGRAM_SOCKET',
+    {
+      target: 'c'
+    }
+  )
+})
+
 test('emits C net runtime include for node:net imports', () => {
   const result = compileSource(
     `import net from 'node:net'

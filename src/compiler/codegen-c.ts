@@ -4986,6 +4986,17 @@ function emitDgramSocketCallStatement(expression, context) {
     return emitDgramCloseLines(expression.callee.object.path[0], expression.args, context)
   }
 
+  if (isDgramSocketAnyMethodCall(expression, context)) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_DGRAM_SOCKET',
+        `socket.${expression.callee.property} is not supported by the current C dgram backend slice`,
+        expression.callee.loc ?? expression.loc
+      )
+    )
+    return []
+  }
+
   return null
 }
 
@@ -5449,10 +5460,13 @@ function emitDgramZeroArgCallbackLines(callback, context) {
 }
 
 function isDgramSocketMethodCall(expression, method, context) {
+  return isDgramSocketAnyMethodCall(expression, context) && expression.callee.property === method
+}
+
+function isDgramSocketAnyMethodCall(expression, context) {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
-    expression.callee.property === method &&
     expression.callee.object?.type === 'Reference' &&
     expression.callee.object.path.length === 1 &&
     context.variables.get(expression.callee.object.path[0]) === 'dgram-socket'
