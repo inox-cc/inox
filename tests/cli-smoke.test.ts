@@ -1089,6 +1089,53 @@ console.log(names[0], names[1])
   }
 })
 
+test('ccjs run --target c runs sync node:fs hosted fallback operations', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-sync-cli-'))
+  const entry = join(dir, 'main.ts')
+  const file = join(dir, 'value.txt')
+  const copy = join(dir, 'copy.txt')
+  const link = join(dir, 'copy-link.txt')
+
+  try {
+    await writeFile(
+      entry,
+      `import fs from 'node:fs'
+
+fs.writeFileSync(${JSON.stringify(file)}, 'a')
+fs.appendFileSync(${JSON.stringify(file)}, 'b')
+fs.copyFileSync(${JSON.stringify(file)}, ${JSON.stringify(copy)})
+fs.symlinkSync(${JSON.stringify(copy)}, ${JSON.stringify(link)})
+
+const text = fs.readFileSync(${JSON.stringify(copy)}, 'utf8')
+const target = fs.readlinkSync(${JSON.stringify(link)})
+const real = fs.realpathSync(${JSON.stringify(link)})
+const stats = fs.statSync(${JSON.stringify(copy)})
+const linkStats = fs.lstatSync(${JSON.stringify(link)})
+
+console.log(text, stats.isFile(), linkStats.isFile(), linkStats.isDirectory(), target.length > 0, real.length > 0)
+`
+    )
+
+    const result = await runCli(['run', entry, '--target', 'c'])
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, 'ab 1 0 0 1 1\n')
+    assert.equal(result.stderr, '')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs run --target c runs a module graph with import aliases', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
