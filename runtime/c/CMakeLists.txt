@@ -29,7 +29,6 @@ set(CCJS_RUNTIME_SOURCES
   "${CCJS_RUNTIME_DIR}/src/network/fetch.c"
   "${CCJS_RUNTIME_DIR}/src/network/http.c"
   "${CCJS_RUNTIME_DIR}/src/network/net.c"
-  "${CCJS_RUNTIME_DIR}/src/network/tls.c"
   "${CCJS_RUNTIME_DIR}/src/objects/object.c"
   "${CCJS_RUNTIME_DIR}/src/strings/string.c"
   "${CCJS_RUNTIME_DIR}/src/time/time.c"
@@ -54,29 +53,46 @@ else()
   message(FATAL_ERROR "Unsupported CCJS_LOOP_BACKEND=${CCJS_LOOP_BACKEND}. Expected embedded or libuv.")
 endif()
 
-add_library(ccjs_runtime STATIC ${CCJS_RUNTIME_SOURCES})
-target_include_directories(ccjs_runtime PUBLIC
-  "${CCJS_RUNTIME_DIR}/include"
-)
+set(CCJS_TLS_COMPILE_DEFINITION "")
+set(CCJS_TLS_INCLUDE_DIRS "")
+set(CCJS_TLS_LIBRARIES "")
 
 if(CCJS_TLS_BACKEND STREQUAL "none")
-  target_compile_definitions(ccjs_runtime PUBLIC CCJS_TLS_BACKEND_NONE=1)
+  list(APPEND CCJS_RUNTIME_SOURCES "${CCJS_RUNTIME_DIR}/src/network/tls.c")
+  set(CCJS_TLS_COMPILE_DEFINITION CCJS_TLS_BACKEND_NONE=1)
 elseif(CCJS_TLS_BACKEND STREQUAL "boringssl")
+  if(NOT CCJS_LOOP_BACKEND STREQUAL "libuv")
+    message(FATAL_ERROR "CCJS_TLS_BACKEND=boringssl requires CCJS_LOOP_BACKEND=libuv.")
+  endif()
+
   if(NOT EXISTS "${CCJS_BORINGSSL_ROOT}/include/openssl/ssl.h")
     message(FATAL_ERROR "BoringSSL submodule is not initialized. Run `pnpm run boringssl:bootstrap` from the repository root.")
   endif()
 
   set(BUILD_TESTING OFF CACHE BOOL "Build dependency tests" FORCE)
   add_subdirectory("${CCJS_BORINGSSL_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/boringssl" EXCLUDE_FROM_ALL)
-  target_include_directories(ccjs_runtime PUBLIC "${CCJS_BORINGSSL_ROOT}/include")
-  target_link_libraries(ccjs_runtime PUBLIC ssl crypto)
-  target_compile_definitions(ccjs_runtime PUBLIC CCJS_TLS_BACKEND_BORINGSSL=1)
+  list(APPEND CCJS_RUNTIME_SOURCES "${CCJS_RUNTIME_DIR}/src/network/tls-boringssl.c")
+  list(APPEND CCJS_TLS_INCLUDE_DIRS "${CCJS_BORINGSSL_ROOT}/include")
+  list(APPEND CCJS_TLS_LIBRARIES ssl crypto)
+  set(CCJS_TLS_COMPILE_DEFINITION CCJS_TLS_BACKEND_BORINGSSL=1)
 elseif(CCJS_TLS_BACKEND STREQUAL "openssl")
   find_package(OpenSSL REQUIRED)
-  target_link_libraries(ccjs_runtime PUBLIC OpenSSL::SSL OpenSSL::Crypto)
-  target_compile_definitions(ccjs_runtime PUBLIC CCJS_TLS_BACKEND_OPENSSL=1)
+  list(APPEND CCJS_RUNTIME_SOURCES "${CCJS_RUNTIME_DIR}/src/network/tls.c")
+  list(APPEND CCJS_TLS_LIBRARIES OpenSSL::SSL OpenSSL::Crypto)
+  set(CCJS_TLS_COMPILE_DEFINITION CCJS_TLS_BACKEND_OPENSSL=1)
 else()
   message(FATAL_ERROR "Unsupported CCJS_TLS_BACKEND=${CCJS_TLS_BACKEND}. Expected none, boringssl or openssl.")
+endif()
+
+add_library(ccjs_runtime STATIC ${CCJS_RUNTIME_SOURCES})
+target_include_directories(ccjs_runtime PUBLIC
+  "${CCJS_RUNTIME_DIR}/include"
+  ${CCJS_TLS_INCLUDE_DIRS}
+)
+target_compile_definitions(ccjs_runtime PUBLIC ${CCJS_TLS_COMPILE_DEFINITION})
+
+if(CCJS_TLS_LIBRARIES)
+  target_link_libraries(ccjs_runtime PUBLIC ${CCJS_TLS_LIBRARIES})
 endif()
 
 if(CCJS_TLS_CA_BUNDLE)

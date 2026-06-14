@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:tls'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { compileSource } from '../src/compiler/index.ts'
 
 type CommandResult = {
@@ -11,6 +13,8 @@ type CommandResult = {
   stdout: string
   stderr: string
 }
+
+const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
 test('C runtime value/object/array skeleton compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -255,6 +259,238 @@ int main(void) {
 
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, 'tls unsupported\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('C runtime BoringSSL TLS client connects to local TLS server', async (t) => {
+  if (process.env.CCJS_TEST_BORINGSSL_TLS !== '1') {
+    t.skip('set CCJS_TEST_BORINGSSL_TLS=1 to build BoringSSL TLS integration smoke')
+    return
+  }
+
+  const cc = await runCommand('cc', ['--version'])
+  const cmake = await runCommand('cmake', ['--version'])
+  const openssl = await runCommand('openssl', ['version'])
+
+  if (cc.code !== 0 || cmake.code !== 0 || openssl.code !== 0) {
+    t.skip('cc, cmake and openssl are required')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-boringssl-runtime-'))
+  const buildDir = join(dir, 'build')
+  const goodKey = join(dir, 'good-key.pem')
+  const goodCert = join(dir, 'good-cert.pem')
+  const badKey = join(dir, 'bad-key.pem')
+  const badCert = join(dir, 'bad-cert.pem')
+  const source = join(dir, 'tls-client.c')
+
+  try {
+    await generateLocalhostCertificate(goodKey, goodCert)
+    await generateLocalhostCertificate(badKey, badCert)
+    await writeFile(
+      join(dir, 'CMakeLists.txt'),
+      `cmake_minimum_required(VERSION 3.22)
+project(ccjs_tls_smoke C CXX)
+
+add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
+add_executable(tls-client tls-client.c)
+set_property(TARGET tls-client PROPERTY LINKER_LANGUAGE CXX)
+target_link_libraries(tls-client PRIVATE ccjs_runtime)
+`
+    )
+    await writeFile(
+      source,
+      `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "ccjs/allocator.h"
+#include "ccjs/loop.h"
+#include "ccjs/tls.h"
+
+typedef struct tls_state {
+  ccjs_tls_client* client;
+  char response[4096];
+  size_t response_len;
+  int done;
+  ccjs_status status;
+} tls_state;
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static ccjs_status on_connect(void* user, ccjs_tls_client* client, ccjs_status status) {
+  tls_state* state = (tls_state*)user;
+  state->client = client;
+
+  if (status != CCJS_OK) {
+    state->status = status;
+    state->done = 1;
+    return CCJS_OK;
+  }
+
+  const char request[] = "GET / HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n";
+  return ccjs_tls_client_write(client, request, sizeof(request) - 1);
+}
+
+static ccjs_status on_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len) {
+  tls_state* state = (tls_state*)user;
+
+  if (state->response_len + len >= sizeof(state->response)) {
+    state->status = CCJS_ERR_UNSUPPORTED;
+    state->done = 1;
+    ccjs_tls_client_close(client);
+    return CCJS_OK;
+  }
+
+  memcpy(state->response + state->response_len, bytes, len);
+  state->response_len += len;
+  state->response[state->response_len] = '\\0';
+
+  if (strstr(state->response, "\\r\\n\\r\\nok") != 0) {
+    state->status = CCJS_OK;
+    state->done = 1;
+    ccjs_tls_client_close(client);
+  }
+
+  return CCJS_OK;
+}
+
+static void on_close(void* user, ccjs_tls_client* client) {
+  (void)client;
+  tls_state* state = (tls_state*)user;
+
+  if (!state->done) {
+    state->status = CCJS_ERR_FIELD;
+    state->done = 1;
+  }
+}
+
+int main(int argc, char** argv) {
+  if (argc != 2) return 2;
+
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_loop loop;
+  tls_state state = { 0 };
+  state.status = CCJS_ERR_FIELD;
+
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 3;
+
+  ccjs_status status = ccjs_tls_connect(
+    &loop,
+    "127.0.0.1",
+    atoi(argv[1]),
+    "localhost",
+    on_connect,
+    on_data,
+    on_close,
+    &state,
+    &state.client
+  );
+
+  if (status != CCJS_OK) {
+    ccjs_loop_dispose(&loop);
+    return 4;
+  }
+
+  for (int spin = 0; !state.done && ccjs_loop_has_work(&loop) && spin < 1000000; spin += 1) {
+    status = ccjs_loop_poll(&loop, 0);
+
+    if (status != CCJS_OK) {
+      state.status = status;
+      state.done = 1;
+    }
+  }
+
+  if (!state.done) {
+    state.status = CCJS_ERR_FIELD;
+    if (state.client != 0) ccjs_tls_client_close(state.client);
+  }
+
+  ccjs_loop_dispose(&loop);
+
+  if (state.status != CCJS_OK) {
+    printf("status %d\\n", (int)state.status);
+    return 10 + (int)state.status;
+  }
+
+  printf("%s", state.response);
+  return strstr(state.response, "ok") == 0 ? 20 : 0;
+}
+`
+    )
+
+    const configure = await runCommand('cmake', [
+      '-S',
+      dir,
+      '-B',
+      buildDir,
+      '-DCCJS_LOOP_BACKEND=libuv',
+      '-DCCJS_TLS_BACKEND=boringssl',
+      `-DCCJS_TLS_CA_BUNDLE=${goodCert}`
+    ])
+
+    assert.equal(configure.code, 0, configure.stderr)
+
+    const build = await runCommand('cmake', ['--build', buildDir, '--target', 'tls-client'])
+
+    assert.equal(build.code, 0, build.stderr)
+
+    let goodServer
+
+    try {
+      goodServer = await startLocalTlsServer(goodKey, goodCert)
+    } catch (error) {
+      if (isLocalListenUnavailable(error)) {
+        t.skip('local TLS listen is not permitted in this environment')
+        return
+      }
+
+      throw error
+    }
+
+    try {
+      const run = await runCommand(join(buildDir, 'tls-client'), [String(goodServer.port)])
+
+      assert.equal(run.code, 0, run.stderr)
+      assert.match(run.stdout, /HTTP\/1\.1 200 OK/)
+      assert.match(run.stdout, /\r?\n\r?\nok/)
+    } finally {
+      await goodServer.close()
+    }
+
+    const badServer = await startLocalTlsServer(badKey, badCert)
+
+    try {
+      const run = await runCommand(join(buildDir, 'tls-client'), [String(badServer.port)])
+
+      assert.notEqual(run.code, 0)
+      assert.match(run.stdout, /status/)
+    } finally {
+      await badServer.close()
+    }
   } finally {
     await rm(dir, {
       recursive: true,
@@ -9611,6 +9847,89 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
     '-o',
     output
   ])
+}
+
+async function generateLocalhostCertificate(keyPath: string, certPath: string): Promise<void> {
+  const result = await runCommand('openssl', [
+    'req',
+    '-x509',
+    '-newkey',
+    'rsa:2048',
+    '-nodes',
+    '-keyout',
+    keyPath,
+    '-out',
+    certPath,
+    '-days',
+    '1',
+    '-subj',
+    '/CN=localhost',
+    '-addext',
+    'subjectAltName=DNS:localhost'
+  ])
+
+  assert.equal(result.code, 0, result.stderr)
+}
+
+async function startLocalTlsServer(
+  keyPath: string,
+  certPath: string
+): Promise<{ port: number; close: () => Promise<void> }> {
+  const key = await readFile(keyPath)
+  const cert = await readFile(certPath)
+  const server = createServer(
+    {
+      key,
+      cert
+    },
+    (socket) => {
+      socket.on('data', () => {
+        socket.end('HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok')
+      })
+    }
+  )
+
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => {
+      server.off('listening', onListening)
+      reject(error)
+    }
+    const onListening = () => {
+      server.off('error', onError)
+      resolve()
+    }
+
+    server.once('error', onError)
+    server.once('listening', onListening)
+    server.listen(0, '127.0.0.1')
+  })
+
+  const address = server.address()
+  const port = typeof address === 'object' && address != null ? address.port : 0
+
+  assert.notEqual(port, 0)
+
+  return {
+    port,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error != null) {
+            reject(error)
+          } else {
+            resolve()
+          }
+        })
+      })
+  }
+}
+
+function isLocalListenUnavailable(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    (error.code === 'EPERM' || error.code === 'EACCES' || error.code === 'EADDRNOTAVAIL')
+  )
 }
 
 function runCommand(command: string, args: string[]): Promise<CommandResult> {
