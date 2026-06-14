@@ -63,7 +63,7 @@ import {
   reportUnsupportedCSyntaxFeatures
 } from './diagnostics.ts'
 import { formatGeneratedC } from './format.ts'
-import { cStringLiteral, emitCIdentifier, escapeCString, utf8ByteLength } from './identifiers.ts'
+import { cStringLiteral, emitCFunctionName, emitCIdentifier, escapeCString, utf8ByteLength } from './identifiers.ts'
 import {
   emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters,
   relativeCIncludePath,
@@ -107,7 +107,20 @@ import {
 } from './syntax.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
 import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile, CModulePlan } from './types.ts'
-import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
+import {
+  cRuntimeValueTag,
+  emitCObjectParamName,
+  emitCReturnType,
+  emitCScalarParamName,
+  emitCStringParamName,
+  emitCType,
+  emitThrowingFunctionOutType,
+  isManagedRuntimeReturnType,
+  isNullableScalarParam,
+  isNullableScalarType,
+  isRuntimeNullableType,
+  isThrowingFunctionRuntimeOut
+} from './value-types.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -8962,22 +8975,6 @@ function emitMainReturnExpression(context) {
     : `${context.unhandledRejectionFlag} == 0 ? ${successReturn} : 1`
 }
 
-function emitCFunctionName(name) {
-  return name === 'main' ? 'ccjs_main' : name
-}
-
-function emitCStringParamName(name) {
-  return `ccjs_param_${name}`
-}
-
-function emitCScalarParamName(name) {
-  return `ccjs_param_${name}`
-}
-
-function emitCObjectParamName(name) {
-  return `ccjs_param_${name}`
-}
-
 function emitRuntimeParamPrelude(statement, context) {
   const params = resolveFunctionDeclarationParams(statement.name, statement.params, context)
 
@@ -9052,54 +9049,6 @@ function emitRuntimeParamPreludeForParams(statement, params, context) {
   })
 }
 
-function emitCType(type) {
-  if (type === 'void') {
-    return 'void'
-  }
-
-  if (isManagedRuntimeReturnType(type)) {
-    return 'ccjs_value'
-  }
-
-  if (type === 'function') {
-    return 'void*'
-  }
-
-  if (type === 'promise') {
-    return 'ccjs_promise*'
-  }
-
-  if (type === 'timer') {
-    return 'ccjs_timer_handle*'
-  }
-
-  return 'double'
-}
-
-function emitCReturnType(type, nullable = false) {
-  if (nullable && isNullableScalarType(type)) {
-    return 'ccjs_value'
-  }
-
-  if (isManagedRuntimeReturnType(type)) {
-    return 'ccjs_value'
-  }
-
-  return emitCType(type)
-}
-
-function emitThrowingFunctionOutType(type, nullable = false) {
-  if (nullable && isNullableScalarType(type)) {
-    return 'ccjs_value'
-  }
-
-  if (isManagedRuntimeReturnType(type)) {
-    return 'ccjs_value'
-  }
-
-  return emitCType(type)
-}
-
 function emitThrowingFunctionPrelude(context) {
   if (!context.throwingFunction) {
     return []
@@ -9112,13 +9061,6 @@ function emitThrowingFunctionPrelude(context) {
       ? []
       : [`*${context.functionReturnOut} = ${isThrowingFunctionRuntimeOut(context) ? 'ccjs_undefined_value()' : '0'};`])
   ]
-}
-
-function isThrowingFunctionRuntimeOut(context) {
-  return (
-    isManagedRuntimeReturnType(context.returnType) ||
-    (context.returnNullable === true && isNullableScalarType(context.returnType))
-  )
 }
 
 function emitStatement(statement, context) {
@@ -12054,54 +11996,6 @@ function emitRuntimeValueCheck(name, expectedTag, context) {
   }
 
   return emitRuntimeTypeCheck(`${name}.tag != ${expectedTag} || ${name}.as.ref == 0`, context)
-}
-
-function cRuntimeValueTag(valueType) {
-  if (valueType === 'boolean') {
-    return 'CCJS_TAG_BOOL'
-  }
-
-  if (valueType === 'number') {
-    return 'CCJS_TAG_NUMBER'
-  }
-
-  if (valueType === 'string') {
-    return 'CCJS_TAG_STRING'
-  }
-
-  if (valueType === 'bytes') {
-    return 'CCJS_TAG_BYTES'
-  }
-
-  if (valueType === 'object') {
-    return 'CCJS_TAG_OBJECT'
-  }
-
-  if (valueType === 'array') {
-    return 'CCJS_TAG_ARRAY'
-  }
-
-  if (valueType === 'function') {
-    return 'CCJS_TAG_FUNCTION'
-  }
-
-  if (valueType === 'map') {
-    return 'CCJS_TAG_MAP'
-  }
-
-  if (valueType === 'set') {
-    return 'CCJS_TAG_SET'
-  }
-
-  return null
-}
-
-function isRuntimeNullableType(valueType) {
-  return cRuntimeValueTag(valueType) != null
-}
-
-function isNullableScalarParam(param) {
-  return param?.nullable === true && isNullableScalarType(param.valueType)
 }
 
 function isNullableScalarRuntimeExpression(expression, context) {
