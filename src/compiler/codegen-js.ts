@@ -179,9 +179,12 @@ function isFsPromiseUsagePath(path: string): boolean {
     'fs.promises.mkdir',
     'fs.promises.readFile',
     'fs.promises.readdir',
+    'fs.promises.readlink',
+    'fs.promises.realpath',
     'fs.promises.rename',
     'fs.promises.rm',
     'fs.promises.stat',
+    'fs.promises.symlink',
     'fs.promises.unlink',
     'fs.promises.writeFile'
   ].includes(path)
@@ -197,9 +200,12 @@ function isFsSyncUsagePath(path: string): boolean {
       'fs.mkdirSync',
       'fs.readFileSync',
       'fs.readdirSync',
+      'fs.readlinkSync',
+      'fs.realpathSync',
       'fs.renameSync',
       'fs.rmSync',
       'fs.statSync',
+      'fs.symlinkSync',
       'fs.unlinkSync',
       'fs.writeFileSync'
     ].includes(path) ||
@@ -219,9 +225,12 @@ function isFsPromiseRuntimeMethod(method: string): boolean {
     'readFileBytes',
     'readDir',
     'readDirDirents',
+    'readlink',
+    'realpath',
     'rename',
     'rm',
     'stat',
+    'symlink',
     'unlink',
     'writeFile',
     'writeFileBytes'
@@ -240,9 +249,12 @@ function isFsSyncRuntimeMethod(method: string): boolean {
     'readFileSync',
     'readDirSync',
     'readDirDirentsSync',
+    'readlinkSync',
+    'realpathSync',
     'renameSync',
     'rmSync',
     'statSync',
+    'symlinkSync',
     'unlinkSync',
     'writeFileBytesSync',
     'writeFileSync'
@@ -887,6 +899,10 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
     return `fs.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options)})`
   }
 
+  if (expression.fsRuntimeMethod === 'realpath' || expression.fsRuntimeMethod === 'readlink') {
+    return `fs.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options)})`
+  }
+
   if (expression.fsRuntimeMethod === 'access') {
     return `fs.access(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
@@ -897,7 +913,7 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
     return `fs.${method}(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
-  if (['mkdir', 'rename', 'rm', 'unlink'].includes(expression.fsRuntimeMethod ?? '')) {
+  if (['mkdir', 'rename', 'rm', 'symlink', 'unlink'].includes(expression.fsRuntimeMethod ?? '')) {
     return `fs.${expression.fsRuntimeMethod}(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
@@ -934,6 +950,10 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
     return `ccjsFsSync.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options)})`
   }
 
+  if (expression.fsRuntimeMethod === 'realpathSync' || expression.fsRuntimeMethod === 'readlinkSync') {
+    return `ccjsFsSync.${expression.fsRuntimeMethod}(${emitExpression(expression.args[0], options)})`
+  }
+
   if (expression.fsRuntimeMethod === 'accessSync') {
     return `ccjsFsSync.accessSync(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
@@ -944,7 +964,7 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
     return `ccjsFsSync.${method}(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
-  if (['mkdirSync', 'renameSync', 'rmSync', 'unlinkSync'].includes(expression.fsRuntimeMethod ?? '')) {
+  if (['mkdirSync', 'renameSync', 'rmSync', 'symlinkSync', 'unlinkSync'].includes(expression.fsRuntimeMethod ?? '')) {
     return `ccjsFsSync.${expression.fsRuntimeMethod}(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 

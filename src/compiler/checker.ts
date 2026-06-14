@@ -2318,6 +2318,31 @@ class Checker {
       return 'void'
     }
 
+    if (method === 'realpathSync' || method === 'readlinkSync') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      expression.fsRuntimeMethod = method
+      expression.valueType = 'string'
+
+      return 'string'
+    }
+
+    if (method === 'symlinkSync') {
+      if (expression.args.length !== 2) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsStringArg(expression, 1)
+      expression.fsRuntimeMethod = 'symlinkSync'
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
     if (method === 'readFile') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
@@ -2494,6 +2519,33 @@ class Checker {
       this.checkFsStringArg(expression, 0)
       this.checkFsStringArg(expression, 1)
       expression.fsRuntimeMethod = 'copyFile'
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'void'
+
+      return 'promise'
+    }
+
+    if (method === 'realpath' || method === 'readlink') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      expression.fsRuntimeMethod = method
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'string'
+
+      return 'promise'
+    }
+
+    if (method === 'symlink') {
+      if (expression.args.length !== 2) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsStringArg(expression, 1)
+      expression.fsRuntimeMethod = 'symlink'
       expression.valueType = 'promise'
       expression.promiseValueType = 'void'
 
@@ -5290,9 +5342,12 @@ function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
       'mkdir',
       'readFile',
       'readDir',
+      'readlink',
+      'realpath',
       'rename',
       'rm',
       'stat',
+      'symlink',
       'unlink',
       'writeFile'
     ].includes(method)
@@ -5332,12 +5387,18 @@ function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
             'lstatSync',
             'mkdir',
             'mkdirSync',
+            'readlink',
+            'readlinkSync',
+            'realpath',
+            'realpathSync',
             'stat',
             'statSync',
             'rename',
             'renameSync',
             'rm',
             'rmSync',
+            'symlink',
+            'symlinkSync',
             'unlink',
             'unlinkSync',
             'writeFile',
@@ -5381,9 +5442,22 @@ function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promisesApi:
   }
 
   if (
-    ['access', 'appendFile', 'copyFile', 'lstat', 'mkdir', 'readFile', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(
-      info.method
-    ) &&
+    [
+      'access',
+      'appendFile',
+      'copyFile',
+      'lstat',
+      'mkdir',
+      'readFile',
+      'readlink',
+      'realpath',
+      'rename',
+      'rm',
+      'stat',
+      'symlink',
+      'unlink',
+      'writeFile'
+    ].includes(info.method) &&
     !promisesApi
   ) {
     return `Node ${info.path.join('.')} callback API is not supported yet; use fs.promises.${info.method}`

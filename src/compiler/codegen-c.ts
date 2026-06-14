@@ -2102,9 +2102,12 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'fs.promises.mkdir' ||
     path === 'fs.promises.readFile' ||
     path === 'fs.promises.readdir' ||
+    path === 'fs.promises.readlink' ||
+    path === 'fs.promises.realpath' ||
     path === 'fs.promises.rename' ||
     path === 'fs.promises.rm' ||
     path === 'fs.promises.stat' ||
+    path === 'fs.promises.symlink' ||
     path === 'fs.promises.unlink' ||
     path === 'fs.promises.writeFile' ||
     path === 'fs.accessSync' ||
@@ -2114,9 +2117,12 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'fs.mkdirSync' ||
     path === 'fs.readFileSync' ||
     path === 'fs.readdirSync' ||
+    path === 'fs.readlinkSync' ||
+    path === 'fs.realpathSync' ||
     path === 'fs.renameSync' ||
     path === 'fs.rmSync' ||
     path === 'fs.statSync' ||
+    path === 'fs.symlinkSync' ||
     path === 'fs.unlinkSync' ||
     path === 'fs.writeFileSync' ||
     path === 'fs.constants.F_OK' ||
@@ -3395,9 +3401,12 @@ function isAsyncFsRuntimeCallExpression(expression) {
       'readFileBytes',
       'readDir',
       'readDirDirents',
+      'readlink',
+      'realpath',
       'rename',
       'rm',
       'stat',
+      'symlink',
       'unlink',
       'writeFile',
       'writeFileBytes'
@@ -3819,6 +3828,10 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
     lines.push(`status = ccjs_fs_stat(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'lstat') {
     lines.push(`status = ccjs_fs_lstat(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'realpath') {
+    lines.push(`status = ccjs_fs_realpath(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'readlink') {
+    lines.push(`status = ccjs_fs_readlink(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'access') {
     const mode = emitPreparedFsAccessModeExpression(expression, context)
 
@@ -3845,6 +3858,13 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
     lines.push(...destPath.lines)
     lines.push(
       `status = ccjs_fs_copy_file(ccjs_loop, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &frame->awaited);`
+    )
+  } else if (method === 'symlink') {
+    const linkPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_link_path')
+
+    lines.push(...linkPath.lines)
+    lines.push(
+      `status = ccjs_fs_symlink(ccjs_loop, ${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length}, &frame->awaited);`
     )
   } else if (method === 'mkdir') {
     lines.push(`status = ccjs_fs_mkdir(ccjs_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &frame->awaited);`)
@@ -13274,6 +13294,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
           'mkdir',
           'rename',
           'rm',
+          'symlink',
           'unlink',
           'writeFile',
           'writeFileBytes'
@@ -13283,6 +13304,8 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
             ? 'array'
             : method === 'stat' || method === 'lstat'
               ? 'object'
+              : method === 'realpath' || method === 'readlink'
+                ? 'string'
               : method === 'readFileBytes'
                 ? 'bytes'
                 : 'string'),
@@ -13367,6 +13390,21 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
     }
   }
 
+  if (method === 'realpath' || method === 'readlink') {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_${method}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
   if (method === 'access') {
     const mode = emitPreparedFsAccessModeExpression(expression, context)
 
@@ -13429,6 +13467,24 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
     lines.push(
       emitStatusCheck(
         `ccjs_fs_copy_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'symlink') {
+    const linkPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_link_path')
+
+    lines.push(...linkPath.lines)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_symlink(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length}, &${out})`,
         context
       )
     )
@@ -13541,7 +13597,16 @@ function emitPreparedFsSyncValueExpression(expression, context) {
 
   if (
     method == null ||
-    !['lstatSync', 'readFileBytesSync', 'readFileSync', 'readDirDirentsSync', 'readDirSync', 'statSync'].includes(method)
+    ![
+      'lstatSync',
+      'readFileBytesSync',
+      'readFileSync',
+      'readDirDirentsSync',
+      'readDirSync',
+      'readlinkSync',
+      'realpathSync',
+      'statSync'
+    ].includes(method)
   ) {
     return null
   }
@@ -13565,9 +13630,13 @@ function emitPreparedFsSyncValueExpression(expression, context) {
           ? `ccjs_fs_read_dir_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
           : method === 'readDirDirentsSync'
             ? `ccjs_fs_read_dir_dirents_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-            : method === 'statSync'
-              ? `ccjs_fs_stat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-              : `ccjs_fs_lstat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+            : method === 'realpathSync'
+              ? `ccjs_fs_realpath_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+              : method === 'readlinkSync'
+                ? `ccjs_fs_readlink_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+                : method === 'statSync'
+                  ? `ccjs_fs_stat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+                  : `ccjs_fs_lstat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
 
   return {
     lines: [
@@ -13593,6 +13662,7 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
       'mkdirSync',
       'renameSync',
       'rmSync',
+      'symlinkSync',
       'unlinkSync',
       'writeFileBytesSync',
       'writeFileSync'
@@ -13649,6 +13719,17 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
     lines.push(
       emitStatusCheck(`ccjs_fs_copy_file_sync(${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length})`, context)
     )
+
+    return {
+      lines
+    }
+  }
+
+  if (method === 'symlinkSync') {
+    const linkPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_link_path')
+
+    lines.push(...linkPath.lines)
+    lines.push(emitStatusCheck(`ccjs_fs_symlink_sync(${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length})`, context))
 
     return {
       lines
@@ -18040,9 +18121,12 @@ function cFsRuntimeCallName(callee) {
       'lstat',
       'mkdir',
       'readFile',
+      'readlink',
+      'realpath',
       'rename',
       'rm',
       'stat',
+      'symlink',
       'unlink',
       'writeFile'
     ].includes(path[2])
@@ -18069,9 +18153,12 @@ function cFsRuntimeCallName(callee) {
     'lstatSync',
     'mkdirSync',
     'readFileSync',
+    'readlinkSync',
+    'realpathSync',
     'renameSync',
     'rmSync',
     'statSync',
+    'symlinkSync',
     'unlinkSync',
     'writeFileSync'
   ].includes(path[1])

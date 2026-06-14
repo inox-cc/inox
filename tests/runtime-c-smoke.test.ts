@@ -1275,7 +1275,12 @@ static ccjs_status read_dir(void* user, ccjs_allocator* allocator, const char* p
 int main(void) {
   ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
   fs_state state = { 0, 0, 0, { 0 }, 0 };
-  ccjs_fs_adapter adapter = { &state, read_file, write_file, read_dir };
+  ccjs_fs_adapter adapter = {
+    .user = &state,
+    .read_file = read_file,
+    .write_file = write_file,
+    .read_dir = read_dir
+  };
   ccjs_loop loop;
   ccjs_promise* read_promise = 0;
   ccjs_promise* dir_promise = 0;
@@ -1457,7 +1462,12 @@ static ccjs_status access_file(void* user, const char* path, size_t path_len, in
 int main(void) {
   ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
   fs_state state = { 0, 0, 0 };
-  ccjs_fs_adapter adapter = { &state, 0, 0, 0, 0, stat_file, lstat_file, access_file };
+  ccjs_fs_adapter adapter = {
+    .user = &state,
+    .stat = stat_file,
+    .lstat = lstat_file,
+    .access = access_file
+  };
   ccjs_loop loop;
   ccjs_promise* stat_promise = 0;
   ccjs_promise* lstat_promise = 0;
@@ -1828,6 +1838,7 @@ test('generated C node:fs promises copy hosted files and read entries', async (t
   const appendedTextCopy = join(dir, 'appended-copy.txt')
   const appendedBytes = join(dir, 'appended.bin')
   const appendedBytesCopy = join(dir, 'appended-copy.bin')
+  const promiseLink = join(dir, 'promise-link.txt')
   const source = join(dir, 'fs-node-promises.c')
   const output = join(dir, 'fs-node-promises')
   const data = Buffer.from([9, 8, 7, 6, 0, 255])
@@ -1865,9 +1876,12 @@ await fs.promises.copyFile(${JSON.stringify(appendedText)}, ${JSON.stringify(app
 await fs.promises.writeFile(${JSON.stringify(appendedBytes)}, bytes)
 await fs.promises.appendFile(${JSON.stringify(appendedBytes)}, bytes)
 await fs.promises.copyFile(${JSON.stringify(appendedBytes)}, ${JSON.stringify(appendedBytesCopy)})
+await fs.promises.symlink(${JSON.stringify(textInput)}, ${JSON.stringify(promiseLink)})
+const linkTarget = await fs.promises.readlink(${JSON.stringify(promiseLink)})
+const realTarget = await fs.promises.realpath(${JSON.stringify(promiseLink)})
 const names = entries.sort()
 const firstDirent = dirents[0]
-console.log(text, names[0], names[1], bytes.length, stats.isFile(), dirents.length, firstDirent.isFile())
+console.log(text, names[0], names[1], bytes.length, stats.isFile(), dirents.length, firstDirent.isFile(), linkTarget === ${JSON.stringify(textInput)}, realTarget.length > 0)
 
 `,
       {
@@ -1884,7 +1898,7 @@ console.log(text, names[0], names[1], bytes.length, stats.isFile(), dirents.leng
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'node text alpha.txt beta.txt 6 1 2 1\n')
+    assert.equal(run.stdout, 'node text alpha.txt beta.txt 6 1 2 1 1 1\n')
     assert.equal(await readFile(textCopied, 'utf8'), 'node text')
     assert.deepEqual(await readFile(bytesCopied), data)
     await assert.rejects(readFile(mutationInput, 'utf8'))
@@ -1923,6 +1937,7 @@ test('generated C fs sync helpers copy hosted files and read entries', async (t)
   const appendedTextCopy = join(dir, 'sync-appended-copy.txt')
   const appendedBytes = join(dir, 'sync-appended.bin')
   const appendedBytesCopy = join(dir, 'sync-appended-copy.bin')
+  const syncLink = join(dir, 'sync-link.txt')
   const source = join(dir, 'fs-sync.c')
   const output = join(dir, 'fs-sync')
   const data = Buffer.from([5, 4, 3, 2, 1, 0, 255])
@@ -1958,9 +1973,12 @@ fs.copyFileSync(${JSON.stringify(appendedText)}, ${JSON.stringify(appendedTextCo
 fs.writeFileSync(${JSON.stringify(appendedBytes)}, bytes)
 fs.appendFileSync(${JSON.stringify(appendedBytes)}, bytes)
 fs.copyFileSync(${JSON.stringify(appendedBytes)}, ${JSON.stringify(appendedBytesCopy)})
+fs.symlinkSync(${JSON.stringify(textInput)}, ${JSON.stringify(syncLink)})
+const linkTarget = fs.readlinkSync(${JSON.stringify(syncLink)})
+const realTarget = fs.realpathSync(${JSON.stringify(syncLink)})
 const names = entries.sort()
 const firstDirent = dirents[0]
-console.log(names[0], names[1], stats.isFile(), dirents.length, firstDirent.isFile())
+console.log(names[0], names[1], stats.isFile(), dirents.length, firstDirent.isFile(), linkTarget === ${JSON.stringify(textInput)}, realTarget.length > 0)
 
 `,
       {
@@ -1977,7 +1995,7 @@ console.log(names[0], names[1], stats.isFile(), dirents.length, firstDirent.isFi
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'alpha.txt beta.txt 1 2 1\n')
+    assert.equal(run.stdout, 'alpha.txt beta.txt 1 2 1 1 1\n')
     assert.equal(await readFile(textCopied, 'utf8'), 'sync text')
     assert.deepEqual(await readFile(bytesCopied), data)
     await assert.rejects(readFile(mutationInput, 'utf8'))

@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, readlink, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { normalizeNewlines, runCommand } from './lib/run-command.ts'
@@ -68,6 +68,7 @@ async function checkLibuvFsRuntime(workDir: string): Promise<void> {
   const mutationMissing = join(dataDir, 'mutation-missing.txt')
   const appendText = join(dataDir, 'append.txt')
   const appendTextCopy = join(dataDir, 'append-copy.txt')
+  const symlinkPath = join(dataDir, 'input-link.txt')
   const byteData = Buffer.from([0, 1, 2, 3, 250, 255])
 
   await mkdir(sourceDir, { recursive: true })
@@ -153,6 +154,8 @@ int main(void) {
   ccjs_value entries_value = ccjs_undefined_value();
   ccjs_value dirents_value = ccjs_undefined_value();
   ccjs_value first_dirent = ccjs_undefined_value();
+  ccjs_value readlink_value = ccjs_undefined_value();
+  ccjs_value realpath_value = ccjs_undefined_value();
   ccjs_value bytes_value = ccjs_undefined_value();
   ccjs_value stat_value = ccjs_undefined_value();
   ccjs_value lstat_value = ccjs_undefined_value();
@@ -173,6 +176,9 @@ int main(void) {
   if (ccjs_fs_rm_sync(${JSON.stringify(mutationMissing)}, ${Buffer.byteLength(mutationMissing)}, false, true) != CCJS_OK) return 36;
   if (ccjs_fs_append_file_sync(${JSON.stringify(appendText)}, ${Buffer.byteLength(appendText)}, " append", 7) != CCJS_OK) return 37;
   if (ccjs_fs_copy_file_sync(${JSON.stringify(appendText)}, ${Buffer.byteLength(appendText)}, ${JSON.stringify(appendTextCopy)}, ${Buffer.byteLength(appendTextCopy)}) != CCJS_OK) return 38;
+  if (ccjs_fs_symlink_sync(${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, ${JSON.stringify(symlinkPath)}, ${Buffer.byteLength(symlinkPath)}) != CCJS_OK) return 44;
+  if (ccjs_fs_readlink_sync(&allocator, ${JSON.stringify(symlinkPath)}, ${Buffer.byteLength(symlinkPath)}, &readlink_value) != CCJS_OK) return 45;
+  if (ccjs_fs_realpath_sync(&allocator, ${JSON.stringify(symlinkPath)}, ${Buffer.byteLength(symlinkPath)}, &realpath_value) != CCJS_OK) return 46;
   if (ccjs_fs_read_file(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, &read_text) != CCJS_OK) return 3;
   if (ccjs_fs_write_file(&loop, ${JSON.stringify(textOutput)}, ${Buffer.byteLength(textOutput)}, "uv saved", 8, &write_text) != CCJS_OK) return 4;
   if (ccjs_fs_read_dir(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &read_entries) != CCJS_OK) return 5;
@@ -220,6 +226,8 @@ int main(void) {
   ccjs_release(dirents_value);
   ccjs_release(entries_value);
   ccjs_release(text_value);
+  ccjs_release(realpath_value);
+  ccjs_release(readlink_value);
   ccjs_release(bytes_to_write);
   ccjs_promise_release(missing);
   ccjs_promise_release(access_file);
@@ -257,6 +265,9 @@ int main(void) {
   const textOutputValue = await readFile(textOutput, 'utf8')
   const bytesOutputValue = await readFile(bytesOutput)
   const appendTextCopyValue = await readFile(appendTextCopy, 'utf8')
+  const linkTarget = await readlink(symlinkPath)
+  const realTarget = await realpath(symlinkPath)
+  const expectedRealTarget = await realpath(textInput)
 
   if (textOutputValue !== 'uv saved') {
     console.error(`Libuv fs smoke text output mismatch: ${JSON.stringify(textOutputValue)}`)
@@ -270,6 +281,11 @@ int main(void) {
 
   if (appendTextCopyValue !== 'uv append') {
     console.error(`Libuv fs smoke append/copy output mismatch: ${JSON.stringify(appendTextCopyValue)}`)
+    process.exit(1)
+  }
+
+  if (linkTarget !== textInput || realTarget !== expectedRealTarget) {
+    console.error(`Libuv fs smoke link output mismatch: ${JSON.stringify({ linkTarget, realTarget, textInput, expectedRealTarget })}`)
     process.exit(1)
   }
 

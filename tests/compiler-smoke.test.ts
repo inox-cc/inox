@@ -7206,6 +7206,76 @@ export function main(): void {
   )
 })
 
+test('lowers Node fs link path helpers to the fs runtime', () => {
+  const js = compileSource(
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  await fs.promises.symlink('/tmp/value.txt', '/tmp/link.txt')
+  const target = await fs.promises.readlink('/tmp/link.txt')
+  const resolved = await fs.promises.realpath('/tmp/value.txt')
+  fs.symlinkSync('/tmp/value.txt', '/tmp/sync-link.txt')
+  const syncTarget = fs.readlinkSync('/tmp/sync-link.txt')
+  const syncResolved = fs.realpathSync('/tmp/value.txt')
+  console.log(target, resolved, syncTarget, syncResolved)
+}
+`,
+    {
+      target: 'js'
+    }
+  )
+
+  assert.match(js.code, /await fs\.symlink\("\/tmp\/value\.txt", "\/tmp\/link\.txt"\)/)
+  assert.match(js.code, /const target = await fs\.readlink\("\/tmp\/link\.txt"\)/)
+  assert.match(js.code, /const resolved = await fs\.realpath\("\/tmp\/value\.txt"\)/)
+  assert.match(js.code, /ccjsFsSync\.symlinkSync\("\/tmp\/value\.txt", "\/tmp\/sync-link\.txt"\)/)
+  assert.match(js.code, /const syncTarget = ccjsFsSync\.readlinkSync\("\/tmp\/sync-link\.txt"\)/)
+  assert.match(js.code, /const syncResolved = ccjsFsSync\.realpathSync\("\/tmp\/value\.txt"\)/)
+
+  const c = compileSource(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const real = fs.promises.realpath('/tmp/value.txt')
+  const link = fs.promises.readlink('/tmp/link.txt')
+  fs.promises.symlink('/tmp/value.txt', '/tmp/link.txt')
+  const syncReal = fs.realpathSync('/tmp/value.txt')
+  const syncLink = fs.readlinkSync('/tmp/link.txt')
+  fs.symlinkSync('/tmp/value.txt', '/tmp/sync-link.txt')
+  console.log(syncReal, syncLink)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const real = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'real')
+  const link = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'link')
+
+  assert.equal(real?.promiseValueType, 'string')
+  assert.equal(link?.promiseValueType, 'string')
+  assert.match(c.code, /ccjs_fs_realpath\(&ccjs_loop, "\/tmp\/value\.txt", 14, &real\)/)
+  assert.match(c.code, /ccjs_fs_readlink\(&ccjs_loop, "\/tmp\/link\.txt", 13, &link\)/)
+  assert.match(
+    c.code,
+    /ccjs_fs_symlink\(&ccjs_loop, "\/tmp\/value\.txt", 14, "\/tmp\/link\.txt", 13, &ccjs_promise_\d+\)/
+  )
+  assert.match(c.code, /ccjs_fs_realpath_sync\(&ccjs_default_allocator, "\/tmp\/value\.txt", 14, &ccjs_fs_value_\d+\)/)
+  assert.match(c.code, /ccjs_fs_readlink_sync\(&ccjs_default_allocator, "\/tmp\/link\.txt", 13, &ccjs_fs_value_\d+\)/)
+  assert.match(c.code, /ccjs_fs_symlink_sync\("\/tmp\/value\.txt", 14, "\/tmp\/sync-link\.txt", 18\)/)
+
+  assertDiagnostic(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  fs.promises.symlink('/tmp/value.txt')
+}
+`,
+    'CCJS_ARG_COUNT'
+  )
+})
+
 test('lowers node:fs/promises imports to the fs runtime', () => {
   const js = compileSource(
     `import fs from 'node:fs/promises'
