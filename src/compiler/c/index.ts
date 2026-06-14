@@ -77,6 +77,7 @@ import {
   collectRuntimeNamedImportNames,
   irProgramsUseRuntimeImport
 } from './runtime-imports.ts'
+import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
 import { mathRuntimeMethodName } from './runtime-methods.ts'
 import { cPromiseRuntimeCallName } from './async/promises.ts'
 import {
@@ -11967,35 +11968,6 @@ function emitBoxedRuntimeValueAssignment(expression, context) {
     `ccjs_release(*${name});`,
     `*${name} = ${temp};`
   ]
-}
-
-function emitRuntimeNullableValueCheck(name, expectedTag, context) {
-  if (expectedTag == null) {
-    return []
-  }
-
-  if (expectedTag === 'CCJS_TAG_BOOL' || expectedTag === 'CCJS_TAG_NUMBER') {
-    return [emitRuntimeTypeCheck(`${name}.tag != CCJS_TAG_NULL && ${name}.tag != ${expectedTag}`, context)]
-  }
-
-  return [
-    emitRuntimeTypeCheck(
-      `${name}.tag != CCJS_TAG_NULL && (${name}.tag != ${expectedTag} || ${name}.as.ref == 0)`,
-      context
-    )
-  ]
-}
-
-function emitRuntimeValueCheck(name, expectedTag, context) {
-  if (expectedTag == null) {
-    return ''
-  }
-
-  if (expectedTag === 'CCJS_TAG_BOOL' || expectedTag === 'CCJS_TAG_NUMBER') {
-    return emitRuntimeTypeCheck(`${name}.tag != ${expectedTag}`, context)
-  }
-
-  return emitRuntimeTypeCheck(`${name}.tag != ${expectedTag} || ${name}.as.ref == 0`, context)
 }
 
 function isNullableScalarRuntimeExpression(expression, context) {
