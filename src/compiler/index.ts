@@ -8,7 +8,7 @@ import { tokenize } from './lexer.ts'
 import { lowerProgram } from './lower.ts'
 import { buildModuleGraph } from './module-graph.ts'
 import { parse } from './parser.ts'
-import type { CompileOptions, FileCompileResult, SourceCompileResult } from './types.ts'
+import type { CompileOptions, CompileTarget, FileCompileResult, IrProgram, SourceCompileResult } from './types.ts'
 import type { CModuleOutputFile } from './codegen-c.ts'
 
 type CModuleCompileOptions = CompileOptions & {
@@ -21,8 +21,34 @@ export type CModuleCompileResult = {
   files: CModuleOutputFile[]
 }
 
+export type SourceIrCompileResult = {
+  target: CompileTarget
+  ast: SourceCompileResult['ast']
+  hir: SourceCompileResult['hir']
+  ir: IrProgram
+}
+
+export type GraphIrCompileResult = {
+  target: CompileTarget
+  graph: FileCompileResult['graph']
+  irModules: ReturnType<typeof collectIrModuleRecords>
+}
+
 export function compileSource(source: string, options: CompileOptions = {}): SourceCompileResult {
-  const target = options.target ?? 'c'
+  const compiled = compileSourceToIr(source, options)
+
+  if (compiled.target === 'c') {
+    runCStaticChecks([compiled.ir], options)
+  }
+
+  return {
+    ...compiled,
+    code: emitTargetFromIr(compiled.target, compiled.ir, options)
+  }
+}
+
+export function compileSourceToIr(source: string, options: CompileOptions = {}): SourceIrCompileResult {
+  const target = resolveCompileTarget(options)
   const tokens = tokenize(source)
   const ast = parse(tokens)
   const checked = checkProgram(ast, {
@@ -32,74 +58,53 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
   const hir = lowerProgram(checked.ast)
   const ir = lowerHirToIr(hir)
 
-  if (target === 'c') {
-    checkCProfileCapabilities([ir], options)
-    checkCCompileBudgets([ir], options)
+  return {
+    target,
+    ast: checked.ast,
+    hir,
+    ir
+  }
+}
 
-    return {
-      target,
-      ast: checked.ast,
-      hir,
-      ir,
-      code: emitCFromIr(ir, {
-        random: options.random
-      })
-    }
+export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: CompileOptions = {}): string {
+  if (target === 'c') {
+    return emitCFromIr(ir, {
+      random: options.random
+    })
   }
 
   if (target === 'js') {
-    return {
-      target,
-      ast: checked.ast,
-      hir,
-      ir,
-      code: emitJsFromIr(ir, {
-        callMain: options.callMain
-      })
-    }
+    return emitJsFromIr(ir, {
+      callMain: options.callMain
+    })
   }
 
   throw new Error(`Unsupported target ${target}`)
 }
 
 export async function compileFile(entry: string, options: CompileOptions = {}): Promise<FileCompileResult> {
-  const target = options.target ?? 'c'
+  const compiled = await compileGraphToIrModules(entry, options)
 
-  if (target === 'c') {
-    const graph = await buildModuleGraph(entry, {
-      ...options,
-      target
-    })
-    const irModules = collectIrModuleRecords(graph)
-    checkCProfileCapabilities(
-      irModules.map((module) => module.ir),
-      options
-    )
-    checkCCompileBudgets(
-      irModules.map((module) => module.ir),
+  if (compiled.target === 'c') {
+    runCStaticChecks(
+      compiled.irModules.map((module) => module.ir),
       options
     )
 
     return {
-      target,
-      graph,
-      code: emitCBundleFromIrModules(irModules, graph.entry, {
+      target: compiled.target,
+      graph: compiled.graph,
+      code: emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, {
         random: options.random
       })
     }
   }
 
-  const graph = await buildModuleGraph(entry, {
-    ...options,
-    target
-  })
-  const irModules = collectIrModuleRecords(graph)
-
-  if (target === 'js') {
+  if (compiled.target === 'js') {
     return {
-      target,
-      graph,
-      code: emitJsBundleFromIrModules(irModules, graph.entry, {
+      target: compiled.target,
+      graph: compiled.graph,
+      code: emitJsBundleFromIrModules(compiled.irModules, compiled.graph.entry, {
         callMain: options.callMain
       })
     }
@@ -112,27 +117,48 @@ export async function compileFileToCModules(
   entry: string,
   options: CModuleCompileOptions = {}
 ): Promise<CModuleCompileResult> {
-  const graph = await buildModuleGraph(entry, {
+  const compiled = await compileGraphToIrModules(entry, {
     ...options,
     target: 'c'
   })
-  const irModules = collectIrModuleRecords(graph)
 
-  checkCProfileCapabilities(
-    irModules.map((module) => module.ir),
-    options
-  )
-  checkCCompileBudgets(
-    irModules.map((module) => module.ir),
+  runCStaticChecks(
+    compiled.irModules.map((module) => module.ir),
     options
   )
 
   return {
     target: 'c',
-    graph,
-    files: emitCModuleFilesFromGraph(graph, {
+    graph: compiled.graph,
+    files: emitCModuleFilesFromGraph(compiled.graph, {
       random: options.random,
       sourceRoot: options.sourceRoot
     })
   }
+}
+
+export async function compileGraphToIrModules(
+  entry: string,
+  options: CompileOptions = {}
+): Promise<GraphIrCompileResult> {
+  const target = resolveCompileTarget(options)
+  const graph = await buildModuleGraph(entry, {
+    ...options,
+    target
+  })
+
+  return {
+    target,
+    graph,
+    irModules: collectIrModuleRecords(graph)
+  }
+}
+
+export function runCStaticChecks(irs: IrProgram[], options: CompileOptions = {}): void {
+  checkCProfileCapabilities(irs, options)
+  checkCCompileBudgets(irs, options)
+}
+
+function resolveCompileTarget(options: CompileOptions): CompileTarget {
+  return options.target ?? 'c'
 }
