@@ -1,4 +1,5 @@
 import { fsGlobalUsagePathForRuntimeMethod, fsRuntimeMethodForPath } from './stdlib/descriptors/fs.ts'
+import { timerRuntimeMethodNameFromPath } from './stdlib/descriptors/timers.ts'
 import type {
   AnyNode,
   IrFeature,
@@ -1418,11 +1419,7 @@ function timerRuntimeCallName(callee: AnyNode): string | null {
     return null
   }
 
-  return ['clearImmediate', 'clearInterval', 'clearTimeout', 'setImmediate', 'setInterval', 'setTimeout'].includes(
-    callee.path[0]
-  )
-    ? callee.path[0]
-    : null
+  return timerRuntimeMethodNameFromPath(callee.path)
 }
 
 function mayBeStringBytesOperand(expression: AnyNode | null | undefined): boolean {

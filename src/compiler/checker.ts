@@ -9,6 +9,11 @@ import {
   setElementTypeNameFromTypeName
 } from './type-names.ts'
 import { fsRuntimeCallInfoFromPath, unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
+import {
+  isTimerClearMethod,
+  isTimerHandleMethod,
+  timerRuntimeMethodNameFromPath
+} from './stdlib/descriptors/timers.ts'
 import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
 import type {
   AnyNode,
@@ -5745,19 +5750,11 @@ function timerRuntimeMethodName(callee: AnyNode): string | null {
     return null
   }
 
-  return ['clearImmediate', 'clearInterval', 'clearTimeout', 'setImmediate', 'setInterval', 'setTimeout'].includes(
-    callee.path[0]
-  )
-    ? callee.path[0]
-    : null
+  return timerRuntimeMethodNameFromPath(callee.path)
 }
 
 function timerClearMethodName(method: string): string | null {
-  return ['clearImmediate', 'clearInterval', 'clearTimeout'].includes(method) ? method : null
-}
-
-function isTimerHandleMethod(method: string): boolean {
-  return ['ref', 'unref'].includes(method)
+  return isTimerClearMethod(method) ? method : null
 }
 
 function timerCallbackFunctionType(): AnyNode {

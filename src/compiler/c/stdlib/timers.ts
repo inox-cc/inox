@@ -1,9 +1,15 @@
+import {
+  isTimerClearMethod,
+  isTimerStartMethod,
+  timerRuntimeMethodNameFromPath
+} from '../../stdlib/descriptors/timers.ts'
+
 export function cTimerRuntimeCallName(callee: any): string | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 
-  return cTimerStartCallName(callee) ?? cTimerClearCallName(callee)
+  return timerRuntimeMethodNameFromPath(callee.path)
 }
 
 export function cTimerStartCallName(callee: any): string | null {
@@ -11,7 +17,7 @@ export function cTimerStartCallName(callee: any): string | null {
     return null
   }
 
-  return ['setImmediate', 'setInterval', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+  return isTimerStartMethod(callee.path[0]) ? callee.path[0] : null
 }
 
 export function cTimerClearCallName(callee: any): string | null {
@@ -19,7 +25,7 @@ export function cTimerClearCallName(callee: any): string | null {
     return null
   }
 
-  return ['clearImmediate', 'clearInterval', 'clearTimeout'].includes(callee.path[0]) ? callee.path[0] : null
+  return isTimerClearMethod(callee.path[0]) ? callee.path[0] : null
 }
 
 export function timerCallbackFunctionType(): any {

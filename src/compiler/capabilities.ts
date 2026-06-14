@@ -1,6 +1,7 @@
 import { visitAstLike } from './ast-visit.ts'
 import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrGlobalUsages } from './ir.ts'
+import { timerRuntimeMethods } from './stdlib/descriptors/timers.ts'
 import type {
   AnyNode,
   CompileOptions,
@@ -21,14 +22,7 @@ type CapabilityUsage = RequiredCapability & {
   path: string
 }
 
-const timerGlobals = new Set([
-  'clearImmediate',
-  'clearInterval',
-  'clearTimeout',
-  'setImmediate',
-  'setInterval',
-  'setTimeout'
-])
+const timerGlobals = new Set(timerRuntimeMethods)
 
 export function checkCProfileCapabilities(programs: IrProgram[], options: CompileOptions): void {
   if (options.profile !== 'embedded') {
