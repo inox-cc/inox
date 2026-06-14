@@ -1,9 +1,12 @@
 node_modules/
 .pnpm-store/
+.DS_Store
 coverage/
 dist/
 tmp/
 .idea
 *.log
+*.tmp
 example/build/
 example/build-libuv/
+example/build-libuv-boringssl/

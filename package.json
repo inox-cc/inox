@@ -18,6 +18,7 @@
     "boringssl:bootstrap": "node scripts/bootstrap-boringssl.ts",
     "libuv:bootstrap": "node scripts/bootstrap-libuv.ts",
     "build": "node scripts/build.ts",
+    "clean": "node scripts/clean.ts",
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
