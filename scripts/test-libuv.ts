@@ -2085,7 +2085,8 @@ int main(void) {
 async function checkLibuvCompiledFetchClient(workDir: string): Promise<void> {
   const sourceDir = join(workDir, 'compiled-fetch-client-src')
   const fetchBuildDir = join(workDir, 'compiled-fetch-client-build')
-  const responseBody = 'compiled-fetch'
+  const requestBody = '{"name":"Ada"}'
+  const responseBody = 'compiled-fetch-post'
   const server = createHttpServer((request, response) => {
     if (request.url !== '/value') {
       response.writeHead(404, {
@@ -2096,12 +2097,34 @@ async function checkLibuvCompiledFetchClient(workDir: string): Promise<void> {
       return
     }
 
-    response.writeHead(200, {
-      Connection: 'close',
-      'Content-Length': String(responseBody.length),
-      'Content-Type': 'text/plain'
+    let body = ''
+
+    request.setEncoding('utf8')
+    request.on('data', (chunk) => {
+      body += chunk
     })
-    response.end(responseBody)
+    request.on('end', () => {
+      if (
+        request.method !== 'POST' ||
+        request.headers['content-type'] !== 'application/json' ||
+        request.headers['x-ccjs'] !== 'fetch' ||
+        body !== requestBody
+      ) {
+        response.writeHead(400, {
+          Connection: 'close',
+          'Content-Length': '0'
+        })
+        response.end()
+        return
+      }
+
+      response.writeHead(200, {
+        Connection: 'close',
+        'Content-Length': String(responseBody.length),
+        'Content-Type': 'text/plain'
+      })
+      response.end(responseBody)
+    })
   })
 
   await new Promise<void>((resolve, reject) => {
@@ -2117,7 +2140,14 @@ async function checkLibuvCompiledFetchClient(workDir: string): Promise<void> {
   }
 
   const url = `http://127.0.0.1:${address.port}/value`
-  const source = `const response = await fetch('${url}')
+  const source = `const response = await fetch('${url}', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CCJS': 'fetch'
+  },
+  body: '${requestBody}'
+})
 const text = await response.text()
 console.log(response.status, response.ok, response.url, text)
 `

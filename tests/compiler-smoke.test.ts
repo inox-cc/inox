@@ -456,9 +456,51 @@ console.log(response.status, response.ok, response.url, text)
   assert.match(result.code, /printf\("%g %g %\.\*s %\.\*s\\n"/)
 })
 
+test('lowers global fetch init options to the C fetch runtime', () => {
+  const result = compileSource(
+    `const response = await fetch('http://127.0.0.1:9000/users', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CCJS': 'fetch'
+  },
+  body: '{"name":"Ada"}'
+})
+console.log(response.status)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_fetch_header ccjs_fetch_headers_\d+\[2\] = \{ \{ "Content-Type", 12, "application\/json", 16 \}, \{ "X-CCJS", 6, "fetch", 5 \} \};/)
+  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ "POST", 4, ccjs_fetch_headers_\d+, 2, "\{\\"name\\":\\"Ada\\"\}", 14 \};/)
+  assert.match(result.code, /ccjs_fetch_with_init\(&ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/users", 27, &ccjs_fetch_init_\d+, &ccjs_promise_\d+\)/)
+})
+
+test('lowers fetch awaits inside async task frames', () => {
+  const result = compileSource(
+    `async function load(): Promise<string> {
+  const response = await fetch('http://127.0.0.1:9000/status', { method: 'HEAD' })
+  return await response.text()
+}
+
+const text = await load()
+console.log(text)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /status = ccjs_fetch_with_init\(ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/status", 28, &ccjs_fetch_init_\d+, &frame->awaited\);/)
+  assert.match(result.code, /ccjs_fetch_response_text\(ccjs_loop, response, &ccjs_promise_\d+\)/)
+})
+
 test('reports unsupported fetch init and response body helpers with fetch diagnostics', () => {
   assertDiagnostic(
-    `const response = await fetch('http://127.0.0.1:9000/hello', { method: 'POST' })
+    `const controller = { signal: {} }
+const response = await fetch('http://127.0.0.1:9000/hello', { signal: controller.signal })
 console.log(response.status)
 `,
     'CCJS_FETCH',

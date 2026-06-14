@@ -3585,6 +3585,10 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context) {
     return true
   }
 
+  if (isAsyncFetchRuntimeCallExpression(expression)) {
+    return true
+  }
+
   if (isPromiseReturningFunctionCallee(expression.callee, context)) {
     return true
   }
@@ -3626,6 +3630,12 @@ function isAsyncFsRuntimeCallExpression(expression) {
       'writeFileBytes'
     ].includes(method)
   )
+}
+
+function isAsyncFetchRuntimeCallExpression(expression) {
+  const method = cFetchRuntimeExpressionMethod(expression)
+
+  return expression?.valueType === 'promise' && (method === 'fetch' || method === 'text')
 }
 
 function resolveAsyncTaskReturnValueExpression(expression, returnType, context) {
@@ -4000,6 +4010,12 @@ function emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, op
     return fsCall
   }
 
+  const fetchCall = emitPreparedAsyncTaskFetchSourceExpression(expression, wrapper, context, options)
+
+  if (fetchCall != null) {
+    return fetchCall
+  }
+
   const taskCall = emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context, options)
 
   if (taskCall != null) {
@@ -4110,6 +4126,38 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
     lines.push(
       `status = ccjs_fs_write_file(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
     )
+  }
+
+  return {
+    lines: [...lines, ...emitAsyncTaskScheduleStatusCheck(wrapper, options)]
+  }
+}
+
+function emitPreparedAsyncTaskFetchSourceExpression(expression, wrapper, context, options) {
+  if (!isAsyncFetchRuntimeCallExpression(expression)) {
+    return null
+  }
+
+  const method = cFetchRuntimeExpressionMethod(expression)
+  const lines: string[] = []
+
+  if (method === 'fetch') {
+    const url = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_url')
+    const init = emitPreparedFetchInitOperand(expression, context)
+
+    lines.push(...url.lines)
+    lines.push(...init.lines)
+    lines.push(
+      init.expression === '0'
+        ? `status = ccjs_fetch(ccjs_loop, ${url.bytes}, ${url.length}, &frame->awaited);`
+        : `status = ccjs_fetch_with_init(ccjs_loop, ${url.bytes}, ${url.length}, ${init.expression}, &frame->awaited);`
+    )
+  } else {
+    const response = emitCValueExpression(expression.callee.object, context)
+
+    lines.push(...response.lines)
+    lines.push(emitRuntimeTypeCheck(`${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`, context))
+    lines.push(`status = ccjs_fetch_response_text(ccjs_loop, ${response.expression}, &frame->awaited);`)
   }
 
   return {
@@ -17341,14 +17389,17 @@ function emitPreparedFetchCallExpression(expression, context, options: { out?: s
 
   if (method === 'fetch') {
     const url = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_url')
+    const init = emitPreparedFetchInitOperand(expression, context)
+    const call =
+      init.expression === '0'
+        ? `ccjs_fetch(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, &${out})`
+        : `ccjs_fetch_with_init(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, ${init.expression}, &${out})`
 
     return {
       lines: [
         ...url.lines,
-        emitStatusCheck(
-          `ccjs_fetch(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, &${out})`,
-          context
-        )
+        ...init.lines,
+        emitStatusCheck(call, context)
       ],
       expression: out,
       valueType,
@@ -17368,6 +17419,82 @@ function emitPreparedFetchCallExpression(expression, context, options: { out?: s
     valueType,
     rejectionValueType: 'error'
   }
+}
+
+function emitPreparedFetchInitOperand(expression, context) {
+  const init = expression.args[1]
+
+  if (init == null || init.type !== 'ObjectLiteral') {
+    return {
+      lines: [],
+      expression: '0'
+    }
+  }
+
+  const lines: string[] = []
+  const methodValue = findObjectLiteralPropertyValue(init, 'method')
+  const headersValue = findObjectLiteralPropertyValue(init, 'headers')
+  const bodyValue = findObjectLiteralPropertyValue(init, 'body')
+  const method =
+    methodValue == null
+      ? { lines: [] as string[], bytes: '0', length: '0' }
+      : emitPreparedStringBytesOperand(methodValue, context, 'ccjs_fetch_method')
+  const body =
+    bodyValue == null ? { lines: [] as string[], bytes: '0', length: '0' } : emitPreparedFetchBodyOperand(bodyValue, context)
+  let headersExpression = '0'
+  let headerCount = '0'
+
+  lines.push(...method.lines)
+
+  if (headersValue?.type === 'ObjectLiteral' && headersValue.properties.length > 0) {
+    const headersName = nextCName(context, 'ccjs_fetch_headers')
+    const headerInitializers: string[] = []
+
+    for (const property of headersValue.properties) {
+      const value = emitPreparedStringBytesOperand(property.value, context, 'ccjs_fetch_header')
+
+      lines.push(...value.lines)
+      headerInitializers.push(
+        `{ ${cStringLiteral(String(property.key))}, ${utf8ByteLength(String(property.key))}, ${value.bytes}, ${value.length} }`
+      )
+    }
+
+    lines.push(`ccjs_fetch_header ${headersName}[${headersValue.properties.length}] = { ${headerInitializers.join(', ')} };`)
+    headersExpression = headersName
+    headerCount = `${headersValue.properties.length}`
+  }
+
+  lines.push(...body.lines)
+
+  const initName = nextCName(context, 'ccjs_fetch_init')
+
+  lines.push(
+    `ccjs_fetch_init ${initName} = { ${method.bytes}, ${method.length}, ${headersExpression}, ${headerCount}, ${body.bytes}, ${body.length} };`
+  )
+
+  return {
+    lines,
+    expression: `&${initName}`
+  }
+}
+
+function emitPreparedFetchBodyOperand(expression, context) {
+  if (inferExpressionType(expression, context) === 'bytes') {
+    const value = emitCValueExpression(expression, context)
+    const bytes = nextCName(context, 'ccjs_fetch_body')
+
+    return {
+      lines: [
+        ...value.lines,
+        emitRuntimeValueCheck(value.expression, 'CCJS_TAG_BYTES', context),
+        `ccjs_bytes* ${bytes} = (ccjs_bytes*)${value.expression}.as.ref;`
+      ],
+      bytes: `(const char*)${bytes}->bytes`,
+      length: `${bytes}->len`
+    }
+  }
+
+  return emitPreparedStringBytesOperand(expression, context, 'ccjs_fetch_body')
 }
 
 function emitPreparedFsSyncValueExpression(expression, context) {

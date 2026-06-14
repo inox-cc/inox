@@ -9,4 +9,12 @@ type FetchResponse = {
   text(): Promise<string>
 }
 
-declare function fetch(url: string): Promise<FetchResponse>
+type FetchInit = {
+  readonly method?: string
+  readonly headers?: {
+    readonly [name: string]: string
+  }
+  readonly body?: string | Buffer | Uint8Array
+}
+
+declare function fetch(url: string, init?: FetchInit): Promise<FetchResponse>

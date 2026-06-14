@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct ccjs_fetch_request {
+typedef struct ccjs_fetch_operation {
   ccjs_loop* loop;
   ccjs_allocator* allocator;
   ccjs_net_socket* socket;
@@ -18,11 +18,13 @@ typedef struct ccjs_fetch_request {
   void* user;
   char host[256];
   char path[512];
+  char request[4096];
+  size_t request_len;
   int port;
   char response[8192];
   size_t response_len;
   int completed;
-} ccjs_fetch_request;
+} ccjs_fetch_operation;
 
 typedef struct ccjs_fetch_promise_request {
   ccjs_loop* loop;
@@ -40,14 +42,20 @@ enum {
 
 static ccjs_status ccjs_fetch_parse_url(const char* url, char* host, size_t host_len, int* port, char* path, size_t path_len);
 static ccjs_status ccjs_fetch_copy_url(ccjs_allocator* allocator, const char* url, size_t url_len, char** out);
+static ccjs_status ccjs_fetch_build_request(ccjs_fetch_operation* request, const ccjs_fetch_init* init);
+static ccjs_status ccjs_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len);
+static ccjs_status ccjs_fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text);
+static ccjs_status ccjs_fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value);
+static int ccjs_fetch_header_name_equals(const char* name, size_t name_len, const char* expected);
+static int ccjs_fetch_headers_include(const ccjs_fetch_header* headers, size_t header_count, const char* name);
 static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, ccjs_status status);
 static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len);
 static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket);
-static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_request* request);
+static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request);
 static const char* ccjs_fetch_find_header_end(const char* bytes, size_t len);
 static int ccjs_fetch_parse_status(const char* bytes, size_t len);
 static int ccjs_fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out);
-static ccjs_status ccjs_fetch_finish(ccjs_fetch_request* request, ccjs_status status, const ccjs_fetch_response* response);
+static ccjs_status ccjs_fetch_finish(ccjs_fetch_operation* request, ccjs_status status, const ccjs_fetch_response* response);
 static ccjs_status ccjs_fetch_promise_done(void* user, ccjs_status status, const ccjs_fetch_response* response);
 static ccjs_status ccjs_fetch_response_new(
   ccjs_allocator* allocator,
@@ -62,19 +70,23 @@ static const char* ccjs_fetch_error_message(ccjs_status status);
 static void ccjs_fetch_promise_request_free(ccjs_fetch_promise_request* request);
 
 ccjs_status ccjs_fetch_get(ccjs_loop* loop, const char* url, ccjs_fetch_done_fn done, void* user) {
+  return ccjs_fetch_request(loop, url, 0, done, user);
+}
+
+ccjs_status ccjs_fetch_request(ccjs_loop* loop, const char* url, const ccjs_fetch_init* init, ccjs_fetch_done_fn done, void* user) {
   if (loop == 0 || loop->allocator == 0 || url == 0 || done == 0) {
     return CCJS_ERR_TYPE;
   }
 
   ccjs_allocator* allocator = loop->allocator;
-  ccjs_fetch_request* request =
-    allocator->alloc(allocator->user, sizeof(ccjs_fetch_request), _Alignof(ccjs_fetch_request));
+  ccjs_fetch_operation* request =
+    allocator->alloc(allocator->user, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
 
   if (request == 0) {
     return CCJS_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(ccjs_fetch_request));
+  memset(request, 0, sizeof(ccjs_fetch_operation));
   request->loop = loop;
   request->allocator = allocator;
   request->done = done;
@@ -83,7 +95,14 @@ ccjs_status ccjs_fetch_get(ccjs_loop* loop, const char* url, ccjs_fetch_done_fn 
   ccjs_status status = ccjs_fetch_parse_url(url, request->host, sizeof(request->host), &request->port, request->path, sizeof(request->path));
 
   if (status != CCJS_OK) {
-    allocator->free(allocator->user, request, sizeof(ccjs_fetch_request), _Alignof(ccjs_fetch_request));
+    allocator->free(allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
+    return status;
+  }
+
+  status = ccjs_fetch_build_request(request, init);
+
+  if (status != CCJS_OK) {
+    allocator->free(allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
     return status;
   }
 
@@ -99,7 +118,7 @@ ccjs_status ccjs_fetch_get(ccjs_loop* loop, const char* url, ccjs_fetch_done_fn 
   );
 
   if (status != CCJS_OK) {
-    allocator->free(allocator->user, request, sizeof(ccjs_fetch_request), _Alignof(ccjs_fetch_request));
+    allocator->free(allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
     return status;
   }
 
@@ -107,6 +126,16 @@ ccjs_status ccjs_fetch_get(ccjs_loop* loop, const char* url, ccjs_fetch_done_fn 
 }
 
 ccjs_status ccjs_fetch(ccjs_loop* loop, const char* url, size_t url_len, ccjs_promise** out) {
+  return ccjs_fetch_with_init(loop, url, url_len, 0, out);
+}
+
+ccjs_status ccjs_fetch_with_init(
+  ccjs_loop* loop,
+  const char* url,
+  size_t url_len,
+  const ccjs_fetch_init* init,
+  ccjs_promise** out
+) {
   if (out == 0) {
     return CCJS_ERR_TYPE;
   }
@@ -142,7 +171,7 @@ ccjs_status ccjs_fetch(ccjs_loop* loop, const char* url, size_t url_len, ccjs_pr
   status = ccjs_fetch_copy_url(allocator, url, url_len, &request->url);
 
   if (status == CCJS_OK) {
-    status = ccjs_fetch_get(loop, request->url, ccjs_fetch_promise_done, request);
+    status = ccjs_fetch_request(loop, request->url, init, ccjs_fetch_promise_done, request);
   }
 
   if (status != CCJS_OK) {
@@ -258,36 +287,168 @@ static ccjs_status ccjs_fetch_copy_url(ccjs_allocator* allocator, const char* ur
   return CCJS_OK;
 }
 
+static ccjs_status ccjs_fetch_build_request(ccjs_fetch_operation* request, const ccjs_fetch_init* init) {
+  if (request == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  const char* method = "GET";
+  size_t method_len = 3;
+  const ccjs_fetch_header* headers = 0;
+  size_t header_count = 0;
+  const char* body = 0;
+  size_t body_len = 0;
+
+  if (init != 0) {
+    if (init->method != 0 && init->method_len > 0) {
+      method = init->method;
+      method_len = init->method_len;
+    }
+
+    headers = init->headers;
+    header_count = init->header_count;
+    body = init->body;
+    body_len = init->body_len;
+  }
+
+  if (method == 0 || method_len == 0 || method_len > 32) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  if (header_count > 0 && headers == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (body_len > 0 && body == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  size_t offset = 0;
+  ccjs_status status = ccjs_fetch_append_bytes(request->request, sizeof(request->request), &offset, method, method_len);
+
+  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, " ");
+  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, request->path);
+  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, " HTTP/1.1\r\nHost: ");
+  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, request->host);
+  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+
+  for (size_t index = 0; status == CCJS_OK && index < header_count; index += 1) {
+    const ccjs_fetch_header* header = headers + index;
+
+    if (header->name == 0 || header->name_len == 0 || header->value == 0) {
+      return CCJS_ERR_TYPE;
+    }
+
+    status = ccjs_fetch_append_bytes(request->request, sizeof(request->request), &offset, header->name, header->name_len);
+    if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, ": ");
+    if (status == CCJS_OK) status = ccjs_fetch_append_bytes(request->request, sizeof(request->request), &offset, header->value, header->value_len);
+    if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+  }
+
+  if (status == CCJS_OK && body_len > 0 && !ccjs_fetch_headers_include(headers, header_count, "Content-Length")) {
+    status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "Content-Length: ");
+    if (status == CCJS_OK) status = ccjs_fetch_append_size(request->request, sizeof(request->request), &offset, body_len);
+    if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+  }
+
+  if (status == CCJS_OK && !ccjs_fetch_headers_include(headers, header_count, "Connection")) {
+    status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "Connection: close\r\n");
+  }
+
+  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+  if (status == CCJS_OK && body_len > 0) {
+    status = ccjs_fetch_append_bytes(request->request, sizeof(request->request), &offset, body, body_len);
+  }
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  request->request_len = offset;
+  return CCJS_OK;
+}
+
+static ccjs_status ccjs_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len) {
+  if (out == 0 || offset == 0 || (len > 0 && bytes == 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (*offset > out_size || len > out_size - *offset) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  if (len > 0) {
+    memcpy(out + *offset, bytes, len);
+  }
+
+  *offset += len;
+  return CCJS_OK;
+}
+
+static ccjs_status ccjs_fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text) {
+  if (text == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  return ccjs_fetch_append_bytes(out, out_size, offset, text, strlen(text));
+}
+
+static ccjs_status ccjs_fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value) {
+  char buffer[32];
+  int written = snprintf(buffer, sizeof(buffer), "%zu", value);
+
+  if (written < 0 || (size_t)written >= sizeof(buffer)) {
+    return CCJS_ERR_FIELD;
+  }
+
+  return ccjs_fetch_append_bytes(out, out_size, offset, buffer, (size_t)written);
+}
+
+static int ccjs_fetch_header_name_equals(const char* name, size_t name_len, const char* expected) {
+  if (name == 0 || expected == 0 || strlen(expected) != name_len) {
+    return 0;
+  }
+
+  for (size_t index = 0; index < name_len; index += 1) {
+    if (tolower((unsigned char)name[index]) != tolower((unsigned char)expected[index])) {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
+static int ccjs_fetch_headers_include(const ccjs_fetch_header* headers, size_t header_count, const char* name) {
+  if (headers == 0 || name == 0) {
+    return 0;
+  }
+
+  for (size_t index = 0; index < header_count; index += 1) {
+    if (ccjs_fetch_header_name_equals(headers[index].name, headers[index].name_len, name)) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, ccjs_status status) {
-  ccjs_fetch_request* request = (ccjs_fetch_request*)user;
+  ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
 
   if (status != CCJS_OK) {
     return ccjs_fetch_finish(request, status, 0);
-  }
-
-  char header[1024];
-  int header_len = snprintf(
-    header,
-    sizeof(header),
-    "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",
-    request->path,
-    request->host
-  );
-
-  if (header_len < 0 || (size_t)header_len >= sizeof(header)) {
-    return ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
   }
 
   if (ccjs_net_socket_read_start(socket) != CCJS_OK) {
     return ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
   }
 
-  return ccjs_net_socket_write(socket, header, (size_t)header_len);
+  return ccjs_net_socket_write(socket, request->request, request->request_len);
 }
 
 static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
   (void)socket;
-  ccjs_fetch_request* request = (ccjs_fetch_request*)user;
+  ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
 
   if (request->response_len + len > sizeof(request->response)) {
     return ccjs_fetch_finish(request, CCJS_ERR_UNSUPPORTED, 0);
@@ -301,7 +462,7 @@ static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const
 
 static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket) {
   (void)socket;
-  ccjs_fetch_request* request = (ccjs_fetch_request*)user;
+  ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
 
   if (request == 0) {
     return;
@@ -311,10 +472,10 @@ static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket) {
     ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
   }
 
-  request->allocator->free(request->allocator->user, request, sizeof(ccjs_fetch_request), _Alignof(ccjs_fetch_request));
+  request->allocator->free(request->allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
 }
 
-static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_request* request) {
+static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request) {
   const char* header_end = ccjs_fetch_find_header_end(request->response, request->response_len);
 
   if (header_end == 0) {
@@ -341,6 +502,8 @@ static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_request* request) {
   ccjs_fetch_response response = {
     status,
     status >= 200 && status < 300,
+    request->response,
+    header_len,
     request->response + header_len,
     content_len
   };
@@ -414,7 +577,7 @@ static int ccjs_fetch_parse_content_length(const char* bytes, size_t header_len,
   return 0;
 }
 
-static ccjs_status ccjs_fetch_finish(ccjs_fetch_request* request, ccjs_status status, const ccjs_fetch_response* response) {
+static ccjs_status ccjs_fetch_finish(ccjs_fetch_operation* request, ccjs_status status, const ccjs_fetch_response* response) {
   if (request->completed) {
     return CCJS_OK;
   }
@@ -634,10 +797,30 @@ ccjs_status ccjs_fetch_get(ccjs_loop* loop, const char* url, ccjs_fetch_done_fn 
   return CCJS_ERR_UNSUPPORTED;
 }
 
+ccjs_status ccjs_fetch_request(ccjs_loop* loop, const char* url, const ccjs_fetch_init* init, ccjs_fetch_done_fn done, void* user) {
+  (void)loop;
+  (void)url;
+  (void)init;
+  (void)done;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
 ccjs_status ccjs_fetch(ccjs_loop* loop, const char* url, size_t url_len, ccjs_promise** out) {
+  return ccjs_fetch_with_init(loop, url, url_len, 0, out);
+}
+
+ccjs_status ccjs_fetch_with_init(
+  ccjs_loop* loop,
+  const char* url,
+  size_t url_len,
+  const ccjs_fetch_init* init,
+  ccjs_promise** out
+) {
   (void)loop;
   (void)url;
   (void)url_len;
+  (void)init;
 
   if (out == 0) {
     return CCJS_ERR_TYPE;

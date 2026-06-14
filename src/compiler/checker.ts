@@ -2160,8 +2160,7 @@ class Checker {
     }
 
     if (expression.args[1] != null) {
-      this.checkExpression(expression.args[1])
-      this.report('CCJS_FETCH', 'fetch init options are not supported by the current C/libuv fetch slice', expression.args[1].loc)
+      this.checkFetchInitObject(expression.args[1])
     }
 
     expression.fetchRuntimeMethod = 'fetch'
@@ -2170,6 +2169,62 @@ class Checker {
     expression.shape = fetchResponseObjectShape
 
     return 'promise'
+  }
+
+  checkFetchInitObject(expression: AnyNode): void {
+    if (expression.type !== 'ObjectLiteral') {
+      this.checkExpression(expression)
+      this.report('CCJS_FETCH', 'fetch init must be an object literal in the current C/libuv fetch slice', expression.loc)
+      return
+    }
+
+    for (const property of expression.properties) {
+      if (!['method', 'headers', 'body'].includes(property.key)) {
+        this.checkExpression(property.value)
+        this.report('CCJS_FETCH', `fetch init option ${property.key} is not supported by the current C/libuv fetch slice`, property.loc)
+        continue
+      }
+
+      if (property.key === 'method') {
+        this.checkAssignableType(
+          this.checkExpression(property.value),
+          'string',
+          property.value.loc,
+          false,
+          this.expressionCanBeNull(property.value)
+        )
+        continue
+      }
+
+      if (property.key === 'body') {
+        const bodyType = this.checkExpression(property.value)
+
+        if (bodyType !== 'string' && bodyType !== 'bytes') {
+          this.report(
+            'CCJS_FETCH',
+            'fetch init body must be a string, Buffer or Uint8Array in the current C/libuv fetch slice',
+            property.value.loc
+          )
+        }
+        continue
+      }
+
+      if (property.value.type !== 'ObjectLiteral') {
+        this.checkExpression(property.value)
+        this.report('CCJS_FETCH', 'fetch init headers must be an object literal in the current C/libuv fetch slice', property.value.loc)
+        continue
+      }
+
+      for (const header of property.value.properties) {
+        this.checkAssignableType(
+          this.checkExpression(header.value),
+          'string',
+          header.value.loc,
+          false,
+          this.expressionCanBeNull(header.value)
+        )
+      }
+    }
   }
 
   checkFetchResponseMethodCall(expression: AnyNode): ValueType | null {
