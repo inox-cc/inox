@@ -29,6 +29,15 @@ struct ccjs_dgram_socket {
 };
 
 static ccjs_status ccjs_dgram_ip4_addr(const char* host, int port, struct sockaddr_in* out);
+static ccjs_status ccjs_dgram_send_resolved(
+  ccjs_dgram_socket* socket,
+  const char* bytes,
+  size_t len,
+  const struct sockaddr* addr,
+  ccjs_dgram_send_fn callback,
+  void* user
+);
+static ccjs_status ccjs_dgram_sockaddr_to_address(const struct sockaddr* addr, ccjs_dgram_address* out);
 static void ccjs_dgram_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 static void ccjs_dgram_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const struct sockaddr* addr, unsigned flags);
 static void ccjs_dgram_send_cb(uv_udp_send_t* request, int status);
@@ -120,6 +129,29 @@ ccjs_status ccjs_dgram_socket_on_close(ccjs_dgram_socket* socket, ccjs_dgram_clo
   return CCJS_OK;
 }
 
+ccjs_status ccjs_dgram_socket_connect(ccjs_dgram_socket* socket, const char* host, int port) {
+  if (socket == 0 || socket->closing || host == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  struct sockaddr_in addr;
+  ccjs_status status = ccjs_dgram_ip4_addr(host, port, &addr);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  return uv_udp_connect(&socket->handle, (const struct sockaddr*)&addr) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+ccjs_status ccjs_dgram_socket_disconnect(ccjs_dgram_socket* socket) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  return uv_udp_connect(&socket->handle, 0) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
 ccjs_status ccjs_dgram_recv_start(ccjs_dgram_socket* socket) {
   if (socket == 0 || socket->closing || socket->recv == 0) {
     return CCJS_ERR_TYPE;
@@ -149,73 +181,32 @@ ccjs_status ccjs_dgram_send_with_callback(
   ccjs_dgram_send_fn callback,
   void* user
 ) {
-  if (socket == 0 || socket->closing || (bytes == 0 && len != 0) || host == 0) {
+  if (host == 0) {
     return CCJS_ERR_TYPE;
-  }
-
-  ccjs_allocator* allocator = socket->allocator;
-  ccjs_dgram_send_request* request =
-    allocator->alloc(allocator->user, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
-
-  if (request == 0) {
-    return CCJS_ERR_OOM;
-  }
-
-  memset(request, 0, sizeof(ccjs_dgram_send_request));
-  request->socket = socket;
-  request->len = len;
-  request->callback = callback;
-  request->user = user;
-
-  if (len != 0) {
-    request->bytes = allocator->alloc(allocator->user, len, _Alignof(char));
-
-    if (request->bytes == 0) {
-      allocator->free(allocator->user, request, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
-      return CCJS_ERR_OOM;
-    }
-
-    memcpy(request->bytes, bytes, len);
   }
 
   struct sockaddr_in addr;
   ccjs_status status = ccjs_dgram_ip4_addr(host, port, &addr);
 
   if (status != CCJS_OK) {
-    if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, len, _Alignof(char));
-    }
-
-    allocator->free(allocator->user, request, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
     return status;
   }
 
-  status = ccjs_libuv_loop_retain_request(socket->loop);
+  return ccjs_dgram_send_resolved(socket, bytes, len, (const struct sockaddr*)&addr, callback, user);
+}
 
-  if (status != CCJS_OK) {
-    if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, len, _Alignof(char));
-    }
+ccjs_status ccjs_dgram_send_connected(ccjs_dgram_socket* socket, const char* bytes, size_t len) {
+  return ccjs_dgram_send_connected_with_callback(socket, bytes, len, 0, 0);
+}
 
-    allocator->free(allocator->user, request, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
-    return status;
-  }
-
-  uv_buf_t buffer = uv_buf_init(request->bytes == 0 ? "" : request->bytes, (unsigned int)len);
-  request->request.data = request;
-
-  if (uv_udp_send(&request->request, &socket->handle, &buffer, 1, (const struct sockaddr*)&addr, ccjs_dgram_send_cb) != 0) {
-    ccjs_libuv_loop_release_request(socket->loop);
-
-    if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, len, _Alignof(char));
-    }
-
-    allocator->free(allocator->user, request, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
-    return CCJS_ERR_FIELD;
-  }
-
-  return CCJS_OK;
+ccjs_status ccjs_dgram_send_connected_with_callback(
+  ccjs_dgram_socket* socket,
+  const char* bytes,
+  size_t len,
+  ccjs_dgram_send_fn callback,
+  void* user
+) {
+  return ccjs_dgram_send_resolved(socket, bytes, len, 0, callback, user);
 }
 
 ccjs_status ccjs_dgram_socket_address(ccjs_dgram_socket* socket, ccjs_dgram_address* out) {
@@ -223,7 +214,6 @@ ccjs_status ccjs_dgram_socket_address(ccjs_dgram_socket* socket, ccjs_dgram_addr
     return CCJS_ERR_TYPE;
   }
 
-  memset(out, 0, sizeof(ccjs_dgram_address));
   struct sockaddr_storage addr;
   int len = sizeof(addr);
 
@@ -231,16 +221,22 @@ ccjs_status ccjs_dgram_socket_address(ccjs_dgram_socket* socket, ccjs_dgram_addr
     return CCJS_ERR_FIELD;
   }
 
-  if (((struct sockaddr*)&addr)->sa_family != AF_INET) {
-    return CCJS_ERR_UNSUPPORTED;
+  return ccjs_dgram_sockaddr_to_address((const struct sockaddr*)&addr, out);
+}
+
+ccjs_status ccjs_dgram_socket_remote_address(ccjs_dgram_socket* socket, ccjs_dgram_address* out) {
+  if (socket == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
   }
 
-  const struct sockaddr_in* ip4 = (const struct sockaddr_in*)&addr;
-  uv_ip4_name(ip4, out->address, sizeof(out->address));
-  out->family = "IPv4";
-  out->port = ntohs(ip4->sin_port);
+  struct sockaddr_storage addr;
+  int len = sizeof(addr);
 
-  return CCJS_OK;
+  if (uv_udp_getpeername(&socket->handle, (struct sockaddr*)&addr, &len) != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  return ccjs_dgram_sockaddr_to_address((const struct sockaddr*)&addr, out);
 }
 
 ccjs_status ccjs_dgram_local_port(ccjs_dgram_socket* socket, int* out_port) {
@@ -272,6 +268,90 @@ void ccjs_dgram_close(ccjs_dgram_socket* socket) {
   socket->closing = 1;
   uv_udp_recv_stop(&socket->handle);
   uv_close((uv_handle_t*)&socket->handle, ccjs_dgram_close_cb);
+}
+
+static ccjs_status ccjs_dgram_send_resolved(
+  ccjs_dgram_socket* socket,
+  const char* bytes,
+  size_t len,
+  const struct sockaddr* addr,
+  ccjs_dgram_send_fn callback,
+  void* user
+) {
+  if (socket == 0 || socket->closing || (bytes == 0 && len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_allocator* allocator = socket->allocator;
+  ccjs_dgram_send_request* request =
+    allocator->alloc(allocator->user, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
+
+  if (request == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  memset(request, 0, sizeof(ccjs_dgram_send_request));
+  request->socket = socket;
+  request->len = len;
+  request->callback = callback;
+  request->user = user;
+
+  if (len != 0) {
+    request->bytes = allocator->alloc(allocator->user, len, _Alignof(char));
+
+    if (request->bytes == 0) {
+      allocator->free(allocator->user, request, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
+      return CCJS_ERR_OOM;
+    }
+
+    memcpy(request->bytes, bytes, len);
+  }
+
+  ccjs_status status = ccjs_libuv_loop_retain_request(socket->loop);
+
+  if (status != CCJS_OK) {
+    if (request->bytes != 0) {
+      allocator->free(allocator->user, request->bytes, len, _Alignof(char));
+    }
+
+    allocator->free(allocator->user, request, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
+    return status;
+  }
+
+  uv_buf_t buffer = uv_buf_init(request->bytes == 0 ? "" : request->bytes, (unsigned int)len);
+  request->request.data = request;
+
+  if (uv_udp_send(&request->request, &socket->handle, &buffer, 1, addr, ccjs_dgram_send_cb) != 0) {
+    ccjs_libuv_loop_release_request(socket->loop);
+
+    if (request->bytes != 0) {
+      allocator->free(allocator->user, request->bytes, len, _Alignof(char));
+    }
+
+    allocator->free(allocator->user, request, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
+    return CCJS_ERR_FIELD;
+  }
+
+  return CCJS_OK;
+}
+
+static ccjs_status ccjs_dgram_sockaddr_to_address(const struct sockaddr* addr, ccjs_dgram_address* out) {
+  if (addr == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  memset(out, 0, sizeof(ccjs_dgram_address));
+
+  if (addr->sa_family != AF_INET) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  const struct sockaddr_in* ip4 = (const struct sockaddr_in*)addr;
+  uv_ip4_name(ip4, out->address, sizeof(out->address));
+  out->family = "IPv4";
+  out->port = ntohs(ip4->sin_port);
+
+  return CCJS_OK;
 }
 
 static ccjs_status ccjs_dgram_ip4_addr(const char* host, int port, struct sockaddr_in* out) {
@@ -429,6 +509,18 @@ ccjs_status ccjs_dgram_socket_on_close(ccjs_dgram_socket* socket, ccjs_dgram_clo
   return CCJS_ERR_UNSUPPORTED;
 }
 
+ccjs_status ccjs_dgram_socket_connect(ccjs_dgram_socket* socket, const char* host, int port) {
+  (void)socket;
+  (void)host;
+  (void)port;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_socket_disconnect(ccjs_dgram_socket* socket) {
+  (void)socket;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
 ccjs_status ccjs_dgram_recv_start(ccjs_dgram_socket* socket) {
   (void)socket;
   return CCJS_ERR_UNSUPPORTED;
@@ -467,7 +559,40 @@ ccjs_status ccjs_dgram_send_with_callback(
   return CCJS_ERR_UNSUPPORTED;
 }
 
+ccjs_status ccjs_dgram_send_connected(ccjs_dgram_socket* socket, const char* bytes, size_t len) {
+  (void)socket;
+  (void)bytes;
+  (void)len;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_send_connected_with_callback(
+  ccjs_dgram_socket* socket,
+  const char* bytes,
+  size_t len,
+  ccjs_dgram_send_fn callback,
+  void* user
+) {
+  (void)socket;
+  (void)bytes;
+  (void)len;
+  (void)callback;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
 ccjs_status ccjs_dgram_socket_address(ccjs_dgram_socket* socket, ccjs_dgram_address* out) {
+  (void)socket;
+
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  memset(out, 0, sizeof(ccjs_dgram_address));
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_socket_remote_address(ccjs_dgram_socket* socket, ccjs_dgram_address* out) {
   (void)socket;
 
   if (out == 0) {

@@ -154,6 +154,29 @@ socket.bind({ port: 0, address: '127.0.0.1' })
   assert.match(result.code, /ccjs_dgram_bind\(socket, "127\.0\.0\.1", \(int\)\(0\)\)/)
 })
 
+test('lowers node:dgram connected UDP helpers to the C dgram runtime', () => {
+  const result = compileSource(
+    `import dgram from 'node:dgram'
+
+const socket = dgram.createSocket('udp4')
+socket.connect(41234, '127.0.0.1', () => {
+  const remote = socket.remoteAddress()
+  socket.send('hello')
+  console.log(remote.port)
+})
+socket.disconnect()
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_dgram_socket_connect\(socket, "127\.0\.0\.1", \(int\)\(41234\)\)/)
+  assert.match(result.code, /ccjs_dgram_socket_remote_address\(socket, &remote\)/)
+  assert.match(result.code, /ccjs_dgram_send_connected\(socket, "hello", 5\)/)
+  assert.match(result.code, /ccjs_dgram_socket_disconnect\(socket\)/)
+})
+
 test('emits C net runtime include for node:net imports', () => {
   const result = compileSource(
     `import net from 'node:net'

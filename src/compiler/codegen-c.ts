@@ -4887,11 +4887,13 @@ function emitDgramAddressVariableDeclaration(statement, context) {
   }
 
   const socketName = statement.init.callee.object.path[0]
+  const runtime =
+    statement.init.callee.property === 'remoteAddress' ? 'ccjs_dgram_socket_remote_address' : 'ccjs_dgram_socket_address'
   context.variables.set(statement.name, 'dgram-address')
 
   return [
     `ccjs_dgram_address ${statement.name};`,
-    emitStatusCheck(`ccjs_dgram_socket_address(${socketName}, &${statement.name})`, context)
+    emitStatusCheck(`${runtime}(${socketName}, &${statement.name})`, context)
   ]
 }
 
@@ -4922,6 +4924,14 @@ function emitDgramSocketCallStatement(expression, context) {
 
   if (isDgramSocketMethodCall(expression, 'on', context)) {
     return emitDgramOnLines(expression.callee.object.path[0], expression.args, context)
+  }
+
+  if (isDgramSocketMethodCall(expression, 'connect', context)) {
+    return emitDgramConnectLines(expression.callee.object.path[0], expression.args, context)
+  }
+
+  if (isDgramSocketMethodCall(expression, 'disconnect', context)) {
+    return emitDgramDisconnectLines(expression.callee.object.path[0], expression.args, context)
   }
 
   if (isDgramSocketMethodCall(expression, 'send', context)) {
@@ -5038,20 +5048,71 @@ function emitDgramOnLines(socketName, args, context) {
   ]
 }
 
+function emitDgramConnectLines(socketName, args, context) {
+  if (args.length < 1) {
+    context.diagnostics.push(
+      diagnostic('CCJS_DGRAM_SOCKET', 'socket.connect in the C backend currently requires a port argument', args[0]?.loc)
+    )
+    return []
+  }
+
+  const hostArg = args[1]?.type === 'ArrowFunctionExpression' ? null : args[1]
+  const callback = args[1]?.type === 'ArrowFunctionExpression' ? args[1] : args[2]
+  const port = emitDgramPortExpression(args[0], null, context)
+  const host = emitDgramHostExpression(hostArg, null, context)
+
+  if (args.length > 3) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_DGRAM_SOCKET',
+        'socket.connect in the C backend currently supports port, optional address and optional callback',
+        args[3]?.loc
+      )
+    )
+  }
+
+  return [
+    ...port.lines,
+    emitStatusCheck(`ccjs_dgram_socket_connect(${socketName}, ${host}, (int)(${port.expression}))`, context),
+    ...emitDgramZeroArgCallbackLines(callback, context)
+  ]
+}
+
+function emitDgramDisconnectLines(socketName, args, context) {
+  if (args.length > 0) {
+    context.diagnostics.push(
+      diagnostic('CCJS_DGRAM_SOCKET', 'socket.disconnect in the C backend does not take arguments', args[0]?.loc)
+    )
+  }
+
+  return [emitStatusCheck(`ccjs_dgram_socket_disconnect(${socketName})`, context)]
+}
+
 function emitDgramSendLines(socketName, args, context, dgramContext = null) {
+  const callback = args.at(-1)?.type === 'ArrowFunctionExpression' ? args.at(-1) : null
+  const callbackOffset = callback == null ? 0 : 1
+
+  if (args.length - callbackOffset === 1) {
+    const body = emitDgramBytesOperand(args[0], dgramContext, context)
+
+    return [
+      ...body.lines,
+      ...emitDgramStatusCheck(`ccjs_dgram_send_connected(${socketName}, ${body.bytes}, ${body.length})`, context, dgramContext),
+      ...emitDgramZeroArgCallbackLines(callback, context)
+    ]
+  }
+
   if (args.length < 3) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_DGRAM_SOCKET',
-        'socket.send in the C backend currently requires message, port and address arguments',
+        'socket.send in the C backend currently requires message, port and address arguments, or a connected socket message form',
         args[0]?.loc
       )
     )
     return []
   }
 
-  const callback = args.at(-1)?.type === 'ArrowFunctionExpression' ? args.at(-1) : null
-  const callbackOffset = callback == null ? 0 : 1
   const hasOffsetLength = args.length - callbackOffset >= 5
   const body = emitDgramBytesOperand(args[0], dgramContext, context)
   const portArg = hasOffsetLength ? args[3] : args[1]
@@ -5304,7 +5365,7 @@ function isDgramAddressCall(expression, context) {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
-    expression.callee.property === 'address' &&
+    (expression.callee.property === 'address' || expression.callee.property === 'remoteAddress') &&
     expression.callee.object?.type === 'Reference' &&
     expression.callee.object.path.length === 1 &&
     context.variables.get(expression.callee.object.path[0]) === 'dgram-socket'
