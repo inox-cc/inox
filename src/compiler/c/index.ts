@@ -89,8 +89,8 @@ import {
 } from './stdlib/binary.ts'
 import { irProgramsUseConsoleRuntime, isConsoleLog } from './stdlib/console.ts'
 import { cCryptoRuntimeCallName, cryptoRuntimeMethodName } from './stdlib/crypto.ts'
-import { cFetchRuntimeExpressionMethod } from './stdlib/fetch.ts'
-import { cFsRuntimeConstantExpression, cFsRuntimeExpressionMethod } from './stdlib/fs.ts'
+import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from './stdlib/fetch.ts'
+import { cFsRuntimeConstantExpression, cFsRuntimeExpressionMethod, isAsyncFsRuntimeCallExpression } from './stdlib/fs.ts'
 import { cJsonRuntimeCallName } from './stdlib/json.ts'
 import {
   cTimerClearCallName,
@@ -2324,42 +2324,6 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context) {
     resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
 
   return isSupportedAsyncTaskValueType(valueType)
-}
-
-function isAsyncFsRuntimeCallExpression(expression) {
-  const method = cFsRuntimeExpressionMethod(expression)
-
-  return (
-    method != null &&
-    expression?.valueType === 'promise' &&
-    [
-      'access',
-      'appendFile',
-      'appendFileBytes',
-      'copyFile',
-      'lstat',
-      'mkdir',
-      'readFile',
-      'readFileBytes',
-      'readDir',
-      'readDirDirents',
-      'readlink',
-      'realpath',
-      'rename',
-      'rm',
-      'stat',
-      'symlink',
-      'unlink',
-      'writeFile',
-      'writeFileBytes'
-    ].includes(method)
-  )
-}
-
-function isAsyncFetchRuntimeCallExpression(expression) {
-  const method = cFetchRuntimeExpressionMethod(expression)
-
-  return expression?.valueType === 'promise' && (method === 'fetch' || method === 'text')
 }
 
 function resolveAsyncTaskReturnValueExpression(expression, returnType, context) {

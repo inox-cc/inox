@@ -2,6 +2,36 @@ export function cFsRuntimeExpressionMethod(expression: any): string | null {
   return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
 }
 
+export function isAsyncFsRuntimeCallExpression(expression: any): boolean {
+  const method = cFsRuntimeExpressionMethod(expression)
+
+  return (
+    method != null &&
+    expression?.valueType === 'promise' &&
+    [
+      'access',
+      'appendFile',
+      'appendFileBytes',
+      'copyFile',
+      'lstat',
+      'mkdir',
+      'readFile',
+      'readFileBytes',
+      'readDir',
+      'readDirDirents',
+      'readlink',
+      'realpath',
+      'rename',
+      'rm',
+      'stat',
+      'symlink',
+      'unlink',
+      'writeFile',
+      'writeFileBytes'
+    ].includes(method)
+  )
+}
+
 export function cFsRuntimeConstantExpression(expression: any): string | null {
   const name = expression?.fsRuntimeConstant
 
