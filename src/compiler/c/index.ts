@@ -97,6 +97,14 @@ import {
   cTimerStartCallName,
   timerCallbackFunctionType
 } from './stdlib/timers.ts'
+import {
+  cUnsupportedExpressionCode,
+  cUnsupportedVariableDeclarationCode,
+  containsAwaitExpression,
+  emitCOperator,
+  isNullishCoalescingExpression,
+  isOptionalChainExpression
+} from './syntax.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
 import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile, CModulePlan } from './types.ts'
 import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
@@ -18427,86 +18435,6 @@ function inferExpressionType(expression, context) {
   }
 
   return 'number'
-}
-
-function emitCOperator(operator) {
-  if (operator === '===' || operator === '==') {
-    return '=='
-  }
-
-  if (operator === '!==' || operator === '!=') {
-    return '!='
-  }
-
-  return operator
-}
-
-function cUnsupportedExpressionCode(type) {
-  if (type === 'function') {
-    return 'CCJS_C_FUNCTION_VALUE'
-  }
-
-  if (type === 'optional') {
-    return 'CCJS_C_OPTIONAL_CHAINING'
-  }
-
-  if (type === 'class') {
-    return 'CCJS_C_CLASS'
-  }
-
-  if (type === 'async' || type === 'promise') {
-    return 'CCJS_C_ASYNC'
-  }
-
-  if (type === 'js-global') {
-    return 'CCJS_C_JS_GLOBAL'
-  }
-
-  if (type === 'map' || type === 'set') {
-    return 'CCJS_C_COLLECTION'
-  }
-
-  return 'CCJS_C_UNSUPPORTED_EXPR'
-}
-
-function cUnsupportedVariableDeclarationCode(statement, type) {
-  if (statement?.init?.type === 'AwaitExpression') {
-    return 'CCJS_C_ASYNC'
-  }
-
-  return cUnsupportedExpressionCode(type)
-}
-
-function containsAwaitExpression(node) {
-  if (node == null) {
-    return false
-  }
-
-  if (Array.isArray(node)) {
-    return node.some((item) => containsAwaitExpression(item))
-  }
-
-  if (typeof node !== 'object') {
-    return false
-  }
-
-  if (node.type === 'AwaitExpression') {
-    return true
-  }
-
-  return Object.values(node).some((value) => containsAwaitExpression(value))
-}
-
-function isOptionalChainExpression(expression) {
-  return (
-    expression?.type === 'OptionalMemberExpression' ||
-    expression?.type === 'OptionalIndexExpression' ||
-    expression?.type === 'OptionalCallExpression'
-  )
-}
-
-function isNullishCoalescingExpression(expression) {
-  return expression?.type === 'BinaryExpression' && expression.operator === '??'
 }
 
 function isErrorConstructorExpression(expression) {
