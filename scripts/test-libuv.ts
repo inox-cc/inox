@@ -46,6 +46,7 @@ try {
     await checkLibuvDgramRuntime(buildDir)
     await checkLibuvNetRuntime(buildDir)
     await checkLibuvHttpRuntime(buildDir)
+    await checkLibuvFetchRuntime(buildDir)
     await checkLibuvFsRuntime(buildDir)
     console.log('Libuv checks passed')
   }
@@ -920,6 +921,136 @@ int main(void) {
 
   if (stdout !== expected) {
     console.error(`Libuv http smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    process.exit(1)
+  }
+}
+
+async function checkLibuvFetchRuntime(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'fetch-smoke-src')
+  const fetchBuildDir = join(workDir, 'fetch-smoke-build')
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_fetch_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_fetch_smoke fetch-smoke.c)
+target_link_libraries(ccjs_libuv_fetch_smoke PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(
+    join(sourceDir, 'fetch-smoke.c'),
+    `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "ccjs/allocator.h"
+#include "ccjs/fetch.h"
+#include "ccjs/http.h"
+#include "ccjs/time.h"
+
+typedef struct test_state {
+  ccjs_http_server* server;
+  int handled;
+  int done;
+  int status;
+  int ok;
+  char body[64];
+} test_state;
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static ccjs_status on_http(void* user, const ccjs_http_request* request, ccjs_http_response* response) {
+  (void)request;
+  test_state* state = (test_state*)user;
+  state->handled += 1;
+  return ccjs_http_response_text(response, 200, "fetch-ok", 8);
+}
+
+static ccjs_status on_fetch(void* user, ccjs_status status, const ccjs_fetch_response* response) {
+  test_state* state = (test_state*)user;
+  if (status != CCJS_OK || response == 0) return CCJS_ERR_FIELD;
+  state->done += 1;
+  state->status = response->status;
+  state->ok = response->ok ? 1 : 0;
+  size_t copy_len = response->body_len >= sizeof(state->body) ? sizeof(state->body) - 1 : response->body_len;
+  memcpy(state->body, response->body, copy_len);
+  state->body[copy_len] = '\\0';
+  ccjs_http_server_close(state->server);
+  return CCJS_OK;
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_loop loop;
+  test_state state = { 0 };
+  int port = 0;
+  int guard = 0;
+  char url[128];
+
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
+  if (ccjs_http_server_new(&loop, on_http, &state, &state.server) != CCJS_OK) return 2;
+  if (ccjs_http_server_listen(state.server, "127.0.0.1", 0, 16) != CCJS_OK) return 3;
+  if (ccjs_http_server_local_port(state.server, &port) != CCJS_OK) return 4;
+  snprintf(url, sizeof(url), "http://127.0.0.1:%d/value", port);
+  if (ccjs_fetch_get(&loop, url, on_fetch, &state) != CCJS_OK) return 5;
+
+  while (ccjs_loop_has_work(&loop) && guard < 500) {
+    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 6;
+    guard += 1;
+  }
+
+  if (guard >= 500) return 7;
+  printf("%d %d %d %d %s\\n", state.handled, state.done, state.status, state.ok, state.body);
+  ccjs_loop_dispose(&loop);
+  return 0;
+}
+`
+  )
+
+  await checkCommand('configure libuv fetch smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    fetchBuildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build libuv fetch smoke', 'cmake', ['--build', fetchBuildDir])
+
+  const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_fetch_smoke'), [])
+  const stdout = normalizeNewlines(run.stdout)
+
+  if (run.code !== 0) {
+    fail('run libuv fetch smoke', run)
+  }
+
+  const expected = '1 1 200 1 fetch-ok\n'
+
+  if (stdout !== expected) {
+    console.error(`Libuv fetch smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
     process.exit(1)
   }
 }

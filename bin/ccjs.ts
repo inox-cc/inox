@@ -39,6 +39,7 @@ const cRuntimeSourceGroups = {
   binary: ['runtime/c/src/binary/binary.c'],
   console: ['runtime/c/src/console/console.c'],
   dgram: ['runtime/c/src/network/dgram.c'],
+  fetch: ['runtime/c/src/network/fetch.c'],
   fs: ['runtime/c/src/fs/fs.c'],
   http: ['runtime/c/src/network/http.c'],
   json: ['runtime/c/src/json/json.c'],
@@ -259,6 +260,12 @@ function cRuntimeSourcesForCode(code: string): string[] {
     groups.add('async')
     groups.add('net')
     groups.add('http')
+  }
+
+  if (usesCHeader(code, 'fetch')) {
+    groups.add('async')
+    groups.add('net')
+    groups.add('fetch')
   }
 
   if (usesCHeader(code, 'loop') || usesCHeader(code, 'promise')) {
