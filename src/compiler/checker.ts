@@ -102,8 +102,34 @@ const fetchResponseObjectShape: ObjectShapeInfo = {
       name: 'url',
       valueType: 'string',
       readonly: true
+    },
+    {
+      name: 'statusText',
+      valueType: 'string',
+      readonly: true
+    },
+    {
+      name: 'redirected',
+      valueType: 'boolean',
+      readonly: true
+    },
+    {
+      name: 'headers',
+      valueType: 'object',
+      shape: {
+        kind: 'object',
+        builtin: 'fetch.Headers',
+        fields: []
+      },
+      readonly: true
     }
   ]
+}
+
+const fetchHeadersObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'fetch.Headers',
+  fields: []
 }
 
 const fetchAbortSignalObjectShape: ObjectShapeInfo = {
@@ -1785,6 +1811,12 @@ class Checker {
       return fetchResponseMethodType
     }
 
+    const fetchHeadersMethodType = this.checkFetchHeadersMethodCall(expression)
+
+    if (fetchHeadersMethodType != null) {
+      return fetchHeadersMethodType
+    }
+
     const fsType = this.checkFsCall(expression)
 
     if (fsType != null) {
@@ -2219,13 +2251,13 @@ class Checker {
     }
 
     for (const property of expression.properties) {
-      if (!['method', 'headers', 'body', 'signal'].includes(property.key)) {
+      if (!['method', 'headers', 'body', 'signal', 'redirect'].includes(property.key)) {
         this.checkExpression(property.value)
         this.report('CCJS_FETCH', `fetch init option ${property.key} is not supported by the current C/libuv fetch slice`, property.loc)
         continue
       }
 
-      if (property.key === 'method') {
+      if (property.key === 'method' || property.key === 'redirect') {
         this.checkAssignableType(
           this.checkExpression(property.value),
           'string',
@@ -2339,6 +2371,46 @@ class Checker {
     expression.promiseValueType = 'string'
 
     return 'promise'
+  }
+
+  checkFetchHeadersMethodCall(expression: AnyNode): ValueType | null {
+    if (
+      expression.callee.type !== 'MemberExpression' ||
+      !['get', 'has'].includes(expression.callee.property)
+    ) {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const shape = this.resolveExpressionShape(expression.callee.object)
+
+    if (objectType !== 'object' || shape?.builtin !== 'fetch.Headers') {
+      return null
+    }
+
+    if (expression.args.length !== 1) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function Headers.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (expression.args[0] != null) {
+      this.checkAssignableType(
+        this.checkExpression(expression.args[0]),
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+    }
+
+    expression.fetchRuntimeMethod = expression.callee.property === 'get' ? 'headersGet' : 'headersHas'
+    expression.valueType = expression.callee.property === 'get' ? 'string' : 'boolean'
+    expression.nullable = expression.callee.property === 'get'
+
+    return expression.valueType
   }
 
   resolveClassMethodReceiverClassName(expression: AnyNode): string | null {

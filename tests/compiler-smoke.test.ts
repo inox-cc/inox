@@ -474,8 +474,31 @@ console.log(response.status)
   )
 
   assert.match(result.code, /ccjs_fetch_header ccjs_fetch_headers_\d+\[2\] = \{ \{ "Content-Type", 12, "application\/json", 16 \}, \{ "X-CCJS", 6, "fetch", 5 \} \};/)
-  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ "POST", 4, ccjs_fetch_headers_\d+, 2, "\{\\"name\\":\\"Ada\\"\}", 14, ccjs_undefined_value\(\) \};/)
+  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ "POST", 4, ccjs_fetch_headers_\d+, 2, "\{\\"name\\":\\"Ada\\"\}", 14, ccjs_undefined_value\(\), 0, 0 \};/)
   assert.match(result.code, /ccjs_fetch_with_init\(&ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/users", 27, &ccjs_fetch_init_\d+, &ccjs_promise_\d+\)/)
+})
+
+test('lowers fetch response metadata and headers helpers to the C fetch runtime', () => {
+  const result = compileSource(
+    `const response = await fetch('http://127.0.0.1:9000/hello?x=1', { redirect: 'manual' })
+const headers = response.headers
+const contentType = headers.get('content-type')
+const hasTrace = response.headers.has('x-trace')
+console.log(response.statusText, response.redirected, contentType ?? 'missing', hasTrace)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, ccjs_undefined_value\(\), "manual", 6 \};/)
+  assert.match(result.code, /ccjs_object_get_known\(response, 5, &headers\)/)
+  assert.match(result.code, /ccjs_fetch_headers_get\(&ccjs_default_allocator, headers, "content-type", 12, &ccjs_fetch_header_value_\d+\)/)
+  assert.match(result.code, /contentType = ccjs_fetch_header_value_\d+;/)
+  assert.match(result.code, /ccjs_object_get_known\(response, 5, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_fetch_headers_has\(ccjs_value_\d+, "x-trace", 7, &hasTrace\)/)
+  assert.match(result.code, /ccjs_object_get_known\(response, 3, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(response, 4, &ccjs_log_value_\d+\)/)
 })
 
 test('lowers AbortController signal for fetch init to the C fetch runtime', () => {
@@ -493,7 +516,7 @@ console.log(response.status)
   assert.match(result.code, /ccjs_fetch_abort_controller_new\(&ccjs_default_allocator, &controller\)/)
   assert.match(result.code, /ccjs_fetch_abort_controller_abort\(controller\)/)
   assert.match(result.code, /ccjs_fetch_abort_controller_signal\(controller, &ccjs_fetch_signal_\d+\)/)
-  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, ccjs_fetch_signal_\d+ \};/)
+  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, ccjs_fetch_signal_\d+, 0, 0 \};/)
   assert.match(result.code, /ccjs_fetch_with_init\(&ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/slow", 26, &ccjs_fetch_init_\d+, &ccjs_promise_\d+\)/)
 })
 
@@ -537,7 +560,7 @@ console.log(text)
 
 test('reports unsupported fetch init and response body helpers with fetch diagnostics', () => {
   assertDiagnostic(
-    `const response = await fetch('http://127.0.0.1:9000/hello', { redirect: 'follow' })
+    `const response = await fetch('http://127.0.0.1:9000/hello', { cache: 'no-store' })
 console.log(response.status)
 `,
     'CCJS_FETCH',

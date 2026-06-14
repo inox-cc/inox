@@ -61,6 +61,7 @@ try {
     await checkLibuvCompiledHttpServer(buildDir)
     await checkLibuvFetchRuntime(buildDir)
     await checkLibuvCompiledFetchClient(buildDir)
+    await checkLibuvCompiledFetchRedirectMetadata(buildDir)
     await checkLibuvCompiledFetchAbort(buildDir)
     await checkLibuvFsRuntime(buildDir)
     console.log('Libuv checks passed')
@@ -2290,6 +2291,116 @@ target_link_libraries(ccjs_libuv_compiled_fetch_abort_smoke PRIVATE ccjs_runtime
     if (stdout !== expected) {
       console.error(
         `Compiled libuv fetch abort stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+      )
+      process.exit(1)
+    }
+  } finally {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve())
+    })
+  }
+}
+
+async function checkLibuvCompiledFetchRedirectMetadata(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'compiled-fetch-redirect-src')
+  const fetchBuildDir = join(workDir, 'compiled-fetch-redirect-build')
+  const responseBody = 'redirected-body'
+  const server = createHttpServer((request, response) => {
+    if (request.url?.startsWith('/redirect')) {
+      response.writeHead(302, {
+        Connection: 'close',
+        'Content-Length': '0',
+        Location: '/final'
+      })
+      response.end()
+      return
+    }
+
+    if (request.url === '/final') {
+      response.writeHead(200, {
+        Connection: 'close',
+        'Content-Length': String(responseBody.length),
+        'Content-Type': 'text/plain',
+        'X-Trace': 'stage4'
+      })
+      response.end(responseBody)
+      return
+    }
+
+    response.writeHead(404, {
+      Connection: 'close',
+      'Content-Length': '0'
+    })
+    response.end()
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
+
+  const address = server.address()
+
+  if (address == null || typeof address === 'string') {
+    server.close()
+    throw new Error('Expected HTTP address with a numeric port')
+  }
+
+  const followUrl = `http://localhost:${address.port}/redirect?from=1`
+  const manualUrl = `http://127.0.0.1:${address.port}/redirect`
+  const finalUrl = `http://127.0.0.1:${address.port}/final`
+  const source = `const follow = await fetch('${followUrl}')
+const followText = await follow.text()
+const contentType = follow.headers.get('content-type') ?? 'missing'
+console.log(follow.status, follow.statusText, follow.ok, follow.redirected, follow.url, contentType, follow.headers.has('x-trace'), followText)
+
+const manual = await fetch('${manualUrl}', { redirect: 'manual' })
+const location = manual.headers.get('location') ?? 'missing'
+console.log(manual.status, manual.statusText, manual.redirected, location)
+`
+  const compiled = compileSource(source, {
+    target: 'c'
+  })
+
+  try {
+    await mkdir(sourceDir, { recursive: true })
+    await writeFile(
+      join(sourceDir, 'CMakeLists.txt'),
+      `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_compiled_fetch_redirect_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_compiled_fetch_redirect_smoke generated-fetch-redirect.c)
+target_link_libraries(ccjs_libuv_compiled_fetch_redirect_smoke PRIVATE ccjs_runtime)
+`
+    )
+    await writeFile(join(sourceDir, 'generated-fetch-redirect.c'), compiled.code)
+
+    await checkCommand('configure compiled libuv fetch redirect smoke', 'cmake', [
+      '-S',
+      sourceDir,
+      '-B',
+      fetchBuildDir,
+      '-DCCJS_LOOP_BACKEND=libuv'
+    ])
+    await checkCommand('build compiled libuv fetch redirect smoke', 'cmake', ['--build', fetchBuildDir])
+
+    const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_compiled_fetch_redirect_smoke'), [])
+    const stdout = normalizeNewlines(run.stdout)
+
+    if (run.code !== 0) {
+      fail('run compiled libuv fetch redirect smoke', run)
+    }
+
+    const expected = `200 OK 1 1 ${finalUrl} text/plain 1 ${responseBody}\n302 Found 0 /final\n`
+
+    if (stdout !== expected) {
+      console.error(
+        `Compiled libuv fetch redirect stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
       )
       process.exit(1)
     }

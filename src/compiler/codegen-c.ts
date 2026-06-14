@@ -10732,6 +10732,15 @@ function emitStatement(statement, context) {
       return emitArraySortVariableDeclaration(statement, arraySortCall, context)
     }
 
+    const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (fetchHeadersCall != null && statement.valueType === 'boolean') {
+      context.variables.set(statement.name, 'boolean')
+      return fetchHeadersCall.lines
+    }
+
     if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
       return emitNullableRuntimeValueVariableDeclaration(statement, context)
     }
@@ -10802,7 +10811,7 @@ function emitStatement(statement, context) {
       }
     }
 
-    if (statement.init?.type === 'CallExpression' && inferExpressionType(statement.init, context) === 'string') {
+    if (statement.init?.type === 'CallExpression' && statement.nullable !== true && inferExpressionType(statement.init, context) === 'string') {
       return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
     }
 
@@ -13263,6 +13272,15 @@ function emitScalarVariableDeclaration(statement, context) {
     return [`ccjs_timer_handle* ${statement.name} = 0;`]
   }
 
+  const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (fetchHeadersCall != null && statement.valueType === 'boolean') {
+    context.variables.set(statement.name, 'boolean')
+    return fetchHeadersCall.lines
+  }
+
   const inferred = inferExpressionType(statement.init, context)
   context.variables.set(statement.name, inferred)
 
@@ -13640,6 +13658,10 @@ function emitObjectMemberVariableDeclaration(statement, member, context, emitGet
     return emitObjectBytesMemberVariableDeclaration(statement, member, context, emitGetCall)
   }
 
+  if (member.valueType === 'object') {
+    return emitObjectObjectMemberVariableDeclaration(statement, member, context, emitGetCall)
+  }
+
   if (member.valueType === 'string') {
     return emitObjectStringMemberVariableDeclaration(statement, member, context, emitGetCall)
   }
@@ -13718,6 +13740,23 @@ function emitObjectBytesMemberVariableDeclaration(statement, member, context, em
   ]
 
   context.variables.set(statement.name, member.valueType)
+
+  return lines
+}
+
+function emitObjectObjectMemberVariableDeclaration(statement, member, context, emitGetCall) {
+  registerOwnedValue(context, statement.name)
+  const lines = [
+    ...emitPrepareOwnedValueWrite(statement.name),
+    emitStatusCheck(emitGetCall(statement.name), context),
+    emitRuntimeTypeCheck(`${statement.name}.tag != CCJS_TAG_OBJECT || ${statement.name}.as.ref == 0`, context)
+  ]
+
+  context.variables.set(statement.name, 'object')
+
+  if (statement.shape != null) {
+    registerObjectShape(context, statement.name, statement.shape)
+  }
 
   return lines
 }
@@ -13867,6 +13906,12 @@ function emitCValueExpression(expression, context) {
 
   if (fsSyncValue != null) {
     return fsSyncValue
+  }
+
+  const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(expression, context)
+
+  if (fetchHeadersCall != null) {
+    return fetchHeadersCall
   }
 
   const jsonCall = emitPreparedJsonCallExpression(expression, context)
@@ -14086,6 +14131,23 @@ function emitCValueExpression(expression, context) {
       }
     }
 
+    if (member?.valueType === 'object') {
+      const temp = nextCName(context, 'ccjs_value')
+      registerOwnedValue(context, temp)
+
+      return {
+        lines: [
+          ...emitPrepareOwnedValueWrite(temp),
+          emitStatusCheck(
+            `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
+            context
+          ),
+          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_OBJECT || ${temp}.as.ref == 0`, context)
+        ],
+        expression: temp
+      }
+    }
+
     if (member?.valueType === 'string') {
       const temp = nextCName(context, 'ccjs_value')
       registerOwnedValue(context, temp)
@@ -14174,6 +14236,23 @@ function emitCValueExpression(expression, context) {
             context
           ),
           emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context)
+        ],
+        expression: temp
+      }
+    }
+
+    if (field?.valueType === 'object') {
+      const temp = nextCName(context, 'ccjs_value')
+      registerOwnedValue(context, temp)
+
+      return {
+        lines: [
+          ...emitPrepareOwnedValueWrite(temp),
+          emitStatusCheck(
+            `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
+            context
+          ),
+          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_OBJECT || ${temp}.as.ref == 0`, context)
         ],
         expression: temp
       }
@@ -16922,6 +17001,12 @@ function emitPreparedCallExpression(expression, context) {
     return fsCall
   }
 
+  const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(expression, context)
+
+  if (fetchHeadersCall != null) {
+    return fetchHeadersCall
+  }
+
   const jsonCall = emitPreparedJsonCallExpression(expression, context)
 
   if (jsonCall != null) {
@@ -17437,6 +17522,55 @@ function emitPreparedFetchCallExpression(expression, context, options: { out?: s
   }
 }
 
+function emitPreparedFetchHeadersCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const method = cFetchRuntimeExpressionMethod(expression)
+
+  if (method !== 'headersGet' && method !== 'headersHas') {
+    return null
+  }
+
+  const headers = emitCValueExpression(expression.callee.object, context)
+  const name = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_header_name')
+  const lines = [
+    ...headers.lines,
+    emitRuntimeTypeCheck(`${headers.expression}.tag != CCJS_TAG_OBJECT || ${headers.expression}.as.ref == 0`, context),
+    ...name.lines
+  ]
+
+  if (method === 'headersHas') {
+    const out = options.out ?? nextCName(context, 'ccjs_fetch_header_has')
+    lines.push(`int ${out} = 0;`)
+    lines.push(emitStatusCheck(`ccjs_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context))
+
+    return {
+      lines,
+      expression: out,
+      valueType: 'boolean'
+    }
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_fetch_header_value')
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  lines.push(...emitPrepareOwnedValueWrite(out))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_fetch_headers_get(&ccjs_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: out,
+    valueType: 'string',
+    nullable: true
+  }
+}
+
 function emitFetchAbortControllerVariableDeclaration(statement, context) {
   if (!isFetchAbortControllerConstructorExpression(statement.init)) {
     return null
@@ -17481,10 +17615,15 @@ function emitPreparedFetchInitOperand(expression, context) {
   const headersValue = findObjectLiteralPropertyValue(init, 'headers')
   const bodyValue = findObjectLiteralPropertyValue(init, 'body')
   const signalValue = findObjectLiteralPropertyValue(init, 'signal')
+  const redirectValue = findObjectLiteralPropertyValue(init, 'redirect')
   const method =
     methodValue == null
       ? { lines: [] as string[], bytes: '0', length: '0' }
       : emitPreparedStringBytesOperand(methodValue, context, 'ccjs_fetch_method')
+  const redirect =
+    redirectValue == null
+      ? { lines: [] as string[], bytes: '0', length: '0' }
+      : emitPreparedStringBytesOperand(redirectValue, context, 'ccjs_fetch_redirect')
   const body =
     bodyValue == null ? { lines: [] as string[], bytes: '0', length: '0' } : emitPreparedFetchBodyOperand(bodyValue, context)
   const signal =
@@ -17514,11 +17653,12 @@ function emitPreparedFetchInitOperand(expression, context) {
 
   lines.push(...body.lines)
   lines.push(...signal.lines)
+  lines.push(...redirect.lines)
 
   const initName = nextCName(context, 'ccjs_fetch_init')
 
   lines.push(
-    `ccjs_fetch_init ${initName} = { ${method.bytes}, ${method.length}, ${headersExpression}, ${headerCount}, ${body.bytes}, ${body.length}, ${signal.expression} };`
+    `ccjs_fetch_init ${initName} = { ${method.bytes}, ${method.length}, ${headersExpression}, ${headerCount}, ${body.bytes}, ${body.length}, ${signal.expression}, ${redirect.bytes}, ${redirect.length} };`
   )
 
   return {
