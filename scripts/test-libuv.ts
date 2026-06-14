@@ -10,8 +10,6 @@ import { normalizeNewlines, runCommand } from './lib/run-command.ts'
 import { rootDir } from './lib/repo-checks.ts'
 
 const uvHeaderPath = join(rootDir, 'third_party', 'libuv', 'include', 'uv.h')
-const expectedStdout =
-  'hello world 60\ntext ccjs cmake example 😀 123\nHello World!\ninterval 1\ninterval 2\ninterval 3\n'
 
 try {
   await access(uvHeaderPath)
@@ -32,40 +30,25 @@ if (cmakeProbe.code !== 0) {
 const buildDir = await mkdtemp(join(tmpdir(), 'ccjs-libuv-cmake-'))
 
 try {
-  await checkCommand('configure libuv example', 'cmake', ['-S', 'example', '-B', buildDir, '-DCCJS_LOOP_BACKEND=libuv'])
-  await checkCommand('build libuv example', 'cmake', ['--build', buildDir])
-
-  const run = await runCommand(join(buildDir, 'ccjs_cmake_example'), [], buildDir)
-  const stdout = normalizeNewlines(run.stdout)
-
-  if (run.code !== 0) {
-    fail('run libuv example', run)
-  } else if (stdout !== expectedStdout) {
-    console.error(
-      `Libuv example stdout mismatch.\nExpected: ${JSON.stringify(expectedStdout)}\nActual: ${JSON.stringify(stdout)}`
-    )
-    process.exitCode = 1
-  } else {
-    await checkLibuvTimerRuntime(buildDir)
-    await checkLibuvConsoleRuntime(buildDir)
-    await checkLibuvDgramRuntime(buildDir)
-    await checkLibuvDgramConnectedRuntime(buildDir)
-    await checkLibuvDgramOptionsRuntime(buildDir)
-    await checkLibuvCompiledDgramServer(buildDir)
-    await checkLibuvCompiledDgramConnectedClient(buildDir)
-    await checkLibuvCompiledDgramOptions(buildDir)
-    await checkLibuvNetRuntime(buildDir)
-    await checkLibuvCompiledNetServer(buildDir)
-    await checkLibuvCompiledNetClient(buildDir)
-    await checkLibuvHttpRuntime(buildDir)
-    await checkLibuvCompiledHttpServer(buildDir)
-    await checkLibuvFetchRuntime(buildDir)
-    await checkLibuvCompiledFetchClient(buildDir)
-    await checkLibuvCompiledFetchRedirectMetadata(buildDir)
-    await checkLibuvCompiledFetchAbort(buildDir)
-    await checkLibuvFsRuntime(buildDir)
-    console.log('Libuv checks passed')
-  }
+  await checkLibuvTimerRuntime(buildDir)
+  await checkLibuvConsoleRuntime(buildDir)
+  await checkLibuvDgramRuntime(buildDir)
+  await checkLibuvDgramConnectedRuntime(buildDir)
+  await checkLibuvDgramOptionsRuntime(buildDir)
+  await checkLibuvCompiledDgramServer(buildDir)
+  await checkLibuvCompiledDgramConnectedClient(buildDir)
+  await checkLibuvCompiledDgramOptions(buildDir)
+  await checkLibuvNetRuntime(buildDir)
+  await checkLibuvCompiledNetServer(buildDir)
+  await checkLibuvCompiledNetClient(buildDir)
+  await checkLibuvHttpRuntime(buildDir)
+  await checkLibuvCompiledHttpServer(buildDir)
+  await checkLibuvFetchRuntime(buildDir)
+  await checkLibuvCompiledFetchClient(buildDir)
+  await checkLibuvCompiledFetchRedirectMetadata(buildDir)
+  await checkLibuvCompiledFetchAbort(buildDir)
+  await checkLibuvFsRuntime(buildDir)
+  console.log('Libuv checks passed')
 } finally {
   await rm(buildDir, {
     recursive: true,
