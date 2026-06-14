@@ -20,6 +20,7 @@ import { tokenize } from '../lexer.ts'
 import { parse } from '../parser.ts'
 import { formatGeneratedC } from './format.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
+import type { CEmitOptions, CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -29,10 +30,10 @@ import type {
   IrProgram,
   IrSyntaxFeatureUsage,
   ModuleGraph,
-  ModuleRecord,
   RandomOptions,
   SourceLocation
 } from '../types.ts'
+export type { CModuleOutputFile } from './types.ts'
 
 const cStringPredicateMethods = new Set(['includes', 'startsWith', 'endsWith'])
 
@@ -54,39 +55,6 @@ const runtimeBuiltinImportSources = new Set([
   'node:http',
   'node:net'
 ])
-
-type CEmitOptions = {
-  random?: RandomOptions
-}
-
-export type CModuleOutputFile = {
-  kind: 'header' | 'source'
-  path: string
-  sourcePath: string
-  code: string
-}
-
-type CModuleEmitOptions = CEmitOptions & {
-  sourceRoot?: string
-}
-
-type CModulePlan = {
-  record: ModuleRecord
-  ir: IrProgram
-  isEntry: boolean
-  relativeSourcePath: string
-  sourcePath: string
-  headerPath: string
-  symbolPrefix: string
-  headerGuard: string
-  initName: string | null
-  imports: CModuleImportPlan[]
-}
-
-type CModuleImportPlan = {
-  declaration: AnyNode
-  module: CModulePlan
-}
 
 type AsyncTaskSuccessPhaseKind = 'pre-finalizer' | 'prefix-finalizer' | 'body'
 type AsyncTaskTryPhaseKind = 'success-finalizer' | 'reject-finalizer' | 'handler-prelude' | 'handler-finalizer'
