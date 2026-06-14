@@ -499,6 +499,97 @@ int main(int argc, char** argv) {
   }
 })
 
+test('generated C fetch uses BoringSSL TLS for HTTPS URLs', async (t) => {
+  if (process.env.CCJS_TEST_BORINGSSL_FETCH !== '1') {
+    t.skip('set CCJS_TEST_BORINGSSL_FETCH=1 to build BoringSSL HTTPS fetch smoke')
+    return
+  }
+
+  const cc = await runCommand('cc', ['--version'])
+  const cmake = await runCommand('cmake', ['--version'])
+  const openssl = await runCommand('openssl', ['version'])
+
+  if (cc.code !== 0 || cmake.code !== 0 || openssl.code !== 0) {
+    t.skip('cc, cmake and openssl are required')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-boringssl-fetch-'))
+  const buildDir = join(dir, 'build')
+  const key = join(dir, 'key.pem')
+  const cert = join(dir, 'cert.pem')
+  let server: { port: number; close: () => Promise<void> } | null = null
+
+  try {
+    await generateLocalhostCertificate(key, cert)
+
+    try {
+      server = await startLocalTlsServer(key, cert)
+    } catch (error) {
+      if (isLocalListenUnavailable(error)) {
+        t.skip('local TLS listen is not permitted in this environment')
+        return
+      }
+
+      throw error
+    }
+
+    const result = compileSource(
+      `const response = await fetch('https://localhost:${server.port}/')
+const text = await response.text()
+console.log(response.status, text)
+`,
+      {
+        target: 'c',
+        tlsBackend: 'boringssl'
+      }
+    )
+
+    await writeFile(join(dir, 'main.c'), result.code)
+    await writeFile(
+      join(dir, 'CMakeLists.txt'),
+      `cmake_minimum_required(VERSION 3.22)
+project(ccjs_https_fetch_smoke C CXX)
+
+add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
+add_executable(fetch-client main.c)
+set_property(TARGET fetch-client PROPERTY LINKER_LANGUAGE CXX)
+target_link_libraries(fetch-client PRIVATE ccjs_runtime)
+`
+    )
+
+    const configure = await runCommand('cmake', [
+      '-S',
+      dir,
+      '-B',
+      buildDir,
+      '-DCCJS_LOOP_BACKEND=libuv',
+      '-DCCJS_TLS_BACKEND=boringssl',
+      `-DCCJS_TLS_CA_BUNDLE=${cert}`
+    ])
+
+    assert.equal(configure.code, 0, configure.stderr)
+
+    const build = await runCommand('cmake', ['--build', buildDir, '--target', 'fetch-client'])
+
+    assert.equal(build.code, 0, build.stderr)
+
+    const run = await runCommand(join(buildDir, 'fetch-client'), [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '200 ok\n')
+  } finally {
+    if (server != null) {
+      await server.close()
+    }
+
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('C runtime OpenSSL TLS backend builds when available', async (t) => {
   if (process.env.CCJS_TEST_OPENSSL_TLS !== '1') {
     t.skip('set CCJS_TEST_OPENSSL_TLS=1 to build OpenSSL TLS backend smoke')

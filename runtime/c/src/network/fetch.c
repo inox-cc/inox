@@ -4,6 +4,7 @@
 #include "ccjs/net.h"
 #include "ccjs/object.h"
 #include "ccjs/string.h"
+#include "ccjs/tls.h"
 
 #include <ctype.h>
 #include <stdint.h>
@@ -15,6 +16,7 @@ typedef struct ccjs_fetch_operation {
   ccjs_loop* loop;
   ccjs_allocator* allocator;
   ccjs_net_socket* socket;
+  ccjs_tls_client* tls;
   ccjs_timer_handle* abort_timer;
   ccjs_fetch_done_fn done;
   void* user;
@@ -26,6 +28,7 @@ typedef struct ccjs_fetch_operation {
   char request[4096];
   size_t request_len;
   int port;
+  int secure;
   int redirect_mode;
   int redirect_count;
   int redirected;
@@ -70,7 +73,8 @@ enum {
 
 #define CCJS_FETCH_MAX_REDIRECTS 20
 
-static ccjs_status ccjs_fetch_parse_url(const char* url, char* host, size_t host_len, int* port, char* path, size_t path_len);
+static ccjs_status
+ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, int* port, char* path, size_t path_len);
 static ccjs_status ccjs_fetch_copy_url(ccjs_allocator* allocator, const char* url, size_t url_len, char** out);
 static ccjs_status ccjs_fetch_set_url(ccjs_fetch_operation* request, const char* url);
 static ccjs_status ccjs_fetch_build_request(ccjs_fetch_operation* request, const ccjs_fetch_init* init);
@@ -86,6 +90,14 @@ static ccjs_status ccjs_fetch_redirect_mode_from_init(const ccjs_fetch_init* ini
 static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, ccjs_status status);
 static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len);
 static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket);
+static ccjs_status ccjs_fetch_on_tls_connect(void* user, ccjs_tls_client* client, ccjs_status status);
+static ccjs_status ccjs_fetch_on_tls_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len);
+static void ccjs_fetch_on_tls_close(void* user, ccjs_tls_client* client);
+static ccjs_status ccjs_fetch_on_transport_connect(ccjs_fetch_operation* request, ccjs_status status);
+static ccjs_status ccjs_fetch_on_transport_data(ccjs_fetch_operation* request, const char* bytes, size_t len);
+static void ccjs_fetch_on_transport_close(ccjs_fetch_operation* request);
+static ccjs_status ccjs_fetch_transport_write(ccjs_fetch_operation* request, const char* bytes, size_t len);
+static void ccjs_fetch_transport_close(ccjs_fetch_operation* request);
 static ccjs_status ccjs_fetch_abort_poll(void* user);
 static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request);
 static const char* ccjs_fetch_find_header_end(const char* bytes, size_t len);
@@ -448,11 +460,25 @@ ccjs_status ccjs_fetch_signal_aborted(ccjs_value signal, int* out) {
   return CCJS_OK;
 }
 
-static ccjs_status ccjs_fetch_parse_url(const char* url, char* host, size_t host_len, int* port, char* path, size_t path_len) {
-  const char* prefix = "http://";
-  size_t prefix_len = strlen(prefix);
+static ccjs_status
+ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, int* port, char* path, size_t path_len) {
+  const char* http_prefix = "http://";
+  const char* https_prefix = "https://";
+  size_t http_prefix_len = strlen(http_prefix);
+  size_t https_prefix_len = strlen(https_prefix);
+  size_t prefix_len = 0;
 
-  if (strncmp(url, prefix, prefix_len) != 0 || host == 0 || port == 0 || path == 0) {
+  if (url == 0 || secure == 0 || host == 0 || port == 0 || path == 0) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  if (strncmp(url, http_prefix, http_prefix_len) == 0) {
+    *secure = 0;
+    prefix_len = http_prefix_len;
+  } else if (strncmp(url, https_prefix, https_prefix_len) == 0) {
+    *secure = 1;
+    prefix_len = https_prefix_len;
+  } else {
     return CCJS_ERR_UNSUPPORTED;
   }
 
@@ -469,18 +495,10 @@ static ccjs_status ccjs_fetch_parse_url(const char* url, char* host, size_t host
     return CCJS_ERR_UNSUPPORTED;
   }
 
-  if (parsed_host_len == 9 && strncasecmp(host_start, "localhost", 9) == 0) {
-    if (host_len <= strlen("127.0.0.1")) {
-      return CCJS_ERR_UNSUPPORTED;
-    }
+  memcpy(host, host_start, parsed_host_len);
+  host[parsed_host_len] = '\0';
 
-    memcpy(host, "127.0.0.1", strlen("127.0.0.1") + 1);
-  } else {
-    memcpy(host, host_start, parsed_host_len);
-    host[parsed_host_len] = '\0';
-  }
-
-  *port = 80;
+  *port = *secure ? 443 : 80;
 
   if (*cursor == ':') {
     cursor += 1;
@@ -565,7 +583,15 @@ static ccjs_status ccjs_fetch_set_url(ccjs_fetch_operation* request, const char*
   memcpy(request->url, url, url_len + 1);
   request->url_len = url_len;
 
-  return ccjs_fetch_parse_url(request->url, request->host, sizeof(request->host), &request->port, request->path, sizeof(request->path));
+  return ccjs_fetch_parse_url(
+    request->url,
+    &request->secure,
+    request->host,
+    sizeof(request->host),
+    &request->port,
+    request->path,
+    sizeof(request->path)
+  );
 }
 
 static ccjs_status ccjs_fetch_start_connection(ccjs_fetch_operation* request) {
@@ -574,6 +600,22 @@ static ccjs_status ccjs_fetch_start_connection(ccjs_fetch_operation* request) {
   }
 
   request->socket = 0;
+  request->tls = 0;
+
+  if (request->secure) {
+    return ccjs_tls_connect(
+      request->loop,
+      request->host,
+      request->port,
+      request->host,
+      ccjs_fetch_on_tls_connect,
+      ccjs_fetch_on_tls_data,
+      ccjs_fetch_on_tls_close,
+      request,
+      &request->tls
+    );
+  }
+
   return ccjs_net_connect(
     request->loop,
     request->host,
@@ -804,6 +846,43 @@ static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, cc
   ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
 
   if (status != CCJS_OK) {
+    return ccjs_fetch_on_transport_connect(request, status);
+  }
+
+  if (ccjs_net_socket_read_start(socket) != CCJS_OK) {
+    return ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
+  }
+
+  return ccjs_fetch_on_transport_connect(request, CCJS_OK);
+}
+
+static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
+  (void)socket;
+  return ccjs_fetch_on_transport_data((ccjs_fetch_operation*)user, bytes, len);
+}
+
+static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket) {
+  (void)socket;
+  ccjs_fetch_on_transport_close((ccjs_fetch_operation*)user);
+}
+
+static ccjs_status ccjs_fetch_on_tls_connect(void* user, ccjs_tls_client* client, ccjs_status status) {
+  (void)client;
+  return ccjs_fetch_on_transport_connect((ccjs_fetch_operation*)user, status);
+}
+
+static ccjs_status ccjs_fetch_on_tls_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len) {
+  (void)client;
+  return ccjs_fetch_on_transport_data((ccjs_fetch_operation*)user, bytes, len);
+}
+
+static void ccjs_fetch_on_tls_close(void* user, ccjs_tls_client* client) {
+  (void)client;
+  ccjs_fetch_on_transport_close((ccjs_fetch_operation*)user);
+}
+
+static ccjs_status ccjs_fetch_on_transport_connect(ccjs_fetch_operation* request, ccjs_status status) {
+  if (status != CCJS_OK) {
     return ccjs_fetch_finish(request, status, 0);
   }
 
@@ -818,17 +897,10 @@ static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, cc
     return ccjs_fetch_finish(request, CCJS_ERR_THROW, 0);
   }
 
-  if (ccjs_net_socket_read_start(socket) != CCJS_OK) {
-    return ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
-  }
-
-  return ccjs_net_socket_write(socket, request->request, request->request_len);
+  return ccjs_fetch_transport_write(request, request->request, request->request_len);
 }
 
-static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
-  (void)socket;
-  ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
-
+static ccjs_status ccjs_fetch_on_transport_data(ccjs_fetch_operation* request, const char* bytes, size_t len) {
   int aborted = 0;
   ccjs_status status = ccjs_fetch_operation_is_aborted(request, &aborted);
 
@@ -850,10 +922,7 @@ static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const
   return ccjs_fetch_try_complete(request);
 }
 
-static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket) {
-  (void)socket;
-  ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
-
+static void ccjs_fetch_on_transport_close(ccjs_fetch_operation* request) {
   if (request == 0) {
     return;
   }
@@ -865,6 +934,7 @@ static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket) {
 
   if (request->waiting_redirect_close) {
     request->socket = 0;
+    request->tls = 0;
     request->waiting_redirect_close = 0;
     ccjs_status status = ccjs_fetch_start_connection(request);
 
@@ -878,6 +948,30 @@ static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket) {
 
   ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
   ccjs_fetch_operation_free(request);
+}
+
+static ccjs_status ccjs_fetch_transport_write(ccjs_fetch_operation* request, const char* bytes, size_t len) {
+  if (request == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (request->secure) {
+    return request->tls == 0 ? CCJS_ERR_TYPE : ccjs_tls_client_write(request->tls, bytes, len);
+  }
+
+  return request->socket == 0 ? CCJS_ERR_TYPE : ccjs_net_socket_write(request->socket, bytes, len);
+}
+
+static void ccjs_fetch_transport_close(ccjs_fetch_operation* request) {
+  if (request == 0) {
+    return;
+  }
+
+  if (request->tls != 0) {
+    ccjs_tls_client_close(request->tls);
+  } else if (request->socket != 0) {
+    ccjs_net_socket_close(request->socket);
+  }
 }
 
 static ccjs_status ccjs_fetch_abort_poll(void* user) {
@@ -1322,7 +1416,10 @@ static ccjs_status ccjs_fetch_resolve_redirect_url(
     return CCJS_ERR_UNSUPPORTED;
   }
 
-  if (location_len >= strlen("http://") && strncasecmp(location, "http://", strlen("http://")) == 0) {
+  if (
+    (location_len >= strlen("http://") && strncasecmp(location, "http://", strlen("http://")) == 0) ||
+    (location_len >= strlen("https://") && strncasecmp(location, "https://", strlen("https://")) == 0)
+  ) {
     memcpy(out, location, location_len);
     out[location_len] = '\0';
     return CCJS_OK;
@@ -1333,9 +1430,11 @@ static ccjs_status ccjs_fetch_resolve_redirect_url(
   }
 
   char origin[512];
-  int written = request->port == 80
-                  ? snprintf(origin, sizeof(origin), "http://%s", request->host)
-                  : snprintf(origin, sizeof(origin), "http://%s:%d", request->host, request->port);
+  const char* scheme = request->secure ? "https" : "http";
+  int default_port = request->secure ? 443 : 80;
+  int written = request->port == default_port
+                  ? snprintf(origin, sizeof(origin), "%s://%s", scheme, request->host)
+                  : snprintf(origin, sizeof(origin), "%s://%s:%d", scheme, request->host, request->port);
 
   if (written < 0 || (size_t)written >= sizeof(origin)) {
     return CCJS_ERR_UNSUPPORTED;
@@ -1385,8 +1484,8 @@ static ccjs_status ccjs_fetch_follow_redirect(ccjs_fetch_operation* request, con
   request->redirected = 1;
   request->waiting_redirect_close = 1;
 
-  if (request->socket != 0) {
-    ccjs_net_socket_close(request->socket);
+  if (request->socket != 0 || request->tls != 0) {
+    ccjs_fetch_transport_close(request);
   } else {
     request->waiting_redirect_close = 0;
     status = ccjs_fetch_start_connection(request);
@@ -1415,9 +1514,7 @@ static ccjs_status ccjs_fetch_finish(ccjs_fetch_operation* request, ccjs_status 
 
   ccjs_status callback_status = request->done(request->user, status, response);
 
-  if (request->socket != 0) {
-    ccjs_net_socket_close(request->socket);
-  }
+  ccjs_fetch_transport_close(request);
 
   return callback_status;
 }
