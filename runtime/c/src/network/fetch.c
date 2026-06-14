@@ -6,6 +6,7 @@
 #include "ccjs/string.h"
 
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,6 +105,11 @@ static int ccjs_fetch_find_header_value(
   const char** value,
   size_t* value_len
 );
+static int ccjs_fetch_header_value_contains_token(const char* value, size_t value_len, const char* token);
+static ccjs_status ccjs_fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete);
+static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode);
+static const char* ccjs_fetch_find_crlf(const char* bytes, size_t len);
+static int ccjs_fetch_hex_digit(char value);
 static int ccjs_fetch_is_redirect_status(int status);
 static ccjs_status ccjs_fetch_resolve_redirect_url(
   ccjs_fetch_operation* request,
@@ -905,12 +911,43 @@ static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request) {
   size_t header_len = (size_t)(header_end - request->response);
   size_t content_len = 0;
 
-  if (!ccjs_fetch_parse_content_length(request->response, header_len, &content_len)) {
-    return CCJS_OK;
-  }
+  if (ccjs_fetch_parse_content_length(request->response, header_len, &content_len)) {
+    if (request->response_len < header_len + content_len) {
+      return CCJS_OK;
+    }
+  } else {
+    const char* transfer_encoding = 0;
+    size_t transfer_encoding_len = 0;
 
-  if (request->response_len < header_len + content_len) {
-    return CCJS_OK;
+    if (
+      !ccjs_fetch_find_header_value(
+        request->response,
+        header_len,
+        "Transfer-Encoding",
+        17,
+        &transfer_encoding,
+        &transfer_encoding_len
+      ) ||
+      !ccjs_fetch_header_value_contains_token(transfer_encoding, transfer_encoding_len, "chunked")
+    ) {
+      return CCJS_OK;
+    }
+
+    int complete = 0;
+    ccjs_status chunked_status = ccjs_fetch_decode_chunked_body(
+      request->response + header_len,
+      request->response_len - header_len,
+      &content_len,
+      &complete
+    );
+
+    if (chunked_status != CCJS_OK) {
+      return ccjs_fetch_finish(request, chunked_status, 0);
+    }
+
+    if (!complete) {
+      return CCJS_OK;
+    }
   }
 
   int status = 0;
@@ -1102,6 +1139,168 @@ static int ccjs_fetch_find_header_value(
   }
 
   return 0;
+}
+
+static int ccjs_fetch_header_value_contains_token(const char* value, size_t value_len, const char* token) {
+  if (value == 0 || token == 0) {
+    return 0;
+  }
+
+  size_t token_len = strlen(token);
+  size_t cursor = 0;
+
+  while (cursor < value_len) {
+    while (cursor < value_len && (value[cursor] == ',' || value[cursor] == ' ' || value[cursor] == '\t')) {
+      cursor += 1;
+    }
+
+    size_t start = cursor;
+
+    while (cursor < value_len && value[cursor] != ',') {
+      cursor += 1;
+    }
+
+    size_t end = cursor;
+
+    while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t')) {
+      end -= 1;
+    }
+
+    if (end - start == token_len && strncasecmp(value + start, token, token_len) == 0) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static ccjs_status ccjs_fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete) {
+  ccjs_status status = ccjs_fetch_scan_chunked_body(bytes, len, out_len, complete, 0);
+
+  if (status != CCJS_OK || complete == 0 || !*complete) {
+    return status;
+  }
+
+  return ccjs_fetch_scan_chunked_body(bytes, len, out_len, complete, 1);
+}
+
+static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode) {
+  if (bytes == 0 || out_len == 0 || complete == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  size_t read = 0;
+  size_t write = 0;
+  *out_len = 0;
+  *complete = 0;
+
+  while (read < len) {
+    const char* line_end = ccjs_fetch_find_crlf(bytes + read, len - read);
+
+    if (line_end == 0) {
+      return CCJS_OK;
+    }
+
+    size_t line_len = (size_t)(line_end - (bytes + read));
+    size_t chunk_size = 0;
+    size_t index = 0;
+    int saw_digit = 0;
+
+    while (index < line_len) {
+      int digit = ccjs_fetch_hex_digit(bytes[read + index]);
+
+      if (digit < 0) {
+        break;
+      }
+
+      if (chunk_size > (SIZE_MAX - (size_t)digit) / 16) {
+        return CCJS_ERR_UNSUPPORTED;
+      }
+
+      chunk_size = chunk_size * 16 + (size_t)digit;
+      saw_digit = 1;
+      index += 1;
+    }
+
+    if (!saw_digit) {
+      return CCJS_ERR_FIELD;
+    }
+
+    while (index < line_len && (bytes[read + index] == ' ' || bytes[read + index] == '\t')) {
+      index += 1;
+    }
+
+    if (index < line_len && bytes[read + index] != ';') {
+      return CCJS_ERR_FIELD;
+    }
+
+    read += line_len + 2;
+
+    if (chunk_size == 0) {
+      for (;;) {
+        const char* trailer_end = ccjs_fetch_find_crlf(bytes + read, len - read);
+
+        if (trailer_end == 0) {
+          return CCJS_OK;
+        }
+
+        if (trailer_end == bytes + read) {
+          *out_len = write;
+          *complete = 1;
+          return CCJS_OK;
+        }
+
+        read = (size_t)(trailer_end - bytes) + 2;
+      }
+    }
+
+    if (chunk_size > len - read || len - read - chunk_size < 2) {
+      return CCJS_OK;
+    }
+
+    if (bytes[read + chunk_size] != '\r' || bytes[read + chunk_size + 1] != '\n') {
+      return CCJS_ERR_FIELD;
+    }
+
+    if (decode && chunk_size > 0 && write != read) {
+      memmove(bytes + write, bytes + read, chunk_size);
+    }
+
+    write += chunk_size;
+    read += chunk_size + 2;
+  }
+
+  return CCJS_OK;
+}
+
+static const char* ccjs_fetch_find_crlf(const char* bytes, size_t len) {
+  if (bytes == 0 || len < 2) {
+    return 0;
+  }
+
+  for (size_t index = 0; index + 1 < len; index += 1) {
+    if (bytes[index] == '\r' && bytes[index + 1] == '\n') {
+      return bytes + index;
+    }
+  }
+
+  return 0;
+}
+
+static int ccjs_fetch_hex_digit(char value) {
+  if (value >= '0' && value <= '9') {
+    return value - '0';
+  }
+
+  if (value >= 'a' && value <= 'f') {
+    return value - 'a' + 10;
+  }
+
+  if (value >= 'A' && value <= 'F') {
+    return value - 'A' + 10;
+  }
+
+  return -1;
 }
 
 static int ccjs_fetch_is_redirect_status(int status) {

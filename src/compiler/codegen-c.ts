@@ -15427,6 +15427,10 @@ function emitConsoleLogValue(expression, context) {
     return emitNumberLogValue(expression, type, context)
   }
 
+  if (type === 'object' && isErrorValueExpression(expression, context)) {
+    return emitRuntimeErrorLogValue(expression, context)
+  }
+
   context.diagnostics.push(
     diagnostic(
       cUnsupportedExpressionCode(type),
@@ -16034,6 +16038,48 @@ function emitRuntimeNumberLogValue(valueType, emitGetCall, context) {
     format: '%g',
     values: [valueType === 'boolean' ? `((double)(${value}.as.boolean ? 1 : 0))` : `${value}.as.number`]
   }
+}
+
+function emitRuntimeErrorLogValue(expression, context) {
+  const object = emitErrorLogObjectExpression(expression, context)
+  const nameValue = nextCName(context, 'ccjs_log_value')
+  const messageValue = nextCName(context, 'ccjs_log_value')
+  const nameString = nextCName(context, 'ccjs_log_string')
+  const messageString = nextCName(context, 'ccjs_log_string')
+  registerOwnedValue(context, nameValue)
+  registerOwnedValue(context, messageValue)
+
+  return {
+    lines: [
+      ...object.lines,
+      ...emitPrepareOwnedValueWrite(nameValue),
+      ...emitPrepareOwnedValueWrite(messageValue),
+      emitStatusCheck(`ccjs_object_get_known(${object.expression}, 0, &${nameValue})`, context),
+      emitStatusCheck(`ccjs_object_get_known(${object.expression}, 1, &${messageValue})`, context),
+      emitRuntimeTypeCheck(`${nameValue}.tag != CCJS_TAG_STRING || ${nameValue}.as.ref == 0`, context),
+      emitRuntimeTypeCheck(`${messageValue}.tag != CCJS_TAG_STRING || ${messageValue}.as.ref == 0`, context),
+      `ccjs_string* ${nameString} = (ccjs_string*)${nameValue}.as.ref;`,
+      `ccjs_string* ${messageString} = (ccjs_string*)${messageValue}.as.ref;`
+    ],
+    format: '%.*s: %.*s',
+    values: [
+      `(int)${nameString}->len`,
+      `${nameString}->bytes`,
+      `(int)${messageString}->len`,
+      `${messageString}->bytes`
+    ]
+  }
+}
+
+function emitErrorLogObjectExpression(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    return {
+      lines: [],
+      expression: emitObjectValueReference(expression.path[0], context)
+    }
+  }
+
+  return emitCValueExpression(expression, context)
 }
 
 function resolveRuntimeStringReference(expression, context) {

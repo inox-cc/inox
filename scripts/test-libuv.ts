@@ -45,6 +45,7 @@ try {
   await checkLibuvCompiledHttpServer(buildDir)
   await checkLibuvFetchRuntime(buildDir)
   await checkLibuvCompiledFetchClient(buildDir)
+  await checkLibuvCompiledFetchChunked(buildDir)
   await checkLibuvCompiledFetchRedirectMetadata(buildDir)
   await checkLibuvCompiledFetchAbort(buildDir)
   await checkLibuvFsRuntime(buildDir)
@@ -1413,7 +1414,7 @@ int main(void) {
   if (ccjs_net_server_address(state.server, &address) != CCJS_OK) return 6;
   if (ccjs_net_server_local_port(state.server, &port) != CCJS_OK) return 7;
   if (port <= 0 || address.port != port || strcmp(address.family, "IPv4") != 0) return 8;
-  if (ccjs_net_connect(&loop, "127.0.0.1", port, on_connect, on_client_data, 0, &state, &state.client) != CCJS_OK) return 9;
+  if (ccjs_net_connect(&loop, "localhost", port, on_connect, on_client_data, 0, &state, &state.client) != CCJS_OK) return 9;
   if (ccjs_net_socket_on_connect(state.client, on_socket_connected, &state) != CCJS_OK) return 10;
   if (ccjs_net_socket_on_ready(state.client, on_socket_ready, &state) != CCJS_OK) return 11;
   if (ccjs_net_socket_on_end(state.client, on_socket_end, &state) != CCJS_OK) return 12;
@@ -2179,6 +2180,98 @@ target_link_libraries(ccjs_libuv_compiled_fetch_client_smoke PRIVATE ccjs_runtim
     if (stdout !== expected) {
       console.error(
         `Compiled libuv fetch client stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+      )
+      process.exit(1)
+    }
+  } finally {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve())
+    })
+  }
+}
+
+async function checkLibuvCompiledFetchChunked(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'compiled-fetch-chunked-src')
+  const fetchBuildDir = join(workDir, 'compiled-fetch-chunked-build')
+  const responseBody = 'chunked-fetch-body'
+  const server = createHttpServer((request, response) => {
+    if (request.url !== '/chunked') {
+      response.writeHead(404, {
+        Connection: 'close',
+        'Content-Length': '0'
+      })
+      response.end()
+      return
+    }
+
+    response.writeHead(200, {
+      Connection: 'close',
+      'Content-Type': 'text/plain'
+    })
+    response.write('chunked-')
+    response.end('fetch-body')
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
+
+  const address = server.address()
+
+  if (address == null || typeof address === 'string') {
+    server.close()
+    throw new Error('Expected HTTP address with a numeric port')
+  }
+
+  const url = `http://127.0.0.1:${address.port}/chunked`
+  const source = `const response = await fetch('${url}')
+const text = await response.text()
+console.log(response.status, response.ok, text)
+`
+  const compiled = compileSource(source, {
+    target: 'c'
+  })
+
+  try {
+    await mkdir(sourceDir, { recursive: true })
+    await writeFile(
+      join(sourceDir, 'CMakeLists.txt'),
+      `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_compiled_fetch_chunked_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_compiled_fetch_chunked_smoke generated-fetch-chunked.c)
+target_link_libraries(ccjs_libuv_compiled_fetch_chunked_smoke PRIVATE ccjs_runtime)
+`
+    )
+    await writeFile(join(sourceDir, 'generated-fetch-chunked.c'), compiled.code)
+
+    await checkCommand('configure compiled libuv fetch chunked smoke', 'cmake', [
+      '-S',
+      sourceDir,
+      '-B',
+      fetchBuildDir,
+      '-DCCJS_LOOP_BACKEND=libuv'
+    ])
+    await checkCommand('build compiled libuv fetch chunked smoke', 'cmake', ['--build', fetchBuildDir])
+
+    const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_compiled_fetch_chunked_smoke'), [])
+    const stdout = normalizeNewlines(run.stdout)
+
+    if (run.code !== 0) {
+      fail('run compiled libuv fetch chunked smoke', run)
+    }
+
+    const expected = `200 1 ${responseBody}\n`
+
+    if (stdout !== expected) {
+      console.error(
+        `Compiled libuv fetch chunked stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
       )
       process.exit(1)
     }

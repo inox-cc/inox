@@ -3,6 +3,7 @@
 #ifdef CCJS_LOOP_BACKEND_LIBUV
 #include "../async/loop-libuv-internal.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -19,6 +20,7 @@ typedef struct ccjs_net_write_request {
 typedef struct ccjs_net_connect_request {
   uv_connect_t request;
   ccjs_net_socket* socket;
+  ccjs_net_connect_fn connect;
 } ccjs_net_connect_request;
 
 struct ccjs_net_server {
@@ -66,6 +68,7 @@ struct ccjs_net_socket {
 };
 
 static ccjs_status ccjs_net_ip4_addr(const char* host, int port, struct sockaddr_in* out);
+static ccjs_status ccjs_net_resolve_ip4_addr(ccjs_loop* loop, const char* host, int port, struct sockaddr_in* out);
 static ccjs_status ccjs_net_sockaddr_to_address(const struct sockaddr* addr, ccjs_net_address* out);
 static ccjs_status ccjs_net_socket_init(ccjs_loop* loop, ccjs_net_socket** out);
 static ccjs_status ccjs_net_socket_write_internal(
@@ -274,12 +277,6 @@ ccjs_status ccjs_net_connect(
     return status;
   }
 
-  socket->data = data;
-  socket->data_user = user;
-  socket->close = close;
-  socket->close_user = user;
-  socket->user = user;
-
   ccjs_allocator* allocator = loop->allocator;
   ccjs_net_connect_request* request =
     allocator->alloc(allocator->user, sizeof(ccjs_net_connect_request), _Alignof(ccjs_net_connect_request));
@@ -291,10 +288,11 @@ ccjs_status ccjs_net_connect(
 
   memset(request, 0, sizeof(ccjs_net_connect_request));
   request->socket = socket;
+  request->connect = connect;
   request->request.data = request;
 
   struct sockaddr_in addr;
-  status = ccjs_net_ip4_addr(host, port, &addr);
+  status = ccjs_net_resolve_ip4_addr(loop, host, port, &addr);
 
   if (status != CCJS_OK) {
     allocator->free(allocator->user, request, sizeof(ccjs_net_connect_request), _Alignof(ccjs_net_connect_request));
@@ -311,19 +309,20 @@ ccjs_status ccjs_net_connect(
   }
 
   socket->handle.data = socket;
-  socket->user = user;
-  *out = socket;
 
   if (uv_tcp_connect(&request->request, &socket->handle, (const struct sockaddr*)&addr, ccjs_net_connect_cb) != 0) {
     ccjs_libuv_loop_release_request(loop);
     allocator->free(allocator->user, request, sizeof(ccjs_net_connect_request), _Alignof(ccjs_net_connect_request));
     ccjs_net_socket_close(socket);
-    *out = 0;
     return CCJS_ERR_FIELD;
   }
 
-  request->request.data = request;
-  request->request.handle->data = connect;
+  socket->data = data;
+  socket->data_user = user;
+  socket->close = close;
+  socket->close_user = user;
+  socket->user = user;
+  *out = socket;
 
   return CCJS_OK;
 }
@@ -671,6 +670,53 @@ static ccjs_status ccjs_net_ip4_addr(const char* host, int port, struct sockaddr
   return uv_ip4_addr(host, port, out) == 0 ? CCJS_OK : CCJS_ERR_UNSUPPORTED;
 }
 
+static ccjs_status ccjs_net_resolve_ip4_addr(ccjs_loop* loop, const char* host, int port, struct sockaddr_in* out) {
+  ccjs_status status = ccjs_net_ip4_addr(host, port, out);
+
+  if (status == CCJS_OK) {
+    return CCJS_OK;
+  }
+
+  uv_loop_t* uv_loop = ccjs_libuv_loop_handle(loop);
+
+  if (uv_loop == 0 || host == 0 || out == 0 || port < 0 || port > 65535) {
+    return status;
+  }
+
+  char service[16];
+  int written = snprintf(service, sizeof(service), "%d", port);
+
+  if (written <= 0 || (size_t)written >= sizeof(service)) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = IPPROTO_TCP;
+
+  uv_getaddrinfo_t resolver;
+  memset(&resolver, 0, sizeof(resolver));
+
+  if (uv_getaddrinfo(uv_loop, &resolver, 0, host, service, &hints) != 0) {
+    return status;
+  }
+
+  ccjs_status resolve_status = CCJS_ERR_UNSUPPORTED;
+
+  for (struct addrinfo* item = resolver.addrinfo; item != 0; item = item->ai_next) {
+    if (item->ai_family == AF_INET && item->ai_addr != 0 && item->ai_addrlen <= sizeof(struct sockaddr_in)) {
+      memcpy(out, item->ai_addr, item->ai_addrlen);
+      resolve_status = CCJS_OK;
+      break;
+    }
+  }
+
+  uv_freeaddrinfo(resolver.addrinfo);
+  return resolve_status;
+}
+
 static ccjs_status ccjs_net_sockaddr_to_address(const struct sockaddr* addr, ccjs_net_address* out) {
   if (addr == 0 || out == 0) {
     return CCJS_ERR_TYPE;
@@ -814,7 +860,7 @@ static void ccjs_net_connect_cb(uv_connect_t* request, int status) {
   }
 
   ccjs_net_socket* socket = connect_request->socket;
-  ccjs_net_connect_fn connect = (ccjs_net_connect_fn)request->handle->data;
+  ccjs_net_connect_fn connect = connect_request->connect;
   ccjs_status connect_status = status == 0 ? CCJS_OK : CCJS_ERR_FIELD;
 
   ccjs_libuv_loop_release_request(socket->loop);
@@ -826,9 +872,6 @@ static void ccjs_net_connect_cb(uv_connect_t* request, int status) {
       ccjs_net_socket_report_status(socket, callback_status);
     }
   }
-
-  socket->handle.data = socket;
-
   if (connect_status != CCJS_OK) {
     ccjs_net_socket_report_status(socket, connect_status);
     ccjs_net_socket_close(socket);
