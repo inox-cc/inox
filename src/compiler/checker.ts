@@ -21,6 +21,15 @@ import {
   numericCastNames
 } from './checker/builtins.ts'
 import { Scope } from './checker/scope.ts'
+import { fsRuntimeCallInfo, isFsRuntimeImportSymbol } from './checker/std/fs.ts'
+import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
+import { isMathRuntimeMethod } from './checker/std/math.ts'
+import { memberExpressionPath } from './checker/std/paths.ts'
+import {
+  timerCallbackFunctionType,
+  timerClearMethodName,
+  timerRuntimeMethodName
+} from './checker/std/timers.ts'
 import {
   arrayElementTypeNameFromTypeName,
   isBuiltinValueType,
@@ -30,7 +39,7 @@ import {
   promiseValueTypeNameFromTypeName,
   setElementTypeNameFromTypeName
 } from './type-names.ts'
-import { fsRuntimeCallInfoFromPath, unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
+import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
 import {
   fetchHeadersRuntimeMethod,
   isFetchAbortControllerMethod,
@@ -54,14 +63,8 @@ import {
   stringRuntimeMethodName
 } from './stdlib/descriptors/collections.ts'
 import { cryptoRuntimeMethodNameFromPath } from './stdlib/descriptors/crypto.ts'
-import { jsonRuntimeMethodNameFromPath } from './stdlib/descriptors/json.ts'
-import { mathRuntimeArgCount, mathRuntimeMethodNameFromPath } from './stdlib/descriptors/math.ts'
-import {
-  isTimerClearMethod,
-  isTimerHandleMethod,
-  timerRuntimeMethodNameFromPath
-} from './stdlib/descriptors/timers.ts'
-import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
+import { mathRuntimeArgCount } from './stdlib/descriptors/math.ts'
+import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -5241,69 +5244,4 @@ function promiseStaticMethodName(callee: AnyNode): string | null {
   return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'Promise'
     ? callee.property
     : null
-}
-
-function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
-  return fsRuntimeCallInfoFromPath(memberExpressionPath(callee))
-}
-
-function memberExpressionPath(expression: AnyNode): string[] | null {
-  if (expression?.type === 'Reference' && expression.path.length > 0) {
-    return expression.path
-  }
-
-  if (expression?.type !== 'MemberExpression') {
-    return null
-  }
-
-  const objectPath = memberExpressionPath(expression.object)
-
-  return objectPath == null ? null : [...objectPath, expression.property]
-}
-
-function isFsRuntimeImportSymbol(symbol: SymbolInfo): boolean {
-  return (
-    symbol.kind === 'import' &&
-    ['fs', 'node:fs', 'node:fs/promises'].includes(symbol.importSource ?? '') &&
-    ['default', 'fs', 'promises'].includes(symbol.importedName ?? '')
-  )
-}
-
-function jsonRuntimeMethodName(callee: AnyNode): string | null {
-  return jsonRuntimeMethodNameFromPath(memberExpressionPath(callee))
-}
-
-function isJsonParseDeclaredType(valueType: ValueType): boolean {
-  return (
-    valueType === 'array' ||
-    valueType === 'boolean' ||
-    valueType === 'number' ||
-    valueType === 'object' ||
-    valueType === 'string'
-  )
-}
-
-function isMathRuntimeMethod(callee: AnyNode): boolean {
-  return mathRuntimeMethodNameFromPath(memberExpressionPath(callee)) != null
-}
-
-function timerRuntimeMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'Reference' || callee.path.length !== 1) {
-    return null
-  }
-
-  return timerRuntimeMethodNameFromPath(callee.path)
-}
-
-function timerClearMethodName(method: string): string | null {
-  return isTimerClearMethod(method) ? method : null
-}
-
-function timerCallbackFunctionType(): AnyNode {
-  return {
-    kind: 'function',
-    params: [],
-    returnType: 'void',
-    returnNullable: false
-  }
 }
