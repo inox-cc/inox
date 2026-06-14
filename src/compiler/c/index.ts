@@ -94,6 +94,7 @@ import {
   resolvePromiseReturningFunctionValueType
 } from './async/promises.ts'
 import {
+  binaryRuntimeExpressionReturnType,
   binaryRuntimeMethodName,
   isBinaryConstructorExpression,
   isBinaryRuntimeCall,
@@ -18109,7 +18110,7 @@ function inferExpressionType(expression, context) {
   }
 
   if (isBinaryRuntimeCall(expression)) {
-    return expression.valueType ?? (binaryRuntimeMethodName(expression?.callee) === 'toString' ? 'string' : 'bytes')
+    return expression.valueType ?? binaryRuntimeExpressionReturnType(expression) ?? 'bytes'
   }
 
   if (isBinaryConstructorExpression(expression)) {

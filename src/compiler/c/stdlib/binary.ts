@@ -1,13 +1,20 @@
+import {
+  binaryConstructorNameFromPath,
+  binaryInstanceRuntimeMethodName,
+  binaryRuntimeReturnType,
+  binaryStaticRuntimeMethodNameFromPath
+} from '../../stdlib/descriptors/binary.ts'
+
 export function binaryRuntimeMethodName(callee: any): string | null {
   if (callee?.type !== 'MemberExpression') {
     return null
   }
 
   if (callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'Buffer') {
-    return ['alloc', 'from'].includes(callee.property) ? callee.property : null
+    return binaryStaticRuntimeMethodNameFromPath([callee.object.path[0], callee.property])
   }
 
-  return ['slice', 'toString'].includes(callee.property) ? callee.property : null
+  return binaryInstanceRuntimeMethodName(callee.property)
 }
 
 export function isBinaryRuntimeCall(expression: any): boolean {
@@ -30,8 +37,13 @@ export function isBinaryConstructorExpression(expression: any): boolean {
   return (
     expression?.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    expression.callee.path[0] === 'Uint8Array' &&
+    binaryConstructorNameFromPath(expression.callee.path) != null &&
     expression.valueType === 'bytes'
   )
+}
+
+export function binaryRuntimeExpressionReturnType(expression: any): 'bytes' | 'string' | null {
+  return typeof expression?.binaryRuntimeMethod === 'string'
+    ? binaryRuntimeReturnType(expression.binaryRuntimeMethod)
+    : null
 }

@@ -1,7 +1,10 @@
 import { diagnostic } from '../diagnostics.ts'
+import { isBinaryGlobalUsagePath } from '../stdlib/descriptors/binary.ts'
+import { cryptoRuntimeMethodNameFromPath } from '../stdlib/descriptors/crypto.ts'
 import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
+import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
 export function reportUnsupportedCSyntaxFeatures(
@@ -21,8 +24,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
   const path = usage.path.join('.')
 
   return (
-    path === 'Date.now' ||
-    path === 'performance.now' ||
+    timeRuntimeMethodNameFromPath(usage.path) != null ||
     path === 'Error' ||
     path === 'Promise' ||
     path === 'Promise.resolve' ||
@@ -62,9 +64,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
     path === 'fs.constants.W_OK' ||
     path === 'fs.constants.X_OK' ||
     jsonRuntimeMethodNameFromPath(usage.path) != null ||
-    path === 'Buffer.alloc' ||
-    path === 'Buffer.from' ||
-    path === 'Uint8Array' ||
+    isBinaryGlobalUsagePath(usage.path) ||
     path === 'clearImmediate' ||
     path === 'clearInterval' ||
     path === 'clearTimeout' ||
@@ -118,7 +118,7 @@ function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context): boolean {
 }
 
 export function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage): boolean {
-  return usage.path.join('.') === 'crypto.getRandomValues'
+  return cryptoRuntimeMethodNameFromPath(usage.path) != null
 }
 
 export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {

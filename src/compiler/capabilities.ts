@@ -1,6 +1,8 @@
 import { visitAstLike } from './ast-visit.ts'
 import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrGlobalUsages } from './ir.ts'
+import { cryptoRuntimeMethodNameFromPath } from './stdlib/descriptors/crypto.ts'
+import { timeRuntimeCapabilityFromPath } from './stdlib/descriptors/time.ts'
 import { timerRuntimeMethods } from './stdlib/descriptors/timers.ts'
 import type {
   AnyNode,
@@ -90,7 +92,7 @@ function collectEntropyCapabilityUsages(globalUsages: IrGlobalUsage[], options: 
         path,
         loc: usage.loc
       })
-    } else if (path === 'crypto.getRandomValues') {
+    } else if (cryptoRuntimeMethodNameFromPath(usage.path) != null) {
       usages.push({
         key: 'entropy',
         name: 'entropy',
@@ -123,20 +125,11 @@ function collectHeapCapabilityUsages(node: unknown): CapabilityUsage[] {
 }
 
 function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapability | null {
+  const timeCapability = timeRuntimeCapabilityFromPath(usage.path)
   const path = usage.path.join('.')
 
-  if (path === 'Date.now') {
-    return {
-      key: 'wallClock',
-      name: 'wall-clock'
-    }
-  }
-
-  if (path === 'performance.now') {
-    return {
-      key: 'monotonicClock',
-      name: 'monotonic-clock'
-    }
+  if (timeCapability != null) {
+    return timeCapability
   }
 
   if (usage.root === 'fs') {

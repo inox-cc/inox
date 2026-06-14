@@ -1,5 +1,8 @@
+import { binaryConstructorNameFromPath } from './stdlib/descriptors/binary.ts'
+import { cryptoRuntimeMethodNameFromPath } from './stdlib/descriptors/crypto.ts'
 import { fsGlobalUsagePathForRuntimeMethod, fsRuntimeMethodForPath } from './stdlib/descriptors/fs.ts'
 import { jsonRuntimeMethodNameFromPath } from './stdlib/descriptors/json.ts'
+import { timeRuntimeMethodNameFromPath } from './stdlib/descriptors/time.ts'
 import { timerRuntimeMethodNameFromPath } from './stdlib/descriptors/timers.ts'
 import type {
   AnyNode,
@@ -1284,7 +1287,7 @@ function binaryConstructorName(expression: AnyNode): string | null {
     return null
   }
 
-  return expression.callee.path[0] === 'Uint8Array' ? expression.callee.path[0] : null
+  return binaryConstructorNameFromPath(expression.callee.path)
 }
 
 function isBinaryArrayLiteralConstructor(expression: AnyNode): boolean {
@@ -1304,7 +1307,9 @@ function cryptoRuntimeMethodName(expression: AnyNode): string | null {
     return null
   }
 
-  return typeof expression.cryptoRuntimeMethod === 'string' ? expression.cryptoRuntimeMethod : null
+  return cryptoRuntimeMethodNameFromPath(runtimeMemberExpressionPath(expression.callee)) === expression.cryptoRuntimeMethod
+    ? expression.cryptoRuntimeMethod
+    : null
 }
 
 function isObjectFieldExpression(expression: AnyNode | null | undefined): boolean {
@@ -1374,19 +1379,7 @@ function stringRuntimeMethodName(expression: AnyNode): string | null {
 }
 
 function timeRuntimeCallName(callee: AnyNode): string | null {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
-    return null
-  }
-
-  if (callee.object.path[0] === 'Date' && callee.property === 'now') {
-    return 'Date.now'
-  }
-
-  if (callee.object.path[0] === 'performance' && callee.property === 'now') {
-    return 'performance.now'
-  }
-
-  return null
+  return timeRuntimeMethodNameFromPath(runtimeMemberExpressionPath(callee))
 }
 
 function runtimeMemberExpressionPath(expression: AnyNode): string[] | null {

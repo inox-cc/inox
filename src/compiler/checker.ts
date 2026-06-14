@@ -18,6 +18,12 @@ import {
   isFetchResponseBodyMethod,
   isSupportedFetchResponseBodyMethod
 } from './stdlib/descriptors/fetch.ts'
+import {
+  binaryConstructorNameFromPath,
+  binaryInstanceRuntimeMethodName,
+  binaryStaticRuntimeMethodNameFromPath
+} from './stdlib/descriptors/binary.ts'
+import { cryptoRuntimeMethodNameFromPath } from './stdlib/descriptors/crypto.ts'
 import { jsonRuntimeMethodNameFromPath } from './stdlib/descriptors/json.ts'
 import { mathRuntimeArgCount, mathRuntimeMethodNameFromPath } from './stdlib/descriptors/math.ts'
 import {
@@ -1958,18 +1964,14 @@ class Checker {
       return null
     }
 
-    if (
-      expression.callee.object.type === 'Reference' &&
-      expression.callee.object.path.length === 1 &&
-      expression.callee.object.path[0] === 'Buffer'
-    ) {
+    const staticMethod = binaryStaticRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+
+    if (staticMethod != null) {
       if (this.scope.resolve('Buffer') != null) {
         return null
       }
 
-      const method = expression.callee.property
-
-      if (method === 'from') {
+      if (staticMethod === 'from') {
         if (expression.args.length < 1 || expression.args.length > 2) {
           this.report(
             'CCJS_ARG_COUNT',
@@ -1989,13 +1991,13 @@ class Checker {
         }
 
         this.checkUtf8EncodingArg(expression, 1, 'Buffer.from')
-        expression.binaryRuntimeMethod = 'from'
+        expression.binaryRuntimeMethod = staticMethod
         expression.valueType = 'bytes'
 
         return 'bytes'
       }
 
-      if (method === 'alloc') {
+      if (staticMethod === 'alloc') {
         if (expression.args.length !== 1) {
           this.report(
             'CCJS_ARG_COUNT',
@@ -2008,13 +2010,11 @@ class Checker {
           this.checkAssignableType(this.checkExpression(expression.args[0]), 'number', expression.args[0].loc)
         }
 
-        expression.binaryRuntimeMethod = 'alloc'
+        expression.binaryRuntimeMethod = staticMethod
         expression.valueType = 'bytes'
 
         return 'bytes'
       }
-
-      return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
@@ -2023,7 +2023,9 @@ class Checker {
       return null
     }
 
-    if (expression.callee.property === 'slice') {
+    const instanceMethod = binaryInstanceRuntimeMethodName(expression.callee.property)
+
+    if (instanceMethod === 'slice') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
           'CCJS_ARG_COUNT',
@@ -2036,13 +2038,13 @@ class Checker {
         this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc)
       }
 
-      expression.binaryRuntimeMethod = 'slice'
+      expression.binaryRuntimeMethod = instanceMethod
       expression.valueType = 'bytes'
 
       return 'bytes'
     }
 
-    if (expression.callee.property === 'toString') {
+    if (instanceMethod === 'toString') {
       if (expression.args.length > 1) {
         this.report(
           'CCJS_ARG_COUNT',
@@ -2052,7 +2054,7 @@ class Checker {
       }
 
       this.checkUtf8EncodingArg(expression, 0, 'bytes.toString')
-      expression.binaryRuntimeMethod = 'toString'
+      expression.binaryRuntimeMethod = instanceMethod
       expression.valueType = 'string'
 
       return 'string'
@@ -2078,23 +2080,16 @@ class Checker {
   }
 
   checkCryptoCall(expression: AnyNode): ValueType | null {
-    if (
-      expression.callee.type !== 'MemberExpression' ||
-      expression.callee.object.type !== 'Reference' ||
-      expression.callee.object.path.length !== 1 ||
-      expression.callee.object.path[0] !== 'crypto'
-    ) {
-      return null
-    }
+    const method = cryptoRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
 
-    if (expression.callee.property !== 'getRandomValues') {
+    if (method == null) {
       return null
     }
 
     const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     expression.valueType = 'bytes'
-    expression.cryptoRuntimeMethod = 'getRandomValues'
+    expression.cryptoRuntimeMethod = method
 
     if (expression.args.length !== 1) {
       this.report(
@@ -4169,7 +4164,7 @@ class Checker {
       return 'object'
     }
 
-    if (expression.callee.path[0] === 'Uint8Array') {
+    if (binaryConstructorNameFromPath(expression.callee.path) === 'Uint8Array') {
       if (expression.args.length !== 1) {
         this.report(
           'CCJS_ARG_COUNT',
