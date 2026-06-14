@@ -847,10 +847,16 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
 
 static ccjs_status on_http(void* user, const ccjs_http_request* request, ccjs_http_response* response) {
   test_state* state = (test_state*)user;
-  if (request->method_len != 3 || strncmp(request->method, "GET", 3) != 0) return CCJS_ERR_FIELD;
-  if (request->url_len != 6 || strncmp(request->url, "/hello", 6) != 0) return CCJS_ERR_FIELD;
+  ccjs_http_header headers[] = {
+    { "Content-Type", 12, "application/json", 16 },
+    { "X-CCJS", 6, "libuv-http", 10 }
+  };
+  if (!ccjs_http_request_method_equals(request, "GET", 3)) return CCJS_ERR_FIELD;
+  if (!ccjs_http_request_url_equals(request, "/hello", 6)) return CCJS_ERR_FIELD;
   state->handled += 1;
-  return ccjs_http_response_text(response, 200, "hello", 5);
+  if (ccjs_http_response_write_head(response, 201, headers, 2) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (ccjs_http_response_write(response, "{\\"data\\":", 8) != CCJS_OK) return CCJS_ERR_FIELD;
+  return ccjs_http_response_end(response, "\\"hello\\"}", 8);
 }
 
 static ccjs_status on_client_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
@@ -859,7 +865,7 @@ static ccjs_status on_client_data(void* user, ccjs_net_socket* socket, const cha
   size_t copy_len = current + len >= sizeof(state->response) ? sizeof(state->response) - current - 1 : len;
   memcpy(state->response + current, bytes, copy_len);
   state->response[current + copy_len] = '\\0';
-  if (strstr(state->response, "\\r\\n\\r\\nhello") != 0) {
+  if (strstr(state->response, "\\r\\n\\r\\n{\\"data\\":\\"hello\\"}") != 0) {
     ccjs_net_socket_close(socket);
     ccjs_http_server_close(state->server);
   }
@@ -894,7 +900,14 @@ int main(void) {
   }
 
   if (guard >= 500) return 7;
-  printf("%d %d %s\\n", state.client_connected, state.handled, strstr(state.response, "Content-Length: 5") != 0 ? "length" : "missing");
+  printf(
+    "%d %d %s %s %s\\n",
+    state.client_connected,
+    state.handled,
+    strstr(state.response, "HTTP/1.1 201 Created") != 0 ? "created" : "status",
+    strstr(state.response, "Content-Type: application/json") != 0 ? "json" : "content-type",
+    strstr(state.response, "Content-Length: 16") != 0 ? "length" : "missing"
+  );
   ccjs_loop_dispose(&loop);
   return 0;
 }
@@ -917,7 +930,7 @@ int main(void) {
     fail('run libuv http smoke', run)
   }
 
-  const expected = '1 1 length\n'
+  const expected = '1 1 created json length\n'
 
   if (stdout !== expected) {
     console.error(`Libuv http smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
