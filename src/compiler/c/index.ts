@@ -70,12 +70,26 @@ import {
   uniqueCModuleImports
 } from './modules.ts'
 import { emitCPrelude } from './prelude.ts'
-import { cMathBinaryMethods, cMathNullaryMethods, cMathUnaryMethods } from './runtime-methods.ts'
-import { cCryptoRuntimeCallName } from './stdlib/crypto.ts'
+import { mathRuntimeMethodName } from './runtime-methods.ts'
+import { cPromiseRuntimeCallName } from './async/promises.ts'
+import {
+  binaryRuntimeMethodName,
+  isBinaryConstructorExpression,
+  isBinaryRuntimeCall,
+  isBufferAllocCall,
+  isBufferFromCall
+} from './stdlib/binary.ts'
+import { irProgramsUseConsoleRuntime, isConsoleLog } from './stdlib/console.ts'
+import { cCryptoRuntimeCallName, cryptoRuntimeMethodName } from './stdlib/crypto.ts'
 import { cFetchRuntimeExpressionMethod } from './stdlib/fetch.ts'
 import { cFsRuntimeConstantExpression, cFsRuntimeExpressionMethod } from './stdlib/fs.ts'
 import { cJsonRuntimeCallName } from './stdlib/json.ts'
-import { cTimerClearCallName, cTimerRuntimeCallName, cTimerStartCallName } from './stdlib/timers.ts'
+import {
+  cTimerClearCallName,
+  cTimerRuntimeCallName,
+  cTimerStartCallName,
+  timerCallbackFunctionType
+} from './stdlib/timers.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
 import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile, CModulePlan } from './types.ts'
 import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
@@ -18496,21 +18510,6 @@ function inferExpressionType(expression, context) {
   return 'number'
 }
 
-function isConsoleLog(expression) {
-  return (
-    expression?.type === 'CallExpression' &&
-    expression.callee.type === 'MemberExpression' &&
-    expression.callee.object.type === 'Reference' &&
-    expression.callee.object.path.length === 1 &&
-    expression.callee.object.path[0] === 'console' &&
-    ['log', 'info', 'warn', 'error'].includes(expression.callee.property)
-  )
-}
-
-function irProgramsUseConsoleRuntime(programs: IrProgram[]): boolean {
-  return programs.some((program) => containsConsoleRuntimeCall(program.body))
-}
-
 function irProgramsUseRuntimeImport(programs: IrProgram[], sources: ReadonlySet<string>): boolean {
   return programs.some((program) => containsRuntimeImport(program.body, sources))
 }
@@ -18540,36 +18539,6 @@ function containsRuntimeImport(node: unknown, sources: ReadonlySet<string>): boo
     }
 
     if (containsRuntimeImport(value, sources)) {
-      return true
-    }
-  }
-
-  return false
-}
-
-function containsConsoleRuntimeCall(node: unknown): boolean {
-  if (node == null) {
-    return false
-  }
-
-  if (Array.isArray(node)) {
-    return node.some(containsConsoleRuntimeCall)
-  }
-
-  if (typeof node !== 'object') {
-    return false
-  }
-
-  if (isConsoleLog(node as AnyNode)) {
-    return true
-  }
-
-  for (const [key, value] of Object.entries(node)) {
-    if (key === 'loc' || key === 'shape') {
-      continue
-    }
-
-    if (containsConsoleRuntimeCall(value)) {
       return true
     }
   }
@@ -20666,44 +20635,6 @@ function cTimeRuntimeCallName(callee) {
   return null
 }
 
-function binaryRuntimeMethodName(callee) {
-  if (callee?.type !== 'MemberExpression') {
-    return null
-  }
-
-  if (callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'Buffer') {
-    return ['alloc', 'from'].includes(callee.property) ? callee.property : null
-  }
-
-  return ['slice', 'toString'].includes(callee.property) ? callee.property : null
-}
-
-function isBinaryRuntimeCall(expression) {
-  return (
-    expression?.type === 'CallExpression' &&
-    typeof expression.binaryRuntimeMethod === 'string' &&
-    binaryRuntimeMethodName(expression.callee) === expression.binaryRuntimeMethod
-  )
-}
-
-function cryptoRuntimeMethodName(expression) {
-  if (expression?.type !== 'CallExpression' || typeof expression.cryptoRuntimeMethod !== 'string') {
-    return null
-  }
-
-  return cCryptoRuntimeCallName(expression.callee) === expression.cryptoRuntimeMethod
-    ? expression.cryptoRuntimeMethod
-    : null
-}
-
-function isBufferFromCall(expression) {
-  return isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'from'
-}
-
-function isBufferAllocCall(expression) {
-  return isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'alloc'
-}
-
 function isBytesSliceCall(expression, context) {
   return (
     isBinaryRuntimeCall(expression) &&
@@ -20718,53 +20649,6 @@ function isBytesToStringCall(expression, context) {
     expression.binaryRuntimeMethod === 'toString' &&
     inferExpressionType(expression.callee.object, context) === 'bytes'
   )
-}
-
-function isBinaryConstructorExpression(expression) {
-  return (
-    expression?.type === 'NewExpression' &&
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    expression.callee.path[0] === 'Uint8Array' &&
-    expression.valueType === 'bytes'
-  )
-}
-
-function mathRuntimeMethodName(callee) {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
-    return null
-  }
-
-  if (callee.object.path[0] !== 'Math') {
-    return null
-  }
-
-  return cMathNullaryMethods.has(callee.property) ||
-    cMathUnaryMethods.has(callee.property) ||
-    cMathBinaryMethods.has(callee.property)
-    ? callee.property
-    : null
-}
-
-function timerCallbackFunctionType() {
-  return {
-    kind: 'function',
-    params: [],
-    returnType: 'void',
-    returnNullable: false
-  }
-}
-
-function cPromiseRuntimeCallName(callee) {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
-    return null
-  }
-
-  if (callee.object.path[0] !== 'Promise') {
-    return null
-  }
-
-  return ['resolve', 'reject'].includes(callee.property) ? callee.property : null
 }
 
 function isPromiseConstructorExpression(expression) {

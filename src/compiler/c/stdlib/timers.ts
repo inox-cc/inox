@@ -21,3 +21,12 @@ export function cTimerClearCallName(callee: any): string | null {
 
   return ['clearImmediate', 'clearInterval', 'clearTimeout'].includes(callee.path[0]) ? callee.path[0] : null
 }
+
+export function timerCallbackFunctionType(): any {
+  return {
+    kind: 'function',
+    params: [],
+    returnType: 'void',
+    returnNullable: false
+  }
+}

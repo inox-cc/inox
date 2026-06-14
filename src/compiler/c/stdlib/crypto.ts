@@ -9,3 +9,13 @@ export function cCryptoRuntimeCallName(callee: any): string | null {
 
   return callee.property === 'getRandomValues' ? callee.property : null
 }
+
+export function cryptoRuntimeMethodName(expression: any): string | null {
+  if (expression?.type !== 'CallExpression' || typeof expression.cryptoRuntimeMethod !== 'string') {
+    return null
+  }
+
+  return cCryptoRuntimeCallName(expression.callee) === expression.cryptoRuntimeMethod
+    ? expression.cryptoRuntimeMethod
+    : null
+}
