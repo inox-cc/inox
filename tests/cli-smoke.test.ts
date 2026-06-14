@@ -661,6 +661,59 @@ exec cc "$@"
   }
 })
 
+test('ccjs build --target c links TLS runtime source with fetch', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-fetch-runtime-select-test-'))
+  const out = join(dir, 'fetch')
+  const wrapper = join(dir, 'cc-wrapper.sh')
+  const log = join(dir, 'cc.log')
+
+  try {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `const response = await fetch('http://127.0.0.1:1/')
+const text = await response.text()
+`
+    )
+    await writeFile(
+      wrapper,
+      `#!/bin/sh
+printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
+exec cc "$@"
+`
+    )
+    await chmod(wrapper, 0o755)
+
+    const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
+      cwd: dir,
+      env: {
+        CC: wrapper,
+        CCJS_CC_LOG: log
+      }
+    })
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const invocation = await readFile(log, 'utf8')
+
+    assert.match(invocation, /runtime\/c\/src\/network\/fetch\.c/)
+    assert.match(invocation, /runtime\/c\/src\/network\/net\.c/)
+    assert.match(invocation, /runtime\/c\/src\/network\/tls\.c/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs build --target c reads ccjs.config.json toolchain settings', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

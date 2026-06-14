@@ -189,6 +189,80 @@ int main(void) {
   }
 })
 
+test('C runtime TLS fallback reports unsupported backend', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-tls-runtime-'))
+  const source = join(dir, 'tls-runtime.c')
+  const output = join(dir, 'tls-runtime')
+
+  try {
+    await writeFile(
+      source,
+      `#include <stdio.h>
+#include "ccjs/tls.h"
+
+static ccjs_status on_connect(void* user, ccjs_tls_client* client, ccjs_status status) {
+  (void)user;
+  (void)client;
+  (void)status;
+  return CCJS_OK;
+}
+
+static ccjs_status on_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len) {
+  (void)user;
+  (void)client;
+  (void)bytes;
+  (void)len;
+  return CCJS_OK;
+}
+
+static void on_close(void* user, ccjs_tls_client* client) {
+  (void)user;
+  (void)client;
+}
+
+int main(void) {
+  ccjs_loop loop = { 0 };
+  ccjs_tls_client* client = (ccjs_tls_client*)1;
+
+  if (ccjs_tls_connect(&loop, "example.test", 443, "example.test", on_connect, on_data, on_close, 0, &client) != CCJS_ERR_UNSUPPORTED) return 1;
+  if (client != 0) return 2;
+  if (ccjs_tls_connect(&loop, "example.test", 443, "example.test", on_connect, on_data, on_close, 0, 0) != CCJS_ERR_TYPE) return 3;
+
+  printf("tls unsupported\\n");
+  return 0;
+}
+`
+    )
+
+    const compile = await runCommand('cc', [
+      '-Iruntime/c/include',
+      source,
+      'runtime/c/src/network/tls.c',
+      '-o',
+      output
+    ])
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'tls unsupported\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('C runtime JSON parse and stringify compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

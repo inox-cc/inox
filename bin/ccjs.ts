@@ -45,6 +45,7 @@ const cRuntimeSourceGroups = {
   http: ['runtime/c/src/network/http.c'],
   json: ['runtime/c/src/json/json.c'],
   net: ['runtime/c/src/network/net.c'],
+  tls: ['runtime/c/src/network/tls.c'],
   managed: [
     'runtime/c/src/core/value.c',
     'runtime/c/src/core/allocator.c',
@@ -266,7 +267,14 @@ function cRuntimeSourcesForCode(code: string): string[] {
   if (usesCHeader(code, 'fetch')) {
     groups.add('async')
     groups.add('net')
+    groups.add('tls')
     groups.add('fetch')
+  }
+
+  if (usesCHeader(code, 'tls')) {
+    groups.add('async')
+    groups.add('net')
+    groups.add('tls')
   }
 
   if (usesCHeader(code, 'loop') || usesCHeader(code, 'promise')) {
