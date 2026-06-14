@@ -194,6 +194,30 @@ server.listen(9000)
   assert.match(result.code, /ccjs_http_server_listen\(server, 0, \(int\)\(9000\), 128\)/)
 })
 
+test('lowers node:http request event and lifecycle callbacks for C', () => {
+  const result = compileSource(
+    `import http from 'node:http'
+
+const server = http.createServer()
+server.on('request', (req, res) => {
+  res.end('ok')
+})
+
+server.listen(8080, '127.0.0.1', () => {
+  server.close(() => {})
+})
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_http_server_new\(&ccjs_loop, 0, 0, &server\)/)
+  assert.match(result.code, /ccjs_http_server_on_request\(server, ccjs_http_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_http_server_listen\(server, "127\.0\.0\.1", \(int\)\(8080\), 128\)/)
+  assert.match(result.code, /ccjs_http_server_close\(server\);/)
+})
+
 test('compiles arrays, objects, member access and operators to JS', () => {
   const result = compileSource(
     `export function main(): void {

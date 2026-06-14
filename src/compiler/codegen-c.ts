@@ -5521,21 +5521,29 @@ function emitHttpServerCallStatement(expression, context) {
     ]
   }
 
-  if (!isHttpServerMethodCall(expression, 'listen', context)) {
-    return null
+  if (isHttpServerMethodCall(expression, 'listen', context)) {
+    const serverName = expression.callee.object.path[0]
+    registerEventLoop(context)
+
+    return emitHttpServerListenLines(serverName, expression.args, context)
   }
 
-  const serverName = expression.callee.object.path[0]
-  registerEventLoop(context)
+  if (isHttpServerMethodCall(expression, 'on', context)) {
+    return emitHttpServerOnRequestLines(expression.callee.object.path[0], expression.args, context)
+  }
 
-  return emitHttpServerListenLines(serverName, expression.args, context)
+  if (isHttpServerMethodCall(expression, 'close', context)) {
+    return emitHttpServerCloseLines(expression.callee.object.path[0], expression.args, context)
+  }
+
+  return null
 }
 
 function emitHttpServerCreateLines(expression, serverName, context, options: { declare?: boolean } = {}) {
   const listener = expression.args[0]
   const wrapper = context.httpHandlers.get(listener)
 
-  if (listener?.type !== 'ArrowFunctionExpression' || wrapper == null) {
+  if (listener != null && (listener.type !== 'ArrowFunctionExpression' || wrapper == null)) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_HTTP_SERVER',
@@ -5561,23 +5569,95 @@ function emitHttpServerListenLines(serverName, args, context) {
     return []
   }
 
-  if (args.length > 2) {
+  const hostArg = args[1]?.type === 'ArrowFunctionExpression' ? null : args[1]
+  const callback = args[1]?.type === 'ArrowFunctionExpression' ? args[1] : args[2]
+
+  if (args.length > 3) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_HTTP_SERVER',
-        'server.listen callbacks are handled in the next HTTP compiler slice',
-        args[2]?.loc
+        'server.listen in the C backend currently supports port, optional host and optional callback',
+        args[3]?.loc
       )
     )
   }
 
   const port = emitPreparedNumberExpression(args[0], context)
-  const host = emitHttpListenHostExpression(args[1], context)
+  const host = emitHttpListenHostExpression(hostArg, context)
 
   return [
     ...port.lines,
-    emitStatusCheck(`ccjs_http_server_listen(${serverName}, ${host}, (int)(${port.expression}), 128)`, context)
+    emitStatusCheck(`ccjs_http_server_listen(${serverName}, ${host}, (int)(${port.expression}), 128)`, context),
+    ...emitHttpZeroArgCallbackLines(callback, context)
   ]
+}
+
+function emitHttpServerOnRequestLines(serverName, args, context) {
+  if (args[0]?.type !== 'StringLiteral' || args[0].value !== 'request') {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_HTTP_SERVER',
+        "server.on in the C backend currently supports only the 'request' event",
+        args[0]?.loc
+      )
+    )
+    return []
+  }
+
+  const listener = args[1]
+  const wrapper = context.httpHandlers.get(listener)
+
+  if (listener?.type !== 'ArrowFunctionExpression' || wrapper == null) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_HTTP_SERVER',
+        "server.on('request') in the C backend currently requires an inline request listener",
+        listener?.loc
+      )
+    )
+    return []
+  }
+
+  return [emitStatusCheck(`ccjs_http_server_on_request(${serverName}, ${wrapper.name}, 0)`, context)]
+}
+
+function emitHttpServerCloseLines(serverName, args, context) {
+  if (args.length > 1) {
+    context.diagnostics.push(
+      diagnostic('CCJS_HTTP_SERVER', 'server.close in the C backend supports only an optional callback', args[1]?.loc)
+    )
+  }
+
+  return [`ccjs_http_server_close(${serverName});`, ...emitHttpZeroArgCallbackLines(args[0], context)]
+}
+
+function emitHttpZeroArgCallbackLines(callback, context) {
+  if (callback == null) {
+    return []
+  }
+
+  if (callback.type !== 'ArrowFunctionExpression' || callback.params.length !== 0 || callback.async) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_HTTP_SERVER',
+        'HTTP server lifecycle callbacks in the C backend currently require a synchronous zero-argument arrow function',
+        callback.loc
+      )
+    )
+    return []
+  }
+
+  const body = callback.expressionBody
+    ? [
+        {
+          type: 'ExpressionStatement',
+          expression: callback.body,
+          loc: callback.loc
+        }
+      ]
+    : callback.body
+
+  return emitStatementList(body, context)
 }
 
 function emitHttpListenHostExpression(expression, context) {

@@ -39,6 +39,7 @@ ccjs_status ccjs_http_server_new(
 );
 ccjs_status ccjs_http_server_listen(ccjs_http_server* server, const char* host, int port, int backlog);
 ccjs_status ccjs_http_server_local_port(ccjs_http_server* server, int* out_port);
+ccjs_status ccjs_http_server_on_request(ccjs_http_server* server, ccjs_http_handler_fn handler, void* user);
 void ccjs_http_server_close(ccjs_http_server* server);
 int ccjs_http_request_method_equals(const ccjs_http_request* request, const char* method, size_t len);
 int ccjs_http_request_url_equals(const ccjs_http_request* request, const char* url, size_t len);

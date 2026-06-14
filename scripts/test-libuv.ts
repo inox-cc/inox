@@ -889,17 +889,18 @@ int main(void) {
   int guard = 0;
 
   if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_http_server_new(&loop, on_http, &state, &state.server) != CCJS_OK) return 2;
-  if (ccjs_http_server_listen(state.server, "127.0.0.1", 0, 16) != CCJS_OK) return 3;
-  if (ccjs_http_server_local_port(state.server, &port) != CCJS_OK) return 4;
-  if (ccjs_net_connect(&loop, "127.0.0.1", port, on_connect, on_client_data, 0, &state, &state.client) != CCJS_OK) return 5;
+  if (ccjs_http_server_new(&loop, 0, 0, &state.server) != CCJS_OK) return 2;
+  if (ccjs_http_server_on_request(state.server, on_http, &state) != CCJS_OK) return 3;
+  if (ccjs_http_server_listen(state.server, "127.0.0.1", 0, 16) != CCJS_OK) return 4;
+  if (ccjs_http_server_local_port(state.server, &port) != CCJS_OK) return 5;
+  if (ccjs_net_connect(&loop, "127.0.0.1", port, on_connect, on_client_data, 0, &state, &state.client) != CCJS_OK) return 6;
 
   while (ccjs_loop_has_work(&loop) && guard < 500) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 6;
+    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 7;
     guard += 1;
   }
 
-  if (guard >= 500) return 7;
+  if (guard >= 500) return 8;
   printf(
     "%d %d %s %s %s\\n",
     state.client_connected,

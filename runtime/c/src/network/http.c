@@ -84,7 +84,7 @@ ccjs_status ccjs_http_server_new(
   void* user,
   ccjs_http_server** out
 ) {
-  if (loop == 0 || loop->allocator == 0 || handler == 0 || out == 0) {
+  if (loop == 0 || loop->allocator == 0 || out == 0) {
     return CCJS_ERR_TYPE;
   }
 
@@ -128,6 +128,16 @@ ccjs_status ccjs_http_server_local_port(ccjs_http_server* server, int* out_port)
   }
 
   return ccjs_net_server_local_port(server->net_server, out_port);
+}
+
+ccjs_status ccjs_http_server_on_request(ccjs_http_server* server, ccjs_http_handler_fn handler, void* user) {
+  if (server == 0 || handler == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  server->handler = handler;
+  server->user = user;
+  return CCJS_OK;
 }
 
 void ccjs_http_server_close(ccjs_http_server* server) {
@@ -483,6 +493,10 @@ static ccjs_status ccjs_http_try_handle(ccjs_http_connection* connection) {
   };
   ccjs_http_response response;
   ccjs_http_response_init(&response, connection);
+  if (connection->server->handler == 0) {
+    return ccjs_http_response_text(&response, 404, "not found", 9);
+  }
+
   ccjs_status status = connection->server->handler(connection->server->user, &request, &response);
 
   if (status != CCJS_OK) {
@@ -701,6 +715,13 @@ ccjs_status ccjs_http_server_local_port(ccjs_http_server* server, int* out_port)
   }
 
   *out_port = 0;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_http_server_on_request(ccjs_http_server* server, ccjs_http_handler_fn handler, void* user) {
+  (void)server;
+  (void)handler;
+  (void)user;
   return CCJS_ERR_UNSUPPORTED;
 }
 
