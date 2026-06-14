@@ -10,6 +10,7 @@ import {
   libuvOnlyRuntimeImports,
   numericCastNames
 } from './checker/builtins.ts'
+import { Scope } from './checker/scope.ts'
 import {
   arrayElementTypeNameFromTypeName,
   isBuiltinValueType,
@@ -5187,24 +5188,6 @@ class Checker {
 
   report(code: string, message: string, loc: SourceLocation): void {
     this.diagnostics.push(diagnostic(code, message, loc))
-  }
-}
-
-class Scope {
-  parent: Scope | null
-  bindings: Map<string, SymbolInfo>
-
-  constructor(parent: Scope | null) {
-    this.parent = parent
-    this.bindings = new Map()
-  }
-
-  hasOwn(name: string): boolean {
-    return this.bindings.has(name)
-  }
-
-  resolve(name: string): SymbolInfo | null {
-    return this.bindings.get(name) ?? this.parent?.resolve(name) ?? null
   }
 }
 
