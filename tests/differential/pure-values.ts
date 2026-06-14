@@ -1,13 +1,8 @@
-type User = {
-  readonly name: string
-  score: number
-}
-
 function bump(value: number): number {
   return value + 1
 }
 
-const user: User = { name: 'Ada', score: 3 }
+const user = { name: 'Ada', score: 3 }
 let total = user.score
 
 for (const value of [1, 2, 3]) {
