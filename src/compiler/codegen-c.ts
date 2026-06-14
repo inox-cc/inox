@@ -22238,13 +22238,15 @@ function emitEventLoopSleepUntilNextTimerLines(context, indent = '') {
   const loop = emitEventLoopReference(context)
 
   return [
+    `${indent}#if !defined(CCJS_LOOP_BACKEND_LIBUV)`,
     `${indent}{`,
     `${indent}  ccjs_number ccjs_next_due_ms = 0;`,
     `${indent}  ccjs_number ccjs_now_ms = ${emitEventLoopCurrentTimeExpression()};`,
     `${indent}  if (ccjs_loop_pending_microtasks(${loop}) == 0 && ccjs_loop_pending_immediates(${loop}) == 0 && ccjs_loop_next_timer_due_ms(${loop}, &ccjs_next_due_ms) && ccjs_next_due_ms > ccjs_now_ms) {`,
     `${indent}    ccjs_time_sleep_ms(ccjs_next_due_ms - ccjs_now_ms);`,
     `${indent}  }`,
-    `${indent}}`
+    `${indent}}`,
+    `${indent}#endif`
   ]
 }
 

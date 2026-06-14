@@ -261,8 +261,10 @@ ccjs_status ccjs_loop_poll(ccjs_loop* loop, ccjs_number now_ms) {
   loop->turn += 1;
   backend->callback_status = CCJS_OK;
 
+  const int had_microtasks = loop->microtask_count > 0;
   ccjs_status first_error = ccjs_loop_drain_microtasks(loop);
-  uv_run(&backend->uv_loop, UV_RUN_NOWAIT);
+  uv_run_mode run_mode = had_microtasks || !uv_loop_alive(&backend->uv_loop) ? UV_RUN_NOWAIT : UV_RUN_ONCE;
+  uv_run(&backend->uv_loop, run_mode);
   first_error = ccjs_loop_keep_first_error(first_error, backend->callback_status);
 
   return first_error;

@@ -11757,6 +11757,7 @@ clearImmediate(immediate)
     result.code,
     /ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_scheduleLater_\d+, &ccjs_loop, 0, &ccjs_callback_\d+\)/
   )
+  assert.match(result.code, /#if !defined\(CCJS_LOOP_BACKEND_LIBUV\)[\s\S]*ccjs_time_sleep_ms[\s\S]*#endif/)
   assert.match(result.code, /while \(ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
   assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_performance_now\(\)\)/)
 
