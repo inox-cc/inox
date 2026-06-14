@@ -1302,7 +1302,7 @@ class Parser {
   }
 
   parseObjectKey(): AnyNode {
-    if (this.is('identifier')) {
+    if (this.is('identifier') || this.is('keyword')) {
       const token = this.advance()
 
       return {

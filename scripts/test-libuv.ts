@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { createSocket as createUdpSocket } from 'node:dgram'
 import { access, mkdir, mkdtemp, readFile, readlink, realpath, rm, writeFile } from 'node:fs/promises'
 import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -47,6 +48,7 @@ try {
     await checkLibuvTimerRuntime(buildDir)
     await checkLibuvConsoleRuntime(buildDir)
     await checkLibuvDgramRuntime(buildDir)
+    await checkLibuvCompiledDgramServer(buildDir)
     await checkLibuvNetRuntime(buildDir)
     await checkLibuvHttpRuntime(buildDir)
     await checkLibuvCompiledHttpServer(buildDir)
@@ -547,7 +549,10 @@ typedef struct test_state {
   ccjs_dgram_socket* server;
   ccjs_dgram_socket* client;
   int server_received;
+  int server_sent;
   int client_received;
+  int client_sent;
+  int closed;
   char message[32];
 } test_state;
 
@@ -571,10 +576,29 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
+static ccjs_status on_send(void* user, ccjs_status status) {
+  test_state* state = (test_state*)user;
+  if (status != CCJS_OK) return status;
+  state->server_sent += 1;
+  return CCJS_OK;
+}
+
+static ccjs_status on_client_send(void* user, ccjs_status status) {
+  test_state* state = (test_state*)user;
+  if (status != CCJS_OK) return status;
+  state->client_sent += 1;
+  return CCJS_OK;
+}
+
+static void on_close(void* user, ccjs_dgram_socket* socket) {
+  (void)socket;
+  ((test_state*)user)->closed += 1;
+}
+
 static ccjs_status on_server_recv(void* user, ccjs_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
   test_state* state = (test_state*)user;
   state->server_received += 1;
-  return ccjs_dgram_send(socket, bytes, len, host, port);
+  return ccjs_dgram_send_with_callback(socket, bytes, len, host, port, on_send, state);
 }
 
 static ccjs_status on_client_recv(void* user, ccjs_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
@@ -596,30 +620,37 @@ int main(void) {
   ccjs_loop loop;
   test_state state = { 0 };
   ccjs_status status;
+  ccjs_dgram_address address;
   int port = 0;
   int guard = 0;
 
   if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_dgram_socket_new(&loop, on_server_recv, &state, &state.server) != CCJS_OK) return 2;
-  if (ccjs_dgram_socket_new(&loop, on_client_recv, &state, &state.client) != CCJS_OK) return 3;
+  if (ccjs_dgram_socket_new(&loop, 0, 0, &state.server) != CCJS_OK) return 2;
+  if (ccjs_dgram_socket_new(&loop, 0, 0, &state.client) != CCJS_OK) return 3;
+  if (ccjs_dgram_socket_on_message(state.server, on_server_recv, &state) != CCJS_OK) return 4;
+  if (ccjs_dgram_socket_on_message(state.client, on_client_recv, &state) != CCJS_OK) return 5;
+  if (ccjs_dgram_socket_on_close(state.server, on_close, &state) != CCJS_OK) return 6;
+  if (ccjs_dgram_socket_on_close(state.client, on_close, &state) != CCJS_OK) return 7;
   status = ccjs_dgram_bind(state.server, "127.0.0.1", 0);
   if (status != CCJS_OK) {
     fprintf(stderr, "server bind status %d\\n", status);
-    return 4;
+    return 8;
   }
-  if (ccjs_dgram_local_port(state.server, &port) != CCJS_OK) return 5;
-  if (ccjs_dgram_recv_start(state.server) != CCJS_OK) return 6;
-  if (ccjs_dgram_bind(state.client, "127.0.0.1", 0) != CCJS_OK) return 7;
-  if (ccjs_dgram_recv_start(state.client) != CCJS_OK) return 8;
-  if (ccjs_dgram_send(state.client, "ping", 4, "127.0.0.1", port) != CCJS_OK) return 9;
+  if (ccjs_dgram_socket_address(state.server, &address) != CCJS_OK) return 9;
+  port = address.port;
+  if (strcmp(address.family, "IPv4") != 0 || strcmp(address.address, "127.0.0.1") != 0) return 10;
+  if (ccjs_dgram_recv_start(state.server) != CCJS_OK) return 11;
+  if (ccjs_dgram_bind(state.client, "127.0.0.1", 0) != CCJS_OK) return 12;
+  if (ccjs_dgram_recv_start(state.client) != CCJS_OK) return 13;
+  if (ccjs_dgram_send_with_callback(state.client, "ping", 4, "127.0.0.1", port, on_client_send, &state) != CCJS_OK) return 14;
 
   while (ccjs_loop_has_work(&loop) && guard < 200) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 10;
+    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 15;
     guard += 1;
   }
 
-  if (guard >= 200) return 11;
-  printf("%d %d %s\\n", state.server_received, state.client_received, state.message);
+  if (guard >= 200) return 16;
+  printf("%d %d %d %d %d %s\\n", state.server_received, state.server_sent, state.client_received, state.client_sent, state.closed, state.message);
   ccjs_loop_dispose(&loop);
   return 0;
 }
@@ -642,11 +673,116 @@ int main(void) {
     fail('run libuv dgram smoke', run)
   }
 
-  const expected = '1 1 ping\n'
+  const expected = '1 1 1 1 2 ping\n'
 
   if (stdout !== expected) {
     console.error(`Libuv dgram smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
     process.exit(1)
+  }
+}
+
+async function checkLibuvCompiledDgramServer(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'compiled-dgram-src')
+  const dgramBuildDir = join(workDir, 'compiled-dgram-build')
+  const port = await reserveUdpPort()
+  const source = `import dgram from 'node:dgram'
+
+const server = dgram.createSocket('udp4')
+
+server.on('message', (message, rinfo) => {
+  server.send(message, rinfo.port, rinfo.address)
+})
+
+server.bind(${port}, '127.0.0.1')
+`
+  const compiled = compileSource(source, {
+    target: 'c'
+  })
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_compiled_dgram_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_compiled_dgram_smoke generated-dgram-server.c)
+target_link_libraries(ccjs_libuv_compiled_dgram_smoke PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(join(sourceDir, 'generated-dgram-server.c'), compiled.code)
+
+  await checkCommand('configure compiled libuv dgram smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    dgramBuildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build compiled libuv dgram smoke', 'cmake', ['--build', dgramBuildDir])
+
+  const executable = join(dgramBuildDir, 'ccjs_libuv_compiled_dgram_smoke')
+  const child = spawn(executable, [], {
+    cwd: dgramBuildDir,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  let stdout = ''
+  let stderr = ''
+  let exited = false
+  let exitCode = 0
+  const exitPromise = new Promise<void>((resolve) => {
+    child.on('exit', (code) => {
+      exited = true
+      exitCode = code ?? 0
+      resolve()
+    })
+  })
+
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk
+  })
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk
+  })
+
+  try {
+    const response = await requestUdpWithRetries(port, 'compiled-ping')
+
+    if (response !== 'compiled-ping') {
+      throw new Error(`compiled dgram server body mismatch: ${JSON.stringify(response)}`)
+    }
+  } catch (error) {
+    if (stdout.length > 0) {
+      process.stdout.write(stdout)
+    }
+
+    if (stderr.length > 0) {
+      process.stderr.write(stderr)
+    }
+
+    throw error
+  } finally {
+    if (!exited) {
+      child.kill('SIGTERM')
+      await Promise.race([exitPromise, sleep(2000)])
+    }
+
+    if (!exited) {
+      child.kill('SIGKILL')
+      await Promise.race([exitPromise, sleep(2000)])
+    }
+  }
+
+  if (exited && exitCode !== 0) {
+    fail('run compiled libuv dgram smoke', {
+      code: exitCode,
+      stdout,
+      stderr
+    })
   }
 }
 
@@ -1217,6 +1353,27 @@ async function reserveTcpPort(): Promise<number> {
   return address.port
 }
 
+async function reserveUdpPort(): Promise<number> {
+  const socket = createUdpSocket('udp4')
+
+  await new Promise<void>((resolve, reject) => {
+    socket.once('error', reject)
+    socket.bind(0, '127.0.0.1', () => resolve())
+  })
+
+  const address = socket.address()
+
+  await new Promise<void>((resolve) => {
+    socket.close(() => resolve())
+  })
+
+  if (address == null || typeof address === 'string') {
+    throw new Error('Expected UDP address with a numeric port')
+  }
+
+  return address.port
+}
+
 async function requestHttpWithRetries(port: number, path: string): Promise<string> {
   let lastError: unknown = null
 
@@ -1258,6 +1415,58 @@ function requestHttp(port: number, path: string): Promise<string> {
     socket.on('error', (error) => {
       clearTimeout(timer)
       reject(error)
+    })
+  })
+}
+
+async function requestUdpWithRetries(port: number, message: string): Promise<string> {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      return await requestUdp(port, message)
+    } catch (error) {
+      lastError = error
+      await sleep(100)
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
+function requestUdp(port: number, message: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = createUdpSocket('udp4')
+    let settled = false
+    const finish = (error: Error | null, value = '') => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      clearTimeout(timer)
+      socket.close()
+
+      if (error != null) {
+        reject(error)
+      } else {
+        resolve(value)
+      }
+    }
+    const timer = setTimeout(() => {
+      finish(new Error(`Timed out waiting for compiled dgram server on port ${port}`))
+    }, 1000)
+
+    socket.once('message', (buffer) => {
+      finish(null, buffer.toString('utf8'))
+    })
+    socket.once('error', (error) => {
+      finish(error)
+    })
+    socket.send(Buffer.from(message), port, '127.0.0.1', (error) => {
+      if (error != null) {
+        finish(error)
+      }
     })
   })
 }

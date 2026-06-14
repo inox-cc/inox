@@ -110,6 +110,50 @@ export function main(): void {
   assert.match(result.code, /#include "ccjs\/dgram\.h"/)
 })
 
+test('lowers node:dgram message echo sockets to the C dgram runtime', () => {
+  const result = compileSource(
+    `import dgram from 'node:dgram'
+
+const server = dgram.createSocket('udp4')
+server.on('message', (message, rinfo) => {
+  server.send(message, rinfo.port, rinfo.address)
+})
+server.bind(0, '127.0.0.1', () => {
+  const address = server.address()
+  console.log(address.port)
+})
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /static ccjs_status ccjs_dgram_message_handler_\d+\(void\* user, ccjs_dgram_socket\* ccjs_socket, const char\* ccjs_bytes, size_t ccjs_len, const char\* ccjs_host, int ccjs_port\);/)
+  assert.match(result.code, /ccjs_dgram_socket_new\(&ccjs_loop, 0, 0, &server\)/)
+  assert.match(result.code, /ccjs_dgram_socket_on_message\(server, ccjs_dgram_message_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_dgram_bind\(server, "127\.0\.0\.1", \(int\)\(0\)\)/)
+  assert.match(result.code, /ccjs_dgram_recv_start\(server\)/)
+  assert.match(result.code, /ccjs_dgram_send\(ccjs_socket, ccjs_bytes, ccjs_len, ccjs_host, \(int\)\(ccjs_port\)\)/)
+  assert.match(result.code, /ccjs_dgram_socket_address\(server, &address\)/)
+  assert.match(result.code, /printf\("%g\\n", \(\(double\)address\.port\)\)/)
+})
+
+test('lowers node:dgram createSocket and bind option objects with keyword keys', () => {
+  const result = compileSource(
+    `import { createSocket } from 'node:dgram'
+
+const socket = createSocket({ type: 'udp4' })
+socket.bind({ port: 0, address: '127.0.0.1' })
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_dgram_socket_new\(&ccjs_loop, 0, 0, &socket\)/)
+  assert.match(result.code, /ccjs_dgram_bind\(socket, "127\.0\.0\.1", \(int\)\(0\)\)/)
+})
+
 test('emits C net runtime include for node:net imports', () => {
   const result = compileSource(
     `import net from 'node:net'

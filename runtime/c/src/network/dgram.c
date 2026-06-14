@@ -1,23 +1,28 @@
 #include "ccjs/dgram.h"
 
+#include <string.h>
+
 #ifdef CCJS_LOOP_BACKEND_LIBUV
 #include "../async/loop-libuv-internal.h"
 
 #include <stdlib.h>
-#include <string.h>
 
 typedef struct ccjs_dgram_send_request {
   uv_udp_send_t request;
   ccjs_dgram_socket* socket;
   char* bytes;
   size_t len;
+  ccjs_dgram_send_fn callback;
+  void* user;
 } ccjs_dgram_send_request;
 
 struct ccjs_dgram_socket {
   ccjs_loop* loop;
   ccjs_allocator* allocator;
   ccjs_dgram_recv_fn recv;
-  void* user;
+  void* recv_user;
+  ccjs_dgram_close_fn close;
+  void* close_user;
   uv_udp_t handle;
   int closing;
   int retained;
@@ -59,7 +64,7 @@ ccjs_status ccjs_dgram_socket_new(
   socket->loop = loop;
   socket->allocator = allocator;
   socket->recv = recv;
-  socket->user = user;
+  socket->recv_user = user;
 
   if (uv_udp_init(uv_loop, &socket->handle) != 0) {
     allocator->free(allocator->user, socket, sizeof(ccjs_dgram_socket), _Alignof(ccjs_dgram_socket));
@@ -95,6 +100,26 @@ ccjs_status ccjs_dgram_bind(ccjs_dgram_socket* socket, const char* host, int por
   return uv_udp_bind(&socket->handle, (const struct sockaddr*)&addr, 0) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
 }
 
+ccjs_status ccjs_dgram_socket_on_message(ccjs_dgram_socket* socket, ccjs_dgram_recv_fn recv, void* user) {
+  if (socket == 0 || socket->closing || recv == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  socket->recv = recv;
+  socket->recv_user = user;
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_dgram_socket_on_close(ccjs_dgram_socket* socket, ccjs_dgram_close_fn close, void* user) {
+  if (socket == 0 || socket->closing || close == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  socket->close = close;
+  socket->close_user = user;
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_dgram_recv_start(ccjs_dgram_socket* socket) {
   if (socket == 0 || socket->closing || socket->recv == 0) {
     return CCJS_ERR_TYPE;
@@ -112,6 +137,18 @@ ccjs_status ccjs_dgram_recv_stop(ccjs_dgram_socket* socket) {
 }
 
 ccjs_status ccjs_dgram_send(ccjs_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
+  return ccjs_dgram_send_with_callback(socket, bytes, len, host, port, 0, 0);
+}
+
+ccjs_status ccjs_dgram_send_with_callback(
+  ccjs_dgram_socket* socket,
+  const char* bytes,
+  size_t len,
+  const char* host,
+  int port,
+  ccjs_dgram_send_fn callback,
+  void* user
+) {
   if (socket == 0 || socket->closing || (bytes == 0 && len != 0) || host == 0) {
     return CCJS_ERR_TYPE;
   }
@@ -127,6 +164,8 @@ ccjs_status ccjs_dgram_send(ccjs_dgram_socket* socket, const char* bytes, size_t
   memset(request, 0, sizeof(ccjs_dgram_send_request));
   request->socket = socket;
   request->len = len;
+  request->callback = callback;
+  request->user = user;
 
   if (len != 0) {
     request->bytes = allocator->alloc(allocator->user, len, _Alignof(char));
@@ -175,6 +214,31 @@ ccjs_status ccjs_dgram_send(ccjs_dgram_socket* socket, const char* bytes, size_t
     allocator->free(allocator->user, request, sizeof(ccjs_dgram_send_request), _Alignof(ccjs_dgram_send_request));
     return CCJS_ERR_FIELD;
   }
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_dgram_socket_address(ccjs_dgram_socket* socket, ccjs_dgram_address* out) {
+  if (socket == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  memset(out, 0, sizeof(ccjs_dgram_address));
+  struct sockaddr_storage addr;
+  int len = sizeof(addr);
+
+  if (uv_udp_getsockname(&socket->handle, (struct sockaddr*)&addr, &len) != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  if (((struct sockaddr*)&addr)->sa_family != AF_INET) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  const struct sockaddr_in* ip4 = (const struct sockaddr_in*)&addr;
+  uv_ip4_name(ip4, out->address, sizeof(out->address));
+  out->family = "IPv4";
+  out->port = ntohs(ip4->sin_port);
 
   return CCJS_OK;
 }
@@ -258,7 +322,7 @@ static void ccjs_dgram_recv_cb(
       port = ntohs(ip4->sin_port);
     }
 
-    ccjs_status status = socket->recv(socket->user, socket, buf->base, (size_t)nread, host, port);
+    ccjs_status status = socket->recv(socket->recv_user, socket, buf->base, (size_t)nread, host, port);
 
     if (status != CCJS_OK) {
       ccjs_libuv_loop_report_status(socket->loop, status);
@@ -279,8 +343,18 @@ static void ccjs_dgram_send_cb(uv_udp_send_t* request, int status) {
 
   ccjs_dgram_socket* socket = send->socket;
 
-  if (status != 0) {
+  ccjs_status send_status = status == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+
+  if (status != 0 && send->callback == 0) {
     ccjs_libuv_loop_report_status(socket->loop, CCJS_ERR_FIELD);
+  }
+
+  if (send->callback != 0) {
+    ccjs_status callback_status = send->callback(send->user, send_status);
+
+    if (callback_status != CCJS_OK) {
+      ccjs_libuv_loop_report_status(socket->loop, callback_status);
+    }
   }
 
   ccjs_libuv_loop_release_request(socket->loop);
@@ -297,6 +371,10 @@ static void ccjs_dgram_close_cb(uv_handle_t* handle) {
 
   if (socket == 0) {
     return;
+  }
+
+  if (socket->close != 0) {
+    socket->close(socket->close_user, socket);
   }
 
   if (socket->retained) {
@@ -337,6 +415,20 @@ ccjs_status ccjs_dgram_bind(ccjs_dgram_socket* socket, const char* host, int por
   return CCJS_ERR_UNSUPPORTED;
 }
 
+ccjs_status ccjs_dgram_socket_on_message(ccjs_dgram_socket* socket, ccjs_dgram_recv_fn recv, void* user) {
+  (void)socket;
+  (void)recv;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_socket_on_close(ccjs_dgram_socket* socket, ccjs_dgram_close_fn close, void* user) {
+  (void)socket;
+  (void)close;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
 ccjs_status ccjs_dgram_recv_start(ccjs_dgram_socket* socket) {
   (void)socket;
   return CCJS_ERR_UNSUPPORTED;
@@ -353,6 +445,36 @@ ccjs_status ccjs_dgram_send(ccjs_dgram_socket* socket, const char* bytes, size_t
   (void)len;
   (void)host;
   (void)port;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_send_with_callback(
+  ccjs_dgram_socket* socket,
+  const char* bytes,
+  size_t len,
+  const char* host,
+  int port,
+  ccjs_dgram_send_fn callback,
+  void* user
+) {
+  (void)socket;
+  (void)bytes;
+  (void)len;
+  (void)host;
+  (void)port;
+  (void)callback;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_socket_address(ccjs_dgram_socket* socket, ccjs_dgram_address* out) {
+  (void)socket;
+
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  memset(out, 0, sizeof(ccjs_dgram_address));
   return CCJS_ERR_UNSUPPORTED;
 }
 
