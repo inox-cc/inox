@@ -1,4 +1,46 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
+import {
+  createClassDeclaration,
+  createFieldDefinition,
+  createFunctionDeclaration,
+  createFunctionType,
+  createImportDeclaration,
+  createImportSpecifier,
+  createMethodDefinition,
+  createObjectType,
+  createObjectTypeField,
+  createParam,
+  createTypeAliasDeclaration,
+  createVariableDeclaration
+} from './parser/declarations.ts'
+import {
+  createArrayLiteral,
+  createAssignmentExpression,
+  createArrowFunction,
+  createAwaitExpression,
+  createBinaryExpression,
+  createBooleanLiteral,
+  createCallExpression,
+  createIndexExpression,
+  createMemberExpression,
+  createNewExpression,
+  createNullLiteral,
+  createNumberLiteral,
+  createObjectKey,
+  createObjectLiteral,
+  createObjectProperty,
+  createOptionalCallTarget,
+  createOptionalIndexExpression,
+  createOptionalMemberExpression,
+  createReference,
+  createReferenceFromName,
+  createStringLiteral,
+  createTemplateLiteral,
+  createThisExpression,
+  createUnaryExpression,
+  createUpdateExpression
+} from './parser/expressions.ts'
+import { locFromToken } from './parser/locations.ts'
 import { readTypeAnnotation } from './parser/type-annotations.ts'
 import type { AnyNode, Diagnostic, ProgramNode, SourceLocation, Token } from './types.ts'
 
@@ -85,12 +127,7 @@ class Parser {
     if (this.is('identifier')) {
       const local = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected default import name')
 
-      specifiers.push({
-        imported: 'default',
-        local: local.value,
-        default: true,
-        loc: locFromToken(local)
-      })
+      specifiers.push(createImportSpecifier('default', local.value, local, true))
 
       this.matchValue(',')
     }
@@ -112,13 +149,7 @@ class Parser {
     const source = this.expect('string', 'CCJS_EXPECTED_IMPORT', 'expected import source string')
     this.matchValue(';')
 
-    return {
-      type: 'ImportDeclaration',
-      typeOnly: importTypeOnly,
-      specifiers,
-      source: source.value,
-      loc: locFromToken(source)
-    }
+    return createImportDeclaration(importTypeOnly, specifiers, source)
   }
 
   parseNamedImportSpecifiers(): AnyNode[] {
@@ -132,11 +163,7 @@ class Parser {
         local = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected local import name').value
       }
 
-      specifiers.push({
-        imported: imported.value,
-        local,
-        loc: locFromToken(imported)
-      })
+      specifiers.push(createImportSpecifier(imported.value, local, imported))
 
       if (!this.matchValue(',')) {
         break
@@ -162,11 +189,7 @@ class Parser {
         valueType = this.parseTypeAnnotation([',', ')'])
       }
 
-      params.push({
-        name: param.value,
-        valueType,
-        loc: locFromToken(param)
-      })
+      params.push(createParam(param, valueType))
 
       if (!this.matchValue(',')) {
         break
@@ -180,16 +203,14 @@ class Parser {
       returnType = this.parseTypeAnnotation(['{'])
     }
 
-    return {
-      type: 'FunctionDeclaration',
+    return createFunctionDeclaration({
       exported,
       async: isAsync,
-      name: name.value,
-      loc: locFromToken(name),
+      name,
       params,
       returnType,
       body: this.parseBlock()
-    }
+    })
   }
 
   parseTypeAliasDeclaration(exported: boolean): AnyNode {
@@ -197,37 +218,19 @@ class Parser {
     this.expectValue('=', 'CCJS_EXPECTED_TYPE', 'expected = after type alias name')
 
     if (this.isValue('(')) {
-      return {
-        type: 'TypeAliasDeclaration',
-        exported,
-        name: name.value,
-        loc: locFromToken(name),
-        valueType: this.parseFunctionType()
-      }
+      return createTypeAliasDeclaration(exported, name, this.parseFunctionType())
     }
 
     if (!this.isValue('{')) {
       this.report('CCJS_EXPECTED_TYPE', 'only object type aliases are implemented in the current compiler slice')
       this.skipStatement()
 
-      return {
-        type: 'TypeAliasDeclaration',
-        exported,
-        name: name.value,
-        loc: locFromToken(name),
-        valueType: {
-          kind: 'unknown'
-        }
-      }
+      return createTypeAliasDeclaration(exported, name, {
+        kind: 'unknown'
+      })
     }
 
-    return {
-      type: 'TypeAliasDeclaration',
-      exported,
-      name: name.value,
-      loc: locFromToken(name),
-      valueType: this.parseObjectType()
-    }
+    return createTypeAliasDeclaration(exported, name, this.parseObjectType())
   }
 
   parseFunctionType(): AnyNode {
@@ -240,11 +243,7 @@ class Parser {
       this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after function type parameter name')
       const valueType = this.parseTypeAnnotation([',', ')'])
 
-      params.push({
-        name: name.value,
-        valueType,
-        loc: locFromToken(name)
-      })
+      params.push(createParam(name, valueType))
 
       if (!this.matchValue(',')) {
         break
@@ -258,11 +257,7 @@ class Parser {
     })
     this.matchValue(';')
 
-    return {
-      kind: 'function',
-      params,
-      returnType
-    }
+    return createFunctionType(params, returnType)
   }
 
   parseObjectType(): AnyNode {
@@ -276,12 +271,7 @@ class Parser {
       this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after object type field name')
       const valueType = this.parseTypeAnnotation([',', '}'])
 
-      fields.push({
-        name: name.value,
-        readonly,
-        valueType,
-        loc: locFromToken(name)
-      })
+      fields.push(createObjectTypeField(name, readonly, valueType))
 
       if (!this.matchValue(',')) {
         break
@@ -291,10 +281,7 @@ class Parser {
     this.expectValue('}', 'CCJS_EXPECTED_TYPE', 'expected } after object type')
     this.matchValue(';')
 
-    return {
-      kind: 'object',
-      fields
-    }
+    return createObjectType(fields)
   }
 
   parseClassDeclaration(exported: boolean): AnyNode {
@@ -302,14 +289,12 @@ class Parser {
     const fields: AnyNode[] = []
     const methods: AnyNode[] = []
     let extendsName: string | null = null
-    let extendsLoc: SourceLocation | null = null
 
     const extendsToken = this.matchContextualKeyword('extends')
 
     if (extendsToken != null) {
       const base = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected base class name')
       extendsName = base.value
-      extendsLoc = locFromToken(extendsToken)
     }
 
     this.expectValue('{', 'CCJS_EXPECTED_BLOCK', 'expected { after class name')
@@ -326,16 +311,14 @@ class Parser {
 
     this.expectValue('}', 'CCJS_EXPECTED_BLOCK', 'expected } after class body')
 
-    return {
-      type: 'ClassDeclaration',
+    return createClassDeclaration({
       exported,
-      name: name.value,
-      loc: locFromToken(name),
+      name,
       extendsName,
-      extendsLoc,
+      extendsToken,
       fields,
       methods
-    }
+    })
   }
 
   parseClassMember(): AnyNode {
@@ -357,15 +340,12 @@ class Parser {
     })
     this.matchValue(';')
 
-    return {
-      type: 'FieldDefinition',
-      name: name.value,
-      static: staticToken != null,
-      staticLoc: staticToken == null ? null : locFromToken(staticToken),
+    return createFieldDefinition({
+      name,
+      staticToken,
       readonly,
-      valueType,
-      loc: locFromToken(name)
-    }
+      valueType
+    })
   }
 
   parseClassMethod(name: Token, staticToken: Token | null = null): AnyNode {
@@ -381,11 +361,7 @@ class Parser {
         valueType = this.parseTypeAnnotation([',', ')'])
       }
 
-      params.push({
-        name: param.value,
-        valueType,
-        loc: locFromToken(param)
-      })
+      params.push(createParam(param, valueType))
 
       if (!this.matchValue(',')) {
         break
@@ -399,16 +375,13 @@ class Parser {
       returnType = this.parseTypeAnnotation(['{'])
     }
 
-    return {
-      type: 'MethodDefinition',
-      name: name.value,
-      static: staticToken != null,
-      staticLoc: staticToken == null ? null : locFromToken(staticToken),
-      loc: locFromToken(name),
+    return createMethodDefinition({
+      name,
+      staticToken,
       params,
       returnType,
       body: this.parseBlock()
-    }
+    })
   }
 
   parseClassMemberName(): Token {
@@ -800,15 +773,13 @@ class Parser {
     const init = this.matchValue('=') ? this.parseExpression() : null
     this.matchValue(';')
 
-    return {
-      type: 'VariableDeclaration',
+    return createVariableDeclaration({
       kind,
       exported,
-      name: name.value,
-      loc: locFromToken(name),
+      name,
       declaredType,
       init
-    }
+    })
   }
 
   parseExpression(): AnyNode {
@@ -827,12 +798,7 @@ class Parser {
     const expression = this.parseNullish()
 
     if (this.matchValue('=')) {
-      return {
-        type: 'AssignmentExpression',
-        target: expression,
-        value: this.parseAssignment(),
-        loc: expression.loc
-      }
+      return createAssignmentExpression(expression, this.parseAssignment())
     }
 
     return expression
@@ -849,27 +815,14 @@ class Parser {
     this.expectValue('=>', 'CCJS_EXPECTED_ARROW', 'expected => in arrow function')
     const body = this.isValue('{') ? this.parseBlock() : this.parseExpression()
 
-    return {
-      type: 'ArrowFunctionExpression',
-      async: isAsync,
-      params,
-      body,
-      expressionBody: !Array.isArray(body),
-      loc: locFromToken(start)
-    }
+    return createArrowFunction(start, isAsync, params, body)
   }
 
   parseArrowParameters(): AnyNode[] {
     if (this.is('identifier') && this.peek(1).value === '=>') {
       const token = this.advance()
 
-      return [
-        {
-          name: token.value,
-          valueType: 'unknown',
-          loc: locFromToken(token)
-        }
-      ]
+      return [createParam(token)]
     }
 
     const params: AnyNode[] = []
@@ -883,11 +836,7 @@ class Parser {
         valueType = this.parseTypeAnnotation([',', ')'])
       }
 
-      params.push({
-        name: param.value,
-        valueType,
-        loc: locFromToken(param)
-      })
+      params.push(createParam(param, valueType))
 
       if (!this.matchValue(',')) {
         break
@@ -933,13 +882,7 @@ class Parser {
     while (operators.includes(this.current().value)) {
       const operator = this.advance()
       const right = parseOperand()
-      left = {
-        type: 'BinaryExpression',
-        operator: operator.value,
-        left,
-        right,
-        loc: left.loc
-      }
+      left = createBinaryExpression(operator, left, right)
     }
 
     return left
@@ -949,11 +892,7 @@ class Parser {
     if (this.matchKeyword('await')) {
       const token = this.previous()
 
-      return {
-        type: 'AwaitExpression',
-        argument: this.parseUnary(),
-        loc: locFromToken(token)
-      }
+      return createAwaitExpression(token, this.parseUnary())
     }
 
     if (this.matchKeyword('new')) {
@@ -963,24 +902,13 @@ class Parser {
     if (this.isValue('++') || this.isValue('--')) {
       const operator = this.advance()
 
-      return {
-        type: 'UpdateExpression',
-        operator: operator.value,
-        argument: this.parseUnary(),
-        prefix: true,
-        loc: locFromToken(operator)
-      }
+      return createUpdateExpression(operator, this.parseUnary(), true)
     }
 
     if (this.isValue('!') || this.isValue('-')) {
       const operator = this.advance()
 
-      return {
-        type: 'UnaryExpression',
-        operator: operator.value,
-        argument: this.parseUnary(),
-        loc: locFromToken(operator)
-      }
+      return createUnaryExpression(operator, this.parseUnary())
     }
 
     return this.parsePostfix()
@@ -992,12 +920,7 @@ class Parser {
 
     while (this.matchValue('.')) {
       const property = this.parsePropertyName()
-      callee = {
-        type: 'MemberExpression',
-        object: callee,
-        property: property.value,
-        loc: callee.loc
-      }
+      callee = createMemberExpression(callee, property)
     }
 
     if (this.matchValue('(')) {
@@ -1012,12 +935,7 @@ class Parser {
       this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after constructor arguments')
     }
 
-    return {
-      type: 'NewExpression',
-      callee,
-      args,
-      loc: locFromToken(start)
-    }
+    return createNewExpression(start, callee, args)
   }
 
   parsePostfix(): AnyNode {
@@ -1031,12 +949,7 @@ class Parser {
 
       if (this.matchValue('.')) {
         const property = this.parsePropertyName()
-        expression = {
-          type: 'MemberExpression',
-          object: expression,
-          property: property.value,
-          loc: expression.loc
-        }
+        expression = createMemberExpression(expression, property)
         continue
       }
 
@@ -1048,24 +961,13 @@ class Parser {
       if (this.matchValue('[')) {
         const index = this.parseExpression()
         this.expectValue(']', 'CCJS_EXPECTED_BRACKET', 'expected ] after index expression')
-        expression = {
-          type: 'IndexExpression',
-          object: expression,
-          index,
-          loc: expression.loc
-        }
+        expression = createIndexExpression(expression, index)
         continue
       }
 
       if (this.isValue('++') || this.isValue('--')) {
         const operator = this.advance()
-        expression = {
-          type: 'UpdateExpression',
-          operator: operator.value,
-          argument: expression,
-          prefix: false,
-          loc: expression.loc
-        }
+        expression = createUpdateExpression(operator, expression, false)
         continue
       }
 
@@ -1077,33 +979,19 @@ class Parser {
 
   finishOptionalPostfixExpression(object: AnyNode): AnyNode {
     if (this.matchValue('(')) {
-      return this.finishCallExpression({
-        type: 'OptionalCallTarget',
-        callee: object,
-        loc: object.loc
-      })
+      return this.finishCallExpression(createOptionalCallTarget(object))
     }
 
     if (this.matchValue('[')) {
       const index = this.parseExpression()
       this.expectValue(']', 'CCJS_EXPECTED_BRACKET', 'expected ] after optional index expression')
 
-      return {
-        type: 'OptionalIndexExpression',
-        object,
-        index,
-        loc: object.loc
-      }
+      return createOptionalIndexExpression(object, index)
     }
 
     const property = this.parsePropertyName()
 
-    return {
-      type: 'OptionalMemberExpression',
-      object,
-      property: property.value,
-      loc: object.loc
-    }
+    return createOptionalMemberExpression(object, property)
   }
 
   finishCallExpression(callee: AnyNode): AnyNode {
@@ -1119,12 +1007,7 @@ class Parser {
 
     this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after call arguments')
 
-    return {
-      type: callee.type === 'OptionalCallTarget' ? 'OptionalCallExpression' : 'CallExpression',
-      callee: callee.type === 'OptionalCallTarget' ? callee.callee : callee,
-      args,
-      loc: callee.loc
-    }
+    return createCallExpression(callee, args)
   }
 
   parsePrimary(): AnyNode {
@@ -1161,72 +1044,41 @@ class Parser {
     if (this.is('string')) {
       const token = this.advance()
 
-      return {
-        type: 'StringLiteral',
-        value: token.value,
-        loc: locFromToken(token)
-      }
+      return createStringLiteral(token)
     }
 
     if (this.is('template')) {
       const token = this.advance()
 
-      return {
-        type: 'TemplateLiteral',
-        raw: token.value,
-        loc: locFromToken(token)
-      }
+      return createTemplateLiteral(token)
     }
 
     if (this.is('number')) {
       const token = this.advance()
 
-      return {
-        type: 'NumberLiteral',
-        value: token.value,
-        loc: locFromToken(token)
-      }
+      return createNumberLiteral(token)
     }
 
     if (this.matchKeyword('true')) {
-      return {
-        type: 'BooleanLiteral',
-        value: true,
-        loc: locFromToken(this.previous())
-      }
+      return createBooleanLiteral(this.previous(), true)
     }
 
     if (this.matchKeyword('false')) {
-      return {
-        type: 'BooleanLiteral',
-        value: false,
-        loc: locFromToken(this.previous())
-      }
+      return createBooleanLiteral(this.previous(), false)
     }
 
     if (this.matchKeyword('null')) {
-      return {
-        type: 'NullLiteral',
-        value: null,
-        loc: locFromToken(this.previous())
-      }
+      return createNullLiteral(this.previous())
     }
 
     if (this.matchKeyword('this')) {
-      return {
-        type: 'ThisExpression',
-        loc: locFromToken(this.previous())
-      }
+      return createThisExpression(this.previous())
     }
 
     if (this.is('identifier') || this.is('keyword')) {
       const token = this.advance()
 
-      return {
-        type: 'Reference',
-        path: [token.value],
-        loc: locFromToken(token)
-      }
+      return createReference(token)
     }
 
     const token = this.current()
@@ -1252,11 +1104,7 @@ class Parser {
 
     this.expectValue(']', 'CCJS_EXPECTED_BRACKET', 'expected ] after array literal')
 
-    return {
-      type: 'ArrayLiteral',
-      elements,
-      loc: locFromToken(start)
-    }
+    return createArrayLiteral(start, elements)
   }
 
   parseObjectLiteral(): AnyNode {
@@ -1270,11 +1118,7 @@ class Parser {
       if (this.matchValue(':')) {
         value = this.parseExpression()
       } else if (key.kind === 'identifier') {
-        value = {
-          type: 'Reference',
-          path: [key.name],
-          loc: key.loc
-        }
+        value = createReferenceFromName(key.name, key.loc)
       } else {
         this.report('CCJS_EXPECTED_OBJECT_VALUE', 'expected : after object property key')
         value = {
@@ -1282,11 +1126,7 @@ class Parser {
         }
       }
 
-      properties.push({
-        key: key.name,
-        value,
-        loc: key.loc
-      })
+      properties.push(createObjectProperty(key, value))
 
       if (!this.matchValue(',')) {
         break
@@ -1295,11 +1135,7 @@ class Parser {
 
     this.expectValue('}', 'CCJS_EXPECTED_OBJECT', 'expected } after object literal')
 
-    return {
-      type: 'ObjectLiteral',
-      properties,
-      loc: locFromToken(start)
-    }
+    return createObjectLiteral(start, properties)
   }
 
   parseObjectKey(): AnyNode {
@@ -1307,20 +1143,15 @@ class Parser {
       const token = this.advance()
 
       return {
-        kind: 'identifier',
-        name: token.value,
-        loc: locFromToken(token)
+        ...createObjectKey(token),
+        kind: 'identifier'
       }
     }
 
     if (this.is('string') || this.is('number')) {
       const token = this.advance()
 
-      return {
-        kind: token.type,
-        name: token.value,
-        loc: locFromToken(token)
-      }
+      return createObjectKey(token)
     }
 
     const token = this.current()
@@ -1594,13 +1425,5 @@ class Parser {
 
   previous(): Token {
     return this.tokens[Math.max(0, this.position - 1)]
-  }
-}
-
-function locFromToken(token: SourceLocation): SourceLocation {
-  return {
-    ...(token.file == null ? {} : { file: token.file }),
-    line: token.line,
-    column: token.column
   }
 }
