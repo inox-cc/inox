@@ -140,6 +140,60 @@ export function main(): void {
   assert.match(result.code, /#include "ccjs\/http\.h"/)
 })
 
+test('lowers node:http createServer and listen to the C HTTP runtime', () => {
+  const result = compileSource(
+    `import http from 'node:http'
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ data: 'Hello World!' }))
+})
+
+server.listen(8080, '127.0.0.1')
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /static ccjs_status ccjs_http_handler_\d+\(void\* user, const ccjs_http_request\* ccjs_request, ccjs_http_response\* ccjs_response\);/)
+  assert.match(result.code, /ccjs_http_server_new\(&ccjs_loop, ccjs_http_handler_\d+, 0, &server\)/)
+  assert.match(result.code, /ccjs_http_server_listen\(server, "127\.0\.0\.1", \(int\)\(8080\), 128\)/)
+  assert.match(result.code, /ccjs_http_response_write_head\(res, \(int\)\(200\), ccjs_http_headers_\d+, 1\)/)
+  assert.match(result.code, /ccjs_http_response_end\(res, "\{\\\"data\\\":\\\"Hello World!\\\"\}", 23\)/)
+})
+
+test('lowers aliased node:http imports and request field checks for C', () => {
+  const result = compileSource(
+    `import nodeHttp from 'node:http'
+
+const server = nodeHttp.createServer((request, response) => {
+  if (request.method === 'GET' && request.url === '/health') {
+    response.statusCode = 204
+    response.end()
+  } else {
+    response.setHeader('Content-Type', 'text/plain')
+    response.write('missing')
+    response.end(request.url)
+  }
+})
+
+server.listen(9000)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_http_request_method_equals\(request, "GET", 3\)/)
+  assert.match(result.code, /ccjs_http_request_url_equals\(request, "\/health", 7\)/)
+  assert.match(result.code, /ccjs_http_response_set_status\(response, \(int\)\(204\)\)/)
+  assert.match(result.code, /ccjs_http_response_set_header\(response, "Content-Type", 12, "text\/plain", 10\)/)
+  assert.match(result.code, /ccjs_http_response_write\(response, "missing", 7\)/)
+  assert.match(result.code, /ccjs_http_response_end\(response, request->url, request->url_len\)/)
+  assert.match(result.code, /ccjs_http_server_listen\(server, 0, \(int\)\(9000\), 128\)/)
+})
+
 test('compiles arrays, objects, member access and operators to JS', () => {
   const result = compileSource(
     `export function main(): void {
