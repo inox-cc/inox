@@ -1,20 +1,23 @@
-import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:tls'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
-import { compileSource } from '../src/compiler/index.ts'
+import {
+  assert,
+  compileRuntimeProgram,
+  compileSource,
+  generateLocalhostCertificate,
+  isLocalListenUnavailable,
+  join,
+  mkdir,
+  mkdtemp,
+  readFile,
+  repoRoot,
+  rm,
+  runCommand,
+  startLocalTlsServer,
+  tmpdir,
+  writeFile
+} from './helpers/runtime-c.ts'
 
-type CommandResult = {
-  code: number
-  stdout: string
-  stderr: string
-}
 
-const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
 test('C runtime value/object/array skeleton compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -125,524 +128,6 @@ int main(void) {
   }
 })
 
-test('C runtime console adapter captures stdout and stderr writes', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-console-runtime-'))
-  const source = join(dir, 'console-runtime.c')
-  const output = join(dir, 'console-runtime')
-
-  try {
-    await writeFile(
-      source,
-      `#include <stdio.h>
-#include <string.h>
-#include "ccjs/console.h"
-
-typedef struct capture {
-  char out[64];
-  size_t out_len;
-  char err[64];
-  size_t err_len;
-} capture;
-
-static ccjs_status capture_write(void* user, ccjs_console_stream stream, const char* bytes, size_t len) {
-  capture* cap = (capture*)user;
-  char* target = stream == CCJS_CONSOLE_STDERR ? cap->err : cap->out;
-  size_t* target_len = stream == CCJS_CONSOLE_STDERR ? &cap->err_len : &cap->out_len;
-
-  if (*target_len + len >= 64) return CCJS_ERR_OOM;
-  memcpy(target + *target_len, bytes, len);
-  *target_len += len;
-  target[*target_len] = '\\0';
-  return CCJS_OK;
-}
-
-int main(void) {
-  capture cap = { 0 };
-  ccjs_console_set_adapter((ccjs_console_adapter){ &cap, capture_write });
-
-  if (ccjs_console_write_line(CCJS_CONSOLE_STDOUT, "hello", 5) != CCJS_OK) return 1;
-  if (ccjs_console_printf(CCJS_CONSOLE_STDERR, "%s %d\\n", "bad", 7) < 0) return 2;
-
-  ccjs_console_clear_adapter();
-  printf("%s|%s", cap.out, cap.err);
-  return 0;
-}
-`
-    )
-
-    const compile = await runCommand('cc', ['-Iruntime/c/include', source, 'runtime/c/src/console/console.c', '-o', output])
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'hello\n|bad 7\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('C runtime TLS fallback reports unsupported backend', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-tls-runtime-'))
-  const source = join(dir, 'tls-runtime.c')
-  const output = join(dir, 'tls-runtime')
-
-  try {
-    await writeFile(
-      source,
-      `#include <stdio.h>
-#include "ccjs/tls.h"
-
-static ccjs_status on_connect(void* user, ccjs_tls_client* client, ccjs_status status) {
-  (void)user;
-  (void)client;
-  (void)status;
-  return CCJS_OK;
-}
-
-static ccjs_status on_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len) {
-  (void)user;
-  (void)client;
-  (void)bytes;
-  (void)len;
-  return CCJS_OK;
-}
-
-static void on_close(void* user, ccjs_tls_client* client) {
-  (void)user;
-  (void)client;
-}
-
-int main(void) {
-  ccjs_loop loop = { 0 };
-  ccjs_tls_client* client = (ccjs_tls_client*)1;
-
-  if (ccjs_tls_connect(&loop, "example.test", 443, "example.test", on_connect, on_data, on_close, 0, &client) != CCJS_ERR_UNSUPPORTED) return 1;
-  if (client != 0) return 2;
-  if (ccjs_tls_connect(&loop, "example.test", 443, "example.test", on_connect, on_data, on_close, 0, 0) != CCJS_ERR_TYPE) return 3;
-
-  printf("tls unsupported\\n");
-  return 0;
-}
-`
-    )
-
-    const compile = await runCommand('cc', [
-      '-Iruntime/c/include',
-      source,
-      'runtime/c/src/network/tls.c',
-      '-o',
-      output
-    ])
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'tls unsupported\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('C runtime BoringSSL TLS client connects to local TLS server', async (t) => {
-  if (process.env.CCJS_TEST_BORINGSSL_TLS !== '1') {
-    t.skip('set CCJS_TEST_BORINGSSL_TLS=1 to build BoringSSL TLS integration smoke')
-    return
-  }
-
-  const cc = await runCommand('cc', ['--version'])
-  const cmake = await runCommand('cmake', ['--version'])
-  const openssl = await runCommand('openssl', ['version'])
-
-  if (cc.code !== 0 || cmake.code !== 0 || openssl.code !== 0) {
-    t.skip('cc, cmake and openssl are required')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-boringssl-runtime-'))
-  const buildDir = join(dir, 'build')
-  const goodKey = join(dir, 'good-key.pem')
-  const goodCert = join(dir, 'good-cert.pem')
-  const badKey = join(dir, 'bad-key.pem')
-  const badCert = join(dir, 'bad-cert.pem')
-  const source = join(dir, 'tls-client.c')
-
-  try {
-    await generateLocalhostCertificate(goodKey, goodCert)
-    await generateLocalhostCertificate(badKey, badCert)
-    await writeFile(
-      join(dir, 'CMakeLists.txt'),
-      `cmake_minimum_required(VERSION 3.22)
-project(ccjs_tls_smoke C CXX)
-
-add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
-add_executable(tls-client tls-client.c)
-set_property(TARGET tls-client PROPERTY LINKER_LANGUAGE CXX)
-target_link_libraries(tls-client PRIVATE ccjs_runtime)
-`
-    )
-    await writeFile(
-      source,
-      `#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/loop.h"
-#include "ccjs/tls.h"
-
-typedef struct tls_state {
-  ccjs_tls_client* client;
-  char response[4096];
-  size_t response_len;
-  int done;
-  ccjs_status status;
-} tls_state;
-
-static void* test_alloc(void* user, size_t size, size_t align) {
-  (void)user;
-  (void)align;
-  return calloc(1, size);
-}
-
-static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
-  (void)user;
-  (void)old_size;
-  (void)align;
-  return realloc(ptr, new_size);
-}
-
-static void test_free(void* user, void* ptr, size_t size, size_t align) {
-  (void)user;
-  (void)size;
-  (void)align;
-  free(ptr);
-}
-
-static ccjs_status on_connect(void* user, ccjs_tls_client* client, ccjs_status status) {
-  tls_state* state = (tls_state*)user;
-  state->client = client;
-
-  if (status != CCJS_OK) {
-    state->status = status;
-    state->done = 1;
-    return CCJS_OK;
-  }
-
-  const char request[] = "GET / HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n";
-  return ccjs_tls_client_write(client, request, sizeof(request) - 1);
-}
-
-static ccjs_status on_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len) {
-  tls_state* state = (tls_state*)user;
-
-  if (state->response_len + len >= sizeof(state->response)) {
-    state->status = CCJS_ERR_UNSUPPORTED;
-    state->done = 1;
-    ccjs_tls_client_close(client);
-    return CCJS_OK;
-  }
-
-  memcpy(state->response + state->response_len, bytes, len);
-  state->response_len += len;
-  state->response[state->response_len] = '\\0';
-
-  if (strstr(state->response, "\\r\\n\\r\\nok") != 0) {
-    state->status = CCJS_OK;
-    state->done = 1;
-    ccjs_tls_client_close(client);
-  }
-
-  return CCJS_OK;
-}
-
-static void on_close(void* user, ccjs_tls_client* client) {
-  (void)client;
-  tls_state* state = (tls_state*)user;
-
-  if (!state->done) {
-    state->status = CCJS_ERR_FIELD;
-    state->done = 1;
-  }
-}
-
-int main(int argc, char** argv) {
-  if (argc != 2) return 2;
-
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
-  tls_state state = { 0 };
-  state.status = CCJS_ERR_FIELD;
-
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 3;
-
-  ccjs_status status = ccjs_tls_connect(
-    &loop,
-    "127.0.0.1",
-    atoi(argv[1]),
-    "localhost",
-    on_connect,
-    on_data,
-    on_close,
-    &state,
-    &state.client
-  );
-
-  if (status != CCJS_OK) {
-    ccjs_loop_dispose(&loop);
-    return 4;
-  }
-
-  for (int spin = 0; !state.done && ccjs_loop_has_work(&loop) && spin < 1000000; spin += 1) {
-    status = ccjs_loop_poll(&loop, 0);
-
-    if (status != CCJS_OK) {
-      state.status = status;
-      state.done = 1;
-    }
-  }
-
-  if (!state.done) {
-    state.status = CCJS_ERR_FIELD;
-    if (state.client != 0) ccjs_tls_client_close(state.client);
-  }
-
-  ccjs_loop_dispose(&loop);
-
-  if (state.status != CCJS_OK) {
-    printf("status %d\\n", (int)state.status);
-    return 10 + (int)state.status;
-  }
-
-  printf("%s", state.response);
-  return strstr(state.response, "ok") == 0 ? 20 : 0;
-}
-`
-    )
-
-    const configure = await runCommand('cmake', [
-      '-S',
-      dir,
-      '-B',
-      buildDir,
-      '-DCCJS_LOOP_BACKEND=libuv',
-      '-DCCJS_TLS_BACKEND=boringssl',
-      `-DCCJS_TLS_CA_BUNDLE=${goodCert}`
-    ])
-
-    assert.equal(configure.code, 0, configure.stderr)
-
-    const build = await runCommand('cmake', ['--build', buildDir, '--target', 'tls-client'])
-
-    assert.equal(build.code, 0, build.stderr)
-
-    let goodServer
-
-    try {
-      goodServer = await startLocalTlsServer(goodKey, goodCert)
-    } catch (error) {
-      if (isLocalListenUnavailable(error)) {
-        t.skip('local TLS listen is not permitted in this environment')
-        return
-      }
-
-      throw error
-    }
-
-    try {
-      const run = await runCommand(join(buildDir, 'tls-client'), [String(goodServer.port)])
-
-      assert.equal(run.code, 0, run.stderr)
-      assert.match(run.stdout, /HTTP\/1\.1 200 OK/)
-      assert.match(run.stdout, /\r?\n\r?\nok/)
-    } finally {
-      await goodServer.close()
-    }
-
-    const badServer = await startLocalTlsServer(badKey, badCert)
-
-    try {
-      const run = await runCommand(join(buildDir, 'tls-client'), [String(badServer.port)])
-
-      assert.notEqual(run.code, 0)
-      assert.match(run.stdout, /status/)
-    } finally {
-      await badServer.close()
-    }
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('generated C fetch uses BoringSSL TLS for HTTPS URLs', async (t) => {
-  if (process.env.CCJS_TEST_BORINGSSL_FETCH !== '1') {
-    t.skip('set CCJS_TEST_BORINGSSL_FETCH=1 to build BoringSSL HTTPS fetch smoke')
-    return
-  }
-
-  const cc = await runCommand('cc', ['--version'])
-  const cmake = await runCommand('cmake', ['--version'])
-  const openssl = await runCommand('openssl', ['version'])
-
-  if (cc.code !== 0 || cmake.code !== 0 || openssl.code !== 0) {
-    t.skip('cc, cmake and openssl are required')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-boringssl-fetch-'))
-  const buildDir = join(dir, 'build')
-  const key = join(dir, 'key.pem')
-  const cert = join(dir, 'cert.pem')
-  let server: { port: number; close: () => Promise<void> } | null = null
-
-  try {
-    await generateLocalhostCertificate(key, cert)
-
-    try {
-      server = await startLocalTlsServer(key, cert)
-    } catch (error) {
-      if (isLocalListenUnavailable(error)) {
-        t.skip('local TLS listen is not permitted in this environment')
-        return
-      }
-
-      throw error
-    }
-
-    const result = compileSource(
-      `const response = await fetch('https://localhost:${server.port}/')
-const text = await response.text()
-console.log(response.status, text)
-`,
-      {
-        target: 'c',
-        loopBackend: 'libuv',
-        tlsBackend: 'boringssl'
-      }
-    )
-
-    await writeFile(join(dir, 'main.c'), result.code)
-    await writeFile(
-      join(dir, 'CMakeLists.txt'),
-      `cmake_minimum_required(VERSION 3.22)
-project(ccjs_https_fetch_smoke C CXX)
-
-add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
-add_executable(fetch-client main.c)
-set_property(TARGET fetch-client PROPERTY LINKER_LANGUAGE CXX)
-target_link_libraries(fetch-client PRIVATE ccjs_runtime)
-`
-    )
-
-    const configure = await runCommand('cmake', [
-      '-S',
-      dir,
-      '-B',
-      buildDir,
-      '-DCCJS_LOOP_BACKEND=libuv',
-      '-DCCJS_TLS_BACKEND=boringssl',
-      `-DCCJS_TLS_CA_BUNDLE=${cert}`
-    ])
-
-    assert.equal(configure.code, 0, configure.stderr)
-
-    const build = await runCommand('cmake', ['--build', buildDir, '--target', 'fetch-client'])
-
-    assert.equal(build.code, 0, build.stderr)
-
-    const run = await runCommand(join(buildDir, 'fetch-client'), [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '200 ok\n')
-  } finally {
-    if (server != null) {
-      await server.close()
-    }
-
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('C runtime OpenSSL TLS backend builds when available', async (t) => {
-  if (process.env.CCJS_TEST_OPENSSL_TLS !== '1') {
-    t.skip('set CCJS_TEST_OPENSSL_TLS=1 to build OpenSSL TLS backend smoke')
-    return
-  }
-
-  const cmake = await runCommand('cmake', ['--version'])
-
-  if (cmake.code !== 0) {
-    t.skip('cmake is required')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-openssl-runtime-'))
-  const buildDir = join(dir, 'build')
-
-  try {
-    await writeFile(
-      join(dir, 'CMakeLists.txt'),
-      `cmake_minimum_required(VERSION 3.20)
-project(ccjs_openssl_smoke C)
-
-add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
-`
-    )
-
-    const configure = await runCommand('cmake', [
-      '-S',
-      dir,
-      '-B',
-      buildDir,
-      '-DCCJS_LOOP_BACKEND=libuv',
-      '-DCCJS_TLS_BACKEND=openssl'
-    ])
-
-    if (configure.code !== 0 && /Could NOT find OpenSSL|OpenSSL.*NOTFOUND/i.test(configure.stderr)) {
-      t.skip('OpenSSL was not found by CMake')
-      return
-    }
-
-    assert.equal(configure.code, 0, configure.stderr)
-
-    const build = await runCommand('cmake', ['--build', buildDir, '--target', 'ccjs_runtime'])
-
-    assert.equal(build.code, 0, build.stderr)
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
 
 test('C runtime JSON parse and stringify compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -744,6 +229,7 @@ int main(void) {
   }
 })
 
+
 test('C runtime binary bytes value compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -833,6 +319,7 @@ int main(void) {
     })
   }
 })
+
 
 test('C runtime Map and Set helpers compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -976,6 +463,7 @@ int main(void) {
   }
 })
 
+
 test('C runtime release frees nested object and array references', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1069,6 +557,7 @@ int main(void) {
     })
   }
 })
+
 
 test('C runtime callback object invokes and releases context', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -1181,6 +670,7 @@ int main(void) {
   }
 })
 
+
 test('C runtime Promise microtasks settle asynchronously', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1281,6 +771,7 @@ int main(void) {
     })
   }
 })
+
 
 test('C runtime Promise chains fulfillment and rejection recovery', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -1442,6 +933,7 @@ int main(void) {
   }
 })
 
+
 test('generated C reports unhandled Promise rejections', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1483,620 +975,6 @@ test('generated C reports unhandled Promise rejections', async (t) => {
   }
 })
 
-test('C runtime loop polls immediates and timers by turn', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-loop-runtime-'))
-  const source = join(dir, 'loop-runtime.c')
-  const output = join(dir, 'loop-runtime')
-
-  try {
-    await writeFile(
-      source,
-      `#include <stdio.h>
-#include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/loop.h"
-
-static void* test_alloc(void* user, size_t size, size_t align) {
-  (void)user;
-  (void)align;
-  return calloc(1, size);
-}
-
-static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
-  (void)user;
-  (void)old_size;
-  (void)align;
-  return realloc(ptr, new_size);
-}
-
-static void test_free(void* user, void* ptr, size_t size, size_t align) {
-  (void)user;
-  (void)size;
-  (void)align;
-  free(ptr);
-}
-
-typedef struct test_log {
-  ccjs_loop* loop;
-  int count;
-  int finalized;
-  int values[8];
-} test_log;
-
-static void push_value(test_log* log, int value) {
-  log->values[log->count] = value;
-  log->count += 1;
-}
-
-static ccjs_status record_microtask(void* context) {
-  push_value((test_log*)context, 9);
-  return CCJS_OK;
-}
-
-static ccjs_status record_immediate(void* context) {
-  test_log* log = (test_log*)context;
-  push_value(log, 1);
-  return ccjs_loop_queue_microtask(log->loop, record_microtask, context, 0);
-}
-
-static ccjs_status record_timeout(void* context) {
-  push_value((test_log*)context, 2);
-  return CCJS_OK;
-}
-
-static ccjs_status record_interval(void* context) {
-  push_value((test_log*)context, 3);
-  return CCJS_OK;
-}
-
-static void finalize_callback(void* context) {
-  ((test_log*)context)->finalized += 1;
-}
-
-int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
-  ccjs_timer_handle* timeout = 0;
-  ccjs_timer_handle* interval = 0;
-  test_log log = { 0, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 } };
-
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  log.loop = &loop;
-  if (ccjs_loop_queue_immediate(&loop, record_immediate, &log, finalize_callback, 0) != CCJS_OK) return 2;
-  if (ccjs_loop_set_timeout(&loop, 5, record_timeout, &log, finalize_callback, &timeout) != CCJS_OK) return 3;
-  if (ccjs_loop_set_interval(&loop, 2, record_interval, &log, finalize_callback, &interval) != CCJS_OK) return 4;
-  ccjs_loop_clear_timer(timeout);
-  ccjs_loop_clear_timer(timeout);
-  if (ccjs_loop_pending_immediates(&loop) != 1) return 5;
-  if (ccjs_loop_pending_timers(&loop) != 1) return 6;
-  if (ccjs_loop_poll(&loop, 0) != CCJS_OK) return 7;
-  if (log.count != 2 || log.values[0] != 1 || log.values[1] != 9) return 8;
-  if (ccjs_loop_poll(&loop, 1) != CCJS_OK) return 9;
-  if (log.count != 2) return 10;
-  if (ccjs_loop_poll(&loop, 2) != CCJS_OK) return 11;
-  if (log.count != 3 || log.values[2] != 3) return 12;
-  if (ccjs_loop_poll(&loop, 4) != CCJS_OK) return 13;
-  if (log.count != 4 || log.values[3] != 3) return 14;
-  ccjs_loop_clear_timer(interval);
-  ccjs_loop_clear_timer(interval);
-  if (ccjs_loop_poll(&loop, 6) != CCJS_OK) return 15;
-  if (log.count != 4) return 16;
-  if (ccjs_loop_has_work(&loop)) return 17;
-  if (log.finalized != 3) return 18;
-
-  ccjs_loop_dispose(&loop);
-  printf("%d %d %d %d %d %d\\n", log.count, log.values[0], log.values[1], log.values[2], log.values[3], log.finalized);
-  return 0;
-}
-`
-    )
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '4 1 9 3 3 3\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('C runtime time adapter keeps Date.now on monotonic delta', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-time-runtime-'))
-  const source = join(dir, 'time-runtime.c')
-  const output = join(dir, 'time-runtime')
-
-  try {
-    await writeFile(
-      source,
-      `#include <stdio.h>
-#include "ccjs/time.h"
-
-typedef struct clock_state {
-  double mono;
-  double wall;
-  int wall_reads;
-} clock_state;
-
-static ccjs_number monotonic_now(void* user) {
-  clock_state* state = (clock_state*)user;
-  return state->mono;
-}
-
-static ccjs_number wall_now(void* user) {
-  clock_state* state = (clock_state*)user;
-  state->wall_reads += 1;
-  return state->wall;
-}
-
-int main(void) {
-  clock_state state = { 100, 1000, 0 };
-  ccjs_time_adapter adapter = { &state, monotonic_now, wall_now };
-
-  ccjs_time_set_adapter(adapter);
-
-  double p0 = ccjs_performance_now();
-  state.mono = 125;
-  double date1 = ccjs_date_now();
-  state.wall = 5000;
-  state.mono = 150;
-  double date2 = ccjs_date_now();
-  ccjs_time_resync_wall_clock();
-  state.mono = 175;
-  double date3 = ccjs_date_now();
-
-  printf("%.0f %.0f %.0f %.0f %d\\n", p0, date1, date2, date3, state.wall_reads);
-  return 0;
-}
-`
-    )
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '0 1025 1050 5025 2\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('C runtime fs adapter resolves async file promises through the loop', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-runtime-'))
-  const source = join(dir, 'fs-runtime.c')
-  const output = join(dir, 'fs-runtime')
-  const defaultPath = join(dir, 'default-fs.txt')
-  const defaultPathLiteral = JSON.stringify(defaultPath)
-  const defaultPathLen = Buffer.byteLength(defaultPath)
-
-  try {
-    await writeFile(
-      source,
-      `#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/array.h"
-#include "ccjs/fs.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
-
-typedef struct fs_state {
-  int reads;
-  int writes;
-  int dirs;
-  char written[32];
-  size_t written_len;
-} fs_state;
-
-static void* test_alloc(void* user, size_t size, size_t align) {
-  (void)user;
-  (void)align;
-  return calloc(1, size);
-}
-
-static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
-  (void)user;
-  (void)old_size;
-  (void)align;
-  return realloc(ptr, new_size);
-}
-
-static void test_free(void* user, void* ptr, size_t size, size_t align) {
-  (void)user;
-  (void)size;
-  (void)align;
-  free(ptr);
-}
-
-static int path_equals(const char* path, size_t path_len, const char* expected, size_t expected_len) {
-  return path_len == expected_len && memcmp(path, expected, expected_len) == 0;
-}
-
-static ccjs_status read_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
-  fs_state* state = (fs_state*)user;
-  state->reads += 1;
-
-  if (path_equals(path, path_len, "missing", 7)) {
-    return CCJS_ERR_FIELD;
-  }
-
-  return ccjs_string_from_literal(allocator, "hello fs", 8, out);
-}
-
-static ccjs_status write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len) {
-  fs_state* state = (fs_state*)user;
-  state->writes += 1;
-
-  if (path == 0 || bytes == 0 || path_len == 0 || byte_len >= sizeof(state->written)) {
-    return CCJS_ERR_TYPE;
-  }
-
-  memcpy(state->written, bytes, byte_len);
-  state->written[byte_len] = '\\0';
-  state->written_len = byte_len;
-
-  return CCJS_OK;
-}
-
-static ccjs_status read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
-  fs_state* state = (fs_state*)user;
-  state->dirs += 1;
-
-  if (path == 0 || path_len == 0) {
-    return CCJS_ERR_TYPE;
-  }
-
-  ccjs_value entries = ccjs_undefined_value();
-  ccjs_value first = ccjs_undefined_value();
-  ccjs_value second = ccjs_undefined_value();
-
-  if (ccjs_array_new(allocator, 0, &entries) != CCJS_OK) return CCJS_ERR_OOM;
-  if (ccjs_string_from_literal(allocator, "beta.txt", 8, &first) != CCJS_OK) return CCJS_ERR_OOM;
-  if (ccjs_array_push(entries, first) != CCJS_OK) return CCJS_ERR_OOM;
-  ccjs_release(first);
-  if (ccjs_string_from_literal(allocator, "alpha.txt", 9, &second) != CCJS_OK) return CCJS_ERR_OOM;
-  if (ccjs_array_push(entries, second) != CCJS_OK) return CCJS_ERR_OOM;
-  ccjs_release(second);
-  *out = entries;
-
-  return CCJS_OK;
-}
-
-int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  fs_state state = { 0, 0, 0, { 0 }, 0 };
-  ccjs_fs_adapter adapter = {
-    .user = &state,
-    .read_file = read_file,
-    .write_file = write_file,
-    .read_dir = read_dir
-  };
-  ccjs_loop loop;
-  ccjs_promise* read_promise = 0;
-  ccjs_promise* dir_promise = 0;
-  ccjs_promise* write_promise = 0;
-  ccjs_promise* missing_promise = 0;
-  ccjs_value default_text = ccjs_undefined_value();
-  ccjs_value sync_text = ccjs_undefined_value();
-  ccjs_value sync_entries = ccjs_undefined_value();
-  ccjs_value async_text = ccjs_undefined_value();
-  ccjs_value async_entries = ccjs_undefined_value();
-  ccjs_value write_result = ccjs_undefined_value();
-  ccjs_value missing_error = ccjs_undefined_value();
-  ccjs_value missing_error_name = ccjs_undefined_value();
-  ccjs_value missing_error_message = ccjs_undefined_value();
-  ccjs_value missing_error_code = ccjs_undefined_value();
-  ccjs_value first_entry = ccjs_undefined_value();
-  size_t sync_entry_count = 0;
-  size_t async_entry_count = 0;
-
-  if (ccjs_fs_write_file_sync(${defaultPathLiteral}, ${defaultPathLen}, "default", 7) != CCJS_OK) return 1;
-  if (ccjs_fs_read_file_sync(&allocator, ${defaultPathLiteral}, ${defaultPathLen}, &default_text) != CCJS_OK) return 2;
-  if (default_text.tag != CCJS_TAG_STRING || default_text.as.ref == 0) return 3;
-  ccjs_string* default_string = (ccjs_string*)default_text.as.ref;
-  if (default_string->len != 7 || memcmp(default_string->bytes, "default", 7) != 0) return 4;
-  ccjs_release(default_text);
-  default_text = ccjs_undefined_value();
-
-  ccjs_fs_set_adapter(adapter);
-  if (ccjs_fs_read_file_sync(&allocator, "sync", 4, &sync_text) != CCJS_OK) return 5;
-  if (ccjs_fs_write_file_sync("sync-out", 8, "disk", 4) != CCJS_OK) return 6;
-  if (ccjs_fs_read_dir_sync(&allocator, "sync-dir", 8, &sync_entries) != CCJS_OK) return 7;
-  if (ccjs_array_len(sync_entries, &sync_entry_count) != CCJS_OK || sync_entry_count != 2) return 8;
-  if (state.reads != 1 || state.writes != 1 || state.dirs != 1) return 9;
-
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 10;
-  if (ccjs_fs_read_file(&loop, "async", 5, &read_promise) != CCJS_OK) return 11;
-  if (ccjs_fs_read_dir(&loop, "async-dir", 9, &dir_promise) != CCJS_OK) return 12;
-  if (ccjs_fs_write_file(&loop, "async-out", 9, "saved", 5, &write_promise) != CCJS_OK) return 13;
-  if (ccjs_fs_read_file(&loop, "missing", 7, &missing_promise) != CCJS_OK) return 14;
-  if (state.reads != 1 || state.writes != 1 || state.dirs != 1) return 15;
-  if (ccjs_loop_pending_immediates(&loop) != 4) return 16;
-  if (ccjs_loop_poll(&loop, 0) != CCJS_OK) return 17;
-  if (ccjs_loop_has_work(&loop)) return 18;
-  if (ccjs_promise_get_state(read_promise) != CCJS_PROMISE_FULFILLED) return 19;
-  if (ccjs_promise_get_state(dir_promise) != CCJS_PROMISE_FULFILLED) return 20;
-  if (ccjs_promise_get_state(write_promise) != CCJS_PROMISE_FULFILLED) return 21;
-  if (ccjs_promise_get_state(missing_promise) != CCJS_PROMISE_REJECTED) return 22;
-  if (ccjs_promise_get_result(read_promise, &async_text) != CCJS_OK) return 23;
-  if (ccjs_promise_get_result(dir_promise, &async_entries) != CCJS_OK) return 24;
-  if (ccjs_array_len(async_entries, &async_entry_count) != CCJS_OK || async_entry_count != 2) return 25;
-  if (ccjs_array_get(async_entries, 0, &first_entry) != CCJS_OK) return 26;
-  if (ccjs_promise_get_result(write_promise, &write_result) != CCJS_OK) return 27;
-  if (write_result.tag != CCJS_TAG_UNDEFINED) return 28;
-  if (ccjs_promise_get_result(missing_promise, &missing_error) != CCJS_OK) return 29;
-  if (missing_error.tag != CCJS_TAG_OBJECT || missing_error.as.ref == 0) return 30;
-  if (ccjs_object_get(missing_error, "name", 4, &missing_error_name) != CCJS_OK) return 31;
-  if (ccjs_object_get(missing_error, "message", 7, &missing_error_message) != CCJS_OK) return 32;
-  if (ccjs_object_get(missing_error, "code", 4, &missing_error_code) != CCJS_OK) return 33;
-
-  ccjs_string* sync_string = (ccjs_string*)sync_text.as.ref;
-  ccjs_string* async_string = (ccjs_string*)async_text.as.ref;
-  ccjs_string* first_string = (ccjs_string*)first_entry.as.ref;
-  ccjs_string* error_name = (ccjs_string*)missing_error_name.as.ref;
-  ccjs_string* error_message = (ccjs_string*)missing_error_message.as.ref;
-  ccjs_string* error_code = (ccjs_string*)missing_error_code.as.ref;
-  printf("%.*s %.*s %d %zu %zu %.*s %.*s %.*s %.*s %.*s\\n", (int)sync_string->len, sync_string->bytes, (int)async_string->len, async_string->bytes, state.writes, sync_entry_count, async_entry_count, (int)first_string->len, first_string->bytes, (int)state.written_len, state.written, (int)error_name->len, error_name->bytes, (int)error_code->len, error_code->bytes, (int)error_message->len, error_message->bytes);
-
-  ccjs_release(first_entry);
-  ccjs_release(missing_error_code);
-  ccjs_release(missing_error_message);
-  ccjs_release(missing_error_name);
-  ccjs_release(missing_error);
-  ccjs_release(write_result);
-  ccjs_release(async_entries);
-  ccjs_release(async_text);
-  ccjs_release(sync_entries);
-  ccjs_release(sync_text);
-  ccjs_promise_release(missing_promise);
-  ccjs_promise_release(write_promise);
-  ccjs_promise_release(dir_promise);
-  ccjs_promise_release(read_promise);
-  ccjs_loop_dispose(&loop);
-  ccjs_fs_clear_adapter();
-  return 0;
-}
-`
-    )
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(
-      run.stdout,
-      'hello fs hello fs 2 2 2 beta.txt saved FsError ERR_FS_OPERATION filesystem operation failed\n'
-    )
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('C runtime fs adapter supports stat lstat access and Stats helpers', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-stat-adapter-'))
-  const source = join(dir, 'fs-stat-adapter.c')
-  const output = join(dir, 'fs-stat-adapter')
-
-  try {
-    await writeFile(
-      source,
-      `#include <stdio.h>
-#include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/fs.h"
-#include "ccjs/promise.h"
-
-typedef struct fs_state {
-  int stats;
-  int lstats;
-  int accesses;
-} fs_state;
-
-static void* test_alloc(void* user, size_t size, size_t align) {
-  (void)user;
-  (void)align;
-  return calloc(1, size);
-}
-
-static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
-  (void)user;
-  (void)old_size;
-  (void)align;
-  return realloc(ptr, new_size);
-}
-
-static void test_free(void* user, void* ptr, size_t size, size_t align) {
-  (void)user;
-  (void)size;
-  (void)align;
-  free(ptr);
-}
-
-static ccjs_status stat_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
-  fs_state* state = (fs_state*)user;
-  (void)path;
-  (void)path_len;
-  state->stats += 1;
-  return ccjs_fs_stats_new(allocator, 42, 33188, 1000, true, false, out);
-}
-
-static ccjs_status lstat_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
-  fs_state* state = (fs_state*)user;
-  (void)path;
-  (void)path_len;
-  state->lstats += 1;
-  return ccjs_fs_stats_new(allocator, 7, 16877, 2000, false, true, out);
-}
-
-static ccjs_status access_file(void* user, const char* path, size_t path_len, int mode) {
-  fs_state* state = (fs_state*)user;
-  (void)path;
-  (void)path_len;
-  state->accesses += 1;
-  return mode == CCJS_FS_R_OK ? CCJS_OK : CCJS_ERR_FIELD;
-}
-
-int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  fs_state state = { 0, 0, 0 };
-  ccjs_fs_adapter adapter = {
-    .user = &state,
-    .stat = stat_file,
-    .lstat = lstat_file,
-    .access = access_file
-  };
-  ccjs_loop loop;
-  ccjs_promise* stat_promise = 0;
-  ccjs_promise* lstat_promise = 0;
-  ccjs_promise* access_promise = 0;
-  ccjs_value sync_stat = ccjs_undefined_value();
-  ccjs_value sync_lstat = ccjs_undefined_value();
-  ccjs_value async_stat = ccjs_undefined_value();
-  ccjs_value async_lstat = ccjs_undefined_value();
-
-  ccjs_fs_set_adapter(adapter);
-  if (ccjs_fs_stat_sync(&allocator, "file", 4, &sync_stat) != CCJS_OK) return 1;
-  if (ccjs_fs_lstat_sync(&allocator, "dir", 3, &sync_lstat) != CCJS_OK) return 2;
-  if (ccjs_fs_access_sync("file", 4, CCJS_FS_R_OK) != CCJS_OK) return 3;
-  if (!ccjs_fs_stats_is_file(sync_stat)) return 4;
-  if (!ccjs_fs_stats_is_directory(sync_lstat)) return 5;
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 6;
-  if (ccjs_fs_stat(&loop, "file", 4, &stat_promise) != CCJS_OK) return 7;
-  if (ccjs_fs_lstat(&loop, "dir", 3, &lstat_promise) != CCJS_OK) return 8;
-  if (ccjs_fs_access(&loop, "file", 4, CCJS_FS_R_OK, &access_promise) != CCJS_OK) return 9;
-  if (ccjs_loop_poll(&loop, 0) != CCJS_OK) return 10;
-  if (ccjs_promise_get_state(stat_promise) != CCJS_PROMISE_FULFILLED) return 11;
-  if (ccjs_promise_get_state(lstat_promise) != CCJS_PROMISE_FULFILLED) return 12;
-  if (ccjs_promise_get_state(access_promise) != CCJS_PROMISE_FULFILLED) return 13;
-  if (ccjs_promise_get_result(stat_promise, &async_stat) != CCJS_OK) return 14;
-  if (ccjs_promise_get_result(lstat_promise, &async_lstat) != CCJS_OK) return 15;
-  if (!ccjs_fs_stats_is_file(async_stat)) return 16;
-  if (!ccjs_fs_stats_is_directory(async_lstat)) return 17;
-  printf("%d %d %d\\n", state.stats, state.lstats, state.accesses);
-  ccjs_release(async_lstat);
-  ccjs_release(async_stat);
-  ccjs_release(sync_lstat);
-  ccjs_release(sync_stat);
-  ccjs_promise_release(access_promise);
-  ccjs_promise_release(lstat_promise);
-  ccjs_promise_release(stat_promise);
-  ccjs_loop_dispose(&loop);
-  ccjs_fs_clear_adapter();
-  return 0;
-}
-`
-    )
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '2 2 2\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('generated C fs.promises calls compile and run without libuv', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-codegen-'))
-  const source = join(dir, 'fs-codegen.c')
-  const output = join(dir, 'fs-codegen')
-  const input = join(dir, 'value.txt')
-  const copied = join(dir, 'out.txt')
-
-  try {
-    await writeFile(input, 'saved')
-
-    const result = compileSource(
-      `import fs from 'node:fs'
-
-const read = await fs.promises.readFile(${JSON.stringify(input)}, 'utf8')
-await fs.promises.writeFile(${JSON.stringify(copied)}, read)
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '')
-    assert.equal(await readFile(copied, 'utf8'), 'saved')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
 
 test('generated C simple classes compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -2168,372 +1046,6 @@ console.log(value, name)
   }
 })
 
-test('generated C timer calls drain from main loop', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-timers-codegen-'))
-  const source = join(dir, 'timers-codegen.c')
-  const output = join(dir, 'timers-codegen')
-
-  try {
-    const result = compileSource(
-      `function onImmediate(): void {
-  console.log('immediate')
-}
-
-function onTimeout(): void {
-  console.log('timeout')
-}
-
-function onInterval(): void {
-  console.log('interval')
-}
-
-function schedule(): void {
-  const timeout = setTimeout(onTimeout, 1)
-  clearTimeout(timeout)
-}
-
-schedule()
-const cancelledImmediate = setImmediate(onTimeout)
-clearImmediate(cancelledImmediate)
-const interval = setInterval(onInterval, 10)
-setTimeout(() => {
-  clearInterval(interval)
-  console.log('cleared')
-}, 20)
-setImmediate(() => {
-  setTimeout(onTimeout, 10)
-})
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'interval\ntimeout\ninterval\ncleared\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('generated C fs.promises.readdir awaits hosted directory entries', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-readdir-'))
-  const entriesDir = join(dir, 'entries')
-  const missingDir = join(dir, 'missing')
-  const source = join(dir, 'fs-readdir.c')
-  const output = join(dir, 'fs-readdir')
-
-  try {
-    await mkdir(entriesDir)
-    await writeFile(join(entriesDir, 'beta.txt'), '')
-    await writeFile(join(entriesDir, 'alpha.txt'), '')
-
-    const result = compileSource(
-      `import fs from 'node:fs'
-
-const entries = await fs.promises.readdir(${JSON.stringify(entriesDir)})
-const names = entries.sort()
-console.log(names[0], names[1])
-
-try {
-  await fs.promises.readdir(${JSON.stringify(missingDir)})
-} catch (error) {
-  console.log(error.name, error.code, error.message)
-}
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'alpha.txt beta.txt\nFsError ERR_FS_OPERATION filesystem operation failed\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('generated C fs.promises binary read/write copies hosted bytes', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-bytes-'))
-  const input = join(dir, 'input.bin')
-  const copied = join(dir, 'copied.bin')
-  const source = join(dir, 'fs-bytes.c')
-  const output = join(dir, 'fs-bytes')
-  const data = Buffer.from([0, 1, 2, 3, 255, 10, 13])
-
-  try {
-    await writeFile(input, data)
-
-    const result = compileSource(
-      `import fs from 'node:fs'
-
-const bytes = await fs.promises.readFile(${JSON.stringify(input)})
-await fs.promises.writeFile(${JSON.stringify(copied)}, bytes)
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.deepEqual(await readFile(copied), data)
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('generated C node:fs promises copy hosted files and read entries', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-node-promises-'))
-  const entriesDir = join(dir, 'entries')
-  const textInput = join(dir, 'input.txt')
-  const textCopied = join(dir, 'copied.txt')
-  const bytesInput = join(dir, 'input.bin')
-  const bytesCopied = join(dir, 'copied.bin')
-  const mutationRoot = join(dir, 'created')
-  const mutationNested = join(mutationRoot, 'nested')
-  const mutationInput = join(dir, 'mutation-input.txt')
-  const mutationRenamed = join(dir, 'mutation-renamed.txt')
-  const mutationMissing = join(dir, 'missing-for-rm.txt')
-  const appendedText = join(dir, 'appended.txt')
-  const appendedTextCopy = join(dir, 'appended-copy.txt')
-  const appendedBytes = join(dir, 'appended.bin')
-  const appendedBytesCopy = join(dir, 'appended-copy.bin')
-  const promiseLink = join(dir, 'promise-link.txt')
-  const source = join(dir, 'fs-node-promises.c')
-  const output = join(dir, 'fs-node-promises')
-  const data = Buffer.from([9, 8, 7, 6, 0, 255])
-
-  try {
-    await mkdir(entriesDir)
-    await writeFile(join(entriesDir, 'beta.txt'), '')
-    await writeFile(join(entriesDir, 'alpha.txt'), '')
-    await writeFile(textInput, 'node text')
-    await writeFile(bytesInput, data)
-    await writeFile(mutationInput, 'move me')
-
-    const result = compileSource(
-      `import fs from 'node:fs'
-
-const text = await fs.promises.readFile(${JSON.stringify(textInput)}, 'utf8')
-await fs.promises.writeFile(${JSON.stringify(textCopied)}, text)
-
-const bytes: Buffer = await fs.promises.readFile(${JSON.stringify(bytesInput)})
-await fs.promises.writeFile(${JSON.stringify(bytesCopied)}, bytes)
-
-const entries = await fs.promises.readdir(${JSON.stringify(entriesDir)})
-const dirents = await fs.promises.readdir(${JSON.stringify(entriesDir)}, { withFileTypes: true })
-const stats = await fs.promises.stat(${JSON.stringify(textInput)})
-await fs.promises.access(${JSON.stringify(textInput)}, fs.constants.R_OK)
-await fs.promises.mkdir(${JSON.stringify(mutationNested)}, { recursive: true })
-await fs.promises.rename(${JSON.stringify(mutationInput)}, ${JSON.stringify(mutationRenamed)})
-await fs.promises.access(${JSON.stringify(mutationRenamed)}, fs.constants.R_OK)
-await fs.promises.unlink(${JSON.stringify(mutationRenamed)})
-await fs.promises.rm(${JSON.stringify(mutationRoot)}, { recursive: true, force: true })
-await fs.promises.rm(${JSON.stringify(mutationMissing)}, { force: true })
-await fs.promises.writeFile(${JSON.stringify(appendedText)}, 'one')
-await fs.promises.appendFile(${JSON.stringify(appendedText)}, ' two')
-await fs.promises.copyFile(${JSON.stringify(appendedText)}, ${JSON.stringify(appendedTextCopy)})
-await fs.promises.writeFile(${JSON.stringify(appendedBytes)}, bytes)
-await fs.promises.appendFile(${JSON.stringify(appendedBytes)}, bytes)
-await fs.promises.copyFile(${JSON.stringify(appendedBytes)}, ${JSON.stringify(appendedBytesCopy)})
-await fs.promises.symlink(${JSON.stringify(textInput)}, ${JSON.stringify(promiseLink)})
-const linkTarget = await fs.promises.readlink(${JSON.stringify(promiseLink)})
-const realTarget = await fs.promises.realpath(${JSON.stringify(promiseLink)})
-const names = entries.sort()
-const firstDirent = dirents[0]
-console.log(text, names[0], names[1], bytes.length, stats.isFile(), dirents.length, firstDirent.isFile(), linkTarget === ${JSON.stringify(textInput)}, realTarget.length > 0)
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'node text alpha.txt beta.txt 6 1 2 1 1 1\n')
-    assert.equal(await readFile(textCopied, 'utf8'), 'node text')
-    assert.deepEqual(await readFile(bytesCopied), data)
-    await assert.rejects(readFile(mutationInput, 'utf8'))
-    await assert.rejects(readFile(mutationRenamed, 'utf8'))
-    await assert.rejects(readFile(mutationNested, 'utf8'))
-    assert.equal(await readFile(appendedTextCopy, 'utf8'), 'one two')
-    assert.deepEqual(await readFile(appendedBytesCopy), Buffer.concat([data, data]))
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('generated C fs sync helpers copy hosted files and read entries', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-sync-'))
-  const entriesDir = join(dir, 'entries')
-  const textInput = join(dir, 'input.txt')
-  const textCopied = join(dir, 'copied.txt')
-  const bytesInput = join(dir, 'input.bin')
-  const bytesCopied = join(dir, 'copied.bin')
-  const mutationRoot = join(dir, 'sync-created')
-  const mutationNested = join(mutationRoot, 'nested')
-  const mutationInput = join(dir, 'sync-mutation-input.txt')
-  const mutationRenamed = join(dir, 'sync-mutation-renamed.txt')
-  const mutationMissing = join(dir, 'sync-missing-for-rm.txt')
-  const appendedText = join(dir, 'sync-appended.txt')
-  const appendedTextCopy = join(dir, 'sync-appended-copy.txt')
-  const appendedBytes = join(dir, 'sync-appended.bin')
-  const appendedBytesCopy = join(dir, 'sync-appended-copy.bin')
-  const syncLink = join(dir, 'sync-link.txt')
-  const source = join(dir, 'fs-sync.c')
-  const output = join(dir, 'fs-sync')
-  const data = Buffer.from([5, 4, 3, 2, 1, 0, 255])
-
-  try {
-    await mkdir(entriesDir)
-    await writeFile(join(entriesDir, 'beta.txt'), '')
-    await writeFile(join(entriesDir, 'alpha.txt'), '')
-    await writeFile(textInput, 'sync text')
-    await writeFile(bytesInput, data)
-    await writeFile(mutationInput, 'sync move')
-
-    const result = compileSource(
-      `import fs from 'node:fs'
-
-const text = fs.readFileSync(${JSON.stringify(textInput)}, 'utf8')
-fs.writeFileSync(${JSON.stringify(textCopied)}, text)
-const bytes = fs.readFileSync(${JSON.stringify(bytesInput)})
-fs.writeFileSync(${JSON.stringify(bytesCopied)}, bytes)
-const entries = fs.readdirSync(${JSON.stringify(entriesDir)})
-const dirents = fs.readdirSync(${JSON.stringify(entriesDir)}, { withFileTypes: true })
-const stats = fs.statSync(${JSON.stringify(textInput)})
-fs.accessSync(${JSON.stringify(textInput)}, fs.constants.R_OK)
-fs.mkdirSync(${JSON.stringify(mutationNested)}, { recursive: true })
-fs.renameSync(${JSON.stringify(mutationInput)}, ${JSON.stringify(mutationRenamed)})
-fs.accessSync(${JSON.stringify(mutationRenamed)}, fs.constants.R_OK)
-fs.unlinkSync(${JSON.stringify(mutationRenamed)})
-fs.rmSync(${JSON.stringify(mutationRoot)}, { recursive: true, force: true })
-fs.rmSync(${JSON.stringify(mutationMissing)}, { force: true })
-fs.writeFileSync(${JSON.stringify(appendedText)}, 'one')
-fs.appendFileSync(${JSON.stringify(appendedText)}, ' two')
-fs.copyFileSync(${JSON.stringify(appendedText)}, ${JSON.stringify(appendedTextCopy)})
-fs.writeFileSync(${JSON.stringify(appendedBytes)}, bytes)
-fs.appendFileSync(${JSON.stringify(appendedBytes)}, bytes)
-fs.copyFileSync(${JSON.stringify(appendedBytes)}, ${JSON.stringify(appendedBytesCopy)})
-fs.symlinkSync(${JSON.stringify(textInput)}, ${JSON.stringify(syncLink)})
-const linkTarget = fs.readlinkSync(${JSON.stringify(syncLink)})
-const realTarget = fs.realpathSync(${JSON.stringify(syncLink)})
-const names = entries.sort()
-const firstDirent = dirents[0]
-console.log(names[0], names[1], stats.isFile(), dirents.length, firstDirent.isFile(), linkTarget === ${JSON.stringify(textInput)}, realTarget.length > 0)
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'alpha.txt beta.txt 1 2 1 1 1\n')
-    assert.equal(await readFile(textCopied, 'utf8'), 'sync text')
-    assert.deepEqual(await readFile(bytesCopied), data)
-    await assert.rejects(readFile(mutationInput, 'utf8'))
-    await assert.rejects(readFile(mutationRenamed, 'utf8'))
-    await assert.rejects(readFile(mutationNested, 'utf8'))
-    assert.equal(await readFile(appendedTextCopy, 'utf8'), 'one two')
-    assert.deepEqual(await readFile(appendedBytesCopy), Buffer.concat([data, data]))
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
 
 test('generated C async await over settled promises compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -2721,6 +1233,7 @@ try {
   }
 })
 
+
 test('generated C captured Promise callbacks compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2796,6 +1309,7 @@ console.log(await objectLogged)
   }
 })
 
+
 test('generated C Promise callbacks with try catch finally compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2863,6 +1377,7 @@ console.log(await handled, await finalized)
   }
 })
 
+
 test('generated C async task frame over awaited Promise.resolve compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2911,6 +1426,7 @@ console.log(await promise)
   }
 })
 
+
 test('generated C async task frame preserves parameters across resume', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2958,6 +1474,7 @@ console.log(await promise)
     })
   }
 })
+
 
 test('generated C async task frame awaits local Promise variables', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3008,6 +1525,7 @@ console.log(await promise)
   }
 })
 
+
 test('generated C boolean async task frame compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3054,6 +1572,7 @@ console.log(await flip(true))
     })
   }
 })
+
 
 test('generated C async task frame awaits local Promise chains', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3104,6 +1623,7 @@ console.log(await promise)
   }
 })
 
+
 test('generated C async task frame awaits captured local Promise chains', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3153,6 +1673,7 @@ console.log(await promise)
   }
 })
 
+
 test('generated C async task frame direct return values compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3200,6 +1721,7 @@ console.log(await promise)
     })
   }
 })
+
 
 test('generated C async task frame direct managed return values compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3255,6 +1777,7 @@ console.log(result.toString())
   }
 })
 
+
 test('generated C multiple-await async task frame compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3303,6 +1826,7 @@ console.log(await promise)
     })
   }
 })
+
 
 test('generated C async task frame awaits local async tasks and plain Promise helpers', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3369,6 +1893,7 @@ console.log(await promise)
   }
 })
 
+
 test('generated C async task frame awaits managed immediate async helpers', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3429,6 +1954,7 @@ console.log(await copyText('managed', ${JSON.stringify(input)}))
     })
   }
 })
+
 
 test('generated C async task frame rejected awaits reject returned promises', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3496,6 +2022,7 @@ try {
     })
   }
 })
+
 
 test('generated C async task frame try catch finally around awaited promises', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3566,6 +2093,7 @@ try {
     })
   }
 })
+
 
 test('generated C async task frame string prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3638,6 +2166,7 @@ console.log(await literal())
   }
 })
 
+
 test('generated C async task frame array prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3693,6 +2222,7 @@ console.log(result[0], result[1])
     })
   }
 })
+
 
 test('generated C async task frame bytes prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3751,6 +2281,7 @@ console.log(result[0], result[1], text)
   }
 })
 
+
 test('generated C async task frame inner body prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3806,6 +2337,7 @@ console.log(result.length, result.toString())
     })
   }
 })
+
 
 test('generated C async task frame post await inner managed locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3863,6 +2395,7 @@ console.log(result.toString())
   }
 })
 
+
 test('generated C async task frame post await inner scalar locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3917,6 +2450,7 @@ console.log(await work())
     })
   }
 })
+
 
 test('generated C async task frame post await locals before post-nested returns compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3974,6 +2508,7 @@ console.log(await work())
   }
 })
 
+
 test('generated C async task frame post await managed locals before post-nested returns compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4029,6 +2564,7 @@ console.log(await work())
     })
   }
 })
+
 
 test('generated C async task frame object prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4091,6 +2627,7 @@ console.log(result.name, result.score)
   }
 })
 
+
 test('generated C async task frame Map prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4146,6 +2683,7 @@ console.log(result.get('Grace') ?? 0, result.size)
     })
   }
 })
+
 
 test('generated C async task frame Set prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4203,6 +2741,7 @@ console.log(result.has('Grace'), result.size)
   }
 })
 
+
 test('generated C async task frame post try managed locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4258,6 +2797,7 @@ console.log(result.toString())
     })
   }
 })
+
 
 test('generated C async task frame catch managed locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4318,6 +2858,7 @@ console.log(result.toString())
   }
 })
 
+
 test('generated C async task frame catch direct managed returns compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4375,6 +2916,7 @@ console.log(result.toString())
   }
 })
 
+
 test('generated C nested async finalizer throw fallback compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4430,84 +2972,6 @@ console.log(await promise)
   }
 })
 
-test('generated C async task frames await fs promises without libuv', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-fs-'))
-  const textInput = join(dir, 'input.txt')
-  const textCopied = join(dir, 'copied.txt')
-  const bytesInput = join(dir, 'input.bin')
-  const bytesCopied = join(dir, 'copied.bin')
-  const entriesDir = join(dir, 'entries')
-  const source = join(dir, 'async-task-frame-fs.c')
-  const output = join(dir, 'async-task-frame-fs')
-  const data = Buffer.from([9, 8, 7, 0, 255])
-
-  try {
-    await writeFile(textInput, 'loaded')
-    await writeFile(bytesInput, data)
-    await mkdir(entriesDir)
-    await writeFile(join(entriesDir, 'one.txt'), '')
-    await writeFile(join(entriesDir, 'two.txt'), '')
-
-    const result = compileSource(
-      `import fs from 'node:fs'
-
-async function copyText(input: string, output: string): Promise<string> {
-  const text = await fs.promises.readFile(input, 'utf8')
-  await fs.promises.writeFile(output, text)
-
-  return text
-}
-
-async function copyBytes(input: string, output: string): Promise<Buffer> {
-  const bytes: Buffer = await fs.promises.readFile(input)
-  await fs.promises.writeFile(output, bytes)
-
-  return bytes
-}
-
-async function listEntries(path: string): Promise<Array<string>> {
-  const entries: Array<string> = await fs.promises.readdir(path)
-
-  return entries
-}
-
-console.log(await copyText(${JSON.stringify(textInput)}, ${JSON.stringify(textCopied)}))
-await copyBytes(${JSON.stringify(bytesInput)}, ${JSON.stringify(bytesCopied)})
-await listEntries(${JSON.stringify(entriesDir)})
-console.log('listed')
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'loaded\nlisted\n')
-    assert.equal(await readFile(textCopied, 'utf8'), 'loaded')
-    assert.deepEqual(await readFile(bytesCopied), data)
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
 
 test('generated C object literal lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4549,6 +3013,7 @@ console.log('ok')
     })
   }
 })
+
 
 test('generated C early return runs through cleanup label with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4594,6 +3059,7 @@ console.log('unreachable')
   }
 })
 
+
 test('generated C top-level wrapper cleanup compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4633,6 +3099,7 @@ console.log('ok')
     })
   }
 })
+
 
 test('generated C number return cleanup compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4679,6 +3146,7 @@ console.log(getScore())
     })
   }
 })
+
 
 test('generated C prepared for clauses compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4738,6 +3206,7 @@ console.log(total)
   }
 })
 
+
 test('generated C continue statements compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4788,6 +3257,7 @@ console.log(total)
   }
 })
 
+
 test('generated C string-returning for initializer compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4835,6 +3305,7 @@ for (const name = getName(); index < 1; index = index + 1) {
     })
   }
 })
+
 
 test('generated C prepared conditions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4906,6 +3377,7 @@ console.log(index)
   }
 })
 
+
 test('generated C prepared scalar assignment compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4951,6 +3423,7 @@ console.log(index)
     })
   }
 })
+
 
 test('generated C named callback values compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5001,6 +3474,7 @@ run(callback)
   }
 })
 
+
 test('generated C non-capturing inline callback values compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5046,6 +3520,7 @@ run(() => {
     })
   }
 })
+
 
 test('generated C capturing plain callback arguments compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5103,6 +3578,7 @@ runNumber((value: number) => {
     })
   }
 })
+
 
 test('generated C captured callback variables compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5164,6 +3640,7 @@ runNumber(numberCallback)
   }
 })
 
+
 test('generated C mutable numeric callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5214,6 +3691,7 @@ console.log(count)
   }
 })
 
+
 test('generated C mutable numeric callback parameter captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5262,6 +3740,7 @@ run(1)
     })
   }
 })
+
 
 test('generated C mutable string callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5312,6 +3791,7 @@ console.log(label)
     })
   }
 })
+
 
 test('generated C mutable object callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5367,6 +3847,7 @@ console.log(person.name)
   }
 })
 
+
 test('generated C typed callback aliases compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5418,6 +3899,7 @@ run(callback)
   }
 })
 
+
 test('generated C string callback aliases compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5468,6 +3950,7 @@ run(callback)
     })
   }
 })
+
 
 test('generated C object callback aliases compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5527,6 +4010,7 @@ run(callback, person)
   }
 })
 
+
 test('generated C capturing runtime callback arrows compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5577,6 +4061,7 @@ run(callback)
   }
 })
 
+
 test('generated C inline runtime callback arguments compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5625,6 +4110,7 @@ run((value: string) => {
     })
   }
 })
+
 
 test('generated C retained runtime callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5681,6 +4167,7 @@ run(callback)
   }
 })
 
+
 test('generated C string equality comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5735,6 +4222,7 @@ console.log(sameLocal, sameRuntime, differentCall)
   }
 })
 
+
 test('generated C string concatenation compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5785,6 +4273,7 @@ console.log(message)
     })
   }
 })
+
 
 test('generated C string length compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5842,6 +4331,7 @@ console.log('Ada'.length, length(name), user.name.length, getName().length, mess
   }
 })
 
+
 test('generated C string predicate methods compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5896,6 +4386,7 @@ console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getNam
     })
   }
 })
+
 
 test('generated C string slice compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5953,6 +4444,7 @@ console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().sl
   }
 })
 
+
 test('generated C string split compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5999,6 +4491,7 @@ console.log(names[0], names[1], initials[0], initials[1], 'abc'.split('')[1], 'A
     })
   }
 })
+
 
 test('generated C string trim compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6057,6 +4550,7 @@ console.log(' Ada '.trim(), clean(name), user.name.trim(), getName().trim(), mes
   }
 })
 
+
 test('generated C String conversion compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6112,6 +4606,7 @@ console.log(String('Ada'), String(local), String(name), label(42), flag(true), S
   }
 })
 
+
 test('generated C Number conversion compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6155,6 +4650,7 @@ console.log(Number('') ?? 9, Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('
     })
   }
 })
+
 
 test('generated C numeric casts compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6202,6 +4698,7 @@ console.log(signedValue, negative, unsignedValue, wide, rounded, preserved)
   }
 })
 
+
 test('generated C Math.random os backend compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6246,47 +4743,6 @@ console.log(value >= 0, value < 1)
   }
 })
 
-test('generated C time globals compile and run with runtime sources', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-time-globals-'))
-  const source = join(dir, 'time-globals.c')
-  const output = join(dir, 'time-globals')
-
-  try {
-    const result = compileSource(
-      `const started = Date.now()
-const elapsed = performance.now()
-console.log(started >= 0, elapsed >= 0)
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '1 1\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
 
 test('generated C array literal lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6328,6 +4784,7 @@ console.log('ok')
     })
   }
 })
+
 
 test('generated C Array.push statements compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6375,6 +4832,7 @@ console.log(names.length, names[1])
     })
   }
 })
+
 
 test('generated C Array.pop expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6426,6 +4884,7 @@ console.log(names.length, name, none)
   }
 })
 
+
 test('generated C Array.sort without comparator compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6471,6 +4930,7 @@ console.log(names[0], names[1])
     })
   }
 })
+
 
 test('generated C Array.sort comparator callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6533,6 +4993,7 @@ console.log(chained.length, chained[0], chained[1], chained[2])
   }
 })
 
+
 test('generated C Array.filter expression callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6582,6 +5043,7 @@ console.log(aNames.length, aNames[0], aNames[1])
     })
   }
 })
+
 
 test('generated C Array.map expression callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6640,6 +5102,7 @@ console.log(mappedSorted.length, mappedSorted[0], mappedSorted[1], mappedSorted[
     })
   }
 })
+
 
 test('generated C Array block-body callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6725,6 +5188,7 @@ console.log(initials.length, initials[0], initials[1])
   }
 })
 
+
 test('generated C Array methods over object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6776,6 +5240,7 @@ console.log(initials.length, initials[0], initials[1])
   }
 })
 
+
 test('generated C array length lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6816,6 +5281,7 @@ console.log(values.length, [4, 5].length)
     })
   }
 })
+
 
 test('generated C runtime array length compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6861,6 +5327,7 @@ console.log(box.values.length)
     })
   }
 })
+
 
 test('generated C runtime array index reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6910,6 +5377,7 @@ console.log(box.values[1], box.flags[0], name)
   }
 })
 
+
 test('generated C runtime array locals compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6957,6 +5425,7 @@ console.log(values[1], names[0])
     })
   }
 })
+
 
 test('generated C for of over runtime array locals compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7014,6 +5483,7 @@ console.log(total, letters)
   }
 })
 
+
 test('generated C for of over runtime array expressions compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7068,6 +5538,7 @@ console.log(total, letters)
   }
 })
 
+
 test('generated C for of array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7115,6 +5586,7 @@ console.log(total)
   }
 })
 
+
 test('generated C for of string array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7158,6 +5630,7 @@ for (const name of names) {
     })
   }
 })
+
 
 test('generated C for of Set lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7225,6 +5698,7 @@ console.log(total, letters, sawAda, sawGrace)
   }
 })
 
+
 test('generated C for of Map lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7291,6 +5765,7 @@ console.log(total, letters, ada, grace, alan)
   }
 })
 
+
 test('generated C inline for of array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7337,6 +5812,7 @@ console.log(total)
   }
 })
 
+
 test('generated C inline for of string array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7378,6 +5854,7 @@ test('generated C inline for of string array lowering compiles and runs with run
     })
   }
 })
+
 
 test('generated C object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7422,6 +5899,7 @@ console.log(score, active)
   }
 })
 
+
 test('generated C string object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7463,6 +5941,7 @@ console.log(name)
     })
   }
 })
+
 
 test('generated C object field assignment lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7511,6 +5990,7 @@ console.log(score, active, name)
   }
 })
 
+
 test('generated C string index object field reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7554,6 +6034,7 @@ console.log(score, active, name)
     })
   }
 })
+
 
 test('generated C string index object field assignments compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7602,6 +6083,7 @@ console.log(score, active, name)
   }
 })
 
+
 test('generated C array index access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7644,6 +6126,7 @@ console.log(score, active)
     })
   }
 })
+
 
 test('generated C array index assignment lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7690,6 +6173,7 @@ console.log(score, active)
   }
 })
 
+
 test('generated C string array index reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7732,6 +6216,7 @@ console.log(name)
     })
   }
 })
+
 
 test('generated C runtime string local propagation compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7776,6 +6261,7 @@ console.log(again)
   }
 })
 
+
 test('generated C nullable string nullish coalescing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7819,6 +6305,7 @@ console.log(display, name !== null)
     })
   }
 })
+
 
 test('generated C nullable runtime optional access compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7877,6 +6364,7 @@ console.log(missingName, memberName, indexName, arrayName, emptyName, maybeScore
     })
   }
 })
+
 
 test('generated C nullable scalar nullish coalescing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7939,6 +6427,7 @@ console.log(maybeValues?.[0] ?? 5, emptyValues?.[0] ?? 5)
     })
   }
 })
+
 
 test('generated C nullable scalar function ABI compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8006,6 +6495,7 @@ printScore(7 + 1, false)
   }
 })
 
+
 test('generated C nullable scalar branch narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8068,6 +6558,7 @@ console.log(value ?? 9)
   }
 })
 
+
 test('generated C nullable scalar logical narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8123,6 +6614,7 @@ printScore(1, 0)
     })
   }
 })
+
 
 test('generated C nullable scalar early return narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8191,6 +6683,7 @@ printHigh(1)
   }
 })
 
+
 test('generated C nullable scalar loop narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8243,6 +6736,7 @@ printLoop(null, null)
     })
   }
 })
+
 
 test('generated C nullable callback optional calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8315,6 +6809,7 @@ maybeNamed(null)
   }
 })
 
+
 test('generated C nullable callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8373,6 +6868,7 @@ printValues(null, null)
   }
 })
 
+
 test('generated C nullable arrow callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8425,6 +6921,7 @@ printValues(null, null)
     })
   }
 })
+
 
 test('generated C nullable block arrow callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8491,6 +6988,7 @@ printValues(null, null)
     })
   }
 })
+
 
 test('generated C runtime callback returns through finally compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8564,6 +7062,7 @@ printName(null)
   }
 })
 
+
 test('generated C nullable string callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8618,6 +7117,7 @@ printName(arrow)
     })
   }
 })
+
 
 test('generated C nullable object callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8682,6 +7182,7 @@ printUser(arrow)
   }
 })
 
+
 test('generated C local string throw try catch finally compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8726,6 +7227,7 @@ test('generated C local string throw try catch finally compiles and runs with ru
     })
   }
 })
+
 
 test('generated C lightweight Error objects compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8776,6 +7278,7 @@ try {
     })
   }
 })
+
 
 test('generated C interfunction throws compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8851,6 +7354,7 @@ try {
   }
 })
 
+
 test('generated C return through finally compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8909,6 +7413,7 @@ stop()
   }
 })
 
+
 test('generated C break and continue through finally compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8964,6 +7469,7 @@ console.log('done', index)
   }
 })
 
+
 test('generated C runtime string assignment references compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9012,6 +7518,7 @@ console.log(objectName, arrayName)
   }
 })
 
+
 test('generated C string-returning assignment calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9059,6 +7566,7 @@ console.log(target.name, values[0])
     })
   }
 })
+
 
 test('generated C runtime string params compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9111,6 +7619,7 @@ console.log(echo(user.name))
   }
 })
 
+
 test('generated C prepared string args in number expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9157,6 +7666,7 @@ console.log(length(user.name), total)
   }
 })
 
+
 test('generated C runtime string return compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9202,6 +7712,7 @@ console.log(name)
     })
   }
 })
+
 
 test('generated C runtime string index returns compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9253,91 +7764,6 @@ console.log(getObjectName(), getArrayName())
   }
 })
 
-test('generated C direct console log string return compiles and runs with runtime sources', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-direct-string-return-log-'))
-  const source = join(dir, 'direct-string-return-log.c')
-  const output = join(dir, 'direct-string-return-log')
-
-  try {
-    const result = compileSource(
-      `function getName(): string {
-  return 'Ada'
-}
-
-console.log(getName())
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'Ada\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-test('generated C direct console log member and index expressions compile and run with runtime sources', async (t) => {
-  const probe = await runCommand('cc', ['--version'])
-
-  if (probe.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-direct-console-'))
-  const source = join(dir, 'direct-console.c')
-  const output = join(dir, 'direct-console')
-
-  try {
-    const result = compileSource(
-      `const user = { score: 42, active: true, name: 'Ada' }
-const values = [7, false, 'Grace']
-console.log(user.score, user.active, user.name, user['name'], values[0], values[1], values[2])
-
-`,
-      {
-        target: 'c'
-      }
-    )
-
-    await writeFile(source, result.code)
-
-    const compile = await compileRuntimeProgram(source, output)
-
-    assert.equal(compile.code, 0, compile.stderr)
-
-    const run = await runCommand(output, [])
-
-    assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '42 1 Ada Ada 7 0 Grace\n')
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
 
 test('generated C member and index reads inside scalar expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9383,6 +7809,7 @@ console.log(total, same)
   }
 })
 
+
 test('generated C optional object member and index access compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9424,6 +7851,7 @@ console.log(name, user?.['score'])
     })
   }
 })
+
 
 test('generated C typed object shape lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9471,6 +7899,7 @@ console.log(id)
     })
   }
 })
+
 
 test('generated C JSON parse and stringify compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9521,6 +7950,7 @@ console.log(user.name, user.score, text, parsedScore, active)
   }
 })
 
+
 test('generated C Buffer and Uint8Array APIs compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9570,6 +8000,7 @@ console.log(bytes.length, out[0], out[1], slice.length, slice[1], tail[0], tail[
   }
 })
 
+
 test('generated C crypto.getRandomValues compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9611,6 +8042,7 @@ console.log(filled.length, bytes.length, filled[0] >= 0, filled[0] < 256)
     })
   }
 })
+
 
 test('generated C Map and Set methods compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9672,6 +8104,7 @@ console.log(names.has('Grace'), names.size)
   }
 })
 
+
 test('generated C Map and Set method chains compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9719,6 +8152,7 @@ console.log(score, hasScore, hasName, removed, names.size)
     })
   }
 })
+
 
 test('generated C collection values cross function boundaries with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9823,6 +8257,7 @@ console.log(sumFromNums, sumFromCall, totalFromScores, totalFromCall, scores.siz
   }
 })
 
+
 test('generated C Map and Set array literal constructors compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9867,6 +8302,7 @@ console.log(adaScore, graceScore, names.has('Ada'), names.has('Grace'), scores.s
     })
   }
 })
+
 
 test('generated C Map and Set object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9925,6 +8361,7 @@ console.log(adaScore, graceScore, label, hasAda, bag.scores.size, bag.names.size
   }
 })
 
+
 test('generated C Map bracket syntax compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9969,144 +8406,3 @@ console.log(score, missing, scores.size)
     })
   }
 })
-
-function compileRuntimeProgram(source: string, output: string): Promise<CommandResult> {
-  return runCommand('cc', [
-    '-Iruntime/c/include',
-    source,
-    'runtime/c/src/core/value.c',
-    'runtime/c/src/core/allocator.c',
-    'runtime/c/src/core/callback.c',
-    'runtime/c/src/binary/binary.c',
-    'runtime/c/src/async/loop.c',
-    'runtime/c/src/async/promise.c',
-    'runtime/c/src/strings/string.c',
-    'runtime/c/src/objects/object.c',
-    'runtime/c/src/arrays/array.c',
-    'runtime/c/src/collections/map.c',
-    'runtime/c/src/collections/set.c',
-    'runtime/c/src/console/console.c',
-    'runtime/c/src/fs/fs.c',
-    'runtime/c/src/json/json.c',
-    'runtime/c/src/time/time.c',
-    '-o',
-    output
-  ])
-}
-
-async function generateLocalhostCertificate(keyPath: string, certPath: string): Promise<void> {
-  const result = await runCommand('openssl', [
-    'req',
-    '-x509',
-    '-newkey',
-    'rsa:2048',
-    '-nodes',
-    '-keyout',
-    keyPath,
-    '-out',
-    certPath,
-    '-days',
-    '1',
-    '-subj',
-    '/CN=localhost',
-    '-addext',
-    'subjectAltName=DNS:localhost'
-  ])
-
-  assert.equal(result.code, 0, result.stderr)
-}
-
-async function startLocalTlsServer(
-  keyPath: string,
-  certPath: string
-): Promise<{ port: number; close: () => Promise<void> }> {
-  const key = await readFile(keyPath)
-  const cert = await readFile(certPath)
-  const server = createServer(
-    {
-      key,
-      cert
-    },
-    (socket) => {
-      socket.on('data', () => {
-        socket.end('HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok')
-      })
-    }
-  )
-
-  await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error) => {
-      server.off('listening', onListening)
-      reject(error)
-    }
-    const onListening = () => {
-      server.off('error', onError)
-      resolve()
-    }
-
-    server.once('error', onError)
-    server.once('listening', onListening)
-    server.listen(0, '127.0.0.1')
-  })
-
-  const address = server.address()
-  const port = typeof address === 'object' && address != null ? address.port : 0
-
-  assert.notEqual(port, 0)
-
-  return {
-    port,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error != null) {
-            reject(error)
-          } else {
-            resolve()
-          }
-        })
-      })
-  }
-}
-
-function isLocalListenUnavailable(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    'code' in error &&
-    (error.code === 'EPERM' || error.code === 'EACCES' || error.code === 'EADDRNOTAVAIL')
-  )
-}
-
-function runCommand(command: string, args: string[]): Promise<CommandResult> {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd: new URL('..', import.meta.url),
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-    let stdout = ''
-    let stderr = ''
-
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk
-    })
-
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk
-    })
-
-    child.on('error', (error) => {
-      resolve({
-        code: 127,
-        stdout,
-        stderr: error.message
-      })
-    })
-    child.on('exit', (code) => {
-      resolve({
-        code: code ?? 1,
-        stdout,
-        stderr
-      })
-    })
-  })
-}
