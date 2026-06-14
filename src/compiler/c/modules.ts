@@ -1,23 +1,13 @@
 import { createHash } from 'node:crypto'
 import { dirname, extname, isAbsolute, join, normalize, posix as pathPosix, relative, resolve, sep } from 'node:path'
 import { CompileError, diagnostic } from '../diagnostics.ts'
+import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
 import { formatGeneratedC } from './format.ts'
 import { emitCIdentifier } from './identifiers.ts'
 import type { AnyNode, Diagnostic, ModuleGraph } from '../types.ts'
 import type { CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
 
 const cModuleSourceExtensions = ['', '.ts', '.js']
-const runtimeBuiltinImportSources = new Set([
-  'dgram',
-  'fs',
-  'http',
-  'net',
-  'node:dgram',
-  'node:fs',
-  'node:fs/promises',
-  'node:http',
-  'node:net'
-])
 
 export type CModuleFileEmitters = {
   emitHeader(plan: CModulePlan, plans: CModulePlan[], diagnostics: Diagnostic[]): string
@@ -181,10 +171,6 @@ function resolveKnownCModuleImport(from: string, specifier: string, modulePaths:
       : [normalized]
 
   return candidates.find((candidate) => modulePaths.has(candidate)) ?? null
-}
-
-function isRuntimeBuiltinImportSource(specifier: string): boolean {
-  return runtimeBuiltinImportSources.has(specifier)
 }
 
 function relativeCModuleSourcePath(sourceRoot: string, file: string): string {
