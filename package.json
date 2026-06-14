@@ -11,8 +11,10 @@
   "scripts": {
     "example": "pnpm run example:prepare && cmake --build example/build && ./example/build/ccjs_cmake_example",
     "example:libuv": "pnpm run example:prepare-libuv && cmake --build example/build-libuv && ./example/build-libuv/ccjs_cmake_example",
+    "example:libuv-boringssl": "pnpm run example:prepare-libuv-boringssl && cmake --build example/build-libuv-boringssl && ./example/build-libuv-boringssl/ccjs_cmake_example",
     "example:prepare": "cmake -S example -B example/build",
     "example:prepare-libuv": "pnpm run libuv:bootstrap && cmake -S example -B example/build-libuv -DCCJS_LOOP_BACKEND=libuv",
+    "example:prepare-libuv-boringssl": "pnpm run libuv:bootstrap && pnpm run boringssl:bootstrap && cmake -S example -B example/build-libuv-boringssl -DCCJS_LOOP_BACKEND=libuv -DCCJS_TLS_BACKEND=boringssl",
     "boringssl:bootstrap": "node scripts/bootstrap-boringssl.ts",
     "libuv:bootstrap": "node scripts/bootstrap-libuv.ts",
     "build": "node scripts/build.ts",

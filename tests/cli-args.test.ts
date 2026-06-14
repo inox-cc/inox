@@ -14,7 +14,8 @@ test('ccjs index.ts defaults to run command', () => {
     out: null,
     outDir: null,
     entryMode: false,
-    keep: false
+    keep: false,
+    tlsBackend: null
   })
 })
 
@@ -30,7 +31,8 @@ test('ccjs index.ts --emit c compiles source without running', () => {
     out: 'index.c',
     outDir: null,
     entryMode: false,
-    keep: false
+    keep: false,
+    tlsBackend: null
   })
 })
 
@@ -53,8 +55,23 @@ test('emit accepts modular C output directory with entry marker', () => {
     out: null,
     outDir: 'generated',
     entryMode: true,
-    keep: false
+    keep: false,
+    tlsBackend: null
   })
+})
+
+test('accepts explicit C TLS backend', () => {
+  const result = parseCliArgs(['index.ts', '--emit', 'c', '--tls-backend', 'boringssl'])
+
+  assert.equal(result.ok, true)
+  assert.equal(result.plan.tlsBackend, 'boringssl')
+})
+
+test('rejects invalid C TLS backend', () => {
+  const result = parseCliArgs(['index.ts', '--emit', 'c', '--tls-backend', 'wolfssl'])
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, '--tls-backend expects none, boringssl or openssl')
 })
 
 test('modular C output requires entry marker', () => {

@@ -40,7 +40,7 @@ elseif(CCJS_LOOP_BACKEND STREQUAL "libuv")
   set(CCJS_LIBUV_DIR "${CCJS_REPO_ROOT}/third_party/libuv")
 
   if(NOT EXISTS "${CCJS_LIBUV_DIR}/include/uv.h")
-    message(FATAL_ERROR "libuv submodule is not initialized. Run `pnpm run bootstrap:libuv` from the repository root.")
+    message(FATAL_ERROR "libuv submodule is not initialized. Run `pnpm run libuv:bootstrap` from the repository root.")
   endif()
 
   set(LIBUV_BUILD_SHARED OFF CACHE BOOL "Build shared libuv" FORCE)

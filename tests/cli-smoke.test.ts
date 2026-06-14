@@ -714,6 +714,54 @@ exec cc "$@"
   }
 })
 
+test('ccjs build --target c selects configured TLS runtime source with fetch', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-fetch-tls-select-test-'))
+  const out = join(dir, 'fetch')
+  const wrapper = join(dir, 'cc-wrapper.sh')
+  const log = join(dir, 'cc.log')
+
+  try {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `const response = await fetch('https://example.com/')
+const text = await response.text()
+`
+    )
+    await writeFile(
+      wrapper,
+      `#!/bin/sh
+printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
+exit 0
+`
+    )
+    await chmod(wrapper, 0o755)
+
+    const result = await runCli(['build', 'main.ts', '--target', 'c', '--tls-backend', 'openssl', '-o', out], {
+      cwd: dir,
+      env: {
+        CC: wrapper,
+        CCJS_CC_LOG: log
+      }
+    })
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const invocation = await readFile(log, 'utf8')
+
+    assert.match(invocation, /runtime\/c\/src\/network\/fetch\.c/)
+    assert.match(invocation, /runtime\/c\/src\/network\/net\.c/)
+    assert.match(invocation, /runtime\/c\/src\/network\/tls-openssl\.c/)
+    assert.doesNotMatch(invocation, /runtime\/c\/src\/network\/tls\.c/)
+    assert.doesNotMatch(invocation, /runtime\/c\/src\/network\/tls-boringssl\.c/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs build --target c reads ccjs.config.json toolchain settings', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

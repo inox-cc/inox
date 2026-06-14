@@ -7,6 +7,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 find_program(NODE_EXECUTABLE node REQUIRED)
 
+if(CCJS_TLS_BACKEND STREQUAL "boringssl")
+  enable_language(CXX)
+endif()
+
 set(CCJS_CLI "../bin/ccjs.ts")
 set(CCJS_ENTRY "src/index.ts")
 set(CCJS_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -24,6 +28,11 @@ file(GLOB_RECURSE CCJS_COMPILER_SOURCES CONFIGURE_DEPENDS
 
 set(CCJS_GENERATED_SOURCES)
 set(CCJS_GENERATED_HEADERS)
+set(CCJS_CLI_TLS_ARGS)
+
+if(DEFINED CCJS_TLS_BACKEND AND NOT CCJS_TLS_BACKEND STREQUAL "")
+  list(APPEND CCJS_CLI_TLS_ARGS "--tls-backend" "${CCJS_TLS_BACKEND}")
+endif()
 
 foreach(CCJS_TS_SOURCE IN LISTS CCJS_TS_SOURCES)
   file(RELATIVE_PATH CCJS_REL_TS "${CMAKE_CURRENT_SOURCE_DIR}" "${CCJS_TS_SOURCE}")
@@ -42,7 +51,7 @@ endforeach()
 add_custom_command(
   OUTPUT ${CCJS_GENERATED_SOURCES}
   BYPRODUCTS ${CCJS_GENERATED_HEADERS}
-  COMMAND "${NODE_EXECUTABLE}" "${CCJS_CLI}" "${CCJS_ENTRY}" --emit c --out-dir "${CCJS_GENERATED_DIR}" --entry
+  COMMAND "${NODE_EXECUTABLE}" "${CCJS_CLI}" "${CCJS_ENTRY}" --emit c --out-dir "${CCJS_GENERATED_DIR}" --entry ${CCJS_CLI_TLS_ARGS}
   MAIN_DEPENDENCY "${CCJS_ENTRY}"
   DEPENDS ${CCJS_TS_SOURCES} ${CCJS_COMPILER_SOURCES}
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -51,3 +60,7 @@ add_custom_command(
 
 add_executable(ccjs_cmake_example ${CCJS_GENERATED_SOURCES})
 target_link_libraries(ccjs_cmake_example PRIVATE ccjs_runtime)
+
+if(CCJS_TLS_BACKEND STREQUAL "boringssl")
+  set_property(TARGET ccjs_cmake_example PROPERTY LINKER_LANGUAGE CXX)
+endif()

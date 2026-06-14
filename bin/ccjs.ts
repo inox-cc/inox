@@ -12,6 +12,7 @@ import type {
   RandomOptions,
   RuntimeBudgets,
   RuntimeCapabilities,
+  TlsBackend,
   RuntimeProfile
 } from '../src/compiler/types.ts'
 import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
@@ -32,6 +33,7 @@ type CConfig = {
 
 type CompileCOptions = {
   source?: string
+  tlsBackend?: TlsBackend
 }
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -45,7 +47,6 @@ const cRuntimeSourceGroups = {
   http: ['runtime/c/src/network/http.c'],
   json: ['runtime/c/src/json/json.c'],
   net: ['runtime/c/src/network/net.c'],
-  tls: ['runtime/c/src/network/tls.c'],
   managed: [
     'runtime/c/src/core/value.c',
     'runtime/c/src/core/allocator.c',
@@ -106,7 +107,8 @@ async function runCEntry(plan: CliPlan): Promise<void> {
 
   try {
     const buildCode = await compileCExecutable(requireEntry(plan), output, {
-      source
+      source,
+      tlsBackend: plan.tlsBackend ?? undefined
     })
 
     if (buildCode !== 0) {
@@ -136,7 +138,9 @@ async function writeCompiledSource(plan: CliPlan): Promise<void> {
       target: 'c',
       callMain: false,
       sourceRoot: process.cwd(),
-      ...cCompileOptions(config)
+      ...cCompileOptions(config, {
+        tlsBackend: plan.tlsBackend ?? undefined
+      })
     })
 
     for (const file of result.files) {
@@ -159,7 +163,9 @@ async function writeCompiledSource(plan: CliPlan): Promise<void> {
   const result = await compileFile(entry, {
     target: 'c',
     callMain: false,
-    ...cCompileOptions(config)
+    ...cCompileOptions(config, {
+      tlsBackend: plan.tlsBackend ?? undefined
+    })
   })
   const out = plan.out ?? defaultEmitOutput(entry, 'c')
   const dir = dirname(out)
@@ -177,7 +183,9 @@ async function writeCompiledSource(plan: CliPlan): Promise<void> {
 async function buildCExecutable(plan: CliPlan): Promise<void> {
   const entry = requireEntry(plan)
   const out = plan.out ?? defaultCBuildOutput(entry)
-  const code = await compileCExecutable(entry, out)
+  const code = await compileCExecutable(entry, out, {
+    tlsBackend: plan.tlsBackend ?? undefined
+  })
 
   if (code !== 0) {
     process.exitCode = code
@@ -192,7 +200,9 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
   const result = await compileFile(entry, {
     target: 'c',
     callMain: false,
-    ...cCompileOptions(config)
+    ...cCompileOptions(config, {
+      tlsBackend: options.tlsBackend
+    })
   })
   const dir = dirname(out)
   const tempDir = options.source == null ? await mkdtemp(join(tmpdir(), 'ccjs-c-build-')) : null
@@ -208,7 +218,7 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
 
   try {
     const compiler = cCompilerCommand(config)
-    const runtimeSources = cRuntimeSourcesForCode(result.code)
+    const runtimeSources = cRuntimeSourcesForCode(result.code, options.tlsBackend ?? config.c?.tlsBackend ?? 'none')
 
     return await spawnAndWait(compiler.command, [
       ...compiler.args,
@@ -232,8 +242,9 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
   }
 }
 
-function cRuntimeSourcesForCode(code: string): string[] {
-  const groups = new Set<keyof typeof cRuntimeSourceGroups>()
+function cRuntimeSourcesForCode(code: string, tlsBackend: TlsBackend = 'none'): string[] {
+  type RuntimeSourceGroup = keyof typeof cRuntimeSourceGroups | 'tls'
+  const groups = new Set<RuntimeSourceGroup>()
 
   if (usesCHeader(code, 'time')) {
     groups.add('time')
@@ -306,10 +317,28 @@ function cRuntimeSourcesForCode(code: string): string[] {
     groups.add('managed')
   }
 
-  return Object.entries(cRuntimeSourceGroups)
+  const sources = Object.entries(cRuntimeSourceGroups)
     .filter(([group]) => groups.has(group as keyof typeof cRuntimeSourceGroups))
     .flatMap(([, sources]) => sources)
     .map((file) => join(repoRoot, file))
+
+  if (groups.has('tls')) {
+    sources.push(join(repoRoot, cRuntimeTlsSource(tlsBackend)))
+  }
+
+  return sources
+}
+
+function cRuntimeTlsSource(tlsBackend: TlsBackend): string {
+  if (tlsBackend === 'boringssl') {
+    return 'runtime/c/src/network/tls-boringssl.c'
+  }
+
+  if (tlsBackend === 'openssl') {
+    return 'runtime/c/src/network/tls-openssl.c'
+  }
+
+  return 'runtime/c/src/network/tls.c'
 }
 
 function usesCHeader(code: string, name: string): boolean {
@@ -373,14 +402,17 @@ function validateConfig(config: unknown, fileName: string): CConfig {
 }
 
 function cCompileOptions(
-  config: CConfig
+  config: CConfig,
+  overrides: {
+    tlsBackend?: TlsBackend
+  } = {}
 ): Pick<CompileOptions, 'budgets' | 'capabilities' | 'profile' | 'random' | 'tlsBackend'> {
   return {
     budgets: config.budgets,
     capabilities: config.capabilities,
     profile: config.profile,
     random: config.random,
-    tlsBackend: config.c?.tlsBackend
+    tlsBackend: overrides.tlsBackend ?? config.c?.tlsBackend
   }
 }
 

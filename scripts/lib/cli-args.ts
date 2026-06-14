@@ -2,8 +2,10 @@ import { basename, dirname, extname, join } from 'node:path'
 
 const commands = new Set(['build', 'run', 'test'])
 const emitTargets = new Set(['c'])
+const tlsBackends = new Set(['none', 'boringssl', 'openssl'])
 
 export type CliTarget = 'c'
+export type CliTlsBackend = 'none' | 'boringssl' | 'openssl'
 
 export type CliCommand = 'build' | 'emit' | 'help' | 'run' | 'test'
 
@@ -16,6 +18,7 @@ export type CliPlan = {
   outDir?: string | null
   entryMode?: boolean
   keep?: boolean
+  tlsBackend?: CliTlsBackend | null
   help?: boolean
 }
 
@@ -26,6 +29,7 @@ type CliOptions = {
   outDir?: string
   entryMode?: boolean
   keep?: boolean
+  tlsBackend?: CliTlsBackend
 }
 
 type ParsedOptions = {
@@ -46,10 +50,10 @@ type ParseResult<T> =
 
 export const usage = `Usage:
   ccjs <entry>
-  ccjs <entry> --emit c [-o output.c]
-  ccjs <entry> --emit c --out-dir generated --entry
-  ccjs run <entry> [--target c] [--keep]
-  ccjs build <entry> --target c [-o executable]
+  ccjs <entry> --emit c [-o output.c] [--tls-backend none|boringssl|openssl]
+  ccjs <entry> --emit c --out-dir generated --entry [--tls-backend none|boringssl|openssl]
+  ccjs run <entry> [--target c] [--keep] [--tls-backend none|boringssl|openssl]
+  ccjs build <entry> --target c [-o executable] [--tls-backend none|boringssl|openssl]
   ccjs test
 
 Examples:
@@ -116,6 +120,7 @@ export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
   const entryMode = options.entryMode ?? false
   const out = options.out ?? (emit == null || outDir != null ? null : defaultEmitOutput(entry, emit))
   const finalCommand: CliCommand = emit == null ? command : 'emit'
+  const tlsBackend = options.tlsBackend ?? null
 
   if (command === 'build' && target == null) {
     return fail('build requires --target c')
@@ -145,7 +150,8 @@ export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
     out,
     outDir,
     entryMode,
-    keep: options.keep ?? false
+    keep: options.keep ?? false,
+    tlsBackend
   })
 }
 
@@ -168,7 +174,8 @@ export function formatCliPlan(plan: CliPlan): string {
     `out: ${plan.out ?? '-'}`,
     `outDir: ${plan.outDir ?? '-'}`,
     `entryMode: ${plan.entryMode ? 'yes' : 'no'}`,
-    `keep: ${plan.keep ? 'yes' : 'no'}`
+    `keep: ${plan.keep ? 'yes' : 'no'}`,
+    `tlsBackend: ${plan.tlsBackend ?? '-'}`
   ]
 
   return lines.join('\n')
@@ -221,6 +228,15 @@ function parseOptions(tokens: string[]): ParseResult<ParsedOptions> {
       options.outDir = value
     } else if (token === '--entry') {
       options.entryMode = true
+    } else if (token === '--tls-backend') {
+      const value = tokens[i + 1]
+      i += 1
+
+      if (!isCliTlsBackend(value)) {
+        return fail('--tls-backend expects none, boringssl or openssl')
+      }
+
+      options.tlsBackend = value
     } else if (token.startsWith('-')) {
       return fail(`unknown option ${token}`)
     } else {
@@ -251,6 +267,10 @@ function fail(error: string): ParseResult<never> {
 
 function isCliTarget(value: string | undefined): value is CliTarget {
   return value != null && emitTargets.has(value)
+}
+
+function isCliTlsBackend(value: string | undefined): value is CliTlsBackend {
+  return value != null && tlsBackends.has(value)
 }
 
 function isCliCommand(value: string | undefined): value is CliCommand {
