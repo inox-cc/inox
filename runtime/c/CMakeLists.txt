@@ -14,6 +14,7 @@ set(CCJS_RUNTIME_SOURCES
   "${CCJS_RUNTIME_DIR}/src/binary/binary.c"
   "${CCJS_RUNTIME_DIR}/src/collections/map.c"
   "${CCJS_RUNTIME_DIR}/src/collections/set.c"
+  "${CCJS_RUNTIME_DIR}/src/console/console.c"
   "${CCJS_RUNTIME_DIR}/src/core/allocator.c"
   "${CCJS_RUNTIME_DIR}/src/core/callback.c"
   "${CCJS_RUNTIME_DIR}/src/core/value.c"

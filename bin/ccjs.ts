@@ -37,6 +37,7 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const cRuntimeSourceGroups = {
   async: ['runtime/c/src/async/loop.c', 'runtime/c/src/async/promise.c'],
   binary: ['runtime/c/src/binary/binary.c'],
+  console: ['runtime/c/src/console/console.c'],
   fs: ['runtime/c/src/fs/fs.c'],
   json: ['runtime/c/src/json/json.c'],
   managed: [
@@ -235,6 +236,10 @@ function cRuntimeSourcesForCode(code: string): string[] {
   if (usesCHeader(code, 'binary')) {
     groups.add('managed')
     groups.add('binary')
+  }
+
+  if (usesCHeader(code, 'console')) {
+    groups.add('console')
   }
 
   if (usesCHeader(code, 'loop') || usesCHeader(code, 'promise')) {

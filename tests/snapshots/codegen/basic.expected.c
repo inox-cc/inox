@@ -1,6 +1,7 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include "ccjs/console.h"
+#include <string.h>
 #include "ccjs/string.h"
 
 static void* ccjs_default_alloc(void* user, size_t size, size_t align) {

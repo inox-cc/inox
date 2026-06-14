@@ -909,6 +909,7 @@ function emitCModuleSource(
   const needsTimeRuntime = runtimeRequirements.has('clocks') || needsAsyncRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
+  const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') || needsFsRuntime || signatureRuntimeTypes.has('string')
   const classMethods = collectClassMethods(context)
@@ -940,6 +941,7 @@ function emitCModuleSource(
       needsFsRuntime,
       needsJsonRuntime,
       needsTimerRuntime,
+      needsConsoleRuntime,
       options
     )
   )
@@ -1416,6 +1418,7 @@ function emitCUnit(
   const needsTimeRuntime = runtimeRequirements.has('clocks') || needsAsyncRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
+  const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
@@ -1434,6 +1437,7 @@ function emitCUnit(
     needsFsRuntime,
     needsJsonRuntime,
     needsTimerRuntime,
+    needsConsoleRuntime,
     options
   )
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(
@@ -1558,9 +1562,15 @@ function emitCPrelude(
   needsFsRuntime,
   needsJsonRuntime,
   needsTimerRuntime,
+  needsConsoleRuntime,
   options: CEmitOptions = {}
 ) {
   const lines = ['#include <stdio.h>']
+
+  if (needsConsoleRuntime) {
+    lines.push('#include <stdlib.h>')
+    lines.push('#include "ccjs/console.h"')
+  }
 
   if (needsMathRuntime || needsCryptoRuntime) {
     lines.push('#include <stdint.h>')
@@ -1575,7 +1585,9 @@ function emitCPrelude(
   }
 
   if (needsRuntime) {
-    lines.push('#include <stdlib.h>')
+    if (!needsConsoleRuntime) {
+      lines.push('#include <stdlib.h>')
+    }
     if (needsCollectionRuntime) {
       lines.push('#include "ccjs/array.h"')
     }
@@ -7113,7 +7125,7 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && isConsoleLog(statement.expression)) {
-    return emitConsoleLogStatement(statement.expression.args, context)
+    return emitConsoleLogStatement(statement.expression.callee.property, statement.expression.args, context)
   }
 
   if (statement.type === 'ExpressionStatement') {
@@ -11548,9 +11560,14 @@ function emitPreparedBytesIndexAssignment(expression, context) {
   }
 }
 
-function emitConsoleLogStatement(args, context) {
+function emitConsoleLogStatement(method, args, context) {
+  const stream = method === 'warn' || method === 'error' ? 'CCJS_CONSOLE_STDERR' : 'CCJS_CONSOLE_STDOUT'
+  const isStdout = stream === 'CCJS_CONSOLE_STDOUT'
+
   if (args.length === 0) {
-    return ['printf("\\n");']
+    return isStdout
+      ? ['printf("\\n");']
+      : [`if (ccjs_console_printf(${stream}, "\\n") < 0) ${emitFailureStatement(context)}`]
   }
 
   const lines: string[] = []
@@ -11565,10 +11582,20 @@ function emitConsoleLogStatement(args, context) {
     values.push(...value.values)
   }
 
+  const format = escapeCString(parts.join(' '))
+
   if (values.length === 0) {
-    lines.push(`printf("${escapeCString(parts.join(' '))}\\n");`)
+    lines.push(
+      isStdout
+        ? `printf("${format}\\n");`
+        : `if (ccjs_console_printf(${stream}, "${format}\\n") < 0) ${emitFailureStatement(context)}`
+    )
   } else {
-    lines.push(`printf("${escapeCString(parts.join(' '))}\\n", ${values.join(', ')});`)
+    lines.push(
+      isStdout
+        ? `printf("${format}\\n", ${values.join(', ')});`
+        : `if (ccjs_console_printf(${stream}, "${format}\\n", ${values.join(', ')}) < 0) ${emitFailureStatement(context)}`
+    )
   }
 
   return lines
@@ -15694,6 +15721,40 @@ function isConsoleLog(expression) {
     expression.callee.object.path[0] === 'console' &&
     ['log', 'info', 'warn', 'error'].includes(expression.callee.property)
   )
+}
+
+function irProgramsUseConsoleRuntime(programs: IrProgram[]): boolean {
+  return programs.some((program) => containsConsoleRuntimeCall(program.body))
+}
+
+function containsConsoleRuntimeCall(node: unknown): boolean {
+  if (node == null) {
+    return false
+  }
+
+  if (Array.isArray(node)) {
+    return node.some(containsConsoleRuntimeCall)
+  }
+
+  if (typeof node !== 'object') {
+    return false
+  }
+
+  if (isConsoleLog(node as AnyNode)) {
+    return true
+  }
+
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'loc' || key === 'shape') {
+      continue
+    }
+
+    if (containsConsoleRuntimeCall(value)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function emitCOperator(operator) {

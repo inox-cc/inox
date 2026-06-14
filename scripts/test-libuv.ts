@@ -42,6 +42,7 @@ try {
     process.exitCode = 1
   } else {
     await checkLibuvTimerRuntime(buildDir)
+    await checkLibuvConsoleRuntime(buildDir)
     await checkLibuvFsRuntime(buildDir)
     console.log('Libuv checks passed')
   }
@@ -440,6 +441,70 @@ int main(void) {
   await expectMissing(mutationInput)
   await expectMissing(mutationRenamed)
   await expectMissing(mutationNested)
+}
+
+async function checkLibuvConsoleRuntime(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'console-smoke-src')
+  const consoleBuildDir = join(workDir, 'console-smoke-build')
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_console_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_console_smoke console-smoke.c)
+target_link_libraries(ccjs_libuv_console_smoke PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(
+    join(sourceDir, 'console-smoke.c'),
+    `#include "ccjs/console.h"
+
+int main(void) {
+  if (ccjs_console_write_line(CCJS_CONSOLE_STDOUT, "uv console", 10) != CCJS_OK) return 1;
+  if (ccjs_console_printf(CCJS_CONSOLE_STDOUT, "%d %d\\n", 1, 2) < 0) return 2;
+  if (ccjs_console_write_line(CCJS_CONSOLE_STDERR, "uv err", 6) != CCJS_OK) return 3;
+  return 0;
+}
+`
+  )
+
+  await checkCommand('configure libuv console smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    consoleBuildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build libuv console smoke', 'cmake', ['--build', consoleBuildDir])
+
+  const run = await runCommand(join(consoleBuildDir, 'ccjs_libuv_console_smoke'), [])
+  const stdout = normalizeNewlines(run.stdout)
+  const stderr = normalizeNewlines(run.stderr)
+
+  if (run.code !== 0) {
+    fail('run libuv console smoke', run)
+  }
+
+  const expectedStdout = 'uv console\n1 2\n'
+  const expectedStderr = 'uv err\n'
+
+  if (stdout !== expectedStdout || stderr !== expectedStderr) {
+    console.error(
+      `Libuv console smoke output mismatch.\nExpected stdout: ${JSON.stringify(
+        expectedStdout
+      )}\nActual stdout: ${JSON.stringify(stdout)}\nExpected stderr: ${JSON.stringify(
+        expectedStderr
+      )}\nActual stderr: ${JSON.stringify(stderr)}`
+    )
+    process.exit(1)
+  }
 }
 
 async function expectMissing(path: string): Promise<void> {

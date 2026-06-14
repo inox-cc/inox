@@ -75,8 +75,24 @@ test('emits C for a minimal console program', () => {
   )
 
   assert.match(result.code, /#include <stdio\.h>/)
+  assert.match(result.code, /#include "ccjs\/console\.h"/)
   assert.match(result.code, /const char \*name = "Ada";/)
   assert.match(result.code, /printf\("%s %s\\n", "hello", name\);/)
+})
+
+test('emits C console warn and error through stderr runtime stream', () => {
+  const result = compileSource(
+    `console.warn('heads up')
+console.error('failed')
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /#include "ccjs\/console\.h"/)
+  assert.match(result.code, /ccjs_console_printf\(CCJS_CONSOLE_STDERR, "%s\\n", "heads up"\)/)
+  assert.match(result.code, /ccjs_console_printf\(CCJS_CONSOLE_STDERR, "%s\\n", "failed"\)/)
 })
 
 test('compiles arrays, objects, member access and operators to JS', () => {

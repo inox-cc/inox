@@ -606,6 +606,7 @@ exec cc "$@"
     const invocation = await readFile(log, 'utf8')
 
     assert.match(invocation, /runtime\/c\/src\/time\/time\.c/)
+    assert.match(invocation, /runtime\/c\/src\/console\/console\.c/)
     assert.doesNotMatch(invocation, /runtime\/c\/src\/fs\/fs\.c/)
     assert.doesNotMatch(invocation, /runtime\/c\/src\/json\/json\.c/)
     assert.doesNotMatch(invocation, /runtime\/c\/src\/core\/value\.c/)
