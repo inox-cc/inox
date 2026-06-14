@@ -7,7 +7,15 @@
 typedef struct ccjs_net_server ccjs_net_server;
 typedef struct ccjs_net_socket ccjs_net_socket;
 
+typedef struct ccjs_net_address {
+  char address[64];
+  const char* family;
+  int port;
+} ccjs_net_address;
+
 typedef ccjs_status (*ccjs_net_connection_fn)(void* user, ccjs_net_server* server, ccjs_net_socket* socket);
+typedef ccjs_status (*ccjs_net_server_fn)(void* user, ccjs_net_server* server);
+typedef ccjs_status (*ccjs_net_server_error_fn)(void* user, ccjs_net_server* server, ccjs_status status);
 typedef ccjs_status (*ccjs_net_connect_fn)(void* user, ccjs_net_socket* socket, ccjs_status status);
 typedef ccjs_status (*ccjs_net_data_fn)(void* user, ccjs_net_socket* socket, const char* bytes, size_t len);
 typedef void (*ccjs_net_close_fn)(void* user, ccjs_net_socket* socket);
@@ -18,7 +26,12 @@ ccjs_status ccjs_net_server_new(
   void* user,
   ccjs_net_server** out
 );
+ccjs_status ccjs_net_server_on_connection(ccjs_net_server* server, ccjs_net_connection_fn connection, void* user);
+ccjs_status ccjs_net_server_on_listening(ccjs_net_server* server, ccjs_net_server_fn listening, void* user);
+ccjs_status ccjs_net_server_on_close(ccjs_net_server* server, ccjs_net_server_fn close, void* user);
+ccjs_status ccjs_net_server_on_error(ccjs_net_server* server, ccjs_net_server_error_fn error, void* user);
 ccjs_status ccjs_net_server_listen(ccjs_net_server* server, const char* host, int port, int backlog);
+ccjs_status ccjs_net_server_address(ccjs_net_server* server, ccjs_net_address* out);
 ccjs_status ccjs_net_server_local_port(ccjs_net_server* server, int* out_port);
 void ccjs_net_server_close(ccjs_net_server* server);
 
@@ -41,6 +54,7 @@ void ccjs_net_socket_set_callbacks(
 ccjs_status ccjs_net_socket_read_start(ccjs_net_socket* socket);
 ccjs_status ccjs_net_socket_read_stop(ccjs_net_socket* socket);
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len);
+ccjs_status ccjs_net_socket_end(ccjs_net_socket* socket, const char* bytes, size_t len);
 ccjs_status ccjs_net_socket_write_and_close(ccjs_net_socket* socket, const char* bytes, size_t len);
 void ccjs_net_socket_close(ccjs_net_socket* socket);
 

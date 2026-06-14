@@ -249,6 +249,64 @@ export function main(): void {
   assert.match(result.code, /#include "ccjs\/net\.h"/)
 })
 
+test('lowers node:net server lifecycle to the C net runtime', () => {
+  const result = compileSource(
+    `import net from 'node:net'
+
+const server = net.createServer((socket) => {
+  const greeting = 'hello'
+  socket.end(greeting)
+})
+server.on('listening', () => {
+  console.log('listening')
+})
+server.on('close', () => {
+  console.log('closed')
+})
+server.on('error', () => {
+  console.error('net error')
+})
+server.listen({ port: 0, host: '127.0.0.1', backlog: 16 }, () => {
+  const address = server.address()
+  console.log(address.address, address.family, address.port)
+})
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /static ccjs_status ccjs_net_connection_handler_\d+\(void\* user, ccjs_net_server\* ccjs_server, ccjs_net_socket\* ccjs_socket\);/)
+  assert.match(result.code, /static ccjs_status ccjs_net_event_handler_\d+\(void\* user, ccjs_net_server\* ccjs_server\);/)
+  assert.match(result.code, /static ccjs_status ccjs_net_error_handler_\d+\(void\* user, ccjs_net_server\* ccjs_server, ccjs_status ccjs_error_status\);/)
+  assert.match(result.code, /ccjs_net_server_new\(&ccjs_loop, ccjs_net_connection_handler_\d+, 0, &server\)/)
+  assert.match(result.code, /ccjs_net_server_on_listening\(server, ccjs_net_event_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_server_on_close\(server, ccjs_net_event_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_server_on_error\(server, ccjs_net_error_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_server_listen\(server, "127\.0\.0\.1", \(int\)\(0\), \(int\)\(16\)\)/)
+  assert.match(result.code, /ccjs_net_socket_end\(ccjs_socket, "hello", 5\)/)
+  assert.match(result.code, /ccjs_net_address address;/)
+  assert.match(result.code, /ccjs_net_server_address\(server, &address\)/)
+  assert.match(result.code, /printf\("%s %s %g\\n", address\.address, address\.family, \(\(double\)address\.port\)\)/)
+})
+
+test('lowers chained node:net createServer listen calls', () => {
+  const result = compileSource(
+    `import { createServer } from 'node:net'
+
+createServer((socket) => socket.end('ok')).listen(0, '127.0.0.1')
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_net_server\* ccjs_net_server_\d+ = 0;/)
+  assert.match(result.code, /ccjs_net_server_new\(&ccjs_loop, ccjs_net_connection_handler_\d+, 0, &ccjs_net_server_\d+\)/)
+  assert.match(result.code, /ccjs_net_server_listen\(ccjs_net_server_\d+, "127\.0\.0\.1", \(int\)\(0\), \(int\)\(128\)\)/)
+  assert.match(result.code, /ccjs_net_socket_end\(ccjs_socket, "ok", 2\)/)
+})
+
 test('emits C http runtime include for node:http imports', () => {
   const result = compileSource(
     `import http from 'node:http'

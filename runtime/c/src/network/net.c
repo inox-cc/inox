@@ -24,6 +24,12 @@ struct ccjs_net_server {
   ccjs_allocator* allocator;
   ccjs_net_connection_fn connection;
   void* user;
+  ccjs_net_server_fn listening;
+  void* listening_user;
+  ccjs_net_server_fn close;
+  void* close_user;
+  ccjs_net_server_error_fn error;
+  void* error_user;
   uv_tcp_t handle;
   int closing;
   int retained;
@@ -41,8 +47,10 @@ struct ccjs_net_socket {
 };
 
 static ccjs_status ccjs_net_ip4_addr(const char* host, int port, struct sockaddr_in* out);
+static ccjs_status ccjs_net_sockaddr_to_address(const struct sockaddr* addr, ccjs_net_address* out);
 static ccjs_status ccjs_net_socket_init(ccjs_loop* loop, ccjs_net_socket** out);
 static ccjs_status ccjs_net_socket_write_internal(ccjs_net_socket* socket, const char* bytes, size_t len, int close_after);
+static void ccjs_net_server_report_status(ccjs_net_server* server, ccjs_status status);
 static void ccjs_net_connection_cb(uv_stream_t* server_handle, int status);
 static void ccjs_net_connect_cb(uv_connect_t* request, int status);
 static void ccjs_net_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
@@ -57,7 +65,7 @@ ccjs_status ccjs_net_server_new(
   void* user,
   ccjs_net_server** out
 ) {
-  if (loop == 0 || loop->allocator == 0 || connection == 0 || out == 0) {
+  if (loop == 0 || loop->allocator == 0 || out == 0) {
     return CCJS_ERR_TYPE;
   }
 
@@ -100,6 +108,50 @@ ccjs_status ccjs_net_server_new(
   return CCJS_OK;
 }
 
+ccjs_status ccjs_net_server_on_connection(ccjs_net_server* server, ccjs_net_connection_fn connection, void* user) {
+  if (server == 0 || server->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  server->connection = connection;
+  server->user = user;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_server_on_listening(ccjs_net_server* server, ccjs_net_server_fn listening, void* user) {
+  if (server == 0 || server->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  server->listening = listening;
+  server->listening_user = user;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_server_on_close(ccjs_net_server* server, ccjs_net_server_fn close, void* user) {
+  if (server == 0 || server->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  server->close = close;
+  server->close_user = user;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_server_on_error(ccjs_net_server* server, ccjs_net_server_error_fn error, void* user) {
+  if (server == 0 || server->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  server->error = error;
+  server->error_user = user;
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_net_server_listen(ccjs_net_server* server, const char* host, int port, int backlog) {
   if (server == 0 || server->closing) {
     return CCJS_ERR_TYPE;
@@ -116,13 +168,24 @@ ccjs_status ccjs_net_server_listen(ccjs_net_server* server, const char* host, in
     return CCJS_ERR_FIELD;
   }
 
-  return uv_listen((uv_stream_t*)&server->handle, backlog <= 0 ? 128 : backlog, ccjs_net_connection_cb) == 0
-           ? CCJS_OK
-           : CCJS_ERR_FIELD;
+  if (uv_listen((uv_stream_t*)&server->handle, backlog <= 0 ? 128 : backlog, ccjs_net_connection_cb) != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  if (server->listening != 0) {
+    ccjs_status callback_status = server->listening(server->listening_user, server);
+
+    if (callback_status != CCJS_OK) {
+      ccjs_net_server_report_status(server, callback_status);
+      return callback_status;
+    }
+  }
+
+  return CCJS_OK;
 }
 
-ccjs_status ccjs_net_server_local_port(ccjs_net_server* server, int* out_port) {
-  if (server == 0 || out_port == 0) {
+ccjs_status ccjs_net_server_address(ccjs_net_server* server, ccjs_net_address* out) {
+  if (server == 0 || out == 0) {
     return CCJS_ERR_TYPE;
   }
 
@@ -133,11 +196,22 @@ ccjs_status ccjs_net_server_local_port(ccjs_net_server* server, int* out_port) {
     return CCJS_ERR_FIELD;
   }
 
-  if (((struct sockaddr*)&addr)->sa_family != AF_INET) {
-    return CCJS_ERR_UNSUPPORTED;
+  return ccjs_net_sockaddr_to_address((const struct sockaddr*)&addr, out);
+}
+
+ccjs_status ccjs_net_server_local_port(ccjs_net_server* server, int* out_port) {
+  if (server == 0 || out_port == 0) {
+    return CCJS_ERR_TYPE;
   }
 
-  *out_port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
+  ccjs_net_address address;
+  ccjs_status status = ccjs_net_server_address(server, &address);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  *out_port = address.port;
 
   return CCJS_OK;
 }
@@ -264,6 +338,10 @@ ccjs_status ccjs_net_socket_write_and_close(ccjs_net_socket* socket, const char*
   return ccjs_net_socket_write_internal(socket, bytes, len, 1);
 }
 
+ccjs_status ccjs_net_socket_end(ccjs_net_socket* socket, const char* bytes, size_t len) {
+  return ccjs_net_socket_write_internal(socket, bytes == 0 ? "" : bytes, bytes == 0 ? 0 : len, 1);
+}
+
 static ccjs_status ccjs_net_socket_write_internal(ccjs_net_socket* socket, const char* bytes, size_t len, int close_after) {
   if (socket == 0 || socket->closing || (bytes == 0 && len != 0)) {
     return CCJS_ERR_TYPE;
@@ -339,6 +417,25 @@ static ccjs_status ccjs_net_ip4_addr(const char* host, int port, struct sockaddr
   return uv_ip4_addr(host, port, out) == 0 ? CCJS_OK : CCJS_ERR_UNSUPPORTED;
 }
 
+static ccjs_status ccjs_net_sockaddr_to_address(const struct sockaddr* addr, ccjs_net_address* out) {
+  if (addr == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  memset(out, 0, sizeof(ccjs_net_address));
+
+  if (addr->sa_family != AF_INET) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  const struct sockaddr_in* ip4 = (const struct sockaddr_in*)addr;
+  uv_ip4_name(ip4, out->address, sizeof(out->address));
+  out->family = "IPv4";
+  out->port = ntohs(ip4->sin_port);
+
+  return CCJS_OK;
+}
+
 static ccjs_status ccjs_net_socket_init(ccjs_loop* loop, ccjs_net_socket** out) {
   if (loop == 0 || loop->allocator == 0 || out == 0) {
     return CCJS_ERR_TYPE;
@@ -381,6 +478,24 @@ static ccjs_status ccjs_net_socket_init(ccjs_loop* loop, ccjs_net_socket** out) 
   return CCJS_OK;
 }
 
+static void ccjs_net_server_report_status(ccjs_net_server* server, ccjs_status status) {
+  if (server == 0 || status == CCJS_OK) {
+    return;
+  }
+
+  if (server->error != 0) {
+    ccjs_status callback_status = server->error(server->error_user, server, status);
+
+    if (callback_status != CCJS_OK) {
+      ccjs_libuv_loop_report_status(server->loop, callback_status);
+    }
+
+    return;
+  }
+
+  ccjs_libuv_loop_report_status(server->loop, status);
+}
+
 static void ccjs_net_connection_cb(uv_stream_t* server_handle, int status) {
   ccjs_net_server* server = server_handle == 0 ? 0 : (ccjs_net_server*)server_handle->data;
 
@@ -389,7 +504,7 @@ static void ccjs_net_connection_cb(uv_stream_t* server_handle, int status) {
   }
 
   if (status != 0) {
-    ccjs_libuv_loop_report_status(server->loop, CCJS_ERR_FIELD);
+    ccjs_net_server_report_status(server, CCJS_ERR_FIELD);
     return;
   }
 
@@ -397,20 +512,25 @@ static void ccjs_net_connection_cb(uv_stream_t* server_handle, int status) {
   ccjs_status ccjs_status_value = ccjs_net_socket_init(server->loop, &socket);
 
   if (ccjs_status_value != CCJS_OK) {
-    ccjs_libuv_loop_report_status(server->loop, ccjs_status_value);
+    ccjs_net_server_report_status(server, ccjs_status_value);
     return;
   }
 
   if (uv_accept(server_handle, (uv_stream_t*)&socket->handle) != 0) {
     ccjs_net_socket_close(socket);
-    ccjs_libuv_loop_report_status(server->loop, CCJS_ERR_FIELD);
+    ccjs_net_server_report_status(server, CCJS_ERR_FIELD);
+    return;
+  }
+
+  if (server->connection == 0) {
+    ccjs_net_socket_close(socket);
     return;
   }
 
   ccjs_status_value = server->connection(server->user, server, socket);
 
   if (ccjs_status_value != CCJS_OK) {
-    ccjs_libuv_loop_report_status(server->loop, ccjs_status_value);
+    ccjs_net_server_report_status(server, ccjs_status_value);
   }
 }
 
@@ -513,6 +633,14 @@ static void ccjs_net_server_close_cb(uv_handle_t* handle) {
     return;
   }
 
+  if (server->close != 0) {
+    ccjs_status status = server->close(server->close_user, server);
+
+    if (status != CCJS_OK) {
+      ccjs_net_server_report_status(server, status);
+    }
+  }
+
   if (server->retained) {
     ccjs_libuv_loop_release_request(server->loop);
   }
@@ -566,11 +694,52 @@ ccjs_status ccjs_net_server_new(
   return CCJS_ERR_UNSUPPORTED;
 }
 
+ccjs_status ccjs_net_server_on_connection(ccjs_net_server* server, ccjs_net_connection_fn connection, void* user) {
+  (void)server;
+  (void)connection;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_server_on_listening(ccjs_net_server* server, ccjs_net_server_fn listening, void* user) {
+  (void)server;
+  (void)listening;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_server_on_close(ccjs_net_server* server, ccjs_net_server_fn close, void* user) {
+  (void)server;
+  (void)close;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_server_on_error(ccjs_net_server* server, ccjs_net_server_error_fn error, void* user) {
+  (void)server;
+  (void)error;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
 ccjs_status ccjs_net_server_listen(ccjs_net_server* server, const char* host, int port, int backlog) {
   (void)server;
   (void)host;
   (void)port;
   (void)backlog;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_server_address(ccjs_net_server* server, ccjs_net_address* out) {
+  (void)server;
+
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  out->address[0] = '\0';
+  out->family = 0;
+  out->port = 0;
   return CCJS_ERR_UNSUPPORTED;
 }
 
@@ -638,6 +807,13 @@ ccjs_status ccjs_net_socket_read_stop(ccjs_net_socket* socket) {
 }
 
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len) {
+  (void)socket;
+  (void)bytes;
+  (void)len;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_end(ccjs_net_socket* socket, const char* bytes, size_t len) {
   (void)socket;
   (void)bytes;
   (void)len;
