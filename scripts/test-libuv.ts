@@ -41,6 +41,7 @@ try {
     )
     process.exitCode = 1
   } else {
+    await checkLibuvTimerRuntime(buildDir)
     await checkLibuvFsRuntime(buildDir)
     console.log('Libuv checks passed')
   }
@@ -49,6 +50,153 @@ try {
     recursive: true,
     force: true
   })
+}
+
+async function checkLibuvTimerRuntime(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'timer-smoke-src')
+  const timerBuildDir = join(workDir, 'timer-smoke-build')
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_timer_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_timer_smoke timer-smoke.c)
+target_link_libraries(ccjs_libuv_timer_smoke PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(
+    join(sourceDir, 'timer-smoke.c'),
+    `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/loop.h"
+#include "ccjs/time.h"
+
+typedef struct test_log {
+  int immediate;
+  int timeout;
+  int canceled;
+  int interval;
+  int finalized;
+  ccjs_timer_handle* interval_handle;
+} test_log;
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static ccjs_status on_immediate(void* context) {
+  ((test_log*)context)->immediate += 1;
+  return CCJS_OK;
+}
+
+static ccjs_status on_timeout(void* context) {
+  ((test_log*)context)->timeout += 1;
+  return CCJS_OK;
+}
+
+static ccjs_status on_canceled(void* context) {
+  ((test_log*)context)->canceled += 1;
+  return CCJS_OK;
+}
+
+static ccjs_status on_interval(void* context) {
+  test_log* log = (test_log*)context;
+  log->interval += 1;
+
+  if (log->interval >= 3) {
+    ccjs_loop_clear_timer(log->interval_handle);
+  }
+
+  return CCJS_OK;
+}
+
+static void on_finalize(void* context) {
+  ((test_log*)context)->finalized += 1;
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_loop loop;
+  ccjs_timer_handle* immediate = 0;
+  ccjs_timer_handle* timeout = 0;
+  ccjs_timer_handle* canceled = 0;
+  ccjs_timer_handle* interval = 0;
+  test_log log = { 0, 0, 0, 0, 0, 0 };
+  int guard = 0;
+
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
+  if (ccjs_loop_queue_immediate(&loop, on_immediate, &log, on_finalize, &immediate) != CCJS_OK) return 2;
+  if (ccjs_loop_set_timeout(&loop, 0, on_timeout, &log, on_finalize, &timeout) != CCJS_OK) return 3;
+  if (ccjs_loop_set_timeout(&loop, 0, on_canceled, &log, on_finalize, &canceled) != CCJS_OK) return 4;
+  if (ccjs_loop_set_interval(&loop, 0, on_interval, &log, on_finalize, &interval) != CCJS_OK) return 5;
+  log.interval_handle = interval;
+  ccjs_loop_clear_timer(canceled);
+  ccjs_loop_clear_timer(canceled);
+
+  if (log.immediate != 0 || log.timeout != 0 || log.canceled != 0 || log.interval != 0) return 6;
+
+  while (ccjs_loop_has_work(&loop) && guard < 20) {
+    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 7;
+    guard += 1;
+  }
+
+  if (guard >= 20) return 8;
+  if (log.immediate != 1 || log.timeout != 1 || log.canceled != 0 || log.interval != 3) return 9;
+  if (ccjs_loop_has_work(&loop)) return 10;
+
+  ccjs_loop_dispose(&loop);
+  printf("%d %d %d %d %d\\n", log.immediate, log.timeout, log.canceled, log.interval, log.finalized);
+  return 0;
+}
+`
+  )
+
+  await checkCommand('configure libuv timer smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    timerBuildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build libuv timer smoke', 'cmake', ['--build', timerBuildDir])
+
+  const run = await runCommand(join(timerBuildDir, 'ccjs_libuv_timer_smoke'), [])
+  const stdout = normalizeNewlines(run.stdout)
+
+  if (run.code !== 0) {
+    fail('run libuv timer smoke', run)
+  }
+
+  const expected = '1 1 0 3 4\n'
+
+  if (stdout !== expected) {
+    console.error(`Libuv timer smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    process.exit(1)
+  }
 }
 
 async function checkLibuvFsRuntime(workDir: string): Promise<void> {
