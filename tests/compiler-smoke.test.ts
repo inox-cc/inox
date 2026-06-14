@@ -110,6 +110,21 @@ export function main(): void {
   assert.match(result.code, /#include "ccjs\/dgram\.h"/)
 })
 
+test('emits C net runtime include for node:net imports', () => {
+  const result = compileSource(
+    `import net from 'node:net'
+
+export function main(): void {
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /#include "ccjs\/net\.h"/)
+})
+
 test('compiles arrays, objects, member access and operators to JS', () => {
   const result = compileSource(
     `export function main(): void {

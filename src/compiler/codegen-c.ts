@@ -43,7 +43,7 @@ const cMathBinaryMethods = new Set(['max', 'min'])
 const defaultRandomSeed = 0x6d2b79f5
 const cModuleSourceExtensions = ['', '.ts', '.js']
 const generatedCColumnLimit = 130
-const runtimeBuiltinImportSources = new Set(['dgram', 'fs', 'node:dgram', 'node:fs', 'node:fs/promises'])
+const runtimeBuiltinImportSources = new Set(['dgram', 'fs', 'net', 'node:dgram', 'node:fs', 'node:fs/promises', 'node:net'])
 
 type CEmitOptions = {
   random?: RandomOptions
@@ -911,6 +911,7 @@ function emitCModuleSource(
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
+  const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') || needsFsRuntime || signatureRuntimeTypes.has('string')
   const classMethods = collectClassMethods(context)
@@ -944,6 +945,7 @@ function emitCModuleSource(
       needsTimerRuntime,
       needsConsoleRuntime,
       needsDgramRuntime,
+      needsNetRuntime,
       options
     )
   )
@@ -1422,6 +1424,7 @@ function emitCUnit(
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
+  const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
@@ -1442,6 +1445,7 @@ function emitCUnit(
     needsTimerRuntime,
     needsConsoleRuntime,
     needsDgramRuntime,
+    needsNetRuntime,
     options
   )
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(
@@ -1568,6 +1572,7 @@ function emitCPrelude(
   needsTimerRuntime,
   needsConsoleRuntime,
   needsDgramRuntime,
+  needsNetRuntime,
   options: CEmitOptions = {}
 ) {
   const lines = ['#include <stdio.h>']
@@ -1579,6 +1584,10 @@ function emitCPrelude(
 
   if (needsDgramRuntime) {
     lines.push('#include "ccjs/dgram.h"')
+  }
+
+  if (needsNetRuntime) {
+    lines.push('#include "ccjs/net.h"')
   }
 
   if (needsMathRuntime || needsCryptoRuntime) {

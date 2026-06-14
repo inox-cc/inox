@@ -10,7 +10,7 @@ import { lowerProgram } from './lower.ts'
 import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord, ProgramNode, SourceLocation } from './types.ts'
 
 const sourceExtensions = ['', '.ts', '.js']
-const runtimeBuiltinImportSources = new Set(['dgram', 'fs', 'node:dgram', 'node:fs', 'node:fs/promises'])
+const runtimeBuiltinImportSources = new Set(['dgram', 'fs', 'net', 'node:dgram', 'node:fs', 'node:fs/promises', 'node:net'])
 
 export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
   const entryPath = resolve(entry)

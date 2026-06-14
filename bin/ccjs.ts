@@ -41,6 +41,7 @@ const cRuntimeSourceGroups = {
   dgram: ['runtime/c/src/network/dgram.c'],
   fs: ['runtime/c/src/fs/fs.c'],
   json: ['runtime/c/src/json/json.c'],
+  net: ['runtime/c/src/network/net.c'],
   managed: [
     'runtime/c/src/core/value.c',
     'runtime/c/src/core/allocator.c',
@@ -246,6 +247,11 @@ function cRuntimeSourcesForCode(code: string): string[] {
   if (usesCHeader(code, 'dgram')) {
     groups.add('async')
     groups.add('dgram')
+  }
+
+  if (usesCHeader(code, 'net')) {
+    groups.add('async')
+    groups.add('net')
   }
 
   if (usesCHeader(code, 'loop') || usesCHeader(code, 'promise')) {
