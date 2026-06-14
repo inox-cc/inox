@@ -79,7 +79,19 @@ import {
 } from './runtime-imports.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
 import { mathRuntimeMethodName } from './runtime-methods.ts'
-import { cPromiseRuntimeCallName } from './async/promises.ts'
+import {
+  cPromiseRuntimeCallName,
+  functionTakesEventLoopParam,
+  isAsyncFunctionCallee,
+  isExternalEventLoopFunctionCallee,
+  isPromiseConstructorExpression,
+  isPromiseMethodAst,
+  isPromiseReturningFunctionCallee,
+  knownValueType,
+  resolveCAsyncFunctionAwaitValueType,
+  resolvePromiseExpressionValueType,
+  resolvePromiseReturningFunctionValueType
+} from './async/promises.ts'
 import {
   binaryRuntimeMethodName,
   isBinaryConstructorExpression,
@@ -20292,15 +20304,6 @@ function isBytesToStringCall(expression, context) {
   )
 }
 
-function isPromiseConstructorExpression(expression) {
-  return (
-    expression?.type === 'NewExpression' &&
-    expression.callee?.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    expression.callee.path[0] === 'Promise'
-  )
-}
-
 function isPromiseMethodCallExpression(expression, context) {
   return (
     expression?.type === 'CallExpression' &&
@@ -20308,86 +20311,6 @@ function isPromiseMethodCallExpression(expression, context) {
     ['catch', 'then'].includes(expression.callee.property) &&
     inferExpressionType(expression.callee.object, context) === 'promise'
   )
-}
-
-function isPromiseMethodAst(expression) {
-  return (
-    expression?.type === 'CallExpression' &&
-    expression.callee?.type === 'MemberExpression' &&
-    ['catch', 'then'].includes(expression.callee.property)
-  )
-}
-
-function isPlainPromiseReturningFunctionName(name, context) {
-  return context.functionReturnTypes.get(name) === 'promise' && context.functionAsyncFlags.get(name) !== true
-}
-
-function functionTakesEventLoopParam(name, context) {
-  return isPlainPromiseReturningFunctionName(name, context) || context.externalEventLoopFunctions.has(name)
-}
-
-function isPromiseReturningFunctionCallee(callee, context) {
-  return (
-    callee?.type === 'Reference' &&
-    callee.path.length === 1 &&
-    isPlainPromiseReturningFunctionName(callee.path[0], context)
-  )
-}
-
-function isExternalEventLoopFunctionCallee(callee, context) {
-  return (
-    callee?.type === 'Reference' && callee.path.length === 1 && context.externalEventLoopFunctions.has(callee.path[0])
-  )
-}
-
-function resolvePromiseReturningFunctionValueType(callee, context) {
-  if (!isPromiseReturningFunctionCallee(callee, context)) {
-    return 'unknown'
-  }
-
-  return context.functionReturnPromiseValueTypes.get(callee.path[0]) ?? 'unknown'
-}
-
-function resolvePromiseExpressionValueType(expression, context) {
-  const directType = knownValueType(expression?.promiseValueType)
-
-  if (directType != null) {
-    return directType
-  }
-
-  if (expression?.type === 'CallExpression') {
-    if (isPromiseReturningFunctionCallee(expression.callee, context)) {
-      return knownValueType(resolvePromiseReturningFunctionValueType(expression.callee, context))
-    }
-
-    if (isAsyncFunctionCallee(expression.callee, context)) {
-      return knownValueType(resolveCAsyncFunctionAwaitValueType(expression.callee, context))
-    }
-  }
-
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return knownValueType(context.promiseValueTypes.get(expression.path[0]))
-  }
-
-  return null
-}
-
-function knownValueType(valueType) {
-  return valueType == null || valueType === 'unknown' ? null : valueType
-}
-
-function isAsyncFunctionCallee(callee, context) {
-  return (
-    callee?.type === 'Reference' && callee.path.length === 1 && context.functionAsyncFlags.get(callee.path[0]) === true
-  )
-}
-
-function resolveCAsyncFunctionAwaitValueType(callee, context) {
-  if (!isAsyncFunctionCallee(callee, context)) {
-    return null
-  }
-
-  return context.functionReturnPromiseValueTypes.get(callee.path[0]) ?? 'unknown'
 }
 
 function isCJsGlobalRoot(name, context) {
