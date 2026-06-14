@@ -13,6 +13,7 @@ import type {
   RuntimeBudgets,
   RuntimeCapabilities,
   TlsBackend,
+  RuntimeLoopBackend,
   RuntimeProfile
 } from '../src/compiler/types.ts'
 import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
@@ -25,6 +26,7 @@ type CConfig = {
     cc?: string
     cflags?: string | string[]
     ldflags?: string | string[]
+    loopBackend?: 'embedded' | 'libuv'
     tlsBackend?: 'none' | 'boringssl' | 'openssl'
   }
   profile?: RuntimeProfile
@@ -32,6 +34,7 @@ type CConfig = {
 }
 
 type CompileCOptions = {
+  loopBackend?: RuntimeLoopBackend
   source?: string
   tlsBackend?: TlsBackend
 }
@@ -107,6 +110,7 @@ async function runCEntry(plan: CliPlan): Promise<void> {
 
   try {
     const buildCode = await compileCExecutable(requireEntry(plan), output, {
+      loopBackend: plan.loopBackend ?? undefined,
       source,
       tlsBackend: plan.tlsBackend ?? undefined
     })
@@ -139,6 +143,7 @@ async function writeCompiledSource(plan: CliPlan): Promise<void> {
       callMain: false,
       sourceRoot: process.cwd(),
       ...cCompileOptions(config, {
+        loopBackend: plan.loopBackend ?? undefined,
         tlsBackend: plan.tlsBackend ?? undefined
       })
     })
@@ -164,6 +169,7 @@ async function writeCompiledSource(plan: CliPlan): Promise<void> {
     target: 'c',
     callMain: false,
     ...cCompileOptions(config, {
+      loopBackend: plan.loopBackend ?? undefined,
       tlsBackend: plan.tlsBackend ?? undefined
     })
   })
@@ -184,6 +190,7 @@ async function buildCExecutable(plan: CliPlan): Promise<void> {
   const entry = requireEntry(plan)
   const out = plan.out ?? defaultCBuildOutput(entry)
   const code = await compileCExecutable(entry, out, {
+    loopBackend: plan.loopBackend ?? undefined,
     tlsBackend: plan.tlsBackend ?? undefined
   })
 
@@ -201,6 +208,7 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
     target: 'c',
     callMain: false,
     ...cCompileOptions(config, {
+      loopBackend: options.loopBackend,
       tlsBackend: options.tlsBackend
     })
   })
@@ -396,6 +404,7 @@ function validateConfig(config: unknown, fileName: string): CConfig {
 
   validateConfigFlags(value.c.cflags, 'c.cflags', fileName)
   validateConfigFlags(value.c.ldflags, 'c.ldflags', fileName)
+  validateLoopBackendConfig(value.c.loopBackend, fileName)
   validateTlsBackendConfig(value.c.tlsBackend, fileName)
 
   return value
@@ -404,12 +413,14 @@ function validateConfig(config: unknown, fileName: string): CConfig {
 function cCompileOptions(
   config: CConfig,
   overrides: {
+    loopBackend?: RuntimeLoopBackend
     tlsBackend?: TlsBackend
   } = {}
-): Pick<CompileOptions, 'budgets' | 'capabilities' | 'profile' | 'random' | 'tlsBackend'> {
+): Pick<CompileOptions, 'budgets' | 'capabilities' | 'loopBackend' | 'profile' | 'random' | 'tlsBackend'> {
   return {
     budgets: config.budgets,
     capabilities: config.capabilities,
+    loopBackend: overrides.loopBackend ?? config.c?.loopBackend,
     profile: config.profile,
     random: config.random,
     tlsBackend: overrides.tlsBackend ?? config.c?.tlsBackend
@@ -491,6 +502,16 @@ function validateRandomConfig(value: unknown, fileName: string): void {
 
   if (random?.seed != null && (!Number.isInteger(random.seed) || random.seed < 0 || random.seed > 0xffffffff)) {
     throw invalidConfig('random.seed must be an integer from 0 to 4294967295')
+  }
+}
+
+function validateLoopBackendConfig(value: unknown, fileName: string): void {
+  if (value == null) {
+    return
+  }
+
+  if (value !== 'embedded' && value !== 'libuv') {
+    throw new Error(`invalid ${fileName}: c.loopBackend must be "embedded" or "libuv"`)
   }
 }
 

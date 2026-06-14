@@ -541,6 +541,7 @@ console.log(response.status, text)
 `,
       {
         target: 'c',
+        loopBackend: 'libuv',
         tlsBackend: 'boringssl'
       }
     )

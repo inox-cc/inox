@@ -165,6 +165,15 @@ const fsConstantValues = new Map([
   ['R_OK', 4]
 ])
 
+const libuvOnlyRuntimeImports = new Map([
+  ['dgram', 'node:dgram'],
+  ['http', 'node:http'],
+  ['net', 'node:net'],
+  ['node:dgram', 'node:dgram'],
+  ['node:http', 'node:http'],
+  ['node:net', 'node:net']
+])
+
 const globals = new Map<string, SymbolInfo>([
   [
     'console',
@@ -668,6 +677,7 @@ class Checker {
     }
 
     if (item.type === 'ImportDeclaration') {
+      this.checkLibuvOnlyRuntimeImport(item)
       return
     }
 
@@ -2226,6 +2236,15 @@ class Checker {
       return null
     }
 
+    if (!this.requireLibuvBackend('fetch', expression.loc)) {
+      expression.fetchRuntimeMethod = 'fetch'
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'object'
+      expression.shape = fetchResponseObjectShape
+
+      return 'promise'
+    }
+
     if (expression.args.length < 1 || expression.args.length > 2) {
       this.report('CCJS_ARG_COUNT', `function fetch expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
     }
@@ -2340,6 +2359,32 @@ class Checker {
 
   supportsFetchHttps(): boolean {
     return this.options.target === 'js' || this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
+  }
+
+  checkLibuvOnlyRuntimeImport(statement: AnyNode): void {
+    if (statement.typeOnly) {
+      return
+    }
+
+    const feature = libuvOnlyRuntimeImports.get(statement.source)
+
+    if (feature != null) {
+      this.requireLibuvBackend(feature, statement.loc)
+    }
+  }
+
+  requireLibuvBackend(feature: string, loc: SourceLocation): boolean {
+    if (this.options.target !== 'c' || this.options.loopBackend === 'libuv') {
+      return true
+    }
+
+    this.report(
+      'CCJS_NOT_IMPLEMENTED',
+      `${feature} is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv`,
+      loc
+    )
+
+    return false
   }
 
   isSupportedFetchRedirectLiteral(expression: AnyNode): boolean {
@@ -4084,6 +4129,8 @@ class Checker {
     }
 
     if (expression.callee.path[0] === 'AbortController' && this.scope.resolve('AbortController') == null) {
+      this.requireLibuvBackend('AbortController', expression.loc)
+
       if (expression.args.length !== 0) {
         this.report(
           'CCJS_ARG_COUNT',

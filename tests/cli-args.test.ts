@@ -15,6 +15,7 @@ test('ccjs index.ts defaults to run command', () => {
     outDir: null,
     entryMode: false,
     keep: false,
+    loopBackend: null,
     tlsBackend: null
   })
 })
@@ -32,6 +33,7 @@ test('ccjs index.ts --emit c compiles source without running', () => {
     outDir: null,
     entryMode: false,
     keep: false,
+    loopBackend: null,
     tlsBackend: null
   })
 })
@@ -56,8 +58,23 @@ test('emit accepts modular C output directory with entry marker', () => {
     outDir: 'generated',
     entryMode: true,
     keep: false,
+    loopBackend: null,
     tlsBackend: null
   })
+})
+
+test('accepts explicit C loop backend', () => {
+  const result = parseCliArgs(['index.ts', '--emit', 'c', '--loop-backend', 'libuv'])
+
+  assert.equal(result.ok, true)
+  assert.equal(result.plan.loopBackend, 'libuv')
+})
+
+test('rejects invalid C loop backend', () => {
+  const result = parseCliArgs(['index.ts', '--emit', 'c', '--loop-backend', 'asio'])
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, '--loop-backend expects embedded or libuv')
 })
 
 test('accepts explicit C TLS backend', () => {

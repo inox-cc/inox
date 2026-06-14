@@ -2,9 +2,11 @@ import { basename, dirname, extname, join } from 'node:path'
 
 const commands = new Set(['build', 'run', 'test'])
 const emitTargets = new Set(['c'])
+const loopBackends = new Set(['embedded', 'libuv'])
 const tlsBackends = new Set(['none', 'boringssl', 'openssl'])
 
 export type CliTarget = 'c'
+export type CliLoopBackend = 'embedded' | 'libuv'
 export type CliTlsBackend = 'none' | 'boringssl' | 'openssl'
 
 export type CliCommand = 'build' | 'emit' | 'help' | 'run' | 'test'
@@ -18,6 +20,7 @@ export type CliPlan = {
   outDir?: string | null
   entryMode?: boolean
   keep?: boolean
+  loopBackend?: CliLoopBackend | null
   tlsBackend?: CliTlsBackend | null
   help?: boolean
 }
@@ -29,6 +32,7 @@ type CliOptions = {
   outDir?: string
   entryMode?: boolean
   keep?: boolean
+  loopBackend?: CliLoopBackend
   tlsBackend?: CliTlsBackend
 }
 
@@ -50,10 +54,10 @@ type ParseResult<T> =
 
 export const usage = `Usage:
   ccjs <entry>
-  ccjs <entry> --emit c [-o output.c] [--tls-backend none|boringssl|openssl]
-  ccjs <entry> --emit c --out-dir generated --entry [--tls-backend none|boringssl|openssl]
-  ccjs run <entry> [--target c] [--keep] [--tls-backend none|boringssl|openssl]
-  ccjs build <entry> --target c [-o executable] [--tls-backend none|boringssl|openssl]
+  ccjs <entry> --emit c [-o output.c] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
+  ccjs <entry> --emit c --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
+  ccjs run <entry> [--target c] [--keep] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
+  ccjs build <entry> --target c [-o executable] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
   ccjs test
 
 Examples:
@@ -120,6 +124,7 @@ export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
   const entryMode = options.entryMode ?? false
   const out = options.out ?? (emit == null || outDir != null ? null : defaultEmitOutput(entry, emit))
   const finalCommand: CliCommand = emit == null ? command : 'emit'
+  const loopBackend = options.loopBackend ?? null
   const tlsBackend = options.tlsBackend ?? null
 
   if (command === 'build' && target == null) {
@@ -151,6 +156,7 @@ export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
     outDir,
     entryMode,
     keep: options.keep ?? false,
+    loopBackend,
     tlsBackend
   })
 }
@@ -175,6 +181,7 @@ export function formatCliPlan(plan: CliPlan): string {
     `outDir: ${plan.outDir ?? '-'}`,
     `entryMode: ${plan.entryMode ? 'yes' : 'no'}`,
     `keep: ${plan.keep ? 'yes' : 'no'}`,
+    `loopBackend: ${plan.loopBackend ?? '-'}`,
     `tlsBackend: ${plan.tlsBackend ?? '-'}`
   ]
 
@@ -228,6 +235,15 @@ function parseOptions(tokens: string[]): ParseResult<ParsedOptions> {
       options.outDir = value
     } else if (token === '--entry') {
       options.entryMode = true
+    } else if (token === '--loop-backend') {
+      const value = tokens[i + 1]
+      i += 1
+
+      if (!isCliLoopBackend(value)) {
+        return fail('--loop-backend expects embedded or libuv')
+      }
+
+      options.loopBackend = value
     } else if (token === '--tls-backend') {
       const value = tokens[i + 1]
       i += 1
@@ -267,6 +283,10 @@ function fail(error: string): ParseResult<never> {
 
 function isCliTarget(value: string | undefined): value is CliTarget {
   return value != null && emitTargets.has(value)
+}
+
+function isCliLoopBackend(value: string | undefined): value is CliLoopBackend {
+  return value != null && loopBackends.has(value)
 }
 
 function isCliTlsBackend(value: string | undefined): value is CliTlsBackend {

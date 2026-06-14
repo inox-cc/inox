@@ -19,7 +19,7 @@ import {
   collectIrTopLevelNodesFromPrograms,
   findIrEntryProgram
 } from '../src/compiler/ir.ts'
-import type { CompileTarget } from '../src/compiler/types.ts'
+import type { CompileOptions } from '../src/compiler/types.ts'
 
 const strictAssertMatch = assert.match.bind(assert)
 
@@ -44,6 +44,11 @@ function loosenPatternWhitespace(pattern: RegExp): RegExp {
     .replace(/;/g, String.raw`;\s*(?:\}\s*)?`)
 
   return new RegExp(source, pattern.flags)
+}
+
+const cLibuvOptions: CompileOptions = {
+  target: 'c',
+  loopBackend: 'libuv'
 }
 
 test('compiles exported main to runnable JS', () => {
@@ -102,9 +107,7 @@ test('emits C dgram runtime include for node:dgram imports', () => {
 export function main(): void {
 }
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /#include "ccjs\/dgram\.h"/)
@@ -123,9 +126,7 @@ server.bind(0, '127.0.0.1', () => {
   console.log(address.port)
 })
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /static ccjs_status ccjs_dgram_message_handler_\d+\(void\* user, ccjs_dgram_socket\* ccjs_socket, const char\* ccjs_bytes, size_t ccjs_len, const char\* ccjs_host, int ccjs_port\);/)
@@ -145,9 +146,7 @@ test('lowers node:dgram createSocket and bind option objects with keyword keys',
 const socket = createSocket({ type: 'udp4' })
 socket.bind({ port: 0, address: '127.0.0.1' })
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_dgram_socket_new\(&ccjs_loop, 0, 0, &socket\)/)
@@ -166,9 +165,7 @@ socket.connect(41234, '127.0.0.1', () => {
 })
 socket.disconnect()
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_dgram_socket_connect\(socket, "127\.0\.0\.1", \(int\)\(41234\)\)/)
@@ -193,9 +190,7 @@ socket.unref()
 socket.ref()
 console.log(sendSize, recvSize)
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_dgram_bind_flags\(socket, "127\.0\.0\.1", \(int\)\(0\), CCJS_DGRAM_BIND_REUSEADDR\)/)
@@ -216,9 +211,7 @@ test('reports unsupported node:dgram compatibility shapes with dgram diagnostics
 const socket = dgram.createSocket('udp6')
 `,
     'CCJS_DGRAM_SOCKET',
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assertDiagnostic(
@@ -228,9 +221,7 @@ const socket = dgram.createSocket('udp4')
 socket.addMembership('224.0.0.1')
 `,
     'CCJS_DGRAM_SOCKET',
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 })
 
@@ -241,9 +232,7 @@ test('emits C net runtime include for node:net imports', () => {
 export function main(): void {
 }
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /#include "ccjs\/net\.h"/)
@@ -271,9 +260,7 @@ server.listen({ port: 0, host: '127.0.0.1', backlog: 16 }, () => {
   console.log(address.address, address.family, address.port)
 })
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /static ccjs_status ccjs_net_connection_handler_\d+\(void\* user, ccjs_net_server\* ccjs_server, ccjs_net_socket\* ccjs_socket\);/)
@@ -296,9 +283,7 @@ test('lowers chained node:net createServer listen calls', () => {
 
 createServer((socket) => socket.end('ok')).listen(0, '127.0.0.1')
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_net_server\* ccjs_net_server_\d+ = 0;/)
@@ -339,9 +324,7 @@ client.on('drain', () => {
   console.log('drain')
 })
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /static ccjs_status ccjs_net_socket_event_handler_\d+\(void\* user, ccjs_net_socket\* ccjs_socket\);/)
@@ -382,9 +365,7 @@ client.unref()
 client.ref()
 console.log(local.address, local.port, remoteAddress, remotePort, localAddress, localPort, bytesRead, bytesWritten)
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_net_connect\(&ccjs_loop, "127\.0\.0\.1", \(int\)\(9000\), 0, 0, 0, 0, &client\)/)
@@ -414,9 +395,7 @@ const client = net.connect(9000)
 client.setTimeout(1000)
 `,
     'CCJS_NET_SOCKET',
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 })
 
@@ -427,12 +406,71 @@ test('emits C http runtime include for node:http imports', () => {
 export function main(): void {
 }
 `,
+    cLibuvOptions
+  )
+
+  assert.match(result.code, /#include "ccjs\/http\.h"/)
+})
+
+test('reports libuv-only C APIs when the loop backend is embedded', () => {
+  assertDiagnostic(
+    `const response = await fetch('https://example.test/hello')
+console.log(response.status)
+`,
+    'CCJS_NOT_IMPLEMENTED',
     {
       target: 'c'
     }
   )
 
-  assert.match(result.code, /#include "ccjs\/http\.h"/)
+  assertDiagnostic(
+    `import dgram from 'node:dgram'
+console.log(dgram)
+`,
+    'CCJS_NOT_IMPLEMENTED',
+    {
+      target: 'c'
+    }
+  )
+
+  assertDiagnostic(
+    `import net from 'node:net'
+console.log(net)
+`,
+    'CCJS_NOT_IMPLEMENTED',
+    {
+      target: 'c'
+    }
+  )
+
+  assertDiagnostic(
+    `import http from 'node:http'
+console.log(http)
+`,
+    'CCJS_NOT_IMPLEMENTED',
+    {
+      target: 'c'
+    }
+  )
+
+  let error: unknown = null
+
+  try {
+    compileSource(
+      `const response = await fetch('https://example.test/')
+console.log(response.status)
+`,
+      {
+        target: 'c'
+      }
+    )
+  } catch (caught) {
+    error = caught
+  }
+
+  assert.ok(error instanceof CompileError)
+  assert.equal(error.diagnostics[0].code, 'CCJS_NOT_IMPLEMENTED')
+  assert.match(error.diagnostics[0].message, /fetch is not implemented for C without libuv/)
 })
 
 test('lowers global fetch GET and response text to the C fetch runtime', () => {
@@ -441,9 +479,7 @@ test('lowers global fetch GET and response text to the C fetch runtime', () => {
 const text = await response.text()
 console.log(response.status, response.ok, response.url, text)
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /#include "ccjs\/fetch\.h"/)
@@ -468,9 +504,7 @@ test('lowers global fetch init options to the C fetch runtime', () => {
 })
 console.log(response.status)
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_fetch_header ccjs_fetch_headers_\d+\[2\] = \{ \{ "Content-Type", 12, "application\/json", 16 \}, \{ "X-CCJS", 6, "fetch", 5 \} \};/)
@@ -486,9 +520,7 @@ const contentType = headers.get('content-type')
 const hasTrace = response.headers.has('x-trace')
 console.log(response.statusText, response.redirected, contentType ?? 'missing', hasTrace)
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, ccjs_undefined_value\(\), "manual", 6 \};/)
@@ -508,9 +540,7 @@ controller.abort()
 const response = await fetch('http://127.0.0.1:9000/slow', { signal: controller.signal })
 console.log(response.status)
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_fetch_abort_controller_new\(&ccjs_default_allocator, &controller\)/)
@@ -531,9 +561,7 @@ test('lowers fetch rejections to Error-like catch bindings in C', () => {
   console.log(error.name, error.code)
 }
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/)
@@ -553,9 +581,7 @@ test('lowers fetch awaits inside async task frames', () => {
 const text = await load()
 console.log(text)
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /status = ccjs_fetch_with_init\(ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/status", 28, &ccjs_fetch_init_\d+, &frame->awaited\);/)
@@ -568,9 +594,7 @@ test('reports unsupported fetch init and response body helpers with fetch diagno
 console.log(response.status)
 `,
     'CCJS_FETCH',
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assertDiagnostic(
@@ -578,9 +602,7 @@ console.log(response.status)
 console.log(response.status)
 `,
     'CCJS_FETCH',
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assertDiagnostic(
@@ -588,9 +610,7 @@ console.log(response.status)
 console.log(response.status)
 `,
     'CCJS_FETCH',
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assertDiagnostic(
@@ -599,9 +619,7 @@ const data = await response.json()
 console.log(data)
 `,
     'CCJS_FETCH',
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assertDiagnostic(
@@ -610,9 +628,7 @@ const data = await response.arrayBuffer()
 console.log(data)
 `,
     'CCJS_FETCH',
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assertDiagnostic(
@@ -620,9 +636,7 @@ console.log(data)
 console.log(response.body)
 `,
     'CCJS_FETCH',
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 })
 
@@ -632,7 +646,7 @@ test('accepts HTTPS fetch literals when a C TLS backend is enabled', () => {
 console.log(response.status)
 `,
     {
-      target: 'c',
+      ...cLibuvOptions,
       tlsBackend: 'boringssl'
     }
   )
@@ -651,9 +665,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(8080, '127.0.0.1')
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /static ccjs_status ccjs_http_handler_\d+\(void\* user, const ccjs_http_request\* ccjs_request, ccjs_http_response\* ccjs_response\);/)
@@ -680,9 +692,7 @@ const server = nodeHttp.createServer((request, response) => {
 
 server.listen(9000)
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_http_request_method_equals\(request, "GET", 3\)/)
@@ -707,9 +717,7 @@ server.listen(8080, '127.0.0.1', () => {
   server.close(() => {})
 })
 `,
-    {
-      target: 'c'
-    }
+    cLibuvOptions
   )
 
   assert.match(result.code, /ccjs_http_server_new\(&ccjs_loop, 0, 0, &server\)/)
@@ -11870,10 +11878,11 @@ export function main(): void {
   }
 })
 
-function assertDiagnostic(source: string, code: string, options: { target?: CompileTarget } = {}): void {
+function assertDiagnostic(source: string, code: string, options: CompileOptions = {}): void {
   assert.throws(
     () => {
       compileSource(source, {
+        ...options,
         target: options.target ?? 'js'
       })
     },

@@ -203,6 +203,7 @@ export type RandomOptions = {
 }
 
 export type RuntimeProfile = 'embedded' | 'hosted'
+export type RuntimeLoopBackend = 'embedded' | 'libuv'
 
 export type RuntimeCapabilities = {
   entropy?: boolean
@@ -225,6 +226,7 @@ export type CompileOptions = {
   callMain?: boolean
   budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
+  loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   random?: RandomOptions
   tlsBackend?: TlsBackend

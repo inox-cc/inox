@@ -101,6 +101,14 @@ function parseArgs(args: string[]): { help: boolean; networkOnly: boolean } {
   }
 }
 
+function compileLibuvSource(source: string, options: Parameters<typeof compileSource>[1] = {}) {
+  return compileSource(source, {
+    ...options,
+    target: 'c',
+    loopBackend: 'libuv'
+  })
+}
+
 async function checkLibuvTimerRuntime(workDir: string): Promise<void> {
   const sourceDir = join(workDir, 'timer-smoke-src')
   const timerBuildDir = join(workDir, 'timer-smoke-build')
@@ -272,9 +280,7 @@ setTimeout(() => {
   console.log('timeout')
 }, 10)
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   if (!compiled.code.includes('#if !defined(CCJS_LOOP_BACKEND_LIBUV)')) {
     console.error('Compiled timer smoke did not guard generated sleep for libuv builds')
@@ -1058,9 +1064,7 @@ server.on('message', (message, rinfo) => {
 
 server.bind(${port}, '127.0.0.1')
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   await mkdir(sourceDir, { recursive: true })
   await writeFile(
@@ -1176,9 +1180,7 @@ client.connect(${address.port}, '127.0.0.1', () => {
   console.log(remote.port)
 })
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   await mkdir(sourceDir, { recursive: true })
   await writeFile(
@@ -1290,9 +1292,7 @@ socket.bind(0, '127.0.0.1', () => {
   socket.close()
 })
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   await mkdir(sourceDir, { recursive: true })
   await writeFile(
@@ -1608,9 +1608,7 @@ const server = net.createServer((socket) => {
 
 server.listen(${port}, '127.0.0.1')
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   await mkdir(sourceDir, { recursive: true })
   await writeFile(
@@ -1742,9 +1740,7 @@ client.on('end', () => {
   client.destroy()
 })
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   try {
     await mkdir(sourceDir, { recursive: true })
@@ -1957,9 +1953,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(${port}, '127.0.0.1')
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   await mkdir(sourceDir, { recursive: true })
   await writeFile(
@@ -2255,9 +2249,7 @@ async function checkLibuvCompiledFetchClient(workDir: string): Promise<void> {
 const text = await response.text()
 console.log(response.status, response.ok, response.url, text)
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   try {
     await mkdir(sourceDir, { recursive: true })
@@ -2347,9 +2339,7 @@ async function checkLibuvCompiledFetchChunked(workDir: string): Promise<void> {
 const text = await response.text()
 console.log(response.status, response.ok, text)
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   try {
     await mkdir(sourceDir, { recursive: true })
@@ -2442,9 +2432,7 @@ try {
   console.log('aborted')
 }
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   try {
     await mkdir(sourceDir, { recursive: true })
@@ -2552,9 +2540,7 @@ const manual = await fetch('${manualUrl}', { redirect: 'manual' })
 const location = manual.headers.get('location') ?? 'missing'
 console.log(manual.status, manual.statusText, manual.redirected, location)
 `
-  const compiled = compileSource(source, {
-    target: 'c'
-  })
+  const compiled = compileLibuvSource(source)
 
   try {
     await mkdir(sourceDir, { recursive: true })
@@ -2631,12 +2617,8 @@ const text = await response.text()
 const trace = response.headers.get('x-ccjs') ?? 'missing'
 console.log(response.status, response.ok, trace, text)
 `
-  const compiledServer = compileSource(serverSource, {
-    target: 'c'
-  })
-  const compiledClient = compileSource(clientSource, {
-    target: 'c'
-  })
+  const compiledServer = compileLibuvSource(serverSource)
+  const compiledClient = compileLibuvSource(clientSource)
 
   await mkdir(sourceDir, { recursive: true })
   await writeFile(

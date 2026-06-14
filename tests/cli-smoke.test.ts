@@ -136,6 +136,7 @@ console.log(response.status)
       `${JSON.stringify(
         {
           c: {
+            loopBackend: 'libuv',
             tlsBackend: 'boringssl'
           }
         },
@@ -635,7 +636,7 @@ exec cc "$@"
     )
     await chmod(wrapper, 0o755)
 
-    const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
+    const result = await runCli(['build', 'main.ts', '--target', 'c', '--loop-backend', 'libuv', '-o', out], {
       cwd: dir,
       env: {
         CC: wrapper,
@@ -690,7 +691,7 @@ exec cc "$@"
     )
     await chmod(wrapper, 0o755)
 
-    const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
+    const result = await runCli(['build', 'main.ts', '--target', 'c', '--loop-backend', 'libuv', '-o', out], {
       cwd: dir,
       env: {
         CC: wrapper,
@@ -736,13 +737,16 @@ exit 0
     )
     await chmod(wrapper, 0o755)
 
-    const result = await runCli(['build', 'main.ts', '--target', 'c', '--tls-backend', 'openssl', '-o', out], {
-      cwd: dir,
-      env: {
-        CC: wrapper,
-        CCJS_CC_LOG: log
+    const result = await runCli(
+      ['build', 'main.ts', '--target', 'c', '--loop-backend', 'libuv', '--tls-backend', 'openssl', '-o', out],
+      {
+        cwd: dir,
+        env: {
+          CC: wrapper,
+          CCJS_CC_LOG: log
+        }
       }
-    })
+    )
 
     assert.equal(result.code, 0, result.stderr)
     assert.equal(result.stdout, `${out}\n`)
