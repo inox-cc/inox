@@ -1,4 +1,5 @@
 import { fsGlobalUsagePathForRuntimeMethod, fsRuntimeMethodForPath } from './stdlib/descriptors/fs.ts'
+import { jsonRuntimeMethodNameFromPath } from './stdlib/descriptors/json.ts'
 import { timerRuntimeMethodNameFromPath } from './stdlib/descriptors/timers.ts'
 import type {
   AnyNode,
@@ -1403,15 +1404,7 @@ function runtimeMemberExpressionPath(expression: AnyNode): string[] | null {
 }
 
 function jsonRuntimeCallName(callee: AnyNode): string | null {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
-    return null
-  }
-
-  if (callee.object.path[0] !== 'JSON') {
-    return null
-  }
-
-  return ['parse', 'stringify'].includes(callee.property) ? callee.property : null
+  return jsonRuntimeMethodNameFromPath(runtimeMemberExpressionPath(callee))
 }
 
 function timerRuntimeCallName(callee: AnyNode): string | null {

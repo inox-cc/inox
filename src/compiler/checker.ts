@@ -18,6 +18,8 @@ import {
   isFetchResponseBodyMethod,
   isSupportedFetchResponseBodyMethod
 } from './stdlib/descriptors/fetch.ts'
+import { jsonRuntimeMethodNameFromPath } from './stdlib/descriptors/json.ts'
+import { mathRuntimeArgCount, mathRuntimeMethodNameFromPath } from './stdlib/descriptors/math.ts'
 import {
   isTimerClearMethod,
   isTimerHandleMethod,
@@ -431,9 +433,6 @@ const globals = new Map<string, SymbolInfo>([
   ]
 ])
 
-const mathNullaryMethods = new Set(['random'])
-const mathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'fround', 'round', 'sin', 'sqrt', 'trunc'])
-const mathBinaryMethods = new Set(['max', 'min'])
 const numericCastNames = new Set(['i32', 'u32', 'u64', 'f32', 'f64'])
 
 export function checkProgram(program: ProgramNode, options: CompileOptions = {}): { ast: ProgramNode } {
@@ -2182,7 +2181,7 @@ class Checker {
     }
 
     const method = expression.callee.property
-    const expectedArgCount = mathNullaryMethods.has(method) ? 0 : mathUnaryMethods.has(method) ? 1 : 2
+    const expectedArgCount = mathRuntimeArgCount(method) ?? 0
 
     expression.mathRuntimeMethod = method
     expression.valueType = 'number'
@@ -5723,13 +5722,7 @@ function isFsRuntimeImportSymbol(symbol: SymbolInfo): boolean {
 }
 
 function jsonRuntimeMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'MemberExpression' || !['parse', 'stringify'].includes(callee.property)) {
-    return null
-  }
-
-  return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'JSON'
-    ? callee.property
-    : null
+  return jsonRuntimeMethodNameFromPath(memberExpressionPath(callee))
 }
 
 function isJsonParseDeclaredType(valueType: ValueType): boolean {
@@ -5743,15 +5736,7 @@ function isJsonParseDeclaredType(valueType: ValueType): boolean {
 }
 
 function isMathRuntimeMethod(callee: AnyNode): boolean {
-  return (
-    callee.type === 'MemberExpression' &&
-    callee.object?.type === 'Reference' &&
-    callee.object.path.length === 1 &&
-    callee.object.path[0] === 'Math' &&
-    (mathNullaryMethods.has(callee.property) ||
-      mathUnaryMethods.has(callee.property) ||
-      mathBinaryMethods.has(callee.property))
-  )
+  return mathRuntimeMethodNameFromPath(memberExpressionPath(callee)) != null
 }
 
 function timerRuntimeMethodName(callee: AnyNode): string | null {

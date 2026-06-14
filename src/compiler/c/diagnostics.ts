@@ -1,6 +1,7 @@
 import { diagnostic } from '../diagnostics.ts'
 import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
-import { cMathBinaryMethods, cMathNullaryMethods, cMathUnaryMethods } from './runtime-methods.ts'
+import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
+import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
 export function reportUnsupportedCSyntaxFeatures(
@@ -60,8 +61,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
     path === 'fs.constants.R_OK' ||
     path === 'fs.constants.W_OK' ||
     path === 'fs.constants.X_OK' ||
-    path === 'JSON.parse' ||
-    path === 'JSON.stringify' ||
+    jsonRuntimeMethodNameFromPath(usage.path) != null ||
     path === 'Buffer.alloc' ||
     path === 'Buffer.from' ||
     path === 'Uint8Array' ||
@@ -122,14 +122,7 @@ export function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage): boolean {
 }
 
 export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
-  const path = usage.path.join('.')
-
-  return (
-    path.startsWith('Math.') &&
-    (cMathNullaryMethods.has(path.slice('Math.'.length)) ||
-      cMathUnaryMethods.has(path.slice('Math.'.length)) ||
-      cMathBinaryMethods.has(path.slice('Math.'.length)))
-  )
+  return mathRuntimeMethodNameFromPath(usage.path) != null
 }
 
 export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc?: SourceLocation): void {

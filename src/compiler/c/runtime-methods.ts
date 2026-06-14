@@ -1,19 +1,18 @@
-export const cMathNullaryMethods = new Set(['random'])
-export const cMathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'fround', 'round', 'sin', 'sqrt', 'trunc'])
-export const cMathBinaryMethods = new Set(['max', 'min'])
+import {
+  mathBinaryMethods,
+  mathNullaryMethods,
+  mathRuntimeMethodNameFromPath,
+  mathUnaryMethods
+} from '../stdlib/descriptors/math.ts'
+
+export const cMathNullaryMethods = new Set(mathNullaryMethods)
+export const cMathUnaryMethods = new Set(mathUnaryMethods)
+export const cMathBinaryMethods = new Set(mathBinaryMethods)
 
 export function mathRuntimeMethodName(callee: any): string | null {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
     return null
   }
 
-  if (callee.object.path[0] !== 'Math') {
-    return null
-  }
-
-  return cMathNullaryMethods.has(callee.property) ||
-    cMathUnaryMethods.has(callee.property) ||
-    cMathBinaryMethods.has(callee.property)
-    ? callee.property
-    : null
+  return mathRuntimeMethodNameFromPath([callee.object.path[0], callee.property])
 }
