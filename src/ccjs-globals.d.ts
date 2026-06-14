@@ -15,6 +15,16 @@ type FetchInit = {
     readonly [name: string]: string
   }
   readonly body?: string | Buffer | Uint8Array
+  readonly signal?: AbortSignal
 }
 
 declare function fetch(url: string, init?: FetchInit): Promise<FetchResponse>
+
+type AbortSignal = {
+  readonly aborted: boolean
+}
+
+declare class AbortController {
+  readonly signal: AbortSignal
+  abort(): void
+}

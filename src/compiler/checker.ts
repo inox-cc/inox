@@ -106,6 +106,31 @@ const fetchResponseObjectShape: ObjectShapeInfo = {
   ]
 }
 
+const fetchAbortSignalObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'fetch.AbortSignal',
+  fields: [
+    {
+      name: 'aborted',
+      valueType: 'boolean',
+      readonly: true
+    }
+  ]
+}
+
+const fetchAbortControllerObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'fetch.AbortController',
+  fields: [
+    {
+      name: 'signal',
+      valueType: 'object',
+      shape: fetchAbortSignalObjectShape,
+      readonly: true
+    }
+  ]
+}
+
 const fsConstantValues = new Map([
   ['F_OK', 0],
   ['X_OK', 1],
@@ -177,6 +202,15 @@ const globals = new Map<string, SymbolInfo>([
   ],
   [
     'Array',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  ],
+  [
+    'AbortController',
     {
       kind: 'global',
       mutable: false,
@@ -1739,6 +1773,12 @@ class Checker {
       return fsStatsMethodType
     }
 
+    const fetchAbortControllerMethodType = this.checkFetchAbortControllerMethodCall(expression)
+
+    if (fetchAbortControllerMethodType != null) {
+      return fetchAbortControllerMethodType
+    }
+
     const fetchResponseMethodType = this.checkFetchResponseMethodCall(expression)
 
     if (fetchResponseMethodType != null) {
@@ -2179,7 +2219,7 @@ class Checker {
     }
 
     for (const property of expression.properties) {
-      if (!['method', 'headers', 'body'].includes(property.key)) {
+      if (!['method', 'headers', 'body', 'signal'].includes(property.key)) {
         this.checkExpression(property.value)
         this.report('CCJS_FETCH', `fetch init option ${property.key} is not supported by the current C/libuv fetch slice`, property.loc)
         continue
@@ -2209,6 +2249,16 @@ class Checker {
         continue
       }
 
+      if (property.key === 'signal') {
+        const signalType = this.checkExpression(property.value)
+        const signalShape = this.resolveExpressionShape(property.value)
+
+        if (signalType !== 'object' || signalShape?.builtin !== 'fetch.AbortSignal') {
+          this.report('CCJS_FETCH', 'fetch init signal must be an AbortSignal in the current C/libuv fetch slice', property.value.loc)
+        }
+        continue
+      }
+
       if (property.value.type !== 'ObjectLiteral') {
         this.checkExpression(property.value)
         this.report('CCJS_FETCH', 'fetch init headers must be an object literal in the current C/libuv fetch slice', property.value.loc)
@@ -2225,6 +2275,28 @@ class Checker {
         )
       }
     }
+  }
+
+  checkFetchAbortControllerMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'abort') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const shape = this.resolveExpressionShape(expression.callee.object)
+
+    if (objectType !== 'object' || shape?.builtin !== 'fetch.AbortController') {
+      return null
+    }
+
+    if (expression.args.length !== 0) {
+      this.report('CCJS_ARG_COUNT', `function AbortController.abort expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    expression.fetchRuntimeMethod = 'abort'
+    expression.valueType = 'void'
+
+    return 'void'
   }
 
   checkFetchResponseMethodCall(expression: AnyNode): ValueType | null {
@@ -3878,6 +3950,21 @@ class Checker {
       expression.valueType = 'set'
       expression.setElementType = 'unknown'
       return 'set'
+    }
+
+    if (expression.callee.path[0] === 'AbortController' && this.scope.resolve('AbortController') == null) {
+      if (expression.args.length !== 0) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `AbortController constructor expects 0 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      expression.fetchRuntimeMethod = 'abortControllerNew'
+      expression.valueType = 'object'
+      expression.shape = fetchAbortControllerObjectShape
+      return 'object'
     }
 
     if (expression.callee.path[0] === 'Uint8Array') {

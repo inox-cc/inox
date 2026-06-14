@@ -474,8 +474,46 @@ console.log(response.status)
   )
 
   assert.match(result.code, /ccjs_fetch_header ccjs_fetch_headers_\d+\[2\] = \{ \{ "Content-Type", 12, "application\/json", 16 \}, \{ "X-CCJS", 6, "fetch", 5 \} \};/)
-  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ "POST", 4, ccjs_fetch_headers_\d+, 2, "\{\\"name\\":\\"Ada\\"\}", 14 \};/)
+  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ "POST", 4, ccjs_fetch_headers_\d+, 2, "\{\\"name\\":\\"Ada\\"\}", 14, ccjs_undefined_value\(\) \};/)
   assert.match(result.code, /ccjs_fetch_with_init\(&ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/users", 27, &ccjs_fetch_init_\d+, &ccjs_promise_\d+\)/)
+})
+
+test('lowers AbortController signal for fetch init to the C fetch runtime', () => {
+  const result = compileSource(
+    `const controller = new AbortController()
+controller.abort()
+const response = await fetch('http://127.0.0.1:9000/slow', { signal: controller.signal })
+console.log(response.status)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_fetch_abort_controller_new\(&ccjs_default_allocator, &controller\)/)
+  assert.match(result.code, /ccjs_fetch_abort_controller_abort\(controller\)/)
+  assert.match(result.code, /ccjs_fetch_abort_controller_signal\(controller, &ccjs_fetch_signal_\d+\)/)
+  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, ccjs_fetch_signal_\d+ \};/)
+  assert.match(result.code, /ccjs_fetch_with_init\(&ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/slow", 26, &ccjs_fetch_init_\d+, &ccjs_promise_\d+\)/)
+})
+
+test('lowers fetch rejections to Error-like catch bindings in C', () => {
+  const result = compileSource(
+    `try {
+  const response = await fetch('http://127.0.0.1:9000/slow')
+  console.log(response.status)
+} catch (error) {
+  console.log(error.name, error.code)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/)
+  assert.match(result.code, /ccjs_value error = ccjs_error;/)
+  assert.doesNotMatch(result.code, /ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;/)
 })
 
 test('lowers fetch awaits inside async task frames', () => {
@@ -499,8 +537,7 @@ console.log(text)
 
 test('reports unsupported fetch init and response body helpers with fetch diagnostics', () => {
   assertDiagnostic(
-    `const controller = { signal: {} }
-const response = await fetch('http://127.0.0.1:9000/hello', { signal: controller.signal })
+    `const response = await fetch('http://127.0.0.1:9000/hello', { redirect: 'follow' })
 console.log(response.status)
 `,
     'CCJS_FETCH',

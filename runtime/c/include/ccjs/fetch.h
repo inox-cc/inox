@@ -30,6 +30,7 @@ typedef struct ccjs_fetch_init {
   size_t header_count;
   const char* body;
   size_t body_len;
+  ccjs_value signal;
 } ccjs_fetch_init;
 
 typedef ccjs_status (*ccjs_fetch_done_fn)(void* user, ccjs_status status, const ccjs_fetch_response* response);
@@ -45,5 +46,9 @@ ccjs_status ccjs_fetch_with_init(
   ccjs_promise** out
 );
 ccjs_status ccjs_fetch_response_text(ccjs_loop* loop, ccjs_value response, ccjs_promise** out);
+ccjs_status ccjs_fetch_abort_controller_new(ccjs_allocator* allocator, ccjs_value* out);
+ccjs_status ccjs_fetch_abort_controller_signal(ccjs_value controller, ccjs_value* out);
+ccjs_status ccjs_fetch_abort_controller_abort(ccjs_value controller);
+ccjs_status ccjs_fetch_signal_aborted(ccjs_value signal, int* out);
 
 #endif

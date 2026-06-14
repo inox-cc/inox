@@ -2317,7 +2317,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
 }
 
 function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {
-  return usage.path.length === 1 && usage.path[0] === 'fetch'
+  return usage.path.length === 1 && (usage.path[0] === 'fetch' || usage.path[0] === 'AbortController')
 }
 
 function isSupportedCDgramGlobalUsage(usage: IrGlobalUsage, context): boolean {
@@ -10648,6 +10648,12 @@ function emitStatement(statement, context) {
       return netNumber
     }
 
+    const fetchAbortController = emitFetchAbortControllerVariableDeclaration(statement, context)
+
+    if (fetchAbortController != null) {
+      return fetchAbortController
+    }
+
     const asyncPromiseCall = emitPreparedAsyncFunctionPromiseCallExpression(statement.init, context, {
       out: statement.name
     })
@@ -10878,6 +10884,12 @@ function emitStatement(statement, context) {
       return classMethodCall.expression === ''
         ? classMethodCall.lines
         : [...classMethodCall.lines, `${classMethodCall.expression};`]
+    }
+
+    const fetchAbortCall = emitFetchAbortControllerAbortStatement(statement.expression, context)
+
+    if (fetchAbortCall != null) {
+      return fetchAbortCall
     }
 
     if (isArrayMethodCall(statement.expression)) {
@@ -11821,6 +11833,10 @@ function inferPromiseRejectionValueType(
   }
 
   if (expression?.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression) != null) {
+    return 'error'
+  }
+
+  if (expression?.type === 'CallExpression' && cFetchRuntimeExpressionMethod(expression) != null) {
     return 'error'
   }
 
@@ -17421,6 +17437,35 @@ function emitPreparedFetchCallExpression(expression, context, options: { out?: s
   }
 }
 
+function emitFetchAbortControllerVariableDeclaration(statement, context) {
+  if (!isFetchAbortControllerConstructorExpression(statement.init)) {
+    return null
+  }
+
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'object')
+  registerObjectShape(context, statement.name, statement.shape)
+
+  return [
+    ...emitPrepareOwnedValueWrite(statement.name),
+    emitStatusCheck(`ccjs_fetch_abort_controller_new(&ccjs_default_allocator, &${statement.name})`, context)
+  ]
+}
+
+function emitFetchAbortControllerAbortStatement(expression, context) {
+  if (cFetchRuntimeExpressionMethod(expression) !== 'abort') {
+    return null
+  }
+
+  const controller = emitCValueExpression(expression.callee.object, context)
+
+  return [
+    ...controller.lines,
+    emitRuntimeTypeCheck(`${controller.expression}.tag != CCJS_TAG_OBJECT || ${controller.expression}.as.ref == 0`, context),
+    emitStatusCheck(`ccjs_fetch_abort_controller_abort(${controller.expression})`, context)
+  ]
+}
+
 function emitPreparedFetchInitOperand(expression, context) {
   const init = expression.args[1]
 
@@ -17435,12 +17480,15 @@ function emitPreparedFetchInitOperand(expression, context) {
   const methodValue = findObjectLiteralPropertyValue(init, 'method')
   const headersValue = findObjectLiteralPropertyValue(init, 'headers')
   const bodyValue = findObjectLiteralPropertyValue(init, 'body')
+  const signalValue = findObjectLiteralPropertyValue(init, 'signal')
   const method =
     methodValue == null
       ? { lines: [] as string[], bytes: '0', length: '0' }
       : emitPreparedStringBytesOperand(methodValue, context, 'ccjs_fetch_method')
   const body =
     bodyValue == null ? { lines: [] as string[], bytes: '0', length: '0' } : emitPreparedFetchBodyOperand(bodyValue, context)
+  const signal =
+    signalValue == null ? { lines: [] as string[], expression: 'ccjs_undefined_value()' } : emitPreparedFetchSignalOperand(signalValue, context)
   let headersExpression = '0'
   let headerCount = '0'
 
@@ -17465,16 +17513,46 @@ function emitPreparedFetchInitOperand(expression, context) {
   }
 
   lines.push(...body.lines)
+  lines.push(...signal.lines)
 
   const initName = nextCName(context, 'ccjs_fetch_init')
 
   lines.push(
-    `ccjs_fetch_init ${initName} = { ${method.bytes}, ${method.length}, ${headersExpression}, ${headerCount}, ${body.bytes}, ${body.length} };`
+    `ccjs_fetch_init ${initName} = { ${method.bytes}, ${method.length}, ${headersExpression}, ${headerCount}, ${body.bytes}, ${body.length}, ${signal.expression} };`
   )
 
   return {
     lines,
     expression: `&${initName}`
+  }
+}
+
+function emitPreparedFetchSignalOperand(expression, context) {
+  if (expression?.type === 'MemberExpression' && expression.property === 'signal') {
+    const controller = emitCValueExpression(expression.object, context)
+    const signal = nextCName(context, 'ccjs_fetch_signal')
+
+    registerOwnedValue(context, signal)
+
+    return {
+      lines: [
+        ...controller.lines,
+        emitRuntimeTypeCheck(`${controller.expression}.tag != CCJS_TAG_OBJECT || ${controller.expression}.as.ref == 0`, context),
+        ...emitPrepareOwnedValueWrite(signal),
+        emitStatusCheck(`ccjs_fetch_abort_controller_signal(${controller.expression}, &${signal})`, context)
+      ],
+      expression: signal
+    }
+  }
+
+  const signal = emitCValueExpression(expression, context)
+
+  return {
+    lines: [
+      ...signal.lines,
+      emitRuntimeTypeCheck(`${signal.expression}.tag != CCJS_TAG_OBJECT || ${signal.expression}.as.ref == 0`, context)
+    ],
+    expression: signal.expression
   }
 }
 
@@ -19406,6 +19484,10 @@ function inferExpressionType(expression, context) {
     return 'object'
   }
 
+  if (isFetchAbortControllerConstructorExpression(expression)) {
+    return 'object'
+  }
+
   if (expression?.type === 'NewExpression' && collectionConstructorName(expression) === 'Map') {
     return 'map'
   }
@@ -19778,6 +19860,15 @@ function isErrorConstructorExpression(expression) {
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1 &&
     expression.callee.path[0] === 'Error'
+  )
+}
+
+function isFetchAbortControllerConstructorExpression(expression) {
+  return (
+    expression?.type === 'NewExpression' &&
+    expression.callee.type === 'Reference' &&
+    expression.callee.path.length === 1 &&
+    expression.callee.path[0] === 'AbortController'
   )
 }
 

@@ -14,8 +14,10 @@ typedef struct ccjs_fetch_operation {
   ccjs_loop* loop;
   ccjs_allocator* allocator;
   ccjs_net_socket* socket;
+  ccjs_timer_handle* abort_timer;
   ccjs_fetch_done_fn done;
   void* user;
+  ccjs_value signal;
   char host[256];
   char path[512];
   char request[4096];
@@ -40,9 +42,16 @@ enum {
   CCJS_FETCH_RESPONSE_BODY_INDEX = 3
 };
 
+enum {
+  CCJS_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX = 0,
+  CCJS_FETCH_ABORT_SIGNAL_ABORTED_INDEX = 0
+};
+
 static ccjs_status ccjs_fetch_parse_url(const char* url, char* host, size_t host_len, int* port, char* path, size_t path_len);
 static ccjs_status ccjs_fetch_copy_url(ccjs_allocator* allocator, const char* url, size_t url_len, char** out);
 static ccjs_status ccjs_fetch_build_request(ccjs_fetch_operation* request, const ccjs_fetch_init* init);
+static ccjs_status ccjs_fetch_operation_is_aborted(ccjs_fetch_operation* request, int* out);
+static void ccjs_fetch_operation_free(ccjs_fetch_operation* request);
 static ccjs_status ccjs_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len);
 static ccjs_status ccjs_fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text);
 static ccjs_status ccjs_fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value);
@@ -51,6 +60,7 @@ static int ccjs_fetch_headers_include(const ccjs_fetch_header* headers, size_t h
 static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, ccjs_status status);
 static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len);
 static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket);
+static ccjs_status ccjs_fetch_abort_poll(void* user);
 static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request);
 static const char* ccjs_fetch_find_header_end(const char* bytes, size_t len);
 static int ccjs_fetch_parse_status(const char* bytes, size_t len);
@@ -66,6 +76,13 @@ static ccjs_status ccjs_fetch_response_new(
 );
 static ccjs_status ccjs_fetch_reject_status(ccjs_loop* loop, ccjs_promise* promise, ccjs_status status);
 static ccjs_status ccjs_fetch_error_from_status(ccjs_allocator* allocator, ccjs_status status, ccjs_value* out);
+static ccjs_status ccjs_fetch_error_field(
+  ccjs_allocator* allocator,
+  ccjs_value error,
+  uint32_t index,
+  const char* value,
+  size_t value_len
+);
 static const char* ccjs_fetch_error_message(ccjs_status status);
 static void ccjs_fetch_promise_request_free(ccjs_fetch_promise_request* request);
 
@@ -91,19 +108,42 @@ ccjs_status ccjs_fetch_request(ccjs_loop* loop, const char* url, const ccjs_fetc
   request->allocator = allocator;
   request->done = done;
   request->user = user;
+  request->signal = ccjs_undefined_value();
 
   ccjs_status status = ccjs_fetch_parse_url(url, request->host, sizeof(request->host), &request->port, request->path, sizeof(request->path));
 
   if (status != CCJS_OK) {
-    allocator->free(allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
+    ccjs_fetch_operation_free(request);
     return status;
   }
 
   status = ccjs_fetch_build_request(request, init);
 
   if (status != CCJS_OK) {
-    allocator->free(allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
+    ccjs_fetch_operation_free(request);
     return status;
+  }
+
+  int aborted = 0;
+  status = ccjs_fetch_operation_is_aborted(request, &aborted);
+
+  if (status != CCJS_OK) {
+    ccjs_fetch_operation_free(request);
+    return status;
+  }
+
+  if (aborted) {
+    ccjs_fetch_operation_free(request);
+    return CCJS_ERR_THROW;
+  }
+
+  if (request->signal.tag != CCJS_TAG_UNDEFINED && request->signal.tag != CCJS_TAG_NULL) {
+    status = ccjs_loop_set_interval(loop, 1, ccjs_fetch_abort_poll, request, 0, &request->abort_timer);
+
+    if (status != CCJS_OK) {
+      ccjs_fetch_operation_free(request);
+      return status;
+    }
   }
 
   status = ccjs_net_connect(
@@ -118,7 +158,12 @@ ccjs_status ccjs_fetch_request(ccjs_loop* loop, const char* url, const ccjs_fetc
   );
 
   if (status != CCJS_OK) {
-    allocator->free(allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
+    if (request->abort_timer != 0) {
+      ccjs_loop_clear_timer(request->abort_timer);
+      request->abort_timer = 0;
+    }
+
+    ccjs_fetch_operation_free(request);
     return status;
   }
 
@@ -212,6 +257,86 @@ ccjs_status ccjs_fetch_response_text(ccjs_loop* loop, ccjs_value response, ccjs_
   ccjs_release(body);
 
   return status;
+}
+
+ccjs_status ccjs_fetch_abort_controller_new(ccjs_allocator* allocator, ccjs_value* out) {
+  static const ccjs_field_info signal_fields[] = { { "aborted", 0 } };
+  static const ccjs_shape signal_shape = { 1, signal_fields };
+  static const ccjs_field_info controller_fields[] = { { "signal", CCJS_FIELD_READONLY } };
+  static const ccjs_shape controller_shape = { 1, controller_fields };
+
+  if (allocator == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = ccjs_undefined_value();
+  ccjs_value signal = ccjs_undefined_value();
+  ccjs_value controller = ccjs_undefined_value();
+  ccjs_status status = ccjs_object_new(allocator, &signal_shape, &signal);
+
+  if (status == CCJS_OK) {
+    status = ccjs_object_init_known(signal, CCJS_FETCH_ABORT_SIGNAL_ABORTED_INDEX, ccjs_bool_value(false));
+  }
+
+  if (status == CCJS_OK) {
+    status = ccjs_object_new(allocator, &controller_shape, &controller);
+  }
+
+  if (status == CCJS_OK) {
+    status = ccjs_object_init_known(controller, CCJS_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal);
+  }
+
+  ccjs_release(signal);
+
+  if (status != CCJS_OK) {
+    ccjs_release(controller);
+    return status;
+  }
+
+  *out = controller;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_fetch_abort_controller_signal(ccjs_value controller, ccjs_value* out) {
+  return ccjs_object_get_known(controller, CCJS_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out);
+}
+
+ccjs_status ccjs_fetch_abort_controller_abort(ccjs_value controller) {
+  ccjs_value signal = ccjs_undefined_value();
+  ccjs_status status = ccjs_fetch_abort_controller_signal(controller, &signal);
+
+  if (status == CCJS_OK) {
+    status = ccjs_object_init_known(signal, CCJS_FETCH_ABORT_SIGNAL_ABORTED_INDEX, ccjs_bool_value(true));
+  }
+
+  ccjs_release(signal);
+
+  return status;
+}
+
+ccjs_status ccjs_fetch_signal_aborted(ccjs_value signal, int* out) {
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = 0;
+  ccjs_value aborted = ccjs_undefined_value();
+  ccjs_status status = ccjs_object_get_known(signal, CCJS_FETCH_ABORT_SIGNAL_ABORTED_INDEX, &aborted);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  if (aborted.tag != CCJS_TAG_BOOL) {
+    ccjs_release(aborted);
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = aborted.as.boolean ? 1 : 0;
+  ccjs_release(aborted);
+
+  return CCJS_OK;
 }
 
 static ccjs_status ccjs_fetch_parse_url(const char* url, char* host, size_t host_len, int* port, char* path, size_t path_len) {
@@ -309,6 +434,15 @@ static ccjs_status ccjs_fetch_build_request(ccjs_fetch_operation* request, const
     header_count = init->header_count;
     body = init->body;
     body_len = init->body_len;
+
+    if (init->signal.tag != CCJS_TAG_UNDEFINED && init->signal.tag != CCJS_TAG_NULL) {
+      if (init->signal.tag != CCJS_TAG_OBJECT || init->signal.as.ref == 0) {
+        return CCJS_ERR_TYPE;
+      }
+
+      request->signal = init->signal;
+      ccjs_retain(request->signal);
+    }
   }
 
   if (method == 0 || method_len == 0 || method_len > 32) {
@@ -366,6 +500,29 @@ static ccjs_status ccjs_fetch_build_request(ccjs_fetch_operation* request, const
 
   request->request_len = offset;
   return CCJS_OK;
+}
+
+static ccjs_status ccjs_fetch_operation_is_aborted(ccjs_fetch_operation* request, int* out) {
+  if (request == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = 0;
+
+  if (request->signal.tag == CCJS_TAG_UNDEFINED || request->signal.tag == CCJS_TAG_NULL) {
+    return CCJS_OK;
+  }
+
+  return ccjs_fetch_signal_aborted(request->signal, out);
+}
+
+static void ccjs_fetch_operation_free(ccjs_fetch_operation* request) {
+  if (request == 0 || request->allocator == 0) {
+    return;
+  }
+
+  ccjs_release(request->signal);
+  request->allocator->free(request->allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
 }
 
 static ccjs_status ccjs_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len) {
@@ -439,6 +596,17 @@ static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, cc
     return ccjs_fetch_finish(request, status, 0);
   }
 
+  int aborted = 0;
+  status = ccjs_fetch_operation_is_aborted(request, &aborted);
+
+  if (status != CCJS_OK) {
+    return ccjs_fetch_finish(request, status, 0);
+  }
+
+  if (aborted) {
+    return ccjs_fetch_finish(request, CCJS_ERR_THROW, 0);
+  }
+
   if (ccjs_net_socket_read_start(socket) != CCJS_OK) {
     return ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
   }
@@ -449,6 +617,17 @@ static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, cc
 static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
   (void)socket;
   ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
+
+  int aborted = 0;
+  ccjs_status status = ccjs_fetch_operation_is_aborted(request, &aborted);
+
+  if (status != CCJS_OK) {
+    return ccjs_fetch_finish(request, status, 0);
+  }
+
+  if (aborted) {
+    return ccjs_fetch_finish(request, CCJS_ERR_THROW, 0);
+  }
 
   if (request->response_len + len > sizeof(request->response)) {
     return ccjs_fetch_finish(request, CCJS_ERR_UNSUPPORTED, 0);
@@ -472,7 +651,28 @@ static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket) {
     ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
   }
 
-  request->allocator->free(request->allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
+  ccjs_fetch_operation_free(request);
+}
+
+static ccjs_status ccjs_fetch_abort_poll(void* user) {
+  ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
+
+  if (request == 0 || request->completed) {
+    return CCJS_OK;
+  }
+
+  int aborted = 0;
+  ccjs_status status = ccjs_fetch_operation_is_aborted(request, &aborted);
+
+  if (status != CCJS_OK) {
+    return ccjs_fetch_finish(request, status, 0);
+  }
+
+  if (aborted) {
+    return ccjs_fetch_finish(request, CCJS_ERR_THROW, 0);
+  }
+
+  return CCJS_OK;
 }
 
 static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request) {
@@ -583,6 +783,12 @@ static ccjs_status ccjs_fetch_finish(ccjs_fetch_operation* request, ccjs_status 
   }
 
   request->completed = 1;
+
+  if (request->abort_timer != 0) {
+    ccjs_loop_clear_timer(request->abort_timer);
+    request->abort_timer = 0;
+  }
+
   ccjs_status callback_status = request->done(request->user, status, response);
 
   if (request->socket != 0) {
@@ -716,39 +922,22 @@ static ccjs_status ccjs_fetch_error_from_status(ccjs_allocator* allocator, ccjs_
 
   *out = ccjs_undefined_value();
   ccjs_value error = ccjs_undefined_value();
-  ccjs_value name = ccjs_undefined_value();
-  ccjs_value message = ccjs_undefined_value();
-  ccjs_value code = ccjs_undefined_value();
+  const char* name_text = status == CCJS_ERR_THROW ? "AbortError" : "FetchError";
+  const char* code_text = status == CCJS_ERR_THROW ? "ABORT_ERR" : "ERR_FETCH";
   const char* message_text = ccjs_fetch_error_message(status);
   ccjs_status result = ccjs_object_new(allocator, &shape, &error);
 
   if (result == CCJS_OK) {
-    result = ccjs_string_from_literal(allocator, "FetchError", 10, &name);
+    result = ccjs_fetch_error_field(allocator, error, 0, name_text, strlen(name_text));
   }
 
   if (result == CCJS_OK) {
-    result = ccjs_string_from_literal(allocator, message_text, strlen(message_text), &message);
+    result = ccjs_fetch_error_field(allocator, error, 1, message_text, strlen(message_text));
   }
 
   if (result == CCJS_OK) {
-    result = ccjs_string_from_literal(allocator, "ERR_FETCH", 9, &code);
+    result = ccjs_fetch_error_field(allocator, error, 2, code_text, strlen(code_text));
   }
-
-  if (result == CCJS_OK) {
-    result = ccjs_object_init_known(error, 0, name);
-  }
-
-  if (result == CCJS_OK) {
-    result = ccjs_object_init_known(error, 1, message);
-  }
-
-  if (result == CCJS_OK) {
-    result = ccjs_object_init_known(error, 2, code);
-  }
-
-  ccjs_release(name);
-  ccjs_release(message);
-  ccjs_release(code);
 
   if (result != CCJS_OK) {
     ccjs_release(error);
@@ -760,7 +949,30 @@ static ccjs_status ccjs_fetch_error_from_status(ccjs_allocator* allocator, ccjs_
   return CCJS_OK;
 }
 
+static ccjs_status ccjs_fetch_error_field(
+  ccjs_allocator* allocator,
+  ccjs_value error,
+  uint32_t index,
+  const char* value,
+  size_t value_len
+) {
+  ccjs_value field = ccjs_undefined_value();
+  ccjs_status status = ccjs_string_from_literal(allocator, value, value_len, &field);
+
+  if (status == CCJS_OK) {
+    status = ccjs_object_init_known(error, index, field);
+  }
+
+  ccjs_release(field);
+
+  return status;
+}
+
 static const char* ccjs_fetch_error_message(ccjs_status status) {
+  if (status == CCJS_ERR_THROW) {
+    return "fetch request aborted";
+  }
+
   if (status == CCJS_ERR_UNSUPPORTED) {
     return "unsupported fetch URL or response";
   }
@@ -833,6 +1045,44 @@ ccjs_status ccjs_fetch_with_init(
 ccjs_status ccjs_fetch_response_text(ccjs_loop* loop, ccjs_value response, ccjs_promise** out) {
   (void)loop;
   (void)response;
+
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = 0;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_fetch_abort_controller_new(ccjs_allocator* allocator, ccjs_value* out) {
+  (void)allocator;
+
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = ccjs_undefined_value();
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_fetch_abort_controller_signal(ccjs_value controller, ccjs_value* out) {
+  (void)controller;
+
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = ccjs_undefined_value();
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_fetch_abort_controller_abort(ccjs_value controller) {
+  (void)controller;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_fetch_signal_aborted(ccjs_value signal, int* out) {
+  (void)signal;
 
   if (out == 0) {
     return CCJS_ERR_TYPE;

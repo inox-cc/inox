@@ -61,6 +61,7 @@ try {
     await checkLibuvCompiledHttpServer(buildDir)
     await checkLibuvFetchRuntime(buildDir)
     await checkLibuvCompiledFetchClient(buildDir)
+    await checkLibuvCompiledFetchAbort(buildDir)
     await checkLibuvFsRuntime(buildDir)
     console.log('Libuv checks passed')
   }
@@ -2194,6 +2195,101 @@ target_link_libraries(ccjs_libuv_compiled_fetch_client_smoke PRIVATE ccjs_runtim
     if (stdout !== expected) {
       console.error(
         `Compiled libuv fetch client stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+      )
+      process.exit(1)
+    }
+  } finally {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve())
+    })
+  }
+}
+
+async function checkLibuvCompiledFetchAbort(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'compiled-fetch-abort-src')
+  const fetchBuildDir = join(workDir, 'compiled-fetch-abort-build')
+  const server = createHttpServer((request, response) => {
+    request.resume()
+    setTimeout(() => {
+      response.writeHead(200, {
+        Connection: 'close',
+        'Content-Length': '4',
+        'Content-Type': 'text/plain'
+      })
+      response.end('late')
+    }, 100)
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
+
+  const address = server.address()
+
+  if (address == null || typeof address === 'string') {
+    server.close()
+    throw new Error('Expected HTTP address with a numeric port')
+  }
+
+  const url = `http://127.0.0.1:${address.port}/slow`
+  const source = `const controller = new AbortController()
+
+setTimeout(() => {
+  controller.abort()
+}, 5)
+
+try {
+  const response = await fetch('${url}', { signal: controller.signal })
+  const text = await response.text()
+  console.log('resolved', text)
+} catch (error) {
+  console.log('aborted')
+}
+`
+  const compiled = compileSource(source, {
+    target: 'c'
+  })
+
+  try {
+    await mkdir(sourceDir, { recursive: true })
+    await writeFile(
+      join(sourceDir, 'CMakeLists.txt'),
+      `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_compiled_fetch_abort_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_compiled_fetch_abort_smoke generated-fetch-abort.c)
+target_link_libraries(ccjs_libuv_compiled_fetch_abort_smoke PRIVATE ccjs_runtime)
+`
+    )
+    await writeFile(join(sourceDir, 'generated-fetch-abort.c'), compiled.code)
+
+    await checkCommand('configure compiled libuv fetch abort smoke', 'cmake', [
+      '-S',
+      sourceDir,
+      '-B',
+      fetchBuildDir,
+      '-DCCJS_LOOP_BACKEND=libuv'
+    ])
+    await checkCommand('build compiled libuv fetch abort smoke', 'cmake', ['--build', fetchBuildDir])
+
+    const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_compiled_fetch_abort_smoke'), [])
+    const stdout = normalizeNewlines(run.stdout)
+
+    if (run.code !== 0) {
+      fail('run compiled libuv fetch abort smoke', run)
+    }
+
+    const expected = 'aborted\n'
+
+    if (stdout !== expected) {
+      console.error(
+        `Compiled libuv fetch abort stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
       )
       process.exit(1)
     }
