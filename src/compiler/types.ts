@@ -218,6 +218,8 @@ export type RuntimeBudgets = {
   maxRuntimeRequirements?: number
 }
 
+export type TlsBackend = 'none' | 'boringssl' | 'openssl'
+
 export type CompileOptions = {
   target?: CompileTarget
   callMain?: boolean
@@ -225,6 +227,7 @@ export type CompileOptions = {
   capabilities?: RuntimeCapabilities
   profile?: RuntimeProfile
   random?: RandomOptions
+  tlsBackend?: TlsBackend
 }
 
 export type SourceCompileResult = {

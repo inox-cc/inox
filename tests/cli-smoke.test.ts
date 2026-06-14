@@ -119,6 +119,48 @@ console.log(value)
   }
 })
 
+test('ccjs file --emit c reads TLS backend config for HTTPS fetch', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-tls-config-test-'))
+  const out = join(dir, 'fetch.c')
+
+  try {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `const response = await fetch('https://example.test/hello')
+console.log(response.status)
+
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          c: {
+            tlsBackend: 'boringssl'
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
+
+    const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const c = await readFile(out, 'utf8')
+    assert.match(c, /"https:\/\/example\.test\/hello"/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs file --emit c reads Math.random os backend config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-random-os-config-test-'))
   const out = join(dir, 'random.c')
@@ -551,7 +593,8 @@ exec cc "$@"
     assert.match(invocation, /-DCCJS_TEST_CFLAG=1/)
     assert.match(invocation, /<-Llinker path with spaces>/)
     assert.match(invocation, /-DCCJS_TEST_LDFLAG=1/)
-    assert.doesNotMatch(invocation, /runtime\/c\/src\//)
+    assert.match(invocation, /runtime\/c\/src\/console\/console\.c/)
+    assert.doesNotMatch(invocation, /runtime\/c\/src\/fs\/fs\.c/)
     assert.equal(run.code, 0)
     assert.equal(run.stdout, 'hello\n')
   } finally {
@@ -1416,6 +1459,7 @@ function cRuntimeSources(): string[] {
     'runtime/c/src/binary/binary.c',
     'runtime/c/src/collections/map.c',
     'runtime/c/src/collections/set.c',
+    'runtime/c/src/console/console.c',
     'runtime/c/src/core/allocator.c',
     'runtime/c/src/core/callback.c',
     'runtime/c/src/core/value.c',

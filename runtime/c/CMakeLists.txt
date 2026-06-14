@@ -4,6 +4,11 @@ project(ccjs_c_runtime C)
 
 set(CCJS_LOOP_BACKEND "embedded" CACHE STRING "ccjs C runtime event loop backend")
 set_property(CACHE CCJS_LOOP_BACKEND PROPERTY STRINGS embedded libuv)
+set(CCJS_TLS_BACKEND "none" CACHE STRING "ccjs C runtime TLS backend")
+set_property(CACHE CCJS_TLS_BACKEND PROPERTY STRINGS none boringssl openssl)
+set(CCJS_BORINGSSL_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../third_party/boringssl" CACHE PATH "BoringSSL source root")
+set(CCJS_TLS_CA_BUNDLE "" CACHE FILEPATH "TLS CA bundle path")
+set(CCJS_TLS_CA_PATH "" CACHE PATH "TLS CA directory path")
 
 set(CCJS_RUNTIME_DIR "${CMAKE_CURRENT_LIST_DIR}")
 set(CCJS_REPO_ROOT "${CCJS_RUNTIME_DIR}/../..")
@@ -52,6 +57,34 @@ add_library(ccjs_runtime STATIC ${CCJS_RUNTIME_SOURCES})
 target_include_directories(ccjs_runtime PUBLIC
   "${CCJS_RUNTIME_DIR}/include"
 )
+
+if(CCJS_TLS_BACKEND STREQUAL "none")
+  target_compile_definitions(ccjs_runtime PUBLIC CCJS_TLS_BACKEND_NONE=1)
+elseif(CCJS_TLS_BACKEND STREQUAL "boringssl")
+  if(NOT EXISTS "${CCJS_BORINGSSL_ROOT}/include/openssl/ssl.h")
+    message(FATAL_ERROR "BoringSSL submodule is not initialized. Run `pnpm run boringssl:bootstrap` from the repository root.")
+  endif()
+
+  set(BUILD_TESTING OFF CACHE BOOL "Build dependency tests" FORCE)
+  add_subdirectory("${CCJS_BORINGSSL_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/boringssl" EXCLUDE_FROM_ALL)
+  target_include_directories(ccjs_runtime PUBLIC "${CCJS_BORINGSSL_ROOT}/include")
+  target_link_libraries(ccjs_runtime PUBLIC ssl crypto)
+  target_compile_definitions(ccjs_runtime PUBLIC CCJS_TLS_BACKEND_BORINGSSL=1)
+elseif(CCJS_TLS_BACKEND STREQUAL "openssl")
+  find_package(OpenSSL REQUIRED)
+  target_link_libraries(ccjs_runtime PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+  target_compile_definitions(ccjs_runtime PUBLIC CCJS_TLS_BACKEND_OPENSSL=1)
+else()
+  message(FATAL_ERROR "Unsupported CCJS_TLS_BACKEND=${CCJS_TLS_BACKEND}. Expected none, boringssl or openssl.")
+endif()
+
+if(CCJS_TLS_CA_BUNDLE)
+  target_compile_definitions(ccjs_runtime PUBLIC CCJS_TLS_CA_BUNDLE="${CCJS_TLS_CA_BUNDLE}")
+endif()
+
+if(CCJS_TLS_CA_PATH)
+  target_compile_definitions(ccjs_runtime PUBLIC CCJS_TLS_CA_PATH="${CCJS_TLS_CA_PATH}")
+endif()
 
 if(CCJS_LOOP_BACKEND STREQUAL "libuv")
   target_link_libraries(ccjs_runtime PUBLIC uv_a)

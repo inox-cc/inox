@@ -25,7 +25,10 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
   const target = options.target ?? 'c'
   const tokens = tokenize(source)
   const ast = parse(tokens)
-  const checked = checkProgram(ast)
+  const checked = checkProgram(ast, {
+    ...options,
+    target
+  })
   const hir = lowerProgram(checked.ast)
   const ir = lowerHirToIr(hir)
 
@@ -63,7 +66,10 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
   const target = options.target ?? 'c'
 
   if (target === 'c') {
-    const graph = await buildModuleGraph(entry)
+    const graph = await buildModuleGraph(entry, {
+      ...options,
+      target
+    })
     const irModules = collectIrModuleRecords(graph)
     checkCProfileCapabilities(
       irModules.map((module) => module.ir),
@@ -83,7 +89,10 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
     }
   }
 
-  const graph = await buildModuleGraph(entry)
+  const graph = await buildModuleGraph(entry, {
+    ...options,
+    target
+  })
   const irModules = collectIrModuleRecords(graph)
 
   if (target === 'js') {
@@ -103,7 +112,10 @@ export async function compileFileToCModules(
   entry: string,
   options: CModuleCompileOptions = {}
 ): Promise<CModuleCompileResult> {
-  const graph = await buildModuleGraph(entry)
+  const graph = await buildModuleGraph(entry, {
+    ...options,
+    target: 'c'
+  })
   const irModules = collectIrModuleRecords(graph)
 
   checkCProfileCapabilities(

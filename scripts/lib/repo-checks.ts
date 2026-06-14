@@ -76,6 +76,7 @@ const requiredFiles: string[] = [
   'src/ccjs-globals.d.ts',
   'scripts/lib/run-command.ts',
   'scripts/lib/snapshot-runner.ts',
+  'scripts/bootstrap-boringssl.ts',
   'scripts/bootstrap-libuv.ts',
   'scripts/test-capabilities.ts',
   'scripts/test-codegen-snapshots.ts',

@@ -24,6 +24,7 @@ type CConfig = {
     cc?: string
     cflags?: string | string[]
     ldflags?: string | string[]
+    tlsBackend?: 'none' | 'boringssl' | 'openssl'
   }
   profile?: RuntimeProfile
   random?: RandomOptions
@@ -358,16 +359,20 @@ function validateConfig(config: unknown, fileName: string): CConfig {
 
   validateConfigFlags(value.c.cflags, 'c.cflags', fileName)
   validateConfigFlags(value.c.ldflags, 'c.ldflags', fileName)
+  validateTlsBackendConfig(value.c.tlsBackend, fileName)
 
   return value
 }
 
-function cCompileOptions(config: CConfig): Pick<CompileOptions, 'budgets' | 'capabilities' | 'profile' | 'random'> {
+function cCompileOptions(
+  config: CConfig
+): Pick<CompileOptions, 'budgets' | 'capabilities' | 'profile' | 'random' | 'tlsBackend'> {
   return {
     budgets: config.budgets,
     capabilities: config.capabilities,
     profile: config.profile,
-    random: config.random
+    random: config.random,
+    tlsBackend: config.c?.tlsBackend
   }
 }
 
@@ -446,6 +451,16 @@ function validateRandomConfig(value: unknown, fileName: string): void {
 
   if (random?.seed != null && (!Number.isInteger(random.seed) || random.seed < 0 || random.seed > 0xffffffff)) {
     throw invalidConfig('random.seed must be an integer from 0 to 4294967295')
+  }
+}
+
+function validateTlsBackendConfig(value: unknown, fileName: string): void {
+  if (value == null) {
+    return
+  }
+
+  if (value !== 'none' && value !== 'boringssl' && value !== 'openssl') {
+    throw new Error(`invalid ${fileName}: c.tlsBackend must be "none", "boringssl" or "openssl"`)
   }
 }
 

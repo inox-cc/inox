@@ -2,6 +2,7 @@ import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import type {
   AnyNode,
   Diagnostic,
+  CompileOptions,
   ObjectShapeInfo,
   ProgramNode,
   SourceLocation,
@@ -401,8 +402,8 @@ const mathUnaryMethods = new Set(['abs', 'ceil', 'cos', 'floor', 'fround', 'roun
 const mathBinaryMethods = new Set(['max', 'min'])
 const numericCastNames = new Set(['i32', 'u32', 'u64', 'f32', 'f64'])
 
-export function checkProgram(program: ProgramNode): { ast: ProgramNode } {
-  const checker = new Checker(program)
+export function checkProgram(program: ProgramNode, options: CompileOptions = {}): { ast: ProgramNode } {
+  const checker = new Checker(program, options)
   checker.check()
 
   return {
@@ -412,6 +413,7 @@ export function checkProgram(program: ProgramNode): { ast: ProgramNode } {
 
 class Checker {
   program: ProgramNode
+  options: CompileOptions
   diagnostics: Diagnostic[]
   scope: Scope
   types: Map<string, TypeAliasInfo>
@@ -425,8 +427,9 @@ class Checker {
   asyncDepth: number
   functionDepth: number
 
-  constructor(program: ProgramNode) {
+  constructor(program: ProgramNode, options: CompileOptions = {}) {
     this.program = program
+    this.options = options
     this.diagnostics = []
     this.scope = new Scope(null)
     this.types = new Map()
@@ -2236,7 +2239,7 @@ class Checker {
         this.expressionCanBeNull(expression.args[0])
       )
 
-      if (this.isFetchHttpsLiteral(expression.args[0])) {
+      if (this.isFetchHttpsLiteral(expression.args[0]) && !this.supportsFetchHttps()) {
         this.report(
           'CCJS_FETCH',
           'https fetch URLs require a configured TLS adapter and are not supported by the current C/libuv fetch slice',
@@ -2333,6 +2336,10 @@ class Checker {
 
   isFetchHttpsLiteral(expression: AnyNode): boolean {
     return expression.type === 'StringLiteral' && expression.value.toLowerCase().startsWith('https://')
+  }
+
+  supportsFetchHttps(): boolean {
+    return this.options.target === 'js' || this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
   }
 
   isSupportedFetchRedirectLiteral(expression: AnyNode): boolean {

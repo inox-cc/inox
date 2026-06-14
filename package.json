@@ -13,6 +13,7 @@
     "example:libuv": "pnpm run example:prepare-libuv && cmake --build example/build-libuv && ./example/build-libuv/ccjs_cmake_example",
     "example:prepare": "cmake -S example -B example/build",
     "example:prepare-libuv": "pnpm run libuv:bootstrap && cmake -S example -B example/build-libuv -DCCJS_LOOP_BACKEND=libuv",
+    "boringssl:bootstrap": "node scripts/bootstrap-boringssl.ts",
     "libuv:bootstrap": "node scripts/bootstrap-libuv.ts",
     "build": "node scripts/build.ts",
     "lint": "prettier . --write",

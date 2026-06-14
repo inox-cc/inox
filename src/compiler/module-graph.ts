@@ -7,7 +7,7 @@ import { parse } from './parser.ts'
 import { checkProgram } from './checker.ts'
 import { lowerHirToIr } from './ir.ts'
 import { lowerProgram } from './lower.ts'
-import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord, ProgramNode, SourceLocation } from './types.ts'
+import type { AnyNode, CompileOptions, Diagnostic, ModuleGraph, ModuleRecord, ProgramNode, SourceLocation } from './types.ts'
 
 const sourceExtensions = ['', '.ts', '.js']
 const runtimeBuiltinImportSources = new Set([
@@ -22,7 +22,7 @@ const runtimeBuiltinImportSources = new Set([
   'node:net'
 ])
 
-export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
+export async function buildModuleGraph(entry: string, options: CompileOptions = {}): Promise<ModuleGraph> {
   const entryPath = resolve(entry)
   const modules = new Map<string, ModuleRecord>()
   const order: ModuleRecord[] = []
@@ -161,7 +161,7 @@ export async function buildModuleGraph(entry: string): Promise<ModuleGraph> {
       }
     }
 
-    const checked = checkProgram(insertImportSyntheticDeclarations(ast, importTypeDeclarations))
+    const checked = checkProgram(insertImportSyntheticDeclarations(ast, importTypeDeclarations), options)
     module.hir = insertImportSyntheticDeclarations(lowerProgram(checked.ast), importAliasDeclarations)
     module.ir = lowerHirToIr(module.hir)
     visiting.delete(path)

@@ -626,6 +626,20 @@ console.log(response.body)
   )
 })
 
+test('accepts HTTPS fetch literals when a C TLS backend is enabled', () => {
+  const result = compileSource(
+    `const response = await fetch('https://example.test/hello')
+console.log(response.status)
+`,
+    {
+      target: 'c',
+      tlsBackend: 'boringssl'
+    }
+  )
+
+  assert.match(result.code, /ccjs_fetch\(&ccjs_loop, "https:\/\/example\.test\/hello", \d+, &ccjs_promise_\d+\)/)
+})
+
 test('lowers node:http createServer and listen to the C HTTP runtime', () => {
   const result = compileSource(
     `import http from 'node:http'
