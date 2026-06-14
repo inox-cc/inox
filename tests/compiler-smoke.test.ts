@@ -527,6 +527,7 @@ test('lowers fetch rejections to Error-like catch bindings in C', () => {
   console.log(response.status)
 } catch (error) {
   console.log(error)
+  console.log('#error:', error)
   console.log(error.name, error.code)
 }
 `,
@@ -538,6 +539,7 @@ test('lowers fetch rejections to Error-like catch bindings in C', () => {
   assert.match(result.code, /if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/)
   assert.match(result.code, /ccjs_value error = ccjs_error;/)
   assert.match(result.code, /printf\("%\.\*s: %\.\*s\\n"/)
+  assert.match(result.code, /printf\("%s %\.\*s: %\.\*s\\n", "#error:"/)
   assert.doesNotMatch(result.code, /ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;/)
 })
 
