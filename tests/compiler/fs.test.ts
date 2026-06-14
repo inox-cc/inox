@@ -17,8 +17,6 @@ import {
   CompileError,
   emitCBundleFromIrModules,
   emitCFromIr,
-  emitJsBundleFromIrModules,
-  emitJsFromIr,
   findIrEntryProgram,
   join,
   mkdir,
@@ -101,7 +99,7 @@ export async function main(): Promise<void> {
 })
 
 
-test('injects Node fs prelude when fs is referenced', () => {
+test('collects node:fs global usages for fs references', () => {
   const result = compileSource(
     `import fs from 'node:fs'
 
@@ -112,11 +110,10 @@ export async function main(): Promise<void> {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /import \* as fs from 'node:fs\/promises'/)
   assert.deepEqual(
     result.ir.globalUsages.map((usage) => usage.root),
     ['fs', 'fs']
@@ -132,39 +129,15 @@ export async function main(): Promise<void> {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.doesNotMatch(withoutFsUsage.code, /import \* as fs from 'node:fs\/promises'/)
+  assert.deepEqual(withoutFsUsage.ir.globalUsages, [])
 })
 
 
 test('lowers default node:fs import and fs.promises calls to the fs runtime', () => {
-  const js = compileSource(
-    `import fs from 'node:fs'
-
-export async function main(): Promise<void> {
-  const bytes: Buffer = await fs.promises.readFile('/tmp/value.bin')
-  const text: string = await fs.promises.readFile('/tmp/value.txt', 'utf8')
-  const entries = await fs.promises.readdir('/tmp')
-  await fs.promises.writeFile('/tmp/out.txt', text)
-  await fs.promises.writeFile('/tmp/out.bin', bytes)
-  console.log(text, entries[0], bytes.length)
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
-  assert.match(js.code, /const bytes = await fs\.readFile\("\/tmp\/value\.bin"\)/)
-  assert.match(js.code, /const text = await fs\.readFile\("\/tmp\/value\.txt", "utf8"\)/)
-  assert.match(js.code, /const entries = await fs\.readdir\("\/tmp"\)/)
-  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.txt", text\)/)
-  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.bin", bytes\)/)
-
   const c = compileSource(
     `import fs from 'node:fs'
 
@@ -195,31 +168,6 @@ export function main(): void {
 
 
 test('lowers Node fs stat lstat access and constants to the fs runtime', () => {
-  const js = compileSource(
-    `import fs from 'node:fs'
-
-export async function main(): Promise<void> {
-  const stats = await fs.promises.stat('/tmp/value.txt')
-  const link = await fs.promises.lstat('/tmp/link.txt')
-  await fs.promises.access('/tmp/value.txt', fs.constants.R_OK)
-  const syncStats = fs.statSync('/tmp/value.txt')
-  fs.accessSync('/tmp/value.txt', fs.constants.F_OK)
-  console.log(stats.size, link.mtimeMs, stats.isFile(), syncStats.isDirectory())
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
-  assert.match(js.code, /import \* as ccjsFsSync from 'node:fs'/)
-  assert.match(js.code, /const stats = await fs\.stat\("\/tmp\/value\.txt"\)/)
-  assert.match(js.code, /const link = await fs\.lstat\("\/tmp\/link\.txt"\)/)
-  assert.match(js.code, /await fs\.access\("\/tmp\/value\.txt", ccjsFsSync\.constants\.R_OK\)/)
-  assert.match(js.code, /const syncStats = ccjsFsSync\.statSync\("\/tmp\/value\.txt"\)/)
-  assert.match(js.code, /ccjsFsSync\.accessSync\("\/tmp\/value\.txt", ccjsFsSync\.constants\.F_OK\)/)
-
   const c = compileSource(
     `import fs from 'node:fs'
 
@@ -260,36 +208,6 @@ export async function main(): Promise<void> {
 
 
 test('lowers Node fs mutation helpers to the fs runtime', () => {
-  const js = compileSource(
-    `import fs from 'node:fs'
-
-export async function main(): Promise<void> {
-  await fs.promises.mkdir('/tmp/ccjs-dir/nested', { recursive: true })
-  await fs.promises.rename('/tmp/input.txt', '/tmp/renamed.txt')
-  await fs.promises.unlink('/tmp/renamed.txt')
-  await fs.promises.rm('/tmp/ccjs-dir', { recursive: true, force: true })
-  fs.mkdirSync('/tmp/ccjs-sync/nested', { recursive: true })
-  fs.renameSync('/tmp/sync-input.txt', '/tmp/sync-renamed.txt')
-  fs.unlinkSync('/tmp/sync-renamed.txt')
-  fs.rmSync('/tmp/ccjs-sync', { recursive: true, force: true })
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
-  assert.match(js.code, /import \* as ccjsFsSync from 'node:fs'/)
-  assert.match(js.code, /await fs\.mkdir\("\/tmp\/ccjs-dir\/nested", \{ recursive: true \}\)/)
-  assert.match(js.code, /await fs\.rename\("\/tmp\/input\.txt", "\/tmp\/renamed\.txt"\)/)
-  assert.match(js.code, /await fs\.unlink\("\/tmp\/renamed\.txt"\)/)
-  assert.match(js.code, /await fs\.rm\("\/tmp\/ccjs-dir", \{ recursive: true, force: true \}\)/)
-  assert.match(js.code, /ccjsFsSync\.mkdirSync\("\/tmp\/ccjs-sync\/nested", \{ recursive: true \}\)/)
-  assert.match(js.code, /ccjsFsSync\.renameSync\("\/tmp\/sync-input\.txt", "\/tmp\/sync-renamed\.txt"\)/)
-  assert.match(js.code, /ccjsFsSync\.unlinkSync\("\/tmp\/sync-renamed\.txt"\)/)
-  assert.match(js.code, /ccjsFsSync\.rmSync\("\/tmp\/ccjs-sync", \{ recursive: true, force: true \}\)/)
-
   const c = compileSource(
     `import fs from 'node:fs'
 
@@ -341,28 +259,6 @@ export function main(): void {
 
 
 test('lowers Node fs append and copy helpers to the fs runtime', () => {
-  const js = compileSource(
-    `import fs from 'node:fs'
-
-export async function main(): Promise<void> {
-  await fs.promises.appendFile('/tmp/log.txt', 'a')
-  await fs.promises.copyFile('/tmp/log.txt', '/tmp/log.copy.txt')
-  fs.appendFileSync('/tmp/sync-log.txt', 'b')
-  fs.copyFileSync('/tmp/sync-log.txt', '/tmp/sync-log.copy.txt')
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
-  assert.match(js.code, /import \* as ccjsFsSync from 'node:fs'/)
-  assert.match(js.code, /await fs\.appendFile\("\/tmp\/log\.txt", "a"\)/)
-  assert.match(js.code, /await fs\.copyFile\("\/tmp\/log\.txt", "\/tmp\/log\.copy\.txt"\)/)
-  assert.match(js.code, /ccjsFsSync\.appendFileSync\("\/tmp\/sync-log\.txt", "b"\)/)
-  assert.match(js.code, /ccjsFsSync\.copyFileSync\("\/tmp\/sync-log\.txt", "\/tmp\/sync-log\.copy\.txt"\)/)
-
   const c = compileSource(
     `import fs from 'node:fs'
 
@@ -406,24 +302,6 @@ export function main(): void {
 
 
 test('lowers Node fs readdir withFileTypes to Dirent runtime values', () => {
-  const js = compileSource(
-    `import fs from 'node:fs'
-
-export async function main(): Promise<void> {
-  const entries = await fs.promises.readdir('/tmp', { withFileTypes: true })
-  const first = entries[0]
-  const syncEntries = fs.readdirSync('/tmp', { withFileTypes: true })
-  console.log(first.name, first.isFile(), syncEntries[0].isDirectory())
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(js.code, /const entries = await fs\.readdir\("\/tmp", \{ withFileTypes: true \}\)/)
-  assert.match(js.code, /const syncEntries = ccjsFsSync\.readdirSync\("\/tmp", \{ withFileTypes: true \}\)/)
-
   const c = compileSource(
     `import fs from 'node:fs'
 
@@ -470,31 +348,6 @@ export function main(): void {
 
 
 test('lowers Node fs link path helpers to the fs runtime', () => {
-  const js = compileSource(
-    `import fs from 'node:fs'
-
-export async function main(): Promise<void> {
-  await fs.promises.symlink('/tmp/value.txt', '/tmp/link.txt')
-  const target = await fs.promises.readlink('/tmp/link.txt')
-  const resolved = await fs.promises.realpath('/tmp/value.txt')
-  fs.symlinkSync('/tmp/value.txt', '/tmp/sync-link.txt')
-  const syncTarget = fs.readlinkSync('/tmp/sync-link.txt')
-  const syncResolved = fs.realpathSync('/tmp/value.txt')
-  console.log(target, resolved, syncTarget, syncResolved)
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(js.code, /await fs\.symlink\("\/tmp\/value\.txt", "\/tmp\/link\.txt"\)/)
-  assert.match(js.code, /const target = await fs\.readlink\("\/tmp\/link\.txt"\)/)
-  assert.match(js.code, /const resolved = await fs\.realpath\("\/tmp\/value\.txt"\)/)
-  assert.match(js.code, /ccjsFsSync\.symlinkSync\("\/tmp\/value\.txt", "\/tmp\/sync-link\.txt"\)/)
-  assert.match(js.code, /const syncTarget = ccjsFsSync\.readlinkSync\("\/tmp\/sync-link\.txt"\)/)
-  assert.match(js.code, /const syncResolved = ccjsFsSync\.realpathSync\("\/tmp\/value\.txt"\)/)
-
   const c = compileSource(
     `import fs from 'node:fs'
 
@@ -541,30 +394,6 @@ export function main(): void {
 
 
 test('lowers node:fs/promises imports to the fs runtime', () => {
-  const js = compileSource(
-    `import fs from 'node:fs/promises'
-
-export async function main(): Promise<void> {
-  const bytes: Buffer = await fs.readFile('/tmp/value.bin')
-  const text: string = await fs.readFile('/tmp/value.txt', 'utf8')
-  const entries = await fs.readdir('/tmp')
-  await fs.writeFile('/tmp/out.txt', text)
-  await fs.writeFile('/tmp/out.bin', bytes)
-  console.log(text, entries[0], bytes.length)
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
-  assert.match(js.code, /const bytes = await fs\.readFile\("\/tmp\/value\.bin"\)/)
-  assert.match(js.code, /const text = await fs\.readFile\("\/tmp\/value\.txt", "utf8"\)/)
-  assert.match(js.code, /const entries = await fs\.readdir\("\/tmp"\)/)
-  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.txt", text\)/)
-  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.bin", bytes\)/)
-
   const c = compileSource(
     `import fs from 'node:fs/promises'
 
@@ -587,26 +416,7 @@ export function main(): void {
 })
 
 
-test('maps Node fs binary reads to Buffer-compatible JS and C runtime calls', () => {
-  const js = compileSource(
-    `import fs from 'node:fs'
-
-export async function main(): Promise<void> {
-  const bytes: Buffer = await fs.promises.readFile('/tmp/value.bin')
-  const view: Uint8Array = bytes
-  await fs.promises.writeFile('/tmp/out.bin', view)
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
-  assert.match(js.code, /const bytes = await fs\.readFile\("\/tmp\/value\.bin"\)/)
-  assert.match(js.code, /const view = bytes/)
-  assert.match(js.code, /await fs\.writeFile\("\/tmp\/out\.bin", view\)/)
-
+test('maps Node fs binary reads to Buffer-compatible C runtime calls', () => {
   const c = compileSource(
     `import fs from 'node:fs'
 
@@ -648,32 +458,7 @@ export async function main(): Promise<void> {
 })
 
 
-test('maps fs sync helpers to Node fs and C runtime calls', () => {
-  const js = compileSource(
-    `import fs from 'node:fs'
-
-export function main(): void {
-  const text = fs.readFileSync('/tmp/value.txt', 'utf8')
-  const bytes: Buffer = fs.readFileSync('/tmp/value.bin')
-  const entries = fs.readdirSync('/tmp')
-  fs.writeFileSync('/tmp/out.txt', text)
-  fs.writeFileSync('/tmp/out.bin', bytes)
-  console.log(entries[0])
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.doesNotMatch(js.code, /node:fs\/promises/)
-  assert.match(js.code, /import \* as ccjsFsSync from 'node:fs'/)
-  assert.match(js.code, /const text = ccjsFsSync\.readFileSync\("\/tmp\/value\.txt", "utf8"\)/)
-  assert.match(js.code, /const bytes = ccjsFsSync\.readFileSync\("\/tmp\/value\.bin"\)/)
-  assert.match(js.code, /const entries = ccjsFsSync\.readdirSync\("\/tmp"\)/)
-  assert.match(js.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.txt", text\)/)
-  assert.match(js.code, /ccjsFsSync\.writeFileSync\("\/tmp\/out\.bin", bytes\)/)
-
+test('maps fs sync helpers to C runtime calls', () => {
   const c = compileSource(
     `import fs from 'node:fs'
 

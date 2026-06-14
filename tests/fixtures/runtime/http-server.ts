@@ -1,5 +1,6 @@
-// @targets js
-// @expect pass
+// @targets c
+// @expect diagnostic
+// @diagnostic CCJS_NOT_IMPLEMENTED
 
 const server = http.createServer((request, response) => {
   response.end('ok')
@@ -13,4 +14,3 @@ const text = await response.text()
 server.close()
 
 console.log(text)
-

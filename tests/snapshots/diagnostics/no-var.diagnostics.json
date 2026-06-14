@@ -1,5 +1,5 @@
 {
-  "target": "js",
+  "target": "c",
   "diagnostics": [
     {
       "code": "CCJS_NO_VAR",

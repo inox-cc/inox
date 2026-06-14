@@ -17,8 +17,6 @@ import {
   CompileError,
   emitCBundleFromIrModules,
   emitCFromIr,
-  emitJsBundleFromIrModules,
-  emitJsFromIr,
   findIrEntryProgram,
   join,
   mkdir,
@@ -30,7 +28,7 @@ import {
 
 
 
-test('compiles classic for loops to JS and C', () => {
+test('compiles classic for loops to C', () => {
   const source = `export function main(): void {
   let total = 0
 
@@ -41,14 +39,10 @@ test('compiles classic for loops to JS and C', () => {
   console.log(total)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.match(js.code, /for \(let index = 0; \(index < 4\); index = \(index \+ 1\)\) \{/)
   assert.match(c.code, /for \(double index = 0; \(index < 4\); \(index = \(index \+ 1\)\)\) \{/)
 })
 
@@ -95,7 +89,7 @@ export function main(): void {
 })
 
 
-test('compiles simple classes to JS and C object runtime calls', () => {
+test('compiles simple classes to C object runtime calls', () => {
   const source = `class User {
   readonly id: number
   name: string
@@ -130,31 +124,14 @@ export function main(): void {
   console.log(value, name)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-  assert.match(js.code, /class User \{/)
-  assert.match(js.code, /\n {2}id\n {2}name\n/)
-  assert.match(js.code, /constructor\(id, name\) \{/)
-  assert.match(js.code, /this\.id = id/)
-  assert.match(js.code, /this\.name = name/)
-  assert.match(js.code, /rename\(next\) \{/)
-  assert.match(js.code, /score\(extra\) \{/)
-  assert.match(js.code, /total\(extra\) \{/)
-  assert.match(js.code, /label\(\) \{/)
-  assert.match(js.code, /const user = new User\(1, "Ada"\)/)
-  assert.match(js.code, /const value = user\.total\(2\)/)
-  assert.doesNotMatch(js.code, /readonly id: number/)
-  assert.doesNotMatch(js.code, /rename\(next: string\)/)
-  assert.deepEqual(
-    js.ir.syntaxFeatures.map((item) => item.feature),
-    ['class']
-  )
-
   const c = compileSource(source, {
     target: 'c'
   })
 
+  assert.deepEqual(
+    c.ir.syntaxFeatures.map((item) => item.feature),
+    ['class']
+  )
   assert.match(c.code, /#include "ccjs\/object\.h"/)
   assert.match(
     c.code,
@@ -314,11 +291,10 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /const user = \{ id: 1, name: "Ada" \}/)
   assert.doesNotMatch(result.code, /type User/)
 })
 
@@ -335,13 +311,10 @@ export function main(): void {
   console.log(id)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
-  const main = js.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
   const user = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'user')
   assert.ok(user)
@@ -403,11 +376,11 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /const name = user\["name"\]/)
+  assert.match(result.code, /ccjs_object_get\(user, "name", 4, &ccjs_field_\d+\)/)
 
   assertDiagnostic(
     `type User = {

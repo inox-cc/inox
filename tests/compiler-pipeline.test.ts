@@ -19,22 +19,22 @@ test('compiles source to IR before emitting target code', () => {
   console.log('hello')
 }
 `,
-    { target: 'js' }
+    { target: 'c' }
   )
 
-  assert.equal(compiled.target, 'js')
+  assert.equal(compiled.target, 'c')
   assert.equal(compiled.ir.type, 'IrProgram')
   assert.doesNotMatch(JSON.stringify(compiled), /"code"/)
-  assert.match(emitTargetFromIr('js', compiled.ir), /function main\(\)/)
+  assert.match(emitTargetFromIr('c', compiled.ir), /int main\(void\)/)
   assert.equal(
     compileSource(
       `export function main(): void {
   console.log('hello')
 }
 `,
-      { target: 'js' }
+      { target: 'c' }
     ).code,
-    emitTargetFromIr('js', compiled.ir)
+    emitTargetFromIr('c', compiled.ir)
   )
 })
 
@@ -62,22 +62,22 @@ export function main(): void {
 `
     )
 
-    const compiled = await compileGraphToIrModules(entry, { target: 'js' })
+    const compiled = await compileGraphToIrModules(entry, { target: 'c' })
 
-    assert.equal(compiled.target, 'js')
+    assert.equal(compiled.target, 'c')
     assert.deepEqual(
       compiled.irModules.map((module) => module.path),
       [dep, entry]
     )
 
-    const result = await compileFile(entry, { target: 'js' })
+    const result = await compileFile(entry, { target: 'c' })
 
     assert.deepEqual(
       result.graph.modules.map((module) => module.path),
       compiled.graph.modules.map((module) => module.path)
     )
-    assert.match(result.code, /function value\(\)/)
-    assert.match(result.code, /function main\(\)/)
+    assert.match(result.code, /double value\(void\)/)
+    assert.match(result.code, /void ccjs_main\(void\)/)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

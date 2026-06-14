@@ -6,7 +6,7 @@ import { rootDir } from './lib/repo-checks.ts'
 import { runSnapshotSuite, type SnapshotOutput } from './lib/snapshot-runner.ts'
 
 type DiagnosticSnapshot = {
-  target: 'js'
+  target: 'c'
   diagnostics: Diagnostic[]
 }
 
@@ -34,13 +34,13 @@ function createDiagnosticOutput(path: string, source: string): SnapshotOutput {
 function createDiagnosticSnapshot(source: string): DiagnosticSnapshot {
   try {
     compileSource(source, {
-      target: 'js',
+      target: 'c',
       callMain: false
     })
   } catch (error) {
     if (error instanceof CompileError) {
       return {
-        target: 'js',
+        target: 'c',
         diagnostics: error.diagnostics.map(snapshotDiagnostic)
       }
     }

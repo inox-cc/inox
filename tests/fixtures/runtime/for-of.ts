@@ -1,4 +1,4 @@
-// @targets js,c
+// @targets c
 // @expect pass
 
 const values = [1, 2, 3]

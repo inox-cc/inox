@@ -1,4 +1,4 @@
-// @targets js,c
+// @targets c
 // @platforms hosted,node,embedded-adapter
 // @features wall-clock,monotonic-clock
 // @expect pass

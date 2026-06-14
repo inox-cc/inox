@@ -1,7 +1,6 @@
 import { checkCCompileBudgets } from './budgets.ts'
 import { checkCProfileCapabilities } from './capabilities.ts'
 import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
-import { emitJsBundleFromIrModules, emitJsFromIr } from './codegen-js.ts'
 import { checkProgram } from './checker.ts'
 import { collectIrModuleRecords, lowerHirToIr } from './ir.ts'
 import { tokenize } from './lexer.ts'
@@ -37,9 +36,7 @@ export type GraphIrCompileResult = {
 export function compileSource(source: string, options: CompileOptions = {}): SourceCompileResult {
   const compiled = compileSourceToIr(source, options)
 
-  if (compiled.target === 'c') {
-    runCStaticChecks([compiled.ir], options)
-  }
+  runCStaticChecks([compiled.ir], options)
 
   return {
     ...compiled,
@@ -73,44 +70,24 @@ export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: 
     })
   }
 
-  if (target === 'js') {
-    return emitJsFromIr(ir, {
-      callMain: options.callMain
-    })
-  }
-
   throw new Error(`Unsupported target ${target}`)
 }
 
 export async function compileFile(entry: string, options: CompileOptions = {}): Promise<FileCompileResult> {
   const compiled = await compileGraphToIrModules(entry, options)
 
-  if (compiled.target === 'c') {
-    runCStaticChecks(
-      compiled.irModules.map((module) => module.ir),
-      options
-    )
+  runCStaticChecks(
+    compiled.irModules.map((module) => module.ir),
+    options
+  )
 
-    return {
-      target: compiled.target,
-      graph: compiled.graph,
-      code: emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, {
-        random: options.random
-      })
-    }
+  return {
+    target: compiled.target,
+    graph: compiled.graph,
+    code: emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, {
+      random: options.random
+    })
   }
-
-  if (compiled.target === 'js') {
-    return {
-      target: compiled.target,
-      graph: compiled.graph,
-      code: emitJsBundleFromIrModules(compiled.irModules, compiled.graph.entry, {
-        callMain: options.callMain
-      })
-    }
-  }
-
-  throw new Error(`Unsupported target ${target}`)
 }
 
 export async function compileFileToCModules(
@@ -160,5 +137,11 @@ export function runCStaticChecks(irs: IrProgram[], options: CompileOptions = {})
 }
 
 function resolveCompileTarget(options: CompileOptions): CompileTarget {
-  return options.target ?? 'c'
+  const target = options.target as string | undefined
+
+  if (target == null || target === 'c') {
+    return 'c'
+  }
+
+  throw new Error(`Unsupported target ${target}`)
 }

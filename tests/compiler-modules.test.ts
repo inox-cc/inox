@@ -97,7 +97,7 @@ export function main(): void {
     assert.equal(await resolveExistingSource(join(dir, 'dep')), dep)
     assert.equal(await resolveImport(entry, './dep'), dep)
 
-    const graph = await buildModuleGraph(entry, { target: 'js' })
+    const graph = await buildModuleGraph(entry, { target: 'c' })
 
     assert.equal(graph.entry, entry)
     assert.deepEqual(

@@ -17,8 +17,6 @@ import {
   CompileError,
   emitCBundleFromIrModules,
   emitCFromIr,
-  emitJsBundleFromIrModules,
-  emitJsFromIr,
   findIrEntryProgram,
   join,
   mkdir,
@@ -52,7 +50,7 @@ export function main(): void {
     )
 
     const result = await compileFile(join(dir, 'main.js'), {
-      target: 'js'
+      target: 'c'
     })
 
     assert.equal(
@@ -114,7 +112,7 @@ export function main(): void {
     )
 
     const result = await compileFile(join(dir, 'main.ts'), {
-      target: 'js'
+      target: 'c'
     })
     const graph = {
       ...result.graph,
@@ -165,7 +163,7 @@ export function main(): void {
     )
 
     const result = await compileFile(join(dir, 'main.ts'), {
-      target: 'js'
+      target: 'c'
     })
     const graph = {
       ...result.graph,
@@ -198,7 +196,7 @@ export function main(): void {
 })
 
 
-test('emits JS and C bundles directly from target-neutral IR module records', async () => {
+test('emits C bundles directly from target-neutral IR module records', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-bundle-ir-entrypoints-'))
 
   try {
@@ -220,18 +218,14 @@ export function main(): void {
     )
 
     const result = await compileFile(join(dir, 'main.ts'), {
-      target: 'js',
+      target: 'c',
       callMain: false
     })
     const irModules = collectIrModuleRecords(result.graph)
     const libEntry =
       irModules.find((module) => module.ir.functionDeclarations.some((item) => item.name === 'greet'))?.path ?? ''
     assert.notEqual(libEntry, '')
-    const js = emitJsBundleFromIrModules(irModules, result.graph.entry, {
-      callMain: false
-    })
     const c = emitCBundleFromIrModules(irModules, result.graph.entry)
-    const jsWithLibEntry = emitJsBundleFromIrModules(irModules, libEntry)
     const cWithLibEntry = emitCBundleFromIrModules(irModules, libEntry)
 
     assert.deepEqual(
@@ -246,59 +240,10 @@ export function main(): void {
       findIrEntryProgram(irModules, libEntry)?.functionDeclarations.some((item) => item.name === 'greet'),
       true
     )
-    assert.match(js, /function greet\(\) \{/)
-    assert.match(js, /function main\(\) \{/)
-    assert.doesNotMatch(js, /const ccjsMainResult/)
     assert.match(c, /void greet\(void\);/)
     assert.match(c, /void ccjs_main\(void\);/)
     assert.doesNotMatch(c, /int main\(void\) \{[\s\S]*ccjs_main\(\);/)
-    assert.doesNotMatch(jsWithLibEntry, /const ccjsMainResult = main\(\)/)
     assert.doesNotMatch(cWithLibEntry, /int main\(void\) \{\n {2}ccjs_main\(\);/)
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-
-test('drives JS bundle body and main wrapper from stored target-neutral IR programs', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-js-bundle-ir-'))
-
-  try {
-    await writeFile(
-      join(dir, 'lib.ts'),
-      `export function greet(): void {
-  console.log('from lib')
-}
-`
-    )
-    await writeFile(
-      join(dir, 'main.ts'),
-      `import { greet } from './lib.ts'
-
-export function main(): void {
-  greet()
-}
-`
-    )
-
-    const result = await compileFile(join(dir, 'main.ts'), {
-      target: 'js'
-    })
-    const graph = {
-      ...result.graph,
-      modules: result.graph.modules.map((module) => ({
-        ...module,
-        hir: null
-      }))
-    }
-    const code = emitJsBundleFromIrModules(collectIrModuleRecords(graph), graph.entry)
-
-    assert.match(code, /function greet\(\)/)
-    assert.match(code, /function main\(\)/)
-    assert.match(code, /const ccjsMainResult = main\(\)/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -352,7 +297,7 @@ greet()
 })
 
 
-test('compiles static ESM import aliases to JS and C bundles', async () => {
+test('compiles static ESM import aliases to C bundles', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-aliases-'))
 
   try {
@@ -373,14 +318,10 @@ export function main(): void {
 `
     )
 
-    const js = await compileFile(join(dir, 'main.ts'), {
-      target: 'js'
-    })
     const c = await compileFile(join(dir, 'main.ts'), {
       target: 'c'
     })
 
-    assert.match(js.code, /function sayHello\(\) \{\n {2}greet\(\)\n}/)
     assert.match(c.code, /void sayHello\(void\);/)
     assert.match(c.code, /void sayHello\(void\) \{\n {2}greet\(\);/)
     assert.match(c.code, /ccjs_main\(void\) \{\n {2}sayHello\(\);/)
@@ -415,14 +356,10 @@ export function main(): void {
 `
     )
 
-    const js = await compileFile(join(dir, 'main.ts'), {
-      target: 'js'
-    })
     const c = await compileFile(join(dir, 'main.ts'), {
       target: 'c'
     })
 
-    assert.match(js.code, /const user = \{ name: "Ada" \}/)
     assert.match(c.code, /static const ccjs_field_info ccjs_shape_user_\d+_fields\[\]/)
     assert.match(c.code, /ccjs_object_get_known\(user, 0, &ccjs_log_value_\d+\)/)
   } finally {
@@ -456,57 +393,15 @@ export function main(): void {
 `
     )
 
-    const js = await compileFile(join(dir, 'main.ts'), {
-      target: 'js'
-    })
     const c = await compileFile(join(dir, 'main.ts'), {
       target: 'c'
     })
 
     assert.equal(
-      js.graph.modules.some((module) => module.path.endsWith('/lib/index.ts')),
+      c.graph.modules.some((module) => module.path.endsWith('/lib/index.ts')),
       true
     )
-    assert.match(js.code, /from index/)
     assert.match(c.code, /void greet\(void\);/)
-  } finally {
-    await rm(dir, {
-      recursive: true,
-      force: true
-    })
-  }
-})
-
-
-test('compiles a static ESM module graph to JS bundle', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
-
-  try {
-    await writeFile(
-      join(dir, 'lib.js'),
-      `export function greet(): void {
-  console.log('from lib')
-}
-`
-    )
-    await writeFile(
-      join(dir, 'main.js'),
-      `import { greet } from './lib.js'
-
-export function main(): void {
-  greet()
-}
-`
-    )
-
-    const result = await compileFile(join(dir, 'main.js'), {
-      target: 'js'
-    })
-
-    assert.match(result.code, /function greet\(\)/)
-    assert.match(result.code, /function main\(\)/)
-    assert.doesNotMatch(result.code, /import \{/)
-    assert.doesNotMatch(result.code, /export function/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -579,7 +474,7 @@ export function main(): void {
     await assert.rejects(
       () =>
         compileFile(join(dir, 'main.js'), {
-          target: 'js'
+          target: 'c'
         }),
       (error) => {
         if (!(error instanceof CompileError)) {

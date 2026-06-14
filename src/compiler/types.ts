@@ -195,7 +195,7 @@ export type ModuleGraph = {
   modules: ModuleRecord[]
 }
 
-export type CompileTarget = 'c' | 'js'
+export type CompileTarget = 'c'
 
 export type RandomOptions = {
   backend?: 'simple' | 'xorshift32' | 'os'

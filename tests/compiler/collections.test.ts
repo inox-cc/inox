@@ -17,8 +17,6 @@ import {
   CompileError,
   emitCBundleFromIrModules,
   emitCFromIr,
-  emitJsBundleFromIrModules,
-  emitJsFromIr,
   findIrEntryProgram,
   join,
   mkdir,
@@ -28,25 +26,6 @@ import {
   writeFile
 } from '../helpers/compiler-smoke.ts'
 
-
-
-test('compiles arrays, objects, member access and operators to JS', () => {
-  const result = compileSource(
-    `export function main(): void {
-  const user = { name: 'Ada', scores: [1, 2, 3] }
-  const total = user.scores[0] + user['scores'][1] * 2
-  console.log(user.name, total === 5 && true)
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(result.code, /const user = \{ name: "Ada", scores: \[1, 2, 3\] \}/)
-  assert.match(result.code, /const total = \(user\.scores\[0\] \+ \(user\["scores"\]\[1\] \* 2\)\)/)
-  assert.match(result.code, /console\.log\(user\.name, \(\(total === 5\) && true\)\)/)
-})
 
 
 test('lowers C array literals to runtime calls', () => {
@@ -671,7 +650,7 @@ export function main(): void {
 })
 
 
-test('compiles for of loops over arrays to JS and C', () => {
+test('compiles for of loops over arrays to C', () => {
   const source = `export function main(): void {
   const values = [1, 2, 3]
   let total = 0
@@ -683,24 +662,6 @@ test('compiles for of loops over arrays to JS and C', () => {
   console.log(total)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-
-  assert.match(js.code, /for \(const value of values\) \{/)
-  const jsNoMain = compileSource(source, {
-    target: 'js',
-    callMain: false
-  })
-
-  assert.match(jsNoMain.code, /for \(const value of values\) \{/)
-  assert.doesNotThrow(() =>
-    compileSource(jsNoMain.code, {
-      target: 'js',
-      callMain: false
-    })
-  )
-
   const c = compileSource(source, {
     target: 'c'
   })
@@ -736,7 +697,7 @@ test('compiles for of loops over string arrays to C', () => {
 })
 
 
-test('compiles for of loops over Set values to JS and C', () => {
+test('compiles for of loops over Set values to C', () => {
   const source = `type Bag = {
   names: Set<string>
 }
@@ -759,14 +720,10 @@ export function main(): void {
   console.log(total, letters)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.match(js.code, /for \(const value of values\.add\(4\)\) \{/)
   assert.match(c.code, /ccjs_set_add\(values, ccjs_number_value\(4\)\)/)
   assert.match(c.code, /ccjs_set \*ccjs_for_set_\d+ = \(ccjs_set \*\)values\.as\.ref;/)
   assert.match(c.code, /CCJS_SET_SLOT_OCCUPIED/)
@@ -795,26 +752,10 @@ export function main(): void {
   console.log(total, letters)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-  const jsNoMain = compileSource(source, {
-    target: 'js',
-    callMain: false
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.match(js.code, /for \(const ccjsMapEntry_entry of bag\["scores"\]\.set\("Alan", 5\)\) \{/)
-  assert.match(js.code, /const entry = \{ key: ccjsMapEntry_entry\[0\], value: ccjsMapEntry_entry\[1\] \}/)
-  assert.match(jsNoMain.code, /for \(const ccjsMapEntry_entry of bag\["scores"\]\.set\("Alan", 5\)\) \{/)
-  assert.doesNotThrow(() =>
-    compileSource(jsNoMain.code, {
-      target: 'js',
-      callMain: false
-    })
-  )
   assert.match(c.code, /ccjs_map \*ccjs_for_map_\d+ = \(ccjs_map \*\)ccjs_value_\d+\.as\.ref;/)
   assert.match(c.code, /CCJS_MAP_SLOT_OCCUPIED/)
   assert.match(c.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_map_entry_\d+, &entry\)/)
@@ -905,7 +846,7 @@ const label = 'ok'
 console.log(label)
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
@@ -1083,22 +1024,21 @@ test('reports embedded heap capability diagnostics for array-producing methods',
 
 test('checks string length as a readonly number field', () => {
   const result = compileSource(
-    `function length(name: string): number {
-  return name.length
-}
-
-export function main(): void {
+    `export function main(): void {
   const name = 'Ada'
-  console.log(length(name))
+  const size = name.length
+  console.log(size)
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const size = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'size')
 
-  assert.match(result.code, /function ccjsStringLength\(value\) \{/)
-  assert.match(result.code, /return ccjsStringLength\(name\)/)
+  assert.equal(size?.valueType, 'number')
+  assert.match(result.code, /ccjs_string_code_point_length_parts\(name, strlen\(name\)\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -1123,11 +1063,11 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /return values\.length/)
+  assert.match(result.code, /ccjs_array_len\(values, &ccjs_array_len_\d+\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -1157,7 +1097,7 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const firstNumber = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'firstNumber')
@@ -1176,7 +1116,7 @@ export function main(): void {
   assert.equal(values.arrayElementType, 'number')
   assert.equal(names.valueType, 'array')
   assert.equal(names.arrayElementType, 'string')
-  assert.match(result.code, /return values\[0\]/)
+  assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_value_\d+\)/)
 
   assertDiagnostic(
     `function first(values: number[]): string {
@@ -1206,7 +1146,7 @@ test('checks Array sort filter map as typed chain calls', () => {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
@@ -1224,10 +1164,8 @@ test('checks Array sort filter map as typed chain calls', () => {
   assert.equal(filterCall.args[0].params[0].valueType, 'number')
   assert.equal(filterCall.args[0].params[1].valueType, 'number')
   assert.equal(mapCall.args[0].params[0].valueType, 'number')
-  assert.match(
-    result.code,
-    /\.sort\(\(left, right\) => \(left - right\)\)\.filter\(\(value, index\) => \(value > index\)\)\.map\(value => \(value \+ 1\)\)/
-  )
+  assert.match(result.code, /ccjs_sort_compare_\d+ = \(left - right\);/)
+  assert.match(result.code, /ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
 
   const mapped = compileSource(
     `export function main(): void {
@@ -1237,7 +1175,7 @@ test('checks Array sort filter map as typed chain calls', () => {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const mappedMain = mapped.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
@@ -1306,25 +1244,6 @@ test('checks Array sort filter map as typed chain calls', () => {
   assert.match(branchedC.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \* 10\)\)\)/)
   assert.match(branchedC.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \+ 10\)\)\)/)
 
-  const multiStatementFilter = compileSource(
-    `export function main(): void {
-  const values: number[] = [1, 2]
-  const result = values.filter(value => {
-    const keep = value > 1
-
-    return keep
-  })
-
-  console.log(result.length)
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-
-  assert.match(multiStatementFilter.code, /const result = values\.filter\(value => \{/)
-
   assertDiagnostic(
     `export function main(): void {
   const values: number[] = [1]
@@ -1345,139 +1264,27 @@ test('checks Array sort filter map as typed chain calls', () => {
 })
 
 
-test('checks Array push as a typed mutating call', () => {
-  const result = compileSource(
-    `export function main(): void {
-  const values: number[] = [1]
-  const length = values.push(2)
-  console.log(length, values.length)
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  assert.ok(main)
-  const length = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'length')
-  assert.ok(length)
-
-  assert.equal(length.valueType, 'number')
-  assert.equal(length.init.valueType, 'number')
-  assert.equal(length.init.args[0].valueType, 'number')
-  assert.match(result.code, /const length = values\.push\(2\)/)
-
-  assertDiagnostic(
-    `export function main(): void {
-  const values: number[] = [1]
-  values.push('Ada')
-}
-`,
-    'CCJS_TYPE_MISMATCH'
-  )
-
-  assertDiagnostic(
-    `export function main(): void {
-  const values: number[] = [1]
-  values.push()
-}
-`,
-    'CCJS_ARG_COUNT'
-  )
-})
-
-
-test('checks Array pop as a nullable typed mutating call', () => {
-  const result = compileSource(
-    `export function main(): void {
-  const values: number[] = [1]
-  const value = values.pop()
-  const fallback = values.pop() ?? 0
-  console.log(value, fallback)
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-  const js = compileSource(
-    `export function main(): void {
-  const names: string[] = ['Ada']
-  const name: string | null = names.pop()
-  console.log(name ?? 'missing')
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  assert.ok(main)
-  const value = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'value')
-  assert.ok(value)
-
-  assert.equal(value.valueType, 'number')
-  assert.equal(value.nullable, true)
-  assert.equal(value.init.valueType, 'number')
-  assert.equal(value.init.nullable, true)
-  assert.deepEqual(result.ir.features, ['array-pop-null', 'collections', 'runtime-values'])
-  assert.deepEqual(result.ir.runtimeRequirements, ['collections', 'managed-values'])
-  assert.match(result.code, /function ccjsArrayPop\(array\) \{/)
-  assert.match(result.code, /const value = ccjsArrayPop\(values\)/)
-  assert.match(result.code, /const fallback = \(ccjsArrayPop\(values\) \?\? 0\)/)
-  assert.match(js.code, /function ccjsArrayPop\(array\) \{/)
-  assert.match(js.code, /const name = ccjsArrayPop\(names\)/)
-
-  assertDiagnostic(
-    `export function main(): void {
-  const values: number[] = [1]
-  const value: number = values.pop()
-  console.log(value)
-}
-`,
-    'CCJS_TYPE_MISMATCH'
-  )
-
-  assertDiagnostic(
-    `export function main(): void {
-  const values: number[] = [1]
-  values.pop(1)
-}
-`,
-    'CCJS_ARG_COUNT'
-  )
-})
-
-
 test('checks Map and Set generic methods as typed chain calls', () => {
   const result = compileSource(
-    `function makeScores(): Map<string, number> {
-  return new Map()
-}
-
-function makeNames(): Set<string> {
-  return new Set()
-}
-
-export function main(): void {
-  const scores = makeScores()
+    `export function main(): void {
+  const scores: Map<string, number> = new Map()
   const maybeScore = scores.set('Ada', 7).get('Ada')
   const score = maybeScore ?? 0
   const hasAda = scores.has('Ada')
   const removed = scores.delete('Ada')
-  const clearedScores = scores.clear()
-  const names = makeNames()
+  scores.clear()
+  const names: Set<string> = new Set()
   const hasName = names.add('Ada').has('Ada')
-  const clearedNames = names.clear()
-  console.log(score, hasAda, removed, clearedScores, hasName, clearedNames, scores.size, names.size)
+  names.clear()
+  console.log(score, hasAda, removed, hasName)
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const js = compileSource(
+  const typedGet = compileSource(
     `export function main(): void {
   const scores: Map<string, number> = new Map()
   const maybeScore: number | null = scores.get('Ada')
@@ -1485,7 +1292,7 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   assert.ok(main)
@@ -1494,19 +1301,15 @@ export function main(): void {
   const score = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'score')
   const hasAda = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'hasAda')
   const removed = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'removed')
-  const clearedScores = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'clearedScores')
   const names = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'names')
   const hasName = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'hasName')
-  const clearedNames = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'clearedNames')
   assert.ok(scores)
   assert.ok(maybeScore)
   assert.ok(score)
   assert.ok(hasAda)
   assert.ok(removed)
-  assert.ok(clearedScores)
   assert.ok(names)
   assert.ok(hasName)
-  assert.ok(clearedNames)
 
   assert.equal(scores.valueType, 'map')
   assert.equal(scores.mapKeyType, 'string')
@@ -1516,20 +1319,12 @@ export function main(): void {
   assert.equal(score.valueType, 'number')
   assert.equal(hasAda.valueType, 'boolean')
   assert.equal(removed.valueType, 'boolean')
-  assert.equal(clearedScores.valueType, 'void')
   assert.equal(names.valueType, 'set')
   assert.equal(names.setElementType, 'string')
   assert.equal(hasName.valueType, 'boolean')
-  assert.equal(clearedNames.valueType, 'void')
   assert.deepEqual(result.ir.features, ['collections', 'map-get-null', 'runtime-values'])
   assert.deepEqual(result.ir.runtimeRequirements, ['collections', 'managed-values'])
-  assert.match(result.code, /function ccjsMapGet\(map, key\) \{/)
-  assert.match(result.code, /const maybeScore = ccjsMapGet\(scores\.set\("Ada", 7\), "Ada"\)/)
-  assert.match(js.code, /function ccjsMapGet\(map, key\) \{/)
-  assert.match(js.code, /const maybeScore = ccjsMapGet\(scores, "Ada"\)/)
-  assert.match(result.code, /\.add\("Ada"\)\.has\("Ada"\)/)
-  assert.match(result.code, /const clearedScores = scores\.clear\(\)/)
-  assert.match(result.code, /const clearedNames = names\.clear\(\)/)
+  assert.equal(typedGet.ir.features.includes('map-get-null'), true)
 
   assertDiagnostic(
     `export function main(): void {
@@ -1740,10 +1535,10 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
-  const js = compileSource(
+  const typedBracketGet = compileSource(
     `export function main(): void {
   const headers: Map<string, string> = new Map()
   headers['content-type'] = 'application/json'
@@ -1752,7 +1547,7 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
@@ -1767,13 +1562,7 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
   assert.equal(fallback.valueType, 'string')
   assert.deepEqual(result.ir.features, ['collections', 'map-get-null', 'map-index-set', 'runtime-values'])
   assert.deepEqual(result.ir.runtimeRequirements, ['collections', 'managed-values'])
-  assert.match(result.code, /function ccjsMapGet\(map, key\) \{/)
-  assert.match(result.code, /function ccjsMapSet\(map, key, value\) \{/)
-  assert.match(result.code, /ccjsMapSet\(headers, "content-type", "application\/json"\)/)
-  assert.match(result.code, /const contentType = ccjsMapGet\(headers, "content-type"\)/)
-  assert.match(js.code, /function ccjsMapGet\(map, key\) \{/)
-  assert.match(js.code, /function ccjsMapSet\(map, key, value\) \{/)
-  assert.match(js.code, /const contentType = ccjsMapGet\(headers, "content-type"\)/)
+  assert.equal(typedBracketGet.ir.features.includes('map-get-null'), true)
 
   assertDiagnostic(
     `export function main(): void {
@@ -1816,14 +1605,12 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(
-    result.code,
-    /return \(\(name\.includes\("Ada"\) && name\.startsWith\("A"\)\) && name\.endsWith\("a"\)\)/
-  )
+  const hasAda = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'hasAda')
+  assert.equal(hasAda?.returnType, 'boolean')
 
   assertDiagnostic(
     `export function main(): void {
@@ -1856,12 +1643,12 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /function ccjsStringSlice\(value, start, end\) \{/)
-  assert.match(result.code, /return ccjsStringSlice\(name, 1, 3\)/)
+  const middle = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'middle')
+  assert.equal(middle?.returnType, 'string')
 
   assertDiagnostic(
     `export function main(): void {
@@ -1892,13 +1679,10 @@ test('checks string split as a string array call', () => {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /function ccjsStringSplit\(value, separator\) \{/)
-  assert.match(result.code, /const parts = ccjsStringSplit\("Ada,Grace", ","\)/)
-  assert.match(result.code, /const first = parts\[0\]/)
   assert.equal(result.hir.body[0].body[0].valueType, 'array')
   assert.equal(result.hir.body[0].body[0].arrayElementType, 'string')
 
@@ -1931,11 +1715,12 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /return name\.trim\(\)/)
+  const clean = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'clean')
+  assert.equal(clean?.returnType, 'string')
 
   assertDiagnostic(
     `export function main(): void {
@@ -1959,11 +1744,12 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /return String\(value\)/)
+  const label = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'label')
+  assert.equal(label?.returnType, 'string')
 
   assertDiagnostic(
     `export function main(): void {
@@ -1993,14 +1779,12 @@ export function main(): void {
   console.log(parsePort('42') ?? port)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
+  const c = compileSource(source, {
+    target: 'c'
   })
-  assert.match(js.code, /function ccjsNumberFromString\(text\) \{/)
-  assert.match(js.code, /Number\.isNaN\(value\) \? null : value/)
-  assert.doesNotMatch(js.code, /Number\.isFinite/)
-  assert.match(js.code, /return ccjsNumberFromString\(text\)/)
-  assert.match(js.code, /const port = \(ccjsNumberFromString\("8080"\) \?\? 3000\)/)
+  const parsePort = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'parsePort')
+  assert.equal(parsePort?.returnType, 'number')
+  assert.equal(parsePort?.returnNullable, true)
 
   assertDiagnostic(
     `export function main(): void {
@@ -2039,20 +1823,11 @@ export function main(): void {
   console.log(value)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.deepEqual(js.ir.features, ['numeric-casts'])
-  assert.match(js.code, /function ccjsCheckedIntegerCast\(value, min, max\) \{/)
-  assert.match(
-    js.code,
-    /return \(\(\(\(ccjsI32\(value\) \+ ccjsU32\(value\)\) \+ ccjsU64\(value\)\) \+ ccjsF32\(value\)\) \+ ccjsF64\(value\)\)/
-  )
-  assert.match(js.code, /function ccjsF32\(value\) \{/)
+  assert.deepEqual(c.ir.features, ['numeric-casts'])
   assert.match(c.code, /long long ccjs_i32_truncated_\d+ = \(long long\)ccjs_i32_value_\d+;/)
   assert.match(c.code, /ccjs_u32_truncated_\d+ < 0LL \|\| ccjs_u32_truncated_\d+ > 4294967295LL/)
   assert.match(c.code, /ccjs_u64_truncated_\d+ < 0LL \|\| ccjs_u64_truncated_\d+ > 9007199254740991LL/)

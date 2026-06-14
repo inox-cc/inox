@@ -1,8 +1,5 @@
 {
   "targets": {
-    "js": {
-      "expect": "pass"
-    },
     "c": {
       "expect": "diagnostic",
       "diagnostic": "CCJS_NOT_IMPLEMENTED"

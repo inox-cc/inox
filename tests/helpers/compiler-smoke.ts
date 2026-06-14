@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { emitCBundleFromIrModules, emitCFromIr } from '../../src/compiler/codegen-c.ts'
-import { emitJsBundleFromIrModules, emitJsFromIr } from '../../src/compiler/codegen-js.ts'
 import { CompileError } from '../../src/compiler/diagnostics.ts'
 import { compileFile, compileSource } from '../../src/compiler/index.ts'
 import {
@@ -30,7 +29,7 @@ assertModule.match = ((actual: string, expected: RegExp, message?: string | Erro
   }
 }) as typeof assertModule.match
 
-export const assert = assertModule
+export const assert: typeof assertModule = assertModule
 
 export {
   CompileError,
@@ -47,8 +46,6 @@ export {
   compileSource,
   emitCBundleFromIrModules,
   emitCFromIr,
-  emitJsBundleFromIrModules,
-  emitJsFromIr,
   findIrEntryProgram,
   join,
   mkdir,
@@ -70,7 +67,7 @@ export function assertDiagnostic(source: string, code: string, options: CompileO
     () => {
       compileSource(source, {
         ...options,
-        target: options.target ?? 'js'
+        target: options.target ?? 'c'
       })
     },
     (error) => {

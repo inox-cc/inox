@@ -81,7 +81,7 @@ await runSnapshotSuite({
   updateCommand: 'node scripts/test-hir-snapshots.ts --update',
   createOutputs: ({ path, source }) => {
     const hir = compileSource(source, {
-      target: 'js',
+      target: 'c',
       callMain: false
     }).hir
 

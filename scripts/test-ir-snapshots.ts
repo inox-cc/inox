@@ -110,7 +110,7 @@ await runSnapshotSuite({
   updateCommand: 'node scripts/test-ir-snapshots.ts --update',
   createOutputs: ({ path, source }) => {
     const ir = compileSource(source, {
-      target: 'js',
+      target: 'c',
       callMain: false
     }).ir
 

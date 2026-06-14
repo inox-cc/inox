@@ -1,4 +1,4 @@
-// @targets js,c
+// @targets c
 // @expect pass
 
 import fs from 'node:fs'

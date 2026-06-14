@@ -30,6 +30,7 @@ import {
   timerRuntimeMethodName
 } from './checker/std/timers.ts'
 import { memberExpressionPath } from './member-paths.ts'
+import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
 import {
   arrayElementTypeNameFromTypeName,
   isBuiltinValueType,
@@ -2026,7 +2027,7 @@ class Checker {
   }
 
   supportsFetchHttps(): boolean {
-    return this.options.target === 'js' || this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
+    return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
   }
 
   checkLibuvOnlyRuntimeImport(statement: AnyNode): void {
@@ -2042,7 +2043,7 @@ class Checker {
   }
 
   requireLibuvBackend(feature: string, loc: SourceLocation): boolean {
-    if (this.options.target !== 'c' || this.options.loopBackend === 'libuv') {
+    if (this.options.loopBackend === 'libuv') {
       return true
     }
 

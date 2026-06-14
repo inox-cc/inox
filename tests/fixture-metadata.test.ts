@@ -3,14 +3,14 @@ import test from 'node:test'
 import { parseFixtureMetadata, parseMetadataList, validateFixtureMetadata } from '../scripts/lib/fixture-metadata.ts'
 
 test('parses fixture metadata header', () => {
-  const result = parseFixtureMetadata(`// @targets c,js
+  const result = parseFixtureMetadata(`// @targets c
 // @features alloc,async
 // @expect pass
 
 console.log('ok')
 `)
 
-  assert.equal(result.metadata.get('targets'), 'c,js')
+  assert.equal(result.metadata.get('targets'), 'c')
   assert.deepEqual(parseMetadataList(result.metadata.get('features') ?? ''), ['alloc', 'async'])
   assert.equal(result.metadata.get('expect'), 'pass')
   assert.equal(result.bodyStartLine, 5)

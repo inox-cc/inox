@@ -3,7 +3,6 @@ import {
   assert,
   assertDiagnostic,
   cLibuvOptions,
-  collectIrFeatureRequirements,
   collectIrFunctionEffects,
   collectIrFunctionNodeEntries,
   collectIrGlobalRoots,
@@ -17,8 +16,6 @@ import {
   CompileError,
   emitCBundleFromIrModules,
   emitCFromIr,
-  emitJsBundleFromIrModules,
-  emitJsFromIr,
   findIrEntryProgram,
   join,
   mkdir,
@@ -28,20 +25,21 @@ import {
   writeFile
 } from './helpers/compiler-smoke.ts'
 
-test('compiles exported main to runnable JS', () => {
+test('compiles exported main to C wrapper', () => {
   const result = compileSource(
     `export function main(): void {
   console.log('hello')
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /export function main\(\)/)
-  assert.match(result.code, /console\.log\("hello"\)/)
-  assert.match(result.code, /await ccjsMainResult/)
+  assert.match(result.code, /void ccjs_main\(void\) \{/)
+  assert.match(result.code, /printf\("%s\\n", "hello"\);/)
+  assert.match(result.code, /int main\(void\) \{/)
+  assert.doesNotMatch(result.code, /int main\(void\) \{[\s\S]*ccjs_main\(\);/)
 })
 
 
@@ -90,14 +88,14 @@ test('parses string literals that look like operators', () => {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /const bang = "!"/)
-  assert.match(result.code, /const plus = "\+"/)
-  assert.match(result.code, /const paren = "\("/)
-  assert.match(result.code, /console\.log\(bang, plus, paren\)/)
+  assert.match(result.code, /const char \*bang = "!";/)
+  assert.match(result.code, /const char \*plus = "\+";/)
+  assert.match(result.code, /const char \*paren = "\(";/)
+  assert.match(result.code, /printf\("%s %s %s\\n", bang, plus, paren\);/)
 })
 
 
@@ -118,22 +116,17 @@ test('emits C for numeric operators', () => {
 })
 
 
-test('treats double equality as strict equality aliases', () => {
+test('treats double equality as C equality aliases', () => {
   const source = `export function main(): void {
   const same = 1 == 1
   const different = 'Ada' != 'Grace'
   console.log(same, different)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.match(js.code, /const same = \(1 === 1\)/)
-  assert.match(js.code, /const different = \("Ada" !== "Grace"\)/)
   assert.match(c.code, /#include <string\.h>/)
   assert.match(c.code, /const double same = \(1 == 1\);/)
   assert.match(c.code, /const double different = \(!\(3 == 5 && memcmp\("Ada", "Grace", 3\) == 0\)\);/)
@@ -703,7 +696,7 @@ test('lowers known C member and index reads inside scalar expressions', () => {
 })
 
 
-test('compiles if else blocks to JS and C', () => {
+test('compiles if else blocks to C', () => {
   const source = `export function main(): void {
   let text = 'no'
 
@@ -716,21 +709,16 @@ test('compiles if else blocks to JS and C', () => {
   console.log(text)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.match(js.code, /if \(\(1 < 2\)\) \{/)
-  assert.match(js.code, /} else \{/)
   assert.match(c.code, /if \(1 < 2\) \{/)
   assert.match(c.code, /text = "yes";/)
 })
 
 
-test('compiles while loops to JS and C', () => {
+test('compiles while loops to C', () => {
   const source = `export function main(): void {
   let index = 0
   let total = 0
@@ -743,14 +731,10 @@ test('compiles while loops to JS and C', () => {
   console.log(total)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.match(js.code, /while \(\(index < 4\)\) \{/)
   assert.match(c.code, /while \(index < 4\) \{/)
   assert.match(c.code, /total = \(total \+ index\);/)
 })
@@ -844,7 +828,7 @@ test('prepares owned C runtime values before rewriting them inside loops', () =>
 })
 
 
-test('compiles continue statements to JS and C', () => {
+test('compiles continue statements to C', () => {
   const source = `export function main(): void {
   let total = 0
 
@@ -859,14 +843,10 @@ test('compiles continue statements to JS and C', () => {
   console.log(total)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.match(js.code, /continue/)
   assert.match(c.code, /goto ccjs_continue_\d+;/)
   assert.match(c.code, /ccjs_continue_\d+:\s*;/)
 })
@@ -904,34 +884,23 @@ export function main(): void {
 })
 
 
-test('checks explicit typed for of bindings in TypeScript source and JS output', () => {
+test('checks explicit typed for of bindings in TypeScript source', () => {
   const source = `type User = {
   readonly id: number,
   name: string
 }
 
 export function main(): void {
-  const users: User[] = [{ id: 1, name: 'Ada' }]
+  const users: string[] = ['Ada']
 
-  for (const user: User of users) {
-    console.log(user.name)
+  for (const user: string of users) {
+    console.log(user)
   }
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-  const jsNoMain = compileSource(source, {
-    target: 'js',
-    callMain: false
-  })
-
-  assert.match(js.code, /for \(const user of users\) \{/)
-  assert.match(jsNoMain.code, /for \(const user of users\) \{/)
   assert.doesNotThrow(() =>
-    compileSource(jsNoMain.code, {
-      target: 'js',
-      callMain: false
+    compileSource(source, {
+      target: 'c'
     })
   )
 
@@ -966,7 +935,7 @@ test('rejects unsupported C for of iterables with a stable diagnostic', () => {
 })
 
 
-test('compiles switch statements to JS and C', () => {
+test('compiles switch statements to C', () => {
   const source = `export function main(): void {
   const code = 2
   let text = 'none'
@@ -985,16 +954,10 @@ test('compiles switch statements to JS and C', () => {
   console.log(text)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.match(js.code, /switch \(code\) \{/)
-  assert.match(js.code, /case 2:/)
-  assert.match(js.code, /break/)
   assert.match(c.code, /switch \(\(int\)code\) \{/)
   assert.match(c.code, /case \(int\)2: \{/)
   assert.match(c.code, /goto ccjs_break_\d+;/)
@@ -1030,7 +993,7 @@ test('rejects var with a stable diagnostic code', () => {
   assert.throws(
     () => {
       compileSource('var value = 1', {
-        target: 'js'
+        target: 'c'
       })
     },
     (error) => {
@@ -1054,12 +1017,12 @@ test('allows assignment to let bindings', () => {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(result.code, /let count = 1/)
-  assert.match(result.code, /count = 2/)
+  assert.match(result.code, /double count = 1;/)
+  assert.match(result.code, /count = 2;/)
 })
 
 
@@ -1096,7 +1059,7 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration')
@@ -1146,7 +1109,7 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
 })
 
 
-test('drives JS main wrappers from function declarations and C main wrappers from top-level statements', () => {
+test('drives C main wrappers from function declarations and top-level statements', () => {
   const functionSource = `export function main(): void {
   console.log('hello')
 }
@@ -1154,19 +1117,10 @@ test('drives JS main wrappers from function declarations and C main wrappers fro
   const topLevelC = compileSource("console.log('hello')\n", {
     target: 'c'
   })
-  const js = compileSource(functionSource, {
-    target: 'js'
-  })
   const c = compileSource(functionSource, {
     target: 'c'
   })
-  const withoutMainDeclaration = {
-    ...js.ir,
-    functionDeclarations: []
-  }
 
-  assert.match(js.code, /const ccjsMainResult = main\(\)/)
-  assert.doesNotMatch(emitJsFromIr(withoutMainDeclaration), /const ccjsMainResult = main\(\)/)
   assert.match(c.code, /void ccjs_main\(void\) \{/)
   assert.doesNotMatch(c.code, /int main\(void\) \{[\s\S]*ccjs_main\(\);/)
   assert.match(topLevelC.code, /int main\(void\) \{[\s\S]*printf\("%s\\n", "hello"\);/)
@@ -1180,35 +1134,21 @@ test('drives JS main wrappers from function declarations and C main wrappers fro
 })
 
 
-test('drives JS and C top-level emission from target-neutral IR top-level items', () => {
+test('drives C top-level emission from target-neutral IR top-level items', () => {
   const source = `const name = 'Ada'
 console.log(name)
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
   const withoutTopLevelItems = {
-    ...js.ir,
+    ...c.ir,
     topLevelItems: []
   }
 
   assert.deepEqual(
-    js.ir.topLevelItems.map((item) => item.kind),
+    c.ir.topLevelItems.map((item) => item.kind),
     ['statement', 'statement']
-  )
-  assert.match(js.code, /const name = "Ada"/)
-  assert.match(js.code, /console\.log\(name\)/)
-  assert.doesNotMatch(emitJsFromIr(withoutTopLevelItems), /const name/)
-  assert.doesNotMatch(emitJsFromIr(withoutTopLevelItems), /console\.log/)
-  assert.doesNotMatch(
-    emitJsFromIr({
-      ...js.ir,
-      body: []
-    }),
-    /const name/
   )
   assert.match(c.code, /printf\("%s\\n", name\);/)
   assert.doesNotMatch(
@@ -1241,7 +1181,7 @@ export function greet(): void {
 const count = 1
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const entries = collectIrTopLevelNodeEntries(result.ir)
@@ -1279,7 +1219,7 @@ export function main(): void {
 }
 `
   const plainJs = compileSource(source, {
-    target: 'js',
+    target: 'c',
     callMain: false
   })
   const withoutTypeItems = {
@@ -1292,13 +1232,8 @@ export function main(): void {
     ['type', 'function']
   )
   assert.doesNotMatch(plainJs.code, /type User = \{/)
-  assert.match(plainJs.code, /export function main\(\) \{/)
-  assert.match(
-    emitJsFromIr(withoutTypeItems, {
-      callMain: false
-    }),
-    /export function main\(\) \{/
-  )
+  assert.match(plainJs.code, /void ccjs_main\(void\) \{/)
+  assert.match(emitCFromIr(withoutTypeItems), /void ccjs_main\(void\) \{/)
 })
 
 
@@ -1309,7 +1244,7 @@ test('collects IR top-level function nodes across stored programs', () => {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const right = compileSource(
@@ -1318,7 +1253,7 @@ test('collects IR top-level function nodes across stored programs', () => {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const functions = collectIrTopLevelNodesFromPrograms([left.ir, right.ir], 'function')
@@ -1346,18 +1281,17 @@ test('collects IR top-level function nodes across stored programs', () => {
 })
 
 
-test('emits single-file JS and C directly from target-neutral IR programs', () => {
+test('emits single-file C directly from target-neutral IR programs', () => {
   const result = compileSource(
     `export function main(): void {
   console.log('hello')
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
-  assert.match(emitJsFromIr(result.ir), /const ccjsMainResult = main\(\)/)
   assert.match(emitCFromIr(result.ir), /void ccjs_main\(void\) \{/)
 })
 
@@ -1389,56 +1323,6 @@ test('collects target-neutral IR feature requirements', () => {
     ['Date.now']
   )
   assert.match(result.code, /#include "ccjs\/time\.h"/)
-})
-
-
-test('drives JS helper prelude from stored target-neutral IR features', () => {
-  const result = compileSource(
-    `export function main(): void {
-  const values = [1]
-  const value = values.pop()
-  const headers: Map<string, string> = new Map()
-  headers['content-type'] = 'application/json'
-  const contentType = headers['content-type']
-
-  console.log(value ?? 0, contentType ?? 'missing')
-}
-`,
-    {
-      target: 'js'
-    }
-  )
-  const storedFeaturesOnly = {
-    ...result.ir,
-    body: [],
-    topLevelItems: []
-  }
-  const withoutFeatures = {
-    ...result.ir,
-    body: [],
-    features: [],
-    topLevelItems: []
-  }
-  const js = emitJsFromIr(storedFeaturesOnly, {
-    callMain: false
-  })
-
-  assert.deepEqual(collectIrFeatureRequirements([storedFeaturesOnly]), [
-    'array-pop-null',
-    'collections',
-    'map-get-null',
-    'map-index-set',
-    'runtime-values'
-  ])
-  assert.match(js, /function ccjsArrayPop\(array\) \{/)
-  assert.match(js, /function ccjsMapGet\(map, key\) \{/)
-  assert.match(js, /function ccjsMapSet\(map, key, value\) \{/)
-  assert.doesNotMatch(
-    emitJsFromIr(withoutFeatures, {
-      callMain: false
-    }),
-    /function ccjs(?:ArrayPop|MapGet|MapSet)/
-  )
 })
 
 
@@ -1510,7 +1394,7 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const main = result.ir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
@@ -1691,7 +1575,7 @@ export function main(): void {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const add = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'add')
@@ -1702,7 +1586,7 @@ export function main(): void {
     add.params.map((param) => param.valueType),
     ['number', 'number']
   )
-  assert.match(result.code, /function add\(left, right\)/)
+  assert.match(result.code, /double add\(double left, double right\)/)
 })
 
 
@@ -1812,7 +1696,7 @@ test('compiles simple optional object member and index access to C', () => {
 })
 
 
-test('compiles optional chaining to JS and rejects it for C', () => {
+test('rejects unsupported C optional chaining forms', () => {
   const source = `function hello(): string {
   return 'called'
 }
@@ -1823,12 +1707,6 @@ export function main(): void {
   console.log(data?.items?.[0]?.name, missing?.items?.[0]?.name, data.hello?.())
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-
-  assert.match(js.code, /data\?\.items\?\.\[0\]\?\.name/)
-  assert.match(js.code, /data\.hello\?\.\(\)/)
   assertDiagnostic(source, 'CCJS_C_OPTIONAL_CHAINING', {
     target: 'c'
   })
@@ -2223,7 +2101,7 @@ export function main(): void {
 })
 
 
-test('compiles unsupported nullish coalescing to JS and rejects it for C', () => {
+test('rejects unsupported C nullish coalescing forms', () => {
   const source = `function printValue(value: unknown): void {
   console.log(value ?? 'Ada')
 }
@@ -2232,18 +2110,13 @@ export function main(): void {
   printValue(1)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-
-  assert.match(js.code, /console\.log\(\(value \?\? "Ada"\)\)/)
   assertDiagnostic(source, 'CCJS_C_NULLISH', {
     target: 'c'
   })
 })
 
 
-test('compiles throw and try catch finally to JS and lowers local string throws to C error channel', () => {
+test('lowers local string throws to C error channel', () => {
   const source = `export function main(): void {
   try {
     throw 'boom'
@@ -2254,15 +2127,6 @@ test('compiles throw and try catch finally to JS and lowers local string throws 
   }
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-
-  assert.match(js.code, /try \{/)
-  assert.match(js.code, /throw "boom"/)
-  assert.match(js.code, /\} catch \(error\) \{/)
-  assert.match(js.code, /\} finally \{/)
-
   const c = compileSource(source, {
     target: 'c'
   })
@@ -2386,7 +2250,7 @@ test('lowers C break and continue through finally before loop flow', () => {
 })
 
 
-test('compiles Error objects to JS and lowers lightweight Error objects to C', () => {
+test('lowers lightweight Error objects to C', () => {
   const source = `export function main(): void {
   const root = new Error('root', { code: 'E_ROOT' })
   const created = new Error('created', { code: 'E_CREATED', cause: root })
@@ -2401,14 +2265,6 @@ test('compiles Error objects to JS and lowers lightweight Error objects to C', (
   }
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-
-  assert.match(js.code, /const thrown = new Error\("boom", \{ code: "E_BOOM", cause: created \}\)/)
-  assert.match(js.code, /throw thrown/)
-  assert.match(js.code, /console\.log\(error\.name, error\.message, error\.code\)/)
-
   const c = compileSource(source, {
     target: 'c'
   })
@@ -2585,20 +2441,13 @@ export function main(): void {
 })
 
 
-test('compiles arrow functions and chain calls to JS and C', () => {
+test('compiles arrow functions and chain calls to C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]
   const result = values.sort((left: number, right: number) => left - right).filter(value => value > 1).map(value => value * 2)
   console.log(result[0], result[1])
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-
-  assert.match(js.code, /\(left, right\) => \(left - right\)/)
-  assert.match(js.code, /value => \(value > 1\)/)
-  assert.match(js.code, /value => \(value \* 2\)/)
   const c = compileSource(source, {
     target: 'c'
   })
@@ -2616,21 +2465,16 @@ test('types and lowers crypto.getRandomValues as a bytes-preserving call', () =>
   console.log(filled.length)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-
-  assert.deepEqual(js.ir.features, ['binary', 'crypto', 'runtime-values', 'string-bytes'])
-  assert.deepEqual(js.ir.runtimeRequirements, ['binary', 'managed-values', 'string-bytes'])
-  assert.deepEqual(
-    js.ir.globalUsages.map((usage) => usage.path.join('.')),
-    ['Buffer.alloc', 'crypto.getRandomValues']
-  )
-  assert.match(js.code, /const filled = crypto\.getRandomValues\(bytes\)/)
-
   const c = compileSource(source, {
     target: 'c'
   })
+
+  assert.deepEqual(c.ir.features, ['binary', 'crypto', 'runtime-values', 'string-bytes'])
+  assert.deepEqual(c.ir.runtimeRequirements, ['binary', 'managed-values', 'string-bytes'])
+  assert.deepEqual(
+    c.ir.globalUsages.map((usage) => usage.path.join('.')),
+    ['Buffer.alloc', 'crypto.getRandomValues']
+  )
 
   assert.match(c.code, /#include <stdint\.h>/)
   assert.match(c.code, /#include "ccjs\/binary\.h"/)
@@ -2690,14 +2534,14 @@ function stripCryptoRuntimeMetadata(node: unknown): void {
 }
 
 
-test('drives JS Node prelude from stored target-neutral IR global roots', () => {
+test('collects runtime global roots from target-neutral IR global usages', () => {
   const result = compileSource(
     `export function main(): void {
   console.log('ok')
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const globalUsages = [
@@ -2714,10 +2558,6 @@ test('drives JS Node prelude from stored target-neutral IR global roots', () => 
       path: ['fs', 'promises', 'readFile']
     }
   ]
-  const code = emitJsFromIr({
-    ...result.ir,
-    globalUsages
-  })
 
   assert.deepEqual(result.ir.globalUsages, [])
   assert.deepEqual(
@@ -2728,8 +2568,6 @@ test('drives JS Node prelude from stored target-neutral IR global roots', () => 
     ]),
     ['fs', 'http']
   )
-  assert.match(code, /import \* as fs from 'node:fs\/promises'/)
-  assert.match(code, /import \* as http from 'node:http'/)
 })
 
 
@@ -2892,8 +2730,10 @@ test('configures C Math.random os backend through compiler options', () => {
 })
 
 
-test('reports JS stdlib globals with a stable C diagnostic', () => {
-  const usages = compileSource(
+test('reports JS stdlib globals with stable C diagnostics', () => {
+  assert.throws(
+    () =>
+      compileSource(
     `import fs from 'node:fs'
 
 export function main(): void {
@@ -2906,23 +2746,20 @@ export function main(): void {
   console.log(text, server, promise)
 }
 `,
-    {
-      target: 'js'
+        {
+          target: 'c',
+          loopBackend: 'libuv'
+        }
+      ),
+    (error) => {
+      if (!(error instanceof CompileError)) {
+        return false
+      }
+
+      assert.equal(error.diagnostics.some((item) => item.code === 'CCJS_C_JS_GLOBAL'), true)
+      return true
     }
   )
-
-  assert.deepEqual([...new Set(usages.ir.globalUsages.map((usage) => usage.root))].sort(), [
-    'Date',
-    'Promise',
-    'fs',
-    'http'
-  ])
-  assert.deepEqual(usages.ir.globalUsages.map((usage) => usage.path.join('.')).sort(), [
-    'Date.parse',
-    'Promise.resolve',
-    'fs.promises.readFile',
-    'http.createServer'
-  ])
 
   for (const source of [
     `export function main(): void {
@@ -3163,7 +3000,7 @@ test('drives C JS global diagnostics from target-neutral IR global usages', () =
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
 
@@ -3230,7 +3067,7 @@ export function main(): void {
     )
 
     const result = await compileFile(join(dir, 'main.ts'), {
-      target: 'js'
+      target: 'c'
     })
 
     assert.match(result.code, /from ts/)

@@ -15,7 +15,7 @@ import {
   collectIrSyntaxFeatureUsages as collectIrSyntaxFeatureUsagesFromFacade,
   lowerHirToIr
 } from '../src/compiler/ir.ts'
-import type { ProgramNode } from '../src/compiler/types.ts'
+import type { IrFeature, IrRuntimeRequirement, ProgramNode } from '../src/compiler/types.ts'
 
 test('collects IR features from runtime-shaped nodes', () => {
   const program: ProgramNode = {
@@ -59,14 +59,14 @@ test('maps and aggregates IR runtime requirements', () => {
     'managed-values'
   ])
 
-  const programs = [
+  const programs: { features: IrFeature[] }[] = [
     { features: ['timers', 'json'] },
     { features: ['json', 'binary'] }
-  ] as const
-  const runtimePrograms = [
+  ]
+  const runtimePrograms: { runtimeRequirements: IrRuntimeRequirement[] }[] = [
     { runtimeRequirements: ['timers', 'async-runtime'] },
     { runtimeRequirements: ['binary', 'timers'] }
-  ] as const
+  ]
 
   assert.deepEqual(collectIrFeatureRequirements(programs), ['binary', 'json', 'timers'])
   assert.deepEqual(collectIrFeatureRequirementsFromFacade(programs), ['binary', 'json', 'timers'])

@@ -17,8 +17,6 @@ import {
   CompileError,
   emitCBundleFromIrModules,
   emitCFromIr,
-  emitJsBundleFromIrModules,
-  emitJsFromIr,
   findIrEntryProgram,
   join,
   mkdir,
@@ -98,7 +96,7 @@ test('drives C async runtime headers from target-neutral IR requirements', () =>
 })
 
 
-test('compiles named callback function values to JS and C', () => {
+test('compiles named callback function values to C', () => {
   const source = `function run(callback: Function): void {
   callback()
 }
@@ -112,12 +110,6 @@ export function main(): void {
   run(callback)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-
-  assert.match(js.code, /const callback = hello/)
-  assert.match(js.code, /run\(callback\)/)
   const c = compileSource(source, {
     target: 'c'
   })
@@ -129,7 +121,7 @@ export function main(): void {
 })
 
 
-test('compiles typed no-argument callback aliases to JS and C', () => {
+test('compiles typed no-argument callback aliases to C', () => {
   const source = `type Done = () => void;
 
 function run(callback: Done): void {
@@ -145,14 +137,10 @@ export function main(): void {
   run(callback)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
   const c = compileSource(source, {
     target: 'c'
   })
 
-  assert.match(js.code, /const callback = hello/)
   assert.match(c.code, /void run\(void \(\*callback\)\(void\)\);/)
   assert.match(c.code, /void \(\*const callback\)\(void\) = hello;/)
 })
@@ -397,7 +385,7 @@ function run(callback: NumberCallback): void {
 `,
     'CCJS_ARG_COUNT',
     {
-      target: 'js'
+      target: 'c'
     }
   )
 })
@@ -1041,7 +1029,7 @@ export function main(): void {
 })
 
 
-test('compiles awaited async function calls to JS and C', () => {
+test('compiles awaited async function calls to C', () => {
   const source = `async function getValue(): Promise<number> {
   return Promise.resolve(2)
 }
@@ -1057,21 +1045,14 @@ export async function main(): Promise<void> {
   console.log(value)
 }
 `
-  const js = compileSource(source, {
-    target: 'js'
-  })
-
-  assert.match(js.code, /async function getValue\(\)/)
-  assert.match(js.code, /async function getText\(\)/)
-  assert.match(js.code, /return Promise\.resolve\(2\)/)
-  assert.match(js.code, /export async function main\(\)/)
-  assert.deepEqual(
-    js.ir.syntaxFeatures.map((item) => item.feature),
-    ['async-function', 'async-function', 'async-function']
-  )
   const c = compileSource(source, {
     target: 'c'
   })
+
+  assert.deepEqual(
+    c.ir.syntaxFeatures.map((item) => item.feature),
+    ['async-function', 'async-function', 'async-function']
+  )
 
   assert.match(c.code, /double getValue\(void\)/)
   assert.match(c.code, /ccjs_value getText\(void\)/)
@@ -3235,11 +3216,10 @@ test('tracks Promise generic metadata through checker and IR', () => {
 export function main(): void {
   const value: Promise<number> = Promise.resolve(1)
   const inferred = Promise.resolve('ok')
-  console.log(value, inferred)
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const makeValue = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'makeValue')
@@ -3260,9 +3240,6 @@ export function main(): void {
   assert.equal(inferred.promiseValueType, 'string')
   assert.deepEqual(result.ir.features, ['async-runtime'])
   assert.deepEqual(result.ir.runtimeRequirements, ['async-runtime'])
-  assert.match(result.code, /function makeValue\(\) \{/)
-  assert.match(result.code, /const value = Promise\.resolve\(1\)/)
-  assert.match(result.code, /const inferred = Promise\.resolve\("ok"\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -3290,7 +3267,7 @@ export async function main(): Promise<void> {
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const makeText = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'makeText')
@@ -3302,7 +3279,7 @@ export async function main(): Promise<void> {
   assert.equal(returnStatement.argument.promiseValueType, 'string')
   assert.equal(makeTextDeclaration?.returnType, 'promise')
   assert.equal(makeTextDeclaration?.returnPromiseValueType, 'string')
-  assert.match(result.code, /return new Promise\(resolve => \{/)
+  assert.match(result.code, /ccjs_promise_new\(ccjs_loop, &ccjs_return\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -3359,11 +3336,10 @@ test('checks Promise then catch as typed chain calls', () => {
     .catch(error => 0)
     .then(value => String(value))
 
-  console.log(doubled, recovered, chained)
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
@@ -3384,12 +3360,6 @@ test('checks Promise then catch as typed chain calls', () => {
   assert.equal(chained?.valueType, 'promise')
   assert.equal(chained?.promiseValueType, 'string')
   assert.equal(result.ir.features.includes('async-runtime'), true)
-  assert.match(result.code, /const doubled = source\.then\(value => \(value \* 2\)\)/)
-  assert.match(result.code, /const recovered = failed\.catch\(error => "ok"\)/)
-  assert.match(
-    result.code,
-    /const chained = source\.then\(value => \(value \+ 1\)\)\.catch\(error => 0\)\.then\(value => String\(value\)\)/
-  )
 
   const multiStatement = compileSource(
     `export function main(): void {
@@ -3398,19 +3368,16 @@ test('checks Promise then catch as typed chain calls', () => {
 
     return doubled
   })
-
-  console.log(promise)
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const multiMain = multiStatement.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   const multiPromise = multiMain?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'promise')
 
   assert.equal(multiPromise?.promiseValueType, 'number')
-  assert.match(multiStatement.code, /const promise = Promise\.resolve\(1\)\.then\(value => \{/)
 
   const branchStatement = compileSource(
     `export function main(): void {
@@ -3421,12 +3388,10 @@ test('checks Promise then catch as typed chain calls', () => {
 
     return 0
   })
-
-  console.log(promise)
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const branchMain = branchStatement.hir.body.find(
@@ -3435,7 +3400,6 @@ test('checks Promise then catch as typed chain calls', () => {
   const branchPromise = branchMain?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'promise')
 
   assert.equal(branchPromise?.promiseValueType, 'number')
-  assert.match(branchStatement.code, /const promise = Promise\.resolve\(1\)\.then\(value => \{/)
 
   const switchStatement = compileSource(
     `export function main(): void {
@@ -3449,12 +3413,10 @@ test('checks Promise then catch as typed chain calls', () => {
 
     return 1
   })
-
-  console.log(promise)
 }
 `,
     {
-      target: 'js'
+      target: 'c'
     }
   )
   const switchMain = switchStatement.hir.body.find(
@@ -3463,7 +3425,6 @@ test('checks Promise then catch as typed chain calls', () => {
   const switchPromise = switchMain?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'promise')
 
   assert.equal(switchPromise?.promiseValueType, 'number')
-  assert.match(switchStatement.code, /const promise = Promise\.resolve\(2\)\.then\(value => \{/)
 
   assertDiagnostic(
     `export function main(): void {

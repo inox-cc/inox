@@ -1,4 +1,4 @@
-// @targets js
+// @targets c
 // @expect diagnostic
 // @diagnostic CCJS_UNKNOWN_EXPORT
 

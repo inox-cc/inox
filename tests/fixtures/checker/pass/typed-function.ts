@@ -1,4 +1,4 @@
-// @targets js,c
+// @targets c
 // @expect pass
 
 function add(left: number, right: number): number {

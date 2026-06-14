@@ -3,7 +3,7 @@ import { CompileError, diagnostic } from './diagnostics.ts'
 import { collectIrGlobalUsages } from './ir.ts'
 import { cryptoRuntimeMethodNameFromPath } from './stdlib/descriptors/crypto.ts'
 import { timeRuntimeCapabilityFromPath } from './stdlib/descriptors/time.ts'
-import { timerRuntimeMethods } from './stdlib/descriptors/timers.ts'
+import { isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
 import type {
   AnyNode,
   CompileOptions,
@@ -23,8 +23,6 @@ type CapabilityUsage = RequiredCapability & {
   loc?: SourceLocation
   path: string
 }
-
-const timerGlobals = new Set(timerRuntimeMethods)
 
 export function checkCProfileCapabilities(programs: IrProgram[], options: CompileOptions): void {
   if (options.profile !== 'embedded') {
@@ -139,7 +137,7 @@ function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapabil
     }
   }
 
-  if (timerGlobals.has(path)) {
+  if (isTimerRuntimeMethod(path)) {
     return {
       key: 'timers',
       name: 'timers'

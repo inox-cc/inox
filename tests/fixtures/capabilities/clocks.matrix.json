@@ -1,8 +1,5 @@
 {
   "targets": {
-    "js": {
-      "expect": "pass"
-    },
     "c": {
       "expect": "pass"
     }

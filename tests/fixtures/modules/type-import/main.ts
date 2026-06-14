@@ -1,4 +1,4 @@
-// @targets js,c
+// @targets c
 // @expect pass
 
 import type { User as Person } from './types.ts'

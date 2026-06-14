@@ -17,8 +17,6 @@ import {
   CompileError,
   emitCBundleFromIrModules,
   emitCFromIr,
-  emitJsBundleFromIrModules,
-  emitJsFromIr,
   findIrEntryProgram,
   join,
   mkdir,
@@ -681,21 +679,20 @@ server.listen(8080, '127.0.0.1', () => {
 })
 
 
-test('injects Node http prelude when http is referenced', () => {
+test('collects node:http global usages when http is referenced', () => {
   const result = compileSource(
-    `export function main(): void {
+    `import http from 'node:http'
+
+export function main(): void {
   const server = http.createServer((request, response) => {
     response.end('ok')
   })
   server.close()
 }
 `,
-    {
-      target: 'js'
-    }
+    cLibuvOptions
   )
 
-  assert.match(result.code, /import \* as http from 'node:http'/)
   assert.deepEqual(
     result.ir.globalUsages.map((usage) => usage.root),
     ['http']
@@ -704,11 +701,5 @@ test('injects Node http prelude when http is referenced', () => {
     result.ir.globalUsages.map((usage) => usage.path.join('.')),
     ['http.createServer']
   )
-
-  const withoutGlobalUsage = emitJsFromIr({
-    ...result.ir,
-    globalUsages: []
-  })
-
-  assert.doesNotMatch(withoutGlobalUsage, /import \* as http from 'node:http'/)
+  assert.deepEqual(collectIrGlobalRoots([result.ir]), ['http'])
 })

@@ -44,7 +44,7 @@ async function checkFixtureCompile(file: string, source: string, metadata: Map<s
   const rel = relative(rootDir, file)
   const expectation = metadata.get('expect')
   const diagnostic = metadata.get('diagnostic')
-  const targets = parseMetadataList(metadata.get('targets') ?? 'js')
+  const targets = parseMetadataList(metadata.get('targets') ?? 'c')
 
   for (const target of targets) {
     try {
@@ -107,10 +107,6 @@ async function checkFixtureStdout(file: string, rel: string, target: CompileTarg
 }
 
 async function canRunTarget(target: CompileTarget): Promise<boolean> {
-  if (target !== 'c') {
-    return true
-  }
-
   if (cRunnerAvailable == null) {
     try {
       cRunnerAvailable = (await runCommand('cc', ['--version'])).code === 0

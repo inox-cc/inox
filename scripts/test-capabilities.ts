@@ -125,7 +125,7 @@ function parseMatrix(source: string, rel: string): CapabilityMatrix {
 }
 
 function isCompileTarget(value: string): value is CompileTarget {
-  return value === 'c' || value === 'js'
+  return value === 'c'
 }
 
 function validateCompileOptions(value: unknown, rel: string, target: string): void {

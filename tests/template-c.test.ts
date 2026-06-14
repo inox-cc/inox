@@ -184,7 +184,7 @@ function assertDiagnostic(source: string, code: string, options: { target?: Comp
   assert.throws(
     () => {
       compileSource(source, {
-        target: options.target ?? 'js'
+        target: options.target ?? 'c'
       })
     },
     (error) => {

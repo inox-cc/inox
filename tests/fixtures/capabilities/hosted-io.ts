@@ -1,7 +1,8 @@
-// @targets js
+// @targets c
 // @platforms hosted,node
 // @features fetch,fs,http,timers
-// @expect pass
+// @expect diagnostic
+// @diagnostic CCJS_NOT_IMPLEMENTED
 
 import fs from 'node:fs'
 
