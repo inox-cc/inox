@@ -46,6 +46,14 @@ typedef ccjs_status (*ccjs_fs_access_fn)(void* user, const char* path, size_t pa
 typedef ccjs_status (*ccjs_fs_mkdir_fn)(void* user, const char* path, size_t path_len, bool recursive);
 typedef ccjs_status (*ccjs_fs_unlink_fn)(void* user, const char* path, size_t path_len);
 typedef ccjs_status (*ccjs_fs_rm_fn)(void* user, const char* path, size_t path_len, bool recursive, bool force);
+typedef ccjs_status (*ccjs_fs_append_file_fn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
+typedef ccjs_status (*ccjs_fs_copy_file_fn)(
+  void* user,
+  const char* src_path,
+  size_t src_path_len,
+  const char* dest_path,
+  size_t dest_path_len
+);
 typedef ccjs_status (*ccjs_fs_rename_fn)(
   void* user,
   const char* old_path,
@@ -67,6 +75,8 @@ typedef struct ccjs_fs_adapter {
   ccjs_fs_mkdir_fn mkdir;
   ccjs_fs_unlink_fn unlink;
   ccjs_fs_rm_fn rm;
+  ccjs_fs_append_file_fn append_file;
+  ccjs_fs_copy_file_fn copy_file;
   ccjs_fs_rename_fn rename;
 } ccjs_fs_adapter;
 
@@ -82,6 +92,9 @@ ccjs_status ccjs_fs_access_sync(const char* path, size_t path_len, int mode);
 ccjs_status ccjs_fs_mkdir_sync(const char* path, size_t path_len, bool recursive);
 ccjs_status ccjs_fs_unlink_sync(const char* path, size_t path_len);
 ccjs_status ccjs_fs_rm_sync(const char* path, size_t path_len, bool recursive, bool force);
+ccjs_status ccjs_fs_append_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len);
+ccjs_status ccjs_fs_append_file_bytes_sync(const char* path, size_t path_len, ccjs_value bytes);
+ccjs_status ccjs_fs_copy_file_sync(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len);
 ccjs_status ccjs_fs_rename_sync(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len);
 ccjs_status ccjs_fs_write_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len);
 ccjs_status ccjs_fs_write_file_bytes_sync(const char* path, size_t path_len, ccjs_value bytes);
@@ -94,6 +107,17 @@ ccjs_status ccjs_fs_access(ccjs_loop* loop, const char* path, size_t path_len, i
 ccjs_status ccjs_fs_mkdir(ccjs_loop* loop, const char* path, size_t path_len, bool recursive, ccjs_promise** out);
 ccjs_status ccjs_fs_unlink(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out);
 ccjs_status ccjs_fs_rm(ccjs_loop* loop, const char* path, size_t path_len, bool recursive, bool force, ccjs_promise** out);
+ccjs_status
+ccjs_fs_append_file(ccjs_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, ccjs_promise** out);
+ccjs_status ccjs_fs_append_file_bytes(ccjs_loop* loop, const char* path, size_t path_len, ccjs_value bytes, ccjs_promise** out);
+ccjs_status ccjs_fs_copy_file(
+  ccjs_loop* loop,
+  const char* src_path,
+  size_t src_path_len,
+  const char* dest_path,
+  size_t dest_path_len,
+  ccjs_promise** out
+);
 ccjs_status
 ccjs_fs_rename(ccjs_loop* loop, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len, ccjs_promise** out);
 ccjs_status

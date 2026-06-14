@@ -66,6 +66,8 @@ async function checkLibuvFsRuntime(workDir: string): Promise<void> {
   const mutationInput = join(dataDir, 'mutation-input.txt')
   const mutationRenamed = join(dataDir, 'mutation-renamed.txt')
   const mutationMissing = join(dataDir, 'mutation-missing.txt')
+  const appendText = join(dataDir, 'append.txt')
+  const appendTextCopy = join(dataDir, 'append-copy.txt')
   const byteData = Buffer.from([0, 1, 2, 3, 250, 255])
 
   await mkdir(sourceDir, { recursive: true })
@@ -73,6 +75,7 @@ async function checkLibuvFsRuntime(workDir: string): Promise<void> {
   await writeFile(textInput, 'uv text')
   await writeFile(bytesInput, byteData)
   await writeFile(mutationInput, 'uv mutation')
+  await writeFile(appendText, 'uv')
   await writeFile(join(entriesDir, 'alpha.txt'), '')
   await writeFile(join(entriesDir, 'beta.txt'), '')
   await writeFile(
@@ -164,6 +167,8 @@ int main(void) {
   if (ccjs_fs_unlink_sync(${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}) != CCJS_OK) return 34;
   if (ccjs_fs_rm_sync(${JSON.stringify(mutationRoot)}, ${Buffer.byteLength(mutationRoot)}, true, true) != CCJS_OK) return 35;
   if (ccjs_fs_rm_sync(${JSON.stringify(mutationMissing)}, ${Buffer.byteLength(mutationMissing)}, false, true) != CCJS_OK) return 36;
+  if (ccjs_fs_append_file_sync(${JSON.stringify(appendText)}, ${Buffer.byteLength(appendText)}, " append", 7) != CCJS_OK) return 37;
+  if (ccjs_fs_copy_file_sync(${JSON.stringify(appendText)}, ${Buffer.byteLength(appendText)}, ${JSON.stringify(appendTextCopy)}, ${Buffer.byteLength(appendTextCopy)}) != CCJS_OK) return 38;
   if (ccjs_fs_read_file(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, &read_text) != CCJS_OK) return 3;
   if (ccjs_fs_write_file(&loop, ${JSON.stringify(textOutput)}, ${Buffer.byteLength(textOutput)}, "uv saved", 8, &write_text) != CCJS_OK) return 4;
   if (ccjs_fs_read_dir(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &read_entries) != CCJS_OK) return 5;
@@ -239,6 +244,7 @@ int main(void) {
 
   const textOutputValue = await readFile(textOutput, 'utf8')
   const bytesOutputValue = await readFile(bytesOutput)
+  const appendTextCopyValue = await readFile(appendTextCopy, 'utf8')
 
   if (textOutputValue !== 'uv saved') {
     console.error(`Libuv fs smoke text output mismatch: ${JSON.stringify(textOutputValue)}`)
@@ -247,6 +253,11 @@ int main(void) {
 
   if (!bytesOutputValue.equals(Buffer.from([9, 8, 7, 6, 5, 4]))) {
     console.error(`Libuv fs smoke bytes output mismatch: ${JSON.stringify([...bytesOutputValue])}`)
+    process.exit(1)
+  }
+
+  if (appendTextCopyValue !== 'uv append') {
+    console.error(`Libuv fs smoke append/copy output mismatch: ${JSON.stringify(appendTextCopyValue)}`)
     process.exit(1)
   }
 

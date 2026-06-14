@@ -173,6 +173,8 @@ function emitJsPrelude(programs: IrProgram[], options: JsEmitOptions = {}): stri
 function isFsPromiseUsagePath(path: string): boolean {
   return [
     'fs.promises.access',
+    'fs.promises.appendFile',
+    'fs.promises.copyFile',
     'fs.promises.lstat',
     'fs.promises.mkdir',
     'fs.promises.readFile',
@@ -189,6 +191,8 @@ function isFsSyncUsagePath(path: string): boolean {
   return (
     [
       'fs.accessSync',
+      'fs.appendFileSync',
+      'fs.copyFileSync',
       'fs.lstatSync',
       'fs.mkdirSync',
       'fs.readFileSync',
@@ -206,6 +210,9 @@ function isFsSyncUsagePath(path: string): boolean {
 function isFsPromiseRuntimeMethod(method: string): boolean {
   return [
     'access',
+    'appendFile',
+    'appendFileBytes',
+    'copyFile',
     'lstat',
     'mkdir',
     'readFile',
@@ -223,6 +230,9 @@ function isFsPromiseRuntimeMethod(method: string): boolean {
 function isFsSyncRuntimeMethod(method: string): boolean {
   return [
     'accessSync',
+    'appendFileBytesSync',
+    'appendFileSync',
+    'copyFileSync',
     'lstatSync',
     'mkdirSync',
     'readFileBytesSync',
@@ -879,6 +889,12 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
     return `fs.access(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
+  if (['appendFile', 'appendFileBytes', 'copyFile'].includes(expression.fsRuntimeMethod ?? '')) {
+    const method = expression.fsRuntimeMethod === 'appendFileBytes' ? 'appendFile' : expression.fsRuntimeMethod
+
+    return `fs.${method}(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
+  }
+
   if (['mkdir', 'rename', 'rm', 'unlink'].includes(expression.fsRuntimeMethod ?? '')) {
     return `fs.${expression.fsRuntimeMethod}(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
@@ -914,6 +930,12 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
 
   if (expression.fsRuntimeMethod === 'accessSync') {
     return `ccjsFsSync.accessSync(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
+  }
+
+  if (['appendFileSync', 'appendFileBytesSync', 'copyFileSync'].includes(expression.fsRuntimeMethod ?? '')) {
+    const method = expression.fsRuntimeMethod === 'appendFileBytesSync' ? 'appendFileSync' : expression.fsRuntimeMethod
+
+    return `ccjsFsSync.${method}(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   if (['mkdirSync', 'renameSync', 'rmSync', 'unlinkSync'].includes(expression.fsRuntimeMethod ?? '')) {

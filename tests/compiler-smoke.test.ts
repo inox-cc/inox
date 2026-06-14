@@ -7079,6 +7079,70 @@ export function main(): void {
   )
 })
 
+test('lowers Node fs append and copy helpers to the fs runtime', () => {
+  const js = compileSource(
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  await fs.promises.appendFile('/tmp/log.txt', 'a')
+  await fs.promises.copyFile('/tmp/log.txt', '/tmp/log.copy.txt')
+  fs.appendFileSync('/tmp/sync-log.txt', 'b')
+  fs.copyFileSync('/tmp/sync-log.txt', '/tmp/sync-log.copy.txt')
+}
+`,
+    {
+      target: 'js'
+    }
+  )
+
+  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
+  assert.match(js.code, /import \* as ccjsFsSync from 'node:fs'/)
+  assert.match(js.code, /await fs\.appendFile\("\/tmp\/log\.txt", "a"\)/)
+  assert.match(js.code, /await fs\.copyFile\("\/tmp\/log\.txt", "\/tmp\/log\.copy\.txt"\)/)
+  assert.match(js.code, /ccjsFsSync\.appendFileSync\("\/tmp\/sync-log\.txt", "b"\)/)
+  assert.match(js.code, /ccjsFsSync\.copyFileSync\("\/tmp\/sync-log\.txt", "\/tmp\/sync-log\.copy\.txt"\)/)
+
+  const c = compileSource(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const bytes = fs.readFileSync('/tmp/value.bin')
+  const appendPromise = fs.promises.appendFile('/tmp/out.bin', bytes)
+  fs.promises.copyFile('/tmp/out.bin', '/tmp/log.copy.txt')
+  fs.appendFileSync('/tmp/sync.bin', bytes)
+  fs.copyFileSync('/tmp/sync.bin', '/tmp/sync-log.copy.txt')
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const appendPromise = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'appendPromise')
+
+  assert.equal(appendPromise?.valueType, 'promise')
+  assert.equal(appendPromise?.promiseValueType, 'void')
+  assert.equal(appendPromise?.init?.fsRuntimeMethod, 'appendFileBytes')
+  assert.match(c.code, /ccjs_fs_read_file_bytes_sync\(&ccjs_default_allocator, "\/tmp\/value\.bin", 14, &ccjs_fs_value_\d+\)/)
+  assert.match(c.code, /ccjs_fs_append_file_bytes\(&ccjs_loop, "\/tmp\/out\.bin", 12, bytes, &appendPromise\)/)
+  assert.match(
+    c.code,
+    /ccjs_fs_copy_file\(&ccjs_loop, "\/tmp\/out\.bin", 12, "\/tmp\/log\.copy\.txt", 17, &ccjs_promise_\d+\)/
+  )
+  assert.match(c.code, /ccjs_fs_append_file_bytes_sync\("\/tmp\/sync\.bin", 13, bytes\)/)
+  assert.match(c.code, /ccjs_fs_copy_file_sync\("\/tmp\/sync\.bin", 13, "\/tmp\/sync-log\.copy\.txt", 22\)/)
+
+  assertDiagnostic(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  fs.promises.copyFile('/tmp/a', '/tmp/b', 1)
+}
+`,
+    'CCJS_ARG_COUNT'
+  )
+})
+
 test('lowers node:fs/promises imports to the fs runtime', () => {
   const js = compileSource(
     `import fs from 'node:fs/promises'

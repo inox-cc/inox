@@ -2096,6 +2096,8 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'Promise.resolve' ||
     path === 'Promise.reject' ||
     path === 'fs.promises.access' ||
+    path === 'fs.promises.appendFile' ||
+    path === 'fs.promises.copyFile' ||
     path === 'fs.promises.lstat' ||
     path === 'fs.promises.mkdir' ||
     path === 'fs.promises.readFile' ||
@@ -2106,6 +2108,8 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'fs.promises.unlink' ||
     path === 'fs.promises.writeFile' ||
     path === 'fs.accessSync' ||
+    path === 'fs.appendFileSync' ||
+    path === 'fs.copyFileSync' ||
     path === 'fs.lstatSync' ||
     path === 'fs.mkdirSync' ||
     path === 'fs.readFileSync' ||
@@ -3382,6 +3386,9 @@ function isAsyncFsRuntimeCallExpression(expression) {
     expression?.valueType === 'promise' &&
     [
       'access',
+      'appendFile',
+      'appendFileBytes',
+      'copyFile',
       'lstat',
       'mkdir',
       'readFile',
@@ -3814,6 +3821,28 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
 
     lines.push(...mode.lines)
     lines.push(`status = ccjs_fs_access(ccjs_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`)
+  } else if (method === 'appendFileBytes') {
+    const bytes = emitCValueExpression(expression.args[1], context)
+
+    lines.push(...bytes.lines)
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(
+      `status = ccjs_fs_append_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
+    )
+  } else if (method === 'appendFile') {
+    const bytes = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+
+    lines.push(...bytes.lines)
+    lines.push(
+      `status = ccjs_fs_append_file(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
+    )
+  } else if (method === 'copyFile') {
+    const destPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_dest_path')
+
+    lines.push(...destPath.lines)
+    lines.push(
+      `status = ccjs_fs_copy_file(ccjs_loop, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &frame->awaited);`
+    )
   } else if (method === 'mkdir') {
     lines.push(`status = ccjs_fs_mkdir(ccjs_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &frame->awaited);`)
   } else if (method === 'unlink') {
@@ -13185,7 +13214,18 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
       context,
       out,
       expression.promiseValueType ??
-        (['access', 'mkdir', 'rename', 'rm', 'unlink', 'writeFile', 'writeFileBytes'].includes(method)
+        ([
+          'access',
+          'appendFile',
+          'appendFileBytes',
+          'copyFile',
+          'mkdir',
+          'rename',
+          'rm',
+          'unlink',
+          'writeFile',
+          'writeFileBytes'
+        ].includes(method)
           ? 'void'
           : method === 'readDir'
             ? 'array'
@@ -13267,6 +13307,61 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
     lines.push(
       emitStatusCheck(
         `ccjs_fs_access(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${mode.expression}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'appendFileBytes') {
+    const bytes = emitCValueExpression(expression.args[1], context)
+
+    lines.push(...bytes.lines)
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_append_file_bytes(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.expression}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'appendFile') {
+    const bytes = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+
+    lines.push(...bytes.lines)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_append_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'copyFile') {
+    const destPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_dest_path')
+
+    lines.push(...destPath.lines)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_copy_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &${out})`,
         context
       )
     )
@@ -13418,7 +13513,18 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
 
   if (
     method == null ||
-    !['accessSync', 'mkdirSync', 'renameSync', 'rmSync', 'unlinkSync', 'writeFileBytesSync', 'writeFileSync'].includes(method)
+    ![
+      'accessSync',
+      'appendFileBytesSync',
+      'appendFileSync',
+      'copyFileSync',
+      'mkdirSync',
+      'renameSync',
+      'rmSync',
+      'unlinkSync',
+      'writeFileBytesSync',
+      'writeFileSync'
+    ].includes(method)
   ) {
     return null
   }
@@ -13431,6 +13537,46 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
 
     lines.push(...mode.lines)
     lines.push(emitStatusCheck(`ccjs_fs_access_sync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
+
+    return {
+      lines
+    }
+  }
+
+  if (method === 'appendFileBytesSync') {
+    const bytes = emitCValueExpression(expression.args[1], context)
+
+    lines.push(...bytes.lines)
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(
+      emitStatusCheck(`ccjs_fs_append_file_bytes_sync(${path.bytes}, ${path.length}, ${bytes.expression})`, context)
+    )
+
+    return {
+      lines
+    }
+  }
+
+  if (method === 'appendFileSync') {
+    const bytes = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+
+    lines.push(...bytes.lines)
+    lines.push(
+      emitStatusCheck(`ccjs_fs_append_file_sync(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`, context)
+    )
+
+    return {
+      lines
+    }
+  }
+
+  if (method === 'copyFileSync') {
+    const destPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_dest_path')
+
+    lines.push(...destPath.lines)
+    lines.push(
+      emitStatusCheck(`ccjs_fs_copy_file_sync(${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length})`, context)
+    )
 
     return {
       lines
@@ -17808,7 +17954,19 @@ function cFsRuntimeCallName(callee) {
       return 'readDir'
     }
 
-    return ['access', 'lstat', 'mkdir', 'readFile', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(path[2])
+    return [
+      'access',
+      'appendFile',
+      'copyFile',
+      'lstat',
+      'mkdir',
+      'readFile',
+      'rename',
+      'rm',
+      'stat',
+      'unlink',
+      'writeFile'
+    ].includes(path[2])
       ? path[2]
       : null
   }
@@ -17827,6 +17985,8 @@ function cFsRuntimeCallName(callee) {
 
   return [
     'accessSync',
+    'appendFileSync',
+    'copyFileSync',
     'lstatSync',
     'mkdirSync',
     'readFileSync',

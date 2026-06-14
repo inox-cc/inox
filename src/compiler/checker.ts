@@ -2250,6 +2250,37 @@ class Checker {
       return 'void'
     }
 
+    if (method === 'appendFileSync') {
+      if (expression.args.length < 2 || expression.args.length > 3) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 2 or 3 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      this.checkFsStringArg(expression, 0)
+      expression.fsRuntimeMethod = this.checkFsWriteDataArg(expression, 1, `${label} data`, 'appendFileSync')
+      this.checkUtf8EncodingArg(expression, 2, label)
+
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
+    if (method === 'copyFileSync') {
+      if (expression.args.length !== 2) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsStringArg(expression, 1)
+      expression.fsRuntimeMethod = 'copyFileSync'
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
     if (method === 'readFile') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
@@ -2399,6 +2430,39 @@ class Checker {
       return 'promise'
     }
 
+    if (method === 'appendFile') {
+      if (expression.args.length < 2 || expression.args.length > (promisesApi ? 3 : 2)) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects ${promisesApi ? '2 or 3' : '2'} argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      this.checkFsStringArg(expression, 0)
+      expression.fsRuntimeMethod = this.checkFsWriteDataArg(expression, 1, `${label} data`, 'appendFile')
+      this.checkUtf8EncodingArg(expression, 2, label)
+
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'void'
+
+      return 'promise'
+    }
+
+    if (method === 'copyFile') {
+      if (expression.args.length !== 2) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsStringArg(expression, 1)
+      expression.fsRuntimeMethod = 'copyFile'
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'void'
+
+      return 'promise'
+    }
+
     if (expression.args.length < 2 || expression.args.length > (promisesApi ? 3 : 2)) {
       this.report(
         'CCJS_ARG_COUNT',
@@ -2447,7 +2511,15 @@ class Checker {
     const type = this.checkExpression(arg)
 
     if (type === 'bytes') {
-      return textMethod === 'writeFileSync' ? 'writeFileBytesSync' : 'writeFileBytes'
+      if (textMethod === 'writeFileSync') {
+        return 'writeFileBytesSync'
+      }
+
+      if (textMethod === 'appendFileSync') {
+        return 'appendFileBytesSync'
+      }
+
+      return textMethod === 'appendFile' ? 'appendFileBytes' : 'writeFileBytes'
     }
 
     this.checkAssignableType(type, 'string', arg.loc, false, this.expressionCanBeNull(arg))
@@ -5145,7 +5217,20 @@ function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
   if (path.length === 3 && path[1] === 'promises') {
     const method = nodeName === 'readdir' ? 'readDir' : nodeName
 
-    return ['access', 'lstat', 'mkdir', 'readFile', 'readDir', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(method)
+    return [
+      'access',
+      'appendFile',
+      'copyFile',
+      'lstat',
+      'mkdir',
+      'readFile',
+      'readDir',
+      'rename',
+      'rm',
+      'stat',
+      'unlink',
+      'writeFile'
+    ].includes(method)
       ? {
           method,
           nodeName,
@@ -5174,6 +5259,10 @@ function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
             'readDirSync',
             'access',
             'accessSync',
+            'appendFile',
+            'appendFileSync',
+            'copyFile',
+            'copyFileSync',
             'lstat',
             'lstatSync',
             'mkdir',
@@ -5206,7 +5295,11 @@ function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
 }
 
 function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promisesApi: boolean): string | null {
-  if (['readFileBytes', 'readFileBytesSync', 'writeFileBytes', 'writeFileBytesSync'].includes(info.method)) {
+  if (
+    ['appendFileBytes', 'appendFileBytesSync', 'readFileBytes', 'readFileBytesSync', 'writeFileBytes', 'writeFileBytesSync'].includes(
+      info.method
+    )
+  ) {
     return `function ${info.path.join('.')} is not part of Node fs; use fs.promises.readFile/writeFile or fs.readFileSync/writeFileSync`
   }
 
@@ -5222,7 +5315,12 @@ function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promisesApi:
     return `function ${info.path.join('.')} is not part of Node fs; use fs.readdirSync`
   }
 
-  if (['access', 'lstat', 'mkdir', 'readFile', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(info.method) && !promisesApi) {
+  if (
+    ['access', 'appendFile', 'copyFile', 'lstat', 'mkdir', 'readFile', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(
+      info.method
+    ) &&
+    !promisesApi
+  ) {
     return `Node ${info.path.join('.')} callback API is not supported yet; use fs.promises.${info.method}`
   }
 

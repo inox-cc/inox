@@ -1394,7 +1394,20 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
   }
 
   if (path.length === 3 && path[1] === 'promises') {
-    return ['access', 'lstat', 'mkdir', 'readFile', 'readdir', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(path[2])
+    return [
+      'access',
+      'appendFile',
+      'copyFile',
+      'lstat',
+      'mkdir',
+      'readFile',
+      'readdir',
+      'rename',
+      'rm',
+      'stat',
+      'unlink',
+      'writeFile'
+    ].includes(path[2])
       ? path.join('.')
       : null
   }
@@ -1405,6 +1418,8 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
 
   return [
     'accessSync',
+    'appendFileSync',
+    'copyFileSync',
     'lstatSync',
     'mkdirSync',
     'readFileSync',
@@ -1420,8 +1435,12 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
 }
 
 function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
-  if (['access', 'lstat', 'mkdir', 'rename', 'rm', 'stat', 'unlink'].includes(method)) {
+  if (['access', 'appendFile', 'copyFile', 'lstat', 'mkdir', 'rename', 'rm', 'stat', 'unlink'].includes(method)) {
     return ['fs', 'promises', method]
+  }
+
+  if (method === 'appendFileBytes') {
+    return ['fs', 'promises', 'appendFile']
   }
 
   if (method === 'readFile' || method === 'readFileBytes') {
@@ -1448,7 +1467,11 @@ function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
     return ['fs', 'writeFileSync']
   }
 
-  if (['accessSync', 'lstatSync', 'mkdirSync', 'renameSync', 'rmSync', 'statSync', 'unlinkSync'].includes(method)) {
+  if (method === 'appendFileSync' || method === 'appendFileBytesSync') {
+    return ['fs', 'appendFileSync']
+  }
+
+  if (['accessSync', 'copyFileSync', 'lstatSync', 'mkdirSync', 'renameSync', 'rmSync', 'statSync', 'unlinkSync'].includes(method)) {
     return ['fs', method]
   }
 
