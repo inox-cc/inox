@@ -499,6 +499,59 @@ int main(int argc, char** argv) {
   }
 })
 
+test('C runtime OpenSSL TLS backend builds when available', async (t) => {
+  if (process.env.CCJS_TEST_OPENSSL_TLS !== '1') {
+    t.skip('set CCJS_TEST_OPENSSL_TLS=1 to build OpenSSL TLS backend smoke')
+    return
+  }
+
+  const cmake = await runCommand('cmake', ['--version'])
+
+  if (cmake.code !== 0) {
+    t.skip('cmake is required')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-openssl-runtime-'))
+  const buildDir = join(dir, 'build')
+
+  try {
+    await writeFile(
+      join(dir, 'CMakeLists.txt'),
+      `cmake_minimum_required(VERSION 3.20)
+project(ccjs_openssl_smoke C)
+
+add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
+`
+    )
+
+    const configure = await runCommand('cmake', [
+      '-S',
+      dir,
+      '-B',
+      buildDir,
+      '-DCCJS_LOOP_BACKEND=libuv',
+      '-DCCJS_TLS_BACKEND=openssl'
+    ])
+
+    if (configure.code !== 0 && /Could NOT find OpenSSL|OpenSSL.*NOTFOUND/i.test(configure.stderr)) {
+      t.skip('OpenSSL was not found by CMake')
+      return
+    }
+
+    assert.equal(configure.code, 0, configure.stderr)
+
+    const build = await runCommand('cmake', ['--build', buildDir, '--target', 'ccjs_runtime'])
+
+    assert.equal(build.code, 0, build.stderr)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('C runtime JSON parse and stringify compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

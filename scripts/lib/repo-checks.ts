@@ -68,6 +68,7 @@ const requiredFiles: string[] = [
   'runtime/c/src/network/http.c',
   'runtime/c/src/network/net.c',
   'runtime/c/src/network/tls-boringssl.c',
+  'runtime/c/src/network/tls-openssl.c',
   'runtime/c/src/network/tls.c',
   'runtime/c/src/objects/object.c',
   'runtime/c/src/strings/string.c',
