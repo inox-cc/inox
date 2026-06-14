@@ -106,6 +106,7 @@ class Checker {
   diagnostics: Diagnostic[]
   scope: Scope
   types: Map<string, TypeAliasInfo>
+  classNames: Set<string>
   breakDepth: number
   continueDepth: number
   currentReturnType: ValueType
@@ -122,6 +123,7 @@ class Checker {
     this.diagnostics = []
     this.scope = new Scope(null)
     this.types = new Map()
+    this.classNames = new Set()
     this.breakDepth = 0
     this.continueDepth = 0
     this.currentReturnType = 'void'
@@ -147,6 +149,8 @@ class Checker {
     for (const item of this.program.body) {
       if (item.type === 'TypeAliasDeclaration') {
         this.declareTypeAlias(item)
+      } else if (item.type === 'ClassDeclaration') {
+        this.classNames.add(item.name)
       }
     }
 
@@ -275,7 +279,7 @@ class Checker {
   }
 
   resolveClassField(field: AnyNode): AnyNode {
-    const fieldInfo = this.resolveDeclaredType(field.valueType, field.loc)
+    const fieldInfo = this.resolveFieldDeclaredType(field)
 
     field.declaredType = field.valueType
     field.valueType = fieldInfo.valueType
@@ -1023,10 +1027,10 @@ class Checker {
       return 'unknown'
     }
 
-    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = field.valueType ?? fieldType.valueType
 
-    expression.nullable = field.nullable === true || fieldType.nullable
+    expression.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
     expression.valueType = valueType
     expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
     expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
@@ -1059,7 +1063,7 @@ class Checker {
       return 'unknown'
     }
 
-    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = field.valueType ?? fieldType.valueType
 
     expression.nullable = true
@@ -1119,7 +1123,7 @@ class Checker {
       )
     }
 
-    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    const fieldType = this.resolveFieldDeclaredType(field)
     this.checkAssignableType(
       valueType,
       fieldType.valueType,
@@ -1230,10 +1234,10 @@ class Checker {
       return 'unknown'
     }
 
-    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = field.valueType ?? fieldType.valueType
 
-    expression.nullable = field.nullable === true || fieldType.nullable
+    expression.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
     expression.valueType = valueType
     expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
     expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
@@ -1289,7 +1293,7 @@ class Checker {
       return 'unknown'
     }
 
-    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = field.valueType ?? fieldType.valueType
 
     expression.nullable = true
@@ -1371,7 +1375,7 @@ class Checker {
       )
     }
 
-    const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    const fieldType = this.resolveFieldDeclaredType(field)
     this.checkAssignableType(
       valueType,
       fieldType.valueType,
@@ -4367,7 +4371,7 @@ class Checker {
         continue
       }
 
-      const fieldType = this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+      const fieldType = this.resolveFieldDeclaredType(field)
       const propertyType = this.checkExpression(property.value)
 
       this.checkAssignableType(
@@ -4835,6 +4839,23 @@ class Checker {
       }
     }
 
+    const classSymbol = this.scope.resolve(name)
+
+    if (classSymbol?.kind === 'class' || this.classNames.has(name)) {
+      return {
+        valueType: 'object',
+        nullable: false,
+        functionType: null,
+        shape: classSymbol?.shape ?? null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null
+      }
+    }
+
     const shape = this.types.get(name)
 
     if (shape != null) {
@@ -4919,7 +4940,7 @@ class Checker {
     return {
       ...shape,
       fields: shape.fields.map((field) => {
-        const fieldInfo = this.resolveDeclaredType(field.valueType, field.loc)
+        const fieldInfo = this.resolveFieldDeclaredType(field)
 
         return {
           ...field,
@@ -4937,6 +4958,86 @@ class Checker {
         }
       })
     }
+  }
+
+  resolveFieldDeclaredType(field: AnyNode): ResolvedTypeInfo {
+    if (field.ownership === 'weak') {
+      return this.resolveWeakFieldDeclaredType(field)
+    }
+
+    return this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+  }
+
+  resolveWeakFieldDeclaredType(field: AnyNode): ResolvedTypeInfo {
+    const declaredName = field.declaredType ?? field.valueType
+    const targetName = nullableTypeNameFromTypeName(declaredName) ?? declaredName
+    const fieldInfo = this.resolveWeakTargetDeclaredType(targetName, field.loc)
+
+    if (fieldInfo.valueType !== 'unknown' && fieldInfo.valueType !== 'object' && field.weakTypeValidated !== true) {
+      this.report(
+        'CCJS_WEAK_TYPE',
+        `weak field ${field.name} must target an object or class type in the current compiler slice`,
+        field.weakLoc ?? field.loc
+      )
+    }
+
+    field.weakTypeValidated = true
+
+    return {
+      ...fieldInfo,
+      nullable: true
+    }
+  }
+
+  resolveWeakTargetDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
+    if (name == null || name === 'unknown') {
+      return {
+        valueType: 'unknown',
+        nullable: false,
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null
+      }
+    }
+
+    if (name === 'object') {
+      return {
+        valueType: 'object',
+        nullable: false,
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null
+      }
+    }
+
+    const shape = this.types.get(name)
+
+    if (shape?.kind === 'object' || this.classNames.has(name) || this.scope.resolve(name)?.kind === 'class') {
+      return {
+        valueType: 'object',
+        nullable: false,
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null
+      }
+    }
+
+    return this.resolveDeclaredType(name, loc)
   }
 
   resolveExpressionArrayElementType(expression: AnyNode | null | undefined): ValueType | null {

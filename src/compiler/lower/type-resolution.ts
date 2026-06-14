@@ -11,6 +11,7 @@ import {
 
 export type LowerContext = {
   types: Map<string, AnyNode>
+  classNames: Set<string>
 }
 
 export type LowerResolvedType = {
@@ -29,7 +30,8 @@ export type LowerResolvedType = {
 
 export function createLowerContext(ast: ProgramNode): LowerContext {
   return {
-    types: collectTypes(ast)
+    types: collectTypes(ast),
+    classNames: collectClassNames(ast)
   }
 }
 
@@ -163,6 +165,13 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     }
   }
 
+  if (context.classNames.has(name)) {
+    return {
+      ...unresolvedType(),
+      valueType: 'object'
+    }
+  }
+
   return unresolvedType()
 }
 
@@ -170,7 +179,7 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
   return {
     ...shape,
     fields: shape.fields.map((field) => {
-      const declared = resolveDeclaredType(field.valueType, context)
+      const declared = resolveFieldDeclaredType(field, context)
 
       return {
         ...field,
@@ -190,6 +199,32 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
   }
 }
 
+function resolveFieldDeclaredType(field: AnyNode, context: LowerContext): LowerResolvedType {
+  if (field.ownership === 'weak') {
+    return resolveWeakFieldDeclaredType(field, context)
+  }
+
+  return resolveDeclaredType(field.valueType, context)
+}
+
+function resolveWeakFieldDeclaredType(field: AnyNode, context: LowerContext): LowerResolvedType {
+  const targetName = nullableTypeNameFromTypeName(field.valueType) ?? field.valueType
+  const type = context.types.get(targetName)
+
+  if (targetName === 'object' || type?.kind === 'object' || context.classNames.has(targetName)) {
+    return {
+      ...unresolvedType(),
+      valueType: 'object',
+      nullable: true
+    }
+  }
+
+  return {
+    ...resolveDeclaredType(targetName, context),
+    nullable: true
+  }
+}
+
 function collectTypes(ast: ProgramNode): Map<string, AnyNode> {
   const types = new Map()
 
@@ -200,6 +235,8 @@ function collectTypes(ast: ProgramNode): Map<string, AnyNode> {
         fields: item.valueType.fields.map((field) => ({
           name: field.name,
           readonly: field.readonly,
+          ownership: field.ownership ?? 'strong',
+          weakLoc: field.weakLoc ?? null,
           valueType: field.valueType,
           loc: field.loc
         }))
@@ -218,6 +255,18 @@ function collectTypes(ast: ProgramNode): Map<string, AnyNode> {
   }
 
   return types
+}
+
+function collectClassNames(ast: ProgramNode): Set<string> {
+  const classNames = new Set<string>()
+
+  for (const item of ast.body) {
+    if (item.type === 'ClassDeclaration') {
+      classNames.add(item.name)
+    }
+  }
+
+  return classNames
 }
 
 function unresolvedType(): LowerResolvedType {

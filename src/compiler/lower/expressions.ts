@@ -7,7 +7,10 @@ export type LowerExpressionContext = LowerContext & {
   lowerStatement?: LowerStatementFn
 }
 
-export function lowerExpression(expression: AnyNode, context: LowerExpressionContext = { types: new Map() }): AnyNode {
+export function lowerExpression(
+  expression: AnyNode,
+  context: LowerExpressionContext = { types: new Map(), classNames: new Set() }
+): AnyNode {
   if (expression.type === 'StringLiteral') {
     return {
       ...expression,

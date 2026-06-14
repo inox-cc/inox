@@ -60,7 +60,8 @@ import {
   isSupportedCMathGlobalUsage,
   reportCJsGlobalDiagnostic,
   reportUnsupportedCGlobalUsages,
-  reportUnsupportedCSyntaxFeatures
+  reportUnsupportedCSyntaxFeatures,
+  reportUnsupportedCWeakFields
 } from './diagnostics.ts'
 import { formatGeneratedC } from './format.ts'
 import {
@@ -308,6 +309,7 @@ function emitCModuleSource(
   context.unhandledRejectionFlag = needsAsyncRuntime ? `${plan.symbolPrefix}_unhandled_rejection` : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, context)
+  reportUnsupportedCWeakFields(irPrograms, diagnostics)
 
   const lines = [
     `#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath)}"`,
@@ -778,6 +780,7 @@ function emitCUnit(
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, baseContext)
+  reportUnsupportedCWeakFields(irPrograms, diagnostics)
   const lines = emitCPrelude(
     needsRuntime,
     needsTimeRuntime,

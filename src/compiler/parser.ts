@@ -266,12 +266,20 @@ class Parser {
     this.expectValue('{', 'CCJS_EXPECTED_TYPE', 'expected { in object type')
 
     while (!this.isValue('}') && !this.is('eof')) {
-      const readonly = this.matchKeyword('readonly')
+      const modifiers = this.parseFieldModifiers()
       const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected object type field name')
       this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after object type field name')
       const valueType = this.parseTypeAnnotation([',', '}'])
 
-      fields.push(createObjectTypeField(name, readonly, valueType))
+      fields.push(
+        createObjectTypeField(
+          name,
+          modifiers.readonly,
+          valueType,
+          modifiers.weakToken == null ? 'strong' : 'weak',
+          modifiers.weakToken
+        )
+      )
 
       if (!this.matchValue(',')) {
         break
@@ -323,15 +331,15 @@ class Parser {
 
   parseClassMember(): AnyNode {
     const staticToken = this.matchClassStaticModifier()
-    const readonly = this.matchKeyword('readonly')
+    const modifiers = this.parseFieldModifiers()
     const name = this.parseClassMemberName()
 
-    if (!readonly && this.isValue('(')) {
+    if (!modifiers.readonly && modifiers.weakToken == null && this.isValue('(')) {
       return this.parseClassMethod(name, staticToken)
     }
 
-    if (readonly && this.isValue('(')) {
-      this.report('CCJS_EXPECTED_TYPE', 'readonly class methods are not supported; use readonly fields')
+    if ((modifiers.readonly || modifiers.weakToken != null) && this.isValue('(')) {
+      this.report('CCJS_EXPECTED_TYPE', 'class method ownership modifiers are not supported; use fields')
     }
 
     this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after class field name')
@@ -343,9 +351,34 @@ class Parser {
     return createFieldDefinition({
       name,
       staticToken,
-      readonly,
+      readonly: modifiers.readonly,
+      ownership: modifiers.weakToken == null ? 'strong' : 'weak',
+      weakToken: modifiers.weakToken,
       valueType
     })
+  }
+
+  parseFieldModifiers(): { readonly: boolean; weakToken: Token | null } {
+    let readonly = false
+    let weakToken: Token | null = null
+    let matched = true
+
+    while (matched) {
+      matched = false
+
+      if (!readonly && this.matchKeyword('readonly')) {
+        readonly = true
+        matched = true
+        continue
+      }
+
+      if (weakToken == null && this.isWeakFieldModifier()) {
+        weakToken = this.advance()
+        matched = true
+      }
+    }
+
+    return { readonly, weakToken }
   }
 
   parseClassMethod(name: Token, staticToken: Token | null = null): AnyNode {
@@ -1300,6 +1333,16 @@ class Parser {
 
   isContextualKeyword(value: string): boolean {
     return this.current().type === 'identifier' && this.current().value === value
+  }
+
+  isWeakFieldModifier(): boolean {
+    if (!this.isContextualKeyword('weak')) {
+      return false
+    }
+
+    const next = this.peek(1)
+
+    return next.type === 'identifier' || (next.type === 'keyword' && next.value === 'readonly')
   }
 
   isValue(value: string): boolean {

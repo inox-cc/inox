@@ -73,10 +73,18 @@ export function createObjectType(fields: AnyNode[]): AnyNode {
   }
 }
 
-export function createObjectTypeField(name: Token, readonly: boolean, valueType: string): AnyNode {
+export function createObjectTypeField(
+  name: Token,
+  readonly: boolean,
+  valueType: string,
+  ownership = 'strong',
+  weakToken: Token | null = null
+): AnyNode {
   return {
     name: name.value,
     readonly,
+    ownership,
+    weakLoc: weakToken == null ? null : locFromToken(weakToken),
     valueType,
     loc: locFromToken(name)
   }
@@ -106,6 +114,8 @@ export function createFieldDefinition(options: {
   name: Token
   staticToken: Token | null
   readonly: boolean
+  ownership?: string
+  weakToken?: Token | null
   valueType: string
 }): AnyNode {
   return {
@@ -114,6 +124,8 @@ export function createFieldDefinition(options: {
     static: options.staticToken != null,
     staticLoc: options.staticToken == null ? null : locFromToken(options.staticToken),
     readonly: options.readonly,
+    ownership: options.ownership ?? 'strong',
+    weakLoc: options.weakToken == null ? null : locFromToken(options.weakToken),
     valueType: options.valueType,
     loc: locFromToken(options.name)
   }
