@@ -38,6 +38,7 @@ const cRuntimeSourceGroups = {
   async: ['runtime/c/src/async/loop.c', 'runtime/c/src/async/promise.c'],
   binary: ['runtime/c/src/binary/binary.c'],
   console: ['runtime/c/src/console/console.c'],
+  dgram: ['runtime/c/src/network/dgram.c'],
   fs: ['runtime/c/src/fs/fs.c'],
   json: ['runtime/c/src/json/json.c'],
   managed: [
@@ -240,6 +241,11 @@ function cRuntimeSourcesForCode(code: string): string[] {
 
   if (usesCHeader(code, 'console')) {
     groups.add('console')
+  }
+
+  if (usesCHeader(code, 'dgram')) {
+    groups.add('async')
+    groups.add('dgram')
   }
 
   if (usesCHeader(code, 'loop') || usesCHeader(code, 'promise')) {

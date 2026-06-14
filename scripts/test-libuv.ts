@@ -43,6 +43,7 @@ try {
   } else {
     await checkLibuvTimerRuntime(buildDir)
     await checkLibuvConsoleRuntime(buildDir)
+    await checkLibuvDgramRuntime(buildDir)
     await checkLibuvFsRuntime(buildDir)
     console.log('Libuv checks passed')
   }
@@ -503,6 +504,141 @@ int main(void) {
         expectedStderr
       )}\nActual stderr: ${JSON.stringify(stderr)}`
     )
+    process.exit(1)
+  }
+}
+
+async function checkLibuvDgramRuntime(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'dgram-smoke-src')
+  const dgramBuildDir = join(workDir, 'dgram-smoke-build')
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_dgram_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_dgram_smoke dgram-smoke.c)
+target_link_libraries(ccjs_libuv_dgram_smoke PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(
+    join(sourceDir, 'dgram-smoke.c'),
+    `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "ccjs/allocator.h"
+#include "ccjs/dgram.h"
+#include "ccjs/time.h"
+
+typedef struct test_state {
+  ccjs_dgram_socket* server;
+  ccjs_dgram_socket* client;
+  int server_received;
+  int client_received;
+  char message[32];
+} test_state;
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static ccjs_status on_server_recv(void* user, ccjs_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
+  test_state* state = (test_state*)user;
+  state->server_received += 1;
+  return ccjs_dgram_send(socket, bytes, len, host, port);
+}
+
+static ccjs_status on_client_recv(void* user, ccjs_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
+  (void)socket;
+  (void)host;
+  (void)port;
+  test_state* state = (test_state*)user;
+  size_t copy_len = len >= sizeof(state->message) ? sizeof(state->message) - 1 : len;
+  memcpy(state->message, bytes, copy_len);
+  state->message[copy_len] = '\\0';
+  state->client_received += 1;
+  ccjs_dgram_close(state->client);
+  ccjs_dgram_close(state->server);
+  return CCJS_OK;
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_loop loop;
+  test_state state = { 0 };
+  ccjs_status status;
+  int port = 0;
+  int guard = 0;
+
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
+  if (ccjs_dgram_socket_new(&loop, on_server_recv, &state, &state.server) != CCJS_OK) return 2;
+  if (ccjs_dgram_socket_new(&loop, on_client_recv, &state, &state.client) != CCJS_OK) return 3;
+  status = ccjs_dgram_bind(state.server, "127.0.0.1", 0);
+  if (status != CCJS_OK) {
+    fprintf(stderr, "server bind status %d\\n", status);
+    return 4;
+  }
+  if (ccjs_dgram_local_port(state.server, &port) != CCJS_OK) return 5;
+  if (ccjs_dgram_recv_start(state.server) != CCJS_OK) return 6;
+  if (ccjs_dgram_bind(state.client, "127.0.0.1", 0) != CCJS_OK) return 7;
+  if (ccjs_dgram_recv_start(state.client) != CCJS_OK) return 8;
+  if (ccjs_dgram_send(state.client, "ping", 4, "127.0.0.1", port) != CCJS_OK) return 9;
+
+  while (ccjs_loop_has_work(&loop) && guard < 200) {
+    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 10;
+    guard += 1;
+  }
+
+  if (guard >= 200) return 11;
+  printf("%d %d %s\\n", state.server_received, state.client_received, state.message);
+  ccjs_loop_dispose(&loop);
+  return 0;
+}
+`
+  )
+
+  await checkCommand('configure libuv dgram smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    dgramBuildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build libuv dgram smoke', 'cmake', ['--build', dgramBuildDir])
+
+  const run = await runCommand(join(dgramBuildDir, 'ccjs_libuv_dgram_smoke'), [])
+  const stdout = normalizeNewlines(run.stdout)
+
+  if (run.code !== 0) {
+    fail('run libuv dgram smoke', run)
+  }
+
+  const expected = '1 1 ping\n'
+
+  if (stdout !== expected) {
+    console.error(`Libuv dgram smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
     process.exit(1)
   }
 }

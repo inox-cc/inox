@@ -95,6 +95,21 @@ console.error('failed')
   assert.match(result.code, /ccjs_console_printf\(CCJS_CONSOLE_STDERR, "%s\\n", "failed"\)/)
 })
 
+test('emits C dgram runtime include for node:dgram imports', () => {
+  const result = compileSource(
+    `import dgram from 'node:dgram'
+
+export function main(): void {
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /#include "ccjs\/dgram\.h"/)
+})
+
 test('compiles arrays, objects, member access and operators to JS', () => {
   const result = compileSource(
     `export function main(): void {

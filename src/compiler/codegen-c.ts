@@ -43,7 +43,7 @@ const cMathBinaryMethods = new Set(['max', 'min'])
 const defaultRandomSeed = 0x6d2b79f5
 const cModuleSourceExtensions = ['', '.ts', '.js']
 const generatedCColumnLimit = 130
-const runtimeBuiltinImportSources = new Set(['fs', 'node:fs', 'node:fs/promises'])
+const runtimeBuiltinImportSources = new Set(['dgram', 'fs', 'node:dgram', 'node:fs', 'node:fs/promises'])
 
 type CEmitOptions = {
   random?: RandomOptions
@@ -910,6 +910,7 @@ function emitCModuleSource(
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
+  const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') || needsFsRuntime || signatureRuntimeTypes.has('string')
   const classMethods = collectClassMethods(context)
@@ -942,6 +943,7 @@ function emitCModuleSource(
       needsJsonRuntime,
       needsTimerRuntime,
       needsConsoleRuntime,
+      needsDgramRuntime,
       options
     )
   )
@@ -1419,6 +1421,7 @@ function emitCUnit(
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
+  const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
   const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
@@ -1438,6 +1441,7 @@ function emitCUnit(
     needsJsonRuntime,
     needsTimerRuntime,
     needsConsoleRuntime,
+    needsDgramRuntime,
     options
   )
   const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(
@@ -1563,6 +1567,7 @@ function emitCPrelude(
   needsJsonRuntime,
   needsTimerRuntime,
   needsConsoleRuntime,
+  needsDgramRuntime,
   options: CEmitOptions = {}
 ) {
   const lines = ['#include <stdio.h>']
@@ -1570,6 +1575,10 @@ function emitCPrelude(
   if (needsConsoleRuntime) {
     lines.push('#include <stdlib.h>')
     lines.push('#include "ccjs/console.h"')
+  }
+
+  if (needsDgramRuntime) {
+    lines.push('#include "ccjs/dgram.h"')
   }
 
   if (needsMathRuntime || needsCryptoRuntime) {
@@ -15725,6 +15734,42 @@ function isConsoleLog(expression) {
 
 function irProgramsUseConsoleRuntime(programs: IrProgram[]): boolean {
   return programs.some((program) => containsConsoleRuntimeCall(program.body))
+}
+
+function irProgramsUseRuntimeImport(programs: IrProgram[], sources: ReadonlySet<string>): boolean {
+  return programs.some((program) => containsRuntimeImport(program.body, sources))
+}
+
+function containsRuntimeImport(node: unknown, sources: ReadonlySet<string>): boolean {
+  if (node == null) {
+    return false
+  }
+
+  if (Array.isArray(node)) {
+    return node.some((item) => containsRuntimeImport(item, sources))
+  }
+
+  if (typeof node !== 'object') {
+    return false
+  }
+
+  const item = node as AnyNode
+
+  if (item.type === 'ImportDeclaration' && sources.has(item.source)) {
+    return true
+  }
+
+  for (const [key, value] of Object.entries(item)) {
+    if (key === 'loc' || key === 'shape') {
+      continue
+    }
+
+    if (containsRuntimeImport(value, sources)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function containsConsoleRuntimeCall(node: unknown): boolean {
