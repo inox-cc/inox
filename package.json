@@ -21,7 +21,7 @@
     "clean": "node scripts/clean.ts",
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.ts",
+    "test": "node --test tests/*.test.ts tests/**/*.test.ts",
     "test:examples": "node scripts/test-examples.ts",
     "test:fixtures": "node scripts/test-fixtures.ts",
     "test:libuv": "node scripts/test-libuv.ts",
