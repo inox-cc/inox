@@ -61,12 +61,18 @@ async function checkLibuvFsRuntime(workDir: string): Promise<void> {
   const bytesInput = join(dataDir, 'input.bin')
   const bytesOutput = join(dataDir, 'output.bin')
   const missingInput = join(dataDir, 'missing.txt')
+  const mutationRoot = join(dataDir, 'created')
+  const mutationNested = join(mutationRoot, 'nested')
+  const mutationInput = join(dataDir, 'mutation-input.txt')
+  const mutationRenamed = join(dataDir, 'mutation-renamed.txt')
+  const mutationMissing = join(dataDir, 'mutation-missing.txt')
   const byteData = Buffer.from([0, 1, 2, 3, 250, 255])
 
   await mkdir(sourceDir, { recursive: true })
   await mkdir(entriesDir, { recursive: true })
   await writeFile(textInput, 'uv text')
   await writeFile(bytesInput, byteData)
+  await writeFile(mutationInput, 'uv mutation')
   await writeFile(join(entriesDir, 'alpha.txt'), '')
   await writeFile(join(entriesDir, 'beta.txt'), '')
   await writeFile(
@@ -152,6 +158,12 @@ int main(void) {
 
   if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
   if (ccjs_bytes_from_data(&allocator, output_bytes, sizeof(output_bytes), &bytes_to_write) != CCJS_OK) return 2;
+  if (ccjs_fs_mkdir_sync(${JSON.stringify(mutationNested)}, ${Buffer.byteLength(mutationNested)}, true) != CCJS_OK) return 31;
+  if (ccjs_fs_rename_sync(${JSON.stringify(mutationInput)}, ${Buffer.byteLength(mutationInput)}, ${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}) != CCJS_OK) return 32;
+  if (ccjs_fs_access_sync(${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}, CCJS_FS_R_OK) != CCJS_OK) return 33;
+  if (ccjs_fs_unlink_sync(${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}) != CCJS_OK) return 34;
+  if (ccjs_fs_rm_sync(${JSON.stringify(mutationRoot)}, ${Buffer.byteLength(mutationRoot)}, true, true) != CCJS_OK) return 35;
+  if (ccjs_fs_rm_sync(${JSON.stringify(mutationMissing)}, ${Buffer.byteLength(mutationMissing)}, false, true) != CCJS_OK) return 36;
   if (ccjs_fs_read_file(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, &read_text) != CCJS_OK) return 3;
   if (ccjs_fs_write_file(&loop, ${JSON.stringify(textOutput)}, ${Buffer.byteLength(textOutput)}, "uv saved", 8, &write_text) != CCJS_OK) return 4;
   if (ccjs_fs_read_dir(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &read_entries) != CCJS_OK) return 5;
@@ -237,6 +249,21 @@ int main(void) {
     console.error(`Libuv fs smoke bytes output mismatch: ${JSON.stringify([...bytesOutputValue])}`)
     process.exit(1)
   }
+
+  await expectMissing(mutationInput)
+  await expectMissing(mutationRenamed)
+  await expectMissing(mutationNested)
+}
+
+async function expectMissing(path: string): Promise<void> {
+  try {
+    await access(path)
+  } catch {
+    return
+  }
+
+  console.error(`Expected ${path} to be removed`)
+  process.exit(1)
 }
 
 async function checkCommand(label: string, command: string, args: string[]): Promise<void> {

@@ -6999,6 +6999,86 @@ export async function main(): Promise<void> {
   assert.match(c.code, /ccjs_fs_stats_is_directory\(syncStats\)/)
 })
 
+test('lowers Node fs mutation helpers to the fs runtime', () => {
+  const js = compileSource(
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  await fs.promises.mkdir('/tmp/ccjs-dir/nested', { recursive: true })
+  await fs.promises.rename('/tmp/input.txt', '/tmp/renamed.txt')
+  await fs.promises.unlink('/tmp/renamed.txt')
+  await fs.promises.rm('/tmp/ccjs-dir', { recursive: true, force: true })
+  fs.mkdirSync('/tmp/ccjs-sync/nested', { recursive: true })
+  fs.renameSync('/tmp/sync-input.txt', '/tmp/sync-renamed.txt')
+  fs.unlinkSync('/tmp/sync-renamed.txt')
+  fs.rmSync('/tmp/ccjs-sync', { recursive: true, force: true })
+}
+`,
+    {
+      target: 'js'
+    }
+  )
+
+  assert.match(js.code, /import \* as fs from 'node:fs\/promises'/)
+  assert.match(js.code, /import \* as ccjsFsSync from 'node:fs'/)
+  assert.match(js.code, /await fs\.mkdir\("\/tmp\/ccjs-dir\/nested", \{ recursive: true \}\)/)
+  assert.match(js.code, /await fs\.rename\("\/tmp\/input\.txt", "\/tmp\/renamed\.txt"\)/)
+  assert.match(js.code, /await fs\.unlink\("\/tmp\/renamed\.txt"\)/)
+  assert.match(js.code, /await fs\.rm\("\/tmp\/ccjs-dir", \{ recursive: true, force: true \}\)/)
+  assert.match(js.code, /ccjsFsSync\.mkdirSync\("\/tmp\/ccjs-sync\/nested", \{ recursive: true \}\)/)
+  assert.match(js.code, /ccjsFsSync\.renameSync\("\/tmp\/sync-input\.txt", "\/tmp\/sync-renamed\.txt"\)/)
+  assert.match(js.code, /ccjsFsSync\.unlinkSync\("\/tmp\/sync-renamed\.txt"\)/)
+  assert.match(js.code, /ccjsFsSync\.rmSync\("\/tmp\/ccjs-sync", \{ recursive: true, force: true \}\)/)
+
+  const c = compileSource(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const mkdirPromise = fs.promises.mkdir('/tmp/ccjs-dir/nested', { recursive: true })
+  fs.promises.rename('/tmp/input.txt', '/tmp/renamed.txt')
+  fs.promises.unlink('/tmp/renamed.txt')
+  fs.promises.rm('/tmp/ccjs-dir', { recursive: true, force: true })
+  fs.mkdirSync('/tmp/ccjs-sync/nested', { recursive: true })
+  fs.renameSync('/tmp/sync-input.txt', '/tmp/sync-renamed.txt')
+  fs.unlinkSync('/tmp/sync-renamed.txt')
+  fs.rmSync('/tmp/ccjs-sync', { recursive: true, force: true })
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const mkdirPromise = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'mkdirPromise')
+
+  assert.equal(mkdirPromise?.valueType, 'promise')
+  assert.equal(mkdirPromise?.promiseValueType, 'void')
+  assert.equal(mkdirPromise?.init?.fsRecursive, true)
+  assert.deepEqual(c.ir.runtimeRequirements, ['async-runtime', 'fs', 'managed-values', 'objects'])
+  assert.match(c.code, /ccjs_fs_mkdir\(&ccjs_loop, "\/tmp\/ccjs-dir\/nested", 20, true, &mkdirPromise\)/)
+  assert.match(
+    c.code,
+    /ccjs_fs_rename\(&ccjs_loop, "\/tmp\/input\.txt", 14, "\/tmp\/renamed\.txt", 16, &ccjs_promise_\d+\)/
+  )
+  assert.match(c.code, /ccjs_fs_unlink\(&ccjs_loop, "\/tmp\/renamed\.txt", 16, &ccjs_promise_\d+\)/)
+  assert.match(c.code, /ccjs_fs_rm\(&ccjs_loop, "\/tmp\/ccjs-dir", 13, true, true, &ccjs_promise_\d+\)/)
+  assert.match(c.code, /ccjs_fs_mkdir_sync\("\/tmp\/ccjs-sync\/nested", 21, true\)/)
+  assert.match(c.code, /ccjs_fs_rename_sync\("\/tmp\/sync-input\.txt", 19, "\/tmp\/sync-renamed\.txt", 21\)/)
+  assert.match(c.code, /ccjs_fs_unlink_sync\("\/tmp\/sync-renamed\.txt", 21\)/)
+  assert.match(c.code, /ccjs_fs_rm_sync\("\/tmp\/ccjs-sync", 14, true, true\)/)
+
+  assertDiagnostic(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const recursive = true
+  fs.promises.mkdir('/tmp/ccjs-dir', { recursive })
+}
+`,
+    'CCJS_TYPE_MISMATCH'
+  )
+})
+
 test('lowers node:fs/promises imports to the fs runtime', () => {
   const js = compileSource(
     `import fs from 'node:fs/promises'

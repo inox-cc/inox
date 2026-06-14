@@ -1394,20 +1394,33 @@ function fsRuntimeCallName(callee: AnyNode): string | null {
   }
 
   if (path.length === 3 && path[1] === 'promises') {
-    return ['access', 'lstat', 'readFile', 'readdir', 'stat', 'writeFile'].includes(path[2]) ? path.join('.') : null
+    return ['access', 'lstat', 'mkdir', 'readFile', 'readdir', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(path[2])
+      ? path.join('.')
+      : null
   }
 
   if (path.length !== 2) {
     return null
   }
 
-  return ['accessSync', 'lstatSync', 'readFileSync', 'readdirSync', 'statSync', 'writeFileSync'].includes(path[1])
+  return [
+    'accessSync',
+    'lstatSync',
+    'mkdirSync',
+    'readFileSync',
+    'readdirSync',
+    'renameSync',
+    'rmSync',
+    'statSync',
+    'unlinkSync',
+    'writeFileSync'
+  ].includes(path[1])
     ? path.join('.')
     : null
 }
 
 function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
-  if (method === 'access' || method === 'lstat' || method === 'stat') {
+  if (['access', 'lstat', 'mkdir', 'rename', 'rm', 'stat', 'unlink'].includes(method)) {
     return ['fs', 'promises', method]
   }
 
@@ -1435,7 +1448,7 @@ function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
     return ['fs', 'writeFileSync']
   }
 
-  if (method === 'accessSync' || method === 'lstatSync' || method === 'statSync') {
+  if (['accessSync', 'lstatSync', 'mkdirSync', 'renameSync', 'rmSync', 'statSync', 'unlinkSync'].includes(method)) {
     return ['fs', method]
   }
 

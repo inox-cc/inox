@@ -2125,6 +2125,68 @@ class Checker {
       return 'void'
     }
 
+    if (method === 'mkdirSync') {
+      if (expression.args.length < 1 || expression.args.length > 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      this.checkFsStringArg(expression, 0)
+      const options = this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive'])
+      expression.fsRuntimeMethod = 'mkdirSync'
+      expression.fsRecursive = options.recursive === true
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
+    if (method === 'unlinkSync') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      expression.fsRuntimeMethod = 'unlinkSync'
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
+    if (method === 'rmSync') {
+      if (expression.args.length < 1 || expression.args.length > 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      this.checkFsStringArg(expression, 0)
+      const options = this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive', 'force'])
+      expression.fsRuntimeMethod = 'rmSync'
+      expression.fsRecursive = options.recursive === true
+      expression.fsForce = options.force === true
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
+    if (method === 'renameSync') {
+      if (expression.args.length !== 2) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsStringArg(expression, 1)
+      expression.fsRuntimeMethod = 'renameSync'
+      expression.valueType = 'void'
+
+      return 'void'
+    }
+
     if (method === 'readFileSync') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
@@ -2250,6 +2312,72 @@ class Checker {
       return 'promise'
     }
 
+    if (method === 'mkdir') {
+      if (expression.args.length < 1 || expression.args.length > (promisesApi ? 2 : 1)) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects ${promisesApi ? '1 or 2' : '1'} argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      this.checkFsStringArg(expression, 0)
+      const options = promisesApi ? this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive']) : {}
+      expression.fsRuntimeMethod = 'mkdir'
+      expression.fsRecursive = options.recursive === true
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'void'
+
+      return 'promise'
+    }
+
+    if (method === 'unlink') {
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      expression.fsRuntimeMethod = 'unlink'
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'void'
+
+      return 'promise'
+    }
+
+    if (method === 'rm') {
+      if (expression.args.length < 1 || expression.args.length > (promisesApi ? 2 : 1)) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects ${promisesApi ? '1 or 2' : '1'} argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      this.checkFsStringArg(expression, 0)
+      const options = promisesApi ? this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive', 'force']) : {}
+      expression.fsRuntimeMethod = 'rm'
+      expression.fsRecursive = options.recursive === true
+      expression.fsForce = options.force === true
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'void'
+
+      return 'promise'
+    }
+
+    if (method === 'rename') {
+      if (expression.args.length !== 2) {
+        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      this.checkFsStringArg(expression, 0)
+      this.checkFsStringArg(expression, 1)
+      expression.fsRuntimeMethod = 'rename'
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'void'
+
+      return 'promise'
+    }
+
     if (method === 'readDir') {
       if (expression.args.length < 1 || expression.args.length > (info.nodeName === 'readdir' ? 2 : 1)) {
         this.report(
@@ -2345,6 +2473,47 @@ class Checker {
     }
 
     this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, this.expressionCanBeNull(arg))
+  }
+
+  checkFsBooleanOptionsArg(expression: AnyNode, index: number, label: string, allowed: string[]): Record<string, boolean> {
+    const arg = expression.args[index]
+    const result: Record<string, boolean> = {}
+
+    if (arg == null) {
+      return result
+    }
+
+    if (arg.type !== 'ObjectLiteral') {
+      this.report('CCJS_TYPE_MISMATCH', `${label} options must be an object literal in the current compiler slice`, arg.loc)
+      this.checkExpression(arg)
+
+      return result
+    }
+
+    const allowedSet = new Set(allowed)
+
+    for (const property of arg.properties) {
+      if (!allowedSet.has(property.key)) {
+        this.report('CCJS_UNKNOWN_FIELD', `unknown ${label} option ${property.key}`, property.loc)
+        this.checkExpression(property.value)
+        continue
+      }
+
+      const valueType = property.value.valueType ?? this.checkExpression(property.value)
+
+      if (valueType !== 'boolean' || property.value.type !== 'BooleanLiteral') {
+        this.report(
+          'CCJS_TYPE_MISMATCH',
+          `${label} option ${property.key} must be a boolean literal in the current compiler slice`,
+          property.value.loc
+        )
+        continue
+      }
+
+      result[property.key] = property.value.value === true
+    }
+
+    return result
   }
 
   checkJsonCall(expression: AnyNode, declared: ResolvedTypeInfo | null = null): ValueType | null {
@@ -4976,7 +5145,7 @@ function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
   if (path.length === 3 && path[1] === 'promises') {
     const method = nodeName === 'readdir' ? 'readDir' : nodeName
 
-    return ['access', 'lstat', 'readFile', 'readDir', 'stat', 'writeFile'].includes(method)
+    return ['access', 'lstat', 'mkdir', 'readFile', 'readDir', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(method)
       ? {
           method,
           nodeName,
@@ -5007,8 +5176,16 @@ function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
             'accessSync',
             'lstat',
             'lstatSync',
+            'mkdir',
+            'mkdirSync',
             'stat',
             'statSync',
+            'rename',
+            'renameSync',
+            'rm',
+            'rmSync',
+            'unlink',
+            'unlinkSync',
             'writeFile',
             'writeFileBytes',
             'writeFileBytesSync',
@@ -5045,7 +5222,7 @@ function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promisesApi:
     return `function ${info.path.join('.')} is not part of Node fs; use fs.readdirSync`
   }
 
-  if (['access', 'lstat', 'readFile', 'stat', 'writeFile'].includes(info.method) && !promisesApi) {
+  if (['access', 'lstat', 'mkdir', 'readFile', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(info.method) && !promisesApi) {
     return `Node ${info.path.join('.')} callback API is not supported yet; use fs.promises.${info.method}`
   }
 

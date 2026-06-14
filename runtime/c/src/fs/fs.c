@@ -17,10 +17,12 @@
 #endif
 
 #ifndef CCJS_FS_DISABLE_HOST
+#include <errno.h>
 #ifndef _WIN32
 #include <dirent.h>
 #include <unistd.h>
 #else
+#include <direct.h>
 #include <io.h>
 #endif
 #include <stdio.h>
@@ -33,6 +35,10 @@ typedef enum ccjs_fs_request_kind {
   CCJS_FS_REQUEST_STAT,
   CCJS_FS_REQUEST_LSTAT,
   CCJS_FS_REQUEST_ACCESS,
+  CCJS_FS_REQUEST_MKDIR,
+  CCJS_FS_REQUEST_UNLINK,
+  CCJS_FS_REQUEST_RM,
+  CCJS_FS_REQUEST_RENAME,
   CCJS_FS_REQUEST_WRITE_FILE
 } ccjs_fs_request_kind;
 
@@ -42,12 +48,16 @@ typedef struct ccjs_fs_request {
   ccjs_fs_request_kind kind;
   char* path;
   size_t path_len;
+  char* path2;
+  size_t path2_len;
   char* bytes;
   size_t byte_len;
   int mode;
+  bool recursive;
+  bool force;
 } ccjs_fs_request;
 
-static ccjs_fs_adapter ccjs_fs_active_adapter = { 0, 0, 0, 0, 0, 0, 0, 0 };
+static ccjs_fs_adapter ccjs_fs_active_adapter = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static ccjs_status ccjs_fs_copy_bytes(ccjs_allocator* allocator, const char* bytes, size_t len, char** out);
 #if !defined(CCJS_FS_DISABLE_HOST) || defined(CCJS_LOOP_BACKEND_LIBUV)
@@ -61,6 +71,11 @@ static ccjs_status ccjs_fs_libuv_read_dir(void* user, ccjs_allocator* allocator,
 static ccjs_status ccjs_fs_libuv_stat(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_libuv_lstat(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_libuv_access(void* user, const char* path, size_t path_len, int mode);
+static ccjs_status ccjs_fs_libuv_mkdir(void* user, const char* path, size_t path_len, bool recursive);
+static ccjs_status ccjs_fs_libuv_unlink(void* user, const char* path, size_t path_len);
+static ccjs_status ccjs_fs_libuv_rm(void* user, const char* path, size_t path_len, bool recursive, bool force);
+static ccjs_status
+ccjs_fs_libuv_rename(void* user, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len);
 static ccjs_status ccjs_fs_libuv_write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
 static ccjs_status ccjs_fs_libuv_read_file_data(const char* path, size_t path_len, char** out_bytes, size_t* out_len);
 static ccjs_status ccjs_fs_libuv_queue_request(
@@ -68,9 +83,13 @@ static ccjs_status ccjs_fs_libuv_queue_request(
   ccjs_fs_request_kind kind,
   const char* path,
   size_t path_len,
+  const char* path2,
+  size_t path2_len,
   const char* bytes,
   size_t byte_len,
   int mode,
+  bool recursive,
+  bool force,
   ccjs_promise** out
 );
 #endif
@@ -85,6 +104,11 @@ ccjs_fs_default_read_dir(void* user, ccjs_allocator* allocator, const char* path
 static ccjs_status ccjs_fs_default_stat(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_default_lstat(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_default_access(void* user, const char* path, size_t path_len, int mode);
+static ccjs_status ccjs_fs_default_mkdir(void* user, const char* path, size_t path_len, bool recursive);
+static ccjs_status ccjs_fs_default_unlink(void* user, const char* path, size_t path_len);
+static ccjs_status ccjs_fs_default_rm(void* user, const char* path, size_t path_len, bool recursive, bool force);
+static ccjs_status
+ccjs_fs_default_rename(void* user, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len);
 static ccjs_status ccjs_fs_default_write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
 #endif
 static ccjs_status ccjs_fs_queue_request(
@@ -92,9 +116,13 @@ static ccjs_status ccjs_fs_queue_request(
   ccjs_fs_request_kind kind,
   const char* path,
   size_t path_len,
+  const char* path2,
+  size_t path2_len,
   const char* bytes,
   size_t byte_len,
   int mode,
+  bool recursive,
+  bool force,
   ccjs_promise** out
 );
 static ccjs_status ccjs_fs_run_request(void* context);
@@ -113,7 +141,7 @@ ccjs_fs_adapter ccjs_fs_get_adapter(void) {
 }
 
 void ccjs_fs_clear_adapter(void) {
-  ccjs_fs_adapter adapter = { 0, 0, 0, 0, 0, 0, 0, 0 };
+  ccjs_fs_adapter adapter = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
   ccjs_fs_active_adapter = adapter;
 }
 
@@ -348,6 +376,86 @@ ccjs_status ccjs_fs_access_sync(const char* path, size_t path_len, int mode) {
 #endif
 }
 
+ccjs_status ccjs_fs_mkdir_sync(const char* path, size_t path_len, bool recursive) {
+  if (path == 0 && path_len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (ccjs_fs_active_adapter.mkdir != 0) {
+    return ccjs_fs_active_adapter.mkdir(ccjs_fs_active_adapter.user, path, path_len, recursive);
+  }
+
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  return ccjs_fs_libuv_mkdir(0, path, path_len, recursive);
+#endif
+
+#ifndef CCJS_FS_DISABLE_HOST
+  return ccjs_fs_default_mkdir(0, path, path_len, recursive);
+#else
+  return CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
+ccjs_status ccjs_fs_unlink_sync(const char* path, size_t path_len) {
+  if (path == 0 && path_len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (ccjs_fs_active_adapter.unlink != 0) {
+    return ccjs_fs_active_adapter.unlink(ccjs_fs_active_adapter.user, path, path_len);
+  }
+
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  return ccjs_fs_libuv_unlink(0, path, path_len);
+#endif
+
+#ifndef CCJS_FS_DISABLE_HOST
+  return ccjs_fs_default_unlink(0, path, path_len);
+#else
+  return CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
+ccjs_status ccjs_fs_rm_sync(const char* path, size_t path_len, bool recursive, bool force) {
+  if (path == 0 && path_len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (ccjs_fs_active_adapter.rm != 0) {
+    return ccjs_fs_active_adapter.rm(ccjs_fs_active_adapter.user, path, path_len, recursive, force);
+  }
+
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  return ccjs_fs_libuv_rm(0, path, path_len, recursive, force);
+#endif
+
+#ifndef CCJS_FS_DISABLE_HOST
+  return ccjs_fs_default_rm(0, path, path_len, recursive, force);
+#else
+  return force ? CCJS_OK : CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
+ccjs_status ccjs_fs_rename_sync(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len) {
+  if ((old_path == 0 && old_path_len != 0) || (new_path == 0 && new_path_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (ccjs_fs_active_adapter.rename != 0) {
+    return ccjs_fs_active_adapter.rename(ccjs_fs_active_adapter.user, old_path, old_path_len, new_path, new_path_len);
+  }
+
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  return ccjs_fs_libuv_rename(0, old_path, old_path_len, new_path, new_path_len);
+#endif
+
+#ifndef CCJS_FS_DISABLE_HOST
+  return ccjs_fs_default_rename(0, old_path, old_path_len, new_path, new_path_len);
+#else
+  return CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
 ccjs_status ccjs_fs_write_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   if ((path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
     return CCJS_ERR_TYPE;
@@ -381,72 +489,113 @@ ccjs_status ccjs_fs_write_file_bytes_sync(const char* path, size_t path_len, ccj
 ccjs_status ccjs_fs_read_file(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
 #ifdef CCJS_LOOP_BACKEND_LIBUV
   if (ccjs_fs_active_adapter.read_file == 0) {
-    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_READ_FILE, path, path_len, 0, 0, 0, out);
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_READ_FILE, path, path_len, 0, 0, 0, 0, 0, false, false, out);
   }
 #endif
 
-  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_FILE, path, path_len, 0, 0, 0, out);
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_FILE, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
 ccjs_status ccjs_fs_read_file_bytes(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
 #ifdef CCJS_LOOP_BACKEND_LIBUV
   if (ccjs_fs_active_adapter.read_file_bytes == 0) {
-    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_READ_FILE_BYTES, path, path_len, 0, 0, 0, out);
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_READ_FILE_BYTES, path, path_len, 0, 0, 0, 0, 0, false, false, out);
   }
 #endif
 
-  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_FILE_BYTES, path, path_len, 0, 0, 0, out);
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_FILE_BYTES, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
 ccjs_status ccjs_fs_read_dir(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
 #ifdef CCJS_LOOP_BACKEND_LIBUV
   if (ccjs_fs_active_adapter.read_dir == 0) {
-    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_READ_DIR, path, path_len, 0, 0, 0, out);
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_READ_DIR, path, path_len, 0, 0, 0, 0, 0, false, false, out);
   }
 #endif
 
-  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_DIR, path, path_len, 0, 0, 0, out);
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_DIR, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
 ccjs_status ccjs_fs_stat(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
 #ifdef CCJS_LOOP_BACKEND_LIBUV
   if (ccjs_fs_active_adapter.stat == 0) {
-    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_STAT, path, path_len, 0, 0, 0, out);
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_STAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
   }
 #endif
 
-  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_STAT, path, path_len, 0, 0, 0, out);
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_STAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
 ccjs_status ccjs_fs_lstat(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
 #ifdef CCJS_LOOP_BACKEND_LIBUV
   if (ccjs_fs_active_adapter.lstat == 0) {
-    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_LSTAT, path, path_len, 0, 0, 0, out);
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_LSTAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
   }
 #endif
 
-  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_LSTAT, path, path_len, 0, 0, 0, out);
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_LSTAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
 ccjs_status ccjs_fs_access(ccjs_loop* loop, const char* path, size_t path_len, int mode, ccjs_promise** out) {
 #ifdef CCJS_LOOP_BACKEND_LIBUV
   if (ccjs_fs_active_adapter.access == 0) {
-    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_ACCESS, path, path_len, 0, 0, mode, out);
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_ACCESS, path, path_len, 0, 0, 0, 0, mode, false, false, out);
   }
 #endif
 
-  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_ACCESS, path, path_len, 0, 0, mode, out);
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_ACCESS, path, path_len, 0, 0, 0, 0, mode, false, false, out);
+}
+
+ccjs_status ccjs_fs_mkdir(ccjs_loop* loop, const char* path, size_t path_len, bool recursive, ccjs_promise** out) {
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  if (ccjs_fs_active_adapter.mkdir == 0) {
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_MKDIR, path, path_len, 0, 0, 0, 0, 0, recursive, false, out);
+  }
+#endif
+
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_MKDIR, path, path_len, 0, 0, 0, 0, 0, recursive, false, out);
+}
+
+ccjs_status ccjs_fs_unlink(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  if (ccjs_fs_active_adapter.unlink == 0) {
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_UNLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
+  }
+#endif
+
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_UNLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
+}
+
+ccjs_status ccjs_fs_rm(ccjs_loop* loop, const char* path, size_t path_len, bool recursive, bool force, ccjs_promise** out) {
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  if (ccjs_fs_active_adapter.rm == 0) {
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_RM, path, path_len, 0, 0, 0, 0, 0, recursive, force, out);
+  }
+#endif
+
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_RM, path, path_len, 0, 0, 0, 0, 0, recursive, force, out);
+}
+
+ccjs_status
+ccjs_fs_rename(ccjs_loop* loop, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len, ccjs_promise** out) {
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  if (ccjs_fs_active_adapter.rename == 0) {
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_RENAME, old_path, old_path_len, new_path, new_path_len, 0, 0, 0, false, false, out);
+  }
+#endif
+
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_RENAME, old_path, old_path_len, new_path, new_path_len, 0, 0, 0, false, false, out);
 }
 
 ccjs_status
 ccjs_fs_write_file(ccjs_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, ccjs_promise** out) {
 #ifdef CCJS_LOOP_BACKEND_LIBUV
   if (ccjs_fs_active_adapter.write_file == 0) {
-    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, bytes, byte_len, 0, out);
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
   }
 #endif
 
-  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, bytes, byte_len, 0, out);
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
 }
 
 ccjs_status ccjs_fs_write_file_bytes(ccjs_loop* loop, const char* path, size_t path_len, ccjs_value bytes, ccjs_promise** out) {
@@ -462,11 +611,15 @@ ccjs_status ccjs_fs_write_file_bytes(ccjs_loop* loop, const char* path, size_t p
 
 #ifdef CCJS_LOOP_BACKEND_LIBUV
   if (ccjs_fs_active_adapter.write_file == 0) {
-    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, (const char*)data->bytes, data->len, 0, out);
+    return ccjs_fs_libuv_queue_request(
+      loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->len, 0, false, false, out
+    );
   }
 #endif
 
-  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, (const char*)data->bytes, data->len, 0, out);
+  return ccjs_fs_queue_request(
+    loop, CCJS_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->len, 0, false, false, out
+  );
 }
 
 static ccjs_status ccjs_fs_copy_bytes(ccjs_allocator* allocator, const char* bytes, size_t len, char** out) {
@@ -543,7 +696,11 @@ typedef enum ccjs_fs_libuv_stage {
   CCJS_FS_LIBUV_STAGE_SCANDIR,
   CCJS_FS_LIBUV_STAGE_STAT,
   CCJS_FS_LIBUV_STAGE_LSTAT,
-  CCJS_FS_LIBUV_STAGE_ACCESS
+  CCJS_FS_LIBUV_STAGE_ACCESS,
+  CCJS_FS_LIBUV_STAGE_MKDIR,
+  CCJS_FS_LIBUV_STAGE_UNLINK,
+  CCJS_FS_LIBUV_STAGE_RM,
+  CCJS_FS_LIBUV_STAGE_RENAME
 } ccjs_fs_libuv_stage;
 
 typedef struct ccjs_fs_libuv_request {
@@ -556,10 +713,14 @@ typedef struct ccjs_fs_libuv_request {
   int file_open;
   char* path;
   size_t path_len;
+  char* path2;
+  size_t path2_len;
   char* bytes;
   size_t byte_len;
   size_t byte_offset;
   int mode;
+  bool recursive;
+  bool force;
   char* data;
   size_t data_len;
   size_t data_cap;
@@ -915,6 +1076,202 @@ static ccjs_status ccjs_fs_libuv_access(void* user, const char* path, size_t pat
   return ccjs_fs_status_from_uv(access_result);
 }
 
+static ccjs_status ccjs_fs_libuv_mkdir_one(const char* path) {
+  uv_fs_t req;
+  int result = uv_fs_mkdir(0, &req, path, 0777, 0);
+  uv_fs_req_cleanup(&req);
+
+  return result == 0 || result == UV_EEXIST ? CCJS_OK : ccjs_fs_status_from_uv(result);
+}
+
+static ccjs_status ccjs_fs_libuv_mkdir_recursive(char* path) {
+  if (path == 0 || path[0] == '\0') {
+    return CCJS_ERR_TYPE;
+  }
+
+  for (char* cursor = path + 1; *cursor != '\0'; cursor += 1) {
+    if (*cursor != '/' && *cursor != '\\') {
+      continue;
+    }
+
+    char saved = *cursor;
+    *cursor = '\0';
+
+    if (path[0] != '\0') {
+      ccjs_status status = ccjs_fs_libuv_mkdir_one(path);
+
+      if (status != CCJS_OK) {
+        *cursor = saved;
+        return status;
+      }
+    }
+
+    *cursor = saved;
+  }
+
+  return ccjs_fs_libuv_mkdir_one(path);
+}
+
+static ccjs_status ccjs_fs_libuv_mkdir(void* user, const char* path, size_t path_len, bool recursive) {
+  (void)user;
+
+  if (path == 0 && path_len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  status = recursive ? ccjs_fs_libuv_mkdir_recursive(path_copy) : ccjs_fs_libuv_mkdir_one(path_copy);
+  free(path_copy);
+
+  return status;
+}
+
+static ccjs_status ccjs_fs_libuv_unlink(void* user, const char* path, size_t path_len) {
+  (void)user;
+
+  if (path == 0 && path_len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  uv_fs_t req;
+  int result = uv_fs_unlink(0, &req, path_copy, 0);
+  uv_fs_req_cleanup(&req);
+  free(path_copy);
+
+  return ccjs_fs_status_from_uv(result);
+}
+
+static ccjs_status ccjs_fs_libuv_rm_path(char* path, bool recursive, bool force) {
+  uv_fs_t unlink_req;
+  int unlink_result = uv_fs_unlink(0, &unlink_req, path, 0);
+  uv_fs_req_cleanup(&unlink_req);
+
+  if (unlink_result == 0) {
+    return CCJS_OK;
+  }
+
+  if (unlink_result == UV_ENOENT && force) {
+    return CCJS_OK;
+  }
+
+  if (!recursive) {
+    return ccjs_fs_status_from_uv(unlink_result);
+  }
+
+  uv_fs_t scan_req;
+  int scan_result = uv_fs_scandir(0, &scan_req, path, 0, 0);
+
+  if (scan_result < 0) {
+    uv_fs_req_cleanup(&scan_req);
+    return scan_result == UV_ENOENT && force ? CCJS_OK : ccjs_fs_status_from_uv(scan_result);
+  }
+
+  uv_dirent_t entry;
+  int next_result = uv_fs_scandir_next(&scan_req, &entry);
+
+  while (next_result != UV_EOF) {
+    if (next_result < 0) {
+      uv_fs_req_cleanup(&scan_req);
+      return ccjs_fs_status_from_uv(next_result);
+    }
+
+    size_t path_len = strlen(path);
+    size_t name_len = strlen(entry.name);
+    char* child = malloc(path_len + 1 + name_len + 1);
+
+    if (child == 0) {
+      uv_fs_req_cleanup(&scan_req);
+      return CCJS_ERR_OOM;
+    }
+
+    memcpy(child, path, path_len);
+    child[path_len] = '/';
+    memcpy(child + path_len + 1, entry.name, name_len + 1);
+    ccjs_status child_status =
+      entry.type == UV_DIRENT_DIR ? ccjs_fs_libuv_rm_path(child, true, force) : ccjs_fs_libuv_rm_path(child, false, force);
+    free(child);
+
+    if (child_status != CCJS_OK) {
+      uv_fs_req_cleanup(&scan_req);
+      return child_status;
+    }
+
+    next_result = uv_fs_scandir_next(&scan_req, &entry);
+  }
+
+  uv_fs_req_cleanup(&scan_req);
+
+  uv_fs_t rmdir_req;
+  int rmdir_result = uv_fs_rmdir(0, &rmdir_req, path, 0);
+  uv_fs_req_cleanup(&rmdir_req);
+
+  return rmdir_result == 0 || (rmdir_result == UV_ENOENT && force) ? CCJS_OK : ccjs_fs_status_from_uv(rmdir_result);
+}
+
+static ccjs_status ccjs_fs_libuv_rm(void* user, const char* path, size_t path_len, bool recursive, bool force) {
+  (void)user;
+
+  if (path == 0 && path_len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  status = ccjs_fs_libuv_rm_path(path_copy, recursive, force);
+  free(path_copy);
+
+  return status;
+}
+
+static ccjs_status
+ccjs_fs_libuv_rename(void* user, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len) {
+  (void)user;
+
+  if ((old_path == 0 && old_path_len != 0) || (new_path == 0 && new_path_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* old_copy = 0;
+  char* new_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(old_path, old_path_len, &old_copy);
+
+  if (status == CCJS_OK) {
+    status = ccjs_fs_copy_host_bytes(new_path, new_path_len, &new_copy);
+  }
+
+  if (status != CCJS_OK) {
+    free(old_copy);
+    free(new_copy);
+    return status;
+  }
+
+  uv_fs_t req;
+  int result = uv_fs_rename(0, &req, old_copy, new_copy, 0);
+  uv_fs_req_cleanup(&req);
+  free(old_copy);
+  free(new_copy);
+
+  return ccjs_fs_status_from_uv(result);
+}
+
 static ccjs_status ccjs_fs_libuv_write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   (void)user;
 
@@ -973,9 +1330,13 @@ static ccjs_status ccjs_fs_libuv_queue_request(
   ccjs_fs_request_kind kind,
   const char* path,
   size_t path_len,
+  const char* path2,
+  size_t path2_len,
   const char* bytes,
   size_t byte_len,
   int mode,
+  bool recursive,
+  bool force,
   ccjs_promise** out
 ) {
   if (out == 0) {
@@ -986,6 +1347,7 @@ static ccjs_status ccjs_fs_libuv_queue_request(
 
   if (
     loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || (path == 0 && path_len != 0) ||
+    (path2 == 0 && path2_len != 0) ||
     (bytes == 0 && byte_len != 0)
   ) {
     return CCJS_ERR_TYPE;
@@ -1013,12 +1375,19 @@ static ccjs_status ccjs_fs_libuv_queue_request(
   request->stage = CCJS_FS_LIBUV_STAGE_OPEN;
   request->file = 0;
   request->path_len = path_len;
+  request->path2_len = path2_len;
   request->byte_len = byte_len;
   request->mode = mode;
+  request->recursive = recursive;
+  request->force = force;
   request->close_status = CCJS_OK;
   ccjs_promise_retain(promise);
 
   status = ccjs_fs_copy_bytes(loop->allocator, path, path_len, &request->path);
+
+  if (status == CCJS_OK && kind == CCJS_FS_REQUEST_RENAME) {
+    status = ccjs_fs_copy_bytes(loop->allocator, path2, path2_len, &request->path2);
+  }
 
   if (status == CCJS_OK && kind == CCJS_FS_REQUEST_WRITE_FILE) {
     status = ccjs_fs_copy_bytes(loop->allocator, bytes, byte_len, &request->bytes);
@@ -1091,6 +1460,76 @@ static ccjs_status ccjs_fs_libuv_start_request(ccjs_fs_libuv_request* request) {
     }
 
     int result = uv_fs_access(uv_loop, &request->req, request->path, request->mode, ccjs_fs_libuv_cb);
+
+    return result == 0 ? CCJS_OK : ccjs_fs_status_from_uv(result);
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_MKDIR) {
+    request->stage = CCJS_FS_LIBUV_STAGE_MKDIR;
+
+    if (request->recursive) {
+      ccjs_status status = ccjs_fs_libuv_mkdir(0, request->path, request->path_len, true);
+
+      return ccjs_fs_libuv_settle_value(request, status, ccjs_undefined_value());
+    }
+
+    request->req.data = request;
+    uv_loop_t* uv_loop = ccjs_libuv_loop_handle(request->loop);
+
+    if (uv_loop == 0) {
+      return CCJS_ERR_TYPE;
+    }
+
+    int result = uv_fs_mkdir(uv_loop, &request->req, request->path, 0777, ccjs_fs_libuv_cb);
+
+    return result == 0 ? CCJS_OK : ccjs_fs_status_from_uv(result);
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_UNLINK) {
+    request->stage = CCJS_FS_LIBUV_STAGE_UNLINK;
+    request->req.data = request;
+    uv_loop_t* uv_loop = ccjs_libuv_loop_handle(request->loop);
+
+    if (uv_loop == 0) {
+      return CCJS_ERR_TYPE;
+    }
+
+    int result = uv_fs_unlink(uv_loop, &request->req, request->path, ccjs_fs_libuv_cb);
+
+    return result == 0 ? CCJS_OK : ccjs_fs_status_from_uv(result);
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_RM) {
+    request->stage = CCJS_FS_LIBUV_STAGE_RM;
+
+    if (request->recursive) {
+      ccjs_status status = ccjs_fs_libuv_rm(0, request->path, request->path_len, true, request->force);
+
+      return ccjs_fs_libuv_settle_value(request, status, ccjs_undefined_value());
+    }
+
+    request->req.data = request;
+    uv_loop_t* uv_loop = ccjs_libuv_loop_handle(request->loop);
+
+    if (uv_loop == 0) {
+      return CCJS_ERR_TYPE;
+    }
+
+    int result = uv_fs_unlink(uv_loop, &request->req, request->path, ccjs_fs_libuv_cb);
+
+    return result == 0 ? CCJS_OK : ccjs_fs_status_from_uv(result);
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_RENAME) {
+    request->stage = CCJS_FS_LIBUV_STAGE_RENAME;
+    request->req.data = request;
+    uv_loop_t* uv_loop = ccjs_libuv_loop_handle(request->loop);
+
+    if (uv_loop == 0) {
+      return CCJS_ERR_TYPE;
+    }
+
+    int result = uv_fs_rename(uv_loop, &request->req, request->path, request->path2, ccjs_fs_libuv_cb);
 
     return result == 0 ? CCJS_OK : ccjs_fs_status_from_uv(result);
   }
@@ -1303,6 +1742,25 @@ static void ccjs_fs_libuv_cb(uv_fs_t* req) {
     return;
   }
 
+  if (
+    request->stage == CCJS_FS_LIBUV_STAGE_MKDIR || request->stage == CCJS_FS_LIBUV_STAGE_UNLINK ||
+    request->stage == CCJS_FS_LIBUV_STAGE_RM || request->stage == CCJS_FS_LIBUV_STAGE_RENAME
+  ) {
+    uv_fs_req_cleanup(req);
+
+    if (request->stage == CCJS_FS_LIBUV_STAGE_RM && result == UV_ENOENT && request->force) {
+      status = CCJS_OK;
+    }
+
+    status = ccjs_fs_libuv_settle_value(request, status, ccjs_undefined_value());
+
+    if (status != CCJS_OK) {
+      ccjs_libuv_loop_report_status(loop, status);
+    }
+
+    return;
+  }
+
   if (request->stage == CCJS_FS_LIBUV_STAGE_OPEN) {
     if (status != CCJS_OK) {
       uv_fs_req_cleanup(req);
@@ -1428,6 +1886,10 @@ static void ccjs_fs_libuv_request_finalizer(ccjs_fs_libuv_request* request) {
 
   if (request->path != 0) {
     allocator->free(allocator->user, request->path, request->path_len + 1, _Alignof(char));
+  }
+
+  if (request->path2 != 0) {
+    allocator->free(allocator->user, request->path2, request->path2_len + 1, _Alignof(char));
   }
 
   if (request->bytes != 0) {
@@ -1723,6 +2185,205 @@ static ccjs_status ccjs_fs_default_access(void* user, const char* path, size_t p
   return access_result == 0 ? CCJS_OK : CCJS_ERR_FIELD;
 }
 
+static ccjs_status ccjs_fs_default_mkdir_one(const char* path) {
+#ifdef _WIN32
+  int result = _mkdir(path);
+#else
+  int result = mkdir(path, 0777);
+#endif
+
+  return result == 0 || errno == EEXIST ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+static ccjs_status ccjs_fs_default_mkdir_recursive(char* path) {
+  if (path == 0 || path[0] == '\0') {
+    return CCJS_ERR_TYPE;
+  }
+
+  for (char* cursor = path + 1; *cursor != '\0'; cursor += 1) {
+    if (*cursor != '/' && *cursor != '\\') {
+      continue;
+    }
+
+    char saved = *cursor;
+    *cursor = '\0';
+
+    if (path[0] != '\0') {
+      ccjs_status status = ccjs_fs_default_mkdir_one(path);
+
+      if (status != CCJS_OK) {
+        *cursor = saved;
+        return status;
+      }
+    }
+
+    *cursor = saved;
+  }
+
+  return ccjs_fs_default_mkdir_one(path);
+}
+
+static ccjs_status ccjs_fs_default_mkdir(void* user, const char* path, size_t path_len, bool recursive) {
+  (void)user;
+
+  if (path == 0 && path_len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  errno = 0;
+  status = recursive ? ccjs_fs_default_mkdir_recursive(path_copy) : ccjs_fs_default_mkdir_one(path_copy);
+  free(path_copy);
+
+  return status;
+}
+
+static ccjs_status ccjs_fs_default_unlink(void* user, const char* path, size_t path_len) {
+  (void)user;
+
+  if (path == 0 && path_len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+#ifdef _WIN32
+  int result = _unlink(path_copy);
+#else
+  int result = unlink(path_copy);
+#endif
+  free(path_copy);
+
+  return result == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+static ccjs_status ccjs_fs_default_rm_path(char* path, bool recursive, bool force) {
+#ifdef _WIN32
+  int unlink_result = _unlink(path);
+#else
+  int unlink_result = unlink(path);
+#endif
+
+  if (unlink_result == 0) {
+    return CCJS_OK;
+  }
+
+  if (errno == ENOENT && force) {
+    return CCJS_OK;
+  }
+
+  if (!recursive) {
+    return CCJS_ERR_FIELD;
+  }
+
+#ifdef _WIN32
+  return CCJS_ERR_UNSUPPORTED;
+#else
+  DIR* dir = opendir(path);
+
+  if (dir == 0) {
+    return errno == ENOENT && force ? CCJS_OK : CCJS_ERR_FIELD;
+  }
+
+  struct dirent* entry = readdir(dir);
+
+  while (entry != 0) {
+    const char* name = entry->d_name;
+
+    if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+      size_t path_len = strlen(path);
+      size_t name_len = strlen(name);
+      char* child = malloc(path_len + 1 + name_len + 1);
+
+      if (child == 0) {
+        closedir(dir);
+        return CCJS_ERR_OOM;
+      }
+
+      memcpy(child, path, path_len);
+      child[path_len] = '/';
+      memcpy(child + path_len + 1, name, name_len + 1);
+      ccjs_status status = ccjs_fs_default_rm_path(child, true, force);
+      free(child);
+
+      if (status != CCJS_OK) {
+        closedir(dir);
+        return status;
+      }
+    }
+
+    entry = readdir(dir);
+  }
+
+  if (closedir(dir) != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  return rmdir(path) == 0 || (errno == ENOENT && force) ? CCJS_OK : CCJS_ERR_FIELD;
+#endif
+}
+
+static ccjs_status ccjs_fs_default_rm(void* user, const char* path, size_t path_len, bool recursive, bool force) {
+  (void)user;
+
+  if (path == 0 && path_len != 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  errno = 0;
+  status = ccjs_fs_default_rm_path(path_copy, recursive, force);
+  free(path_copy);
+
+  return status;
+}
+
+static ccjs_status
+ccjs_fs_default_rename(void* user, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len) {
+  (void)user;
+
+  if ((old_path == 0 && old_path_len != 0) || (new_path == 0 && new_path_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  char* old_copy = 0;
+  char* new_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(old_path, old_path_len, &old_copy);
+
+  if (status == CCJS_OK) {
+    status = ccjs_fs_copy_host_bytes(new_path, new_path_len, &new_copy);
+  }
+
+  if (status != CCJS_OK) {
+    free(old_copy);
+    free(new_copy);
+    return status;
+  }
+
+  int result = rename(old_copy, new_copy);
+  free(old_copy);
+  free(new_copy);
+
+  return result == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
 static ccjs_status ccjs_fs_default_write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   (void)user;
 
@@ -1758,9 +2419,13 @@ static ccjs_status ccjs_fs_queue_request(
   ccjs_fs_request_kind kind,
   const char* path,
   size_t path_len,
+  const char* path2,
+  size_t path2_len,
   const char* bytes,
   size_t byte_len,
   int mode,
+  bool recursive,
+  bool force,
   ccjs_promise** out
 ) {
   if (out == 0) {
@@ -1771,6 +2436,7 @@ static ccjs_status ccjs_fs_queue_request(
 
   if (
     loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || (path == 0 && path_len != 0) ||
+    (path2 == 0 && path2_len != 0) ||
     (bytes == 0 && byte_len != 0)
   ) {
     return CCJS_ERR_TYPE;
@@ -1795,12 +2461,20 @@ static ccjs_status ccjs_fs_queue_request(
   request->kind = kind;
   request->path = 0;
   request->path_len = path_len;
+  request->path2 = 0;
+  request->path2_len = path2_len;
   request->bytes = 0;
   request->byte_len = byte_len;
   request->mode = mode;
+  request->recursive = recursive;
+  request->force = force;
   ccjs_promise_retain(promise);
 
   status = ccjs_fs_copy_bytes(loop->allocator, path, path_len, &request->path);
+
+  if (status == CCJS_OK && kind == CCJS_FS_REQUEST_RENAME) {
+    status = ccjs_fs_copy_bytes(loop->allocator, path2, path2_len, &request->path2);
+  }
 
   if (status == CCJS_OK && kind == CCJS_FS_REQUEST_WRITE_FILE) {
     status = ccjs_fs_copy_bytes(loop->allocator, bytes, byte_len, &request->bytes);
@@ -1888,6 +2562,46 @@ static ccjs_status ccjs_fs_run_request(void* context) {
 
   if (request->kind == CCJS_FS_REQUEST_ACCESS) {
     ccjs_status status = ccjs_fs_access_sync(request->path, request->path_len, request->mode);
+
+    if (status != CCJS_OK) {
+      return ccjs_fs_reject_status(request->loop, request->promise, status);
+    }
+
+    return ccjs_promise_resolve(request->promise, ccjs_undefined_value());
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_MKDIR) {
+    ccjs_status status = ccjs_fs_mkdir_sync(request->path, request->path_len, request->recursive);
+
+    if (status != CCJS_OK) {
+      return ccjs_fs_reject_status(request->loop, request->promise, status);
+    }
+
+    return ccjs_promise_resolve(request->promise, ccjs_undefined_value());
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_UNLINK) {
+    ccjs_status status = ccjs_fs_unlink_sync(request->path, request->path_len);
+
+    if (status != CCJS_OK) {
+      return ccjs_fs_reject_status(request->loop, request->promise, status);
+    }
+
+    return ccjs_promise_resolve(request->promise, ccjs_undefined_value());
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_RM) {
+    ccjs_status status = ccjs_fs_rm_sync(request->path, request->path_len, request->recursive, request->force);
+
+    if (status != CCJS_OK) {
+      return ccjs_fs_reject_status(request->loop, request->promise, status);
+    }
+
+    return ccjs_promise_resolve(request->promise, ccjs_undefined_value());
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_RENAME) {
+    ccjs_status status = ccjs_fs_rename_sync(request->path, request->path_len, request->path2, request->path2_len);
 
     if (status != CCJS_OK) {
       return ccjs_fs_reject_status(request->loop, request->promise, status);
@@ -2034,6 +2748,10 @@ static void ccjs_fs_request_finalizer(void* context) {
 
   if (request->path != 0) {
     allocator->free(allocator->user, request->path, request->path_len + 1, _Alignof(char));
+  }
+
+  if (request->path2 != 0) {
+    allocator->free(allocator->user, request->path2, request->path2_len + 1, _Alignof(char));
   }
 
   if (request->bytes != 0) {

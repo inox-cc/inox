@@ -2097,15 +2097,23 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'Promise.reject' ||
     path === 'fs.promises.access' ||
     path === 'fs.promises.lstat' ||
+    path === 'fs.promises.mkdir' ||
     path === 'fs.promises.readFile' ||
     path === 'fs.promises.readdir' ||
+    path === 'fs.promises.rename' ||
+    path === 'fs.promises.rm' ||
     path === 'fs.promises.stat' ||
+    path === 'fs.promises.unlink' ||
     path === 'fs.promises.writeFile' ||
     path === 'fs.accessSync' ||
     path === 'fs.lstatSync' ||
+    path === 'fs.mkdirSync' ||
     path === 'fs.readFileSync' ||
     path === 'fs.readdirSync' ||
+    path === 'fs.renameSync' ||
+    path === 'fs.rmSync' ||
     path === 'fs.statSync' ||
+    path === 'fs.unlinkSync' ||
     path === 'fs.writeFileSync' ||
     path === 'fs.constants.F_OK' ||
     path === 'fs.constants.R_OK' ||
@@ -3372,7 +3380,20 @@ function isAsyncFsRuntimeCallExpression(expression) {
 
   return (
     expression?.valueType === 'promise' &&
-    ['access', 'lstat', 'readFile', 'readFileBytes', 'readDir', 'stat', 'writeFile', 'writeFileBytes'].includes(method)
+    [
+      'access',
+      'lstat',
+      'mkdir',
+      'readFile',
+      'readFileBytes',
+      'readDir',
+      'rename',
+      'rm',
+      'stat',
+      'unlink',
+      'writeFile',
+      'writeFileBytes'
+    ].includes(method)
   )
 }
 
@@ -3793,6 +3814,21 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
 
     lines.push(...mode.lines)
     lines.push(`status = ccjs_fs_access(ccjs_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`)
+  } else if (method === 'mkdir') {
+    lines.push(`status = ccjs_fs_mkdir(ccjs_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &frame->awaited);`)
+  } else if (method === 'unlink') {
+    lines.push(`status = ccjs_fs_unlink(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'rm') {
+    lines.push(
+      `status = ccjs_fs_rm(ccjs_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &frame->awaited);`
+    )
+  } else if (method === 'rename') {
+    const newPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_new_path')
+
+    lines.push(...newPath.lines)
+    lines.push(
+      `status = ccjs_fs_rename(ccjs_loop, ${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length}, &frame->awaited);`
+    )
   } else if (method === 'writeFileBytes') {
     const bytes = emitCValueExpression(expression.args[1], context)
 
@@ -13149,7 +13185,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
       context,
       out,
       expression.promiseValueType ??
-        (method === 'writeFile' || method === 'writeFileBytes' || method === 'access'
+        (['access', 'mkdir', 'rename', 'rm', 'unlink', 'writeFile', 'writeFileBytes'].includes(method)
           ? 'void'
           : method === 'readDir'
             ? 'array'
@@ -13242,6 +13278,66 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
     }
   }
 
+  if (method === 'mkdir') {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_mkdir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'unlink') {
+    lines.push(
+      emitStatusCheck(`ccjs_fs_unlink(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`, context)
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'rm') {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_rm(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'rename') {
+    const newPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_new_path')
+
+    lines.push(...newPath.lines)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_rename(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
   if (method === 'writeFileBytes') {
     const bytes = emitCValueExpression(expression.args[1], context)
 
@@ -13320,7 +13416,10 @@ function emitPreparedFsSyncValueExpression(expression, context) {
 function emitPreparedFsSyncStatementExpression(expression, context) {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (method == null || !['accessSync', 'writeFileBytesSync', 'writeFileSync'].includes(method)) {
+  if (
+    method == null ||
+    !['accessSync', 'mkdirSync', 'renameSync', 'rmSync', 'unlinkSync', 'writeFileBytesSync', 'writeFileSync'].includes(method)
+  ) {
     return null
   }
 
@@ -13332,6 +13431,53 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
 
     lines.push(...mode.lines)
     lines.push(emitStatusCheck(`ccjs_fs_access_sync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
+
+    return {
+      lines
+    }
+  }
+
+  if (method === 'mkdirSync') {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_mkdir_sync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')})`,
+        context
+      )
+    )
+
+    return {
+      lines
+    }
+  }
+
+  if (method === 'unlinkSync') {
+    lines.push(emitStatusCheck(`ccjs_fs_unlink_sync(${path.bytes}, ${path.length})`, context))
+
+    return {
+      lines
+    }
+  }
+
+  if (method === 'rmSync') {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_rm_sync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')})`,
+        context
+      )
+    )
+
+    return {
+      lines
+    }
+  }
+
+  if (method === 'renameSync') {
+    const newPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_new_path')
+
+    lines.push(...newPath.lines)
+    lines.push(
+      emitStatusCheck(`ccjs_fs_rename_sync(${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length})`, context)
+    )
 
     return {
       lines
@@ -13378,6 +13524,10 @@ function emitPreparedFsAccessModeExpression(expression, context) {
     lines: mode.lines,
     expression: `((int)${mode.expression})`
   }
+}
+
+function emitFsBooleanFlag(expression, field: string) {
+  return expression?.[field] === true ? 'true' : 'false'
 }
 
 function emitPreparedFsStatsMethodExpression(expression, context) {
@@ -17658,7 +17808,9 @@ function cFsRuntimeCallName(callee) {
       return 'readDir'
     }
 
-    return ['access', 'lstat', 'readFile', 'stat', 'writeFile'].includes(path[2]) ? path[2] : null
+    return ['access', 'lstat', 'mkdir', 'readFile', 'rename', 'rm', 'stat', 'unlink', 'writeFile'].includes(path[2])
+      ? path[2]
+      : null
   }
 
   if (path.length !== 2) {
@@ -17673,7 +17825,17 @@ function cFsRuntimeCallName(callee) {
     return 'readDirSync'
   }
 
-  return ['accessSync', 'lstatSync', 'readFileSync', 'statSync', 'writeFileSync'].includes(path[1])
+  return [
+    'accessSync',
+    'lstatSync',
+    'mkdirSync',
+    'readFileSync',
+    'renameSync',
+    'rmSync',
+    'statSync',
+    'unlinkSync',
+    'writeFileSync'
+  ].includes(path[1])
     ? path[1]
     : null
 }
