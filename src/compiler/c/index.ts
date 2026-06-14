@@ -71,6 +71,11 @@ import {
 } from './modules.ts'
 import { emitCPrelude } from './prelude.ts'
 import { cMathBinaryMethods, cMathNullaryMethods, cMathUnaryMethods } from './runtime-methods.ts'
+import { cCryptoRuntimeCallName } from './stdlib/crypto.ts'
+import { cFetchRuntimeExpressionMethod } from './stdlib/fetch.ts'
+import { cFsRuntimeConstantExpression, cFsRuntimeExpressionMethod } from './stdlib/fs.ts'
+import { cJsonRuntimeCallName } from './stdlib/json.ts'
+import { cTimerClearCallName, cTimerRuntimeCallName, cTimerStartCallName } from './stdlib/timers.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
 import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile, CModulePlan } from './types.ts'
 import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
@@ -2282,6 +2287,7 @@ function isAsyncFsRuntimeCallExpression(expression) {
   const method = cFsRuntimeExpressionMethod(expression)
 
   return (
+    method != null &&
     expression?.valueType === 'promise' &&
     [
       'access',
@@ -16612,7 +16618,7 @@ function emitFsBooleanFlag(expression, field: string) {
 function emitPreparedFsStatsMethodExpression(expression, context) {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (!['direntIsDirectory', 'direntIsFile', 'statsIsDirectory', 'statsIsFile'].includes(method)) {
+  if (method == null || !['direntIsDirectory', 'direntIsFile', 'statsIsDirectory', 'statsIsFile'].includes(method)) {
     return null
   }
 
@@ -20660,138 +20666,6 @@ function cTimeRuntimeCallName(callee) {
   return null
 }
 
-function cFsRuntimeExpressionMethod(expression) {
-  return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
-}
-
-function cFetchRuntimeExpressionMethod(expression) {
-  return expression?.fetchRuntimeMethod ?? null
-}
-
-function cFsRuntimeConstantExpression(expression) {
-  const name = expression?.fsRuntimeConstant
-
-  if (name === 'F_OK') {
-    return 'CCJS_FS_F_OK'
-  }
-
-  if (name === 'R_OK') {
-    return 'CCJS_FS_R_OK'
-  }
-
-  if (name === 'W_OK') {
-    return 'CCJS_FS_W_OK'
-  }
-
-  if (name === 'X_OK') {
-    return 'CCJS_FS_X_OK'
-  }
-
-  return null
-}
-
-function cFsRuntimeCallName(callee) {
-  const path = cRuntimeMemberExpressionPath(callee)
-
-  if (path == null || path[0] !== 'fs') {
-    return null
-  }
-
-  if (path.length === 3 && path[1] === 'promises') {
-    if (path[2] === 'readdir') {
-      return 'readDir'
-    }
-
-    return [
-      'access',
-      'appendFile',
-      'copyFile',
-      'lstat',
-      'mkdir',
-      'readFile',
-      'readlink',
-      'realpath',
-      'rename',
-      'rm',
-      'stat',
-      'symlink',
-      'unlink',
-      'writeFile'
-    ].includes(path[2])
-      ? path[2]
-      : null
-  }
-
-  if (path.length !== 2) {
-    return null
-  }
-
-  if (path[1] === 'readdir') {
-    return 'readDir'
-  }
-
-  if (path[1] === 'readdirSync') {
-    return 'readDirSync'
-  }
-
-  return [
-    'accessSync',
-    'appendFileSync',
-    'copyFileSync',
-    'lstatSync',
-    'mkdirSync',
-    'readFileSync',
-    'readlinkSync',
-    'realpathSync',
-    'renameSync',
-    'rmSync',
-    'statSync',
-    'symlinkSync',
-    'unlinkSync',
-    'writeFileSync'
-  ].includes(path[1])
-    ? path[1]
-    : null
-}
-
-function cRuntimeMemberExpressionPath(expression) {
-  if (expression?.type === 'Reference' && expression.path.length > 0) {
-    return expression.path
-  }
-
-  if (expression?.type !== 'MemberExpression') {
-    return null
-  }
-
-  const objectPath = cRuntimeMemberExpressionPath(expression.object)
-
-  return objectPath == null ? null : [...objectPath, expression.property]
-}
-
-function cJsonRuntimeCallName(callee) {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
-    return null
-  }
-
-  if (callee.object.path[0] !== 'JSON') {
-    return null
-  }
-
-  return ['parse', 'stringify'].includes(callee.property) ? callee.property : null
-}
-
-function cCryptoRuntimeCallName(callee) {
-  if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
-    return null
-  }
-
-  if (callee.object.path[0] !== 'crypto') {
-    return null
-  }
-
-  return callee.property === 'getRandomValues' ? callee.property : null
-}
-
 function binaryRuntimeMethodName(callee) {
   if (callee?.type !== 'MemberExpression') {
     return null
@@ -20870,30 +20744,6 @@ function mathRuntimeMethodName(callee) {
     cMathBinaryMethods.has(callee.property)
     ? callee.property
     : null
-}
-
-function cTimerRuntimeCallName(callee) {
-  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
-    return null
-  }
-
-  return cTimerStartCallName(callee) ?? cTimerClearCallName(callee)
-}
-
-function cTimerStartCallName(callee) {
-  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
-    return null
-  }
-
-  return ['setImmediate', 'setInterval', 'setTimeout'].includes(callee.path[0]) ? callee.path[0] : null
-}
-
-function cTimerClearCallName(callee) {
-  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
-    return null
-  }
-
-  return ['clearImmediate', 'clearInterval', 'clearTimeout'].includes(callee.path[0]) ? callee.path[0] : null
 }
 
 function timerCallbackFunctionType() {
