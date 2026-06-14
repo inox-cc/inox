@@ -1,5 +1,15 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import {
+  commonArrayElementType,
+  commonValueType,
+  inferBinaryExpressionType,
+  isAssignableType,
+  isEqualityComparableType,
+  isEqualityOperator,
+  isMatchingSwitchCaseType,
+  isSwitchableType
+} from './checker/assignability.ts'
+import {
   errorObjectShape,
   fetchAbortControllerObjectShape,
   fetchResponseObjectShape,
@@ -5191,79 +5201,8 @@ class Checker {
   }
 }
 
-function inferBinaryExpressionType(operator: string, left: ValueType, right: ValueType): ValueType {
-  if (['===', '!==', '==', '!=', '<', '<=', '>', '>=', '&&', '||'].includes(operator)) {
-    return 'boolean'
-  }
-
-  if (operator === '??') {
-    return left === 'null' || left === 'unknown' ? right : left
-  }
-
-  if (operator === '+' && (left === 'string' || right === 'string')) {
-    return 'string'
-  }
-
-  return 'number'
-}
-
-function isEqualityOperator(operator: string): boolean {
-  return ['===', '!==', '==', '!='].includes(operator)
-}
-
 function isPromiseMethod(name: string): boolean {
   return ['catch', 'then'].includes(name)
-}
-
-function isEqualityComparableType(left: ValueType, right: ValueType): boolean {
-  if (left === 'unknown' || right === 'unknown') {
-    return true
-  }
-
-  return ['boolean', 'number', 'string', 'null'].includes(left) && left === right
-}
-
-function isAssignableType(
-  actual: ValueType | null | undefined,
-  expected: ValueType | null | undefined,
-  expectedNullable = false,
-  actualNullable = false
-): boolean {
-  if (actual == null || expected == null || actual === 'unknown' || expected === 'unknown') {
-    return true
-  }
-
-  if (actualNullable && actual !== 'null' && !expectedNullable) {
-    return false
-  }
-
-  if (actual === 'null') {
-    return expected === 'null' || expectedNullable
-  }
-
-  return actual === expected
-}
-
-function isSwitchableType(type: ValueType): boolean {
-  return ['boolean', 'number', 'string', 'unknown'].includes(type)
-}
-
-function isMatchingSwitchCaseType(actual: ValueType, expected: ValueType): boolean {
-  return actual === 'unknown' || expected === 'unknown' || actual === expected
-}
-
-function commonArrayElementType(types: ValueType[]): ValueType {
-  return commonValueType(types)
-}
-
-function commonValueType(types: ValueType[]): ValueType {
-  const [first] = types
-
-  if (first == null) {
-    return 'unknown'
-  }
-
-  return types.every((type) => type === first) ? first : 'unknown'
 }
 
 function promiseExecutorFunctionType(): AnyNode {
