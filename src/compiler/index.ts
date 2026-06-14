@@ -2,7 +2,7 @@ import { checkCCompileBudgets } from './budgets.ts'
 import { checkCProfileCapabilities } from './capabilities.ts'
 import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
 import { checkProgram } from './checker.ts'
-import { collectIrModuleRecords, lowerHirToIr } from './ir.ts'
+import { collectIrModuleRecords, collectIrRuntimeRequirements, lowerHirToIr } from './ir.ts'
 import { tokenize } from './lexer.ts'
 import { lowerProgram } from './lower.ts'
 import { buildModuleGraph } from './module-graph.ts'
@@ -84,6 +84,7 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
   return {
     target: compiled.target,
     graph: compiled.graph,
+    irRuntimeRequirements: collectIrRuntimeRequirements(compiled.irModules.map((module) => module.ir)),
     code: emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, {
       random: options.random
     })

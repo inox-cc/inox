@@ -245,6 +245,7 @@ export type SourceCompileResult = {
 export type FileCompileResult = {
   target: CompileTarget
   graph: ModuleGraph
+  irRuntimeRequirements: IrRuntimeRequirement[]
   code: string
 }
 

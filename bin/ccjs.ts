@@ -9,6 +9,7 @@ import { CompileError, formatDiagnostics } from '../src/compiler/diagnostics.ts'
 import { compileFile, compileFileToCModules } from '../src/compiler/index.ts'
 import type {
   CompileOptions,
+  IrRuntimeRequirement,
   RandomOptions,
   RuntimeBudgets,
   RuntimeCapabilities,
@@ -60,7 +61,8 @@ const cRuntimeSourceGroups = {
     'runtime/c/src/collections/map.c',
     'runtime/c/src/collections/set.c'
   ],
-  time: ['runtime/c/src/time/time.c']
+  time: ['runtime/c/src/time/time.c'],
+  weak: ['runtime/c/src/core/weak.c']
 }
 const configFileNames = ['ccjs.config.json', 'ccjs.json']
 
@@ -226,12 +228,18 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
 
   try {
     const compiler = cCompilerCommand(config)
-    const runtimeSources = cRuntimeSourcesForCode(result.code, options.tlsBackend ?? config.c?.tlsBackend ?? 'none')
+    const runtimeRequirements = result.irRuntimeRequirements
+    const runtimeSources = cRuntimeSourcesForCode(
+      result.code,
+      runtimeRequirements,
+      options.tlsBackend ?? config.c?.tlsBackend ?? 'none'
+    )
 
     return await spawnAndWait(compiler.command, [
       ...compiler.args,
       ...configCFlags(config),
       ...splitCommandWords(process.env.CFLAGS),
+      ...cRuntimeCFlagsForRequirements(runtimeRequirements),
       `-I${join(repoRoot, 'runtime/c/include')}`,
       source,
       ...runtimeSources,
@@ -250,9 +258,14 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
   }
 }
 
-function cRuntimeSourcesForCode(code: string, tlsBackend: TlsBackend = 'none'): string[] {
+function cRuntimeSourcesForCode(
+  code: string,
+  runtimeRequirements: readonly IrRuntimeRequirement[] = [],
+  tlsBackend: TlsBackend = 'none'
+): string[] {
   type RuntimeSourceGroup = keyof typeof cRuntimeSourceGroups | 'tls'
   const groups = new Set<RuntimeSourceGroup>()
+  const requirements = new Set(runtimeRequirements)
 
   if (usesCHeader(code, 'time')) {
     groups.add('time')
@@ -325,6 +338,11 @@ function cRuntimeSourcesForCode(code: string, tlsBackend: TlsBackend = 'none'): 
     groups.add('managed')
   }
 
+  if (requirements.has('weak-references')) {
+    groups.add('managed')
+    groups.add('weak')
+  }
+
   const sources = Object.entries(cRuntimeSourceGroups)
     .filter(([group]) => groups.has(group as keyof typeof cRuntimeSourceGroups))
     .flatMap(([, sources]) => sources)
@@ -335,6 +353,10 @@ function cRuntimeSourcesForCode(code: string, tlsBackend: TlsBackend = 'none'): 
   }
 
   return sources
+}
+
+function cRuntimeCFlagsForRequirements(runtimeRequirements: readonly IrRuntimeRequirement[]): string[] {
+  return runtimeRequirements.includes('weak-references') ? ['-DCCJS_ENABLE_WEAK=1'] : []
 }
 
 function cRuntimeTlsSource(tlsBackend: TlsBackend): string {

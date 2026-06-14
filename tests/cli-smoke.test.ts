@@ -662,6 +662,61 @@ exec cc "$@"
   }
 })
 
+test('ccjs build --target c enables weak runtime from IR requirements', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-weak-runtime-select-test-'))
+  const out = join(dir, 'weak')
+  const wrapper = join(dir, 'cc-wrapper.sh')
+  const log = join(dir, 'cc.log')
+
+  try {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `type Parent = {
+  name: string
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+const parent: Parent = { name: 'Ada' }
+const child: Child = { parent }
+console.log(child.parent?.name ?? 'missing')
+`
+    )
+    await writeFile(
+      wrapper,
+      `#!/bin/sh
+printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
+exit 0
+`
+    )
+    await chmod(wrapper, 0o755)
+
+    const result = await runCli(['build', 'main.ts', '--target', 'c', '-o', out], {
+      cwd: dir,
+      env: {
+        CC: wrapper,
+        CCJS_CC_LOG: log
+      }
+    })
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const invocation = await readFile(log, 'utf8')
+
+    assert.match(invocation, /-DCCJS_ENABLE_WEAK=1/)
+    assert.match(invocation, /runtime\/c\/src\/core\/weak\.c/)
+    assert.match(invocation, /runtime\/c\/src\/objects\/object\.c/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs build --target c links TLS runtime source with fetch', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1192,6 +1247,47 @@ test('ccjs run --target c builds and runs a temporary native executable', async 
   assert.equal(result.code, 0)
   assert.equal(result.stdout, 'hello\n')
   assert.equal(result.stderr, '')
+})
+
+test('ccjs run --target c builds and runs weak fields with automatic runtime selection', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-weak-cli-'))
+  const entry = join(dir, 'main.ts')
+
+  try {
+    await writeFile(
+      entry,
+      `type Parent = {
+  name: string
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+const parent: Parent = { name: 'Ada' }
+const child: Child = { parent }
+console.log(child.parent?.name ?? 'missing')
+`
+    )
+
+    const result = await runCli(['run', entry, '--target', 'c'])
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(result.stdout, 'Ada\n')
+    assert.equal(result.stderr, '')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
 })
 
 test('ccjs run --target c runs node:fs through non-libuv hosted fallback', async (t) => {
