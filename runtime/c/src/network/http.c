@@ -69,7 +69,7 @@ static ccjs_status ccjs_http_response_init(ccjs_http_response* response, ccjs_ht
 static int ccjs_http_header_name_equals(const char* left, size_t left_len, const char* right, size_t right_len);
 static int ccjs_http_has_response_header(ccjs_http_response* response, const char* name, size_t len);
 static ccjs_status ccjs_http_parse_headers(
-  char* start,
+  const char* start,
   const char* header_end,
   ccjs_http_header* headers,
   size_t* header_count,
@@ -562,7 +562,7 @@ static int ccjs_http_has_response_header(ccjs_http_response* response, const cha
 }
 
 static ccjs_status ccjs_http_parse_headers(
-  char* start,
+  const char* start,
   const char* header_end,
   ccjs_http_header* headers,
   size_t* header_count,
@@ -574,10 +574,10 @@ static ccjs_status ccjs_http_parse_headers(
 
   *header_count = 0;
   *content_length = 0;
-  char* cursor = start;
+  const char* cursor = start;
 
   while (cursor < header_end - 2) {
-    char* raw_line_end = strstr(cursor, "\r\n");
+    const char* raw_line_end = strstr(cursor, "\r\n");
 
     if (raw_line_end == 0 || raw_line_end > header_end) {
       return CCJS_ERR_FIELD;
@@ -587,14 +587,14 @@ static ccjs_status ccjs_http_parse_headers(
       break;
     }
 
-    char* line_end = raw_line_end;
-    char* separator = memchr(cursor, ':', (size_t)(line_end - cursor));
+    const char* line_end = raw_line_end;
+    const char* separator = memchr(cursor, ':', (size_t)(line_end - cursor));
 
     if (separator == 0) {
       return CCJS_ERR_FIELD;
     }
 
-    char* value = separator + 1;
+    const char* value = separator + 1;
 
     while (value < line_end && (*value == ' ' || *value == '\t')) {
       value += 1;
@@ -618,7 +618,7 @@ static ccjs_status ccjs_http_parse_headers(
     if (ccjs_http_header_name_equals(cursor, (size_t)(separator - cursor), "Content-Length", 14)) {
       size_t parsed = 0;
 
-      for (char* digit = value; digit < line_end; digit += 1) {
+      for (const char* digit = value; digit < line_end; digit += 1) {
         if (*digit < '0' || *digit > '9') {
           return CCJS_ERR_FIELD;
         }
