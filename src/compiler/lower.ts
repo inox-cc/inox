@@ -1,4 +1,13 @@
 import type { AnyNode, ProgramNode } from './types.ts'
+import {
+  arrayElementTypeNameFromTypeName,
+  isBuiltinValueType,
+  isBytesTypeName,
+  mapTypeNamesFromTypeName,
+  nullableTypeNameFromTypeName,
+  promiseValueTypeNameFromTypeName,
+  setElementTypeNameFromTypeName
+} from './type-names.ts'
 
 type LowerContext = {
   types: Map<string, AnyNode>
@@ -333,8 +342,9 @@ function resolveDeclaredType(name: string | null | undefined, context: LowerCont
   }
 
   const mapTypeNames = mapTypeNamesFromTypeName(name)
+  const isMalformedMapTypeName = mapTypeNames == null && name.startsWith('map<') && name.endsWith('>')
 
-  if (name === 'map' || mapTypeNames != null) {
+  if (name === 'map' || mapTypeNames != null || isMalformedMapTypeName) {
     const keyType = mapTypeNames == null ? null : resolveDeclaredType(mapTypeNames.key, context)
     const valueType = mapTypeNames == null ? null : resolveDeclaredType(mapTypeNames.value, context)
 
@@ -547,85 +557,6 @@ function inferPromiseValueType(expression: AnyNode | null): string | null {
   return expression?.valueType === 'promise' ? (expression.promiseValueType ?? null) : null
 }
 
-function arrayElementTypeNameFromTypeName(name: string): string | null {
-  const match = /^array<(.+)>$/.exec(name)
-
-  return match?.[1] ?? null
-}
-
-function nullableTypeNameFromTypeName(name: string): string | null {
-  const match = /^nullable<(.+)>$/.exec(name)
-
-  return match?.[1] ?? null
-}
-
-function mapTypeNamesFromTypeName(name: string): { key: string; value: string } | null {
-  const match = /^map<(.+)>$/.exec(name)
-
-  if (match == null) {
-    return null
-  }
-
-  const args = splitGenericArgs(match[1])
-
-  return args.length === 2
-    ? {
-        key: args[0],
-        value: args[1]
-      }
-    : {
-        key: 'unknown',
-        value: 'unknown'
-      }
-}
-
-function setElementTypeNameFromTypeName(name: string): string | null {
-  const match = /^set<(.+)>$/.exec(name)
-
-  if (match == null) {
-    return null
-  }
-
-  const args = splitGenericArgs(match[1])
-
-  return args.length === 1 ? args[0] : null
-}
-
-function promiseValueTypeNameFromTypeName(name: string): string | null {
-  const match = /^promise<(.+)>$/.exec(name)
-
-  if (match == null) {
-    return null
-  }
-
-  const args = splitGenericArgs(match[1])
-
-  return args.length === 1 ? args[0] : null
-}
-
-function splitGenericArgs(value: string): string[] {
-  const args: string[] = []
-  let depth = 0
-  let start = 0
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]
-
-    if (char === '<') {
-      depth += 1
-    } else if (char === '>') {
-      depth -= 1
-    } else if (char === ',' && depth === 0) {
-      args.push(value.slice(start, index))
-      start = index + 1
-    }
-  }
-
-  args.push(value.slice(start))
-
-  return args.map((arg) => arg.trim()).filter(Boolean)
-}
-
 function commonArrayElementType(types: string[]): string {
   const [first] = types
 
@@ -634,16 +565,6 @@ function commonArrayElementType(types: string[]): string {
   }
 
   return types.every((type) => type === first) ? first : 'unknown'
-}
-
-function isBuiltinValueType(name: string): boolean {
-  return ['array', 'boolean', 'bytes', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(
-    name
-  )
-}
-
-function isBytesTypeName(name: string): boolean {
-  return name === 'Buffer' || name === 'Uint8Array'
 }
 
 function lowerExpression(expression: AnyNode, context: LowerContext = { types: new Map() }): AnyNode {

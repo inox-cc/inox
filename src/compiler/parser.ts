@@ -1,4 +1,5 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
+import { splitGenericArgs, splitUnionArgs } from './type-names.ts'
 import type { AnyNode, Diagnostic, ProgramNode, SourceLocation, Token } from './types.ts'
 
 export function parse(tokens: Token[]): ProgramNode {
@@ -1717,50 +1718,4 @@ function normalizeTypeName(name: string): string {
   }
 
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : 'unknown'
-}
-
-function splitGenericArgs(value: string): string[] {
-  const args: string[] = []
-  let depth = 0
-  let start = 0
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]
-
-    if (char === '<') {
-      depth += 1
-    } else if (char === '>') {
-      depth -= 1
-    } else if (char === ',' && depth === 0) {
-      args.push(value.slice(start, index))
-      start = index + 1
-    }
-  }
-
-  args.push(value.slice(start))
-
-  return args.map((arg) => arg.trim()).filter(Boolean)
-}
-
-function splitUnionArgs(value: string): string[] {
-  const args: string[] = []
-  let depth = 0
-  let start = 0
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]
-
-    if (char === '<') {
-      depth += 1
-    } else if (char === '>') {
-      depth -= 1
-    } else if (char === '|' && depth === 0) {
-      args.push(value.slice(start, index))
-      start = index + 1
-    }
-  }
-
-  args.push(value.slice(start))
-
-  return args.map((arg) => arg.trim()).filter(Boolean)
 }

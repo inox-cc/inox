@@ -1,4 +1,13 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
+import {
+  arrayElementTypeNameFromTypeName,
+  isBuiltinValueType,
+  isBytesTypeName,
+  mapTypeNamesFromTypeName,
+  nullableTypeNameFromTypeName,
+  promiseValueTypeNameFromTypeName,
+  setElementTypeNameFromTypeName
+} from './type-names.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -5619,72 +5628,6 @@ function isMatchingSwitchCaseType(actual: ValueType, expected: ValueType): boole
   return actual === 'unknown' || expected === 'unknown' || actual === expected
 }
 
-function arrayElementTypeNameFromTypeName(name: string): string | null {
-  const match = /^array<(.+)>$/.exec(name)
-
-  return match?.[1] ?? null
-}
-
-function nullableTypeNameFromTypeName(name: string): string | null {
-  const match = /^nullable<(.+)>$/.exec(name)
-
-  return match?.[1] ?? null
-}
-
-function mapTypeNamesFromTypeName(name: string): { key: string; value: string } | null {
-  const match = /^map<(.+)>$/.exec(name)
-
-  if (match == null) {
-    return null
-  }
-
-  const args = splitGenericArgs(match[1])
-
-  return args.length === 2
-    ? {
-        key: args[0],
-        value: args[1]
-      }
-    : null
-}
-
-function setElementTypeNameFromTypeName(name: string): string | null {
-  const match = /^set<(.+)>$/.exec(name)
-  const args = match == null ? [] : splitGenericArgs(match[1])
-
-  return args.length === 1 ? args[0] : null
-}
-
-function promiseValueTypeNameFromTypeName(name: string): string | null {
-  const match = /^promise<(.+)>$/.exec(name)
-  const args = match == null ? [] : splitGenericArgs(match[1])
-
-  return args.length === 1 ? args[0] : null
-}
-
-function splitGenericArgs(value: string): string[] {
-  const args: string[] = []
-  let depth = 0
-  let start = 0
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]
-
-    if (char === '<') {
-      depth += 1
-    } else if (char === '>') {
-      depth -= 1
-    } else if (char === ',' && depth === 0) {
-      args.push(value.slice(start, index))
-      start = index + 1
-    }
-  }
-
-  args.push(value.slice(start))
-
-  return args.map((arg) => arg.trim()).filter(Boolean)
-}
-
 function commonArrayElementType(types: ValueType[]): ValueType {
   return commonValueType(types)
 }
@@ -5725,16 +5668,6 @@ function promiseSettlementFunctionType(): AnyNode {
     returnType: 'void',
     returnNullable: false
   }
-}
-
-function isBuiltinValueType(name: string): boolean {
-  return ['array', 'boolean', 'bytes', 'function', 'null', 'number', 'object', 'promise', 'string', 'void'].includes(
-    name
-  )
-}
-
-function isBytesTypeName(name: string): boolean {
-  return name === 'Buffer' || name === 'Uint8Array'
 }
 
 function promiseStaticMethodName(callee: AnyNode): string | null {
