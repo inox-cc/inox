@@ -211,7 +211,16 @@ function resolveWeakFieldDeclaredType(field: AnyNode, context: LowerContext): Lo
   const targetName = nullableTypeNameFromTypeName(field.valueType) ?? field.valueType
   const type = context.types.get(targetName)
 
-  if (targetName === 'object' || type?.kind === 'object' || context.classNames.has(targetName)) {
+  if (type?.kind === 'object') {
+    return {
+      ...unresolvedType(),
+      valueType: 'object',
+      nullable: true,
+      shape: resolveWeakTargetObjectShape(type, context)
+    }
+  }
+
+  if (targetName === 'object' || context.classNames.has(targetName)) {
     return {
       ...unresolvedType(),
       valueType: 'object',
@@ -223,6 +232,116 @@ function resolveWeakFieldDeclaredType(field: AnyNode, context: LowerContext): Lo
     ...resolveDeclaredType(targetName, context),
     nullable: true
   }
+}
+
+function resolveWeakTargetObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
+  return {
+    ...shape,
+    fields: shape.fields.map((field) => {
+      const declared = resolveWeakTargetShapeFieldType(field, context)
+
+      return {
+        ...field,
+        declaredType: field.declaredType ?? field.valueType,
+        valueType: declared.valueType ?? field.valueType,
+        nullable: declared.nullable || field.ownership === 'weak',
+        arrayElementType: declared.arrayElementType,
+        arrayElementDeclaredType: declared.arrayElementDeclaredType,
+        mapKeyType: declared.mapKeyType,
+        mapValueType: declared.mapValueType,
+        promiseValueType: declared.promiseValueType ?? null,
+        setElementType: declared.setElementType,
+        shape: null,
+        functionType: null
+      }
+    })
+  }
+}
+
+function resolveWeakTargetShapeFieldType(field: AnyNode, context: LowerContext): LowerResolvedType {
+  return resolveWeakTargetShapeTypeName(field.declaredType ?? field.valueType, context)
+}
+
+function resolveWeakTargetShapeTypeName(name: string | null | undefined, context: LowerContext): LowerResolvedType {
+  if (name == null) {
+    return unresolvedType()
+  }
+
+  const nullableTypeName = nullableTypeNameFromTypeName(name)
+
+  if (nullableTypeName != null) {
+    const inner = resolveWeakTargetShapeTypeName(nullableTypeName, context)
+
+    return {
+      ...inner,
+      nullable: true
+    }
+  }
+
+  const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
+
+  if (name === 'array' || arrayElementTypeName != null) {
+    const elementType =
+      arrayElementTypeName == null ? null : resolveWeakTargetShapeTypeName(arrayElementTypeName, context)
+
+    return {
+      ...unresolvedType(),
+      valueType: 'array',
+      arrayElementType: elementType?.valueType ?? 'unknown',
+      arrayElementDeclaredType: arrayElementTypeName ?? null
+    }
+  }
+
+  const mapTypeNames = mapTypeNamesFromTypeName(name)
+  const isMalformedMapTypeName = mapTypeNames == null && name.startsWith('map<') && name.endsWith('>')
+
+  if (name === 'map' || mapTypeNames != null || isMalformedMapTypeName) {
+    const keyType = mapTypeNames == null ? null : resolveWeakTargetShapeTypeName(mapTypeNames.key, context)
+    const valueType = mapTypeNames == null ? null : resolveWeakTargetShapeTypeName(mapTypeNames.value, context)
+
+    return {
+      ...unresolvedType(),
+      valueType: 'map',
+      mapKeyType: keyType?.valueType ?? 'unknown',
+      mapValueType: valueType?.valueType ?? 'unknown'
+    }
+  }
+
+  const setElementTypeName = setElementTypeNameFromTypeName(name)
+
+  if (name === 'set' || setElementTypeName != null) {
+    const elementType =
+      setElementTypeName == null ? null : resolveWeakTargetShapeTypeName(setElementTypeName, context)
+
+    return {
+      ...unresolvedType(),
+      valueType: 'set',
+      setElementType: elementType?.valueType ?? 'unknown'
+    }
+  }
+
+  if (isBytesTypeName(name)) {
+    return {
+      ...unresolvedType(),
+      valueType: 'bytes'
+    }
+  }
+
+  if (isBuiltinValueType(name)) {
+    return {
+      ...unresolvedType(),
+      valueType: name
+    }
+  }
+
+  if (context.types.get(name)?.kind === 'object' || context.classNames.has(name)) {
+    return {
+      ...unresolvedType(),
+      valueType: 'object'
+    }
+  }
+
+  return resolveDeclaredType(name, context)
 }
 
 function collectTypes(ast: ProgramNode): Map<string, AnyNode> {

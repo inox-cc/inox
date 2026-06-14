@@ -123,6 +123,7 @@ class Checker {
   currentClassConstructor: boolean
   asyncDepth: number
   functionDepth: number
+  narrowedNullableNames: Set<string>
 
   constructor(program: ProgramNode, options: CompileOptions = {}) {
     this.program = program
@@ -140,6 +141,7 @@ class Checker {
     this.currentClassConstructor = false
     this.asyncDepth = 0
     this.functionDepth = 0
+    this.narrowedNullableNames = new Set()
   }
 
   check(): void {
@@ -454,10 +456,16 @@ class Checker {
 
     if (statement.type === 'IfStatement') {
       this.checkBooleanCondition(statement.condition)
-      this.checkScopedBody(statement.consequent)
+      const narrowing = this.resolveNullableConditionNarrowing(statement.condition)
+
+      this.withNarrowedNullableNames(narrowing.trueNames, () => {
+        this.checkScopedBody(statement.consequent)
+      })
 
       if (statement.alternate != null) {
-        this.checkScopedBody(statement.alternate)
+        this.withNarrowedNullableNames(narrowing.falseNames, () => {
+          this.checkScopedBody(statement.alternate)
+        })
       }
 
       return
@@ -465,8 +473,12 @@ class Checker {
 
     if (statement.type === 'WhileStatement') {
       this.checkBooleanCondition(statement.condition)
+      const narrowing = this.resolveNullableConditionNarrowing(statement.condition)
+
       this.withLoop(() => {
-        this.checkScopedBody(statement.body)
+        this.withNarrowedNullableNames(narrowing.trueNames, () => {
+          this.checkScopedBody(statement.body)
+        })
       })
       return
     }
@@ -735,6 +747,7 @@ class Checker {
       })
 
       expression.nullable = symbol?.nullable === true
+      expression.valueType = symbol?.valueType ?? 'unknown'
       expression.shape = symbol?.shape ?? null
       expression.className = symbol?.className ?? null
 
@@ -743,7 +756,17 @@ class Checker {
 
     if (expression.type === 'Reference') {
       const symbol = this.resolveReference(expression)
-      expression.nullable = symbol?.nullable === true
+      expression.nullable = symbol?.nullable === true && !this.narrowedNullableNames.has(expression.path[0])
+      expression.valueType = symbol?.valueType ?? 'unknown'
+      expression.arrayElementType = symbol?.arrayElementType ?? null
+      expression.arrayElementDeclaredType = symbol?.arrayElementDeclaredType ?? null
+      expression.mapKeyType = symbol?.mapKeyType ?? null
+      expression.mapValueType = symbol?.mapValueType ?? null
+      expression.promiseValueType = symbol?.promiseValueType ?? null
+      expression.setElementType = symbol?.setElementType ?? null
+      expression.functionType = symbol?.functionType ?? null
+      expression.shape = symbol?.shape ?? null
+      expression.className = symbol?.className ?? null
 
       return symbol?.valueType ?? 'unknown'
     }
@@ -930,6 +953,10 @@ class Checker {
           expression.value.loc
         )
       }
+
+      if (expression.target.path.length === 1 && symbol.nullable === true) {
+        this.narrowedNullableNames.delete(expression.target.path[0])
+      }
     }
 
     return valueType
@@ -965,7 +992,13 @@ class Checker {
 
   checkBinaryExpression(expression: AnyNode): ValueType {
     const left = this.checkExpression(expression.left)
-    const right = this.checkExpression(expression.right)
+    const leftNarrowing = this.resolveNullableConditionNarrowing(expression.left)
+    const right =
+      expression.operator === '&&'
+        ? this.withNarrowedNullableNames(leftNarrowing.trueNames, () => this.checkExpression(expression.right))
+        : expression.operator === '||'
+          ? this.withNarrowedNullableNames(leftNarrowing.falseNames, () => this.checkExpression(expression.right))
+          : this.checkExpression(expression.right)
     const nullableEquality =
       isEqualityOperator(expression.operator) &&
       ((left === 'null' && this.expressionCanBeNull(expression.right)) ||
@@ -1004,6 +1037,8 @@ class Checker {
     }
 
     const objectType = this.checkExpression(expression.object)
+
+    this.reportNullableRuntimeAccess(expression.object, expression.loc)
 
     if (objectType === 'bytes' && expression.property === 'length') {
       expression.valueType = 'number'
@@ -1184,6 +1219,8 @@ class Checker {
   checkIndexExpression(expression: AnyNode): ValueType {
     const objectType = this.checkExpression(expression.object)
     const indexType = this.checkExpression(expression.index)
+
+    this.reportNullableRuntimeAccess(expression.object, expression.loc)
 
     if (objectType === 'map') {
       const mapType = this.resolveExpressionMapType(expression.object) ?? {
@@ -4535,7 +4572,11 @@ class Checker {
       }
 
       this.withLoop(() => {
-        this.checkScopedBody(statement.body)
+        const narrowing = this.resolveNullableConditionNarrowing(statement.test)
+
+        this.withNarrowedNullableNames(narrowing.trueNames, () => {
+          this.checkScopedBody(statement.body)
+        })
       })
     })
   }
@@ -4679,6 +4720,141 @@ class Checker {
     if (type !== 'boolean' && type !== 'unknown') {
       this.report('CCJS_CONDITION_TYPE', `condition must be boolean, got ${type}`, expression.loc)
     }
+  }
+
+  resolveNullableConditionNarrowing(
+    expression: AnyNode | null | undefined
+  ): { trueNames: string[]; falseNames: string[] } {
+    if (expression?.type !== 'BinaryExpression') {
+      return {
+        trueNames: [],
+        falseNames: []
+      }
+    }
+
+    if (expression.operator === '&&') {
+      const left = this.resolveNullableConditionNarrowing(expression.left)
+      const right = this.withNarrowedNullableNames(left.trueNames, () =>
+        this.resolveNullableConditionNarrowing(expression.right)
+      )
+
+      return {
+        trueNames: this.uniqueNames([...left.trueNames, ...right.trueNames]),
+        falseNames: this.intersectNames(left.falseNames, this.uniqueNames([...left.trueNames, ...right.falseNames]))
+      }
+    }
+
+    if (expression.operator === '||') {
+      const left = this.resolveNullableConditionNarrowing(expression.left)
+      const right = this.withNarrowedNullableNames(left.falseNames, () =>
+        this.resolveNullableConditionNarrowing(expression.right)
+      )
+
+      return {
+        trueNames: this.intersectNames(left.trueNames, this.uniqueNames([...left.falseNames, ...right.trueNames])),
+        falseNames: this.uniqueNames([...left.falseNames, ...right.falseNames])
+      }
+    }
+
+    if (!['===', '!==', '==', '!='].includes(expression.operator)) {
+      return {
+        trueNames: [],
+        falseNames: []
+      }
+    }
+
+    const nullable = expression.left?.type === 'NullLiteral' ? expression.right : expression.left
+    const maybeNull = expression.left?.type === 'NullLiteral' ? expression.left : expression.right
+
+    if (maybeNull?.type !== 'NullLiteral' || nullable?.type !== 'Reference' || nullable.path.length !== 1) {
+      return {
+        trueNames: [],
+        falseNames: []
+      }
+    }
+
+    const name = nullable.path[0]
+    const symbol = this.scope.resolve(name)
+
+    if (symbol?.nullable !== true) {
+      return {
+        trueNames: [],
+        falseNames: []
+      }
+    }
+
+    if (['!==', '!='].includes(expression.operator)) {
+      return {
+        trueNames: [name],
+        falseNames: []
+      }
+    }
+
+    return {
+      trueNames: [],
+      falseNames: [name]
+    }
+  }
+
+  reportNullableRuntimeAccess(receiver: AnyNode, loc: SourceLocation): void {
+    if (receiver?.nullable !== true) {
+      return
+    }
+
+    const valueType = receiver.valueType ?? this.inferNullableAccessValueType(receiver)
+
+    if (!this.isRuntimeNullableType(valueType)) {
+      return
+    }
+
+    this.report(
+      'CCJS_WEAK_ACCESS',
+      'nullable weak value access requires optional chaining or a prior null check',
+      loc
+    )
+  }
+
+  inferNullableAccessValueType(expression: AnyNode): ValueType | null {
+    if (expression.type === 'Reference' && expression.path.length === 1) {
+      return this.scope.resolve(expression.path[0])?.valueType ?? null
+    }
+
+    return expression.valueType ?? null
+  }
+
+  isRuntimeNullableType(valueType: ValueType | null | undefined): boolean {
+    return ['number', 'boolean', 'string', 'bytes', 'object', 'array', 'map', 'set', 'function'].includes(
+      valueType ?? ''
+    )
+  }
+
+  withNarrowedNullableNames<T>(names: string[], callback: () => T): T {
+    if (names.length === 0) {
+      return callback()
+    }
+
+    const previous = this.narrowedNullableNames
+    this.narrowedNullableNames = new Set(previous)
+
+    for (const name of names) {
+      this.narrowedNullableNames.add(name)
+    }
+
+    try {
+      return callback()
+    } finally {
+      this.narrowedNullableNames = previous
+    }
+  }
+
+  uniqueNames(names: string[]): string[] {
+    return [...new Set(names)]
+  }
+
+  intersectNames(left: string[], right: string[]): string[] {
+    const rightNames = new Set(right)
+
+    return this.uniqueNames(left.filter((name) => rightNames.has(name)))
   }
 
   checkScopedBody(statement: AnyNode): void {
@@ -5177,12 +5353,29 @@ class Checker {
 
     const shape = this.types.get(name)
 
-    if (shape?.kind === 'object' || this.classNames.has(name) || this.scope.resolve(name)?.kind === 'class') {
+    if (shape?.kind === 'object') {
       return {
         valueType: 'object',
         nullable: false,
         functionType: null,
-        shape: null,
+        shape: this.resolveWeakTargetObjectShape(shape),
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null
+      }
+    }
+
+    const classSymbol = this.scope.resolve(name)
+
+    if (this.classNames.has(name) || classSymbol?.kind === 'class') {
+      return {
+        valueType: 'object',
+        nullable: false,
+        functionType: null,
+        shape: classSymbol?.shape == null ? null : this.resolveWeakTargetObjectShape(classSymbol.shape),
         arrayElementType: null,
         arrayElementDeclaredType: null,
         mapKeyType: null,
@@ -5193,6 +5386,134 @@ class Checker {
     }
 
     return this.resolveDeclaredType(name, loc)
+  }
+
+  resolveWeakTargetObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
+    return {
+      ...shape,
+      fields: shape.fields.map((field) => {
+        const declared = this.resolveWeakTargetShapeFieldType(field)
+
+        return {
+          ...field,
+          declaredType: field.declaredType ?? field.valueType,
+          valueType: declared.valueType,
+          nullable: declared.nullable || field.ownership === 'weak',
+          arrayElementType: declared.arrayElementType,
+          arrayElementDeclaredType: declared.arrayElementDeclaredType,
+          mapKeyType: declared.mapKeyType,
+          mapValueType: declared.mapValueType,
+          promiseValueType: declared.promiseValueType ?? null,
+          setElementType: declared.setElementType,
+          functionType: null,
+          shape: null
+        }
+      })
+    }
+  }
+
+  resolveWeakTargetShapeFieldType(field: AnyNode): ResolvedTypeInfo {
+    return this.resolveWeakTargetShapeTypeName(field.declaredType ?? field.valueType, field.loc)
+  }
+
+  resolveWeakTargetShapeTypeName(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
+    if (name == null || name === 'unknown') {
+      return this.unresolvedTypeInfo()
+    }
+
+    const nullableTypeName = nullableTypeNameFromTypeName(name)
+
+    if (nullableTypeName != null) {
+      const inner = this.resolveWeakTargetShapeTypeName(nullableTypeName, loc)
+
+      return {
+        ...inner,
+        nullable: true
+      }
+    }
+
+    const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
+
+    if (name === 'array' || arrayElementTypeName != null) {
+      const elementInfo =
+        arrayElementTypeName == null ? null : this.resolveWeakTargetShapeTypeName(arrayElementTypeName, loc)
+
+      return {
+        ...this.unresolvedTypeInfo(),
+        valueType: 'array',
+        arrayElementType: elementInfo?.valueType ?? 'unknown',
+        arrayElementDeclaredType: arrayElementTypeName ?? null
+      }
+    }
+
+    const mapTypeNames = mapTypeNamesFromTypeName(name)
+
+    if (name === 'map' || mapTypeNames != null) {
+      const keyInfo = mapTypeNames == null ? null : this.resolveWeakTargetShapeTypeName(mapTypeNames.key, loc)
+      const valueInfo = mapTypeNames == null ? null : this.resolveWeakTargetShapeTypeName(mapTypeNames.value, loc)
+
+      return {
+        ...this.unresolvedTypeInfo(),
+        valueType: 'map',
+        mapKeyType: keyInfo?.valueType ?? 'unknown',
+        mapValueType: valueInfo?.valueType ?? 'unknown'
+      }
+    }
+
+    const setElementTypeName = setElementTypeNameFromTypeName(name)
+
+    if (name === 'set' || setElementTypeName != null) {
+      const elementInfo =
+        setElementTypeName == null ? null : this.resolveWeakTargetShapeTypeName(setElementTypeName, loc)
+
+      return {
+        ...this.unresolvedTypeInfo(),
+        valueType: 'set',
+        setElementType: elementInfo?.valueType ?? 'unknown'
+      }
+    }
+
+    if (isBytesTypeName(name)) {
+      return {
+        ...this.unresolvedTypeInfo(),
+        valueType: 'bytes'
+      }
+    }
+
+    if (isBuiltinValueType(name)) {
+      return {
+        ...this.unresolvedTypeInfo(),
+        valueType: name
+      }
+    }
+
+    if (
+      this.types.get(name)?.kind === 'object' ||
+      this.classNames.has(name) ||
+      this.scope.resolve(name)?.kind === 'class'
+    ) {
+      return {
+        ...this.unresolvedTypeInfo(),
+        valueType: 'object'
+      }
+    }
+
+    return this.resolveDeclaredType(name, loc)
+  }
+
+  unresolvedTypeInfo(): ResolvedTypeInfo {
+    return {
+      valueType: 'unknown',
+      nullable: false,
+      functionType: null,
+      shape: null,
+      arrayElementType: null,
+      arrayElementDeclaredType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      promiseValueType: null,
+      setElementType: null
+    }
   }
 
   resolveExpressionArrayElementType(expression: AnyNode | null | undefined): ValueType | null {
@@ -5394,16 +5715,20 @@ class Checker {
     }
 
     this.scope.bindings.set(name, symbol)
+    this.narrowedNullableNames.delete(name)
   }
 
   withScope(callback: () => void): void {
     const previous = this.scope
+    const previousNarrowedNullableNames = this.narrowedNullableNames
     this.scope = new Scope(previous)
+    this.narrowedNullableNames = new Set(previousNarrowedNullableNames)
 
     try {
       callback()
     } finally {
       this.scope = previous
+      this.narrowedNullableNames = previousNarrowedNullableNames
     }
   }
 

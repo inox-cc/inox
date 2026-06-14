@@ -152,6 +152,91 @@ export function main(): void {}
   assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
 })
 
+test('rejects direct weak dereference without a null check', () => {
+  assertDiagnostic(
+    `type Parent = {
+  name: string
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+export function main(): void {
+  const parent: Parent = { name: 'Ada' }
+  const child: Child = { parent }
+  console.log(child.parent.name)
+}
+`,
+    'CCJS_WEAK_ACCESS'
+  )
+})
+
+test('rejects direct weak local dereference without a null check', () => {
+  assertDiagnostic(
+    `type Parent = {
+  name: string
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+export function main(): void {
+  const parent: Parent = { name: 'Ada' }
+  const child: Child = { parent }
+  const maybe = child.parent
+  console.log(maybe.name)
+}
+`,
+    'CCJS_WEAK_ACCESS'
+  )
+})
+
+test('allows weak dereference after a null check', () => {
+  const compiled = compileSource(`type Parent = {
+  name: string
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+export function main(): void {
+  const parent: Parent = { name: 'Ada' }
+  const child: Child = { parent }
+  const maybe = child.parent
+
+  if (maybe != null) {
+    console.log(maybe.name)
+  }
+}
+`)
+
+  assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
+  assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+})
+
+test('allows optional chaining over weak fields', () => {
+  const compiled = compileSource(`type Parent = {
+  name: string
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+export function main(): void {
+  const parent: Parent = { name: 'Ada' }
+  const child: Child = { parent }
+  console.log(child.parent?.name ?? 'missing')
+}
+`)
+
+  assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
+  assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+})
+
 test('lowers weak class fields to C weak field metadata', () => {
   const compiled = compileSource(`class Node {
   weak parent: Node | null

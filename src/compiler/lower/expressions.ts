@@ -57,7 +57,17 @@ export function lowerExpression(
   if (expression.type === 'Reference') {
     return {
       ...expression,
-      valueType: 'unknown'
+      valueType: expression.valueType ?? 'unknown',
+      nullable: expression.nullable === true,
+      arrayElementType: expression.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
+      mapKeyType: expression.mapKeyType ?? null,
+      mapValueType: expression.mapValueType ?? null,
+      promiseValueType: expression.promiseValueType ?? null,
+      setElementType: expression.setElementType ?? null,
+      functionType: expression.functionType ?? null,
+      shape: expression.shape ?? null,
+      className: expression.className ?? null
     }
   }
 
@@ -65,7 +75,15 @@ export function lowerExpression(
     return {
       ...expression,
       object: lowerExpression(expression.object, context),
-      valueType: 'unknown'
+      valueType: expression.valueType ?? 'unknown',
+      nullable: expression.nullable === true,
+      arrayElementType: expression.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
+      mapKeyType: expression.mapKeyType ?? null,
+      mapValueType: expression.mapValueType ?? null,
+      promiseValueType: expression.promiseValueType ?? null,
+      setElementType: expression.setElementType ?? null,
+      shape: expression.shape ?? null
     }
   }
 

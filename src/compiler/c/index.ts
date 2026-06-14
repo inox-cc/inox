@@ -12549,7 +12549,7 @@ function emitCValueExpression(expression, context) {
             `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
             context
           ),
-          emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context)
+          ...emitRuntimeFieldValueCheck(temp, tag, expression, context)
         ],
         expression: temp
       }
@@ -12566,7 +12566,7 @@ function emitCValueExpression(expression, context) {
             `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
             context
           ),
-          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_OBJECT || ${temp}.as.ref == 0`, context)
+          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_OBJECT', expression, context)
         ],
         expression: temp
       }
@@ -12583,7 +12583,7 @@ function emitCValueExpression(expression, context) {
             `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
             context
           ),
-          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context)
+          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_STRING', expression, context)
         ],
         expression: temp
       }
@@ -12601,7 +12601,7 @@ function emitCValueExpression(expression, context) {
         lines: [
           ...emitPrepareOwnedValueWrite(temp),
           emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context),
-          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_ARRAY || ${temp}.as.ref == 0`, context)
+          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_ARRAY', expression, context)
         ],
         expression: temp
       }
@@ -12616,10 +12616,7 @@ function emitCValueExpression(expression, context) {
         ? {
             lines: [
               ...value.lines,
-              emitRuntimeTypeCheck(
-                `${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`,
-                context
-              )
+              ...emitRuntimeFieldValueCheck(value.expression, 'CCJS_TAG_STRING', expression, context)
             ],
             expression: value.expression
           }
@@ -12634,7 +12631,7 @@ function emitCValueExpression(expression, context) {
         lines: [
           ...emitPrepareOwnedValueWrite(temp),
           emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context),
-          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context)
+          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_STRING', expression, context)
         ],
         expression: temp
       }
@@ -12659,7 +12656,7 @@ function emitCValueExpression(expression, context) {
             `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
             context
           ),
-          emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context)
+          ...emitRuntimeFieldValueCheck(temp, tag, expression, context)
         ],
         expression: temp
       }
@@ -12676,7 +12673,7 @@ function emitCValueExpression(expression, context) {
             `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
             context
           ),
-          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_OBJECT || ${temp}.as.ref == 0`, context)
+          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_OBJECT', expression, context)
         ],
         expression: temp
       }
@@ -12693,7 +12690,7 @@ function emitCValueExpression(expression, context) {
             `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
             context
           ),
-          emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context)
+          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_STRING', expression, context)
         ],
         expression: temp
       }
@@ -13104,8 +13101,16 @@ function cNullLiteralNode(loc = null) {
   }
 }
 
+function emitRuntimeFieldValueCheck(value, expectedTag, expression, context) {
+  if (expression?.nullable === true) {
+    return emitRuntimeNullableValueCheck(value, expectedTag, context)
+  }
+
+  return [emitRuntimeValueCheck(value, expectedTag, context)].filter(Boolean)
+}
+
 function emitCOptionalMemberValueExpression(expression, context) {
-  const member = resolveKnownObjectMember(expression, context)
+  const member = resolveKnownObjectMember(expression, context) ?? resolveObjectExpressionMember(expression)
 
   if (member == null || !isRuntimeNullableType(member.valueType)) {
     context.diagnostics.push(
@@ -13126,12 +13131,15 @@ function emitCOptionalMemberValueExpression(expression, context) {
     expression.object,
     member.valueType,
     context,
-    (temp) => `ccjs_object_get_known(${temp}, ${member.index}, &`
+    (temp) =>
+      member.key == null
+        ? `ccjs_object_get_known(${temp}, ${member.index}, &`
+        : `ccjs_object_get(${temp}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, &`
   )
 }
 
 function emitCOptionalIndexValueExpression(expression, context) {
-  const field = resolveKnownObjectIndex(expression, context)
+  const field = resolveKnownObjectIndex(expression, context) ?? resolveObjectExpressionIndex(expression)
 
   if (field != null) {
     if (!isRuntimeNullableType(field.valueType)) {
@@ -13153,7 +13161,10 @@ function emitCOptionalIndexValueExpression(expression, context) {
       expression.object,
       field.valueType,
       context,
-      (temp) => `ccjs_object_get(${temp}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &`
+      (temp) =>
+        field.key == null
+          ? `ccjs_object_get_known(${temp}, ${field.index}, &`
+          : `ccjs_object_get(${temp}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &`
     )
   }
 
@@ -15057,7 +15068,7 @@ function resolveNullableScalarNullCheckNarrowing(expression, context) {
 
   const name = nullable.path[0]
 
-  if (!context.nullableVariables.has(name) || !isNullableScalarType(context.variables.get(name))) {
+  if (!context.nullableVariables.has(name) || !isRuntimeNullableType(context.variables.get(name))) {
     return emptyNullableScalarNarrowing()
   }
 
@@ -19836,6 +19847,7 @@ function resolveKnownObjectMember(expression, context) {
 
   return {
     objectName,
+    key: null,
     index,
     valueType: fields[index].valueType,
     arrayElementType: fields[index].arrayElementType,
@@ -19843,6 +19855,14 @@ function resolveKnownObjectMember(expression, context) {
     mapValueType: fields[index].mapValueType,
     setElementType: fields[index].setElementType
   }
+}
+
+function resolveObjectExpressionMember(expression) {
+  if (!isMemberAccessExpression(expression)) {
+    return null
+  }
+
+  return resolveObjectExpressionShapeField(expression.object, expression.property)
 }
 
 function emitObjectValueReference(name, context) {
@@ -19875,6 +19895,38 @@ function resolveKnownObjectIndex(expression, context) {
   return {
     objectName,
     key: expression.index.value,
+    index,
+    valueType: fields[index].valueType,
+    arrayElementType: fields[index].arrayElementType,
+    mapKeyType: fields[index].mapKeyType,
+    mapValueType: fields[index].mapValueType,
+    setElementType: fields[index].setElementType
+  }
+}
+
+function resolveObjectExpressionIndex(expression) {
+  if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
+    return null
+  }
+
+  return resolveObjectExpressionShapeField(expression.object, expression.index.value)
+}
+
+function resolveObjectExpressionShapeField(objectExpression, key) {
+  const fields = objectExpression?.shape?.fields
+
+  if (fields == null) {
+    return null
+  }
+
+  const index = fields.findIndex((field) => field.name === key)
+
+  if (index === -1) {
+    return null
+  }
+
+  return {
+    key,
     index,
     valueType: fields[index].valueType,
     arrayElementType: fields[index].arrayElementType,

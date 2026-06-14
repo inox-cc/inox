@@ -113,8 +113,8 @@ export function lowerStatement(statement: AnyNode, context: LowerContext): AnyNo
       loc: statement.loc,
       declaredType: statement.declaredType,
       nullable: declared.nullable || init?.nullable === true,
-      shape: declared.shape,
-      functionType: declared.functionType,
+      shape: declared.shape ?? statement.shape ?? init?.shape ?? null,
+      functionType: declared.functionType ?? statement.functionType ?? init?.functionType ?? null,
       arrayElementType: declared.arrayElementType ?? statement.arrayElementType ?? inferArrayElementType(init),
       arrayElementDeclaredType:
         declared.arrayElementDeclaredType ?? statement.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init),

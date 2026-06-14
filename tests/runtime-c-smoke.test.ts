@@ -1430,6 +1430,73 @@ if (maybe != null) {
   }
 })
 
+test('generated C weak object field access narrows and optional-chains safely', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-generated-weak-access-'))
+  const source = join(dir, 'generated-weak-access.c')
+  const output = join(dir, 'generated-weak-access')
+
+  try {
+    const compiled = compileSource(
+      `type Parent = {
+  name: string
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+function makeDetachedChild(): Child {
+  const parent: Parent = { name: 'Detached' }
+  const child: Child = { parent }
+  return child
+}
+
+const parent: Parent = { name: 'Ada' }
+const child: Child = { parent }
+const maybe = child.parent
+
+if (maybe != null) {
+  console.log(maybe.name)
+}
+
+console.log(child.parent?.name ?? 'missing')
+
+const detached = makeDetachedChild()
+console.log(detached.parent?.name ?? 'gone')
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
+    assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+
+    await writeFile(source, compiled.code)
+
+    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_ENABLE_WEAK=1'])
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\nAda\ngone\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('generated C simple classes compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
