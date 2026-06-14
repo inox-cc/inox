@@ -17,6 +17,7 @@ import {
 import { tokenize } from '../lexer.ts'
 import { parse } from '../parser.ts'
 import {
+  createFunctionContext,
   emitBoxedValueCleanup,
   emitBoxedValueDeclarations,
   emitCleanupReturn,
@@ -43,12 +44,15 @@ import {
   emitStatusResultDeclarations,
   emitThrowingFunctionErrorTransfer,
   isRuntimeBoxedValueType,
+  narrowNullableScalars,
   nextCName,
   registerBoxedValue,
   registerEventLoop,
   registerOwnedPromise,
   registerOwnedValue,
-  shouldEmitCleanupLabel
+  shouldEmitCleanupLabel,
+  withNullableScalarNarrowing,
+  withVariableScope
 } from './context.ts'
 import {
   isSupportedCCryptoGlobalUsage,
@@ -8967,55 +8971,6 @@ function emitFunctionPointerParams(functionType) {
   }
 
   return functionType.params.map((param) => emitCType(param.valueType)).join(', ')
-}
-
-function createFunctionContext(baseContext, returnType, returnNullable = false) {
-  return {
-    ...baseContext,
-    arrayShapes: new Map(),
-    breakFlowUsed: false,
-    breakTargets: [],
-    boxedValueTypes: new Map(),
-    boxedValues: [],
-    boxedVariables: new Set(),
-    classInstanceTypes: new Map(),
-    continueFlowUsed: false,
-    continueTargets: [],
-    cleanupEnabled: true,
-    dgramBoundSockets: new Set(),
-    dgramMessageSockets: new Set(),
-    dgramReuseAddrSockets: new Set(),
-    errorChannelUsed: false,
-    errorObjectNames: new Set(),
-    errorTargets: [],
-    functionErrorOut: null,
-    functionReturnOut: null,
-    functionTypes: new Map(),
-    eventLoopUsed: false,
-    externalEventLoop: false,
-    mapTypes: new Map(),
-    netReadingSockets: new Set(),
-    narrowedNullableScalars: new Set(),
-    nullableVariables: new Set(),
-    objectShapes: new Map(),
-    ownedPromises: [],
-    ownedValues: [],
-    promiseRejectionValueTypes: new Map(),
-    promiseConstructorHandlers: new Map(),
-    promiseValueTypes: new Map(),
-    returnFlowUsed: false,
-    returnTargets: [],
-    runtimeCallbacks: new Set(),
-    runtimeArrayElementTypes: new Map(),
-    setElementTypes: new Map(),
-    runtimeStrings: new Set(),
-    statusReturn: false,
-    throwingFunction: false,
-    usedCleanupGoto: false,
-    variables: new Map(),
-    returnNullable,
-    returnType
-  }
 }
 
 function emitMainWrapper(irPrograms, baseContext) {
@@ -21082,88 +21037,4 @@ function rootReferenceName(expression) {
 
 function isCStringRuntimeMethodName(name) {
   return name === 'trim' || name === 'slice' || name === 'split' || cStringPredicateMethods.has(name)
-}
-
-function withVariableScope(context, callback) {
-  const previous = context.variables
-  const previousArrayShapes = context.arrayShapes
-  const previousBoxedVariables = context.boxedVariables
-  const previousClassInstanceTypes = context.classInstanceTypes
-  const previousErrorObjectNames = context.errorObjectNames
-  const previousFunctionTypes = context.functionTypes
-  const previousMapTypes = context.mapTypes
-  const previousNarrowedNullableScalars = context.narrowedNullableScalars
-  const previousNullableVariables = context.nullableVariables
-  const previousObjectShapes = context.objectShapes
-  const previousPromiseConstructorHandlers = context.promiseConstructorHandlers
-  const previousPromiseRejectionValueTypes = context.promiseRejectionValueTypes
-  const previousPromiseValueTypes = context.promiseValueTypes
-  const previousRuntimeCallbacks = context.runtimeCallbacks
-  const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
-  const previousSetElementTypes = context.setElementTypes
-  const previousRuntimeStrings = context.runtimeStrings
-  context.variables = new Map(previous)
-  context.arrayShapes = new Map(previousArrayShapes)
-  context.boxedVariables = new Set(previousBoxedVariables)
-  context.classInstanceTypes = new Map(previousClassInstanceTypes)
-  context.errorObjectNames = new Set(previousErrorObjectNames)
-  context.functionTypes = new Map(previousFunctionTypes)
-  context.mapTypes = new Map(previousMapTypes)
-  context.narrowedNullableScalars = new Set(previousNarrowedNullableScalars)
-  context.nullableVariables = new Set(previousNullableVariables)
-  context.objectShapes = new Map(previousObjectShapes)
-  context.promiseConstructorHandlers = new Map(previousPromiseConstructorHandlers)
-  context.promiseRejectionValueTypes = new Map(previousPromiseRejectionValueTypes)
-  context.promiseValueTypes = new Map(previousPromiseValueTypes)
-  context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
-  context.runtimeArrayElementTypes = new Map(previousRuntimeArrayElementTypes)
-  context.setElementTypes = new Map(previousSetElementTypes)
-  context.runtimeStrings = new Set(previousRuntimeStrings)
-
-  try {
-    return callback()
-  } finally {
-    context.variables = previous
-    context.arrayShapes = previousArrayShapes
-    context.boxedVariables = previousBoxedVariables
-    context.classInstanceTypes = previousClassInstanceTypes
-    context.errorObjectNames = previousErrorObjectNames
-    context.functionTypes = previousFunctionTypes
-    context.mapTypes = previousMapTypes
-    context.narrowedNullableScalars = previousNarrowedNullableScalars
-    context.nullableVariables = previousNullableVariables
-    context.objectShapes = previousObjectShapes
-    context.promiseConstructorHandlers = previousPromiseConstructorHandlers
-    context.promiseRejectionValueTypes = previousPromiseRejectionValueTypes
-    context.promiseValueTypes = previousPromiseValueTypes
-    context.runtimeCallbacks = previousRuntimeCallbacks
-    context.runtimeArrayElementTypes = previousRuntimeArrayElementTypes
-    context.setElementTypes = previousSetElementTypes
-    context.runtimeStrings = previousRuntimeStrings
-  }
-}
-
-function withNullableScalarNarrowing(context, names, callback) {
-  if (names.length === 0) {
-    return callback()
-  }
-
-  const previous = context.narrowedNullableScalars
-  context.narrowedNullableScalars = new Set(previous)
-
-  for (const name of names) {
-    context.narrowedNullableScalars.add(name)
-  }
-
-  try {
-    return callback()
-  } finally {
-    context.narrowedNullableScalars = previous
-  }
-}
-
-function narrowNullableScalars(context, names) {
-  for (const name of names) {
-    context.narrowedNullableScalars.add(name)
-  }
 }

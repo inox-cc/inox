@@ -1,5 +1,54 @@
 import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
 
+export function createFunctionContext(baseContext: any, returnType: any, returnNullable = false): any {
+  return {
+    ...baseContext,
+    arrayShapes: new Map(),
+    breakFlowUsed: false,
+    breakTargets: [],
+    boxedValueTypes: new Map(),
+    boxedValues: [],
+    boxedVariables: new Set(),
+    classInstanceTypes: new Map(),
+    continueFlowUsed: false,
+    continueTargets: [],
+    cleanupEnabled: true,
+    dgramBoundSockets: new Set(),
+    dgramMessageSockets: new Set(),
+    dgramReuseAddrSockets: new Set(),
+    errorChannelUsed: false,
+    errorObjectNames: new Set(),
+    errorTargets: [],
+    functionErrorOut: null,
+    functionReturnOut: null,
+    functionTypes: new Map(),
+    eventLoopUsed: false,
+    externalEventLoop: false,
+    mapTypes: new Map(),
+    netReadingSockets: new Set(),
+    narrowedNullableScalars: new Set(),
+    nullableVariables: new Set(),
+    objectShapes: new Map(),
+    ownedPromises: [],
+    ownedValues: [],
+    promiseRejectionValueTypes: new Map(),
+    promiseConstructorHandlers: new Map(),
+    promiseValueTypes: new Map(),
+    returnFlowUsed: false,
+    returnTargets: [],
+    runtimeCallbacks: new Set(),
+    runtimeArrayElementTypes: new Map(),
+    setElementTypes: new Map(),
+    runtimeStrings: new Set(),
+    statusReturn: false,
+    throwingFunction: false,
+    usedCleanupGoto: false,
+    variables: new Map(),
+    returnNullable,
+    returnType
+  }
+}
+
 export function emitStatusCheck(call: string, context: any): string {
   return `if (${call} != CCJS_OK) ${emitFailureStatement(context)}`
 }
@@ -293,4 +342,88 @@ export function nextCName(context: any, prefix: string): string {
   context.nextId += 1
 
   return name
+}
+
+export function withVariableScope(context: any, callback: () => any): any {
+  const previous = context.variables
+  const previousArrayShapes = context.arrayShapes
+  const previousBoxedVariables = context.boxedVariables
+  const previousClassInstanceTypes = context.classInstanceTypes
+  const previousErrorObjectNames = context.errorObjectNames
+  const previousFunctionTypes = context.functionTypes
+  const previousMapTypes = context.mapTypes
+  const previousNarrowedNullableScalars = context.narrowedNullableScalars
+  const previousNullableVariables = context.nullableVariables
+  const previousObjectShapes = context.objectShapes
+  const previousPromiseConstructorHandlers = context.promiseConstructorHandlers
+  const previousPromiseRejectionValueTypes = context.promiseRejectionValueTypes
+  const previousPromiseValueTypes = context.promiseValueTypes
+  const previousRuntimeCallbacks = context.runtimeCallbacks
+  const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
+  const previousSetElementTypes = context.setElementTypes
+  const previousRuntimeStrings = context.runtimeStrings
+  context.variables = new Map(previous)
+  context.arrayShapes = new Map(previousArrayShapes)
+  context.boxedVariables = new Set(previousBoxedVariables)
+  context.classInstanceTypes = new Map(previousClassInstanceTypes)
+  context.errorObjectNames = new Set(previousErrorObjectNames)
+  context.functionTypes = new Map(previousFunctionTypes)
+  context.mapTypes = new Map(previousMapTypes)
+  context.narrowedNullableScalars = new Set(previousNarrowedNullableScalars)
+  context.nullableVariables = new Set(previousNullableVariables)
+  context.objectShapes = new Map(previousObjectShapes)
+  context.promiseConstructorHandlers = new Map(previousPromiseConstructorHandlers)
+  context.promiseRejectionValueTypes = new Map(previousPromiseRejectionValueTypes)
+  context.promiseValueTypes = new Map(previousPromiseValueTypes)
+  context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
+  context.runtimeArrayElementTypes = new Map(previousRuntimeArrayElementTypes)
+  context.setElementTypes = new Map(previousSetElementTypes)
+  context.runtimeStrings = new Set(previousRuntimeStrings)
+
+  try {
+    return callback()
+  } finally {
+    context.variables = previous
+    context.arrayShapes = previousArrayShapes
+    context.boxedVariables = previousBoxedVariables
+    context.classInstanceTypes = previousClassInstanceTypes
+    context.errorObjectNames = previousErrorObjectNames
+    context.functionTypes = previousFunctionTypes
+    context.mapTypes = previousMapTypes
+    context.narrowedNullableScalars = previousNarrowedNullableScalars
+    context.nullableVariables = previousNullableVariables
+    context.objectShapes = previousObjectShapes
+    context.promiseConstructorHandlers = previousPromiseConstructorHandlers
+    context.promiseRejectionValueTypes = previousPromiseRejectionValueTypes
+    context.promiseValueTypes = previousPromiseValueTypes
+    context.runtimeCallbacks = previousRuntimeCallbacks
+    context.runtimeArrayElementTypes = previousRuntimeArrayElementTypes
+    context.setElementTypes = previousSetElementTypes
+    context.runtimeStrings = previousRuntimeStrings
+  }
+}
+
+export function withNullableScalarNarrowing(context: any, names: string[], callback: () => any): any {
+  if (names.length === 0) {
+    return callback()
+  }
+
+  const previous = context.narrowedNullableScalars
+  context.narrowedNullableScalars = new Set(previous)
+
+  for (const name of names) {
+    context.narrowedNullableScalars.add(name)
+  }
+
+  try {
+    return callback()
+  } finally {
+    context.narrowedNullableScalars = previous
+  }
+}
+
+export function narrowNullableScalars(context: any, names: string[]): void {
+  for (const name of names) {
+    context.narrowedNullableScalars.add(name)
+  }
 }
