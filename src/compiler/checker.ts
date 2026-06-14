@@ -91,6 +91,13 @@ type ResolvedTypeInfo = {
   setElementType: ValueType | null
 }
 
+type OwnershipGraphEdge = {
+  from: string
+  to: string
+  field: string
+  loc: SourceLocation
+}
+
 export function checkProgram(program: ProgramNode, options: CompileOptions = {}): { ast: ProgramNode } {
   const checker = new Checker(program, options)
   checker.check()
@@ -153,6 +160,9 @@ class Checker {
         this.classNames.add(item.name)
       }
     }
+
+    this.reportOwnershipCycles()
+    throwDiagnostics(this.diagnostics)
 
     for (const item of this.program.body) {
       if (item.type === 'ImportDeclaration') {
@@ -4703,6 +4713,151 @@ class Checker {
     if (item.valueType.kind === 'object' || item.valueType.kind === 'function') {
       this.types.set(item.name, item.valueType)
     }
+  }
+
+  reportOwnershipCycles(): void {
+    const graph = this.buildOwnershipGraph()
+    const path: OwnershipGraphEdge[] = []
+    const visiting = new Set<string>()
+    const visited = new Set<string>()
+    const reported = new Set<string>()
+
+    const visit = (node: string): void => {
+      if (visiting.has(node)) {
+        return
+      }
+
+      if (visited.has(node)) {
+        return
+      }
+
+      visiting.add(node)
+
+      for (const edge of graph.get(node) ?? []) {
+        const cycleStart = path.findIndex((item) => item.from === edge.to)
+
+        if (edge.to === node || cycleStart >= 0) {
+          const cycle = [...(cycleStart < 0 ? [] : path.slice(cycleStart)), edge]
+          const key = this.ownershipCycleKey(cycle)
+
+          if (!reported.has(key)) {
+            reported.add(key)
+            this.report(
+              'CCJS_OWNERSHIP_CYCLE',
+              `strong ownership cycle detected: ${this.formatOwnershipCycle(cycle)}. Mark one back-reference as weak.`,
+              cycle[0]?.loc ?? edge.loc
+            )
+          }
+
+          continue
+        }
+
+        if (!visited.has(edge.to)) {
+          path.push(edge)
+          visit(edge.to)
+          path.pop()
+        }
+      }
+
+      visiting.delete(node)
+      visited.add(node)
+    }
+
+    for (const node of graph.keys()) {
+      visit(node)
+    }
+  }
+
+  buildOwnershipGraph(): Map<string, OwnershipGraphEdge[]> {
+    const graph = new Map<string, OwnershipGraphEdge[]>()
+    const nodeNames = this.ownershipGraphNodeNames()
+
+    for (const name of nodeNames) {
+      graph.set(name, [])
+    }
+
+    for (const item of this.program.body) {
+      if (item.type === 'TypeAliasDeclaration' && item.valueType.kind === 'object') {
+        this.addOwnershipFieldEdges(graph, nodeNames, item.name, item.valueType.fields)
+      } else if (item.type === 'ClassDeclaration') {
+        this.addOwnershipFieldEdges(graph, nodeNames, item.name, item.fields ?? [])
+      }
+    }
+
+    return graph
+  }
+
+  ownershipGraphNodeNames(): Set<string> {
+    return new Set([...this.types.keys(), ...this.classNames])
+  }
+
+  addOwnershipFieldEdges(
+    graph: Map<string, OwnershipGraphEdge[]>,
+    nodeNames: Set<string>,
+    owner: string,
+    fields: AnyNode[]
+  ): void {
+    for (const field of fields) {
+      if (field.ownership === 'weak') {
+        continue
+      }
+
+      for (const target of this.ownershipTargetsFromTypeName(field.valueType)) {
+        if (!nodeNames.has(target)) {
+          continue
+        }
+
+        graph.get(owner)?.push({
+          from: owner,
+          to: target,
+          field: field.name,
+          loc: field.loc
+        })
+      }
+    }
+  }
+
+  ownershipTargetsFromTypeName(name: string | null | undefined): string[] {
+    if (name == null || name === 'unknown') {
+      return []
+    }
+
+    const nullableTypeName = nullableTypeNameFromTypeName(name)
+
+    if (nullableTypeName != null) {
+      return this.ownershipTargetsFromTypeName(nullableTypeName)
+    }
+
+    const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
+
+    if (arrayElementTypeName != null) {
+      return this.ownershipTargetsFromTypeName(arrayElementTypeName)
+    }
+
+    const setElementTypeName = setElementTypeNameFromTypeName(name)
+
+    if (setElementTypeName != null) {
+      return this.ownershipTargetsFromTypeName(setElementTypeName)
+    }
+
+    const mapTypeNames = mapTypeNamesFromTypeName(name)
+
+    if (mapTypeNames != null) {
+      return this.ownershipTargetsFromTypeName(mapTypeNames.value)
+    }
+
+    return [name]
+  }
+
+  ownershipCycleKey(cycle: OwnershipGraphEdge[]): string {
+    return cycle
+      .map((edge) => `${edge.from}.${edge.field}->${edge.to}`)
+      .sort()
+      .join('|')
+  }
+
+  formatOwnershipCycle(cycle: OwnershipGraphEdge[]): string {
+    return cycle.map((edge) => `${edge.from}.${edge.field} -> ${edge.to}`).join(' -> ')
   }
 
   resolveDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {

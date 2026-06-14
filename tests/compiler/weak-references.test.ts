@@ -4,7 +4,8 @@ import {
   assert,
   assertDiagnostic,
   compileSource,
-  compileSourceToIr
+  compileSourceToIr,
+  CompileError
 } from '../helpers/compiler-smoke.ts'
 
 test('parses weak fields as ownership metadata without reserving the weak name', () => {
@@ -70,6 +71,83 @@ function read(node: Node): void {
 }
 `,
     'CCJS_WEAK_UNSUPPORTED'
+  )
+})
+
+test('rejects strong self ownership cycles before recursive type lowering', () => {
+  assertDiagnostic(
+    `type Node = {
+  parent: Node | null
+}
+
+export function main(): void {}
+`,
+    'CCJS_OWNERSHIP_CYCLE'
+  )
+})
+
+test('rejects mutual strong ownership cycles across object aliases', () => {
+  assertDiagnostic(
+    `type Parent = {
+  child: Child | null
+}
+
+type Child = {
+  parent: Parent | null
+}
+
+export function main(): void {}
+`,
+    'CCJS_OWNERSHIP_CYCLE'
+  )
+})
+
+test('rejects class ownership cycles', () => {
+  assertDiagnostic(
+    `class Parent {
+  child: Child | null
+}
+
+class Child {
+  parent: Parent | null
+}
+`,
+    'CCJS_OWNERSHIP_CYCLE'
+  )
+})
+
+test('rejects container-mediated ownership cycles', () => {
+  assertDiagnostic(
+    `type Node = {
+  children: Node[]
+}
+
+export function main(): void {}
+`,
+    'CCJS_OWNERSHIP_CYCLE'
+  )
+})
+
+test('does not report ownership cycles for weak back-references', () => {
+  assert.throws(
+    () => {
+      compileSource(`type Parent = {
+  child: Child | null
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+export function main(): void {}
+`)
+    },
+    (error) => {
+      assert.ok(error instanceof CompileError)
+      assert.equal(error.diagnostics.some((item) => item.code === 'CCJS_OWNERSHIP_CYCLE'), false)
+      assert.equal(error.diagnostics.some((item) => item.code === 'CCJS_WEAK_UNSUPPORTED'), true)
+      return true
+    }
   )
 })
 
