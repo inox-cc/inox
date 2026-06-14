@@ -19,6 +19,9 @@ typedef ccjs_status (*ccjs_net_server_error_fn)(void* user, ccjs_net_server* ser
 typedef ccjs_status (*ccjs_net_connect_fn)(void* user, ccjs_net_socket* socket, ccjs_status status);
 typedef ccjs_status (*ccjs_net_data_fn)(void* user, ccjs_net_socket* socket, const char* bytes, size_t len);
 typedef void (*ccjs_net_close_fn)(void* user, ccjs_net_socket* socket);
+typedef ccjs_status (*ccjs_net_socket_fn)(void* user, ccjs_net_socket* socket);
+typedef ccjs_status (*ccjs_net_socket_error_fn)(void* user, ccjs_net_socket* socket, ccjs_status status);
+typedef ccjs_status (*ccjs_net_socket_write_fn)(void* user, ccjs_net_socket* socket, ccjs_status status);
 
 ccjs_status ccjs_net_server_new(
   ccjs_loop* loop,
@@ -51,11 +54,34 @@ void ccjs_net_socket_set_callbacks(
   ccjs_net_close_fn close,
   void* user
 );
+ccjs_status ccjs_net_socket_on_connect(ccjs_net_socket* socket, ccjs_net_socket_fn connect, void* user);
+ccjs_status ccjs_net_socket_on_ready(ccjs_net_socket* socket, ccjs_net_socket_fn ready, void* user);
+ccjs_status ccjs_net_socket_on_data(ccjs_net_socket* socket, ccjs_net_data_fn data, void* user);
+ccjs_status ccjs_net_socket_on_end(ccjs_net_socket* socket, ccjs_net_socket_fn end, void* user);
+ccjs_status ccjs_net_socket_on_close(ccjs_net_socket* socket, ccjs_net_socket_fn close, void* user);
+ccjs_status ccjs_net_socket_on_error(ccjs_net_socket* socket, ccjs_net_socket_error_fn error, void* user);
+ccjs_status ccjs_net_socket_on_drain(ccjs_net_socket* socket, ccjs_net_socket_fn drain, void* user);
 ccjs_status ccjs_net_socket_read_start(ccjs_net_socket* socket);
 ccjs_status ccjs_net_socket_read_stop(ccjs_net_socket* socket);
+ccjs_status ccjs_net_socket_set_encoding(ccjs_net_socket* socket, const char* encoding, size_t encoding_len);
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len);
+ccjs_status ccjs_net_socket_write_with_callback(
+  ccjs_net_socket* socket,
+  const char* bytes,
+  size_t len,
+  ccjs_net_socket_write_fn callback,
+  void* user
+);
 ccjs_status ccjs_net_socket_end(ccjs_net_socket* socket, const char* bytes, size_t len);
+ccjs_status ccjs_net_socket_end_with_callback(
+  ccjs_net_socket* socket,
+  const char* bytes,
+  size_t len,
+  ccjs_net_socket_write_fn callback,
+  void* user
+);
 ccjs_status ccjs_net_socket_write_and_close(ccjs_net_socket* socket, const char* bytes, size_t len);
+ccjs_status ccjs_net_socket_destroy(ccjs_net_socket* socket);
 void ccjs_net_socket_close(ccjs_net_socket* socket);
 
 #endif

@@ -307,6 +307,62 @@ createServer((socket) => socket.end('ok')).listen(0, '127.0.0.1')
   assert.match(result.code, /ccjs_net_socket_end\(ccjs_socket, "ok", 2\)/)
 })
 
+test('lowers node:net client sockets and events to the C net runtime', () => {
+  const result = compileSource(
+    `import { createConnection } from 'node:net'
+
+const client = createConnection(9000, '127.0.0.1', () => {
+  console.log('connected')
+})
+client.setEncoding('utf8')
+client.on('ready', () => {
+  client.write('ping', () => {
+    console.log('sent')
+  })
+})
+client.on('data', (chunk) => {
+  console.log(chunk)
+  client.end(chunk, () => {
+    console.log('ended')
+  })
+})
+client.on('end', () => {
+  client.destroy()
+})
+client.on('close', () => {
+  console.log('closed')
+})
+client.on('error', () => {
+  console.error('failed')
+})
+client.on('drain', () => {
+  console.log('drain')
+})
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /static ccjs_status ccjs_net_socket_event_handler_\d+\(void\* user, ccjs_net_socket\* ccjs_socket\);/)
+  assert.match(result.code, /static ccjs_status ccjs_net_socket_data_handler_\d+\(void\* user, ccjs_net_socket\* ccjs_socket, const char\* ccjs_bytes, size_t ccjs_len\);/)
+  assert.match(result.code, /static ccjs_status ccjs_net_socket_write_handler_\d+\(void\* user, ccjs_net_socket\* ccjs_socket, ccjs_status ccjs_write_status\);/)
+  assert.match(result.code, /static ccjs_status ccjs_net_socket_error_handler_\d+\(void\* user, ccjs_net_socket\* ccjs_socket, ccjs_status ccjs_error_status\);/)
+  assert.match(result.code, /ccjs_net_connect\(&ccjs_loop, "127\.0\.0\.1", \(int\)\(9000\), 0, 0, 0, 0, &client\)/)
+  assert.match(result.code, /ccjs_net_socket_on_connect\(client, ccjs_net_socket_event_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_socket_set_encoding\(client, "utf8", 4\)/)
+  assert.match(result.code, /ccjs_net_socket_on_data\(client, ccjs_net_socket_data_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_socket_read_start\(client\)/)
+  assert.match(result.code, /ccjs_net_socket_on_end\(client, ccjs_net_socket_event_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_socket_on_close\(client, ccjs_net_socket_event_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_socket_on_error\(client, ccjs_net_socket_error_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_socket_on_drain\(client, ccjs_net_socket_event_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_socket_write_with_callback\(ccjs_socket, "ping", 4, ccjs_net_socket_write_handler_\d+, 0\)/)
+  assert.match(result.code, /printf\("%\.\*s\\n", \(int\)ccjs_len, ccjs_bytes\)/)
+  assert.match(result.code, /ccjs_net_socket_end_with_callback\(ccjs_socket, ccjs_bytes, ccjs_len, ccjs_net_socket_write_handler_\d+, 0\)/)
+  assert.match(result.code, /ccjs_net_socket_destroy\(ccjs_socket\)/)
+})
+
 test('emits C http runtime include for node:http imports', () => {
   const result = compileSource(
     `import http from 'node:http'

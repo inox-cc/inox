@@ -12,6 +12,8 @@ typedef struct ccjs_net_write_request {
   char* bytes;
   size_t len;
   int close_after;
+  ccjs_net_socket_write_fn callback;
+  void* user;
 } ccjs_net_write_request;
 
 typedef struct ccjs_net_connect_request {
@@ -39,18 +41,43 @@ struct ccjs_net_socket {
   ccjs_loop* loop;
   ccjs_allocator* allocator;
   ccjs_net_data_fn data;
+  void* data_user;
   ccjs_net_close_fn close;
+  void* close_user;
+  ccjs_net_socket_fn connect_event;
+  void* connect_user;
+  ccjs_net_socket_fn ready;
+  void* ready_user;
+  ccjs_net_socket_fn end;
+  void* end_user;
+  ccjs_net_socket_fn close_event;
+  void* close_event_user;
+  ccjs_net_socket_error_fn error;
+  void* error_user;
+  ccjs_net_socket_fn drain;
+  void* drain_user;
   void* user;
   uv_tcp_t handle;
+  size_t bytes_read;
+  size_t bytes_written;
   int closing;
   int retained;
+  int utf8_encoding;
 };
 
 static ccjs_status ccjs_net_ip4_addr(const char* host, int port, struct sockaddr_in* out);
 static ccjs_status ccjs_net_sockaddr_to_address(const struct sockaddr* addr, ccjs_net_address* out);
 static ccjs_status ccjs_net_socket_init(ccjs_loop* loop, ccjs_net_socket** out);
-static ccjs_status ccjs_net_socket_write_internal(ccjs_net_socket* socket, const char* bytes, size_t len, int close_after);
+static ccjs_status ccjs_net_socket_write_internal(
+  ccjs_net_socket* socket,
+  const char* bytes,
+  size_t len,
+  int close_after,
+  ccjs_net_socket_write_fn callback,
+  void* user
+);
 static void ccjs_net_server_report_status(ccjs_net_server* server, ccjs_status status);
+static void ccjs_net_socket_report_status(ccjs_net_socket* socket, ccjs_status status);
 static void ccjs_net_connection_cb(uv_stream_t* server_handle, int status);
 static void ccjs_net_connect_cb(uv_connect_t* request, int status);
 static void ccjs_net_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
@@ -235,7 +262,7 @@ ccjs_status ccjs_net_connect(
   void* user,
   ccjs_net_socket** out
 ) {
-  if (loop == 0 || host == 0 || connect == 0 || out == 0) {
+  if (loop == 0 || host == 0 || out == 0) {
     return CCJS_ERR_TYPE;
   }
 
@@ -248,7 +275,9 @@ ccjs_status ccjs_net_connect(
   }
 
   socket->data = data;
+  socket->data_user = user;
   socket->close = close;
+  socket->close_user = user;
   socket->user = user;
 
   ccjs_allocator* allocator = loop->allocator;
@@ -310,12 +339,91 @@ void ccjs_net_socket_set_callbacks(
   }
 
   socket->data = data;
+  socket->data_user = user;
   socket->close = close;
+  socket->close_user = user;
   socket->user = user;
 }
 
+ccjs_status ccjs_net_socket_on_connect(ccjs_net_socket* socket, ccjs_net_socket_fn connect, void* user) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  socket->connect_event = connect;
+  socket->connect_user = user;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_socket_on_ready(ccjs_net_socket* socket, ccjs_net_socket_fn ready, void* user) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  socket->ready = ready;
+  socket->ready_user = user;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_socket_on_data(ccjs_net_socket* socket, ccjs_net_data_fn data, void* user) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  socket->data = data;
+  socket->data_user = user;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_socket_on_end(ccjs_net_socket* socket, ccjs_net_socket_fn end, void* user) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  socket->end = end;
+  socket->end_user = user;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_socket_on_close(ccjs_net_socket* socket, ccjs_net_socket_fn close, void* user) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  socket->close_event = close;
+  socket->close_event_user = user;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_socket_on_error(ccjs_net_socket* socket, ccjs_net_socket_error_fn error, void* user) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  socket->error = error;
+  socket->error_user = user;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_socket_on_drain(ccjs_net_socket* socket, ccjs_net_socket_fn drain, void* user) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  socket->drain = drain;
+  socket->drain_user = user;
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_net_socket_read_start(ccjs_net_socket* socket) {
-  if (socket == 0 || socket->closing || socket->data == 0) {
+  if (socket == 0 || socket->closing || (socket->data == 0 && socket->end == 0)) {
     return CCJS_ERR_TYPE;
   }
 
@@ -330,19 +438,67 @@ ccjs_status ccjs_net_socket_read_stop(ccjs_net_socket* socket) {
   return uv_read_stop((uv_stream_t*)&socket->handle) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
 }
 
+ccjs_status ccjs_net_socket_set_encoding(ccjs_net_socket* socket, const char* encoding, size_t encoding_len) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (encoding == 0 || encoding_len == 0) {
+    socket->utf8_encoding = 0;
+    return CCJS_OK;
+  }
+
+  if (
+    (encoding_len == 4 && memcmp(encoding, "utf8", 4) == 0) ||
+    (encoding_len == 5 && memcmp(encoding, "utf-8", 5) == 0)
+  ) {
+    socket->utf8_encoding = 1;
+    return CCJS_OK;
+  }
+
+  return CCJS_ERR_UNSUPPORTED;
+}
+
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len) {
-  return ccjs_net_socket_write_internal(socket, bytes, len, 0);
+  return ccjs_net_socket_write_internal(socket, bytes, len, 0, 0, 0);
 }
 
 ccjs_status ccjs_net_socket_write_and_close(ccjs_net_socket* socket, const char* bytes, size_t len) {
-  return ccjs_net_socket_write_internal(socket, bytes, len, 1);
+  return ccjs_net_socket_write_internal(socket, bytes, len, 1, 0, 0);
+}
+
+ccjs_status ccjs_net_socket_write_with_callback(
+  ccjs_net_socket* socket,
+  const char* bytes,
+  size_t len,
+  ccjs_net_socket_write_fn callback,
+  void* user
+) {
+  return ccjs_net_socket_write_internal(socket, bytes, len, 0, callback, user);
 }
 
 ccjs_status ccjs_net_socket_end(ccjs_net_socket* socket, const char* bytes, size_t len) {
-  return ccjs_net_socket_write_internal(socket, bytes == 0 ? "" : bytes, bytes == 0 ? 0 : len, 1);
+  return ccjs_net_socket_write_internal(socket, bytes == 0 ? "" : bytes, bytes == 0 ? 0 : len, 1, 0, 0);
 }
 
-static ccjs_status ccjs_net_socket_write_internal(ccjs_net_socket* socket, const char* bytes, size_t len, int close_after) {
+ccjs_status ccjs_net_socket_end_with_callback(
+  ccjs_net_socket* socket,
+  const char* bytes,
+  size_t len,
+  ccjs_net_socket_write_fn callback,
+  void* user
+) {
+  return ccjs_net_socket_write_internal(socket, bytes == 0 ? "" : bytes, bytes == 0 ? 0 : len, 1, callback, user);
+}
+
+static ccjs_status ccjs_net_socket_write_internal(
+  ccjs_net_socket* socket,
+  const char* bytes,
+  size_t len,
+  int close_after,
+  ccjs_net_socket_write_fn callback,
+  void* user
+) {
   if (socket == 0 || socket->closing || (bytes == 0 && len != 0)) {
     return CCJS_ERR_TYPE;
   }
@@ -359,6 +515,8 @@ static ccjs_status ccjs_net_socket_write_internal(ccjs_net_socket* socket, const
   request->socket = socket;
   request->len = len;
   request->close_after = close_after;
+  request->callback = callback;
+  request->user = user;
 
   if (len != 0) {
     request->bytes = allocator->alloc(allocator->user, len, _Alignof(char));
@@ -407,6 +565,16 @@ void ccjs_net_socket_close(ccjs_net_socket* socket) {
   socket->closing = 1;
   uv_read_stop((uv_stream_t*)&socket->handle);
   uv_close((uv_handle_t*)&socket->handle, ccjs_net_socket_close_cb);
+}
+
+ccjs_status ccjs_net_socket_destroy(ccjs_net_socket* socket) {
+  if (socket == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_net_socket_close(socket);
+
+  return CCJS_OK;
 }
 
 static ccjs_status ccjs_net_ip4_addr(const char* host, int port, struct sockaddr_in* out) {
@@ -496,6 +664,24 @@ static void ccjs_net_server_report_status(ccjs_net_server* server, ccjs_status s
   ccjs_libuv_loop_report_status(server->loop, status);
 }
 
+static void ccjs_net_socket_report_status(ccjs_net_socket* socket, ccjs_status status) {
+  if (socket == 0 || status == CCJS_OK) {
+    return;
+  }
+
+  if (socket->error != 0) {
+    ccjs_status callback_status = socket->error(socket->error_user, socket, status);
+
+    if (callback_status != CCJS_OK) {
+      ccjs_libuv_loop_report_status(socket->loop, callback_status);
+    }
+
+    return;
+  }
+
+  ccjs_libuv_loop_report_status(socket->loop, status);
+}
+
 static void ccjs_net_connection_cb(uv_stream_t* server_handle, int status) {
   ccjs_net_server* server = server_handle == 0 ? 0 : (ccjs_net_server*)server_handle->data;
 
@@ -551,11 +737,33 @@ static void ccjs_net_connect_cb(uv_connect_t* request, int status) {
     ccjs_status callback_status = connect(socket->user, socket, connect_status);
 
     if (callback_status != CCJS_OK) {
-      ccjs_libuv_loop_report_status(socket->loop, callback_status);
+      ccjs_net_socket_report_status(socket, callback_status);
     }
   }
 
   socket->handle.data = socket;
+
+  if (connect_status != CCJS_OK) {
+    ccjs_net_socket_report_status(socket, connect_status);
+    ccjs_net_socket_close(socket);
+  } else {
+    if (socket->connect_event != 0) {
+      ccjs_status callback_status = socket->connect_event(socket->connect_user, socket);
+
+      if (callback_status != CCJS_OK) {
+        ccjs_net_socket_report_status(socket, callback_status);
+      }
+    }
+
+    if (socket->ready != 0) {
+      ccjs_status callback_status = socket->ready(socket->ready_user, socket);
+
+      if (callback_status != CCJS_OK) {
+        ccjs_net_socket_report_status(socket, callback_status);
+      }
+    }
+  }
+
   socket->allocator->free(
     socket->allocator->user,
     connect_request,
@@ -586,12 +794,23 @@ static void ccjs_net_read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
   }
 
   if (nread < 0) {
+    if (nread == UV_EOF && socket->end != 0) {
+      ccjs_status status = socket->end(socket->end_user, socket);
+
+      if (status != CCJS_OK) {
+        ccjs_net_socket_report_status(socket, status);
+      }
+    } else if (nread != UV_EOF) {
+      ccjs_net_socket_report_status(socket, CCJS_ERR_FIELD);
+    }
+
     ccjs_net_socket_close(socket);
   } else if (nread > 0 && socket->data != 0) {
-    ccjs_status status = socket->data(socket->user, socket, buf->base, (size_t)nread);
+    socket->bytes_read += (size_t)nread;
+    ccjs_status status = socket->data(socket->data_user, socket, buf->base, (size_t)nread);
 
     if (status != CCJS_OK) {
-      ccjs_libuv_loop_report_status(socket->loop, status);
+      ccjs_net_socket_report_status(socket, status);
     }
   }
 
@@ -610,10 +829,28 @@ static void ccjs_net_write_cb(uv_write_t* request, int status) {
   ccjs_net_socket* socket = write->socket;
 
   if (status != 0) {
-    ccjs_libuv_loop_report_status(socket->loop, CCJS_ERR_FIELD);
+    ccjs_net_socket_report_status(socket, CCJS_ERR_FIELD);
+  } else {
+    socket->bytes_written += write->len;
   }
 
   ccjs_libuv_loop_release_request(socket->loop);
+
+  if (write->callback != 0) {
+    ccjs_status callback_status = write->callback(write->user, socket, status == 0 ? CCJS_OK : CCJS_ERR_FIELD);
+
+    if (callback_status != CCJS_OK) {
+      ccjs_net_socket_report_status(socket, callback_status);
+    }
+  }
+
+  if (status == 0 && socket->drain != 0) {
+    ccjs_status callback_status = socket->drain(socket->drain_user, socket);
+
+    if (callback_status != CCJS_OK) {
+      ccjs_net_socket_report_status(socket, callback_status);
+    }
+  }
 
   if (write->close_after) {
     ccjs_net_socket_close(socket);
@@ -656,7 +893,15 @@ static void ccjs_net_socket_close_cb(uv_handle_t* handle) {
   }
 
   if (socket->close != 0) {
-    socket->close(socket->user, socket);
+    socket->close(socket->close_user, socket);
+  }
+
+  if (socket->close_event != 0) {
+    ccjs_status status = socket->close_event(socket->close_event_user, socket);
+
+    if (status != CCJS_OK) {
+      ccjs_net_socket_report_status(socket, status);
+    }
   }
 
   if (socket->retained) {
@@ -796,6 +1041,55 @@ void ccjs_net_socket_set_callbacks(
   (void)user;
 }
 
+ccjs_status ccjs_net_socket_on_connect(ccjs_net_socket* socket, ccjs_net_socket_fn connect, void* user) {
+  (void)socket;
+  (void)connect;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_on_ready(ccjs_net_socket* socket, ccjs_net_socket_fn ready, void* user) {
+  (void)socket;
+  (void)ready;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_on_data(ccjs_net_socket* socket, ccjs_net_data_fn data, void* user) {
+  (void)socket;
+  (void)data;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_on_end(ccjs_net_socket* socket, ccjs_net_socket_fn end, void* user) {
+  (void)socket;
+  (void)end;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_on_close(ccjs_net_socket* socket, ccjs_net_socket_fn close, void* user) {
+  (void)socket;
+  (void)close;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_on_error(ccjs_net_socket* socket, ccjs_net_socket_error_fn error, void* user) {
+  (void)socket;
+  (void)error;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_on_drain(ccjs_net_socket* socket, ccjs_net_socket_fn drain, void* user) {
+  (void)socket;
+  (void)drain;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
 ccjs_status ccjs_net_socket_read_start(ccjs_net_socket* socket) {
   (void)socket;
   return CCJS_ERR_UNSUPPORTED;
@@ -806,10 +1100,32 @@ ccjs_status ccjs_net_socket_read_stop(ccjs_net_socket* socket) {
   return CCJS_ERR_UNSUPPORTED;
 }
 
+ccjs_status ccjs_net_socket_set_encoding(ccjs_net_socket* socket, const char* encoding, size_t encoding_len) {
+  (void)socket;
+  (void)encoding;
+  (void)encoding_len;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len) {
   (void)socket;
   (void)bytes;
   (void)len;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_write_with_callback(
+  ccjs_net_socket* socket,
+  const char* bytes,
+  size_t len,
+  ccjs_net_socket_write_fn callback,
+  void* user
+) {
+  (void)socket;
+  (void)bytes;
+  (void)len;
+  (void)callback;
+  (void)user;
   return CCJS_ERR_UNSUPPORTED;
 }
 
@@ -820,10 +1136,30 @@ ccjs_status ccjs_net_socket_end(ccjs_net_socket* socket, const char* bytes, size
   return CCJS_ERR_UNSUPPORTED;
 }
 
+ccjs_status ccjs_net_socket_end_with_callback(
+  ccjs_net_socket* socket,
+  const char* bytes,
+  size_t len,
+  ccjs_net_socket_write_fn callback,
+  void* user
+) {
+  (void)socket;
+  (void)bytes;
+  (void)len;
+  (void)callback;
+  (void)user;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
 ccjs_status ccjs_net_socket_write_and_close(ccjs_net_socket* socket, const char* bytes, size_t len) {
   (void)socket;
   (void)bytes;
   (void)len;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_destroy(ccjs_net_socket* socket) {
+  (void)socket;
   return CCJS_ERR_UNSUPPORTED;
 }
 

@@ -1156,6 +1156,10 @@ function createCModuleBaseContext(plan: CModulePlan, plans: CModulePlan[], diagn
   context.httpCreateServerNames = collectHttpRuntimeCreateServerNames(irPrograms)
   context.netImportNames = collectRuntimeImportNames(irPrograms, new Set(['net', 'node:net']), new Set(['default', 'net']))
   context.netCreateServerNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createServer')
+  context.netConnectNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'connect')
+  for (const name of collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createConnection')) {
+    context.netConnectNames.add(name)
+  }
   context.functionNames = createCModuleFunctionNames(plan)
   context.classInfos = createClassInfos(collectIrTopLevelNodes(plan.ir, 'class'), diagnostics)
   context.externalEventLoopFunctions = collectExternalEventLoopFunctions(functions)
@@ -1457,6 +1461,10 @@ function emitCUnit(
   baseContext.httpCreateServerNames = collectHttpRuntimeCreateServerNames(irPrograms)
   baseContext.netImportNames = collectRuntimeImportNames(irPrograms, new Set(['net', 'node:net']), new Set(['default', 'net']))
   baseContext.netCreateServerNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createServer')
+  baseContext.netConnectNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'connect')
+  for (const name of collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createConnection')) {
+    baseContext.netConnectNames.add(name)
+  }
   baseContext.classInfos = createClassInfos(classes, diagnostics)
   baseContext.externalEventLoopFunctions = collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext)
@@ -2310,7 +2318,11 @@ function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context): boolean {
     (usage.path.length === 2 &&
       usage.path[1] === 'createServer' &&
       context.netImportNames?.has(usage.root) === true) ||
-    (usage.path.length === 1 && context.netCreateServerNames?.has(usage.root) === true)
+    (usage.path.length === 2 &&
+      (usage.path[1] === 'connect' || usage.path[1] === 'createConnection') &&
+      context.netImportNames?.has(usage.root) === true) ||
+    (usage.path.length === 1 &&
+      (context.netCreateServerNames?.has(usage.root) === true || context.netConnectNames?.has(usage.root) === true))
   )
 }
 
@@ -2399,6 +2411,7 @@ function createBaseContext(
     httpCreateServerNames: new Set(),
     httpHandlers: new Map(),
     httpImportNames: new Set(),
+    netConnectNames: new Set(),
     netCreateServerNames: new Set(),
     netHandlers: new Map(),
     netImportNames: new Set(),
@@ -6628,6 +6641,22 @@ function emitNetHandlerHead(wrapper) {
     return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_server* ccjs_server, ccjs_net_socket* ccjs_socket)`
   }
 
+  if (wrapper.kind === 'socket-data') {
+    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_socket* ccjs_socket, const char* ccjs_bytes, size_t ccjs_len)`
+  }
+
+  if (wrapper.kind === 'socket-write') {
+    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_socket* ccjs_socket, ccjs_status ccjs_write_status)`
+  }
+
+  if (wrapper.kind === 'socket-event') {
+    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_socket* ccjs_socket)`
+  }
+
+  if (wrapper.kind === 'socket-error') {
+    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_socket* ccjs_socket, ccjs_status ccjs_error_status)`
+  }
+
   if (wrapper.kind === 'error') {
     return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_server* ccjs_server, ccjs_status ccjs_error_status)`
   }
@@ -6637,9 +6666,12 @@ function emitNetHandlerHead(wrapper) {
 
 function emitNetHandlerDeclaration(wrapper, baseContext) {
   const expression = wrapper.expression
+  const isSocketHandler = wrapper.kind === 'connection' || wrapper.kind.startsWith('socket-')
   const socketName = wrapper.kind === 'connection' ? expression.params[0]?.name ?? null : null
+  const dataName = wrapper.kind === 'socket-data' ? expression.params[0]?.name ?? null : null
   const netContext = {
     kind: wrapper.kind,
+    dataName,
     socketName,
     stringLocals: new Map()
   }
@@ -6648,6 +6680,10 @@ function emitNetHandlerDeclaration(wrapper, baseContext) {
 
   if (socketName != null) {
     context.variables.set(socketName, 'net-socket')
+  }
+
+  if (dataName != null) {
+    context.variables.set(dataName, 'string')
   }
 
   const body = expression.expressionBody
@@ -6662,9 +6698,13 @@ function emitNetHandlerDeclaration(wrapper, baseContext) {
   const lines = [
     `${emitNetHandlerHead(wrapper)} {`,
     '  (void)user;',
-    '  (void)ccjs_server;',
-    ...(wrapper.kind === 'connection' && socketName == null ? ['  (void)ccjs_socket;'] : []),
-    ...(wrapper.kind === 'error' ? ['  (void)ccjs_error_status;'] : [])
+    ...(wrapper.kind === 'connection' || wrapper.kind === 'event' || wrapper.kind === 'error'
+      ? ['  (void)ccjs_server;']
+      : []),
+    ...(isSocketHandler && socketName == null ? ['  (void)ccjs_socket;'] : []),
+    ...(wrapper.kind === 'socket-data' && dataName == null ? ['  (void)ccjs_bytes;', '  (void)ccjs_len;'] : []),
+    ...(wrapper.kind === 'error' || wrapper.kind === 'socket-error' ? ['  (void)ccjs_error_status;'] : []),
+    ...(wrapper.kind === 'socket-write' ? ['  (void)ccjs_write_status;'] : [])
   ]
 
   for (const statement of body) {
@@ -6709,6 +6749,12 @@ function emitNetHandlerStatement(statement, netContext, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression?.type === 'CallExpression') {
+    const logStatement = emitNetHandlerConsoleLogStatement(statement.expression, netContext, context)
+
+    if (logStatement != null) {
+      return logStatement
+    }
+
     const socketCall = emitNetHandlerSocketCallStatement(statement.expression, netContext, context)
 
     if (socketCall != null) {
@@ -6721,9 +6767,6 @@ function emitNetHandlerStatement(statement, netContext, context) {
       return serverCall
     }
 
-    if (isConsoleLog(statement.expression)) {
-      return emitConsoleLogStatement(statement.expression.callee.property, statement.expression.args, context)
-    }
   }
 
   if (statement.type === 'ReturnStatement') {
@@ -6752,8 +6795,15 @@ function emitNetHandlerSocketCallStatement(expression, netContext, context) {
   if (
     expression.callee?.type !== 'MemberExpression' ||
     expression.callee.object?.type !== 'Reference' ||
-    expression.callee.object.path.length !== 1 ||
-    expression.callee.object.path[0] !== netContext.socketName
+    expression.callee.object.path.length !== 1
+  ) {
+    return null
+  }
+
+  if (
+    netContext.socketName != null &&
+    expression.callee.object.path[0] !== netContext.socketName &&
+    !String(netContext.kind).startsWith('socket-')
   ) {
     return null
   }
@@ -6761,16 +6811,31 @@ function emitNetHandlerSocketCallStatement(expression, netContext, context) {
   const method = expression.callee.property
 
   if (method === 'write' || method === 'end') {
-    const body = emitNetBytesOperand(expression.args[0], netContext, context)
-    const runtime = method === 'write' ? 'ccjs_net_socket_write' : 'ccjs_net_socket_end'
+    const callback = expression.args.at(-1)?.type === 'ArrowFunctionExpression' ? expression.args.at(-1) : null
+    const bodyArg = callback != null && expression.args.length === 1 ? null : expression.args[0]
+    const body = emitNetBytesOperand(bodyArg, netContext, context)
+    const wrapper = findNetHandler(context, callback, 'socket-write')
+    const runtime =
+      method === 'write'
+        ? wrapper == null
+          ? 'ccjs_net_socket_write'
+          : 'ccjs_net_socket_write_with_callback'
+        : wrapper == null
+          ? 'ccjs_net_socket_end'
+          : 'ccjs_net_socket_end_with_callback'
+    const callbackArgs = wrapper == null ? '' : `, ${wrapper.name}, 0`
 
     return [
       ...body.lines,
-      ...emitNetStatusCheck(`${runtime}(ccjs_socket, ${body.bytes}, ${body.length})`, context)
+      ...emitNetStatusCheck(`${runtime}(ccjs_socket, ${body.bytes}, ${body.length}${callbackArgs})`, context)
     ]
   }
 
-  if (method === 'close' || method === 'destroy') {
+  if (method === 'destroy') {
+    return emitNetStatusCheck('ccjs_net_socket_destroy(ccjs_socket)', context)
+  }
+
+  if (method === 'close') {
     return ['ccjs_net_socket_close(ccjs_socket);']
   }
 
@@ -6782,6 +6847,30 @@ function emitNetHandlerSocketCallStatement(expression, netContext, context) {
     )
   )
   return []
+}
+
+function emitNetHandlerConsoleLogStatement(expression, netContext, context) {
+  if (!isConsoleLog(expression)) {
+    return null
+  }
+
+  const stream = expression.callee.property === 'warn' || expression.callee.property === 'error'
+    ? 'CCJS_CONSOLE_STDERR'
+    : 'CCJS_CONSOLE_STDOUT'
+
+  if (
+    expression.args.length === 1 &&
+    netContext.dataName != null &&
+    expression.args[0]?.type === 'Reference' &&
+    expression.args[0].path.length === 1 &&
+    expression.args[0].path[0] === netContext.dataName
+  ) {
+    return stream === 'CCJS_CONSOLE_STDOUT'
+      ? ['printf("%.*s\\n", (int)ccjs_len, ccjs_bytes);']
+      : [`if (ccjs_console_printf(${stream}, "%.*s\\n", (int)ccjs_len, ccjs_bytes) < 0) return CCJS_ERR_TYPE;`]
+  }
+
+  return emitConsoleLogStatement(expression.callee.property, expression.args, context)
 }
 
 function emitNetHandlerServerCallStatement(expression, context) {
@@ -6798,6 +6887,17 @@ function emitNetHandlerServerCallStatement(expression, context) {
   }
 
   return ['ccjs_net_server_close(ccjs_server);']
+}
+
+function emitNetSocketVariableDeclaration(statement, context) {
+  if (!isNetConnectCall(statement.init, context)) {
+    return null
+  }
+
+  context.variables.set(statement.name, 'net-socket')
+  registerEventLoop(context)
+
+  return emitNetSocketConnectLines(statement.init, statement.name, context)
 }
 
 function emitNetServerVariableDeclaration(statement, context) {
@@ -6823,6 +6923,45 @@ function emitNetAddressVariableDeclaration(statement, context) {
     `ccjs_net_address ${statement.name};`,
     emitStatusCheck(`ccjs_net_server_address(${serverName}, &${statement.name})`, context)
   ]
+}
+
+function emitNetSocketCallStatement(expression, context) {
+  if (isNetSocketMethodCall(expression, 'on', context)) {
+    return emitNetSocketOnLines(expression.callee.object.path[0], expression.args, context)
+  }
+
+  if (isNetSocketMethodCall(expression, 'write', context)) {
+    return emitNetSocketWriteLines(expression.callee.object.path[0], 'write', expression.args, context)
+  }
+
+  if (isNetSocketMethodCall(expression, 'end', context)) {
+    return emitNetSocketWriteLines(expression.callee.object.path[0], 'end', expression.args, context)
+  }
+
+  if (isNetSocketMethodCall(expression, 'destroy', context)) {
+    return [emitStatusCheck(`ccjs_net_socket_destroy(${expression.callee.object.path[0]})`, context)]
+  }
+
+  if (isNetSocketMethodCall(expression, 'close', context)) {
+    return [`ccjs_net_socket_close(${expression.callee.object.path[0]});`]
+  }
+
+  if (isNetSocketMethodCall(expression, 'setEncoding', context)) {
+    return emitNetSocketSetEncodingLines(expression.callee.object.path[0], expression.args, context)
+  }
+
+  if (isNetSocketAnyMethodCall(expression, context)) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_NET_SOCKET',
+        `socket.${expression.callee.property} is not supported by the current C net backend slice`,
+        expression.callee.loc ?? expression.loc
+      )
+    )
+    return []
+  }
+
+  return null
 }
 
 function emitNetServerCallStatement(expression, context) {
@@ -6870,6 +7009,162 @@ function emitNetServerCallStatement(expression, context) {
   }
 
   return null
+}
+
+function emitNetSocketConnectLines(expression, socketName, context, options: { declare?: boolean } = {}) {
+  const optionsArg = expression.args[0]?.type === 'ObjectLiteral' ? expression.args[0] : null
+  const callback = emitNetConnectCallback(expression)
+  const portArg = optionsArg == null ? expression.args[0] : findObjectLiteralPropertyValue(optionsArg, 'port')
+  const hostArg =
+    optionsArg == null
+      ? expression.args[1]?.type === 'ArrowFunctionExpression'
+        ? null
+        : expression.args[1]
+      : findObjectLiteralPropertyValue(optionsArg, 'host')
+  const wrapper = findNetHandler(context, callback, 'socket-event')
+
+  if (portArg == null) {
+    context.diagnostics.push(
+      diagnostic('CCJS_NET_SOCKET', 'net.connect in the C backend currently requires a port argument', expression.loc)
+    )
+  }
+
+  if (callback != null && (callback.type !== 'ArrowFunctionExpression' || wrapper == null)) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_NET_SOCKET',
+        'net.connect callback in the C backend currently requires an inline listener',
+        callback.loc ?? expression.loc
+      )
+    )
+  }
+
+  const port = portArg == null ? { lines: [], expression: '0' } : emitPreparedNumberExpression(portArg, context)
+  const host = emitNetConnectHostExpression(hostArg, context)
+  const lines = options.declare === false ? [] : [`ccjs_net_socket* ${socketName} = 0;`]
+
+  lines.push(
+    ...port.lines,
+    emitStatusCheck(`ccjs_net_connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0, &${socketName})`, context)
+  )
+
+  if (wrapper != null) {
+    lines.push(emitStatusCheck(`ccjs_net_socket_on_connect(${socketName}, ${wrapper.name}, 0)`, context))
+  }
+
+  return lines
+}
+
+function emitNetSocketOnLines(socketName, args, context) {
+  const eventName = args[0]?.type === 'StringLiteral' ? args[0].value : null
+  const kind =
+    eventName === 'data'
+      ? 'socket-data'
+      : ['connect', 'ready', 'end', 'close', 'drain'].includes(eventName ?? '')
+        ? 'socket-event'
+        : eventName === 'error'
+          ? 'socket-error'
+          : null
+
+  if (kind == null) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_NET_SOCKET',
+        "socket.on in the C backend currently supports 'connect', 'ready', 'data', 'end', 'close', 'error' and 'drain'",
+        args[0]?.loc
+      )
+    )
+    return []
+  }
+
+  const listener = args[1]
+  const wrapper = findNetHandler(context, listener, kind)
+
+  if (listener?.type !== 'ArrowFunctionExpression' || wrapper == null) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_NET_SOCKET',
+        `socket.on('${eventName}') in the C backend currently requires an inline listener`,
+        listener?.loc
+      )
+    )
+    return []
+  }
+
+  const runtime =
+    eventName === 'connect'
+      ? 'ccjs_net_socket_on_connect'
+      : eventName === 'ready'
+        ? 'ccjs_net_socket_on_ready'
+        : eventName === 'data'
+          ? 'ccjs_net_socket_on_data'
+          : eventName === 'end'
+            ? 'ccjs_net_socket_on_end'
+            : eventName === 'close'
+              ? 'ccjs_net_socket_on_close'
+              : eventName === 'error'
+                ? 'ccjs_net_socket_on_error'
+                : 'ccjs_net_socket_on_drain'
+  const lines = [emitStatusCheck(`${runtime}(${socketName}, ${wrapper.name}, 0)`, context)]
+
+  if (eventName === 'data' || eventName === 'end') {
+    lines.push(...emitNetMaybeReadStartLines(socketName, context))
+  }
+
+  return lines
+}
+
+function emitNetSocketWriteLines(socketName, method, args, context) {
+  const callback = args.at(-1)?.type === 'ArrowFunctionExpression' ? args.at(-1) : null
+  const bodyArg = callback != null && args.length === 1 ? null : args[0]
+  const body = emitNetBytesOperand(bodyArg, null, context)
+  const wrapper = findNetHandler(context, callback, 'socket-write')
+  const runtime =
+    method === 'write'
+      ? wrapper == null
+        ? 'ccjs_net_socket_write'
+        : 'ccjs_net_socket_write_with_callback'
+      : wrapper == null
+        ? 'ccjs_net_socket_end'
+        : 'ccjs_net_socket_end_with_callback'
+  const callbackArgs = wrapper == null ? '' : `, ${wrapper.name}, 0`
+
+  if (callback != null && wrapper == null) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_NET_SOCKET',
+        `socket.${method} callback in the C backend currently requires an inline listener`,
+        callback.loc
+      )
+    )
+  }
+
+  return [
+    ...body.lines,
+    emitStatusCheck(`${runtime}(${socketName}, ${body.bytes}, ${body.length}${callbackArgs})`, context)
+  ]
+}
+
+function emitNetSocketSetEncodingLines(socketName, args, context) {
+  const value = emitNetStaticStringValue(args[0], null)
+
+  if (value == null) {
+    context.diagnostics.push(
+      diagnostic('CCJS_NET_SOCKET', 'socket.setEncoding in the C backend currently requires a static string', args[0]?.loc)
+    )
+    return []
+  }
+
+  return [emitStatusCheck(`ccjs_net_socket_set_encoding(${socketName}, ${cStringLiteral(value)}, ${utf8ByteLength(value)})`, context)]
+}
+
+function emitNetMaybeReadStartLines(socketName, context) {
+  if (context.netReadingSockets.has(socketName)) {
+    return []
+  }
+
+  context.netReadingSockets.add(socketName)
+  return [emitStatusCheck(`ccjs_net_socket_read_start(${socketName})`, context)]
 }
 
 function emitNetServerCreateLines(expression, serverName, context, options: { declare?: boolean } = {}) {
@@ -7069,12 +7364,33 @@ function emitNetListenHostExpression(expression, context) {
   return '0'
 }
 
+function emitNetConnectHostExpression(expression, context) {
+  if (expression == null) {
+    return '"127.0.0.1"'
+  }
+
+  return emitNetListenHostExpression(expression, context)
+}
+
 function emitNetBytesOperand(expression, netContext, context) {
   if (expression == null) {
     return {
       lines: [],
       bytes: '""',
       length: '0'
+    }
+  }
+
+  if (
+    netContext?.dataName != null &&
+    expression?.type === 'Reference' &&
+    expression.path.length === 1 &&
+    expression.path[0] === netContext.dataName
+  ) {
+    return {
+      lines: [],
+      bytes: 'ccjs_bytes',
+      length: 'ccjs_len'
     }
   }
 
@@ -7155,6 +7471,20 @@ function isNetServerAddressCall(expression, context) {
   )
 }
 
+function isNetSocketMethodCall(expression, method, context) {
+  return isNetSocketAnyMethodCall(expression, context) && expression.callee.property === method
+}
+
+function isNetSocketAnyMethodCall(expression, context) {
+  return (
+    expression?.type === 'CallExpression' &&
+    expression.callee?.type === 'MemberExpression' &&
+    expression.callee.object?.type === 'Reference' &&
+    expression.callee.object.path.length === 1 &&
+    context.variables.get(expression.callee.object.path[0]) === 'net-socket'
+  )
+}
+
 function isNetServerMethodCall(expression, method, context) {
   return isNetServerAnyMethodCall(expression, context) && expression.callee.property === method
 }
@@ -7191,6 +7521,28 @@ function isNetCreateServerCall(expression, context) {
   )
 }
 
+function isNetConnectCall(expression, context) {
+  if (expression?.type !== 'CallExpression') {
+    return false
+  }
+
+  if (
+    expression.callee?.type === 'Reference' &&
+    expression.callee.path.length === 1 &&
+    context.netConnectNames.has(expression.callee.path[0])
+  ) {
+    return true
+  }
+
+  return (
+    expression.callee?.type === 'MemberExpression' &&
+    (expression.callee.property === 'connect' || expression.callee.property === 'createConnection') &&
+    expression.callee.object?.type === 'Reference' &&
+    expression.callee.object.path.length === 1 &&
+    context.netImportNames.has(expression.callee.object.path[0])
+  )
+}
+
 function emitNetCreateServerConnectionListener(expression) {
   if (expression.args[0]?.type === 'ArrowFunctionExpression') {
     return expression.args[0]
@@ -7198,6 +7550,22 @@ function emitNetCreateServerConnectionListener(expression) {
 
   if (expression.args[1]?.type === 'ArrowFunctionExpression') {
     return expression.args[1]
+  }
+
+  return null
+}
+
+function emitNetConnectCallback(expression) {
+  if (expression.args[0]?.type === 'ObjectLiteral') {
+    return expression.args[1]?.type === 'ArrowFunctionExpression' ? expression.args[1] : null
+  }
+
+  if (expression.args[1]?.type === 'ArrowFunctionExpression') {
+    return expression.args[1]
+  }
+
+  if (expression.args[2]?.type === 'ArrowFunctionExpression') {
+    return expression.args[2]
   }
 
   return null
@@ -7835,9 +8203,11 @@ function collectNetHandlers(irPrograms: IrProgram[], context) {
       }
     }
 
+    const cKind = kind.replaceAll('-', '_')
+
     handlers.set(`${kind}:${handlers.size}`, {
       kind,
-      name: `ccjs_net_${kind}_handler_${handlers.size}`,
+      name: `ccjs_net_${cKind}_handler_${handlers.size}`,
       expression
     })
   }
@@ -7857,6 +8227,41 @@ function collectNetHandlers(irPrograms: IrProgram[], context) {
       register('event', expression.args[1])
     } else if (expression.args[0].value === 'error') {
       register('error', expression.args[1])
+    }
+  }
+  const registerSocketEventListener = (expression) => {
+    if (
+      expression?.type !== 'CallExpression' ||
+      expression.callee?.type !== 'MemberExpression' ||
+      expression.callee.property !== 'on' ||
+      expression.args[0]?.type !== 'StringLiteral'
+    ) {
+      return
+    }
+
+    const eventName = expression.args[0].value
+
+    if (eventName === 'data') {
+      register('socket-data', expression.args[1])
+    } else if (['connect', 'ready', 'end', 'close', 'drain'].includes(eventName)) {
+      register('socket-event', expression.args[1])
+    } else if (eventName === 'error') {
+      register('socket-error', expression.args[1])
+    }
+  }
+  const registerSocketWriteCallback = (expression) => {
+    if (
+      expression?.type !== 'CallExpression' ||
+      expression.callee?.type !== 'MemberExpression' ||
+      !['write', 'end'].includes(expression.callee.property)
+    ) {
+      return
+    }
+
+    const callback = expression.args.at(-1)
+
+    if (callback?.type === 'ArrowFunctionExpression') {
+      register('socket-write', callback)
     }
   }
   const visitStatement = (statement) => {
@@ -7941,7 +8346,13 @@ function collectNetHandlers(irPrograms: IrProgram[], context) {
         register('connection', emitNetCreateServerConnectionListener(expression))
       }
 
+      if (isNetConnectCall(expression, context)) {
+        register('socket-event', emitNetConnectCallback(expression))
+      }
+
       registerEventListener(expression)
+      registerSocketEventListener(expression)
+      registerSocketWriteCallback(expression)
       visitExpression(expression.callee)
       expression.args.forEach(visitExpression)
       return
@@ -9664,6 +10075,7 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     eventLoopUsed: false,
     externalEventLoop: false,
     mapTypes: new Map(),
+    netReadingSockets: new Set(),
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
     objectShapes: new Map(),
@@ -9964,6 +10376,12 @@ function emitStatement(statement, context) {
       return netServer
     }
 
+    const netSocket = emitNetSocketVariableDeclaration(statement, context)
+
+    if (netSocket != null) {
+      return netSocket
+    }
+
     const netAddress = emitNetAddressVariableDeclaration(statement, context)
 
     if (netAddress != null) {
@@ -10146,6 +10564,12 @@ function emitStatement(statement, context) {
 
     if (netServerCall != null) {
       return netServerCall
+    }
+
+    const netSocketCall = emitNetSocketCallStatement(statement.expression, context)
+
+    if (netSocketCall != null) {
+      return netSocketCall
     }
 
     const arrayPopCall = emitPreparedArrayPopCallExpression(statement.expression, context, {

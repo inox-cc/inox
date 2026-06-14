@@ -55,6 +55,7 @@ try {
     await checkLibuvCompiledDgramOptions(buildDir)
     await checkLibuvNetRuntime(buildDir)
     await checkLibuvCompiledNetServer(buildDir)
+    await checkLibuvCompiledNetClient(buildDir)
     await checkLibuvHttpRuntime(buildDir)
     await checkLibuvCompiledHttpServer(buildDir)
     await checkLibuvFetchRuntime(buildDir)
@@ -1265,6 +1266,12 @@ typedef struct test_state {
   int client_connected;
   int server_listening;
   int server_closed;
+  int socket_connected;
+  int socket_ready;
+  int socket_ended;
+  int socket_closed;
+  int socket_write_done;
+  int socket_drained;
   char message[32];
 } test_state;
 
@@ -1296,12 +1303,55 @@ static ccjs_status on_server_data(void* user, ccjs_net_socket* socket, const cha
 
 static ccjs_status on_client_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
   test_state* state = (test_state*)user;
+  (void)socket;
   size_t copy_len = len >= sizeof(state->message) ? sizeof(state->message) - 1 : len;
   memcpy(state->message, bytes, copy_len);
   state->message[copy_len] = '\\0';
   state->client_received += 1;
-  ccjs_net_socket_close(socket);
+  return CCJS_OK;
+}
+
+static ccjs_status on_socket_connected(void* user, ccjs_net_socket* socket) {
+  (void)socket;
+  test_state* state = (test_state*)user;
+  state->socket_connected += 1;
+  return CCJS_OK;
+}
+
+static ccjs_status on_socket_ready(void* user, ccjs_net_socket* socket) {
+  (void)socket;
+  test_state* state = (test_state*)user;
+  state->socket_ready += 1;
+  return CCJS_OK;
+}
+
+static ccjs_status on_socket_end(void* user, ccjs_net_socket* socket) {
+  (void)socket;
+  test_state* state = (test_state*)user;
+  state->socket_ended += 1;
   ccjs_net_server_close(state->server);
+  return CCJS_OK;
+}
+
+static ccjs_status on_socket_close(void* user, ccjs_net_socket* socket) {
+  (void)socket;
+  test_state* state = (test_state*)user;
+  state->socket_closed += 1;
+  return CCJS_OK;
+}
+
+static ccjs_status on_socket_write(void* user, ccjs_net_socket* socket, ccjs_status status) {
+  (void)socket;
+  test_state* state = (test_state*)user;
+  if (status != CCJS_OK) return status;
+  state->socket_write_done += 1;
+  return CCJS_OK;
+}
+
+static ccjs_status on_socket_drain(void* user, ccjs_net_socket* socket) {
+  (void)socket;
+  test_state* state = (test_state*)user;
+  state->socket_drained += 1;
   return CCJS_OK;
 }
 
@@ -1332,7 +1382,7 @@ static ccjs_status on_connect(void* user, ccjs_net_socket* socket, ccjs_status s
   if (status != CCJS_OK) return status;
   state->client_connected += 1;
   if (ccjs_net_socket_read_start(socket) != CCJS_OK) return CCJS_ERR_FIELD;
-  return ccjs_net_socket_write(socket, "hello", 5);
+  return ccjs_net_socket_write_with_callback(socket, "hello", 5, on_socket_write, state);
 }
 
 int main(void) {
@@ -1352,14 +1402,34 @@ int main(void) {
   if (ccjs_net_server_local_port(state.server, &port) != CCJS_OK) return 7;
   if (port <= 0 || address.port != port || strcmp(address.family, "IPv4") != 0) return 8;
   if (ccjs_net_connect(&loop, "127.0.0.1", port, on_connect, on_client_data, 0, &state, &state.client) != CCJS_OK) return 9;
+  if (ccjs_net_socket_on_connect(state.client, on_socket_connected, &state) != CCJS_OK) return 10;
+  if (ccjs_net_socket_on_ready(state.client, on_socket_ready, &state) != CCJS_OK) return 11;
+  if (ccjs_net_socket_on_end(state.client, on_socket_end, &state) != CCJS_OK) return 12;
+  if (ccjs_net_socket_on_close(state.client, on_socket_close, &state) != CCJS_OK) return 13;
+  if (ccjs_net_socket_on_drain(state.client, on_socket_drain, &state) != CCJS_OK) return 14;
+  if (ccjs_net_socket_set_encoding(state.client, "utf8", 4) != CCJS_OK) return 15;
 
   while (ccjs_loop_has_work(&loop) && guard < 400) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 10;
+    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 16;
     guard += 1;
   }
 
-  if (guard >= 400) return 11;
-  printf("%d %d %d %d %d %s\\n", state.server_listening, state.server_closed, state.client_connected, state.server_received, state.client_received, state.message);
+  if (guard >= 400) return 17;
+  printf(
+    "%d %d %d %d %d %d %d %d %d %d %d %s\\n",
+    state.server_listening,
+    state.server_closed,
+    state.client_connected,
+    state.socket_connected,
+    state.socket_ready,
+    state.socket_ended,
+    state.socket_closed,
+    state.socket_write_done,
+    state.socket_drained,
+    state.server_received,
+    state.client_received,
+    state.message
+  );
   ccjs_loop_dispose(&loop);
   return 0;
 }
@@ -1382,7 +1452,7 @@ int main(void) {
     fail('run libuv net smoke', run)
   }
 
-  const expected = '1 1 1 1 1 hello\n'
+  const expected = '1 1 1 1 1 1 1 1 1 1 1 hello\n'
 
   if (stdout !== expected) {
     console.error(`Libuv net smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
@@ -1489,6 +1559,100 @@ target_link_libraries(ccjs_libuv_compiled_net_smoke PRIVATE ccjs_runtime)
       code: exitCode,
       stdout,
       stderr
+    })
+  }
+}
+
+async function checkLibuvCompiledNetClient(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'compiled-net-client-src')
+  const netBuildDir = join(workDir, 'compiled-net-client-build')
+  const server = createServer((socket) => {
+    socket.setEncoding('utf8')
+    socket.on('data', (chunk) => {
+      if (chunk === 'ping') {
+        socket.write('pong')
+      }
+
+      socket.end()
+    })
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
+
+  const address = server.address()
+
+  if (address == null || typeof address === 'string') {
+    server.close()
+    throw new Error('Expected TCP address with a numeric port')
+  }
+
+  const source = `import net from 'node:net'
+
+const client = net.createConnection(${address.port}, '127.0.0.1', () => {
+  console.log('connected')
+})
+
+client.setEncoding('utf8')
+client.on('ready', () => {
+  client.write('ping')
+})
+client.on('data', (chunk) => {
+  console.log(chunk)
+})
+client.on('end', () => {
+  client.destroy()
+})
+`
+  const compiled = compileSource(source, {
+    target: 'c'
+  })
+
+  try {
+    await mkdir(sourceDir, { recursive: true })
+    await writeFile(
+      join(sourceDir, 'CMakeLists.txt'),
+      `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_compiled_net_client_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_compiled_net_client_smoke generated-net-client.c)
+target_link_libraries(ccjs_libuv_compiled_net_client_smoke PRIVATE ccjs_runtime)
+`
+    )
+    await writeFile(join(sourceDir, 'generated-net-client.c'), compiled.code)
+
+    await checkCommand('configure compiled libuv net client smoke', 'cmake', [
+      '-S',
+      sourceDir,
+      '-B',
+      netBuildDir,
+      '-DCCJS_LOOP_BACKEND=libuv'
+    ])
+    await checkCommand('build compiled libuv net client smoke', 'cmake', ['--build', netBuildDir])
+
+    const run = await runCommand(join(netBuildDir, 'ccjs_libuv_compiled_net_client_smoke'), [])
+    const stdout = normalizeNewlines(run.stdout)
+
+    if (run.code !== 0) {
+      fail('run compiled libuv net client smoke', run)
+    }
+
+    const expected = 'connected\npong\n'
+
+    if (stdout !== expected) {
+      console.error(`Compiled libuv net client stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+      process.exit(1)
+    }
+  } finally {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve())
     })
   }
 }
