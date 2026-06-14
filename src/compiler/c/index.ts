@@ -17,6 +17,40 @@ import {
 import { tokenize } from '../lexer.ts'
 import { parse } from '../parser.ts'
 import {
+  emitBoxedValueCleanup,
+  emitBoxedValueDeclarations,
+  emitCleanupReturn,
+  emitErrorChannelDeclarations,
+  emitEventLoopCleanup,
+  emitEventLoopCurrentTimeExpression,
+  emitEventLoopDeclarations,
+  emitEventLoopDrain,
+  emitEventLoopInit,
+  emitEventLoopNextTimeExpression,
+  emitEventLoopReference,
+  emitEventLoopSleepUntilNextTimerLines,
+  emitFailureStatement,
+  emitLoopFlowDeclarations,
+  emitOwnedPromiseCleanup,
+  emitOwnedPromiseDeclarations,
+  emitOwnedValueCleanup,
+  emitOwnedValueDeclarations,
+  emitPrepareOwnedValueWrite,
+  emitReturnFlowDeclarations,
+  emitReturnValueDeclarations,
+  emitRuntimeTypeCheck,
+  emitStatusCheck,
+  emitStatusResultDeclarations,
+  emitThrowingFunctionErrorTransfer,
+  isRuntimeBoxedValueType,
+  nextCName,
+  registerBoxedValue,
+  registerEventLoop,
+  registerOwnedPromise,
+  registerOwnedValue,
+  shouldEmitCleanupLabel
+} from './context.ts'
+import {
   isSupportedCCryptoGlobalUsage,
   isSupportedCFetchGlobalUsage,
   isSupportedCMathGlobalUsage,
@@ -35,6 +69,7 @@ import { emitCPrelude } from './prelude.ts'
 import { cMathBinaryMethods, cMathNullaryMethods, cMathUnaryMethods } from './runtime-methods.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
 import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile, CModulePlan } from './types.ts'
+import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -11085,17 +11120,6 @@ function emitRuntimeCallbackRuntimeValueReturnLines(argument, context) {
   ]
 }
 
-function isManagedRuntimeReturnType(valueType) {
-  return (
-    valueType === 'bytes' ||
-    valueType === 'string' ||
-    valueType === 'object' ||
-    valueType === 'array' ||
-    valueType === 'map' ||
-    valueType === 'set'
-  )
-}
-
 function emitRuntimeReturnValueExpression(argument, context, returnType, returnShape) {
   if (returnType === 'object' && argument?.type === 'ObjectLiteral') {
     return emitCObjectLiteralValueExpression(argument, context, returnShape)
@@ -12172,10 +12196,6 @@ function cRuntimeValueTag(valueType) {
 
 function isRuntimeNullableType(valueType) {
   return cRuntimeValueTag(valueType) != null
-}
-
-function isNullableScalarType(valueType) {
-  return valueType === 'number' || valueType === 'boolean'
 }
 
 function isNullableScalarParam(param) {
@@ -20661,296 +20681,6 @@ function updateKnownArrayElementValueType(element, valueType, context) {
     ...elements[element.index],
     valueType
   }
-}
-
-function emitStatusCheck(call, context) {
-  return `if (${call} != CCJS_OK) ${emitFailureStatement(context)}`
-}
-
-function emitRuntimeTypeCheck(condition, context) {
-  return `if (${condition}) ${emitFailureStatement(context)}`
-}
-
-function emitFailureStatement(context) {
-  if (context.failureStatement != null) {
-    context.failureStatementUsed = true
-    return context.failureStatement
-  }
-
-  if (context.throwingFunction && context.cleanupEnabled) {
-    context.usedCleanupGoto = true
-    return 'do { ccjs_status_result = CCJS_ERR_TYPE; goto ccjs_cleanup; } while (0);'
-  }
-
-  if (context.statusReturn) {
-    return 'return CCJS_ERR_TYPE;'
-  }
-
-  if (context.cleanupEnabled) {
-    context.usedCleanupGoto = true
-    return 'goto ccjs_cleanup;'
-  }
-
-  return context.returnType === 'void' ? 'return;' : 'return 0;'
-}
-
-function registerOwnedValue(context, name) {
-  if (!context.ownedValues.includes(name)) {
-    context.ownedValues.push(name)
-  }
-}
-
-function registerOwnedPromise(context, name, valueType = 'unknown', rejectionValueType = 'unknown') {
-  if (!context.ownedPromises.includes(name)) {
-    context.ownedPromises.push(name)
-  }
-
-  context.variables.set(name, 'promise')
-  context.promiseValueTypes.set(name, valueType)
-  context.promiseRejectionValueTypes.set(name, rejectionValueType)
-}
-
-function registerEventLoop(context) {
-  context.eventLoopUsed = true
-  context.usedCleanupGoto = true
-}
-
-function registerBoxedValue(context, name, valueType = 'number') {
-  if (!context.boxedValues.includes(name)) {
-    context.boxedValues.push(name)
-  }
-
-  context.boxedValueTypes.set(name, valueType)
-}
-
-function emitPrepareOwnedValueWrite(name) {
-  return [`ccjs_release(${name});`, `${name} = ccjs_undefined_value();`]
-}
-
-function shouldEmitCleanupLabel(context) {
-  return (
-    context.throwingFunction ||
-    context.returnType !== 'void' ||
-    (context.returnType === 'void' &&
-      (context.ownedValues.length > 0 ||
-        context.ownedPromises.length > 0 ||
-        context.boxedValues.length > 0 ||
-        context.eventLoopUsed ||
-        context.usedCleanupGoto))
-  )
-}
-
-function emitReturnValueDeclarations(context) {
-  if (context.returnType === 'promise') {
-    return ['ccjs_promise* ccjs_return = 0;']
-  }
-
-  if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
-    return ['ccjs_value ccjs_return = ccjs_undefined_value();']
-  }
-
-  if (isManagedRuntimeReturnType(context.returnType)) {
-    return ['ccjs_value ccjs_return = ccjs_undefined_value();']
-  }
-
-  if (context.returnType !== 'void') {
-    return ['double ccjs_return = 0;']
-  }
-
-  return []
-}
-
-function emitStatusResultDeclarations(context) {
-  return context.throwingFunction ? ['ccjs_status ccjs_status_result = CCJS_OK;'] : []
-}
-
-function emitLoopFlowDeclarations(context) {
-  return [
-    ...(context.breakFlowUsed ? ['int ccjs_break_active = 0;'] : []),
-    ...(context.continueFlowUsed ? ['int ccjs_continue_active = 0;'] : [])
-  ]
-}
-
-function emitReturnFlowDeclarations(context) {
-  return context.returnFlowUsed ? ['int ccjs_return_active = 0;'] : []
-}
-
-function emitOwnedValueDeclarations(context) {
-  return context.ownedValues.map((name) => `ccjs_value ${name} = ccjs_undefined_value();`)
-}
-
-function emitOwnedPromiseDeclarations(context) {
-  return context.ownedPromises.map((name) => `ccjs_promise* ${name} = 0;`)
-}
-
-function emitEventLoopDeclarations(context) {
-  return context.eventLoopUsed && !context.externalEventLoop
-    ? ['ccjs_loop ccjs_loop;', 'int ccjs_loop_active = 0;']
-    : []
-}
-
-function emitErrorChannelDeclarations(context) {
-  return context.errorChannelUsed ? ['int ccjs_error_active = 0;'] : []
-}
-
-function emitBoxedValueDeclarations(context) {
-  return context.boxedValues.map((name) =>
-    isRuntimeBoxedValueType(context.boxedValueTypes.get(name)) ? `ccjs_value* ${name} = 0;` : `double* ${name} = 0;`
-  )
-}
-
-function emitOwnedValueCleanup(context) {
-  return context.ownedValues.toReversed().map((name) => `ccjs_release(${name});`)
-}
-
-function emitOwnedPromiseCleanup(context) {
-  return context.ownedPromises.toReversed().flatMap((name) => {
-    const release = `if (${name} != 0) ccjs_promise_release(${name});`
-
-    if (context.unhandledRejectionFlag == null) {
-      return [release]
-    }
-
-    return [
-      `if (${name} != 0 && ccjs_promise_is_unhandled_rejection(${name})) {`,
-      '  fprintf(stderr, "Unhandled Promise rejection\\n");',
-      `  ${context.unhandledRejectionFlag} = 1;`,
-      '}',
-      release
-    ]
-  })
-}
-
-function emitEventLoopInit(context) {
-  if (!context.eventLoopUsed) {
-    return []
-  }
-
-  if (context.externalEventLoop) {
-    return [`if (ccjs_loop == 0) ${emitFailureStatement(context)}`]
-  }
-
-  return [
-    `if (ccjs_loop_init(&ccjs_loop, &ccjs_default_allocator) != CCJS_OK) ${emitFailureStatement(context)}`,
-    'ccjs_loop_active = 1;',
-    `ccjs_loop.now_ms = ${emitEventLoopCurrentTimeExpression()};`
-  ]
-}
-
-function emitEventLoopDrain(context) {
-  if (!context.eventLoopUsed || context.externalEventLoop) {
-    return []
-  }
-
-  const loop = emitEventLoopReference(context)
-
-  return [
-    `while (ccjs_loop_has_work(${loop})) {`,
-    ...emitEventLoopSleepUntilNextTimerLines(context, '  '),
-    `  ${emitStatusCheck(`ccjs_loop_poll(${loop}, ${emitEventLoopCurrentTimeExpression()})`, context)}`,
-    '}'
-  ]
-}
-
-function emitEventLoopCleanup(context) {
-  return context.eventLoopUsed && !context.externalEventLoop
-    ? ['if (ccjs_loop_active) ccjs_loop_dispose(&ccjs_loop);']
-    : []
-}
-
-function emitEventLoopReference(context) {
-  return context.externalEventLoop ? 'ccjs_loop' : '&ccjs_loop'
-}
-
-function emitEventLoopNextTimeExpression(context) {
-  return emitEventLoopCurrentTimeExpression()
-}
-
-function emitEventLoopCurrentTimeExpression() {
-  return 'ccjs_performance_now()'
-}
-
-function emitEventLoopSleepUntilNextTimerLines(context, indent = '') {
-  const loop = emitEventLoopReference(context)
-
-  return [
-    `${indent}#if !defined(CCJS_LOOP_BACKEND_LIBUV)`,
-    `${indent}{`,
-    `${indent}  ccjs_number ccjs_next_due_ms = 0;`,
-    `${indent}  ccjs_number ccjs_now_ms = ${emitEventLoopCurrentTimeExpression()};`,
-    `${indent}  if (ccjs_loop_pending_microtasks(${loop}) == 0 && ccjs_loop_pending_immediates(${loop}) == 0 && ccjs_loop_next_timer_due_ms(${loop}, &ccjs_next_due_ms) && ccjs_next_due_ms > ccjs_now_ms) {`,
-    `${indent}    ccjs_time_sleep_ms(ccjs_next_due_ms - ccjs_now_ms);`,
-    `${indent}  }`,
-    `${indent}}`,
-    `${indent}#endif`
-  ]
-}
-
-function emitBoxedValueCleanup(context) {
-  return context.boxedValues
-    .toReversed()
-    .flatMap((name) =>
-      isRuntimeBoxedValueType(context.boxedValueTypes.get(name))
-        ? [
-            `if (${name} != 0) {`,
-            `  ccjs_release(*${name});`,
-            `  ccjs_default_free(0, ${name}, sizeof(ccjs_value), _Alignof(ccjs_value));`,
-            '}'
-          ]
-        : [`if (${name} != 0) ccjs_default_free(0, ${name}, sizeof(double), _Alignof(double));`]
-    )
-}
-
-function isRuntimeBoxedValueType(valueType) {
-  return ['string', 'object'].includes(valueType)
-}
-
-function emitCleanupReturn(context) {
-  if (context.throwingFunction) {
-    return emitThrowingFunctionCleanupReturn(context)
-  }
-
-  if (isManagedRuntimeReturnType(context.returnType)) {
-    return ['return ccjs_return;']
-  }
-
-  if (context.returnType !== 'void') {
-    return ['return ccjs_return;']
-  }
-
-  return ['return;']
-}
-
-function emitThrowingFunctionErrorTransfer(context) {
-  if (!context.throwingFunction) {
-    return []
-  }
-
-  return [
-    'if (ccjs_error_active) {',
-    `  *${context.functionErrorOut} = ccjs_error;`,
-    '  ccjs_error = ccjs_undefined_value();',
-    '}'
-  ]
-}
-
-function emitThrowingFunctionCleanupReturn(context) {
-  const lines = ['if (ccjs_status_result != CCJS_OK) return ccjs_status_result;']
-
-  if (context.returnType !== 'void') {
-    lines.push(`*${context.functionReturnOut} = ccjs_return;`)
-  }
-
-  lines.push('return CCJS_OK;')
-
-  return lines
-}
-
-function nextCName(context, prefix) {
-  const name = `${prefix}_${context.nextId}`
-  context.nextId += 1
-
-  return name
 }
 
 function usesCJsGlobal(expression, context) {
