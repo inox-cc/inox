@@ -10,6 +10,15 @@ import {
 } from './type-names.ts'
 import { fsRuntimeCallInfoFromPath, unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
 import {
+  fetchHeadersRuntimeMethod,
+  isFetchAbortControllerMethod,
+  isFetchHeadersMethod,
+  isFetchInitOption,
+  isFetchRedirectMode,
+  isFetchResponseBodyMethod,
+  isSupportedFetchResponseBodyMethod
+} from './stdlib/descriptors/fetch.ts'
+import {
   isTimerClearMethod,
   isTimerHandleMethod,
   timerRuntimeMethodNameFromPath
@@ -2303,7 +2312,7 @@ class Checker {
     }
 
     for (const property of expression.properties) {
-      if (!['method', 'headers', 'body', 'signal', 'redirect'].includes(property.key)) {
+      if (!isFetchInitOption(property.key)) {
         this.checkExpression(property.value)
         this.report('CCJS_FETCH', `fetch init option ${property.key} is not supported by the current C/libuv fetch slice`, property.loc)
         continue
@@ -2408,11 +2417,11 @@ class Checker {
       return true
     }
 
-    return ['error', 'follow', 'manual'].includes(expression.value)
+    return isFetchRedirectMode(expression.value)
   }
 
   checkFetchAbortControllerMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'abort') {
+    if (expression.callee.type !== 'MemberExpression' || !isFetchAbortControllerMethod(expression.callee.property)) {
       return null
     }
 
@@ -2436,7 +2445,7 @@ class Checker {
   checkFetchResponseMethodCall(expression: AnyNode): ValueType | null {
     if (
       expression.callee.type !== 'MemberExpression' ||
-      !['arrayBuffer', 'blob', 'bytes', 'formData', 'json', 'text'].includes(expression.callee.property)
+      !isFetchResponseBodyMethod(expression.callee.property)
     ) {
       return null
     }
@@ -2456,7 +2465,7 @@ class Checker {
       )
     }
 
-    if (expression.callee.property !== 'text') {
+    if (!isSupportedFetchResponseBodyMethod(expression.callee.property)) {
       this.report(
         'CCJS_FETCH',
         `Response.${expression.callee.property} is not supported by the current C/libuv fetch slice`,
@@ -2496,7 +2505,7 @@ class Checker {
   checkFetchHeadersMethodCall(expression: AnyNode): ValueType | null {
     if (
       expression.callee.type !== 'MemberExpression' ||
-      !['get', 'has'].includes(expression.callee.property)
+      !isFetchHeadersMethod(expression.callee.property)
     ) {
       return null
     }
@@ -2526,7 +2535,7 @@ class Checker {
       )
     }
 
-    expression.fetchRuntimeMethod = expression.callee.property === 'get' ? 'headersGet' : 'headersHas'
+    expression.fetchRuntimeMethod = fetchHeadersRuntimeMethod(expression.callee.property)
     expression.valueType = expression.callee.property === 'get' ? 'string' : 'boolean'
     expression.nullable = expression.callee.property === 'get'
 

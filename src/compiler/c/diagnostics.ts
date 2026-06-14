@@ -1,4 +1,5 @@
 import { diagnostic } from '../diagnostics.ts'
+import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
 import { cMathBinaryMethods, cMathNullaryMethods, cMathUnaryMethods } from './runtime-methods.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
@@ -82,7 +83,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
 }
 
 export function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {
-  return usage.path.length === 1 && (usage.path[0] === 'fetch' || usage.path[0] === 'AbortController')
+  return usage.path.length === 1 && isFetchGlobalRoot(usage.path[0])
 }
 
 function isSupportedCDgramGlobalUsage(usage: IrGlobalUsage, context): boolean {
