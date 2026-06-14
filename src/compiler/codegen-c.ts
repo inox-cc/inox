@@ -4897,6 +4897,44 @@ function emitDgramAddressVariableDeclaration(statement, context) {
   ]
 }
 
+function emitDgramNumberVariableDeclaration(statement, context) {
+  if (
+    statement.init?.type !== 'CallExpression' ||
+    statement.init.callee?.type !== 'MemberExpression' ||
+    statement.init.callee.object?.type !== 'Reference' ||
+    statement.init.callee.object.path.length !== 1 ||
+    context.variables.get(statement.init.callee.object.path[0]) !== 'dgram-socket'
+  ) {
+    return null
+  }
+
+  const socketName = statement.init.callee.object.path[0]
+  const method = statement.init.callee.property
+  const runtime =
+    method === 'getSendBufferSize'
+      ? 'ccjs_dgram_get_send_buffer_size'
+      : method === 'getRecvBufferSize'
+        ? 'ccjs_dgram_get_recv_buffer_size'
+        : null
+
+  if (runtime == null) {
+    return null
+  }
+
+  context.variables.set(statement.name, 'number')
+
+  const size = nextCName(context, 'ccjs_dgram_buffer_size')
+
+  return [
+    `double ${statement.name} = 0;`,
+    '{',
+    `  int ${size} = 0;`,
+    `  ${emitStatusCheck(`${runtime}(${socketName}, &${size})`, context)}`,
+    `  ${statement.name} = (double)${size};`,
+    '}'
+  ]
+}
+
 function emitDgramSocketCallStatement(expression, context) {
   if (
     expression.callee?.type === 'MemberExpression' &&
@@ -4938,6 +4976,12 @@ function emitDgramSocketCallStatement(expression, context) {
     return emitDgramSendLines(expression.callee.object.path[0], expression.args, context)
   }
 
+  const optionCall = emitDgramSocketOptionCallStatement(expression, context)
+
+  if (optionCall != null) {
+    return optionCall
+  }
+
   if (isDgramSocketMethodCall(expression, 'close', context)) {
     return emitDgramCloseLines(expression.callee.object.path[0], expression.args, context)
   }
@@ -4974,6 +5018,10 @@ function emitDgramSocketCreateLines(expression, socketName, context, options: { 
     context.dgramMessageSockets.add(socketName)
   }
 
+  if (staticObjectBooleanPropertyValue(expression.args[0], 'reuseAddr') === true) {
+    context.dgramReuseAddrSockets.add(socketName)
+  }
+
   return lines
 }
 
@@ -5002,9 +5050,10 @@ function emitDgramBindLines(socketName, args, context) {
 
   const port = portArg == null ? { lines: [], expression: '0' } : emitDgramPortExpression(portArg, null, context)
   const host = emitDgramHostExpression(hostArg, null, context)
+  const flags = context.dgramReuseAddrSockets.has(socketName) ? 'CCJS_DGRAM_BIND_REUSEADDR' : '0'
   const lines = [
     ...port.lines,
-    emitStatusCheck(`ccjs_dgram_bind(${socketName}, ${host}, (int)(${port.expression}))`, context)
+    emitStatusCheck(`ccjs_dgram_bind_flags(${socketName}, ${host}, (int)(${port.expression}), ${flags})`, context)
   ]
 
   context.dgramBoundSockets.add(socketName)
@@ -5086,6 +5135,55 @@ function emitDgramDisconnectLines(socketName, args, context) {
   }
 
   return [emitStatusCheck(`ccjs_dgram_socket_disconnect(${socketName})`, context)]
+}
+
+function emitDgramSocketOptionCallStatement(expression, context) {
+  if (
+    expression?.type !== 'CallExpression' ||
+    expression.callee?.type !== 'MemberExpression' ||
+    expression.callee.object?.type !== 'Reference' ||
+    expression.callee.object.path.length !== 1 ||
+    context.variables.get(expression.callee.object.path[0]) !== 'dgram-socket'
+  ) {
+    return null
+  }
+
+  const socketName = expression.callee.object.path[0]
+  const method = expression.callee.property
+
+  if (method === 'setBroadcast') {
+    const enabled = emitPreparedNumberExpression(expression.args[0], context)
+
+    return [
+      ...enabled.lines,
+      emitStatusCheck(`ccjs_dgram_set_broadcast(${socketName}, ${enabled.expression} ? 1 : 0)`, context)
+    ]
+  }
+
+  if (method === 'setTTL') {
+    const ttl = emitPreparedNumberExpression(expression.args[0], context)
+
+    return [...ttl.lines, emitStatusCheck(`ccjs_dgram_set_ttl(${socketName}, (int)(${ttl.expression}))`, context)]
+  }
+
+  if (method === 'setSendBufferSize' || method === 'setRecvBufferSize') {
+    const runtime = method === 'setSendBufferSize' ? 'ccjs_dgram_set_send_buffer_size' : 'ccjs_dgram_set_recv_buffer_size'
+    const size = emitPreparedNumberExpression(expression.args[0], context)
+
+    return [...size.lines, emitStatusCheck(`${runtime}(${socketName}, (int)(${size.expression}))`, context)]
+  }
+
+  if (method === 'ref' || method === 'unref') {
+    if (expression.args.length > 0) {
+      context.diagnostics.push(
+        diagnostic('CCJS_DGRAM_SOCKET', `socket.${method} in the C backend does not take arguments`, expression.args[0]?.loc)
+      )
+    }
+
+    return [emitStatusCheck(`${method === 'ref' ? 'ccjs_dgram_ref' : 'ccjs_dgram_unref'}(${socketName})`, context)]
+  }
+
+  return null
 }
 
 function emitDgramSendLines(socketName, args, context, dgramContext = null) {
@@ -5440,6 +5538,16 @@ function staticObjectStringPropertyValue(expression, key) {
 
   if (value?.type === 'TemplateLiteral' && !value.raw.includes('${')) {
     return value.raw.slice(1, -1)
+  }
+
+  return null
+}
+
+function staticObjectBooleanPropertyValue(expression, key) {
+  const value = findObjectLiteralPropertyValue(expression, key)
+
+  if (value?.type === 'BooleanLiteral') {
+    return value.value === true
   }
 
   return null
@@ -8699,6 +8807,7 @@ function createFunctionContext(baseContext, returnType, returnNullable = false) 
     cleanupEnabled: true,
     dgramBoundSockets: new Set(),
     dgramMessageSockets: new Set(),
+    dgramReuseAddrSockets: new Set(),
     errorChannelUsed: false,
     errorObjectNames: new Set(),
     errorTargets: [],
@@ -8982,6 +9091,12 @@ function emitStatement(statement, context) {
 
     if (dgramSocket != null) {
       return dgramSocket
+    }
+
+    const dgramNumber = emitDgramNumberVariableDeclaration(statement, context)
+
+    if (dgramNumber != null) {
+      return dgramNumber
     }
 
     const dgramAddress = emitDgramAddressVariableDeclaration(statement, context)

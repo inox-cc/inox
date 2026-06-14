@@ -95,6 +95,10 @@ ccjs_status ccjs_dgram_socket_new(
 }
 
 ccjs_status ccjs_dgram_bind(ccjs_dgram_socket* socket, const char* host, int port) {
+  return ccjs_dgram_bind_flags(socket, host, port, 0);
+}
+
+ccjs_status ccjs_dgram_bind_flags(ccjs_dgram_socket* socket, const char* host, int port, unsigned int flags) {
   if (socket == 0 || socket->closing) {
     return CCJS_ERR_TYPE;
   }
@@ -106,7 +110,9 @@ ccjs_status ccjs_dgram_bind(ccjs_dgram_socket* socket, const char* host, int por
     return status;
   }
 
-  return uv_udp_bind(&socket->handle, (const struct sockaddr*)&addr, 0) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+  unsigned int uv_flags = (flags & CCJS_DGRAM_BIND_REUSEADDR) != 0 ? UV_UDP_REUSEADDR : 0;
+
+  return uv_udp_bind(&socket->handle, (const struct sockaddr*)&addr, uv_flags) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
 }
 
 ccjs_status ccjs_dgram_socket_on_message(ccjs_dgram_socket* socket, ccjs_dgram_recv_fn recv, void* user) {
@@ -256,6 +262,88 @@ ccjs_status ccjs_dgram_local_port(ccjs_dgram_socket* socket, int* out_port) {
   }
 
   *out_port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_dgram_set_broadcast(ccjs_dgram_socket* socket, int enabled) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  return uv_udp_set_broadcast(&socket->handle, enabled ? 1 : 0) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+ccjs_status ccjs_dgram_set_ttl(ccjs_dgram_socket* socket, int ttl) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  return uv_udp_set_ttl(&socket->handle, ttl) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+ccjs_status ccjs_dgram_get_send_buffer_size(ccjs_dgram_socket* socket, int* out_size) {
+  if (socket == 0 || socket->closing || out_size == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  int size = 0;
+
+  if (uv_send_buffer_size((uv_handle_t*)&socket->handle, &size) != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  *out_size = size;
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_dgram_set_send_buffer_size(ccjs_dgram_socket* socket, int size) {
+  if (socket == 0 || socket->closing || size <= 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  int value = size;
+
+  return uv_send_buffer_size((uv_handle_t*)&socket->handle, &value) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+ccjs_status ccjs_dgram_get_recv_buffer_size(ccjs_dgram_socket* socket, int* out_size) {
+  if (socket == 0 || socket->closing || out_size == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  int size = 0;
+
+  if (uv_recv_buffer_size((uv_handle_t*)&socket->handle, &size) != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  *out_size = size;
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_dgram_set_recv_buffer_size(ccjs_dgram_socket* socket, int size) {
+  if (socket == 0 || socket->closing || size <= 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  int value = size;
+
+  return uv_recv_buffer_size((uv_handle_t*)&socket->handle, &value) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+ccjs_status ccjs_dgram_ref(ccjs_dgram_socket* socket) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_dgram_unref(ccjs_dgram_socket* socket) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
 
   return CCJS_OK;
 }
@@ -489,9 +577,14 @@ ccjs_status ccjs_dgram_socket_new(
 }
 
 ccjs_status ccjs_dgram_bind(ccjs_dgram_socket* socket, const char* host, int port) {
+  return ccjs_dgram_bind_flags(socket, host, port, 0);
+}
+
+ccjs_status ccjs_dgram_bind_flags(ccjs_dgram_socket* socket, const char* host, int port, unsigned int flags) {
   (void)socket;
   (void)host;
   (void)port;
+  (void)flags;
   return CCJS_ERR_UNSUPPORTED;
 }
 
@@ -611,6 +704,62 @@ ccjs_status ccjs_dgram_local_port(ccjs_dgram_socket* socket, int* out_port) {
   }
 
   *out_port = 0;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_set_broadcast(ccjs_dgram_socket* socket, int enabled) {
+  (void)socket;
+  (void)enabled;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_set_ttl(ccjs_dgram_socket* socket, int ttl) {
+  (void)socket;
+  (void)ttl;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_get_send_buffer_size(ccjs_dgram_socket* socket, int* out_size) {
+  (void)socket;
+
+  if (out_size == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out_size = 0;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_set_send_buffer_size(ccjs_dgram_socket* socket, int size) {
+  (void)socket;
+  (void)size;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_get_recv_buffer_size(ccjs_dgram_socket* socket, int* out_size) {
+  (void)socket;
+
+  if (out_size == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out_size = 0;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_set_recv_buffer_size(ccjs_dgram_socket* socket, int size) {
+  (void)socket;
+  (void)size;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_ref(ccjs_dgram_socket* socket) {
+  (void)socket;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_dgram_unref(ccjs_dgram_socket* socket) {
+  (void)socket;
   return CCJS_ERR_UNSUPPORTED;
 }
 

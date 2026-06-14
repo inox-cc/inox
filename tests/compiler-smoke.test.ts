@@ -131,7 +131,7 @@ server.bind(0, '127.0.0.1', () => {
   assert.match(result.code, /static ccjs_status ccjs_dgram_message_handler_\d+\(void\* user, ccjs_dgram_socket\* ccjs_socket, const char\* ccjs_bytes, size_t ccjs_len, const char\* ccjs_host, int ccjs_port\);/)
   assert.match(result.code, /ccjs_dgram_socket_new\(&ccjs_loop, 0, 0, &server\)/)
   assert.match(result.code, /ccjs_dgram_socket_on_message\(server, ccjs_dgram_message_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_dgram_bind\(server, "127\.0\.0\.1", \(int\)\(0\)\)/)
+  assert.match(result.code, /ccjs_dgram_bind_flags\(server, "127\.0\.0\.1", \(int\)\(0\), 0\)/)
   assert.match(result.code, /ccjs_dgram_recv_start\(server\)/)
   assert.match(result.code, /ccjs_dgram_send\(ccjs_socket, ccjs_bytes, ccjs_len, ccjs_host, \(int\)\(ccjs_port\)\)/)
   assert.match(result.code, /ccjs_dgram_socket_address\(server, &address\)/)
@@ -151,7 +151,7 @@ socket.bind({ port: 0, address: '127.0.0.1' })
   )
 
   assert.match(result.code, /ccjs_dgram_socket_new\(&ccjs_loop, 0, 0, &socket\)/)
-  assert.match(result.code, /ccjs_dgram_bind\(socket, "127\.0\.0\.1", \(int\)\(0\)\)/)
+  assert.match(result.code, /ccjs_dgram_bind_flags\(socket, "127\.0\.0\.1", \(int\)\(0\), 0\)/)
 })
 
 test('lowers node:dgram connected UDP helpers to the C dgram runtime', () => {
@@ -175,6 +175,38 @@ socket.disconnect()
   assert.match(result.code, /ccjs_dgram_socket_remote_address\(socket, &remote\)/)
   assert.match(result.code, /ccjs_dgram_send_connected\(socket, "hello", 5\)/)
   assert.match(result.code, /ccjs_dgram_socket_disconnect\(socket\)/)
+})
+
+test('lowers node:dgram socket options to the C dgram runtime', () => {
+  const result = compileSource(
+    `import dgram from 'node:dgram'
+
+const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true })
+socket.bind(0, '127.0.0.1')
+socket.setBroadcast(false)
+socket.setTTL(32)
+socket.setSendBufferSize(4096)
+socket.setRecvBufferSize(4096)
+const sendSize = socket.getSendBufferSize()
+const recvSize = socket.getRecvBufferSize()
+socket.unref()
+socket.ref()
+console.log(sendSize, recvSize)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_dgram_bind_flags\(socket, "127\.0\.0\.1", \(int\)\(0\), CCJS_DGRAM_BIND_REUSEADDR\)/)
+  assert.match(result.code, /ccjs_dgram_set_broadcast\(socket, 0 \? 1 : 0\)/)
+  assert.match(result.code, /ccjs_dgram_set_ttl\(socket, \(int\)\(32\)\)/)
+  assert.match(result.code, /ccjs_dgram_set_send_buffer_size\(socket, \(int\)\(4096\)\)/)
+  assert.match(result.code, /ccjs_dgram_set_recv_buffer_size\(socket, \(int\)\(4096\)\)/)
+  assert.match(result.code, /ccjs_dgram_get_send_buffer_size\(socket, &ccjs_dgram_buffer_size_\d+\)/)
+  assert.match(result.code, /ccjs_dgram_get_recv_buffer_size\(socket, &ccjs_dgram_buffer_size_\d+\)/)
+  assert.match(result.code, /ccjs_dgram_unref\(socket\)/)
+  assert.match(result.code, /ccjs_dgram_ref\(socket\)/)
 })
 
 test('emits C net runtime include for node:net imports', () => {

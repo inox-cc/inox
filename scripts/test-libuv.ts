@@ -49,8 +49,10 @@ try {
     await checkLibuvConsoleRuntime(buildDir)
     await checkLibuvDgramRuntime(buildDir)
     await checkLibuvDgramConnectedRuntime(buildDir)
+    await checkLibuvDgramOptionsRuntime(buildDir)
     await checkLibuvCompiledDgramServer(buildDir)
     await checkLibuvCompiledDgramConnectedClient(buildDir)
+    await checkLibuvCompiledDgramOptions(buildDir)
     await checkLibuvNetRuntime(buildDir)
     await checkLibuvHttpRuntime(buildDir)
     await checkLibuvCompiledHttpServer(buildDir)
@@ -828,6 +830,112 @@ int main(void) {
   }
 }
 
+async function checkLibuvDgramOptionsRuntime(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'dgram-options-smoke-src')
+  const dgramBuildDir = join(workDir, 'dgram-options-smoke-build')
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_dgram_options_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_dgram_options_smoke dgram-options-smoke.c)
+target_link_libraries(ccjs_libuv_dgram_options_smoke PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(
+    join(sourceDir, 'dgram-options-smoke.c'),
+    `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/dgram.h"
+#include "ccjs/time.h"
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+int main(void) {
+  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  ccjs_loop loop;
+  ccjs_dgram_socket* socket = 0;
+  int send_size = 0;
+  int recv_size = 0;
+  int guard = 0;
+
+  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
+  if (ccjs_dgram_socket_new(&loop, 0, 0, &socket) != CCJS_OK) return 2;
+  if (ccjs_dgram_bind_flags(socket, "127.0.0.1", 0, CCJS_DGRAM_BIND_REUSEADDR) != CCJS_OK) return 3;
+  if (ccjs_dgram_set_broadcast(socket, 0) != CCJS_OK) return 4;
+  if (ccjs_dgram_set_ttl(socket, 32) != CCJS_OK) return 5;
+  if (ccjs_dgram_set_send_buffer_size(socket, 4096) != CCJS_OK) return 6;
+  if (ccjs_dgram_set_recv_buffer_size(socket, 4096) != CCJS_OK) return 7;
+  if (ccjs_dgram_get_send_buffer_size(socket, &send_size) != CCJS_OK) return 8;
+  if (ccjs_dgram_get_recv_buffer_size(socket, &recv_size) != CCJS_OK) return 9;
+  if (send_size <= 0 || recv_size <= 0) return 10;
+  if (ccjs_dgram_unref(socket) != CCJS_OK) return 11;
+  if (ccjs_dgram_ref(socket) != CCJS_OK) return 12;
+  ccjs_dgram_close(socket);
+
+  while (ccjs_loop_has_work(&loop) && guard < 200) {
+    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 13;
+    guard += 1;
+  }
+
+  if (guard >= 200) return 14;
+  printf("%d %d\\n", send_size > 0, recv_size > 0);
+  ccjs_loop_dispose(&loop);
+  return 0;
+}
+`
+  )
+
+  await checkCommand('configure libuv dgram options smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    dgramBuildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build libuv dgram options smoke', 'cmake', ['--build', dgramBuildDir])
+
+  const run = await runCommand(join(dgramBuildDir, 'ccjs_libuv_dgram_options_smoke'), [])
+  const stdout = normalizeNewlines(run.stdout)
+
+  if (run.code !== 0) {
+    fail('run libuv dgram options smoke', run)
+  }
+
+  const expected = '1 1\n'
+
+  if (stdout !== expected) {
+    console.error(`Libuv dgram options smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    process.exit(1)
+  }
+}
+
 async function checkLibuvCompiledDgramServer(workDir: string): Promise<void> {
   const sourceDir = join(workDir, 'compiled-dgram-src')
   const dgramBuildDir = join(workDir, 'compiled-dgram-build')
@@ -1051,6 +1159,71 @@ target_link_libraries(ccjs_libuv_compiled_dgram_connected_smoke PRIVATE ccjs_run
       stdout,
       stderr
     })
+  }
+}
+
+async function checkLibuvCompiledDgramOptions(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'compiled-dgram-options-src')
+  const dgramBuildDir = join(workDir, 'compiled-dgram-options-build')
+  const source = `import dgram from 'node:dgram'
+
+const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true })
+
+socket.bind(0, '127.0.0.1', () => {
+  socket.setBroadcast(false)
+  socket.setTTL(32)
+  socket.setSendBufferSize(4096)
+  socket.setRecvBufferSize(4096)
+  const sendSize = socket.getSendBufferSize()
+  const recvSize = socket.getRecvBufferSize()
+  socket.unref()
+  socket.ref()
+  console.log(sendSize > 0, recvSize > 0)
+  socket.close()
+})
+`
+  const compiled = compileSource(source, {
+    target: 'c'
+  })
+
+  await mkdir(sourceDir, { recursive: true })
+  await writeFile(
+    join(sourceDir, 'CMakeLists.txt'),
+    `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_compiled_dgram_options_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_compiled_dgram_options_smoke generated-dgram-options.c)
+target_link_libraries(ccjs_libuv_compiled_dgram_options_smoke PRIVATE ccjs_runtime)
+`
+  )
+  await writeFile(join(sourceDir, 'generated-dgram-options.c'), compiled.code)
+
+  await checkCommand('configure compiled libuv dgram options smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    dgramBuildDir,
+    '-DCCJS_LOOP_BACKEND=libuv'
+  ])
+  await checkCommand('build compiled libuv dgram options smoke', 'cmake', ['--build', dgramBuildDir])
+
+  const run = await runCommand(join(dgramBuildDir, 'ccjs_libuv_compiled_dgram_options_smoke'), [])
+  const stdout = normalizeNewlines(run.stdout)
+
+  if (run.code !== 0) {
+    fail('run compiled libuv dgram options smoke', run)
+  }
+
+  const expected = '1 1\n'
+
+  if (stdout !== expected) {
+    console.error(`Compiled libuv dgram options stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    process.exit(1)
   }
 }
 
