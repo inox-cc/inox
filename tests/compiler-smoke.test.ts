@@ -435,6 +435,50 @@ export function main(): void {
   assert.match(result.code, /#include "ccjs\/http\.h"/)
 })
 
+test('lowers global fetch GET and response text to the C fetch runtime', () => {
+  const result = compileSource(
+    `const response = await fetch('http://127.0.0.1:9000/hello')
+const text = await response.text()
+console.log(response.status, response.ok, response.url, text)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /#include "ccjs\/fetch\.h"/)
+  assert.match(result.code, /#include "ccjs\/object\.h"/)
+  assert.match(result.code, /ccjs_fetch\(&ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/hello", 27, &ccjs_promise_\d+\)/)
+  assert.match(result.code, /ccjs_fetch_response_text\(&ccjs_loop, response, &ccjs_promise_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(response, 0, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(response, 1, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(response, 2, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /printf\("%g %g %\.\*s %\.\*s\\n"/)
+})
+
+test('reports unsupported fetch init and response body helpers with fetch diagnostics', () => {
+  assertDiagnostic(
+    `const response = await fetch('http://127.0.0.1:9000/hello', { method: 'POST' })
+console.log(response.status)
+`,
+    'CCJS_FETCH',
+    {
+      target: 'c'
+    }
+  )
+
+  assertDiagnostic(
+    `const response = await fetch('http://127.0.0.1:9000/hello')
+const data = await response.json()
+console.log(data)
+`,
+    'CCJS_FETCH',
+    {
+      target: 'c'
+    }
+  )
+})
+
 test('lowers node:http createServer and listen to the C HTTP runtime', () => {
   const result = compileSource(
     `import http from 'node:http'
@@ -8670,13 +8714,13 @@ test('drives C JS global diagnostics from target-neutral IR global usages', () =
       {
         globalUsages: [
           {
-            root: 'fetch',
-            path: ['fetch']
+            root: 'crypto',
+            path: ['crypto']
           }
         ]
       }
     ]),
-    ['fetch']
+    ['crypto']
   )
   assert.throws(
     () =>
@@ -8684,8 +8728,8 @@ test('drives C JS global diagnostics from target-neutral IR global usages', () =
         ...result.ir,
         globalUsages: [
           {
-            root: 'fetch',
-            path: ['fetch'],
+            root: 'crypto',
+            path: ['crypto'],
             loc: {
               line: 1,
               column: 1

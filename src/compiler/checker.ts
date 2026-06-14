@@ -84,6 +84,28 @@ const fsDirentObjectShape: ObjectShapeInfo = {
   ]
 }
 
+const fetchResponseObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'fetch.Response',
+  fields: [
+    {
+      name: 'status',
+      valueType: 'number',
+      readonly: true
+    },
+    {
+      name: 'ok',
+      valueType: 'boolean',
+      readonly: true
+    },
+    {
+      name: 'url',
+      valueType: 'string',
+      readonly: true
+    }
+  ]
+}
+
 const fsConstantValues = new Map([
   ['F_OK', 0],
   ['X_OK', 1],
@@ -1717,10 +1739,22 @@ class Checker {
       return fsStatsMethodType
     }
 
+    const fetchResponseMethodType = this.checkFetchResponseMethodCall(expression)
+
+    if (fetchResponseMethodType != null) {
+      return fetchResponseMethodType
+    }
+
     const fsType = this.checkFsCall(expression)
 
     if (fsType != null) {
       return fsType
+    }
+
+    const fetchType = this.checkFetchCall(expression)
+
+    if (fetchType != null) {
+      return fetchType
     }
 
     const jsonType = this.checkJsonCall(expression)
@@ -2099,6 +2133,85 @@ class Checker {
     expression.valueType = 'boolean'
 
     return 'boolean'
+  }
+
+  checkFetchCall(expression: AnyNode): ValueType | null {
+    if (
+      expression.callee.type !== 'Reference' ||
+      expression.callee.path.length !== 1 ||
+      expression.callee.path[0] !== 'fetch' ||
+      this.scope.resolve('fetch') != null
+    ) {
+      return null
+    }
+
+    if (expression.args.length < 1 || expression.args.length > 2) {
+      this.report('CCJS_ARG_COUNT', `function fetch expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    if (expression.args[0] != null) {
+      this.checkAssignableType(
+        this.checkExpression(expression.args[0]),
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+    }
+
+    if (expression.args[1] != null) {
+      this.checkExpression(expression.args[1])
+      this.report('CCJS_FETCH', 'fetch init options are not supported by the current C/libuv fetch slice', expression.args[1].loc)
+    }
+
+    expression.fetchRuntimeMethod = 'fetch'
+    expression.valueType = 'promise'
+    expression.promiseValueType = 'object'
+    expression.shape = fetchResponseObjectShape
+
+    return 'promise'
+  }
+
+  checkFetchResponseMethodCall(expression: AnyNode): ValueType | null {
+    if (
+      expression.callee.type !== 'MemberExpression' ||
+      !['text', 'bytes', 'json'].includes(expression.callee.property)
+    ) {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const shape = this.resolveExpressionShape(expression.callee.object)
+
+    if (objectType !== 'object' || shape?.builtin !== 'fetch.Response') {
+      return null
+    }
+
+    if (expression.args.length !== 0) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function Response.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (expression.callee.property !== 'text') {
+      this.report(
+        'CCJS_FETCH',
+        `Response.${expression.callee.property} is not supported by the current C/libuv fetch slice`,
+        expression.loc
+      )
+      expression.valueType = 'promise'
+      expression.promiseValueType = 'unknown'
+
+      return 'promise'
+    }
+
+    expression.fetchRuntimeMethod = 'text'
+    expression.valueType = 'promise'
+    expression.promiseValueType = 'string'
+
+    return 'promise'
   }
 
   resolveClassMethodReceiverClassName(expression: AnyNode): string | null {

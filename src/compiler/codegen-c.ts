@@ -892,8 +892,10 @@ function emitCModuleSource(
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
+  const needsFetchRuntime = globalUsages.some(isSupportedCFetchGlobalUsage)
   const needsAsyncRuntime =
     runtimeRequirements.has('async-runtime') ||
+    needsFetchRuntime ||
     needsFsRuntime ||
     needsTimerRuntime ||
     signatureRuntimeTypes.has('promise')
@@ -904,15 +906,20 @@ function emitCModuleSource(
     signatureRuntimeTypes.has('set')
   const needsBinaryRuntime = runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
   const needsClassRuntime = context.classInfos.size > 0
-  const needsObjectRuntime =
-    runtimeRequirements.has('objects') || needsFsRuntime || needsClassRuntime || signatureRuntimeTypes.has('object')
   const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
+  const needsObjectRuntime =
+    runtimeRequirements.has('objects') ||
+    needsFsRuntime ||
+    needsFetchRuntime ||
+    needsClassRuntime ||
+    signatureRuntimeTypes.has('object')
   const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
   const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
   const needsRuntime =
     context.throwingFunctions.size > 0 ||
     needsAsyncRuntime ||
     needsDgramRuntime ||
+    needsFetchRuntime ||
     needsHttpRuntime ||
     needsNetRuntime ||
     needsCallbackRuntime ||
@@ -922,7 +929,8 @@ function emitCModuleSource(
     needsJsonRuntime ||
     signatureRuntimeTypes.size > 0 ||
     runtimeRequirements.has('managed-values')
-  const needsTimeRuntime = runtimeRequirements.has('clocks') || needsAsyncRuntime || needsDgramRuntime || needsHttpRuntime || needsNetRuntime
+  const needsTimeRuntime =
+    runtimeRequirements.has('clocks') || needsAsyncRuntime || needsDgramRuntime || needsFetchRuntime || needsHttpRuntime || needsNetRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
@@ -930,6 +938,7 @@ function emitCModuleSource(
     runtimeRequirements.has('string-bytes') ||
     needsFsRuntime ||
     needsDgramRuntime ||
+    needsFetchRuntime ||
     needsNetRuntime ||
     signatureRuntimeTypes.has('string')
   const classMethods = collectClassMethods(context)
@@ -963,6 +972,7 @@ function emitCModuleSource(
       needsTimerRuntime,
       needsConsoleRuntime,
       needsDgramRuntime,
+      needsFetchRuntime,
       needsHttpRuntime,
       needsNetRuntime,
       options
@@ -1480,18 +1490,20 @@ function emitCUnit(
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
-  const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFsRuntime || needsTimerRuntime
+  const needsFetchRuntime = globalUsages.some(isSupportedCFetchGlobalUsage)
+  const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFetchRuntime || needsFsRuntime || needsTimerRuntime
   const needsCollectionRuntime = runtimeRequirements.has('collections')
   const needsBinaryRuntime = runtimeRequirements.has('binary')
   const needsClassRuntime = baseContext.classInfos.size > 0
-  const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime || needsClassRuntime
   const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
+  const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime || needsFetchRuntime || needsClassRuntime
   const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
   const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
   const needsRuntime =
     baseContext.throwingFunctions.size > 0 ||
     needsAsyncRuntime ||
     needsDgramRuntime ||
+    needsFetchRuntime ||
     needsHttpRuntime ||
     needsNetRuntime ||
     needsCallbackRuntime ||
@@ -1500,11 +1512,13 @@ function emitCUnit(
     needsClassRuntime ||
     needsJsonRuntime ||
     runtimeRequirements.has('managed-values')
-  const needsTimeRuntime = runtimeRequirements.has('clocks') || needsAsyncRuntime || needsDgramRuntime || needsHttpRuntime || needsNetRuntime
+  const needsTimeRuntime =
+    runtimeRequirements.has('clocks') || needsAsyncRuntime || needsDgramRuntime || needsFetchRuntime || needsHttpRuntime || needsNetRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
-  const needsStringHeader = runtimeRequirements.has('string-bytes') || needsFsRuntime || needsDgramRuntime || needsNetRuntime
+  const needsStringHeader =
+    runtimeRequirements.has('string-bytes') || needsFsRuntime || needsDgramRuntime || needsFetchRuntime || needsNetRuntime
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, baseContext)
@@ -1524,6 +1538,7 @@ function emitCUnit(
     needsTimerRuntime,
     needsConsoleRuntime,
     needsDgramRuntime,
+    needsFetchRuntime,
     needsHttpRuntime,
     needsNetRuntime,
     options
@@ -1682,6 +1697,7 @@ function emitCPrelude(
   needsTimerRuntime,
   needsConsoleRuntime,
   needsDgramRuntime,
+  needsFetchRuntime,
   needsHttpRuntime,
   needsNetRuntime,
   options: CEmitOptions = {}
@@ -1695,6 +1711,10 @@ function emitCPrelude(
 
   if (needsDgramRuntime) {
     lines.push('#include "ccjs/dgram.h"')
+  }
+
+  if (needsFetchRuntime) {
+    lines.push('#include "ccjs/fetch.h"')
   }
 
   if (needsHttpRuntime) {
@@ -2288,11 +2308,16 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
     path === 'Map' ||
     path === 'Set' ||
     isSupportedCDgramGlobalUsage(usage, context) ||
+    isSupportedCFetchGlobalUsage(usage) ||
     isSupportedCHttpGlobalUsage(usage, context) ||
     isSupportedCNetGlobalUsage(usage, context) ||
     isSupportedCCryptoGlobalUsage(usage) ||
     isSupportedCMathGlobalUsage(usage)
   )
+}
+
+function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {
+  return usage.path.length === 1 && usage.path[0] === 'fetch'
 }
 
 function isSupportedCDgramGlobalUsage(usage: IrGlobalUsage, context): boolean {
@@ -10591,6 +10616,14 @@ function emitStatement(statement, context) {
       return promiseMethod.lines
     }
 
+    const fetchCall = emitPreparedFetchCallExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (fetchCall != null) {
+      return fetchCall.lines
+    }
+
     const fsCall = emitPreparedFsCallExpression(statement.init, context, {
       out: statement.name
     })
@@ -10822,6 +10855,12 @@ function emitStatement(statement, context) {
 
     if (cryptoCall != null) {
       return cryptoCall.lines
+    }
+
+    const fetchCall = emitPreparedFetchCallExpression(statement.expression, context)
+
+    if (fetchCall != null) {
+      return fetchCall.lines
     }
 
     const fsCall = emitPreparedFsCallExpression(statement.expression, context)
@@ -12019,6 +12058,17 @@ function emitPreparedForInitializer(init, context) {
 }
 
 function emitPreparedForVariableDeclaration(statement, context) {
+  const fetchCall = emitPreparedFetchCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (fetchCall != null) {
+    return {
+      lines: fetchCall.lines,
+      expression: ''
+    }
+  }
+
   const fsCall = emitPreparedFsCallExpression(statement.init, context, {
     out: statement.name
   })
@@ -17273,6 +17323,53 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
   }
 }
 
+function emitPreparedFetchCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const method = cFetchRuntimeExpressionMethod(expression)
+
+  if (method == null || expression?.valueType !== 'promise') {
+    return null
+  }
+
+  registerEventLoop(context)
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const valueType = expression.promiseValueType ?? (method === 'text' ? 'string' : 'object')
+
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, valueType, 'error')
+  }
+
+  if (method === 'fetch') {
+    const url = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_url')
+
+    return {
+      lines: [
+        ...url.lines,
+        emitStatusCheck(
+          `ccjs_fetch(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, &${out})`,
+          context
+        )
+      ],
+      expression: out,
+      valueType,
+      rejectionValueType: 'error'
+    }
+  }
+
+  const response = emitCValueExpression(expression.callee.object, context)
+
+  return {
+    lines: [
+      ...response.lines,
+      emitRuntimeTypeCheck(`${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`, context),
+      emitStatusCheck(`ccjs_fetch_response_text(${emitEventLoopReference(context)}, ${response.expression}, &${out})`, context)
+    ],
+    expression: out,
+    valueType,
+    rejectionValueType: 'error'
+  }
+}
+
 function emitPreparedFsSyncValueExpression(expression, context) {
   const method = cFsRuntimeExpressionMethod(expression)
 
@@ -18362,6 +18459,15 @@ function emitPreparedAwaitPromiseExpression(expression, context) {
 }
 
 function emitPreparedPromiseExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const fetchCall = emitPreparedFetchCallExpression(expression, context, options)
+
+  if (fetchCall != null) {
+    return {
+      ...fetchCall,
+      valueType: resolvePromiseExpressionValueType(expression, context) ?? fetchCall.valueType ?? 'unknown'
+    }
+  }
+
   const fsCall = emitPreparedFsCallExpression(expression, context, options)
 
   if (fsCall != null) {
@@ -19134,6 +19240,10 @@ function inferExpressionType(expression, context) {
   }
 
   if (expression?.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression) != null) {
+    return expression.valueType === 'promise' ? 'promise' : (expression.valueType ?? 'unknown')
+  }
+
+  if (expression?.type === 'CallExpression' && cFetchRuntimeExpressionMethod(expression) != null) {
     return expression.valueType === 'promise' ? 'promise' : (expression.valueType ?? 'unknown')
   }
 
@@ -21837,6 +21947,10 @@ function cTimeRuntimeCallName(callee) {
 
 function cFsRuntimeExpressionMethod(expression) {
   return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
+}
+
+function cFetchRuntimeExpressionMethod(expression) {
+  return expression?.fetchRuntimeMethod ?? null
 }
 
 function cFsRuntimeConstantExpression(expression) {

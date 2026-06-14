@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createSocket as createUdpSocket } from 'node:dgram'
 import { access, mkdir, mkdtemp, readFile, readlink, realpath, rm, writeFile } from 'node:fs/promises'
+import { createServer as createHttpServer } from 'node:http'
 import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -59,6 +60,7 @@ try {
     await checkLibuvHttpRuntime(buildDir)
     await checkLibuvCompiledHttpServer(buildDir)
     await checkLibuvFetchRuntime(buildDir)
+    await checkLibuvCompiledFetchClient(buildDir)
     await checkLibuvFsRuntime(buildDir)
     console.log('Libuv checks passed')
   }
@@ -2077,6 +2079,98 @@ int main(void) {
   if (stdout !== expected) {
     console.error(`Libuv fetch smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
     process.exit(1)
+  }
+}
+
+async function checkLibuvCompiledFetchClient(workDir: string): Promise<void> {
+  const sourceDir = join(workDir, 'compiled-fetch-client-src')
+  const fetchBuildDir = join(workDir, 'compiled-fetch-client-build')
+  const responseBody = 'compiled-fetch'
+  const server = createHttpServer((request, response) => {
+    if (request.url !== '/value') {
+      response.writeHead(404, {
+        Connection: 'close',
+        'Content-Length': '0'
+      })
+      response.end()
+      return
+    }
+
+    response.writeHead(200, {
+      Connection: 'close',
+      'Content-Length': String(responseBody.length),
+      'Content-Type': 'text/plain'
+    })
+    response.end(responseBody)
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
+
+  const address = server.address()
+
+  if (address == null || typeof address === 'string') {
+    server.close()
+    throw new Error('Expected HTTP address with a numeric port')
+  }
+
+  const url = `http://127.0.0.1:${address.port}/value`
+  const source = `const response = await fetch('${url}')
+const text = await response.text()
+console.log(response.status, response.ok, response.url, text)
+`
+  const compiled = compileSource(source, {
+    target: 'c'
+  })
+
+  try {
+    await mkdir(sourceDir, { recursive: true })
+    await writeFile(
+      join(sourceDir, 'CMakeLists.txt'),
+      `cmake_minimum_required(VERSION 3.20)
+
+project(ccjs_libuv_compiled_fetch_client_smoke C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
+add_executable(ccjs_libuv_compiled_fetch_client_smoke generated-fetch-client.c)
+target_link_libraries(ccjs_libuv_compiled_fetch_client_smoke PRIVATE ccjs_runtime)
+`
+    )
+    await writeFile(join(sourceDir, 'generated-fetch-client.c'), compiled.code)
+
+    await checkCommand('configure compiled libuv fetch client smoke', 'cmake', [
+      '-S',
+      sourceDir,
+      '-B',
+      fetchBuildDir,
+      '-DCCJS_LOOP_BACKEND=libuv'
+    ])
+    await checkCommand('build compiled libuv fetch client smoke', 'cmake', ['--build', fetchBuildDir])
+
+    const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_compiled_fetch_client_smoke'), [])
+    const stdout = normalizeNewlines(run.stdout)
+
+    if (run.code !== 0) {
+      fail('run compiled libuv fetch client smoke', run)
+    }
+
+    const expected = `200 1 ${url} ${responseBody}\n`
+
+    if (stdout !== expected) {
+      console.error(
+        `Compiled libuv fetch client stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+      )
+      process.exit(1)
+    }
+  } finally {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve())
+    })
   }
 }
 
