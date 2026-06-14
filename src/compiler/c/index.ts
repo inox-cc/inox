@@ -19,6 +19,7 @@ import {
 import { tokenize } from '../lexer.ts'
 import { parse } from '../parser.ts'
 import { formatGeneratedC } from './format.ts'
+import { cStringLiteral, emitCIdentifier, escapeCString, utf8ByteLength } from './identifiers.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
 import type { CEmitOptions, CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
 import type {
@@ -21672,18 +21673,6 @@ function nextCName(context, prefix) {
   return name
 }
 
-function cStringLiteral(value) {
-  return JSON.stringify(value)
-}
-
-function emitCIdentifier(value) {
-  return value.replaceAll(/[^A-Za-z0-9_]/g, '_')
-}
-
-function utf8ByteLength(value) {
-  return Buffer.byteLength(value, 'utf8')
-}
-
 function usesCJsGlobal(expression, context) {
   const root = rootReferenceName(expression)
 
@@ -22167,13 +22156,4 @@ function narrowNullableScalars(context, names) {
   for (const name of names) {
     context.narrowedNullableScalars.add(name)
   }
-}
-
-function escapeCString(value) {
-  return value
-    .replaceAll('\\', '\\\\')
-    .replaceAll('"', '\\"')
-    .replaceAll('\n', '\\n')
-    .replaceAll('\r', '\\r')
-    .replaceAll('\t', '\\t')
 }
