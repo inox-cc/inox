@@ -1,4 +1,11 @@
 import { binaryConstructorNameFromPath } from './stdlib/descriptors/binary.ts'
+import {
+  arrayRuntimeMethodName,
+  collectionConstructorNameFromPath,
+  isMapMethod,
+  isSetMethod,
+  stringRuntimeMethodName as collectionStringRuntimeMethodName
+} from './stdlib/descriptors/collections.ts'
 import { cryptoRuntimeMethodNameFromPath } from './stdlib/descriptors/crypto.ts'
 import { fsGlobalUsagePathForRuntimeMethod, fsRuntimeMethodForPath } from './stdlib/descriptors/fs.ts'
 import { jsonRuntimeMethodNameFromPath } from './stdlib/descriptors/json.ts'
@@ -1263,7 +1270,9 @@ function runtimeConstructorName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['Error', 'Map', 'Set', 'Uint8Array'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
+  return expression.callee.path[0] === 'Error'
+    ? 'Error'
+    : (collectionConstructorNameFromPath(expression.callee.path) ?? binaryConstructorNameFromPath(expression.callee.path))
 }
 
 function collectionConstructorName(expression: AnyNode): string | null {
@@ -1271,7 +1280,7 @@ function collectionConstructorName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['Map', 'Set'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
+  return collectionConstructorNameFromPath(expression.callee.path)
 }
 
 function objectConstructorName(expression: AnyNode): string | null {
@@ -1329,7 +1338,7 @@ function collectionMethodCallName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['add', 'clear', 'delete', 'get', 'has', 'set'].includes(expression.callee.property)
+  return isMapMethod(expression.callee.property) || isSetMethod(expression.callee.property)
     ? expression.callee.property
     : null
 }
@@ -1339,9 +1348,7 @@ function arrayMethodCallName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['filter', 'map', 'pop', 'push', 'sort'].includes(expression.callee.property)
-    ? expression.callee.property
-    : null
+  return arrayRuntimeMethodName(expression.callee.property)
 }
 
 function isStringConversionCall(expression: AnyNode): boolean {
@@ -1373,9 +1380,7 @@ function stringRuntimeMethodName(expression: AnyNode): string | null {
     return null
   }
 
-  return ['endsWith', 'includes', 'slice', 'split', 'startsWith', 'trim'].includes(expression.callee.property)
-    ? expression.callee.property
-    : null
+  return collectionStringRuntimeMethodName(expression.callee.property)
 }
 
 function timeRuntimeCallName(callee: AnyNode): string | null {

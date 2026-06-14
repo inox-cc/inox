@@ -63,6 +63,12 @@ import {
   reportUnsupportedCSyntaxFeatures
 } from './diagnostics.ts'
 import { formatGeneratedC } from './format.ts'
+import {
+  arrayRuntimeMethodName,
+  collectionConstructorNameFromPath,
+  isStringPredicateMethod,
+  isStringRuntimeMethod
+} from '../stdlib/descriptors/collections.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from './globals.ts'
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, escapeCString, utf8ByteLength } from './identifiers.ts'
 import {
@@ -147,10 +153,6 @@ import type {
   SourceLocation
 } from '../types.ts'
 export type { CModuleOutputFile } from './types.ts'
-
-const cStringPredicateMethods = new Set(['includes', 'startsWith', 'endsWith'])
-
-const cArrayMethods = new Set(['sort', 'filter', 'map', 'push', 'pop'])
 
 type AsyncTaskSuccessPhaseKind = 'pre-finalizer' | 'prefix-finalizer' | 'body'
 type AsyncTaskTryPhaseKind = 'success-finalizer' | 'reject-finalizer' | 'handler-prelude' | 'handler-finalizer'
@@ -18506,7 +18508,7 @@ function isStringPredicateCall(expression, context) {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
-    !cStringPredicateMethods.has(expression.callee.property) ||
+    !isStringPredicateMethod(expression.callee.property) ||
     expression.args.length !== 1
   ) {
     return false
@@ -18522,7 +18524,7 @@ function isArrayMethodCall(expression) {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee.type === 'MemberExpression' &&
-    cArrayMethods.has(expression.callee.property)
+    arrayRuntimeMethodName(expression.callee.property) != null
   )
 }
 
@@ -19410,7 +19412,7 @@ function collectionConstructorName(expression) {
     return null
   }
 
-  return ['Map', 'Set'].includes(expression.callee.path[0]) ? expression.callee.path[0] : null
+  return collectionConstructorNameFromPath(expression.callee.path)
 }
 
 function emitPreparedCollectionCallExpression(expression, context) {
@@ -20295,5 +20297,5 @@ function isPromiseMethodCallExpression(expression, context) {
 }
 
 function isCStringRuntimeMethodName(name) {
-  return name === 'trim' || name === 'slice' || name === 'split' || cStringPredicateMethods.has(name)
+  return isStringRuntimeMethod(name)
 }

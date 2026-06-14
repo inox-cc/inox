@@ -23,6 +23,14 @@ import {
   binaryInstanceRuntimeMethodName,
   binaryStaticRuntimeMethodNameFromPath
 } from './stdlib/descriptors/binary.ts'
+import {
+  collectionConstructorNameFromPath,
+  isArrayMethod,
+  isStringPredicateMethod,
+  mapRuntimeMethodName,
+  setRuntimeMethodName,
+  stringRuntimeMethodName
+} from './stdlib/descriptors/collections.ts'
 import { cryptoRuntimeMethodNameFromPath } from './stdlib/descriptors/crypto.ts'
 import { jsonRuntimeMethodNameFromPath } from './stdlib/descriptors/json.ts'
 import { mathRuntimeArgCount, mathRuntimeMethodNameFromPath } from './stdlib/descriptors/math.ts'
@@ -3414,20 +3422,22 @@ class Checker {
     const property = expression.callee.property
     const objectType = this.checkExpression(expression.callee.object)
 
-    if (objectType === 'map' && isMapMethod(property)) {
+    const mapMethod = mapRuntimeMethodName(property)
+
+    if (objectType === 'map' && mapMethod != null) {
       const mapType = this.resolveExpressionMapType(expression.callee.object) ?? {
         key: 'unknown',
         value: 'unknown'
       }
 
-      if (property === 'clear') {
+      if (mapMethod === 'clear') {
         this.checkCollectionArgCount(expression, 'map.clear', 0)
         expression.valueType = 'void'
         return 'void'
       }
 
-      if (property === 'get' || property === 'has' || property === 'delete') {
-        this.checkCollectionArgCount(expression, `map.${property}`, 1)
+      if (mapMethod === 'get' || mapMethod === 'has' || mapMethod === 'delete') {
+        this.checkCollectionArgCount(expression, `map.${mapMethod}`, 1)
 
         if (expression.args[0] != null) {
           this.checkAssignableType(
@@ -3443,7 +3453,7 @@ class Checker {
           this.checkExpression(arg)
         }
 
-        if (property === 'get') {
+        if (mapMethod === 'get') {
           expression.valueType = mapType.value ?? 'unknown'
           expression.nullable = true
           return mapType.value ?? 'unknown'
@@ -3486,16 +3496,18 @@ class Checker {
       return 'map'
     }
 
-    if (objectType === 'set' && isSetMethod(property)) {
+    const setMethod = setRuntimeMethodName(property)
+
+    if (objectType === 'set' && setMethod != null) {
       const elementType = this.resolveExpressionSetElementType(expression.callee.object) ?? 'unknown'
 
-      if (property === 'clear') {
+      if (setMethod === 'clear') {
         this.checkCollectionArgCount(expression, 'set.clear', 0)
         expression.valueType = 'void'
         return 'void'
       }
 
-      this.checkCollectionArgCount(expression, `set.${property}`, 1)
+      this.checkCollectionArgCount(expression, `set.${setMethod}`, 1)
 
       if (expression.args[0] != null) {
         this.checkAssignableType(
@@ -3511,7 +3523,7 @@ class Checker {
         this.checkExpression(arg)
       }
 
-      if (property === 'add') {
+      if (setMethod === 'add') {
         expression.valueType = 'set'
         expression.setElementType = elementType
         return 'set'
@@ -3996,7 +4008,9 @@ class Checker {
   }
 
   checkStringTrimCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'trim') {
+    const method = expression.callee.type === 'MemberExpression' ? stringRuntimeMethodName(expression.callee.property) : null
+
+    if (method !== 'trim') {
       return null
     }
 
@@ -4015,13 +4029,15 @@ class Checker {
     }
 
     expression.valueType = 'string'
-    expression.stringRuntimeMethod = 'trim'
+    expression.stringRuntimeMethod = method
 
     return 'string'
   }
 
   checkStringSliceCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'slice') {
+    const method = expression.callee.type === 'MemberExpression' ? stringRuntimeMethodName(expression.callee.property) : null
+
+    if (method !== 'slice') {
       return null
     }
 
@@ -4045,13 +4061,15 @@ class Checker {
     }
 
     expression.valueType = 'string'
-    expression.stringRuntimeMethod = 'slice'
+    expression.stringRuntimeMethod = method
 
     return 'string'
   }
 
   checkStringSplitCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'split') {
+    const method = expression.callee.type === 'MemberExpression' ? stringRuntimeMethodName(expression.callee.property) : null
+
+    if (method !== 'split') {
       return null
     }
 
@@ -4079,7 +4097,7 @@ class Checker {
     expression.valueType = 'array'
     expression.arrayElementType = 'string'
     expression.arrayElementDeclaredType = 'string'
-    expression.stringRuntimeMethod = 'split'
+    expression.stringRuntimeMethod = method
 
     return 'array'
   }
@@ -4134,14 +4152,16 @@ class Checker {
       return 'object'
     }
 
-    if (expression.callee.path[0] === 'Map') {
+    const collectionConstructor = collectionConstructorNameFromPath(expression.callee.path)
+
+    if (collectionConstructor === 'Map') {
       expression.valueType = 'map'
       expression.mapKeyType = 'unknown'
       expression.mapValueType = 'unknown'
       return 'map'
     }
 
-    if (expression.callee.path[0] === 'Set') {
+    if (collectionConstructor === 'Set') {
       expression.valueType = 'set'
       expression.setElementType = 'unknown'
       return 'set'
@@ -5579,22 +5599,6 @@ function inferBinaryExpressionType(operator: string, left: ValueType, right: Val
 
 function isEqualityOperator(operator: string): boolean {
   return ['===', '!==', '==', '!='].includes(operator)
-}
-
-function isStringPredicateMethod(name: string): boolean {
-  return ['includes', 'startsWith', 'endsWith'].includes(name)
-}
-
-function isArrayMethod(name: string): boolean {
-  return ['sort', 'filter', 'map', 'push', 'pop'].includes(name)
-}
-
-function isMapMethod(name: string): boolean {
-  return ['clear', 'delete', 'get', 'has', 'set'].includes(name)
-}
-
-function isSetMethod(name: string): boolean {
-  return ['add', 'clear', 'delete', 'has'].includes(name)
 }
 
 function isPromiseMethod(name: string): boolean {

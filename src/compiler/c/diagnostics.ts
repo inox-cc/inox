@@ -1,5 +1,6 @@
 import { diagnostic } from '../diagnostics.ts'
 import { isBinaryGlobalUsagePath } from '../stdlib/descriptors/binary.ts'
+import { isCollectionConstructorGlobalUsagePath } from '../stdlib/descriptors/collections.ts'
 import { cryptoRuntimeMethodNameFromPath } from '../stdlib/descriptors/crypto.ts'
 import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
@@ -71,8 +72,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
     path === 'setImmediate' ||
     path === 'setInterval' ||
     path === 'setTimeout' ||
-    path === 'Map' ||
-    path === 'Set' ||
+    isCollectionConstructorGlobalUsagePath(usage.path) ||
     isSupportedCDgramGlobalUsage(usage, context) ||
     isSupportedCFetchGlobalUsage(usage) ||
     isSupportedCHttpGlobalUsage(usage, context) ||
