@@ -72,6 +72,18 @@ const fsStatsObjectShape: ObjectShapeInfo = {
   ]
 }
 
+const fsDirentObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'fs.Dirent',
+  fields: [
+    {
+      name: 'name',
+      valueType: 'string',
+      readonly: true
+    }
+  ]
+}
+
 const fsConstantValues = new Map([
   ['F_OK', 0],
   ['X_OK', 1],
@@ -740,13 +752,22 @@ class Checker {
       statement.valueType = valueType
       statement.nullable = declared?.nullable === true || statement.init?.nullable === true
       statement.arrayElementType = arrayElementType
-      statement.arrayElementDeclaredType = arrayElementDeclaredType
+      statement.arrayElementDeclaredType =
+        valueType === 'object' && statement.init?.arrayElementDeclaredType === 'fs.Dirent'
+          ? 'fs.Dirent'
+          : arrayElementDeclaredType
       statement.mapKeyType = mapType?.key ?? null
       statement.mapValueType = mapType?.value ?? null
       statement.promiseValueType = promiseValueType
       statement.setElementType = setElementType
       statement.functionType = declared?.functionType ?? null
-      statement.shape = declared?.shape ?? statement.init?.shape ?? null
+      statement.shape =
+        declared?.shape ??
+        statement.init?.shape ??
+        (valueType === 'object' &&
+        (statement.init?.arrayElementDeclaredType === 'fs.Dirent' || statement.arrayElementDeclaredType === 'fs.Dirent')
+          ? fsDirentObjectShape
+          : null)
       statement.className = statement.init?.className ?? null
 
       if (declared?.shape != null && statement.init?.type === 'ObjectLiteral') {
@@ -1401,7 +1422,15 @@ class Checker {
 
       if (objectType === 'array') {
         this.checkAssignableType(indexType, 'number', expression.index.loc)
-        return this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
+        const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
+        expression.valueType = valueType
+        expression.arrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
+
+        if (expression.arrayElementDeclaredType === 'fs.Dirent') {
+          expression.shape = fsDirentObjectShape
+        }
+
+        return valueType
       }
 
       return 'unknown'
@@ -1448,6 +1477,10 @@ class Checker {
         expression.nullable = true
         expression.valueType = valueType
         expression.arrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
+
+        if (expression.arrayElementDeclaredType === 'fs.Dirent') {
+          expression.shape = fsDirentObjectShape
+        }
 
         return valueType
       }
@@ -2046,19 +2079,23 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape?.builtin !== 'fs.Stats') {
+    if (objectType !== 'object' || (shape?.builtin !== 'fs.Stats' && shape?.builtin !== 'fs.Dirent')) {
       return null
     }
 
     if (expression.args.length !== 0) {
       this.report(
         'CCJS_ARG_COUNT',
-        `function Stats.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
+        `function ${shape.builtin === 'fs.Dirent' ? 'Dirent' : 'Stats'}.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
 
-    expression.fsRuntimeMethod = expression.callee.property === 'isFile' ? 'statsIsFile' : 'statsIsDirectory'
+    if (shape.builtin === 'fs.Dirent') {
+      expression.fsRuntimeMethod = expression.callee.property === 'isFile' ? 'direntIsFile' : 'direntIsDirectory'
+    } else {
+      expression.fsRuntimeMethod = expression.callee.property === 'isFile' ? 'statsIsFile' : 'statsIsDirectory'
+    }
     expression.valueType = 'boolean'
 
     return 'boolean'
@@ -2222,12 +2259,12 @@ class Checker {
       }
 
       this.checkFsStringArg(expression, 0)
-      this.checkUtf8EncodingArg(expression, 1, label)
+      const withFileTypes = this.checkFsReaddirOptionsArg(expression, 1, label)
 
-      expression.fsRuntimeMethod = 'readDirSync'
+      expression.fsRuntimeMethod = withFileTypes ? 'readDirDirentsSync' : 'readDirSync'
       expression.valueType = 'array'
-      expression.arrayElementType = 'string'
-      expression.arrayElementDeclaredType = 'string'
+      expression.arrayElementType = withFileTypes ? 'object' : 'string'
+      expression.arrayElementDeclaredType = withFileTypes ? 'fs.Dirent' : 'string'
 
       return 'array'
     }
@@ -2419,13 +2456,13 @@ class Checker {
       }
 
       this.checkFsStringArg(expression, 0)
-      this.checkUtf8EncodingArg(expression, 1, label)
+      const withFileTypes = this.checkFsReaddirOptionsArg(expression, 1, label)
 
-      expression.fsRuntimeMethod = 'readDir'
+      expression.fsRuntimeMethod = withFileTypes ? 'readDirDirents' : 'readDir'
       expression.valueType = 'promise'
       expression.promiseValueType = 'array'
-      expression.arrayElementType = 'string'
-      expression.arrayElementDeclaredType = 'string'
+      expression.arrayElementType = withFileTypes ? 'object' : 'string'
+      expression.arrayElementDeclaredType = withFileTypes ? 'fs.Dirent' : 'string'
 
       return 'promise'
     }
@@ -2545,6 +2582,24 @@ class Checker {
     }
 
     this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, this.expressionCanBeNull(arg))
+  }
+
+  checkFsReaddirOptionsArg(expression: AnyNode, index: number, label: string): boolean {
+    const arg = expression.args[index]
+
+    if (arg == null) {
+      return false
+    }
+
+    if (arg.type === 'StringLiteral') {
+      this.checkUtf8EncodingArg(expression, index, label)
+
+      return false
+    }
+
+    const options = this.checkFsBooleanOptionsArg(expression, index, label, ['withFileTypes'])
+
+    return options.withFileTypes === true
   }
 
   checkFsBooleanOptionsArg(expression: AnyNode, index: number, label: string, allowed: string[]): Record<string, boolean> {
@@ -4197,7 +4252,17 @@ class Checker {
       return expression.shape ?? null
     }
 
-    return this.scope.resolve(expression.path[0])?.shape ?? expression.shape ?? null
+    const symbol = this.scope.resolve(expression.path[0])
+
+    if (symbol?.shape != null) {
+      return symbol.shape
+    }
+
+    if (symbol?.valueType === 'object' && symbol.arrayElementDeclaredType === 'fs.Dirent') {
+      return fsDirentObjectShape
+    }
+
+    return expression.shape ?? null
   }
 
   isThisExpression(expression: AnyNode): boolean {

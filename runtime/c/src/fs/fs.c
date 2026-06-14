@@ -32,6 +32,7 @@ typedef enum ccjs_fs_request_kind {
   CCJS_FS_REQUEST_READ_FILE,
   CCJS_FS_REQUEST_READ_FILE_BYTES,
   CCJS_FS_REQUEST_READ_DIR,
+  CCJS_FS_REQUEST_READ_DIR_DIRENTS,
   CCJS_FS_REQUEST_STAT,
   CCJS_FS_REQUEST_LSTAT,
   CCJS_FS_REQUEST_ACCESS,
@@ -59,7 +60,7 @@ typedef struct ccjs_fs_request {
   bool force;
 } ccjs_fs_request;
 
-static ccjs_fs_adapter ccjs_fs_active_adapter = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+static ccjs_fs_adapter ccjs_fs_active_adapter = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static ccjs_status ccjs_fs_copy_bytes(ccjs_allocator* allocator, const char* bytes, size_t len, char** out);
 #if !defined(CCJS_FS_DISABLE_HOST) || defined(CCJS_LOOP_BACKEND_LIBUV)
@@ -70,6 +71,8 @@ static ccjs_status ccjs_fs_libuv_read_file(void* user, ccjs_allocator* allocator
 static ccjs_status
 ccjs_fs_libuv_read_file_bytes(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_libuv_read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+static ccjs_status
+ccjs_fs_libuv_read_dir_dirents(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_libuv_stat(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_libuv_lstat(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_libuv_access(void* user, const char* path, size_t path_len, int mode);
@@ -111,6 +114,8 @@ static ccjs_status
 ccjs_fs_default_read_file_bytes(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status
 ccjs_fs_default_read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
+static ccjs_status
+ccjs_fs_default_read_dir_dirents(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_default_stat(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_default_lstat(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out);
 static ccjs_status ccjs_fs_default_access(void* user, const char* path, size_t path_len, int mode);
@@ -159,7 +164,7 @@ ccjs_fs_adapter ccjs_fs_get_adapter(void) {
 }
 
 void ccjs_fs_clear_adapter(void) {
-  ccjs_fs_adapter adapter = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+  ccjs_fs_adapter adapter = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
   ccjs_fs_active_adapter = adapter;
 }
 
@@ -254,6 +259,98 @@ ccjs_fs_stats_new(ccjs_allocator* allocator, double size, double mode, double mt
   return CCJS_OK;
 }
 
+enum {
+  CCJS_FS_DIRENT_NAME_INDEX = 0,
+  CCJS_FS_DIRENT_IS_FILE_INDEX = 1,
+  CCJS_FS_DIRENT_IS_DIRECTORY_INDEX = 2
+};
+
+static ccjs_status ccjs_fs_dirent_bool_field(ccjs_value dirent, uint32_t index, bool* out) {
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = false;
+  ccjs_value value = ccjs_undefined_value();
+  ccjs_status status = ccjs_object_get_known(dirent, index, &value);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  if (value.tag != CCJS_TAG_BOOL) {
+    ccjs_release(value);
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = value.as.boolean;
+  ccjs_release(value);
+
+  return CCJS_OK;
+}
+
+bool ccjs_fs_dirent_is_file(ccjs_value dirent) {
+  bool result = false;
+
+  return ccjs_fs_dirent_bool_field(dirent, CCJS_FS_DIRENT_IS_FILE_INDEX, &result) == CCJS_OK && result;
+}
+
+bool ccjs_fs_dirent_is_directory(ccjs_value dirent) {
+  bool result = false;
+
+  return ccjs_fs_dirent_bool_field(dirent, CCJS_FS_DIRENT_IS_DIRECTORY_INDEX, &result) == CCJS_OK && result;
+}
+
+ccjs_status ccjs_fs_dirent_new(
+  ccjs_allocator* allocator,
+  const char* name,
+  size_t name_len,
+  bool is_file,
+  bool is_directory,
+  ccjs_value* out
+) {
+  static const ccjs_field_info fields[] = { { "name", CCJS_FIELD_READONLY },
+                                            { "__ccjsIsFile", CCJS_FIELD_READONLY },
+                                            { "__ccjsIsDirectory", CCJS_FIELD_READONLY } };
+  static const ccjs_shape shape = { 3, fields };
+
+  if (allocator == 0 || out == 0 || (name == 0 && name_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = ccjs_undefined_value();
+  ccjs_value dirent = ccjs_undefined_value();
+  ccjs_value name_value = ccjs_undefined_value();
+  ccjs_status status = ccjs_object_new(allocator, &shape, &dirent);
+
+  if (status == CCJS_OK) {
+    status = ccjs_string_from_literal(allocator, name == 0 ? "" : name, name_len, &name_value);
+  }
+
+  if (status == CCJS_OK) {
+    status = ccjs_object_init_known(dirent, CCJS_FS_DIRENT_NAME_INDEX, name_value);
+  }
+
+  if (status == CCJS_OK) {
+    status = ccjs_object_init_known(dirent, CCJS_FS_DIRENT_IS_FILE_INDEX, ccjs_bool_value(is_file));
+  }
+
+  if (status == CCJS_OK) {
+    status = ccjs_object_init_known(dirent, CCJS_FS_DIRENT_IS_DIRECTORY_INDEX, ccjs_bool_value(is_directory));
+  }
+
+  ccjs_release(name_value);
+
+  if (status != CCJS_OK) {
+    ccjs_release(dirent);
+    return status;
+  }
+
+  *out = dirent;
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_fs_read_file_sync(ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
   if (out != 0) {
     *out = ccjs_undefined_value();
@@ -321,6 +418,30 @@ ccjs_status ccjs_fs_read_dir_sync(ccjs_allocator* allocator, const char* path, s
 
 #ifndef CCJS_FS_DISABLE_HOST
   return ccjs_fs_default_read_dir(0, allocator, path, path_len, out);
+#else
+  return CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
+ccjs_status ccjs_fs_read_dir_dirents_sync(ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+  if (out != 0) {
+    *out = ccjs_undefined_value();
+  }
+
+  if (allocator == 0 || allocator->alloc == 0 || out == 0 || (path == 0 && path_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (ccjs_fs_active_adapter.read_dir_dirents != 0) {
+    return ccjs_fs_active_adapter.read_dir_dirents(ccjs_fs_active_adapter.user, allocator, path, path_len, out);
+  }
+
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  return ccjs_fs_libuv_read_dir_dirents(0, allocator, path, path_len, out);
+#endif
+
+#ifndef CCJS_FS_DISABLE_HOST
+  return ccjs_fs_default_read_dir_dirents(0, allocator, path, path_len, out);
 #else
   return CCJS_ERR_UNSUPPORTED;
 #endif
@@ -582,6 +703,16 @@ ccjs_status ccjs_fs_read_dir(ccjs_loop* loop, const char* path, size_t path_len,
 #endif
 
   return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_DIR, path, path_len, 0, 0, 0, 0, 0, false, false, out);
+}
+
+ccjs_status ccjs_fs_read_dir_dirents(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
+#ifdef CCJS_LOOP_BACKEND_LIBUV
+  if (ccjs_fs_active_adapter.read_dir_dirents == 0) {
+    return ccjs_fs_libuv_queue_request(loop, CCJS_FS_REQUEST_READ_DIR_DIRENTS, path, path_len, 0, 0, 0, 0, 0, false, false, out);
+  }
+#endif
+
+  return ccjs_fs_queue_request(loop, CCJS_FS_REQUEST_READ_DIR_DIRENTS, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
 ccjs_status ccjs_fs_stat(ccjs_loop* loop, const char* path, size_t path_len, ccjs_promise** out) {
@@ -856,7 +987,7 @@ static ccjs_status ccjs_fs_status_from_uv(ssize_t result);
 static ccjs_status ccjs_fs_libuv_close_sync(uv_file file, ccjs_status status);
 static ccjs_status ccjs_fs_stats_from_uv(ccjs_allocator* allocator, const uv_stat_t* stat, ccjs_value* out);
 static double ccjs_fs_uv_mtime_ms(const uv_stat_t* stat);
-static ccjs_status ccjs_fs_libuv_read_dir_entries(uv_fs_t* req, ccjs_allocator* allocator, ccjs_value* out);
+static ccjs_status ccjs_fs_libuv_read_dir_entries(uv_fs_t* req, ccjs_allocator* allocator, bool with_file_types, ccjs_value* out);
 static ccjs_status ccjs_fs_libuv_start_request(ccjs_fs_libuv_request* request);
 static ccjs_status ccjs_fs_libuv_start_open(ccjs_fs_libuv_request* request, int flags, int mode);
 static ccjs_status ccjs_fs_libuv_start_fstat(ccjs_fs_libuv_request* request);
@@ -1057,7 +1188,7 @@ ccjs_fs_libuv_read_file_bytes(void* user, ccjs_allocator* allocator, const char*
   return status;
 }
 
-static ccjs_status ccjs_fs_libuv_read_dir_entries(uv_fs_t* req, ccjs_allocator* allocator, ccjs_value* out) {
+static ccjs_status ccjs_fs_libuv_read_dir_entries(uv_fs_t* req, ccjs_allocator* allocator, bool with_file_types, ccjs_value* out) {
   if (req == 0 || allocator == 0 || out == 0) {
     return CCJS_ERR_TYPE;
   }
@@ -1080,14 +1211,27 @@ static ccjs_status ccjs_fs_libuv_read_dir_entries(uv_fs_t* req, ccjs_allocator* 
       return ccjs_fs_status_from_uv(next_result);
     }
 
-    ccjs_value name = ccjs_undefined_value();
-    status = ccjs_string_from_literal(allocator, entry.name, strlen(entry.name), &name);
+    ccjs_value value = ccjs_undefined_value();
+    size_t name_len = strlen(entry.name);
 
-    if (status == CCJS_OK) {
-      status = ccjs_array_push(entries, name);
+    if (with_file_types) {
+      status = ccjs_fs_dirent_new(
+        allocator,
+        entry.name,
+        name_len,
+        entry.type == UV_DIRENT_FILE,
+        entry.type == UV_DIRENT_DIR,
+        &value
+      );
+    } else {
+      status = ccjs_string_from_literal(allocator, entry.name, name_len, &value);
     }
 
-    ccjs_release(name);
+    if (status == CCJS_OK) {
+      status = ccjs_array_push(entries, value);
+    }
+
+    ccjs_release(value);
 
     if (status != CCJS_OK) {
       ccjs_release(entries);
@@ -1127,7 +1271,44 @@ static ccjs_status ccjs_fs_libuv_read_dir(void* user, ccjs_allocator* allocator,
     return ccjs_fs_status_from_uv(scan_result);
   }
 
-  status = ccjs_fs_libuv_read_dir_entries(&scan_req, allocator, out);
+  status = ccjs_fs_libuv_read_dir_entries(&scan_req, allocator, false, out);
+  uv_fs_req_cleanup(&scan_req);
+
+  return status;
+}
+
+static ccjs_status ccjs_fs_libuv_read_dir_dirents(
+  void* user,
+  ccjs_allocator* allocator,
+  const char* path,
+  size_t path_len,
+  ccjs_value* out
+) {
+  (void)user;
+
+  if (allocator == 0 || out == 0 || (path == 0 && path_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = ccjs_undefined_value();
+
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  uv_fs_t scan_req;
+  int scan_result = uv_fs_scandir(0, &scan_req, path_copy, 0, 0);
+  free(path_copy);
+
+  if (scan_result < 0) {
+    uv_fs_req_cleanup(&scan_req);
+    return ccjs_fs_status_from_uv(scan_result);
+  }
+
+  status = ccjs_fs_libuv_read_dir_entries(&scan_req, allocator, true, out);
   uv_fs_req_cleanup(&scan_req);
 
   return status;
@@ -1592,7 +1773,7 @@ static ccjs_status ccjs_fs_libuv_start_request(ccjs_fs_libuv_request* request) {
     return CCJS_ERR_TYPE;
   }
 
-  if (request->kind == CCJS_FS_REQUEST_READ_DIR) {
+  if (request->kind == CCJS_FS_REQUEST_READ_DIR || request->kind == CCJS_FS_REQUEST_READ_DIR_DIRENTS) {
     request->stage = CCJS_FS_LIBUV_STAGE_SCANDIR;
     request->req.data = request;
     uv_loop_t* uv_loop = ccjs_libuv_loop_handle(request->loop);
@@ -1892,7 +2073,9 @@ static void ccjs_fs_libuv_cb(uv_fs_t* req) {
     ccjs_value entries = ccjs_undefined_value();
 
     if (status == CCJS_OK) {
-      status = ccjs_fs_libuv_read_dir_entries(req, request->loop->allocator, &entries);
+      status = ccjs_fs_libuv_read_dir_entries(
+        req, request->loop->allocator, request->kind == CCJS_FS_REQUEST_READ_DIR_DIRENTS, &entries
+      );
     }
 
     uv_fs_req_cleanup(req);
@@ -2266,6 +2449,123 @@ ccjs_fs_default_read_dir(void* user, ccjs_allocator* allocator, const char* path
 
     entry = readdir(dir);
   }
+
+  if (closedir(dir) != 0) {
+    ccjs_release(entries);
+    return CCJS_ERR_FIELD;
+  }
+
+  *out = entries;
+
+  return CCJS_OK;
+#endif
+}
+
+static ccjs_status ccjs_fs_default_dirent_type(const char* dir_path, const char* name, bool* is_file, bool* is_directory) {
+  if (dir_path == 0 || name == 0 || is_file == 0 || is_directory == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *is_file = false;
+  *is_directory = false;
+
+  size_t dir_len = strlen(dir_path);
+  size_t name_len = strlen(name);
+  char* child = malloc(dir_len + 1 + name_len + 1);
+
+  if (child == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  memcpy(child, dir_path, dir_len);
+  child[dir_len] = '/';
+  memcpy(child + dir_len + 1, name, name_len + 1);
+
+  struct stat statbuf;
+  int stat_result = stat(child, &statbuf);
+  free(child);
+
+  if (stat_result != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  *is_file = S_ISREG(statbuf.st_mode);
+  *is_directory = S_ISDIR(statbuf.st_mode);
+
+  return CCJS_OK;
+}
+
+static ccjs_status
+ccjs_fs_default_read_dir_dirents(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+  (void)user;
+
+  if (allocator == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+#ifdef _WIN32
+  (void)path;
+  (void)path_len;
+  return CCJS_ERR_UNSUPPORTED;
+#else
+  char* path_copy = 0;
+  ccjs_status status = ccjs_fs_copy_host_bytes(path, path_len, &path_copy);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  DIR* dir = opendir(path_copy);
+
+  if (dir == 0) {
+    free(path_copy);
+    return CCJS_ERR_FIELD;
+  }
+
+  ccjs_value entries = ccjs_undefined_value();
+  status = ccjs_array_new(allocator, 0, &entries);
+
+  if (status != CCJS_OK) {
+    free(path_copy);
+    closedir(dir);
+    return status;
+  }
+
+  struct dirent* entry = readdir(dir);
+
+  while (entry != 0) {
+    const char* name = entry->d_name;
+
+    if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+      bool is_file = false;
+      bool is_directory = false;
+      status = ccjs_fs_default_dirent_type(path_copy, name, &is_file, &is_directory);
+
+      ccjs_value value = ccjs_undefined_value();
+      size_t name_len = strlen(name);
+
+      if (status == CCJS_OK) {
+        status = ccjs_fs_dirent_new(allocator, name, name_len, is_file, is_directory, &value);
+      }
+
+      if (status == CCJS_OK) {
+        status = ccjs_array_push(entries, value);
+      }
+
+      ccjs_release(value);
+
+      if (status != CCJS_OK) {
+        free(path_copy);
+        closedir(dir);
+        ccjs_release(entries);
+        return status;
+      }
+    }
+
+    entry = readdir(dir);
+  }
+
+  free(path_copy);
 
   if (closedir(dir) != 0) {
     ccjs_release(entries);
@@ -2765,6 +3065,20 @@ static ccjs_status ccjs_fs_run_request(void* context) {
   if (request->kind == CCJS_FS_REQUEST_READ_DIR) {
     ccjs_value result = ccjs_undefined_value();
     ccjs_status status = ccjs_fs_read_dir_sync(request->loop->allocator, request->path, request->path_len, &result);
+
+    if (status != CCJS_OK) {
+      return ccjs_fs_reject_status(request->loop, request->promise, status);
+    }
+
+    ccjs_status resolve_status = ccjs_promise_resolve(request->promise, result);
+    ccjs_release(result);
+
+    return resolve_status;
+  }
+
+  if (request->kind == CCJS_FS_REQUEST_READ_DIR_DIRENTS) {
+    ccjs_value result = ccjs_undefined_value();
+    ccjs_status status = ccjs_fs_read_dir_dirents_sync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != CCJS_OK) {
       return ccjs_fs_reject_status(request->loop, request->promise, status);

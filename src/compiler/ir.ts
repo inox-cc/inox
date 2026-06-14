@@ -1447,7 +1447,7 @@ function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
     return ['fs', 'promises', 'readFile']
   }
 
-  if (method === 'readDir') {
+  if (method === 'readDir' || method === 'readDirDirents') {
     return ['fs', 'promises', 'readdir']
   }
 
@@ -1459,7 +1459,7 @@ function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
     return ['fs', 'readFileSync']
   }
 
-  if (method === 'readDirSync') {
+  if (method === 'readDirSync' || method === 'readDirDirentsSync') {
     return ['fs', 'readdirSync']
   }
 

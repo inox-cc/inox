@@ -7143,6 +7143,69 @@ export function main(): void {
   )
 })
 
+test('lowers Node fs readdir withFileTypes to Dirent runtime values', () => {
+  const js = compileSource(
+    `import fs from 'node:fs'
+
+export async function main(): Promise<void> {
+  const entries = await fs.promises.readdir('/tmp', { withFileTypes: true })
+  const first = entries[0]
+  const syncEntries = fs.readdirSync('/tmp', { withFileTypes: true })
+  console.log(first.name, first.isFile(), syncEntries[0].isDirectory())
+}
+`,
+    {
+      target: 'js'
+    }
+  )
+
+  assert.match(js.code, /const entries = await fs\.readdir\("\/tmp", \{ withFileTypes: true \}\)/)
+  assert.match(js.code, /const syncEntries = ccjsFsSync\.readdirSync\("\/tmp", \{ withFileTypes: true \}\)/)
+
+  const c = compileSource(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  const entries = fs.promises.readdir('/tmp', { withFileTypes: true })
+  const syncEntries = fs.readdirSync('/tmp', { withFileTypes: true })
+  const first = syncEntries[0]
+  console.log(first.name, first.isFile(), first.isDirectory())
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const entries = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'entries')
+  const syncEntries = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'syncEntries')
+  const first = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'first')
+
+  assert.equal(entries?.promiseValueType, 'array')
+  assert.equal(entries?.arrayElementType, 'object')
+  assert.equal(entries?.arrayElementDeclaredType, 'fs.Dirent')
+  assert.equal(syncEntries?.arrayElementDeclaredType, 'fs.Dirent')
+  assert.equal(first?.arrayElementDeclaredType, 'fs.Dirent')
+  assert.equal(first?.init?.shape?.builtin, 'fs.Dirent')
+  assert.match(c.code, /ccjs_fs_read_dir_dirents\(&ccjs_loop, "\/tmp", 4, &entries\)/)
+  assert.match(
+    c.code,
+    /ccjs_fs_read_dir_dirents_sync\(&ccjs_default_allocator, "\/tmp", 4, &ccjs_fs_value_\d+\)/
+  )
+  assert.match(c.code, /ccjs_fs_dirent_is_file\(first\)/)
+  assert.match(c.code, /ccjs_fs_dirent_is_directory\(first\)/)
+
+  assertDiagnostic(
+    `import fs from 'node:fs'
+
+export function main(): void {
+  fs.promises.readdir('/tmp', { withFileTypes: true, recursive: true })
+}
+`,
+    'CCJS_UNKNOWN_FIELD'
+  )
+})
+
 test('lowers node:fs/promises imports to the fs runtime', () => {
   const js = compileSource(
     `import fs from 'node:fs/promises'

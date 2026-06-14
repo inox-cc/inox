@@ -3394,6 +3394,7 @@ function isAsyncFsRuntimeCallExpression(expression) {
       'readFile',
       'readFileBytes',
       'readDir',
+      'readDirDirents',
       'rename',
       'rm',
       'stat',
@@ -3812,6 +3813,8 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
     lines.push(`status = ccjs_fs_read_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'readDir') {
     lines.push(`status = ccjs_fs_read_dir(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+  } else if (method === 'readDirDirents') {
+    lines.push(`status = ccjs_fs_read_dir_dirents(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'stat') {
     lines.push(`status = ccjs_fs_stat(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'lstat') {
@@ -7051,6 +7054,12 @@ function emitStatement(statement, context) {
     }
 
     if (isIndexAccessExpression(statement.init)) {
+      const direntElement = emitDirentArrayIndexVariableDeclaration(statement, context)
+
+      if (direntElement != null) {
+        return direntElement
+      }
+
       const element = resolveKnownArrayIndex(statement.init, context)
 
       if (element != null) {
@@ -7066,6 +7075,14 @@ function emitStatement(statement, context) {
 
     if (isRuntimeValueLocalExpression(statement.init, context)) {
       return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
+    }
+
+    if (isIndexAccessExpression(statement.init)) {
+      const runtimeElement = resolveRuntimeArrayIndex(statement.init, context)
+
+      if (runtimeElement?.valueType === 'object') {
+        return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
+      }
     }
 
     if (statement.init?.type === 'CallExpression' && inferExpressionType(statement.init, context) === 'string') {
@@ -8709,6 +8726,38 @@ function emitNullableScalarReturnStatement(statement, context) {
   ]
 }
 
+function emitDirentArrayIndexVariableDeclaration(statement, context) {
+  const expression = statement.init
+
+  if (
+    expression?.type !== 'IndexExpression' ||
+    expression.object.type !== 'Reference' ||
+    expression.index.type !== 'NumberLiteral' ||
+    expression.arrayElementDeclaredType !== 'fs.Dirent'
+  ) {
+    return null
+  }
+
+  const index = Number.parseInt(expression.index.value, 10)
+
+  if (!Number.isInteger(index) || index < 0) {
+    return null
+  }
+
+  const array = emitCValueExpression(expression.object, context)
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'object')
+  registerObjectShape(context, statement.name, expression.shape)
+
+  return [
+    ...array.lines,
+    ...emitPrepareOwnedValueWrite(statement.name),
+    emitStatusCheck(`ccjs_array_get(${array.expression}, ${index}, &${statement.name})`, context),
+    emitRuntimeValueCheck(statement.name, 'CCJS_TAG_OBJECT', context),
+    `ccjs_retain(${statement.name});`
+  ]
+}
+
 function emitRuntimeStringVariableDeclaration(statement, expression, context) {
   const value = emitCValueExpression(expression, context)
   const lines = [
@@ -8748,11 +8797,14 @@ function registerRuntimeValueMetadata(name, valueType, declaration, expression, 
   if (valueType === 'object') {
     registerObjectShape(context, name, declaration.shape ?? expression?.shape ?? null)
   } else if (valueType === 'array') {
+    const fsDirentArray =
+      expression?.fsRuntimeMethod === 'readDirDirents' || expression?.fsRuntimeMethod === 'readDirDirentsSync'
     context.runtimeArrayElementTypes.set(
       name,
       declaration.arrayElementType ??
         resolveRuntimeArrayElementType(expression, context) ??
         expression?.arrayElementType ??
+        (fsDirentArray ? 'object' : null) ??
         'unknown'
     )
   } else if (valueType === 'map') {
@@ -13227,7 +13279,7 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
           'writeFileBytes'
         ].includes(method)
           ? 'void'
-          : method === 'readDir'
+          : method === 'readDir' || method === 'readDirDirents'
             ? 'array'
             : method === 'stat' || method === 'lstat'
               ? 'object'
@@ -13274,6 +13326,21 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
     lines.push(
       emitStatusCheck(
         `ccjs_fs_read_dir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (method === 'readDirDirents') {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_read_dir_dirents(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
         context
       )
     )
@@ -13472,7 +13539,10 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 function emitPreparedFsSyncValueExpression(expression, context) {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (method == null || !['lstatSync', 'readFileBytesSync', 'readFileSync', 'readDirSync', 'statSync'].includes(method)) {
+  if (
+    method == null ||
+    !['lstatSync', 'readFileBytesSync', 'readFileSync', 'readDirDirentsSync', 'readDirSync', 'statSync'].includes(method)
+  ) {
     return null
   }
 
@@ -13493,9 +13563,11 @@ function emitPreparedFsSyncValueExpression(expression, context) {
         ? `ccjs_fs_read_file_bytes_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
         : method === 'readDirSync'
           ? `ccjs_fs_read_dir_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-          : method === 'statSync'
-            ? `ccjs_fs_stat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-            : `ccjs_fs_lstat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+          : method === 'readDirDirentsSync'
+            ? `ccjs_fs_read_dir_dirents_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+            : method === 'statSync'
+              ? `ccjs_fs_stat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+              : `ccjs_fs_lstat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
 
   return {
     lines: [
@@ -13679,12 +13751,19 @@ function emitFsBooleanFlag(expression, field: string) {
 function emitPreparedFsStatsMethodExpression(expression, context) {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (method !== 'statsIsFile' && method !== 'statsIsDirectory') {
+  if (!['direntIsDirectory', 'direntIsFile', 'statsIsDirectory', 'statsIsFile'].includes(method)) {
     return null
   }
 
   const receiver = emitCValueExpression(expression.callee.object, context)
-  const helper = method === 'statsIsFile' ? 'ccjs_fs_stats_is_file' : 'ccjs_fs_stats_is_directory'
+  const helper =
+    method === 'statsIsFile'
+      ? 'ccjs_fs_stats_is_file'
+      : method === 'statsIsDirectory'
+        ? 'ccjs_fs_stats_is_directory'
+        : method === 'direntIsFile'
+          ? 'ccjs_fs_dirent_is_file'
+          : 'ccjs_fs_dirent_is_directory'
 
   return {
     lines: receiver.lines,

@@ -218,6 +218,7 @@ function isFsPromiseRuntimeMethod(method: string): boolean {
     'readFile',
     'readFileBytes',
     'readDir',
+    'readDirDirents',
     'rename',
     'rm',
     'stat',
@@ -238,6 +239,7 @@ function isFsSyncRuntimeMethod(method: string): boolean {
     'readFileBytesSync',
     'readFileSync',
     'readDirSync',
+    'readDirDirentsSync',
     'renameSync',
     'rmSync',
     'statSync',
@@ -916,6 +918,10 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
     return `fs.readdir(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
+  if (expression.fsRuntimeMethod === 'readDirDirents') {
+    return `fs.readdir(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
+  }
+
   if (expression.fsRuntimeMethod === 'writeFile') {
     return `fs.writeFile(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
@@ -951,7 +957,11 @@ function emitFsRuntimeCallExpression(expression: AnyNode, options: JsEmitOptions
   }
 
   if (expression.fsRuntimeMethod === 'readDirSync') {
-    return `ccjsFsSync.readdirSync(${emitExpression(expression.args[0], options)})`
+    return `ccjsFsSync.readdirSync(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
+  }
+
+  if (expression.fsRuntimeMethod === 'readDirDirentsSync') {
+    return `ccjsFsSync.readdirSync(${expression.args.map((arg) => emitExpression(arg, options)).join(', ')})`
   }
 
   if (expression.fsRuntimeMethod === 'writeFileSync') {

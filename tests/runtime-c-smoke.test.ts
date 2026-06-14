@@ -1850,6 +1850,7 @@ const bytes: Buffer = await fs.promises.readFile(${JSON.stringify(bytesInput)})
 await fs.promises.writeFile(${JSON.stringify(bytesCopied)}, bytes)
 
 const entries = await fs.promises.readdir(${JSON.stringify(entriesDir)})
+const dirents = await fs.promises.readdir(${JSON.stringify(entriesDir)}, { withFileTypes: true })
 const stats = await fs.promises.stat(${JSON.stringify(textInput)})
 await fs.promises.access(${JSON.stringify(textInput)}, fs.constants.R_OK)
 await fs.promises.mkdir(${JSON.stringify(mutationNested)}, { recursive: true })
@@ -1865,7 +1866,8 @@ await fs.promises.writeFile(${JSON.stringify(appendedBytes)}, bytes)
 await fs.promises.appendFile(${JSON.stringify(appendedBytes)}, bytes)
 await fs.promises.copyFile(${JSON.stringify(appendedBytes)}, ${JSON.stringify(appendedBytesCopy)})
 const names = entries.sort()
-console.log(text, names[0], names[1], bytes.length, stats.isFile())
+const firstDirent = dirents[0]
+console.log(text, names[0], names[1], bytes.length, stats.isFile(), dirents.length, firstDirent.isFile())
 
 `,
       {
@@ -1882,7 +1884,7 @@ console.log(text, names[0], names[1], bytes.length, stats.isFile())
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'node text alpha.txt beta.txt 6 1\n')
+    assert.equal(run.stdout, 'node text alpha.txt beta.txt 6 1 2 1\n')
     assert.equal(await readFile(textCopied, 'utf8'), 'node text')
     assert.deepEqual(await readFile(bytesCopied), data)
     await assert.rejects(readFile(mutationInput, 'utf8'))
@@ -1941,6 +1943,7 @@ fs.writeFileSync(${JSON.stringify(textCopied)}, text)
 const bytes = fs.readFileSync(${JSON.stringify(bytesInput)})
 fs.writeFileSync(${JSON.stringify(bytesCopied)}, bytes)
 const entries = fs.readdirSync(${JSON.stringify(entriesDir)})
+const dirents = fs.readdirSync(${JSON.stringify(entriesDir)}, { withFileTypes: true })
 const stats = fs.statSync(${JSON.stringify(textInput)})
 fs.accessSync(${JSON.stringify(textInput)}, fs.constants.R_OK)
 fs.mkdirSync(${JSON.stringify(mutationNested)}, { recursive: true })
@@ -1956,7 +1959,8 @@ fs.writeFileSync(${JSON.stringify(appendedBytes)}, bytes)
 fs.appendFileSync(${JSON.stringify(appendedBytes)}, bytes)
 fs.copyFileSync(${JSON.stringify(appendedBytes)}, ${JSON.stringify(appendedBytesCopy)})
 const names = entries.sort()
-console.log(names[0], names[1], stats.isFile())
+const firstDirent = dirents[0]
+console.log(names[0], names[1], stats.isFile(), dirents.length, firstDirent.isFile())
 
 `,
       {
@@ -1973,7 +1977,7 @@ console.log(names[0], names[1], stats.isFile())
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'alpha.txt beta.txt 1\n')
+    assert.equal(run.stdout, 'alpha.txt beta.txt 1 2 1\n')
     assert.equal(await readFile(textCopied, 'utf8'), 'sync text')
     assert.deepEqual(await readFile(bytesCopied), data)
     await assert.rejects(readFile(mutationInput, 'utf8'))
