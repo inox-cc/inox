@@ -64,6 +64,14 @@ ccjs_status ccjs_net_socket_on_drain(ccjs_net_socket* socket, ccjs_net_socket_fn
 ccjs_status ccjs_net_socket_read_start(ccjs_net_socket* socket);
 ccjs_status ccjs_net_socket_read_stop(ccjs_net_socket* socket);
 ccjs_status ccjs_net_socket_set_encoding(ccjs_net_socket* socket, const char* encoding, size_t encoding_len);
+ccjs_status ccjs_net_socket_address(ccjs_net_socket* socket, ccjs_net_address* out);
+ccjs_status ccjs_net_socket_remote_address(ccjs_net_socket* socket, ccjs_net_address* out);
+ccjs_status ccjs_net_socket_get_bytes_read(ccjs_net_socket* socket, size_t* out_bytes);
+ccjs_status ccjs_net_socket_get_bytes_written(ccjs_net_socket* socket, size_t* out_bytes);
+ccjs_status ccjs_net_socket_set_no_delay(ccjs_net_socket* socket, int enabled);
+ccjs_status ccjs_net_socket_set_keep_alive(ccjs_net_socket* socket, int enabled, unsigned int initial_delay);
+ccjs_status ccjs_net_socket_ref(ccjs_net_socket* socket);
+ccjs_status ccjs_net_socket_unref(ccjs_net_socket* socket);
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len);
 ccjs_status ccjs_net_socket_write_with_callback(
   ccjs_net_socket* socket,

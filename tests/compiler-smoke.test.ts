@@ -363,6 +363,63 @@ client.on('drain', () => {
   assert.match(result.code, /ccjs_net_socket_destroy\(ccjs_socket\)/)
 })
 
+test('lowers node:net socket address helpers and options to the C net runtime', () => {
+  const result = compileSource(
+    `import { connect } from 'node:net'
+
+const client = connect(9000)
+const local = client.address()
+const remoteAddress = client.remoteAddress
+const remotePort = client.remotePort
+const localAddress = client.localAddress
+const localPort = client.localPort
+const bytesRead = client.bytesRead
+const bytesWritten = client.bytesWritten
+client.setNoDelay()
+client.setNoDelay(false)
+client.setKeepAlive(true, 10)
+client.unref()
+client.ref()
+console.log(local.address, local.port, remoteAddress, remotePort, localAddress, localPort, bytesRead, bytesWritten)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_net_connect\(&ccjs_loop, "127\.0\.0\.1", \(int\)\(9000\), 0, 0, 0, 0, &client\)/)
+  assert.match(result.code, /ccjs_net_address local;/)
+  assert.match(result.code, /ccjs_net_socket_address\(client, &local\)/)
+  assert.match(result.code, /ccjs_net_socket_remote_address\(client, &ccjs_net_address_\d+\)/)
+  assert.match(result.code, /const char \*remoteAddress = ccjs_net_address_\d+\.address;/)
+  assert.match(result.code, /remotePort = \(double\)ccjs_net_address_\d+\.port;/)
+  assert.match(result.code, /ccjs_net_socket_address\(client, &ccjs_net_address_\d+\)/)
+  assert.match(result.code, /const char \*localAddress = ccjs_net_address_\d+\.address;/)
+  assert.match(result.code, /localPort = \(double\)ccjs_net_address_\d+\.port;/)
+  assert.match(result.code, /ccjs_net_socket_get_bytes_read\(client, &ccjs_net_counter\)/)
+  assert.match(result.code, /ccjs_net_socket_get_bytes_written\(client, &ccjs_net_counter\)/)
+  assert.match(result.code, /ccjs_net_socket_set_no_delay\(client, 1 \? 1 : 0\)/)
+  assert.match(result.code, /ccjs_net_socket_set_no_delay\(client, 0 \? 1 : 0\)/)
+  assert.match(result.code, /ccjs_net_socket_set_keep_alive\(client, 1 \? 1 : 0, \(unsigned int\)\(10\)\)/)
+  assert.match(result.code, /ccjs_net_socket_unref\(client\)/)
+  assert.match(result.code, /ccjs_net_socket_ref\(client\)/)
+  assert.match(result.code, /printf\("%s %g %s %g %s %g %g %g\\n"/)
+})
+
+test('reports unsupported node:net socket timeout with net diagnostics', () => {
+  assertDiagnostic(
+    `import net from 'node:net'
+
+const client = net.connect(9000)
+client.setTimeout(1000)
+`,
+    'CCJS_NET_SOCKET',
+    {
+      target: 'c'
+    }
+  )
+})
+
 test('emits C http runtime include for node:http imports', () => {
   const result = compileSource(
     `import http from 'node:http'

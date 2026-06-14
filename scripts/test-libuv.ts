@@ -1272,6 +1272,11 @@ typedef struct test_state {
   int socket_closed;
   int socket_write_done;
   int socket_drained;
+  int socket_address_checked;
+  int socket_remote_checked;
+  int socket_options_checked;
+  int socket_bytes_read_checked;
+  int socket_bytes_written_checked;
   char message[32];
 } test_state;
 
@@ -1303,11 +1308,14 @@ static ccjs_status on_server_data(void* user, ccjs_net_socket* socket, const cha
 
 static ccjs_status on_client_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
   test_state* state = (test_state*)user;
-  (void)socket;
+  size_t bytes_read = 0;
   size_t copy_len = len >= sizeof(state->message) ? sizeof(state->message) - 1 : len;
+  if (ccjs_net_socket_get_bytes_read(socket, &bytes_read) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (bytes_read < len) return CCJS_ERR_FIELD;
   memcpy(state->message, bytes, copy_len);
   state->message[copy_len] = '\\0';
   state->client_received += 1;
+  state->socket_bytes_read_checked += 1;
   return CCJS_OK;
 }
 
@@ -1341,10 +1349,13 @@ static ccjs_status on_socket_close(void* user, ccjs_net_socket* socket) {
 }
 
 static ccjs_status on_socket_write(void* user, ccjs_net_socket* socket, ccjs_status status) {
-  (void)socket;
   test_state* state = (test_state*)user;
+  size_t bytes_written = 0;
   if (status != CCJS_OK) return status;
+  if (ccjs_net_socket_get_bytes_written(socket, &bytes_written) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (bytes_written < 5) return CCJS_ERR_FIELD;
   state->socket_write_done += 1;
+  state->socket_bytes_written_checked += 1;
   return CCJS_OK;
 }
 
@@ -1379,8 +1390,22 @@ static ccjs_status on_connection(void* user, ccjs_net_server* server, ccjs_net_s
 
 static ccjs_status on_connect(void* user, ccjs_net_socket* socket, ccjs_status status) {
   test_state* state = (test_state*)user;
+  ccjs_net_address local = { 0 };
+  ccjs_net_address remote = { 0 };
   if (status != CCJS_OK) return status;
   state->client_connected += 1;
+  if (ccjs_net_socket_set_no_delay(socket, 1) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (ccjs_net_socket_set_keep_alive(socket, 1, 1) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (ccjs_net_socket_ref(socket) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (ccjs_net_socket_unref(socket) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (ccjs_net_socket_ref(socket) != CCJS_OK) return CCJS_ERR_FIELD;
+  state->socket_options_checked += 1;
+  if (ccjs_net_socket_address(socket, &local) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (ccjs_net_socket_remote_address(socket, &remote) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (local.port <= 0 || remote.port <= 0) return CCJS_ERR_FIELD;
+  if (strcmp(local.family, "IPv4") != 0 || strcmp(remote.family, "IPv4") != 0) return CCJS_ERR_FIELD;
+  state->socket_address_checked += 1;
+  state->socket_remote_checked += 1;
   if (ccjs_net_socket_read_start(socket) != CCJS_OK) return CCJS_ERR_FIELD;
   return ccjs_net_socket_write_with_callback(socket, "hello", 5, on_socket_write, state);
 }
@@ -1416,7 +1441,7 @@ int main(void) {
 
   if (guard >= 400) return 17;
   printf(
-    "%d %d %d %d %d %d %d %d %d %d %d %s\\n",
+    "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %s\\n",
     state.server_listening,
     state.server_closed,
     state.client_connected,
@@ -1426,6 +1451,11 @@ int main(void) {
     state.socket_closed,
     state.socket_write_done,
     state.socket_drained,
+    state.socket_address_checked,
+    state.socket_remote_checked,
+    state.socket_options_checked,
+    state.socket_bytes_read_checked,
+    state.socket_bytes_written_checked,
     state.server_received,
     state.client_received,
     state.message
@@ -1452,7 +1482,7 @@ int main(void) {
     fail('run libuv net smoke', run)
   }
 
-  const expected = '1 1 1 1 1 1 1 1 1 1 1 hello\n'
+  const expected = '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 hello\n'
 
   if (stdout !== expected) {
     console.error(`Libuv net smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)

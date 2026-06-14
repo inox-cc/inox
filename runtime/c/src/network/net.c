@@ -459,6 +459,92 @@ ccjs_status ccjs_net_socket_set_encoding(ccjs_net_socket* socket, const char* en
   return CCJS_ERR_UNSUPPORTED;
 }
 
+ccjs_status ccjs_net_socket_address(ccjs_net_socket* socket, ccjs_net_address* out) {
+  if (socket == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  struct sockaddr_storage addr;
+  int len = sizeof(addr);
+
+  if (uv_tcp_getsockname(&socket->handle, (struct sockaddr*)&addr, &len) != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  return ccjs_net_sockaddr_to_address((const struct sockaddr*)&addr, out);
+}
+
+ccjs_status ccjs_net_socket_remote_address(ccjs_net_socket* socket, ccjs_net_address* out) {
+  if (socket == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  struct sockaddr_storage addr;
+  int len = sizeof(addr);
+
+  if (uv_tcp_getpeername(&socket->handle, (struct sockaddr*)&addr, &len) != 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+  return ccjs_net_sockaddr_to_address((const struct sockaddr*)&addr, out);
+}
+
+ccjs_status ccjs_net_socket_get_bytes_read(ccjs_net_socket* socket, size_t* out_bytes) {
+  if (socket == 0 || out_bytes == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out_bytes = socket->bytes_read;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_socket_get_bytes_written(ccjs_net_socket* socket, size_t* out_bytes) {
+  if (socket == 0 || out_bytes == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out_bytes = socket->bytes_written;
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_socket_set_no_delay(ccjs_net_socket* socket, int enabled) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  return uv_tcp_nodelay(&socket->handle, enabled ? 1 : 0) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+ccjs_status ccjs_net_socket_set_keep_alive(ccjs_net_socket* socket, int enabled, unsigned int initial_delay) {
+  if (socket == 0 || socket->closing) {
+    return CCJS_ERR_TYPE;
+  }
+
+  return uv_tcp_keepalive(&socket->handle, enabled ? 1 : 0, initial_delay) == 0 ? CCJS_OK : CCJS_ERR_FIELD;
+}
+
+ccjs_status ccjs_net_socket_ref(ccjs_net_socket* socket) {
+  if (socket == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  uv_ref((uv_handle_t*)&socket->handle);
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_net_socket_unref(ccjs_net_socket* socket) {
+  if (socket == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  uv_unref((uv_handle_t*)&socket->handle);
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_net_socket_write(ccjs_net_socket* socket, const char* bytes, size_t len) {
   return ccjs_net_socket_write_internal(socket, bytes, len, 0, 0, 0);
 }
@@ -1104,6 +1190,77 @@ ccjs_status ccjs_net_socket_set_encoding(ccjs_net_socket* socket, const char* en
   (void)socket;
   (void)encoding;
   (void)encoding_len;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_address(ccjs_net_socket* socket, ccjs_net_address* out) {
+  (void)socket;
+
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  out->address[0] = '\0';
+  out->family = 0;
+  out->port = 0;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_remote_address(ccjs_net_socket* socket, ccjs_net_address* out) {
+  (void)socket;
+
+  if (out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  out->address[0] = '\0';
+  out->family = 0;
+  out->port = 0;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_get_bytes_read(ccjs_net_socket* socket, size_t* out_bytes) {
+  (void)socket;
+
+  if (out_bytes == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out_bytes = 0;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_get_bytes_written(ccjs_net_socket* socket, size_t* out_bytes) {
+  (void)socket;
+
+  if (out_bytes == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out_bytes = 0;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_set_no_delay(ccjs_net_socket* socket, int enabled) {
+  (void)socket;
+  (void)enabled;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_set_keep_alive(ccjs_net_socket* socket, int enabled, unsigned int initial_delay) {
+  (void)socket;
+  (void)enabled;
+  (void)initial_delay;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_ref(ccjs_net_socket* socket) {
+  (void)socket;
+  return CCJS_ERR_UNSUPPORTED;
+}
+
+ccjs_status ccjs_net_socket_unref(ccjs_net_socket* socket) {
+  (void)socket;
   return CCJS_ERR_UNSUPPORTED;
 }
 

@@ -6912,16 +6912,66 @@ function emitNetServerVariableDeclaration(statement, context) {
 }
 
 function emitNetAddressVariableDeclaration(statement, context) {
-  if (!isNetServerAddressCall(statement.init, context)) {
+  if (!isNetAddressCall(statement.init, context)) {
     return null
   }
 
-  const serverName = statement.init.callee.object.path[0]
+  const receiverName = statement.init.callee.object.path[0]
+  const runtime =
+    context.variables.get(receiverName) === 'net-socket' ? 'ccjs_net_socket_address' : 'ccjs_net_server_address'
   context.variables.set(statement.name, 'net-address')
 
   return [
     `ccjs_net_address ${statement.name};`,
-    emitStatusCheck(`ccjs_net_server_address(${serverName}, &${statement.name})`, context)
+    emitStatusCheck(`${runtime}(${receiverName}, &${statement.name})`, context)
+  ]
+}
+
+function emitNetAddressMemberVariableDeclaration(statement, context) {
+  const member = resolveNetSocketAddressMember(statement.init, context)
+
+  if (member == null) {
+    return null
+  }
+
+  if (member.valueType === 'string') {
+    context.variables.set(statement.name, 'string')
+
+    return [
+      `ccjs_net_address ${member.tempName};`,
+      emitStatusCheck(`${member.runtime}(${member.socketName}, &${member.tempName})`, context),
+      `const char *${statement.name} = ${member.tempName}.${member.field};`
+    ]
+  }
+
+  context.variables.set(statement.name, 'number')
+
+  return [
+    `double ${statement.name} = 0;`,
+    '{',
+    `  ccjs_net_address ${member.tempName};`,
+    `  ${emitStatusCheck(`${member.runtime}(${member.socketName}, &${member.tempName})`, context)}`,
+    `  ${statement.name} = (double)${member.tempName}.${member.field};`,
+    '}'
+  ]
+}
+
+function emitNetNumberVariableDeclaration(statement, context) {
+  const counter = resolveNetSocketCounterMember(statement.init, context)
+
+  if (counter == null) {
+    return null
+  }
+
+  context.variables.set(statement.name, 'number')
+
+  return [
+    `double ${statement.name} = 0;`,
+    '{',
+    `  size_t ccjs_net_counter = 0;`,
+    `  ${emitStatusCheck(`${counter.runtime}(${counter.socketName}, &ccjs_net_counter)`, context)}`,
+    `  ${statement.name} = (double)ccjs_net_counter;`,
+    '}'
   ]
 }
 
@@ -6948,6 +6998,12 @@ function emitNetSocketCallStatement(expression, context) {
 
   if (isNetSocketMethodCall(expression, 'setEncoding', context)) {
     return emitNetSocketSetEncodingLines(expression.callee.object.path[0], expression.args, context)
+  }
+
+  const optionCall = emitNetSocketOptionCallStatement(expression, context)
+
+  if (optionCall != null) {
+    return optionCall
   }
 
   if (isNetSocketAnyMethodCall(expression, context)) {
@@ -7156,6 +7212,70 @@ function emitNetSocketSetEncodingLines(socketName, args, context) {
   }
 
   return [emitStatusCheck(`ccjs_net_socket_set_encoding(${socketName}, ${cStringLiteral(value)}, ${utf8ByteLength(value)})`, context)]
+}
+
+function emitNetSocketOptionCallStatement(expression, context) {
+  if (!isNetSocketAnyMethodCall(expression, context)) {
+    return null
+  }
+
+  const socketName = expression.callee.object.path[0]
+  const method = expression.callee.property
+
+  if (method === 'setNoDelay') {
+    const enabled =
+      expression.args[0] == null
+        ? { lines: [], expression: '1' }
+        : emitPreparedNumberExpression(expression.args[0], context)
+
+    return [
+      ...enabled.lines,
+      emitStatusCheck(`ccjs_net_socket_set_no_delay(${socketName}, ${enabled.expression} ? 1 : 0)`, context)
+    ]
+  }
+
+  if (method === 'setKeepAlive') {
+    const enabled =
+      expression.args[0] == null
+        ? { lines: [], expression: '0' }
+        : emitPreparedNumberExpression(expression.args[0], context)
+    const delay =
+      expression.args[1] == null
+        ? { lines: [], expression: '0' }
+        : emitPreparedNumberExpression(expression.args[1], context)
+
+    return [
+      ...enabled.lines,
+      ...delay.lines,
+      emitStatusCheck(
+        `ccjs_net_socket_set_keep_alive(${socketName}, ${enabled.expression} ? 1 : 0, (unsigned int)(${delay.expression}))`,
+        context
+      )
+    ]
+  }
+
+  if (method === 'ref' || method === 'unref') {
+    if (expression.args.length > 0) {
+      context.diagnostics.push(
+        diagnostic('CCJS_NET_SOCKET', `socket.${method} in the C backend does not take arguments`, expression.args[0]?.loc)
+      )
+    }
+
+    return [emitStatusCheck(`${method === 'ref' ? 'ccjs_net_socket_ref' : 'ccjs_net_socket_unref'}(${socketName})`, context)]
+  }
+
+  if (method === 'setTimeout') {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_NET_SOCKET',
+        'socket.setTimeout is not supported by the current C net backend slice yet',
+        expression.callee.loc ?? expression.loc
+      )
+    )
+    return []
+  }
+
+  return null
 }
 
 function emitNetMaybeReadStartLines(socketName, context) {
@@ -7460,15 +7580,70 @@ function resolveNetAddressStringMember(expression, context) {
   return expression.property === 'family' ? `${expression.object.path[0]}.family` : `${expression.object.path[0]}.address`
 }
 
-function isNetServerAddressCall(expression, context) {
+function isNetAddressCall(expression, context) {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
     expression.callee.property === 'address' &&
     expression.callee.object?.type === 'Reference' &&
     expression.callee.object.path.length === 1 &&
-    context.variables.get(expression.callee.object.path[0]) === 'net-server'
+    (context.variables.get(expression.callee.object.path[0]) === 'net-server' ||
+      context.variables.get(expression.callee.object.path[0]) === 'net-socket')
   )
+}
+
+function resolveNetSocketAddressMember(expression, context) {
+  if (
+    expression?.type !== 'MemberExpression' ||
+    expression.object?.type !== 'Reference' ||
+    expression.object.path.length !== 1 ||
+    context.variables.get(expression.object.path[0]) !== 'net-socket'
+  ) {
+    return null
+  }
+
+  const property = expression.property
+  const isRemote = property === 'remoteAddress' || property === 'remotePort'
+  const isLocal = property === 'localAddress' || property === 'localPort'
+
+  if (!isRemote && !isLocal) {
+    return null
+  }
+
+  return {
+    socketName: expression.object.path[0],
+    runtime: isRemote ? 'ccjs_net_socket_remote_address' : 'ccjs_net_socket_address',
+    tempName: nextCName(context, 'ccjs_net_address'),
+    field: property === 'remotePort' || property === 'localPort' ? 'port' : 'address',
+    valueType: property === 'remotePort' || property === 'localPort' ? 'number' : 'string'
+  }
+}
+
+function resolveNetSocketCounterMember(expression, context) {
+  if (
+    expression?.type !== 'MemberExpression' ||
+    expression.object?.type !== 'Reference' ||
+    expression.object.path.length !== 1 ||
+    context.variables.get(expression.object.path[0]) !== 'net-socket'
+  ) {
+    return null
+  }
+
+  if (expression.property === 'bytesRead') {
+    return {
+      socketName: expression.object.path[0],
+      runtime: 'ccjs_net_socket_get_bytes_read'
+    }
+  }
+
+  if (expression.property === 'bytesWritten') {
+    return {
+      socketName: expression.object.path[0],
+      runtime: 'ccjs_net_socket_get_bytes_written'
+    }
+  }
+
+  return null
 }
 
 function isNetSocketMethodCall(expression, method, context) {
@@ -10386,6 +10561,18 @@ function emitStatement(statement, context) {
 
     if (netAddress != null) {
       return netAddress
+    }
+
+    const netAddressMember = emitNetAddressMemberVariableDeclaration(statement, context)
+
+    if (netAddressMember != null) {
+      return netAddressMember
+    }
+
+    const netNumber = emitNetNumberVariableDeclaration(statement, context)
+
+    if (netNumber != null) {
+      return netNumber
     }
 
     const asyncPromiseCall = emitPreparedAsyncFunctionPromiseCallExpression(statement.init, context, {
