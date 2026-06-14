@@ -168,6 +168,7 @@ ccjs_status ccjs_map_new(ccjs_allocator* allocator, ccjs_value* out) {
   map->header.size = sizeof(ccjs_map);
   map->header.align = _Alignof(ccjs_map);
   map->header.allocator = allocator;
+  ccjs_ref_init_weak(&map->header);
   map->len = 0;
   map->cap = 0;
   map->tombstones = 0;

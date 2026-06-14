@@ -27,6 +27,7 @@ ccjs_status ccjs_callback_new(
   callback->header.size = sizeof(ccjs_callback);
   callback->header.align = _Alignof(ccjs_callback);
   callback->header.allocator = allocator;
+  ccjs_ref_init_weak(&callback->header);
   callback->call = call;
   callback->context = context;
   callback->finalizer = finalizer;

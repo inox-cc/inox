@@ -24,6 +24,7 @@ ccjs_status ccjs_object_new(ccjs_allocator* allocator, const ccjs_shape* shape, 
   object->header.size = size;
   object->header.align = _Alignof(ccjs_object);
   object->header.allocator = allocator;
+  ccjs_ref_init_weak(&object->header);
   object->shape = shape;
 
   for (uint32_t index = 0; index < shape->field_count; index += 1) {

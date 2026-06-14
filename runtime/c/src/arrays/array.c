@@ -138,6 +138,7 @@ ccjs_status ccjs_array_new(ccjs_allocator* allocator, size_t len, ccjs_value* ou
   array->header.size = sizeof(ccjs_array);
   array->header.align = _Alignof(ccjs_array);
   array->header.allocator = allocator;
+  ccjs_ref_init_weak(&array->header);
   array->len = len;
   array->cap = len;
 

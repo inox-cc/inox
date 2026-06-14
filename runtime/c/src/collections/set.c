@@ -308,6 +308,7 @@ ccjs_status ccjs_set_new(ccjs_allocator* allocator, ccjs_value* out) {
   set->header.size = sizeof(ccjs_set);
   set->header.align = _Alignof(ccjs_set);
   set->header.allocator = allocator;
+  ccjs_ref_init_weak(&set->header);
   set->len = 0;
   set->cap = 0;
   set->tombstones = 0;

@@ -1266,6 +1266,119 @@ test('generated C reports unhandled Promise rejections', async (t) => {
 })
 
 
+test('C runtime weak references upgrade and clear after target release', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-weak-runtime-'))
+  const source = join(dir, 'weak-runtime-smoke.c')
+  const output = join(dir, 'weak-runtime-smoke')
+
+  try {
+    await writeFile(
+      source,
+      `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/debug.h"
+#include "ccjs/string.h"
+#include "ccjs/weak.h"
+
+static void* base_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* base_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void base_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+static int expect_ref(ccjs_value value, uint32_t expected) {
+  return value.as.ref != 0 && value.as.ref->ref_count == expected;
+}
+
+int main(void) {
+  ccjs_allocator base = { 0, base_alloc, base_realloc, base_free };
+  ccjs_allocator allocator = ccjs_debug_allocator(&base);
+  ccjs_debug_memory_stats stats;
+  ccjs_value name;
+  ccjs_value upgraded;
+  ccjs_weak_ref weak = ccjs_weak_null();
+  ccjs_weak_ref retained = ccjs_weak_null();
+
+  ccjs_debug_memory_reset();
+
+  if (!ccjs_weak_is_empty(weak)) return 1;
+  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 2;
+  if (ccjs_weak_from_value(name, &weak) != CCJS_OK) return 3;
+  if (ccjs_weak_is_empty(weak) || weak.cell->weak_count != 1) return 4;
+  if (!expect_ref(name, 1)) return 5;
+
+  retained = weak;
+  ccjs_weak_retain(retained);
+  if (retained.cell->weak_count != 2) return 6;
+  ccjs_weak_release(weak);
+  weak = ccjs_weak_null();
+  if (retained.cell->weak_count != 1) return 7;
+
+  if (ccjs_weak_upgrade(retained, &upgraded) != CCJS_OK) return 8;
+  if (upgraded.tag != CCJS_TAG_STRING || upgraded.as.ref != name.as.ref || !expect_ref(name, 2)) return 9;
+  ccjs_release(upgraded);
+  if (!expect_ref(name, 1)) return 10;
+
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 1 || stats.live_weak_cells != 1 || stats.live_alloc_count != 2) return 11;
+
+  ccjs_release(name);
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 0 || stats.live_weak_cells != 1 || stats.live_alloc_count != 1) return 12;
+
+  if (ccjs_weak_upgrade(retained, &upgraded) != CCJS_OK) return 13;
+  if (upgraded.tag != CCJS_TAG_NULL) return 14;
+
+  ccjs_weak_release(retained);
+  retained = ccjs_weak_null();
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_weak_cells != 0 || stats.live_alloc_count != 0 || stats.alloc_count != stats.free_count) return 15;
+
+  printf("weak ok\\n");
+  return 0;
+}
+`
+    )
+
+    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_ENABLE_WEAK=1', '-DCCJS_DEBUG_MEMORY=1'])
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'weak ok\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C simple classes compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

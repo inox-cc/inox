@@ -43,6 +43,8 @@ typedef enum ccjs_ref_kind {
   CCJS_REF_KIND_COUNT
 } ccjs_ref_kind;
 
+typedef struct ccjs_weak_cell ccjs_weak_cell;
+
 typedef struct ccjs_ref {
   ccjs_ref_kind kind;
   uint32_t ref_count;
@@ -50,6 +52,9 @@ typedef struct ccjs_ref {
   size_t size;
   size_t align;
   ccjs_allocator* allocator;
+#ifdef CCJS_ENABLE_WEAK
+  ccjs_weak_cell* weak_cell;
+#endif
 } ccjs_ref;
 
 typedef struct ccjs_value {
@@ -88,6 +93,16 @@ static inline ccjs_value ccjs_number_value(ccjs_number number) {
 static inline bool ccjs_is_ref_value(ccjs_value value) {
   return value.tag == CCJS_TAG_STRING || value.tag == CCJS_TAG_OBJECT || value.tag == CCJS_TAG_ARRAY ||
          value.tag == CCJS_TAG_BYTES || value.tag == CCJS_TAG_FUNCTION || value.tag == CCJS_TAG_MAP || value.tag == CCJS_TAG_SET;
+}
+
+static inline void ccjs_ref_init_weak(ccjs_ref* ref) {
+#ifdef CCJS_ENABLE_WEAK
+  if (ref != 0) {
+    ref->weak_cell = 0;
+  }
+#else
+  (void)ref;
+#endif
 }
 
 void ccjs_retain(ccjs_value value);

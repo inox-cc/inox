@@ -157,6 +157,7 @@ static ccjs_status ccjs_bytes_allocate(ccjs_allocator* allocator, size_t len, cc
   bytes->header.size = size;
   bytes->header.align = _Alignof(ccjs_bytes);
   bytes->header.allocator = allocator;
+  ccjs_ref_init_weak(&bytes->header);
   bytes->len = len;
   *out = bytes;
 #ifdef CCJS_DEBUG_MEMORY

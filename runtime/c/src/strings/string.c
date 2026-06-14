@@ -29,6 +29,7 @@ ccjs_status ccjs_string_from_literal(ccjs_allocator* allocator, const char* byte
   string->header.size = size;
   string->header.align = _Alignof(ccjs_string);
   string->header.allocator = allocator;
+  ccjs_ref_init_weak(&string->header);
   string->len = len;
   memcpy(string->bytes, bytes, len);
 
@@ -420,6 +421,7 @@ ccjs_status ccjs_string_concat_parts(
   string->header.size = size;
   string->header.align = _Alignof(ccjs_string);
   string->header.allocator = allocator;
+  ccjs_ref_init_weak(&string->header);
   string->len = len;
 
   if (left_len != 0) {

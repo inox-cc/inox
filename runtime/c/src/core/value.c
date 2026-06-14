@@ -9,6 +9,9 @@
 #include "ccjs/object.h"
 #include "ccjs/set.h"
 #include "ccjs/value.h"
+#ifdef CCJS_ENABLE_WEAK
+#include "ccjs/weak.h"
+#endif
 
 void ccjs_retain(ccjs_value value) {
   if (ccjs_is_ref_value(value) && value.as.ref != 0) {
@@ -34,6 +37,9 @@ void ccjs_release(ccjs_value value) {
   }
 
   ccjs_allocator* allocator = value.as.ref->allocator;
+#ifdef CCJS_ENABLE_WEAK
+  ccjs_weak_clear_target(value.as.ref);
+#endif
 
   if (value.as.ref->kind == CCJS_REF_OBJECT) {
     ccjs_object* object = (ccjs_object*)value.as.ref;
