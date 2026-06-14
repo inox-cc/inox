@@ -4,6 +4,7 @@ import type { AnyNode, IrGlobalUsage, ProgramNode } from '../types.ts'
 const jsStdGlobalRoots = new Set([
   'Array',
   'Buffer',
+  'ccjs',
   'Date',
   'Error',
   'Int8Array',

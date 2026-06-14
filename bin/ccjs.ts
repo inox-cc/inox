@@ -45,6 +45,7 @@ const cRuntimeSourceGroups = {
   async: ['runtime/c/src/async/loop.c', 'runtime/c/src/async/promise.c'],
   binary: ['runtime/c/src/binary/binary.c'],
   console: ['runtime/c/src/console/console.c'],
+  debug: ['runtime/c/src/core/debug.c'],
   dgram: ['runtime/c/src/network/dgram.c'],
   fetch: ['runtime/c/src/network/fetch.c'],
   fs: ['runtime/c/src/fs/fs.c'],
@@ -343,6 +344,11 @@ function cRuntimeSourcesForCode(
     groups.add('weak')
   }
 
+  if (requirements.has('debug-memory')) {
+    groups.add('managed')
+    groups.add('debug')
+  }
+
   const sources = Object.entries(cRuntimeSourceGroups)
     .filter(([group]) => groups.has(group as keyof typeof cRuntimeSourceGroups))
     .flatMap(([, sources]) => sources)
@@ -356,7 +362,17 @@ function cRuntimeSourcesForCode(
 }
 
 function cRuntimeCFlagsForRequirements(runtimeRequirements: readonly IrRuntimeRequirement[]): string[] {
-  return runtimeRequirements.includes('weak-references') ? ['-DCCJS_ENABLE_WEAK=1'] : []
+  const flags: string[] = []
+
+  if (runtimeRequirements.includes('weak-references')) {
+    flags.push('-DCCJS_ENABLE_WEAK=1')
+  }
+
+  if (runtimeRequirements.includes('debug-memory')) {
+    flags.push('-DCCJS_DEBUG_MEMORY=1')
+  }
+
+  return flags
 }
 
 function cRuntimeTlsSource(tlsBackend: TlsBackend): string {

@@ -8,6 +8,7 @@ export function emitCPrelude(
   needsTimeRuntime,
   needsMathRuntime,
   needsCryptoRuntime,
+  needsDebugMemoryRuntime,
   needsAsyncRuntime,
   needsCallbackRuntime,
   needsStringHeader,
@@ -33,6 +34,10 @@ export function emitCPrelude(
 
   if (needsDgramRuntime) {
     lines.push('#include "ccjs/dgram.h"')
+  }
+
+  if (needsDebugMemoryRuntime) {
+    lines.push('#include "ccjs/debug.h"')
   }
 
   if (needsFetchRuntime) {
@@ -140,6 +145,15 @@ export function emitCPrelude(
     lines.push('  free(ptr);')
     lines.push('}')
     lines.push('')
+    if (needsDebugMemoryRuntime) {
+      lines.push('static ccjs_allocator ccjs_default_base_allocator = {')
+      lines.push('  0,')
+      lines.push('  ccjs_default_alloc,')
+      lines.push('  ccjs_default_realloc,')
+      lines.push('  ccjs_default_free')
+      lines.push('};')
+      lines.push('')
+    }
     lines.push('static ccjs_allocator ccjs_default_allocator = {')
     lines.push('  0,')
     lines.push('  ccjs_default_alloc,')
@@ -147,6 +161,17 @@ export function emitCPrelude(
     lines.push('  ccjs_default_free')
     lines.push('};')
     lines.push('')
+
+    if (needsDebugMemoryRuntime) {
+      lines.push('static int ccjs_debug_memory_allocator_initialized = 0;')
+      lines.push('')
+      lines.push('static void ccjs_debug_memory_ensure_allocator(void) {')
+      lines.push('  if (ccjs_debug_memory_allocator_initialized) return;')
+      lines.push('  ccjs_debug_memory_allocator_initialized = 1;')
+      lines.push('  ccjs_default_allocator = ccjs_debug_allocator(&ccjs_default_base_allocator);')
+      lines.push('}')
+      lines.push('')
+    }
 
     if (needsTimerRuntime) {
       lines.push('static ccjs_status ccjs_timer_callback_run(void* context) {')

@@ -10,6 +10,7 @@ import {
   isSwitchableType
 } from './checker/assignability.ts'
 import {
+  debugMemoryStatsObjectShape,
   errorObjectShape,
   fetchAbortControllerObjectShape,
   fetchResponseObjectShape,
@@ -24,11 +25,7 @@ import { Scope } from './checker/scope.ts'
 import { fsRuntimeCallInfo, isFsRuntimeImportSymbol, removedFsRuntimeMethodInfo } from './checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
-import {
-  timerCallbackFunctionType,
-  timerClearMethodName,
-  timerRuntimeMethodName
-} from './checker/std/timers.ts'
+import { timerCallbackFunctionType, timerClearMethodName, timerRuntimeMethodName } from './checker/std/timers.ts'
 import { memberExpressionPath } from './member-paths.ts'
 import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
 import {
@@ -64,6 +61,7 @@ import {
   stringRuntimeMethodName
 } from './stdlib/descriptors/collections.ts'
 import { cryptoRuntimeMethodNameFromPath } from './stdlib/descriptors/crypto.ts'
+import { debugRuntimeMethodNameFromPath } from './stdlib/descriptors/debug.ts'
 import { mathRuntimeArgCount } from './stdlib/descriptors/math.ts'
 import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
 import type {
@@ -1591,6 +1589,12 @@ class Checker {
       return cryptoType
     }
 
+    const debugMemoryType = this.checkDebugMemoryCall(expression)
+
+    if (debugMemoryType != null) {
+      return debugMemoryType
+    }
+
     const timerType = this.checkTimerCall(expression)
 
     if (timerType != null) {
@@ -1812,6 +1816,28 @@ class Checker {
     return 'bytes'
   }
 
+  checkDebugMemoryCall(expression: AnyNode): ValueType | null {
+    const method = debugRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+
+    if (method == null) {
+      return null
+    }
+
+    expression.valueType = 'object'
+    expression.shape = debugMemoryStatsObjectShape
+    expression.debugRuntimeMethod = method
+
+    if (expression.args.length !== 0) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function ccjs.__debug.memory expects 0 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    return 'object'
+  }
+
   checkClassMethodCall(expression: AnyNode): ValueType | null {
     if (expression.callee.type !== 'MemberExpression') {
       return null
@@ -1917,7 +1943,10 @@ class Checker {
   }
 
   checkFsStatsMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || !['isFile', 'isDirectory'].includes(expression.callee.property)) {
+    if (
+      expression.callee.type !== 'MemberExpression' ||
+      !['isFile', 'isDirectory'].includes(expression.callee.property)
+    ) {
       return null
     }
 
@@ -1966,7 +1995,11 @@ class Checker {
     }
 
     if (expression.args.length < 1 || expression.args.length > 2) {
-      this.report('CCJS_ARG_COUNT', `function fetch expects 1 or 2 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function fetch expects 1 or 2 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     if (expression.args[0] != null) {
@@ -2002,14 +2035,22 @@ class Checker {
   checkFetchInitObject(expression: AnyNode): void {
     if (expression.type !== 'ObjectLiteral') {
       this.checkExpression(expression)
-      this.report('CCJS_FETCH', 'fetch init must be an object literal in the current C/libuv fetch slice', expression.loc)
+      this.report(
+        'CCJS_FETCH',
+        'fetch init must be an object literal in the current C/libuv fetch slice',
+        expression.loc
+      )
       return
     }
 
     for (const property of expression.properties) {
       if (!isFetchInitOption(property.key)) {
         this.checkExpression(property.value)
-        this.report('CCJS_FETCH', `fetch init option ${property.key} is not supported by the current C/libuv fetch slice`, property.loc)
+        this.report(
+          'CCJS_FETCH',
+          `fetch init option ${property.key} is not supported by the current C/libuv fetch slice`,
+          property.loc
+        )
         continue
       }
 
@@ -2050,14 +2091,22 @@ class Checker {
         const signalShape = this.resolveExpressionShape(property.value)
 
         if (signalType !== 'object' || signalShape?.builtin !== 'fetch.AbortSignal') {
-          this.report('CCJS_FETCH', 'fetch init signal must be an AbortSignal in the current C/libuv fetch slice', property.value.loc)
+          this.report(
+            'CCJS_FETCH',
+            'fetch init signal must be an AbortSignal in the current C/libuv fetch slice',
+            property.value.loc
+          )
         }
         continue
       }
 
       if (property.value.type !== 'ObjectLiteral') {
         this.checkExpression(property.value)
-        this.report('CCJS_FETCH', 'fetch init headers must be an object literal in the current C/libuv fetch slice', property.value.loc)
+        this.report(
+          'CCJS_FETCH',
+          'fetch init headers must be an object literal in the current C/libuv fetch slice',
+          property.value.loc
+        )
         continue
       }
 
@@ -2128,7 +2177,11 @@ class Checker {
     }
 
     if (expression.args.length !== 0) {
-      this.report('CCJS_ARG_COUNT', `function AbortController.abort expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function AbortController.abort expects 0 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     expression.fetchRuntimeMethod = 'abort'
@@ -2138,10 +2191,7 @@ class Checker {
   }
 
   checkFetchResponseMethodCall(expression: AnyNode): ValueType | null {
-    if (
-      expression.callee.type !== 'MemberExpression' ||
-      !isFetchResponseBodyMethod(expression.callee.property)
-    ) {
+    if (expression.callee.type !== 'MemberExpression' || !isFetchResponseBodyMethod(expression.callee.property)) {
       return null
     }
 
@@ -2191,17 +2241,18 @@ class Checker {
       return null
     }
 
-    this.report('CCJS_FETCH', 'Response.body streams are not supported by the current C/libuv fetch slice', expression.loc)
+    this.report(
+      'CCJS_FETCH',
+      'Response.body streams are not supported by the current C/libuv fetch slice',
+      expression.loc
+    )
     expression.valueType = 'object'
 
     return 'object'
   }
 
   checkFetchHeadersMethodCall(expression: AnyNode): ValueType | null {
-    if (
-      expression.callee.type !== 'MemberExpression' ||
-      !isFetchHeadersMethod(expression.callee.property)
-    ) {
+    if (expression.callee.type !== 'MemberExpression' || !isFetchHeadersMethod(expression.callee.property)) {
       return null
     }
 
@@ -2279,7 +2330,11 @@ class Checker {
 
     if (method === 'statSync' || method === 'lstatSync') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2327,7 +2382,11 @@ class Checker {
 
     if (method === 'unlinkSync') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2358,7 +2417,11 @@ class Checker {
 
     if (method === 'renameSync') {
       if (expression.args.length !== 2) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2452,7 +2515,11 @@ class Checker {
 
     if (method === 'copyFileSync') {
       if (expression.args.length !== 2) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2465,7 +2532,11 @@ class Checker {
 
     if (method === 'realpathSync' || method === 'readlinkSync') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2477,7 +2548,11 @@ class Checker {
 
     if (method === 'symlinkSync') {
       if (expression.args.length !== 2) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2520,7 +2595,11 @@ class Checker {
 
     if (method === 'stat' || method === 'lstat') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2571,7 +2650,11 @@ class Checker {
 
     if (method === 'unlink') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2604,7 +2687,11 @@ class Checker {
 
     if (method === 'rename') {
       if (expression.args.length !== 2) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2658,7 +2745,11 @@ class Checker {
 
     if (method === 'copyFile') {
       if (expression.args.length !== 2) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2672,7 +2763,11 @@ class Checker {
 
     if (method === 'realpath' || method === 'readlink') {
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2685,7 +2780,11 @@ class Checker {
 
     if (method === 'symlink') {
       if (expression.args.length !== 2) {
-        this.report('CCJS_ARG_COUNT', `function ${label} expects 2 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
       this.checkFsStringArg(expression, 0)
@@ -2803,7 +2902,12 @@ class Checker {
     return options.withFileTypes === true
   }
 
-  checkFsBooleanOptionsArg(expression: AnyNode, index: number, label: string, allowed: string[]): Record<string, boolean> {
+  checkFsBooleanOptionsArg(
+    expression: AnyNode,
+    index: number,
+    label: string,
+    allowed: string[]
+  ): Record<string, boolean> {
     const arg = expression.args[index]
     const result: Record<string, boolean> = {}
 
@@ -2812,7 +2916,11 @@ class Checker {
     }
 
     if (arg.type !== 'ObjectLiteral') {
-      this.report('CCJS_TYPE_MISMATCH', `${label} options must be an object literal in the current compiler slice`, arg.loc)
+      this.report(
+        'CCJS_TYPE_MISMATCH',
+        `${label} options must be an object literal in the current compiler slice`,
+        arg.loc
+      )
       this.checkExpression(arg)
 
       return result
@@ -3714,7 +3822,8 @@ class Checker {
   }
 
   checkStringTrimCall(expression: AnyNode): ValueType | null {
-    const method = expression.callee.type === 'MemberExpression' ? stringRuntimeMethodName(expression.callee.property) : null
+    const method =
+      expression.callee.type === 'MemberExpression' ? stringRuntimeMethodName(expression.callee.property) : null
 
     if (method !== 'trim') {
       return null
@@ -3741,7 +3850,8 @@ class Checker {
   }
 
   checkStringSliceCall(expression: AnyNode): ValueType | null {
-    const method = expression.callee.type === 'MemberExpression' ? stringRuntimeMethodName(expression.callee.property) : null
+    const method =
+      expression.callee.type === 'MemberExpression' ? stringRuntimeMethodName(expression.callee.property) : null
 
     if (method !== 'slice') {
       return null
@@ -3773,7 +3883,8 @@ class Checker {
   }
 
   checkStringSplitCall(expression: AnyNode): ValueType | null {
-    const method = expression.callee.type === 'MemberExpression' ? stringRuntimeMethodName(expression.callee.property) : null
+    const method =
+      expression.callee.type === 'MemberExpression' ? stringRuntimeMethodName(expression.callee.property) : null
 
     if (method !== 'split') {
       return null
@@ -4722,9 +4833,10 @@ class Checker {
     }
   }
 
-  resolveNullableConditionNarrowing(
-    expression: AnyNode | null | undefined
-  ): { trueNames: string[]; falseNames: string[] } {
+  resolveNullableConditionNarrowing(expression: AnyNode | null | undefined): {
+    trueNames: string[]
+    falseNames: string[]
+  } {
     if (expression?.type !== 'BinaryExpression') {
       return {
         trueNames: [],
@@ -4807,11 +4919,7 @@ class Checker {
       return
     }
 
-    this.report(
-      'CCJS_WEAK_ACCESS',
-      'nullable weak value access requires optional chaining or a prior null check',
-      loc
-    )
+    this.report('CCJS_WEAK_ACCESS', 'nullable weak value access requires optional chaining or a prior null check', loc)
   }
 
   inferNullableAccessValueType(expression: AnyNode): ValueType | null {

@@ -1,4 +1,5 @@
 import type { ObjectShapeInfo, SymbolInfo } from '../types.ts'
+import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
 
 export const errorObjectShape: ObjectShapeInfo = {
   kind: 'object',
@@ -134,6 +135,16 @@ export const fetchAbortControllerObjectShape: ObjectShapeInfo = {
   ]
 }
 
+export const debugMemoryStatsObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'ccjs.DebugMemoryStats',
+  fields: debugMemoryStatsFields.map((field) => ({
+    name: field.name,
+    valueType: 'number',
+    readonly: true
+  }))
+}
+
 export const fsConstantValues = new Map([
   ['F_OK', 0],
   ['X_OK', 1],
@@ -151,6 +162,14 @@ export const libuvOnlyRuntimeImports = new Map([
 ])
 
 export const globals = new Map<string, SymbolInfo>([
+  [
+    'ccjs',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
   [
     'console',
     {

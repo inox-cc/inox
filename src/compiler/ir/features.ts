@@ -7,18 +7,13 @@ import {
   stringRuntimeMethodName as collectionStringRuntimeMethodName
 } from '../stdlib/descriptors/collections.ts'
 import { cryptoRuntimeMethodNameFromPath } from '../stdlib/descriptors/crypto.ts'
+import { debugRuntimeMethodNameFromPath } from '../stdlib/descriptors/debug.ts'
 import { fsRuntimeMethodForPath } from '../stdlib/descriptors/fs.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import { timerRuntimeMethodNameFromPath } from '../stdlib/descriptors/timers.ts'
 import { memberExpressionPath } from '../member-paths.ts'
-import type {
-  AnyNode,
-  IrFeature,
-  IrRuntimeRequirement,
-  IrSyntaxFeatureUsage,
-  ProgramNode
-} from '../types.ts'
+import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
 
 export function collectIrFeatures(program: ProgramNode): IrFeature[] {
   const features = new Set<IrFeature>()
@@ -54,6 +49,10 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       requirements.add('managed-values')
       requirements.add('objects')
       requirements.add('weak-references')
+    } else if (feature === 'debug-memory') {
+      requirements.add('managed-values')
+      requirements.add('objects')
+      requirements.add('debug-memory')
     } else if (feature === 'fs') {
       requirements.add('async-runtime')
       requirements.add('fs')
@@ -349,6 +348,12 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('runtime-values')
   }
 
+  if (debugRuntimeMethodName(expression) != null) {
+    features.add('debug-memory')
+    features.add('objects')
+    features.add('runtime-values')
+  }
+
   if (timerRuntimeCallName(expression.callee) != null) {
     features.add('timers')
   }
@@ -409,7 +414,8 @@ function runtimeConstructorName(expression: AnyNode): string | null {
 
   return expression.callee.path[0] === 'Error'
     ? 'Error'
-    : (collectionConstructorNameFromPath(expression.callee.path) ?? binaryConstructorNameFromPath(expression.callee.path))
+    : (collectionConstructorNameFromPath(expression.callee.path) ??
+        binaryConstructorNameFromPath(expression.callee.path))
 }
 
 function collectionConstructorName(expression: AnyNode): string | null {
@@ -455,6 +461,16 @@ function cryptoRuntimeMethodName(expression: AnyNode): string | null {
 
   return cryptoRuntimeMethodNameFromPath(memberExpressionPath(expression.callee)) === expression.cryptoRuntimeMethod
     ? expression.cryptoRuntimeMethod
+    : null
+}
+
+function debugRuntimeMethodName(expression: AnyNode): string | null {
+  if (expression.type !== 'CallExpression' || expression.callee?.type !== 'MemberExpression') {
+    return null
+  }
+
+  return debugRuntimeMethodNameFromPath(memberExpressionPath(expression.callee)) === expression.debugRuntimeMethod
+    ? expression.debugRuntimeMethod
     : null
 }
 

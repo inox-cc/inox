@@ -110,7 +110,11 @@ import {
 import { irProgramsUseConsoleRuntime, isConsoleLog } from './stdlib/console.ts'
 import { cCryptoRuntimeCallName, cryptoRuntimeMethodName } from './stdlib/crypto.ts'
 import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from './stdlib/fetch.ts'
-import { cFsRuntimeConstantExpression, cFsRuntimeExpressionMethod, isAsyncFsRuntimeCallExpression } from './stdlib/fs.ts'
+import {
+  cFsRuntimeConstantExpression,
+  cFsRuntimeExpressionMethod,
+  isAsyncFsRuntimeCallExpression
+} from './stdlib/fs.ts'
 import { cJsonRuntimeCallName } from './stdlib/json.ts'
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import {
@@ -143,6 +147,8 @@ import {
   isRuntimeNullableType,
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
+import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
+import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -254,6 +260,7 @@ function emitCModuleSource(
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
+  const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
   const needsFetchRuntime = globalUsages.some(isSupportedCFetchGlobalUsage)
   const needsAsyncRuntime =
     runtimeRequirements.has('async-runtime') ||
@@ -292,7 +299,12 @@ function emitCModuleSource(
     signatureRuntimeTypes.size > 0 ||
     runtimeRequirements.has('managed-values')
   const needsTimeRuntime =
-    runtimeRequirements.has('clocks') || needsAsyncRuntime || needsDgramRuntime || needsFetchRuntime || needsHttpRuntime || needsNetRuntime
+    runtimeRequirements.has('clocks') ||
+    needsAsyncRuntime ||
+    needsDgramRuntime ||
+    needsFetchRuntime ||
+    needsHttpRuntime ||
+    needsNetRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
@@ -323,6 +335,7 @@ function emitCModuleSource(
       needsTimeRuntime,
       needsMathRuntime,
       needsCryptoRuntime,
+      needsDebugMemoryRuntime,
       needsAsyncRuntime,
       needsCallbackRuntime,
       needsStringHeader,
@@ -522,12 +535,28 @@ function createCModuleBaseContext(plan: CModulePlan, plans: CModulePlan[], diagn
   const jsGlobalRoots = new Set(globalRoots)
   const context = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
 
-  context.dgramImportNames = collectRuntimeImportNames(irPrograms, new Set(['dgram', 'node:dgram']), new Set(['default', 'dgram']))
-  context.dgramCreateSocketNames = collectRuntimeNamedImportNames(irPrograms, new Set(['dgram', 'node:dgram']), 'createSocket')
+  context.dgramImportNames = collectRuntimeImportNames(
+    irPrograms,
+    new Set(['dgram', 'node:dgram']),
+    new Set(['default', 'dgram'])
+  )
+  context.dgramCreateSocketNames = collectRuntimeNamedImportNames(
+    irPrograms,
+    new Set(['dgram', 'node:dgram']),
+    'createSocket'
+  )
   context.httpImportNames = collectHttpRuntimeImportNames(irPrograms)
   context.httpCreateServerNames = collectHttpRuntimeCreateServerNames(irPrograms)
-  context.netImportNames = collectRuntimeImportNames(irPrograms, new Set(['net', 'node:net']), new Set(['default', 'net']))
-  context.netCreateServerNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createServer')
+  context.netImportNames = collectRuntimeImportNames(
+    irPrograms,
+    new Set(['net', 'node:net']),
+    new Set(['default', 'net'])
+  )
+  context.netCreateServerNames = collectRuntimeNamedImportNames(
+    irPrograms,
+    new Set(['net', 'node:net']),
+    'createServer'
+  )
   context.netConnectNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'connect')
   for (const name of collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createConnection')) {
     context.netConnectNames.add(name)
@@ -721,12 +750,28 @@ function emitCUnit(
   const classes = collectIrTopLevelNodesFromPrograms(irPrograms, 'class')
   const jsGlobalRoots = new Set(globalRoots)
   const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
-  baseContext.dgramImportNames = collectRuntimeImportNames(irPrograms, new Set(['dgram', 'node:dgram']), new Set(['default', 'dgram']))
-  baseContext.dgramCreateSocketNames = collectRuntimeNamedImportNames(irPrograms, new Set(['dgram', 'node:dgram']), 'createSocket')
+  baseContext.dgramImportNames = collectRuntimeImportNames(
+    irPrograms,
+    new Set(['dgram', 'node:dgram']),
+    new Set(['default', 'dgram'])
+  )
+  baseContext.dgramCreateSocketNames = collectRuntimeNamedImportNames(
+    irPrograms,
+    new Set(['dgram', 'node:dgram']),
+    'createSocket'
+  )
   baseContext.httpImportNames = collectHttpRuntimeImportNames(irPrograms)
   baseContext.httpCreateServerNames = collectHttpRuntimeCreateServerNames(irPrograms)
-  baseContext.netImportNames = collectRuntimeImportNames(irPrograms, new Set(['net', 'node:net']), new Set(['default', 'net']))
-  baseContext.netCreateServerNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createServer')
+  baseContext.netImportNames = collectRuntimeImportNames(
+    irPrograms,
+    new Set(['net', 'node:net']),
+    new Set(['default', 'net'])
+  )
+  baseContext.netCreateServerNames = collectRuntimeNamedImportNames(
+    irPrograms,
+    new Set(['net', 'node:net']),
+    'createServer'
+  )
   baseContext.netConnectNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'connect')
   for (const name of collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createConnection')) {
     baseContext.netConnectNames.add(name)
@@ -746,13 +791,16 @@ function emitCUnit(
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
+  const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
   const needsFetchRuntime = globalUsages.some(isSupportedCFetchGlobalUsage)
-  const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || needsFetchRuntime || needsFsRuntime || needsTimerRuntime
+  const needsAsyncRuntime =
+    runtimeRequirements.has('async-runtime') || needsFetchRuntime || needsFsRuntime || needsTimerRuntime
   const needsCollectionRuntime = runtimeRequirements.has('collections')
   const needsBinaryRuntime = runtimeRequirements.has('binary')
   const needsClassRuntime = baseContext.classInfos.size > 0
   const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
-  const needsObjectRuntime = runtimeRequirements.has('objects') || needsFsRuntime || needsFetchRuntime || needsClassRuntime
+  const needsObjectRuntime =
+    runtimeRequirements.has('objects') || needsFsRuntime || needsFetchRuntime || needsClassRuntime
   const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
   const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
   const needsRuntime =
@@ -769,12 +817,21 @@ function emitCUnit(
     needsJsonRuntime ||
     runtimeRequirements.has('managed-values')
   const needsTimeRuntime =
-    runtimeRequirements.has('clocks') || needsAsyncRuntime || needsDgramRuntime || needsFetchRuntime || needsHttpRuntime || needsNetRuntime
+    runtimeRequirements.has('clocks') ||
+    needsAsyncRuntime ||
+    needsDgramRuntime ||
+    needsFetchRuntime ||
+    needsHttpRuntime ||
+    needsNetRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
   const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsStringHeader =
-    runtimeRequirements.has('string-bytes') || needsFsRuntime || needsDgramRuntime || needsFetchRuntime || needsNetRuntime
+    runtimeRequirements.has('string-bytes') ||
+    needsFsRuntime ||
+    needsDgramRuntime ||
+    needsFetchRuntime ||
+    needsNetRuntime
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, baseContext)
@@ -783,6 +840,7 @@ function emitCUnit(
     needsTimeRuntime,
     needsMathRuntime,
     needsCryptoRuntime,
+    needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,
     needsStringHeader,
@@ -2787,7 +2845,9 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
     const mode = emitPreparedFsAccessModeExpression(expression, context)
 
     lines.push(...mode.lines)
-    lines.push(`status = ccjs_fs_access(ccjs_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`)
+    lines.push(
+      `status = ccjs_fs_access(ccjs_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`
+    )
   } else if (method === 'appendFileBytes') {
     const bytes = emitCValueExpression(expression.args[1], context)
 
@@ -2818,7 +2878,9 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
       `status = ccjs_fs_symlink(ccjs_loop, ${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length}, &frame->awaited);`
     )
   } else if (method === 'mkdir') {
-    lines.push(`status = ccjs_fs_mkdir(ccjs_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &frame->awaited);`)
+    lines.push(
+      `status = ccjs_fs_mkdir(ccjs_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &frame->awaited);`
+    )
   } else if (method === 'unlink') {
     lines.push(`status = ccjs_fs_unlink(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'rm') {
@@ -2877,7 +2939,12 @@ function emitPreparedAsyncTaskFetchSourceExpression(expression, wrapper, context
     const response = emitCValueExpression(expression.callee.object, context)
 
     lines.push(...response.lines)
-    lines.push(emitRuntimeTypeCheck(`${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`, context))
+    lines.push(
+      emitRuntimeTypeCheck(
+        `${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`,
+        context
+      )
+    )
     lines.push(`status = ccjs_fetch_response_text(ccjs_loop, ${response.expression}, &frame->awaited);`)
   }
 
@@ -3738,7 +3805,9 @@ function emitDgramAddressVariableDeclaration(statement, context) {
 
   const socketName = statement.init.callee.object.path[0]
   const runtime =
-    statement.init.callee.property === 'remoteAddress' ? 'ccjs_dgram_socket_remote_address' : 'ccjs_dgram_socket_address'
+    statement.init.callee.property === 'remoteAddress'
+      ? 'ccjs_dgram_socket_remote_address'
+      : 'ccjs_dgram_socket_address'
   context.variables.set(statement.name, 'dgram-address')
 
   return [
@@ -3897,7 +3966,14 @@ function emitDgramBindLines(socketName, args, context) {
         ? null
         : args[1]
       : findObjectLiteralPropertyValue(options, 'address')
-  const callback = options == null ? (firstIsCallback ? args[0] : args[1]?.type === 'ArrowFunctionExpression' ? args[1] : args[2]) : objectCallback
+  const callback =
+    options == null
+      ? firstIsCallback
+        ? args[0]
+        : args[1]?.type === 'ArrowFunctionExpression'
+          ? args[1]
+          : args[2]
+      : objectCallback
 
   if (args.length > (options == null ? 3 : 2)) {
     context.diagnostics.push(
@@ -3961,7 +4037,11 @@ function emitDgramOnLines(socketName, args, context) {
 function emitDgramConnectLines(socketName, args, context) {
   if (args.length < 1) {
     context.diagnostics.push(
-      diagnostic('CCJS_DGRAM_SOCKET', 'socket.connect in the C backend currently requires a port argument', args[0]?.loc)
+      diagnostic(
+        'CCJS_DGRAM_SOCKET',
+        'socket.connect in the C backend currently requires a port argument',
+        args[0]?.loc
+      )
     )
     return []
   }
@@ -4028,7 +4108,8 @@ function emitDgramSocketOptionCallStatement(expression, context) {
   }
 
   if (method === 'setSendBufferSize' || method === 'setRecvBufferSize') {
-    const runtime = method === 'setSendBufferSize' ? 'ccjs_dgram_set_send_buffer_size' : 'ccjs_dgram_set_recv_buffer_size'
+    const runtime =
+      method === 'setSendBufferSize' ? 'ccjs_dgram_set_send_buffer_size' : 'ccjs_dgram_set_recv_buffer_size'
     const size = emitPreparedNumberExpression(expression.args[0], context)
 
     return [...size.lines, emitStatusCheck(`${runtime}(${socketName}, (int)(${size.expression}))`, context)]
@@ -4037,7 +4118,11 @@ function emitDgramSocketOptionCallStatement(expression, context) {
   if (method === 'ref' || method === 'unref') {
     if (expression.args.length > 0) {
       context.diagnostics.push(
-        diagnostic('CCJS_DGRAM_SOCKET', `socket.${method} in the C backend does not take arguments`, expression.args[0]?.loc)
+        diagnostic(
+          'CCJS_DGRAM_SOCKET',
+          `socket.${method} in the C backend does not take arguments`,
+          expression.args[0]?.loc
+        )
       )
     }
 
@@ -4056,7 +4141,11 @@ function emitDgramSendLines(socketName, args, context, dgramContext = null) {
 
     return [
       ...body.lines,
-      ...emitDgramStatusCheck(`ccjs_dgram_send_connected(${socketName}, ${body.bytes}, ${body.length})`, context, dgramContext),
+      ...emitDgramStatusCheck(
+        `ccjs_dgram_send_connected(${socketName}, ${body.bytes}, ${body.length})`,
+        context,
+        dgramContext
+      ),
       ...emitDgramZeroArgCallbackLines(callback, context)
     ]
   }
@@ -4247,7 +4336,9 @@ function resolveDgramAddressStringMember(expression, context) {
     return null
   }
 
-  return expression.property === 'family' ? `${expression.object.path[0]}.family` : `${expression.object.path[0]}.address`
+  return expression.property === 'family'
+    ? `${expression.object.path[0]}.family`
+    : `${expression.object.path[0]}.address`
 }
 
 function resolveDgramRinfoMember(expression, dgramContext) {
@@ -4442,12 +4533,8 @@ function emitHttpHandlerDeclaration(wrapper, baseContext) {
   const lines = [
     `${emitHttpHandlerHead(wrapper)} {`,
     '  (void)user;',
-    requestName == null
-      ? '  (void)ccjs_request;'
-      : `  const ccjs_http_request* ${requestName} = ccjs_request;`,
-    responseName == null
-      ? '  (void)ccjs_response;'
-      : `  ccjs_http_response* ${responseName} = ccjs_response;`
+    requestName == null ? '  (void)ccjs_request;' : `  const ccjs_http_request* ${requestName} = ccjs_request;`,
+    responseName == null ? '  (void)ccjs_response;' : `  ccjs_http_response* ${responseName} = ccjs_response;`
   ]
 
   for (const statement of body) {
@@ -4468,7 +4555,9 @@ function emitHttpHandlerStatement(statement, httpContext, context) {
   if (statement.type === 'BlockStatement') {
     return [
       '{',
-      ...statement.body.flatMap((item) => emitHttpHandlerStatement(item, httpContext, context)).map((line) => `  ${line}`),
+      ...statement.body
+        .flatMap((item) => emitHttpHandlerStatement(item, httpContext, context))
+        .map((line) => `  ${line}`),
       '}'
     ]
   }
@@ -5259,7 +5348,12 @@ function emitHttpServerCreateLines(expression, serverName, context, options: { d
 
   const lines = options.declare === false ? [] : [`ccjs_http_server* ${serverName} = 0;`]
 
-  lines.push(emitStatusCheck(`ccjs_http_server_new(${emitEventLoopReference(context)}, ${wrapper?.name ?? '0'}, 0, &${serverName})`, context))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_http_server_new(${emitEventLoopReference(context)}, ${wrapper?.name ?? '0'}, 0, &${serverName})`,
+      context
+    )
+  )
 
   return lines
 }
@@ -5461,8 +5555,8 @@ function emitNetHandlerHead(wrapper) {
 function emitNetHandlerDeclaration(wrapper, baseContext) {
   const expression = wrapper.expression
   const isSocketHandler = wrapper.kind === 'connection' || wrapper.kind.startsWith('socket-')
-  const socketName = wrapper.kind === 'connection' ? expression.params[0]?.name ?? null : null
-  const dataName = wrapper.kind === 'socket-data' ? expression.params[0]?.name ?? null : null
+  const socketName = wrapper.kind === 'connection' ? (expression.params[0]?.name ?? null) : null
+  const dataName = wrapper.kind === 'socket-data' ? (expression.params[0]?.name ?? null) : null
   const netContext = {
     kind: wrapper.kind,
     dataName,
@@ -5519,7 +5613,9 @@ function emitNetHandlerStatement(statement, netContext, context) {
   if (statement.type === 'BlockStatement') {
     return [
       '{',
-      ...statement.body.flatMap((item) => emitNetHandlerStatement(item, netContext, context)).map((line) => `  ${line}`),
+      ...statement.body
+        .flatMap((item) => emitNetHandlerStatement(item, netContext, context))
+        .map((line) => `  ${line}`),
       '}'
     ]
   }
@@ -5560,7 +5656,6 @@ function emitNetHandlerStatement(statement, netContext, context) {
     if (serverCall != null) {
       return serverCall
     }
-
   }
 
   if (statement.type === 'ReturnStatement') {
@@ -5648,9 +5743,10 @@ function emitNetHandlerConsoleLogStatement(expression, netContext, context) {
     return null
   }
 
-  const stream = expression.callee.property === 'warn' || expression.callee.property === 'error'
-    ? 'CCJS_CONSOLE_STDERR'
-    : 'CCJS_CONSOLE_STDOUT'
+  const stream =
+    expression.callee.property === 'warn' || expression.callee.property === 'error'
+      ? 'CCJS_CONSOLE_STDERR'
+      : 'CCJS_CONSOLE_STDOUT'
 
   if (
     expression.args.length === 1 &&
@@ -5895,7 +5991,10 @@ function emitNetSocketConnectLines(expression, socketName, context, options: { d
 
   lines.push(
     ...port.lines,
-    emitStatusCheck(`ccjs_net_connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0, &${socketName})`, context)
+    emitStatusCheck(
+      `ccjs_net_connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0, &${socketName})`,
+      context
+    )
   )
 
   if (wrapper != null) {
@@ -6000,12 +6099,21 @@ function emitNetSocketSetEncodingLines(socketName, args, context) {
 
   if (value == null) {
     context.diagnostics.push(
-      diagnostic('CCJS_NET_SOCKET', 'socket.setEncoding in the C backend currently requires a static string', args[0]?.loc)
+      diagnostic(
+        'CCJS_NET_SOCKET',
+        'socket.setEncoding in the C backend currently requires a static string',
+        args[0]?.loc
+      )
     )
     return []
   }
 
-  return [emitStatusCheck(`ccjs_net_socket_set_encoding(${socketName}, ${cStringLiteral(value)}, ${utf8ByteLength(value)})`, context)]
+  return [
+    emitStatusCheck(
+      `ccjs_net_socket_set_encoding(${socketName}, ${cStringLiteral(value)}, ${utf8ByteLength(value)})`,
+      context
+    )
+  ]
 }
 
 function emitNetSocketOptionCallStatement(expression, context) {
@@ -6051,11 +6159,17 @@ function emitNetSocketOptionCallStatement(expression, context) {
   if (method === 'ref' || method === 'unref') {
     if (expression.args.length > 0) {
       context.diagnostics.push(
-        diagnostic('CCJS_NET_SOCKET', `socket.${method} in the C backend does not take arguments`, expression.args[0]?.loc)
+        diagnostic(
+          'CCJS_NET_SOCKET',
+          `socket.${method} in the C backend does not take arguments`,
+          expression.args[0]?.loc
+        )
       )
     }
 
-    return [emitStatusCheck(`${method === 'ref' ? 'ccjs_net_socket_ref' : 'ccjs_net_socket_unref'}(${socketName})`, context)]
+    return [
+      emitStatusCheck(`${method === 'ref' ? 'ccjs_net_socket_ref' : 'ccjs_net_socket_unref'}(${socketName})`, context)
+    ]
   }
 
   if (method === 'setTimeout') {
@@ -6112,7 +6226,8 @@ function emitNetServerListenLines(serverName, args, context) {
   const callback = emitNetListenCallback(args, options)
   const portArg = options == null ? emitNetListenPortArg(args) : findObjectLiteralPropertyValue(options, 'port')
   const hostArg = options == null ? emitNetListenHostArg(args) : findObjectLiteralPropertyValue(options, 'host')
-  const backlogArg = options == null ? emitNetListenBacklogArg(args) : findObjectLiteralPropertyValue(options, 'backlog')
+  const backlogArg =
+    options == null ? emitNetListenBacklogArg(args) : findObjectLiteralPropertyValue(options, 'backlog')
 
   if (options != null && findObjectLiteralPropertyValue(options, 'exclusive') != null) {
     context.diagnostics.push(
@@ -6126,12 +6241,16 @@ function emitNetServerListenLines(serverName, args, context) {
 
   const port = portArg == null ? { lines: [], expression: '0' } : emitPreparedNumberExpression(portArg, context)
   const host = emitNetListenHostExpression(hostArg, context)
-  const backlog = backlogArg == null ? { lines: [], expression: '128' } : emitPreparedNumberExpression(backlogArg, context)
+  const backlog =
+    backlogArg == null ? { lines: [], expression: '128' } : emitPreparedNumberExpression(backlogArg, context)
 
   return [
     ...port.lines,
     ...backlog.lines,
-    emitStatusCheck(`ccjs_net_server_listen(${serverName}, ${host}, (int)(${port.expression}), (int)(${backlog.expression}))`, context),
+    emitStatusCheck(
+      `ccjs_net_server_listen(${serverName}, ${host}, (int)(${port.expression}), (int)(${backlog.expression}))`,
+      context
+    ),
     ...emitNetZeroArgCallbackLines(callback, context)
   ]
 }
@@ -6232,7 +6351,7 @@ function emitNetListenCallback(args, options) {
 }
 
 function emitNetListenPortArg(args) {
-  return args[0]?.type === 'ArrowFunctionExpression' ? null : args[0] ?? null
+  return args[0]?.type === 'ArrowFunctionExpression' ? null : (args[0] ?? null)
 }
 
 function emitNetListenHostArg(args) {
@@ -6371,7 +6490,9 @@ function resolveNetAddressStringMember(expression, context) {
     return null
   }
 
-  return expression.property === 'family' ? `${expression.object.path[0]}.family` : `${expression.object.path[0]}.address`
+  return expression.property === 'family'
+    ? `${expression.object.path[0]}.family`
+    : `${expression.object.path[0]}.address`
 }
 
 function isNetAddressCall(expression, context) {
@@ -9324,7 +9445,11 @@ function emitStatement(statement, context) {
       }
     }
 
-    if (statement.init?.type === 'CallExpression' && statement.nullable !== true && inferExpressionType(statement.init, context) === 'string') {
+    if (
+      statement.init?.type === 'CallExpression' &&
+      statement.nullable !== true &&
+      inferExpressionType(statement.init, context) === 'string'
+    ) {
       return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
     }
 
@@ -9429,6 +9554,14 @@ function emitStatement(statement, context) {
 
     if (collectionCall != null) {
       return collectionCall.lines
+    }
+
+    const debugMemoryCall = emitPreparedDebugMemoryCallExpression(statement.expression, context, {
+      discard: true
+    })
+
+    if (debugMemoryCall != null) {
+      return debugMemoryCall.lines
     }
 
     const cryptoCall = emitPreparedCryptoCallExpression(statement.expression, context, {
@@ -12344,6 +12477,12 @@ function emitCValueExpression(expression, context) {
     return jsonCall
   }
 
+  const debugMemoryCall = emitPreparedDebugMemoryCallExpression(expression, context)
+
+  if (debugMemoryCall != null) {
+    return debugMemoryCall
+  }
+
   const cryptoCall = emitPreparedCryptoCallExpression(expression, context)
 
   if (cryptoCall != null) {
@@ -13127,14 +13266,10 @@ function emitCOptionalMemberValueExpression(expression, context) {
     }
   }
 
-  return emitCOptionalObjectReadValueExpression(
-    expression.object,
-    member.valueType,
-    context,
-    (temp) =>
-      member.key == null
-        ? `ccjs_object_get_known(${temp}, ${member.index}, &`
-        : `ccjs_object_get(${temp}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, &`
+  return emitCOptionalObjectReadValueExpression(expression.object, member.valueType, context, (temp) =>
+    member.key == null
+      ? `ccjs_object_get_known(${temp}, ${member.index}, &`
+      : `ccjs_object_get(${temp}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, &`
   )
 }
 
@@ -13157,14 +13292,10 @@ function emitCOptionalIndexValueExpression(expression, context) {
       }
     }
 
-    return emitCOptionalObjectReadValueExpression(
-      expression.object,
-      field.valueType,
-      context,
-      (temp) =>
-        field.key == null
-          ? `ccjs_object_get_known(${temp}, ${field.index}, &`
-          : `ccjs_object_get(${temp}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &`
+    return emitCOptionalObjectReadValueExpression(expression.object, field.valueType, context, (temp) =>
+      field.key == null
+        ? `ccjs_object_get_known(${temp}, ${field.index}, &`
+        : `ccjs_object_get(${temp}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &`
     )
   }
 
@@ -14497,12 +14628,7 @@ function emitRuntimeErrorLogValue(expression, context) {
       `ccjs_string* ${messageString} = (ccjs_string*)${messageValue}.as.ref;`
     ],
     format: '%.*s: %.*s',
-    values: [
-      `(int)${nameString}->len`,
-      `${nameString}->bytes`,
-      `(int)${messageString}->len`,
-      `${messageString}->bytes`
-    ]
+    values: [`(int)${nameString}->len`, `${nameString}->bytes`, `(int)${messageString}->len`, `${messageString}->bytes`]
   }
 }
 
@@ -15667,9 +15793,9 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
               ? 'object'
               : method === 'realpath' || method === 'readlink'
                 ? 'string'
-              : method === 'readFileBytes'
-                ? 'bytes'
-                : 'string'),
+                : method === 'readFileBytes'
+                  ? 'bytes'
+                  : 'string'),
       'error'
     )
   }
@@ -15874,7 +16000,10 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
 
   if (method === 'unlink') {
     lines.push(
-      emitStatusCheck(`ccjs_fs_unlink(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`, context)
+      emitStatusCheck(
+        `ccjs_fs_unlink(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
+        context
+      )
     )
 
     return {
@@ -15978,11 +16107,7 @@ function emitPreparedFetchCallExpression(expression, context, options: { out?: s
         : `ccjs_fetch_with_init(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, ${init.expression}, &${out})`
 
     return {
-      lines: [
-        ...url.lines,
-        ...init.lines,
-        emitStatusCheck(call, context)
-      ],
+      lines: [...url.lines, ...init.lines, emitStatusCheck(call, context)],
       expression: out,
       valueType,
       rejectionValueType: 'error'
@@ -15994,8 +16119,14 @@ function emitPreparedFetchCallExpression(expression, context, options: { out?: s
   return {
     lines: [
       ...response.lines,
-      emitRuntimeTypeCheck(`${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`, context),
-      emitStatusCheck(`ccjs_fetch_response_text(${emitEventLoopReference(context)}, ${response.expression}, &${out})`, context)
+      emitRuntimeTypeCheck(
+        `${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`,
+        context
+      ),
+      emitStatusCheck(
+        `ccjs_fetch_response_text(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
+        context
+      )
     ],
     expression: out,
     valueType,
@@ -16021,7 +16152,9 @@ function emitPreparedFetchHeadersCallExpression(expression, context, options: { 
   if (method === 'headersHas') {
     const out = options.out ?? nextCName(context, 'ccjs_fetch_header_has')
     lines.push(`int ${out} = 0;`)
-    lines.push(emitStatusCheck(`ccjs_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context))
+    lines.push(
+      emitStatusCheck(`ccjs_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
+    )
 
     return {
       lines,
@@ -16076,7 +16209,10 @@ function emitFetchAbortControllerAbortStatement(expression, context) {
 
   return [
     ...controller.lines,
-    emitRuntimeTypeCheck(`${controller.expression}.tag != CCJS_TAG_OBJECT || ${controller.expression}.as.ref == 0`, context),
+    emitRuntimeTypeCheck(
+      `${controller.expression}.tag != CCJS_TAG_OBJECT || ${controller.expression}.as.ref == 0`,
+      context
+    ),
     emitStatusCheck(`ccjs_fetch_abort_controller_abort(${controller.expression})`, context)
   ]
 }
@@ -16106,9 +16242,13 @@ function emitPreparedFetchInitOperand(expression, context) {
       ? { lines: [] as string[], bytes: '0', length: '0' }
       : emitPreparedStringBytesOperand(redirectValue, context, 'ccjs_fetch_redirect')
   const body =
-    bodyValue == null ? { lines: [] as string[], bytes: '0', length: '0' } : emitPreparedFetchBodyOperand(bodyValue, context)
+    bodyValue == null
+      ? { lines: [] as string[], bytes: '0', length: '0' }
+      : emitPreparedFetchBodyOperand(bodyValue, context)
   const signal =
-    signalValue == null ? { lines: [] as string[], expression: 'ccjs_undefined_value()' } : emitPreparedFetchSignalOperand(signalValue, context)
+    signalValue == null
+      ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
+      : emitPreparedFetchSignalOperand(signalValue, context)
   let headersExpression = '0'
   let headerCount = '0'
 
@@ -16127,7 +16267,9 @@ function emitPreparedFetchInitOperand(expression, context) {
       )
     }
 
-    lines.push(`ccjs_fetch_header ${headersName}[${headersValue.properties.length}] = { ${headerInitializers.join(', ')} };`)
+    lines.push(
+      `ccjs_fetch_header ${headersName}[${headersValue.properties.length}] = { ${headerInitializers.join(', ')} };`
+    )
     headersExpression = headersName
     headerCount = `${headersValue.properties.length}`
   }
@@ -16158,7 +16300,10 @@ function emitPreparedFetchSignalOperand(expression, context) {
     return {
       lines: [
         ...controller.lines,
-        emitRuntimeTypeCheck(`${controller.expression}.tag != CCJS_TAG_OBJECT || ${controller.expression}.as.ref == 0`, context),
+        emitRuntimeTypeCheck(
+          `${controller.expression}.tag != CCJS_TAG_OBJECT || ${controller.expression}.as.ref == 0`,
+          context
+        ),
         ...emitPrepareOwnedValueWrite(signal),
         emitStatusCheck(`ccjs_fetch_abort_controller_signal(${controller.expression}, &${signal})`, context)
       ],
@@ -16308,7 +16453,10 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
 
     lines.push(...bytes.lines)
     lines.push(
-      emitStatusCheck(`ccjs_fs_append_file_sync(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`, context)
+      emitStatusCheck(
+        `ccjs_fs_append_file_sync(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`,
+        context
+      )
     )
 
     return {
@@ -16321,7 +16469,10 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
 
     lines.push(...destPath.lines)
     lines.push(
-      emitStatusCheck(`ccjs_fs_copy_file_sync(${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length})`, context)
+      emitStatusCheck(
+        `ccjs_fs_copy_file_sync(${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length})`,
+        context
+      )
     )
 
     return {
@@ -16333,7 +16484,12 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
     const linkPath = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_link_path')
 
     lines.push(...linkPath.lines)
-    lines.push(emitStatusCheck(`ccjs_fs_symlink_sync(${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length})`, context))
+    lines.push(
+      emitStatusCheck(
+        `ccjs_fs_symlink_sync(${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length})`,
+        context
+      )
+    )
 
     return {
       lines
@@ -16379,7 +16535,10 @@ function emitPreparedFsSyncStatementExpression(expression, context) {
 
     lines.push(...newPath.lines)
     lines.push(
-      emitStatusCheck(`ccjs_fs_rename_sync(${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length})`, context)
+      emitStatusCheck(
+        `ccjs_fs_rename_sync(${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length})`,
+        context
+      )
     )
 
     return {
@@ -16517,6 +16676,55 @@ function emitPreparedJsonScalarParseExpression(expression, context) {
   return {
     lines: value.lines,
     expression: valueType === 'boolean' ? `(${value.expression}.as.boolean ? 1 : 0)` : `${value.expression}.as.number`
+  }
+}
+
+function emitPreparedDebugMemoryCallExpression(expression, context, options: { discard?: boolean } = {}) {
+  if (cDebugRuntimeMethodName(expression) !== 'memory') {
+    return null
+  }
+
+  if (options.discard === true) {
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
+  const out = nextCName(context, 'ccjs_debug_memory')
+  const stats = nextCName(context, 'ccjs_debug_stats')
+  const shapeName = nextCName(context, 'ccjs_shape_debug_memory')
+  const fieldsName = `${shapeName}_fields`
+  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+
+  for (const field of debugMemoryStatsFields) {
+    lines.push(`  { ${cStringLiteral(field.name)}, CCJS_FIELD_READONLY },`)
+  }
+
+  lines.push('};')
+  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`  ${debugMemoryStatsFields.length},`)
+  lines.push(`  ${fieldsName}`)
+  lines.push('};')
+  lines.push(`ccjs_debug_memory_stats ${stats};`)
+  lines.push('ccjs_debug_memory_ensure_allocator();')
+  lines.push(`ccjs_debug_memory_snapshot(&${stats});`)
+  registerOwnedValue(context, out)
+  lines.push(...emitPrepareOwnedValueWrite(out))
+  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${out})`, context))
+
+  for (const [index, field] of debugMemoryStatsFields.entries()) {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_object_init_known(${out}, ${index}, ccjs_number_value((ccjs_number)${stats}.${field.cField}))`,
+        context
+      )
+    )
+  }
+
+  return {
+    lines,
+    expression: out
   }
 }
 
@@ -18079,6 +18287,10 @@ function inferExpressionType(expression, context) {
 
   if (cryptoRuntimeMethodName(expression) === 'getRandomValues') {
     return 'bytes'
+  }
+
+  if (cDebugRuntimeMethodName(expression) === 'memory') {
+    return 'object'
   }
 
   if (

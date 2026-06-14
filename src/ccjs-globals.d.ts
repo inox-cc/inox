@@ -37,3 +37,24 @@ declare class AbortController {
   readonly signal: AbortSignal
   abort(): void
 }
+
+type CcjsDebugMemoryStats = {
+  readonly allocCount: number
+  readonly reallocCount: number
+  readonly freeCount: number
+  readonly liveAllocCount: number
+  readonly liveBytes: number
+  readonly peakLiveBytes: number
+  readonly retainCount: number
+  readonly releaseCount: number
+  readonly livePromises: number
+  readonly liveCallbacks: number
+  readonly liveWeakCells: number
+  readonly oomFailureCount: number
+}
+
+declare const ccjs: {
+  readonly __debug: {
+    memory(): CcjsDebugMemoryStats
+  }
+}

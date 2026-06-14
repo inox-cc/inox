@@ -2,6 +2,7 @@ import { diagnostic } from '../diagnostics.ts'
 import { isBinaryGlobalUsagePath } from '../stdlib/descriptors/binary.ts'
 import { isCollectionConstructorGlobalUsagePath } from '../stdlib/descriptors/collections.ts'
 import { cryptoRuntimeMethodNameFromPath } from '../stdlib/descriptors/crypto.ts'
+import { debugRuntimeMethodNameFromPath } from '../stdlib/descriptors/debug.ts'
 import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
@@ -78,6 +79,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
     isSupportedCHttpGlobalUsage(usage, context) ||
     isSupportedCNetGlobalUsage(usage, context) ||
     isSupportedCCryptoGlobalUsage(usage) ||
+    isSupportedCDebugGlobalUsage(usage) ||
     isSupportedCMathGlobalUsage(usage)
   )
 }
@@ -119,6 +121,10 @@ function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context): boolean {
 
 export function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage): boolean {
   return cryptoRuntimeMethodNameFromPath(usage.path) != null
+}
+
+export function isSupportedCDebugGlobalUsage(usage: IrGlobalUsage): boolean {
+  return debugRuntimeMethodNameFromPath(usage.path) != null
 }
 
 export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
