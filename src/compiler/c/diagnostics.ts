@@ -1,0 +1,150 @@
+import { diagnostic } from '../diagnostics.ts'
+import { cMathBinaryMethods, cMathNullaryMethods, cMathUnaryMethods } from './runtime-methods.ts'
+import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
+
+export function reportUnsupportedCSyntaxFeatures(
+  _syntaxFeatures: IrSyntaxFeatureUsage[],
+  _diagnostics: Diagnostic[]
+): void {}
+
+export function reportUnsupportedCGlobalUsages(globalUsages: IrGlobalUsage[], diagnostics: Diagnostic[], context): void {
+  for (const usage of globalUsages) {
+    if (!isSupportedCGlobalUsage(usage, context)) {
+      reportCJsGlobalDiagnostic(diagnostics, usage.loc)
+    }
+  }
+}
+
+function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
+  const path = usage.path.join('.')
+
+  return (
+    path === 'Date.now' ||
+    path === 'performance.now' ||
+    path === 'Error' ||
+    path === 'Promise' ||
+    path === 'Promise.resolve' ||
+    path === 'Promise.reject' ||
+    path === 'fs.promises.access' ||
+    path === 'fs.promises.appendFile' ||
+    path === 'fs.promises.copyFile' ||
+    path === 'fs.promises.lstat' ||
+    path === 'fs.promises.mkdir' ||
+    path === 'fs.promises.readFile' ||
+    path === 'fs.promises.readdir' ||
+    path === 'fs.promises.readlink' ||
+    path === 'fs.promises.realpath' ||
+    path === 'fs.promises.rename' ||
+    path === 'fs.promises.rm' ||
+    path === 'fs.promises.stat' ||
+    path === 'fs.promises.symlink' ||
+    path === 'fs.promises.unlink' ||
+    path === 'fs.promises.writeFile' ||
+    path === 'fs.accessSync' ||
+    path === 'fs.appendFileSync' ||
+    path === 'fs.copyFileSync' ||
+    path === 'fs.lstatSync' ||
+    path === 'fs.mkdirSync' ||
+    path === 'fs.readFileSync' ||
+    path === 'fs.readdirSync' ||
+    path === 'fs.readlinkSync' ||
+    path === 'fs.realpathSync' ||
+    path === 'fs.renameSync' ||
+    path === 'fs.rmSync' ||
+    path === 'fs.statSync' ||
+    path === 'fs.symlinkSync' ||
+    path === 'fs.unlinkSync' ||
+    path === 'fs.writeFileSync' ||
+    path === 'fs.constants.F_OK' ||
+    path === 'fs.constants.R_OK' ||
+    path === 'fs.constants.W_OK' ||
+    path === 'fs.constants.X_OK' ||
+    path === 'JSON.parse' ||
+    path === 'JSON.stringify' ||
+    path === 'Buffer.alloc' ||
+    path === 'Buffer.from' ||
+    path === 'Uint8Array' ||
+    path === 'clearImmediate' ||
+    path === 'clearInterval' ||
+    path === 'clearTimeout' ||
+    path === 'setImmediate' ||
+    path === 'setInterval' ||
+    path === 'setTimeout' ||
+    path === 'Map' ||
+    path === 'Set' ||
+    isSupportedCDgramGlobalUsage(usage, context) ||
+    isSupportedCFetchGlobalUsage(usage) ||
+    isSupportedCHttpGlobalUsage(usage, context) ||
+    isSupportedCNetGlobalUsage(usage, context) ||
+    isSupportedCCryptoGlobalUsage(usage) ||
+    isSupportedCMathGlobalUsage(usage)
+  )
+}
+
+export function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {
+  return usage.path.length === 1 && (usage.path[0] === 'fetch' || usage.path[0] === 'AbortController')
+}
+
+function isSupportedCDgramGlobalUsage(usage: IrGlobalUsage, context): boolean {
+  return (
+    (usage.path.length === 2 &&
+      usage.path[1] === 'createSocket' &&
+      context.dgramImportNames?.has(usage.root) === true) ||
+    (usage.path.length === 1 && context.dgramCreateSocketNames?.has(usage.root) === true)
+  )
+}
+
+function isSupportedCHttpGlobalUsage(usage: IrGlobalUsage, context): boolean {
+  return (
+    (usage.path.length === 2 &&
+      usage.path[1] === 'createServer' &&
+      context.httpImportNames?.has(usage.root) === true) ||
+    (usage.path.length === 1 && context.httpCreateServerNames?.has(usage.root) === true)
+  )
+}
+
+function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context): boolean {
+  return (
+    (usage.path.length === 2 &&
+      usage.path[1] === 'createServer' &&
+      context.netImportNames?.has(usage.root) === true) ||
+    (usage.path.length === 2 &&
+      (usage.path[1] === 'connect' || usage.path[1] === 'createConnection') &&
+      context.netImportNames?.has(usage.root) === true) ||
+    (usage.path.length === 1 &&
+      (context.netCreateServerNames?.has(usage.root) === true || context.netConnectNames?.has(usage.root) === true))
+  )
+}
+
+export function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage): boolean {
+  return usage.path.join('.') === 'crypto.getRandomValues'
+}
+
+export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
+  const path = usage.path.join('.')
+
+  return (
+    path.startsWith('Math.') &&
+    (cMathNullaryMethods.has(path.slice('Math.'.length)) ||
+      cMathUnaryMethods.has(path.slice('Math.'.length)) ||
+      cMathBinaryMethods.has(path.slice('Math.'.length)))
+  )
+}
+
+export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc?: SourceLocation): void {
+  if (diagnostics.some((item) => item.code === 'CCJS_C_JS_GLOBAL' && sameLocation(item, loc))) {
+    return
+  }
+
+  diagnostics.push(
+    diagnostic('CCJS_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', loc)
+  )
+}
+
+function sameLocation(left: SourceLocation | undefined, right: SourceLocation | undefined): boolean {
+  if (left == null || right == null) {
+    return left == null && right == null
+  }
+
+  return left.line === right.line && left.column === right.column
+}
