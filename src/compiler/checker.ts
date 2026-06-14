@@ -1290,6 +1290,12 @@ class Checker {
       return fsConstantType
     }
 
+    const unsupportedFetchBodyType = this.checkFetchUnsupportedResponseBodyMember(expression)
+
+    if (unsupportedFetchBodyType != null) {
+      return unsupportedFetchBodyType
+    }
+
     const objectType = this.checkExpression(expression.object)
 
     if (objectType === 'bytes' && expression.property === 'length') {
@@ -2229,6 +2235,14 @@ class Checker {
         false,
         this.expressionCanBeNull(expression.args[0])
       )
+
+      if (this.isFetchHttpsLiteral(expression.args[0])) {
+        this.report(
+          'CCJS_FETCH',
+          'https fetch URLs require a configured TLS adapter and are not supported by the current C/libuv fetch slice',
+          expression.args[0].loc
+        )
+      }
     }
 
     if (expression.args[1] != null) {
@@ -2265,6 +2279,14 @@ class Checker {
           false,
           this.expressionCanBeNull(property.value)
         )
+
+        if (property.key === 'redirect' && !this.isSupportedFetchRedirectLiteral(property.value)) {
+          this.report(
+            'CCJS_FETCH',
+            "fetch init redirect must be 'follow', 'manual' or 'error' in the current C/libuv fetch slice",
+            property.value.loc
+          )
+        }
         continue
       }
 
@@ -2309,6 +2331,18 @@ class Checker {
     }
   }
 
+  isFetchHttpsLiteral(expression: AnyNode): boolean {
+    return expression.type === 'StringLiteral' && expression.value.toLowerCase().startsWith('https://')
+  }
+
+  isSupportedFetchRedirectLiteral(expression: AnyNode): boolean {
+    if (expression.type !== 'StringLiteral') {
+      return true
+    }
+
+    return ['error', 'follow', 'manual'].includes(expression.value)
+  }
+
   checkFetchAbortControllerMethodCall(expression: AnyNode): ValueType | null {
     if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'abort') {
       return null
@@ -2334,7 +2368,7 @@ class Checker {
   checkFetchResponseMethodCall(expression: AnyNode): ValueType | null {
     if (
       expression.callee.type !== 'MemberExpression' ||
-      !['text', 'bytes', 'json'].includes(expression.callee.property)
+      !['arrayBuffer', 'blob', 'bytes', 'formData', 'json', 'text'].includes(expression.callee.property)
     ) {
       return null
     }
@@ -2371,6 +2405,24 @@ class Checker {
     expression.promiseValueType = 'string'
 
     return 'promise'
+  }
+
+  checkFetchUnsupportedResponseBodyMember(expression: AnyNode): ValueType | null {
+    if (expression.property !== 'body') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.object)
+    const shape = this.resolveExpressionShape(expression.object)
+
+    if (objectType !== 'object' || shape?.builtin !== 'fetch.Response') {
+      return null
+    }
+
+    this.report('CCJS_FETCH', 'Response.body streams are not supported by the current C/libuv fetch slice', expression.loc)
+    expression.valueType = 'object'
+
+    return 'object'
   }
 
   checkFetchHeadersMethodCall(expression: AnyNode): ValueType | null {

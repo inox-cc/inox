@@ -570,9 +570,50 @@ console.log(response.status)
   )
 
   assertDiagnostic(
+    `const response = await fetch('https://example.test/hello')
+console.log(response.status)
+`,
+    'CCJS_FETCH',
+    {
+      target: 'c'
+    }
+  )
+
+  assertDiagnostic(
+    `const response = await fetch('http://127.0.0.1:9000/hello', { redirect: 'same-origin' })
+console.log(response.status)
+`,
+    'CCJS_FETCH',
+    {
+      target: 'c'
+    }
+  )
+
+  assertDiagnostic(
     `const response = await fetch('http://127.0.0.1:9000/hello')
 const data = await response.json()
 console.log(data)
+`,
+    'CCJS_FETCH',
+    {
+      target: 'c'
+    }
+  )
+
+  assertDiagnostic(
+    `const response = await fetch('http://127.0.0.1:9000/hello')
+const data = await response.arrayBuffer()
+console.log(data)
+`,
+    'CCJS_FETCH',
+    {
+      target: 'c'
+    }
+  )
+
+  assertDiagnostic(
+    `const response = await fetch('http://127.0.0.1:9000/hello')
+console.log(response.body)
 `,
     'CCJS_FETCH',
     {
