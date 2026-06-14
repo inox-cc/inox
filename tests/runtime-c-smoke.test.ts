@@ -559,6 +559,162 @@ int main(void) {
 })
 
 
+test('C runtime ownership ABI retains getters and releases container entries', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-ownership-'))
+  const source = join(dir, 'ownership-smoke.c')
+  const output = join(dir, 'ownership-smoke')
+
+  try {
+    await writeFile(
+      source,
+      `#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/array.h"
+#include "ccjs/map.h"
+#include "ccjs/object.h"
+#include "ccjs/set.h"
+#include "ccjs/string.h"
+
+typedef struct counters {
+  int allocs;
+  int frees;
+} counters;
+
+static void* test_alloc(void* user, size_t size, size_t align) {
+  (void)align;
+  counters* state = (counters*)user;
+  state->allocs += 1;
+  return calloc(1, size);
+}
+
+static void* test_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void test_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)size;
+  (void)align;
+  counters* state = (counters*)user;
+  state->frees += 1;
+  free(ptr);
+}
+
+static int expect_ref(ccjs_value value, uint32_t expected) {
+  return value.as.ref != 0 && value.as.ref->ref_count == expected;
+}
+
+int main(void) {
+  counters state = { 0, 0 };
+  ccjs_allocator allocator = { &state, test_alloc, test_realloc, test_free };
+  ccjs_field_info fields[] = {
+    { "name", 0 }
+  };
+  ccjs_shape shape = { 1, fields };
+  ccjs_value user;
+  ccjs_value name;
+  ccjs_value replacement;
+  ccjs_value got;
+  ccjs_value array;
+  ccjs_value popped;
+  ccjs_value map;
+  ccjs_value key;
+  ccjs_value map_value;
+  ccjs_value map_next;
+  ccjs_value map_found;
+  ccjs_value set;
+  ccjs_value set_value;
+  bool removed = false;
+
+  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 1;
+  if (!expect_ref(name, 1)) return 2;
+  if (ccjs_string_from_literal(&allocator, "Grace", 5, &replacement) != CCJS_OK) return 3;
+  if (ccjs_object_new(&allocator, &shape, &user) != CCJS_OK) return 4;
+  if (ccjs_object_set_known(user, 0, name) != CCJS_OK) return 5;
+  if (!expect_ref(name, 2)) return 6;
+  if (ccjs_object_get_known(user, 0, &got) != CCJS_OK) return 7;
+  if (!expect_ref(name, 3)) return 8;
+  ccjs_release(got);
+  if (!expect_ref(name, 2)) return 9;
+  if (ccjs_object_set_known(user, 0, replacement) != CCJS_OK) return 10;
+  if (!expect_ref(name, 1) || !expect_ref(replacement, 2)) return 11;
+
+  if (ccjs_array_new(&allocator, 1, &array) != CCJS_OK) return 12;
+  if (ccjs_array_set(array, 0, name) != CCJS_OK) return 13;
+  if (!expect_ref(name, 2)) return 14;
+  if (ccjs_array_pop(array, &popped) != CCJS_OK) return 15;
+  if (popped.as.ref != name.as.ref || !expect_ref(name, 2)) return 16;
+  ccjs_release(popped);
+  if (!expect_ref(name, 1)) return 17;
+
+  if (ccjs_map_new(&allocator, &map) != CCJS_OK) return 18;
+  if (ccjs_string_from_literal(&allocator, "key", 3, &key) != CCJS_OK) return 19;
+  if (ccjs_string_from_literal(&allocator, "one", 3, &map_value) != CCJS_OK) return 20;
+  if (ccjs_string_from_literal(&allocator, "two", 3, &map_next) != CCJS_OK) return 21;
+  if (ccjs_map_set(map, key, map_value) != CCJS_OK) return 22;
+  if (!expect_ref(key, 2) || !expect_ref(map_value, 2)) return 23;
+  if (ccjs_map_get(map, key, &map_found) != CCJS_OK) return 24;
+  if (map_found.as.ref != map_value.as.ref || !expect_ref(map_value, 3)) return 25;
+  ccjs_release(map_found);
+  if (!expect_ref(map_value, 2)) return 26;
+  if (ccjs_map_set(map, key, map_next) != CCJS_OK) return 27;
+  if (!expect_ref(key, 2) || !expect_ref(map_value, 1) || !expect_ref(map_next, 2)) return 28;
+  if (ccjs_map_delete(map, key, &removed) != CCJS_OK || !removed) return 29;
+  if (!expect_ref(key, 1) || !expect_ref(map_next, 1)) return 30;
+
+  if (ccjs_set_new(&allocator, &set) != CCJS_OK) return 31;
+  if (ccjs_string_from_literal(&allocator, "member", 6, &set_value) != CCJS_OK) return 32;
+  if (ccjs_set_add(set, set_value) != CCJS_OK) return 33;
+  if (!expect_ref(set_value, 2)) return 34;
+  if (ccjs_set_delete(set, set_value, &removed) != CCJS_OK || !removed) return 35;
+  if (!expect_ref(set_value, 1)) return 36;
+
+  ccjs_release(user);
+  if (!expect_ref(replacement, 1)) return 37;
+  ccjs_release(array);
+  ccjs_release(map);
+  ccjs_release(set);
+  ccjs_release(name);
+  ccjs_release(replacement);
+  ccjs_release(key);
+  ccjs_release(map_value);
+  ccjs_release(map_next);
+  ccjs_release(set_value);
+
+  printf("%d %d %d\\n", state.allocs, state.frees, state.allocs - state.frees);
+  return state.allocs == state.frees ? 0 : 38;
+}
+`
+    )
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '13 13 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('C runtime callback object invokes and releases context', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
