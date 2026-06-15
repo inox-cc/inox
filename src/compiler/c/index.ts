@@ -253,6 +253,22 @@ import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } 
 import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import {
+  emitPreparedArrayLengthExpression,
+  emitPreparedRuntimeArrayIndexValue,
+  isArrayLengthExpression,
+  isArrayMethodCall,
+  resolveForOfElementType,
+  resolveKnownArrayIndex,
+  resolveKnownArrayLength,
+  resolveKnownForOfArray,
+  resolveOptionalRuntimeArrayIndex,
+  resolveRuntimeArrayElementType,
+  resolveRuntimeArrayIndex,
+  resolveRuntimeForOfArray,
+  updateKnownArrayElementValueType,
+  type ArrayLoweringDependencies
+} from './values/arrays.ts'
+import {
   emitPreparedStringBytesOperand,
   emitPreparedStringCompareExpression,
   emitPreparedStringLengthExpression,
@@ -281,6 +297,13 @@ import type {
   SourceLocation
 } from '../types.ts'
 export type { CModuleOutputFile } from './types.ts'
+
+const arrayLoweringDependencies: ArrayLoweringDependencies = {
+  emitCValueExpression,
+  inferExpressionType,
+  resolveKnownObjectIndex,
+  resolveKnownObjectMember
+}
 
 const stringLoweringDependencies: StringLoweringDependencies = {
   canLowerCNullishCoalescingExpression,
@@ -1443,6 +1466,7 @@ function createBaseContext(
     classInfos: new Map(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
+    arrayLoweringDependencies,
     stringLoweringDependencies,
     cryptoImportNames: new Set(),
     diagnostics,
@@ -12375,14 +12399,6 @@ function isNumericCastCall(expression, context) {
   return inferExpressionType(expression.args[0], context) === 'number'
 }
 
-function isArrayMethodCall(expression) {
-  return (
-    expression?.type === 'CallExpression' &&
-    expression.callee.type === 'MemberExpression' &&
-    arrayRuntimeMethodName(expression.callee.property) != null
-  )
-}
-
 function emitArraySortVariableDeclaration(statement, sorted, context) {
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'array')
@@ -13495,14 +13511,6 @@ function emitPreparedCollectionSizeExpression(expression, context) {
   }
 }
 
-function isArrayLengthExpression(expression, context) {
-  return (
-    expression?.type === 'MemberExpression' &&
-    expression.property === 'length' &&
-    inferExpressionType(expression.object, context) === 'array'
-  )
-}
-
 function isMemberAccessExpression(expression) {
   return expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression'
 }
@@ -13673,108 +13681,6 @@ function registerObjectShape(context, name, shape) {
   )
 }
 
-function resolveKnownArrayIndex(expression, context) {
-  if (
-    expression?.type !== 'IndexExpression' ||
-    expression.object.type !== 'Reference' ||
-    expression.object.path.length !== 1 ||
-    expression.index.type !== 'NumberLiteral'
-  ) {
-    return null
-  }
-
-  const arrayName = expression.object.path[0]
-  const elements = context.arrayShapes.get(arrayName)
-
-  if (elements == null) {
-    return null
-  }
-
-  const index = Number.parseInt(expression.index.value, 10)
-
-  if (!Number.isInteger(index) || index < 0 || index >= elements.length) {
-    return null
-  }
-
-  return {
-    arrayName,
-    index,
-    valueType: elements[index].valueType
-  }
-}
-
-function resolveRuntimeArrayIndex(expression, context) {
-  if (expression?.type !== 'IndexExpression' || expression.index.type !== 'NumberLiteral') {
-    return null
-  }
-
-  const index = Number.parseInt(expression.index.value, 10)
-
-  if (!Number.isInteger(index) || index < 0) {
-    return null
-  }
-
-  const valueType = resolveRuntimeArrayElementType(expression.object, context)
-
-  return valueType == null
-    ? null
-    : {
-        index,
-        valueType
-      }
-}
-
-function resolveOptionalRuntimeArrayIndex(expression, context) {
-  if (expression?.type !== 'OptionalIndexExpression' || expression.index.type !== 'NumberLiteral') {
-    return null
-  }
-
-  const index = Number.parseInt(expression.index.value, 10)
-
-  if (!Number.isInteger(index) || index < 0) {
-    return null
-  }
-
-  const valueType = resolveRuntimeArrayElementType(expression.object, context)
-
-  return valueType == null
-    ? null
-    : {
-        index,
-        valueType
-      }
-}
-
-function resolveRuntimeArrayElementType(expression, context) {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return context.runtimeArrayElementTypes.get(expression.path[0]) ?? null
-  }
-
-  if (expression?.type === 'CallExpression') {
-    const functionReturn = resolveFunctionReturnNameFromCall(expression)
-
-    return expression.valueType === 'array'
-      ? (expression.arrayElementType ??
-          (functionReturn == null ? null : context.functionReturnArrayElementTypes.get(functionReturn)) ??
-          'unknown')
-      : null
-  }
-
-  if (expression?.type === 'MemberExpression') {
-    const member = resolveKnownObjectMember(expression, context)
-
-    return member?.valueType === 'array' ? (member.arrayElementType ?? 'unknown') : null
-  }
-
-  if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    const field = resolveKnownObjectIndex(expression, context)
-
-    return field?.valueType === 'array' ? (field.arrayElementType ?? 'unknown') : null
-  }
-
-  return null
-}
-
 function resolveRuntimeSetElementType(expression, context) {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return context.setElementTypes.get(expression.path[0]) ?? null
@@ -13856,110 +13762,6 @@ function resolveFunctionReturnNameFromCall(expression) {
     : null
 }
 
-function emitPreparedRuntimeArrayIndexValue(expression, element, context, prefix = 'ccjs_array_item') {
-  const array = emitCValueExpression(expression.object, context)
-  const value = nextCName(context, prefix)
-  registerOwnedValue(context, value)
-
-  return {
-    lines: [
-      ...array.lines,
-      ...emitPrepareOwnedValueWrite(value),
-      emitStatusCheck(`ccjs_array_get(${array.expression}, ${element.index}, &${value})`, context)
-    ],
-    expression: value
-  }
-}
-
-function resolveKnownArrayLength(expression, context) {
-  if (expression?.type !== 'MemberExpression' || expression.property !== 'length') {
-    return null
-  }
-
-  if (expression.object.type === 'ArrayLiteral') {
-    return `${expression.object.elements.length}`
-  }
-
-  if (expression.object.type !== 'Reference' || expression.object.path.length !== 1) {
-    return null
-  }
-
-  const elements = context.arrayShapes.get(expression.object.path[0])
-
-  return elements == null ? null : `${elements.length}`
-}
-
-function emitPreparedArrayLengthExpression(expression, context) {
-  if (expression?.type !== 'MemberExpression' || expression.property !== 'length') {
-    return null
-  }
-
-  const knownLength = resolveKnownArrayLength(expression, context)
-
-  if (knownLength != null) {
-    return {
-      lines: [],
-      expression: knownLength
-    }
-  }
-
-  if (inferExpressionType(expression.object, context) !== 'array') {
-    return null
-  }
-
-  const value = emitCValueExpression(expression.object, context)
-  const temp = nextCName(context, 'ccjs_array_len')
-
-  return {
-    lines: [
-      ...value.lines,
-      `size_t ${temp} = 0;`,
-      emitStatusCheck(`ccjs_array_len(${value.expression}, &${temp})`, context)
-    ],
-    expression: temp
-  }
-}
-
-function resolveKnownForOfArray(expression, context) {
-  if (expression?.type !== 'Reference' || expression.path.length !== 1) {
-    return null
-  }
-
-  const name = expression.path[0]
-  const elements = context.arrayShapes.get(name)
-
-  return elements == null
-    ? null
-    : {
-        name,
-        elements
-      }
-}
-
-function resolveRuntimeForOfArray(expression, context) {
-  const elementType = resolveRuntimeArrayElementType(expression, context)
-
-  if (elementType == null) {
-    return null
-  }
-
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return {
-      name: expression.path[0],
-      elementType,
-      lines: []
-    }
-  }
-
-  const value = emitCValueExpression(expression, context)
-
-  return {
-    name: value.expression,
-    elementType,
-    lines: value.lines
-  }
-}
-
 function resolveRuntimeForOfSet(expression, context) {
   const elementType = resolveRuntimeSetElementType(expression, context)
 
@@ -13998,37 +13800,6 @@ function resolveRuntimeForOfMap(expression, context) {
     keyType: mapType.key,
     valueType: mapType.value,
     lines: receiver.lines
-  }
-}
-
-function resolveForOfElementType(elements) {
-  if (elements.length === 0) {
-    return 'unknown'
-  }
-
-  const [first] = elements
-
-  if (first?.valueType == null || first.valueType === 'unknown') {
-    return 'unknown'
-  }
-
-  return elements.every((element) => element.valueType === first.valueType) ? first.valueType : 'unknown'
-}
-
-function updateKnownArrayElementValueType(element, valueType, context) {
-  if (valueType === 'unknown') {
-    return
-  }
-
-  const elements = context.arrayShapes.get(element.arrayName)
-
-  if (elements == null || elements[element.index] == null) {
-    return
-  }
-
-  elements[element.index] = {
-    ...elements[element.index],
-    valueType
   }
 }
 
