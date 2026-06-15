@@ -2129,7 +2129,7 @@ function isBoxedRuntimeStringReference(expression: AnyNode, context: CFunctionCo
   )
 }
 
-function emitBoxedObjectVariableDeclaration(statement, context) {
+function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
   const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
   const fieldsName = `${shapeName}_fields`
   const fields =
@@ -2187,7 +2187,7 @@ function emitBoxedObjectVariableDeclaration(statement, context) {
   return lines
 }
 
-function emitKnownObjectMemberVariableDeclaration(statement, member, context) {
+function emitKnownObjectMemberVariableDeclaration(statement: AnyNode, member: any, context: CFunctionContext): string[] {
   return emitObjectMemberVariableDeclaration(
     statement,
     member,
@@ -2197,7 +2197,11 @@ function emitKnownObjectMemberVariableDeclaration(statement, member, context) {
   )
 }
 
-function emitDynamicObjectMemberVariableDeclaration(statement, member, context) {
+function emitDynamicObjectMemberVariableDeclaration(
+  statement: AnyNode,
+  member: any,
+  context: CFunctionContext
+): string[] {
   return emitObjectMemberVariableDeclaration(
     statement,
     member,
@@ -2207,7 +2211,12 @@ function emitDynamicObjectMemberVariableDeclaration(statement, member, context) 
   )
 }
 
-function emitObjectMemberVariableDeclaration(statement, member, context, emitGetCall) {
+function emitObjectMemberVariableDeclaration(
+  statement: AnyNode,
+  member: any,
+  context: CFunctionContext,
+  emitGetCall: (temp: string) => string
+): string[] {
   if (member.valueType === 'array') {
     return emitObjectArrayMemberVariableDeclaration(statement, member, context, emitGetCall)
   }
@@ -2254,7 +2263,12 @@ function emitObjectMemberVariableDeclaration(statement, member, context, emitGet
   return lines
 }
 
-function emitObjectArrayMemberVariableDeclaration(statement, member, context, emitGetCall) {
+function emitObjectArrayMemberVariableDeclaration(
+  statement: AnyNode,
+  member: any,
+  context: CFunctionContext,
+  emitGetCall: (temp: string) => string
+): string[] {
   registerOwnedValue(context, statement.name)
 
   const lines = [
@@ -2269,7 +2283,12 @@ function emitObjectArrayMemberVariableDeclaration(statement, member, context, em
   return lines
 }
 
-function emitObjectCollectionMemberVariableDeclaration(statement, member, context, emitGetCall) {
+function emitObjectCollectionMemberVariableDeclaration(
+  statement: AnyNode,
+  member: any,
+  context: CFunctionContext,
+  emitGetCall: (temp: string) => string
+): string[] {
   registerOwnedValue(context, statement.name)
 
   const tag = member.valueType === 'map' ? 'CCJS_TAG_MAP' : 'CCJS_TAG_SET'
@@ -2293,7 +2312,12 @@ function emitObjectCollectionMemberVariableDeclaration(statement, member, contex
   return lines
 }
 
-function emitObjectBytesMemberVariableDeclaration(statement, member, context, emitGetCall) {
+function emitObjectBytesMemberVariableDeclaration(
+  statement: AnyNode,
+  member: any,
+  context: CFunctionContext,
+  emitGetCall: (temp: string) => string
+): string[] {
   registerOwnedValue(context, statement.name)
   const lines = [
     ...emitPrepareOwnedValueWrite(statement.name),
@@ -2306,7 +2330,12 @@ function emitObjectBytesMemberVariableDeclaration(statement, member, context, em
   return lines
 }
 
-function emitObjectObjectMemberVariableDeclaration(statement, member, context, emitGetCall) {
+function emitObjectObjectMemberVariableDeclaration(
+  statement: AnyNode,
+  member: any,
+  context: CFunctionContext,
+  emitGetCall: (temp: string) => string
+): string[] {
   registerOwnedValue(context, statement.name)
   const lines = [
     ...emitPrepareOwnedValueWrite(statement.name),
@@ -2323,7 +2352,12 @@ function emitObjectObjectMemberVariableDeclaration(statement, member, context, e
   return lines
 }
 
-function emitObjectStringMemberVariableDeclaration(statement, member, context, emitGetCall) {
+function emitObjectStringMemberVariableDeclaration(
+  statement: AnyNode,
+  member: any,
+  context: CFunctionContext,
+  emitGetCall: (temp: string) => string
+): string[] {
   const temp = nextCName(context, 'ccjs_field')
   registerOwnedValue(context, temp)
   const lines = [
@@ -2339,7 +2373,7 @@ function emitObjectStringMemberVariableDeclaration(statement, member, context, e
   return lines
 }
 
-function emitKnownObjectMemberAssignment(expression, member, context) {
+function emitKnownObjectMemberAssignment(expression: AnyNode, member: any, context: CFunctionContext): string[] {
   const value = emitCValueExpression(expression.value, context)
   const valueType = inferExpressionType(expression.value, context)
 
@@ -2354,7 +2388,7 @@ function emitKnownObjectMemberAssignment(expression, member, context) {
   ]
 }
 
-function emitDynamicObjectMemberAssignment(expression, member, context) {
+function emitDynamicObjectMemberAssignment(expression: AnyNode, member: any, context: CFunctionContext): string[] {
   const value = emitCValueExpression(expression.value, context)
   const valueType = inferExpressionType(expression.value, context)
 
@@ -2369,7 +2403,7 @@ function emitDynamicObjectMemberAssignment(expression, member, context) {
   ]
 }
 
-function emitKnownArrayIndexVariableDeclaration(statement, element, context) {
+function emitKnownArrayIndexVariableDeclaration(statement: AnyNode, element: any, context: CFunctionContext): string[] {
   if (element.valueType === 'string') {
     return emitKnownArrayStringIndexVariableDeclaration(statement, element, context)
   }
@@ -2400,7 +2434,11 @@ function emitKnownArrayIndexVariableDeclaration(statement, element, context) {
   return lines
 }
 
-function emitKnownArrayStringIndexVariableDeclaration(statement, element, context) {
+function emitKnownArrayStringIndexVariableDeclaration(
+  statement: AnyNode,
+  element: any,
+  context: CFunctionContext
+): string[] {
   const temp = nextCName(context, 'ccjs_item')
   registerOwnedValue(context, temp)
   const lines = [
@@ -2416,7 +2454,7 @@ function emitKnownArrayStringIndexVariableDeclaration(statement, element, contex
   return lines
 }
 
-function emitKnownArrayIndexAssignment(expression, element, context) {
+function emitKnownArrayIndexAssignment(expression: AnyNode, element: any, context: CFunctionContext): string[] {
   const value = emitCValueExpression(expression.value, context)
   const valueType = inferExpressionType(expression.value, context)
 
@@ -2428,7 +2466,7 @@ function emitKnownArrayIndexAssignment(expression, element, context) {
   ]
 }
 
-function emitArrayVariableDeclaration(statement, context) {
+function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
   const lines = [
     ...emitPrepareOwnedValueWrite(statement.name),
     emitStatusCheck(
