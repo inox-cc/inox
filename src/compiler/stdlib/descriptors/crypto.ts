@@ -1,10 +1,14 @@
 export const cryptoRuntimeMethods = [
   'createHash',
+  'createHmac',
+  'getHashes',
   'getRandomValues',
+  'hash',
   'randomBytes',
   'randomFillSync',
   'randomInt',
-  'randomUUID'
+  'randomUUID',
+  'timingSafeEqual'
 ] as const
 
 export type CryptoRuntimeMethod = (typeof cryptoRuntimeMethods)[number]
@@ -23,7 +27,6 @@ export const unsupportedNodeCryptoMethods = [
   'createDiffieHellman',
   'createDiffieHellmanGroup',
   'createECDH',
-  'createHmac',
   'createPrivateKey',
   'createPublicKey',
   'createSecretKey',
@@ -43,8 +46,6 @@ export const unsupportedNodeCryptoMethods = [
   'getCurves',
   'getDiffieHellman',
   'getFips',
-  'getHashes',
-  'hash',
   'hkdf',
   'hkdfSync',
   'pbkdf2',
@@ -61,7 +62,6 @@ export const unsupportedNodeCryptoMethods = [
   'setEngine',
   'setFips',
   'sign',
-  'timingSafeEqual',
   'verify'
 ] as const
 

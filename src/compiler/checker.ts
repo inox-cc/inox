@@ -2231,6 +2231,30 @@ class Checker {
     const method = call.method
     const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
+    if (method === 'getHashes') {
+      expression.valueType = 'array'
+      expression.arrayElementType = 'string'
+      expression.cryptoRuntimeMethod = method
+
+      if (expression.args.length !== 0) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (!this.supportsCryptoHash()) {
+        this.report(
+          'CCJS_NOT_IMPLEMENTED',
+          "node:crypto getHashes requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
+          expression.loc
+        )
+      }
+
+      return 'array'
+    }
+
     if (method === 'createHash') {
       expression.valueType = 'crypto-hash'
       expression.cryptoRuntimeMethod = method
@@ -2270,6 +2294,165 @@ class Checker {
       }
 
       return 'crypto-hash'
+    }
+
+    if (method === 'createHmac') {
+      expression.valueType = 'crypto-hmac'
+      expression.cryptoRuntimeMethod = method
+
+      if (expression.args.length !== 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+        return 'crypto-hmac'
+      }
+
+      this.checkAssignableType(
+        argTypes[0],
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+
+      if (!this.supportsCryptoHash()) {
+        this.report(
+          'CCJS_NOT_IMPLEMENTED',
+          "node:crypto createHmac requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
+          expression.loc
+        )
+        return 'crypto-hmac'
+      }
+
+      if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'sha256') {
+        this.report(
+          'CCJS_NOT_IMPLEMENTED',
+          "node:crypto createHmac only supports the 'sha256' algorithm in the current C backend",
+          expression.args[0].loc
+        )
+      }
+
+      if (argTypes[1] !== 'string' && argTypes[1] !== 'bytes') {
+        this.report(
+          'CCJS_TYPE_MISMATCH',
+          'node:crypto createHmac key must be a string or Buffer in the current C backend',
+          expression.args[1].loc
+        )
+      }
+
+      return 'crypto-hmac'
+    }
+
+    if (method === 'hash') {
+      expression.cryptoRuntimeMethod = method
+
+      if (expression.args.length < 2 || expression.args.length > 3) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 2 or 3 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (expression.args[0] != null) {
+        this.checkAssignableType(
+          argTypes[0],
+          'string',
+          expression.args[0].loc,
+          false,
+          this.expressionCanBeNull(expression.args[0])
+        )
+
+        if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'sha256') {
+          this.report(
+            'CCJS_NOT_IMPLEMENTED',
+            "node:crypto hash only supports the 'sha256' algorithm in the current C backend",
+            expression.args[0].loc
+          )
+        }
+      }
+
+      if (expression.args[1] != null && argTypes[1] !== 'string' && argTypes[1] !== 'bytes') {
+        this.report(
+          'CCJS_TYPE_MISMATCH',
+          'node:crypto hash data must be a string or Buffer in the current C backend',
+          expression.args[1].loc
+        )
+      }
+
+      if (!this.supportsCryptoHash()) {
+        this.report(
+          'CCJS_NOT_IMPLEMENTED',
+          "node:crypto hash requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
+          expression.loc
+        )
+      }
+
+      if (expression.args[2] == null) {
+        expression.cryptoHashDigestEncoding = 'hex'
+        expression.valueType = 'string'
+        return 'string'
+      }
+
+      this.checkAssignableType(
+        argTypes[2],
+        'string',
+        expression.args[2].loc,
+        false,
+        this.expressionCanBeNull(expression.args[2])
+      )
+
+      if (expression.args[2].type === 'StringLiteral' && expression.args[2].value === 'buffer') {
+        expression.cryptoHashDigestEncoding = 'bytes'
+        expression.valueType = 'bytes'
+        return 'bytes'
+      }
+
+      if (expression.args[2].type !== 'StringLiteral' || expression.args[2].value !== 'hex') {
+        this.report(
+          'CCJS_NOT_IMPLEMENTED',
+          "node:crypto hash only supports the 'hex' and 'buffer' output encodings in the current C backend",
+          expression.args[2].loc
+        )
+      }
+
+      expression.cryptoHashDigestEncoding = 'hex'
+      expression.valueType = 'string'
+
+      return 'string'
+    }
+
+    if (method === 'timingSafeEqual') {
+      expression.valueType = 'boolean'
+      expression.cryptoRuntimeMethod = method
+
+      if (expression.args.length !== 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+        return 'boolean'
+      }
+
+      this.checkAssignableType(
+        argTypes[0],
+        'bytes',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+      this.checkAssignableType(
+        argTypes[1],
+        'bytes',
+        expression.args[1].loc,
+        false,
+        this.expressionCanBeNull(expression.args[1])
+      )
+
+      return 'boolean'
     }
 
     expression.valueType = method === 'randomInt' ? 'number' : method === 'randomUUID' ? 'string' : 'bytes'
@@ -2378,17 +2561,19 @@ class Checker {
 
     const objectType = this.checkExpression(expression.callee.object)
 
-    if (objectType !== 'crypto-hash') {
+    if (objectType !== 'crypto-hash' && objectType !== 'crypto-hmac') {
       return null
     }
 
-    expression.cryptoRuntimeMethod = `Hash.${method}`
+    const label = objectType === 'crypto-hmac' ? 'Hmac' : 'Hash'
+
+    expression.cryptoRuntimeMethod = `${label}.${method}`
 
     if (method === 'update') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function Hash.update expects 1 or 2 argument(s), got ${expression.args.length}`,
+          `function ${label}.update expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
@@ -2399,7 +2584,7 @@ class Checker {
         if (dataType !== 'string' && dataType !== 'bytes') {
           this.report(
             'CCJS_TYPE_MISMATCH',
-            'Hash.update data must be a string or Buffer in the current C backend',
+            `${label}.update data must be a string or Buffer in the current C backend`,
             expression.args[0].loc
           )
         }
@@ -2418,20 +2603,20 @@ class Checker {
         if (expression.args[1].type !== 'StringLiteral' || expression.args[1].value !== 'utf8') {
           this.report(
             'CCJS_NOT_IMPLEMENTED',
-            "Hash.update only supports the 'utf8' input encoding in the current C backend",
+            `${label}.update only supports the 'utf8' input encoding in the current C backend`,
             expression.args[1].loc
           )
         }
       }
 
-      expression.valueType = 'crypto-hash'
-      return 'crypto-hash'
+      expression.valueType = objectType
+      return objectType
     }
 
     if (expression.args.length > 1) {
       this.report(
         'CCJS_ARG_COUNT',
-        `function Hash.digest expects 0 or 1 argument(s), got ${expression.args.length}`,
+        `function ${label}.digest expects 0 or 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
@@ -2454,7 +2639,7 @@ class Checker {
     if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'hex') {
       this.report(
         'CCJS_NOT_IMPLEMENTED',
-        "Hash.digest only supports the 'hex' encoding in the current C backend",
+        `${label}.digest only supports the 'hex' encoding in the current C backend`,
         expression.args[0].loc
       )
     }

@@ -89,6 +89,47 @@ console.log(digest.length)
   )
 })
 
+test('lowers node:crypto hash hmac hashes and timing helpers to the C crypto runtime', () => {
+  const result = compileSource(
+    `import { createHmac, getHashes, hash, timingSafeEqual } from 'node:crypto'
+
+const hex = hash('sha256', 'hello')
+const explicitHex = hash('sha256', 'hello', 'hex')
+const bytes = hash('sha256', 'hello', 'buffer')
+const otherBytes = hash('sha256', 'hello', 'buffer')
+const hmac = createHmac('sha256', 'secret')
+hmac.update('hello')
+console.log(getHashes().length)
+console.log(hex)
+console.log(explicitHex)
+console.log(bytes.length)
+console.log(timingSafeEqual(bytes, otherBytes))
+console.log(hmac.digest('hex'))
+`,
+    {
+      ...cLibuvOptions,
+      tlsBackend: 'openssl'
+    }
+  )
+
+  assert.deepEqual(result.ir.features, ['binary', 'crypto', 'runtime-values', 'string-bytes'])
+  assert.deepEqual(result.ir.runtimeRequirements, ['binary', 'crypto', 'managed-values', 'string-bytes'])
+  assert.match(result.code, /ccjs_crypto_get_hashes\(&ccjs_default_allocator, &ccjs_crypto_hashes_\d+\)/)
+  assert.match(
+    result.code,
+    /ccjs_crypto_hash_oneshot_hex\(&ccjs_default_allocator, "sha256", 6, ccjs_value_\d+, &ccjs_crypto_digest_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /ccjs_crypto_hash_oneshot_bytes\(&ccjs_default_allocator, "sha256", 6, ccjs_value_\d+, &ccjs_crypto_digest_\d+\)/
+  )
+  assert.match(result.code, /ccjs_crypto_hmac_create\(&ccjs_default_allocator, "sha256", 6, ccjs_value_\d+, &hmac\)/)
+  assert.match(result.code, /ccjs_crypto_hmac_update\(hmac, ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_crypto_hmac_digest_hex\(&ccjs_default_allocator, hmac, &ccjs_crypto_digest_\d+\)/)
+  assert.match(result.code, /ccjs_crypto_timing_safe_equal\(bytes, otherBytes, &ccjs_crypto_equal_\d+\)/)
+  assert.match(result.code, /ccjs_crypto_hmac_free\(hmac\)/)
+})
+
 test('reports node:crypto createHash without a TLS crypto backend at compile time', () => {
   assert.throws(
     () => {
@@ -115,6 +156,32 @@ createHash('sha256')
         ),
         true
       )
+      return true
+    }
+  )
+})
+
+test('reports node:crypto hash and hmac helpers without a TLS crypto backend at compile time', () => {
+  assert.throws(
+    () => {
+      compileSource(
+        `import { createHmac, getHashes, hash } from 'node:crypto'
+
+getHashes()
+hash('sha256', 'hello')
+createHmac('sha256', 'secret')
+`,
+        cLibuvOptions
+      )
+    },
+    (error) => {
+      if (!(error instanceof CompileError)) {
+        return false
+      }
+
+      assert.equal(error.diagnostics.some((item) => item.message.includes('getHashes requires tlsBackend')), true)
+      assert.equal(error.diagnostics.some((item) => item.message.includes('hash requires tlsBackend')), true)
+      assert.equal(error.diagnostics.some((item) => item.message.includes('createHmac requires tlsBackend')), true)
       return true
     }
   )
@@ -151,6 +218,39 @@ createHash('sha1').update('hello', 'latin1').digest('base64')
         error.diagnostics.some((item) => item.message.includes("Hash.digest only supports the 'hex' encoding")),
         true
       )
+      return true
+    }
+  )
+})
+
+test('reports unsupported node:crypto hash and hmac algorithms and encodings at compile time', () => {
+  assert.throws(
+    () => {
+      compileSource(
+        `import { createHmac, hash } from 'node:crypto'
+
+hash('sha1', 'hello', 'base64')
+createHmac('sha1', 'secret').update('hello', 'latin1').digest('base64')
+`,
+        {
+          ...cLibuvOptions,
+          tlsBackend: 'openssl'
+        }
+      )
+    },
+    (error) => {
+      if (!(error instanceof CompileError)) {
+        return false
+      }
+
+      assert.equal(error.diagnostics.some((item) => item.message.includes("hash only supports the 'sha256'")), true)
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes("hash only supports the 'hex' and 'buffer'")),
+        true
+      )
+      assert.equal(error.diagnostics.some((item) => item.message.includes("createHmac only supports the 'sha256'")), true)
+      assert.equal(error.diagnostics.some((item) => item.message.includes("Hmac.update only supports the 'utf8'")), true)
+      assert.equal(error.diagnostics.some((item) => item.message.includes("Hmac.digest only supports the 'hex'")), true)
       return true
     }
   )
@@ -193,10 +293,10 @@ test('reports unsupported node:crypto methods at compile time only', () => {
   assert.throws(
     () => {
       compileSource(
-        `import { createHmac } from 'node:crypto'
+        `import { createCipheriv } from 'node:crypto'
 
 export function main(): void {
-  createHmac('sha256', 'secret')
+  createCipheriv('aes-128-cbc', 'secret', 'iv')
 }
 `,
         cLibuvOptions
@@ -212,7 +312,7 @@ export function main(): void {
         true
       )
       assert.equal(
-        error.diagnostics.some((item) => item.message.includes('node:crypto createHmac is not implemented')),
+        error.diagnostics.some((item) => item.message.includes('node:crypto createCipheriv is not implemented')),
         true
       )
       return true

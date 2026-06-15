@@ -38,6 +38,10 @@ export function emitCType(type: any): string {
     return 'ccjs_crypto_hash*'
   }
 
+  if (type === 'crypto-hmac') {
+    return 'ccjs_crypto_hmac*'
+  }
+
   return 'double'
 }
 

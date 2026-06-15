@@ -31,6 +31,7 @@ export function createFunctionContext(baseContext: any, returnType: any, returnN
     objectShapes: new Map(),
     ownedPromises: [],
     ownedCryptoHashes: [],
+    ownedCryptoHmacs: [],
     ownedValues: [],
     promiseRejectionValueTypes: new Map(),
     promiseConstructorHandlers: new Map(),
@@ -110,6 +111,14 @@ export function registerOwnedCryptoHash(context: any, name: string): void {
   context.variables.set(name, 'crypto-hash')
 }
 
+export function registerOwnedCryptoHmac(context: any, name: string): void {
+  if (!context.ownedCryptoHmacs.includes(name)) {
+    context.ownedCryptoHmacs.push(name)
+  }
+
+  context.variables.set(name, 'crypto-hmac')
+}
+
 export function registerEventLoop(context: any): void {
   context.eventLoopUsed = true
   context.usedCleanupGoto = true
@@ -135,6 +144,7 @@ export function shouldEmitCleanupLabel(context: any): boolean {
       (context.ownedValues.length > 0 ||
         context.ownedPromises.length > 0 ||
         context.ownedCryptoHashes.length > 0 ||
+        context.ownedCryptoHmacs.length > 0 ||
         context.boxedValues.length > 0 ||
         context.eventLoopUsed ||
         context.usedCleanupGoto))
@@ -179,7 +189,8 @@ export function emitReturnFlowDeclarations(context: any): string[] {
 export function emitOwnedValueDeclarations(context: any): string[] {
   return [
     ...context.ownedValues.map((name: string) => `ccjs_value ${name} = ccjs_undefined_value();`),
-    ...context.ownedCryptoHashes.map((name: string) => `ccjs_crypto_hash* ${name} = 0;`)
+    ...context.ownedCryptoHashes.map((name: string) => `ccjs_crypto_hash* ${name} = 0;`),
+    ...context.ownedCryptoHmacs.map((name: string) => `ccjs_crypto_hmac* ${name} = 0;`)
   ]
 }
 
@@ -205,6 +216,7 @@ export function emitBoxedValueDeclarations(context: any): string[] {
 
 export function emitOwnedValueCleanup(context: any): string[] {
   return [
+    ...context.ownedCryptoHmacs.toReversed().map((name: string) => `ccjs_crypto_hmac_free(${name});`),
     ...context.ownedCryptoHashes.toReversed().map((name: string) => `ccjs_crypto_hash_free(${name});`),
     ...context.ownedValues.toReversed().map((name: string) => `ccjs_release(${name});`)
   ]
