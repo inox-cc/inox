@@ -1402,7 +1402,7 @@ function functionUsesExternalEventLoop(node, externalNames) {
       return
     }
 
-    if (cTimerStartCallName(value.callee) != null) {
+    if (isTimerStartCallExpression(value)) {
       found = true
       return
     }
@@ -7861,7 +7861,7 @@ function collectCallbackWrappers(irPrograms: IrProgram[], context) {
     }
 
     if (expression.type === 'CallExpression') {
-      if (cTimerStartCallName(expression.callee) != null) {
+      if (isTimerStartCallExpression(expression)) {
         registerRuntime(expression.args[0], timerCallbackFunctionType(), scopes)
       }
 
@@ -12026,7 +12026,7 @@ function emitScalarVariableDeclaration(statement, context) {
     return emitErrorObjectVariableDeclaration(statement, context)
   }
 
-  if (statement.init?.type === 'CallExpression' && cTimerStartCallName(statement.init.callee) != null) {
+  if (statement.init?.type === 'CallExpression' && isTimerStartCallExpression(statement.init)) {
     const timerCall = emitPreparedTimerCallExpression(statement.init, context, {
       out: statement.name
     })
@@ -17821,13 +17821,13 @@ function emitPreparedCryptoNumberCallExpression(expression, context) {
 }
 
 function emitPreparedTimerCallExpression(expression, context, options: { out?: string; asValue?: boolean } = {}) {
-  const method = cTimerRuntimeCallName(expression?.callee)
+  const method = expression?.timerRuntimeMethod ?? cTimerRuntimeCallName(expression?.callee)
 
   if (method == null) {
     return null
   }
 
-  const clearMethod = cTimerClearCallName(expression.callee)
+  const clearMethod = method.startsWith('clear') ? method : cTimerClearCallName(expression.callee)
 
   if (clearMethod != null) {
     const handle = emitPreparedTimerHandleExpression(expression.args[0], context)
@@ -17914,6 +17914,14 @@ function emitPreparedTimerCallExpression(expression, context, options: { out?: s
   }
 }
 
+function isTimerStartCallExpression(expression): boolean {
+  if (expression?.type !== 'CallExpression') {
+    return false
+  }
+
+  return cTimerStartCallName(expression.callee) != null || expression.timerRuntimeMethod?.startsWith('set') === true
+}
+
 function emitPreparedTimerHandleExpression(expression, context) {
   if (
     expression?.type === 'Reference' &&
@@ -17926,7 +17934,10 @@ function emitPreparedTimerHandleExpression(expression, context) {
     }
   }
 
-  if (expression?.type === 'CallExpression' && cTimerStartCallName(expression.callee) != null) {
+  if (
+    expression?.type === 'CallExpression' &&
+    (cTimerStartCallName(expression.callee) != null || expression.timerRuntimeMethod?.startsWith('set'))
+  ) {
     return emitPreparedTimerCallExpression(expression, context, {
       asValue: true
     })

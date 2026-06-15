@@ -416,7 +416,7 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('string-bytes')
   }
 
-  if (timerRuntimeCallName(expression.callee) != null) {
+  if (timerRuntimeCallName(expression) != null) {
     features.add('timers')
   }
 
@@ -639,7 +639,13 @@ function jsonRuntimeCallName(callee: AnyNode): string | null {
   return jsonRuntimeMethodNameFromPath(memberExpressionPath(callee))
 }
 
-function timerRuntimeCallName(callee: AnyNode): string | null {
+function timerRuntimeCallName(expression: AnyNode): string | null {
+  if (expression.type === 'CallExpression' && typeof expression.timerRuntimeMethod === 'string') {
+    return expression.timerRuntimeMethod
+  }
+
+  const callee = expression.callee
+
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }

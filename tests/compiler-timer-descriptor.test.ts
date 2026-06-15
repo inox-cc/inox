@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  isNodeTimerImportSource,
   isTimerClearMethod,
   isTimerHandleMethod,
   isTimerRuntimeMethod,
@@ -14,6 +15,8 @@ test('maps timer global paths to runtime methods', () => {
   assert.equal(timerRuntimeMethodNameFromPath(['clearInterval']), 'clearInterval')
   assert.equal(timerRuntimeMethodNameFromPath(['timers', 'setTimeout']), null)
   assert.equal(timerRuntimeMethodNameFromPath(['queueMicrotask']), null)
+  assert.equal(isNodeTimerImportSource('node:timers'), true)
+  assert.equal(isNodeTimerImportSource('node:timers/promises'), false)
 })
 
 test('classifies timer runtime and handle methods', () => {

@@ -87,7 +87,7 @@ import {
   isUnsupportedStreamRuntimeExport,
   unsupportedStreamRuntimeExportReason
 } from './stdlib/descriptors/stream.ts'
-import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
+import { isNodeTimerImportSource, isTimerHandleMethod, isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
 import {
   isChildProcessRuntimeMethod,
   isNodeChildProcessImportSource,
@@ -3802,6 +3802,16 @@ class Checker {
       }
     }
 
+    if (isNodeTimerImportSource(source)) {
+      if (isTimerRuntimeMethod(importedName)) {
+        return 'function'
+      }
+
+      if (importedName === 'default' || importedName === 'timers') {
+        return 'object'
+      }
+    }
+
     return 'unknown'
   }
 
@@ -5033,13 +5043,23 @@ class Checker {
   }
 
   checkTimerCall(expression: AnyNode): ValueType | null {
-    const method = timerRuntimeMethodName(expression.callee)
+    const method = this.resolveTimerRuntimeMethod(expression.callee)
 
     if (method == null) {
       return null
     }
 
-    if (this.scope.resolve(method) != null) {
+    const shadow = timerRuntimeMethodName(expression.callee) === method ? this.scope.resolve(method) : null
+
+    if (
+      shadow != null &&
+      !(
+        shadow.kind === 'import' &&
+        shadow.importSource != null &&
+        isNodeTimerImportSource(shadow.importSource) &&
+        shadow.importedName === method
+      )
+    ) {
       return null
     }
 
@@ -5095,6 +5115,52 @@ class Checker {
     expression.valueType = 'timer'
 
     return 'timer'
+  }
+
+  resolveTimerRuntimeMethod(callee: AnyNode): string | null {
+    const globalMethod = timerRuntimeMethodName(callee)
+
+    if (globalMethod != null) {
+      return globalMethod
+    }
+
+    const path = memberExpressionPath(callee)
+
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (
+        symbol?.kind === 'import' &&
+        symbol.importSource != null &&
+        isNodeTimerImportSource(symbol.importSource) &&
+        importedName != null &&
+        isTimerRuntimeMethod(importedName)
+      ) {
+        return importedName
+      }
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        symbol.importSource != null &&
+        isNodeTimerImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'timers') &&
+        path[1] != null &&
+        isTimerRuntimeMethod(path[1])
+      ) {
+        return path[1]
+      }
+    }
+
+    return null
   }
 
   checkTimerCallbackArg(expression: AnyNode, index: number): void {

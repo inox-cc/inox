@@ -13,10 +13,15 @@ export const timerClearMethods: readonly TimerRuntimeMethod[] = ['clearImmediate
 export const timerRuntimeMethods: readonly TimerRuntimeMethod[] = [...timerStartMethods, ...timerClearMethods]
 export const timerHandleMethods: readonly TimerHandleMethod[] = ['ref', 'unref']
 
+const nodeTimerImportSources = new Set(['node:timers'])
 const timerRuntimeMethodSet = new Set(timerRuntimeMethods)
 const timerStartMethodSet = new Set(timerStartMethods)
 const timerClearMethodSet = new Set(timerClearMethods)
 const timerHandleMethodSet = new Set(timerHandleMethods)
+
+export function isNodeTimerImportSource(source: string): boolean {
+  return nodeTimerImportSources.has(source)
+}
 
 export function timerRuntimeMethodNameFromPath(path: readonly string[] | null | undefined): TimerRuntimeMethod | null {
   if (path == null || path.length !== 1) {

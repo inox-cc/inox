@@ -292,6 +292,61 @@ setImmediate(() => {
   }
 })
 
+test('generated C node:timers imports drain from main loop', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-timers-codegen-'))
+  const source = join(dir, 'node-timers-codegen.c')
+  const output = join(dir, 'node-timers-codegen')
+
+  try {
+    const result = compileSource(
+      `import timers, { clearTimeout, setTimeout as later } from 'node:timers'
+
+function onTimeout(): void {
+  console.log('timeout')
+}
+
+function onInterval(): void {
+  console.log('interval')
+}
+
+const cancelled = later(onTimeout, 1)
+clearTimeout(cancelled)
+const interval = timers.setInterval(onInterval, 10)
+timers.setTimeout(() => {
+  timers.clearInterval(interval)
+  console.log('cleared')
+}, 20)
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'interval\ninterval\ncleared\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('generated C time globals compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
