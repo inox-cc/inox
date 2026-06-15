@@ -45,6 +45,7 @@ const cRuntimeSourceGroups = {
   async: ['runtime/c/src/async/loop.c', 'runtime/c/src/async/promise.c'],
   binary: ['runtime/c/src/binary/binary.c'],
   console: ['runtime/c/src/console/console.c'],
+  crypto: ['runtime/c/src/crypto/crypto.c'],
   debug: ['runtime/c/src/core/debug.c'],
   dgram: ['runtime/c/src/network/dgram.c'],
   fetch: ['runtime/c/src/network/fetch.c'],
@@ -275,6 +276,12 @@ function cRuntimeSourcesForCode(
   if (usesCHeader(code, 'binary')) {
     groups.add('managed')
     groups.add('binary')
+  }
+
+  if (usesCHeader(code, 'crypto')) {
+    groups.add('managed')
+    groups.add('binary')
+    groups.add('crypto')
   }
 
   if (usesCHeader(code, 'console')) {

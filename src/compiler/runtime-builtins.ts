@@ -4,6 +4,7 @@ export const runtimeBuiltinImportSources = new Set([
   'http',
   'net',
   'node:dgram',
+  'node:crypto',
   'node:fs',
   'node:fs/promises',
   'node:http',

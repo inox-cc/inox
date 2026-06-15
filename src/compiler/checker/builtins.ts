@@ -156,6 +156,7 @@ export const libuvOnlyRuntimeImports = new Map([
   ['dgram', 'node:dgram'],
   ['http', 'node:http'],
   ['net', 'node:net'],
+  ['node:crypto', 'node:crypto'],
   ['node:dgram', 'node:dgram'],
   ['node:http', 'node:http'],
   ['node:net', 'node:net']

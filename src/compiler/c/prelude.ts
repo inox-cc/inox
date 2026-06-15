@@ -56,7 +56,7 @@ export function emitCPrelude(
     lines.push('#include <stdint.h>')
   }
 
-  if (needsCryptoRuntime || (needsMathRuntime && (options.random?.backend ?? 'simple') === 'os')) {
+  if (needsMathRuntime && (options.random?.backend ?? 'simple') === 'os') {
     lines.push(...emitOsEntropyHeaders())
   }
 
@@ -80,6 +80,9 @@ export function emitCPrelude(
     }
     if (needsBinaryRuntime) {
       lines.push('#include "ccjs/binary.h"')
+    }
+    if (needsCryptoRuntime) {
+      lines.push('#include "ccjs/crypto.h"')
     }
     if (needsFsRuntime) {
       lines.push('#include "ccjs/fs.h"')
@@ -107,18 +110,13 @@ export function emitCPrelude(
 
   lines.push('')
 
-  if (needsCryptoRuntime || (needsMathRuntime && (options.random?.backend ?? 'simple') === 'os')) {
+  if (needsMathRuntime && (options.random?.backend ?? 'simple') === 'os') {
     lines.push(...emitOsEntropyHelper())
     lines.push('')
   }
 
   if (needsMathRuntime) {
     lines.push(...emitMathHelpers(options.random))
-    lines.push('')
-  }
-
-  if (needsCryptoRuntime) {
-    lines.push(...emitCryptoHelpers())
     lines.push('')
   }
 
@@ -371,17 +369,6 @@ function emitRandomBackendHelper(backend: NonNullable<RandomOptions['backend']>)
     'static double ccjs_math_random(void) {',
     '  ccjs_math_random_state = ccjs_math_random_state * 1664525u + 1013904223u;',
     '  return (double)(ccjs_math_random_state >> 8) / 16777216.0;',
-    '}'
-  ]
-}
-
-function emitCryptoHelpers() {
-  return [
-    'static ccjs_status ccjs_crypto_get_random_values(ccjs_value value) {',
-    '  if (value.tag != CCJS_TAG_BYTES || value.as.ref == 0) return CCJS_ERR_TYPE;',
-    '  ccjs_bytes* bytes = (ccjs_bytes*)value.as.ref;',
-    '  if (bytes->len == 0) return CCJS_OK;',
-    '  return ccjs_os_random_bytes(bytes->bytes, bytes->len) ? CCJS_OK : CCJS_ERR_UNSUPPORTED;',
     '}'
   ]
 }

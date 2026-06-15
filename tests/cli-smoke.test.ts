@@ -1665,6 +1665,7 @@ function cRuntimeSources(): string[] {
     'runtime/c/src/core/callback.c',
     'runtime/c/src/core/debug.c',
     'runtime/c/src/core/value.c',
+    'runtime/c/src/crypto/crypto.c',
     'runtime/c/src/core/weak.c',
     'runtime/c/src/fs/fs.c',
     'runtime/c/src/json/json.c',

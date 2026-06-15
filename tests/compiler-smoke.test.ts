@@ -2470,7 +2470,7 @@ test('types and lowers crypto.getRandomValues as a bytes-preserving call', () =>
   })
 
   assert.deepEqual(c.ir.features, ['binary', 'crypto', 'runtime-values', 'string-bytes'])
-  assert.deepEqual(c.ir.runtimeRequirements, ['binary', 'managed-values', 'string-bytes'])
+  assert.deepEqual(c.ir.runtimeRequirements, ['binary', 'crypto', 'managed-values', 'string-bytes'])
   assert.deepEqual(
     c.ir.globalUsages.map((usage) => usage.path.join('.')),
     ['Buffer.alloc', 'crypto.getRandomValues']
@@ -2478,8 +2478,9 @@ test('types and lowers crypto.getRandomValues as a bytes-preserving call', () =>
 
   assert.match(c.code, /#include <stdint\.h>/)
   assert.match(c.code, /#include "ccjs\/binary\.h"/)
-  assert.match(c.code, /static int ccjs_os_random_bytes\(uint8_t \*out, size_t len\)/)
-  assert.match(c.code, /static ccjs_status ccjs_crypto_get_random_values\(ccjs_value value\)/)
+  assert.match(c.code, /#include "ccjs\/crypto\.h"/)
+  assert.doesNotMatch(c.code, /static int ccjs_os_random_bytes\(uint8_t \*out, size_t len\)/)
+  assert.doesNotMatch(c.code, /static ccjs_status ccjs_crypto_get_random_values\(ccjs_value value\)/)
   assert.match(c.code, /if \(ccjs_crypto_get_random_values\(bytes\) != CCJS_OK\)\s+goto ccjs_cleanup;/)
   assert.match(c.code, /ccjs_retain\(ccjs_crypto_bytes_\d+\);/)
 

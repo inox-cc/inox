@@ -6,7 +6,6 @@ import {
   isSetMethod,
   stringRuntimeMethodName as collectionStringRuntimeMethodName
 } from '../stdlib/descriptors/collections.ts'
-import { cryptoRuntimeMethodNameFromPath } from '../stdlib/descriptors/crypto.ts'
 import { debugRuntimeMethodNameFromPath } from '../stdlib/descriptors/debug.ts'
 import { fsRuntimeMethodForPath } from '../stdlib/descriptors/fs.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
@@ -41,6 +40,7 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       requirements.add('managed-values')
     } else if (feature === 'crypto') {
       requirements.add('binary')
+      requirements.add('crypto')
       requirements.add('managed-values')
     } else if (feature === 'objects') {
       requirements.add('managed-values')
@@ -455,13 +455,11 @@ function binaryRuntimeMethodName(expression: AnyNode): string | null {
 }
 
 function cryptoRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression.type !== 'CallExpression' || expression.callee?.type !== 'MemberExpression') {
+  if (expression.type !== 'CallExpression' || typeof expression.cryptoRuntimeMethod !== 'string') {
     return null
   }
 
-  return cryptoRuntimeMethodNameFromPath(memberExpressionPath(expression.callee)) === expression.cryptoRuntimeMethod
-    ? expression.cryptoRuntimeMethod
-    : null
+  return expression.cryptoRuntimeMethod
 }
 
 function debugRuntimeMethodName(expression: AnyNode): string | null {

@@ -17,7 +17,11 @@ export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
 export { assert, compileSource, join, mkdir, mkdtemp, readFile, rm, tmpdir, writeFile }
 
-export function compileRuntimeProgram(source: string, output: string, extraArgs: string[] = []): Promise<CommandResult> {
+export function compileRuntimeProgram(
+  source: string,
+  output: string,
+  extraArgs: string[] = []
+): Promise<CommandResult> {
   return runCommand('cc', [
     '-Iruntime/c/include',
     ...extraArgs,
@@ -27,6 +31,7 @@ export function compileRuntimeProgram(source: string, output: string, extraArgs:
     'runtime/c/src/core/callback.c',
     'runtime/c/src/core/debug.c',
     'runtime/c/src/binary/binary.c',
+    'runtime/c/src/crypto/crypto.c',
     'runtime/c/src/core/weak.c',
     'runtime/c/src/async/loop.c',
     'runtime/c/src/async/promise.c',

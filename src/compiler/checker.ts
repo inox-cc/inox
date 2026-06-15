@@ -60,7 +60,12 @@ import {
   setRuntimeMethodName,
   stringRuntimeMethodName
 } from './stdlib/descriptors/collections.ts'
-import { cryptoRuntimeMethodNameFromPath } from './stdlib/descriptors/crypto.ts'
+import {
+  cryptoRuntimeMethodNameFromPath,
+  isCryptoRuntimeMethod,
+  isNodeCryptoImportSource,
+  isUnsupportedNodeCryptoMethod
+} from './stdlib/descriptors/crypto.ts'
 import { debugRuntimeMethodNameFromPath } from './stdlib/descriptors/debug.ts'
 import { mathRuntimeArgCount } from './stdlib/descriptors/math.ts'
 import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
@@ -1785,35 +1790,170 @@ class Checker {
   }
 
   checkCryptoCall(expression: AnyNode): ValueType | null {
-    const method = cryptoRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+    const call = this.resolveCryptoRuntimeCall(expression)
+
+    if (call == null) {
+      return null
+    }
+
+    if (call.unsupported) {
+      for (const arg of expression.args) {
+        this.checkExpression(arg)
+      }
+
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        `node:crypto ${call.method} is not implemented by the current C backend`,
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    const method = call.method
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+
+    expression.valueType = method === 'randomInt' ? 'number' : method === 'randomUUID' ? 'string' : 'bytes'
+    expression.cryptoRuntimeMethod = method
+
+    if (method === 'getRandomValues') {
+      if (expression.args.length !== 1) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+        return 'bytes'
+      }
+
+      this.checkAssignableType(
+        argTypes[0],
+        'bytes',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+
+      return 'bytes'
+    }
+
+    if (method === 'randomBytes') {
+      if (expression.args.length !== 1) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+        return 'bytes'
+      }
+
+      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc)
+      return 'bytes'
+    }
+
+    if (method === 'randomFillSync') {
+      if (expression.args.length < 1 || expression.args.length > 3) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 1 to 3 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+        return 'bytes'
+      }
+
+      this.checkAssignableType(
+        argTypes[0],
+        'bytes',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+
+      for (const [index, argType] of argTypes.entries()) {
+        if (index > 0) {
+          this.checkAssignableType(argType, 'number', expression.args[index].loc)
+        }
+      }
+
+      return 'bytes'
+    }
+
+    if (method === 'randomInt') {
+      if (expression.args.length < 1 || expression.args.length > 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+        return 'number'
+      }
+
+      for (const [index, argType] of argTypes.entries()) {
+        this.checkAssignableType(argType, 'number', expression.args[index].loc)
+      }
+
+      return 'number'
+    }
+
+    if (expression.args.length !== 0) {
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        'node:crypto randomUUID options are not implemented by the current C backend',
+        expression.loc
+      )
+    }
+
+    return 'string'
+  }
+
+  resolveCryptoRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+    const path = memberExpressionPath(expression.callee)
+    const method = this.resolveCryptoRuntimeMethod(path)
 
     if (method == null) {
       return null
     }
 
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    return {
+      method,
+      label: path == null ? method : path.join('.'),
+      unsupported: !isCryptoRuntimeMethod(method)
+    }
+  }
 
-    expression.valueType = 'bytes'
-    expression.cryptoRuntimeMethod = method
-
-    if (expression.args.length !== 1) {
-      this.report(
-        'CCJS_ARG_COUNT',
-        `crypto.getRandomValues expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-      return 'bytes'
+  resolveCryptoRuntimeMethod(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
     }
 
-    this.checkAssignableType(
-      argTypes[0],
-      'bytes',
-      expression.args[0].loc,
-      false,
-      this.expressionCanBeNull(expression.args[0])
-    )
+    if (path.length === 2) {
+      const globalMethod = cryptoRuntimeMethodNameFromPath(path)
 
-    return 'bytes'
+      if (globalMethod != null) {
+        return globalMethod
+      }
+
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeCryptoImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'crypto')
+      ) {
+        return isCryptoRuntimeMethod(path[1]) || isUnsupportedNodeCryptoMethod(path[1]) ? path[1] : null
+      }
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (symbol?.kind === 'import' && isNodeCryptoImportSource(symbol.importSource) && importedName != null) {
+        return isCryptoRuntimeMethod(importedName) || isUnsupportedNodeCryptoMethod(importedName) ? importedName : null
+      }
+    }
+
+    return null
   }
 
   checkDebugMemoryCall(expression: AnyNode): ValueType | null {

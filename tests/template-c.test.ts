@@ -211,6 +211,7 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
     'runtime/c/src/core/debug.c',
     'runtime/c/src/core/weak.c',
     'runtime/c/src/binary/binary.c',
+    'runtime/c/src/crypto/crypto.c',
     'runtime/c/src/async/loop.c',
     'runtime/c/src/async/promise.c',
     'runtime/c/src/strings/string.c',

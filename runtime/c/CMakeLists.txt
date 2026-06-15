@@ -26,6 +26,7 @@ set(CCJS_RUNTIME_SOURCES
   "${CCJS_RUNTIME_DIR}/src/core/callback.c"
   "${CCJS_RUNTIME_DIR}/src/core/debug.c"
   "${CCJS_RUNTIME_DIR}/src/core/value.c"
+  "${CCJS_RUNTIME_DIR}/src/crypto/crypto.c"
   "${CCJS_RUNTIME_DIR}/src/fs/fs.c"
   "${CCJS_RUNTIME_DIR}/src/json/json.c"
   "${CCJS_RUNTIME_DIR}/src/network/dgram.c"

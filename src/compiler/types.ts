@@ -51,6 +51,7 @@ export type IrRuntimeRequirement =
   | 'binary'
   | 'callback-values'
   | 'clocks'
+  | 'crypto'
   | 'debug-memory'
   | 'collections'
   | 'fs'

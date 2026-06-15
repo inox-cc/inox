@@ -108,7 +108,7 @@ import {
   isBufferFromCall
 } from './stdlib/binary.ts'
 import { irProgramsUseConsoleRuntime, isConsoleLog } from './stdlib/console.ts'
-import { cCryptoRuntimeCallName, cryptoRuntimeMethodName } from './stdlib/crypto.ts'
+import { cryptoRuntimeMethodName } from './stdlib/crypto.ts'
 import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from './stdlib/fetch.ts'
 import {
   cFsRuntimeConstantExpression,
@@ -306,7 +306,8 @@ function emitCModuleSource(
     needsHttpRuntime ||
     needsNetRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
-  const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
+  const needsCryptoRuntime =
+    runtimeRequirements.has('crypto') || globalUsages.some((usage) => isSupportedCCryptoGlobalUsage(usage, context))
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
@@ -545,6 +546,11 @@ function createCModuleBaseContext(plan: CModulePlan, plans: CModulePlan[], diagn
     new Set(['dgram', 'node:dgram']),
     'createSocket'
   )
+  context.cryptoImportNames = collectRuntimeImportNames(
+    irPrograms,
+    new Set(['node:crypto']),
+    new Set(['default', 'crypto'])
+  )
   context.httpImportNames = collectHttpRuntimeImportNames(irPrograms)
   context.httpCreateServerNames = collectHttpRuntimeCreateServerNames(irPrograms)
   context.netImportNames = collectRuntimeImportNames(
@@ -760,6 +766,11 @@ function emitCUnit(
     new Set(['dgram', 'node:dgram']),
     'createSocket'
   )
+  baseContext.cryptoImportNames = collectRuntimeImportNames(
+    irPrograms,
+    new Set(['node:crypto']),
+    new Set(['default', 'crypto'])
+  )
   baseContext.httpImportNames = collectHttpRuntimeImportNames(irPrograms)
   baseContext.httpCreateServerNames = collectHttpRuntimeCreateServerNames(irPrograms)
   baseContext.netImportNames = collectRuntimeImportNames(
@@ -824,7 +835,8 @@ function emitCUnit(
     needsHttpRuntime ||
     needsNetRuntime
   const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
-  const needsCryptoRuntime = globalUsages.some(isSupportedCCryptoGlobalUsage)
+  const needsCryptoRuntime =
+    runtimeRequirements.has('crypto') || globalUsages.some((usage) => isSupportedCCryptoGlobalUsage(usage, baseContext))
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
@@ -1211,6 +1223,7 @@ function createBaseContext(
     classInfos: new Map(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
+    cryptoImportNames: new Set(),
     diagnostics,
     dgramCreateSocketNames: new Set(),
     dgramImportNames: new Set(),
@@ -14883,6 +14896,12 @@ function emitPreparedNumberExpression(expression, context) {
       return binaryCall
     }
 
+    const cryptoCall = emitPreparedCryptoNumberCallExpression(expression, context)
+
+    if (cryptoCall != null) {
+      return cryptoCall
+    }
+
     const numericCast = emitPreparedNumericCastExpression(expression, context)
 
     if (numericCast != null) {
@@ -16729,30 +16748,110 @@ function emitPreparedDebugMemoryCallExpression(expression, context, options: { d
 }
 
 function emitPreparedCryptoCallExpression(expression, context, options: { discard?: boolean } = {}) {
-  if (cryptoRuntimeMethodName(expression) !== 'getRandomValues') {
+  const method = cryptoRuntimeMethodName(expression)
+
+  if (method == null || method === 'randomInt') {
     return null
   }
 
-  const value = emitCValueExpression(expression.args[0], context)
+  if (method === 'getRandomValues' || method === 'randomFillSync') {
+    const value = emitCValueExpression(expression.args[0], context)
+    const preparedCall =
+      method === 'getRandomValues'
+        ? { lines: [], call: `ccjs_crypto_get_random_values(${value.expression})` }
+        : emitCryptoRandomFillCall(value.expression, expression, context)
 
-  if (options.discard === true) {
+    if (options.discard === true) {
+      return {
+        lines: [...value.lines, ...preparedCall.lines, emitStatusCheck(preparedCall.call, context)],
+        expression: ''
+      }
+    }
+
+    const out = nextCName(context, 'ccjs_crypto_bytes')
+    registerOwnedValue(context, out)
+
     return {
-      lines: [...value.lines, emitStatusCheck(`ccjs_crypto_get_random_values(${value.expression})`, context)],
-      expression: ''
+      lines: [
+        ...value.lines,
+        ...preparedCall.lines,
+        emitStatusCheck(preparedCall.call, context),
+        ...emitPrepareOwnedValueWrite(out),
+        `${out} = ${value.expression};`,
+        emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context),
+        `ccjs_retain(${out});`
+      ],
+      expression: out
     }
   }
 
-  const out = nextCName(context, 'ccjs_crypto_bytes')
+  if (method === 'randomBytes') {
+    const size = emitPreparedNumberExpression(expression.args[0], context)
+    const out = nextCName(context, 'ccjs_crypto_bytes')
+    registerOwnedValue(context, out)
+
+    return {
+      lines: [
+        ...size.lines,
+        ...emitPrepareOwnedValueWrite(out),
+        emitStatusCheck(`ccjs_crypto_random_bytes(&ccjs_default_allocator, ${size.expression}, &${out})`, context),
+        emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context)
+      ],
+      expression: options.discard === true ? '' : out
+    }
+  }
+
+  const out = nextCName(context, 'ccjs_crypto_uuid')
   registerOwnedValue(context, out)
 
   return {
     lines: [
-      ...value.lines,
-      emitStatusCheck(`ccjs_crypto_get_random_values(${value.expression})`, context),
       ...emitPrepareOwnedValueWrite(out),
-      `${out} = ${value.expression};`,
-      emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context),
-      `ccjs_retain(${out});`
+      emitStatusCheck(`ccjs_crypto_random_uuid(&ccjs_default_allocator, &${out})`, context),
+      emitRuntimeValueCheck(out, 'CCJS_TAG_STRING', context)
+    ],
+    expression: options.discard === true ? '' : out
+  }
+}
+
+function emitCryptoRandomFillCall(value: string, expression, context): { lines: string[]; call: string } {
+  const offset =
+    expression.args[1] == null
+      ? { lines: [], expression: '0' }
+      : emitPreparedNumberExpression(expression.args[1], context)
+  const size =
+    expression.args[2] == null
+      ? { lines: [], expression: '0' }
+      : emitPreparedNumberExpression(expression.args[2], context)
+  const hasSize = expression.args[2] == null ? '0' : '1'
+
+  return {
+    lines: [...offset.lines, ...size.lines],
+    call: `ccjs_crypto_random_fill(${value}, ${offset.expression}, ${size.expression}, ${hasSize})`
+  }
+}
+
+function emitPreparedCryptoNumberCallExpression(expression, context) {
+  if (cryptoRuntimeMethodName(expression) !== 'randomInt') {
+    return null
+  }
+
+  const min =
+    expression.args.length === 1
+      ? { lines: [], expression: '0' }
+      : emitPreparedNumberExpression(expression.args[0], context)
+  const max = emitPreparedNumberExpression(
+    expression.args.length === 1 ? expression.args[0] : expression.args[1],
+    context
+  )
+  const out = nextCName(context, 'ccjs_crypto_int')
+
+  return {
+    lines: [
+      ...min.lines,
+      ...max.lines,
+      `ccjs_number ${out} = 0;`,
+      emitStatusCheck(`ccjs_crypto_random_int(${min.expression}, ${max.expression}, &${out})`, context)
     ],
     expression: out
   }
@@ -18285,8 +18384,18 @@ function inferExpressionType(expression, context) {
     return expression.valueType ?? (cJsonRuntimeCallName(expression.callee) === 'parse' ? 'object' : 'string')
   }
 
-  if (cryptoRuntimeMethodName(expression) === 'getRandomValues') {
+  const cryptoMethod = cryptoRuntimeMethodName(expression)
+
+  if (cryptoMethod === 'getRandomValues' || cryptoMethod === 'randomBytes' || cryptoMethod === 'randomFillSync') {
     return 'bytes'
+  }
+
+  if (cryptoMethod === 'randomInt') {
+    return 'number'
+  }
+
+  if (cryptoMethod === 'randomUUID') {
+    return 'string'
   }
 
   if (cDebugRuntimeMethodName(expression) === 'memory') {

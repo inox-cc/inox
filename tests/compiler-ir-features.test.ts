@@ -55,14 +55,12 @@ test('maps and aggregates IR runtime requirements', () => {
   assert.deepEqual(collectRuntimeRequirements(['array-pop-null', 'crypto', 'fs', 'number-from-string-null']), [
     'async-runtime',
     'binary',
+    'crypto',
     'fs',
     'managed-values'
   ])
 
-  const programs: { features: IrFeature[] }[] = [
-    { features: ['timers', 'json'] },
-    { features: ['json', 'binary'] }
-  ]
+  const programs: { features: IrFeature[] }[] = [{ features: ['timers', 'json'] }, { features: ['json', 'binary'] }]
   const runtimePrograms: { runtimeRequirements: IrRuntimeRequirement[] }[] = [
     { runtimeRequirements: ['timers', 'async-runtime'] },
     { runtimeRequirements: ['binary', 'timers'] }

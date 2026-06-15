@@ -1,7 +1,7 @@
 import { diagnostic } from '../diagnostics.ts'
 import { isBinaryGlobalUsagePath } from '../stdlib/descriptors/binary.ts'
 import { isCollectionConstructorGlobalUsagePath } from '../stdlib/descriptors/collections.ts'
-import { cryptoRuntimeMethodNameFromPath } from '../stdlib/descriptors/crypto.ts'
+import { cryptoRuntimeMethodNameFromPath, isCryptoRuntimeMethod } from '../stdlib/descriptors/crypto.ts'
 import { debugRuntimeMethodNameFromPath } from '../stdlib/descriptors/debug.ts'
 import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
@@ -14,7 +14,11 @@ export function reportUnsupportedCSyntaxFeatures(
   _diagnostics: Diagnostic[]
 ): void {}
 
-export function reportUnsupportedCGlobalUsages(globalUsages: IrGlobalUsage[], diagnostics: Diagnostic[], context): void {
+export function reportUnsupportedCGlobalUsages(
+  globalUsages: IrGlobalUsage[],
+  diagnostics: Diagnostic[],
+  context
+): void {
   for (const usage of globalUsages) {
     if (!isSupportedCGlobalUsage(usage, context)) {
       reportCJsGlobalDiagnostic(diagnostics, usage.loc)
@@ -78,7 +82,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
     isSupportedCFetchGlobalUsage(usage) ||
     isSupportedCHttpGlobalUsage(usage, context) ||
     isSupportedCNetGlobalUsage(usage, context) ||
-    isSupportedCCryptoGlobalUsage(usage) ||
+    isSupportedCCryptoGlobalUsage(usage, context) ||
     isSupportedCDebugGlobalUsage(usage) ||
     isSupportedCMathGlobalUsage(usage)
   )
@@ -108,9 +112,7 @@ function isSupportedCHttpGlobalUsage(usage: IrGlobalUsage, context): boolean {
 
 function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context): boolean {
   return (
-    (usage.path.length === 2 &&
-      usage.path[1] === 'createServer' &&
-      context.netImportNames?.has(usage.root) === true) ||
+    (usage.path.length === 2 && usage.path[1] === 'createServer' && context.netImportNames?.has(usage.root) === true) ||
     (usage.path.length === 2 &&
       (usage.path[1] === 'connect' || usage.path[1] === 'createConnection') &&
       context.netImportNames?.has(usage.root) === true) ||
@@ -119,8 +121,13 @@ function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context): boolean {
   )
 }
 
-export function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage): boolean {
-  return cryptoRuntimeMethodNameFromPath(usage.path) != null
+export function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage, context?: any): boolean {
+  return (
+    cryptoRuntimeMethodNameFromPath(usage.path) != null ||
+    (usage.path.length === 2 &&
+      context?.cryptoImportNames?.has(usage.root) === true &&
+      isCryptoRuntimeMethod(usage.path[1]))
+  )
 }
 
 export function isSupportedCDebugGlobalUsage(usage: IrGlobalUsage): boolean {
