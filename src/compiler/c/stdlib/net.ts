@@ -11,7 +11,11 @@ import {
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { isConsoleLog } from './console.ts'
 import type { IrProgram } from '../../types.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
+import type {
+  CNetHandler,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 
 type NetHandlerContext = {
   kind: string
@@ -37,7 +41,7 @@ export type NetLoweringDependencies = {
   findObjectLiteralPropertyValue: (expression: any, key: string) => any
 }
 
-export function emitNetHandlerHead(wrapper: any): string {
+export function emitNetHandlerHead(wrapper: CNetHandler): string {
   if (wrapper.kind === 'connection') {
     return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_server* ccjs_server, ccjs_net_socket* ccjs_socket)`
   }
@@ -66,7 +70,7 @@ export function emitNetHandlerHead(wrapper: any): string {
 }
 
 export function emitNetHandlerDeclaration(
-  wrapper: any,
+  wrapper: CNetHandler,
   baseContext: CEmitContext,
   deps: NetLoweringDependencies
 ): string[] {
@@ -74,11 +78,11 @@ export function emitNetHandlerDeclaration(
   const isSocketHandler = wrapper.kind === 'connection' || wrapper.kind.startsWith('socket-')
   const socketName = wrapper.kind === 'connection' ? (expression.params[0]?.name ?? null) : null
   const dataName = wrapper.kind === 'socket-data' ? (expression.params[0]?.name ?? null) : null
-  const netContext = {
+  const netContext: NetHandlerContext = {
     kind: wrapper.kind,
     dataName,
     socketName,
-    stringLocals: new Map()
+    stringLocals: new Map<string, string>()
   }
   const context = deps.createFunctionContext(baseContext, 'void')
   context.statusReturn = true
@@ -1252,7 +1256,7 @@ function emitNetConnectCallback(expression: any): any | null {
   return null
 }
 
-function findNetHandler(context: CEmitContext, expression: any, kind: string): any | null {
+function findNetHandler(context: CEmitContext, expression: any, kind: string): CNetHandler | null {
   if (expression == null) {
     return null
   }
@@ -1266,8 +1270,8 @@ function findNetHandler(context: CEmitContext, expression: any, kind: string): a
   return null
 }
 
-export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<any, any> {
-  const handlers = new Map()
+export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<string, CNetHandler> {
+  const handlers = new Map<string, CNetHandler>()
   const register = (kind, expression) => {
     if (expression?.type !== 'ArrowFunctionExpression') {
       return

@@ -283,11 +283,19 @@ import {
 } from './syntax.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
 import type {
+  CAsyncTaskWrapper,
+  CCallbackWrapper,
+  CClassInfo,
+  CDgramMessageHandler,
+  CHttpHandler,
+  CNetHandler,
+  CPromiseChainWrapper,
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
   CEmitOptions,
   CFunctionParam,
+  CFunctionReturnMapType,
   CFunctionType,
   CModuleEmitOptions,
   CModuleOutputFile,
@@ -1143,7 +1151,7 @@ function createThrowingFunctionInfo(
   const functionThrowValueTypes = new Map<string, IrFunctionEffect['throwValueTypes']>(
     functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, []])
   )
-  const throwingFunctions = new Set()
+  const throwingFunctions = new Set<string>()
 
   for (const effect of functionEffects) {
     if (!functionThrowValueTypes.has(effect.name)) {
@@ -1186,36 +1194,38 @@ function createBaseContext(
   const throwing = createThrowingFunctionInfo(functionDeclarations, functionEffects)
 
   return {
-    boxedMutableCaptureDeclarations: new Set(),
-    classInfos: new Map(),
-    callbackArrowWrappers: new Map(),
-    callbackWrappers: new Map(),
+    boxedMutableCaptureDeclarations: new Set<AnyNode>(),
+    classInfos: new Map<string, CClassInfo>(),
+    callbackArrowWrappers: new Map<AnyNode, CCallbackWrapper>(),
+    callbackWrappers: new Map<string, CCallbackWrapper>(),
     statementLoweringDependencies,
     classLoweringDependencies,
     nullableLoweringDependencies,
     collectionLoweringDependencies,
     arrayLoweringDependencies,
     stringLoweringDependencies,
-    cryptoImportNames: new Set(),
+    cryptoImportNames: new Set<string>(),
     diagnostics,
-    dgramCreateSocketNames: new Set(),
-    dgramImportNames: new Set(),
-    dgramMessageHandlers: new Map(),
+    dgramCreateSocketNames: new Set<string>(),
+    dgramImportNames: new Set<string>(),
+    dgramMessageHandlers: new Map<AnyNode, CDgramMessageHandler>(),
     functionThrowValueTypes: throwing.functionThrowValueTypes,
-    functionNames: new Map(
+    functionNames: new Map<string, string>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, emitCFunctionName(item.name)])
     ),
-    functionParams: new Map(functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.params])),
-    functionReturnArrayElementTypes: new Map(
+    functionParams: new Map<string, CFunctionParam[]>(
+      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.params as CFunctionParam[]])
+    ),
+    functionReturnArrayElementTypes: new Map<string, string | null>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnArrayElementType ?? null])
     ),
-    functionReturnArrayElementDeclaredTypes: new Map(
+    functionReturnArrayElementDeclaredTypes: new Map<string, string | null>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [
         item.name,
         item.returnArrayElementDeclaredType ?? null
       ])
     ),
-    functionReturnMapTypes: new Map(
+    functionReturnMapTypes: new Map<string, CFunctionReturnMapType>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [
         item.name,
         {
@@ -1224,36 +1234,38 @@ function createBaseContext(
         }
       ])
     ),
-    functionReturnNullables: new Map(
+    functionReturnNullables: new Map<string, boolean>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnNullable === true])
     ),
-    functionReturnPromiseValueTypes: new Map(
+    functionReturnPromiseValueTypes: new Map<string, string | null>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnPromiseValueType ?? null])
     ),
-    functionReturnShapes: new Map(
+    functionReturnShapes: new Map<string, any>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnShape ?? null])
     ),
-    functionReturnSetElementTypes: new Map(
+    functionReturnSetElementTypes: new Map<string, string | null>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnSetElementType ?? null])
     ),
-    functionReturnTypes: new Map(functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnType])),
-    functionAsyncFlags: new Map(
+    functionReturnTypes: new Map<string, string>(
+      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnType])
+    ),
+    functionAsyncFlags: new Map<string, boolean>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.async === true])
     ),
-    asyncTaskWrappers: new Map(),
+    asyncTaskWrappers: new Map<string, CAsyncTaskWrapper>(),
     jsGlobalRoots,
-    promiseChainArrowWrappers: new Map(),
-    promiseChainWrappers: new Map(),
+    promiseChainArrowWrappers: new Map<AnyNode, CPromiseChainWrapper>(),
+    promiseChainWrappers: new Map<string, CPromiseChainWrapper>(),
     processRuntime: false,
-    httpCreateServerNames: new Set(),
-    httpHandlers: new Map(),
-    httpImportNames: new Set(),
-    netConnectNames: new Set(),
-    netCreateServerNames: new Set(),
-    netHandlers: new Map(),
-    netImportNames: new Set(),
-    runtimeFunctionParams: new Map(),
-    externalEventLoopFunctions: new Set(),
+    httpCreateServerNames: new Set<string>(),
+    httpHandlers: new Map<AnyNode, CHttpHandler>(),
+    httpImportNames: new Set<string>(),
+    netConnectNames: new Set<string>(),
+    netCreateServerNames: new Set<string>(),
+    netHandlers: new Map<string, CNetHandler>(),
+    netImportNames: new Set<string>(),
+    runtimeFunctionParams: new Map<string, CFunctionType>(),
+    externalEventLoopFunctions: new Set<string>(),
     throwingFunctions: throwing.throwingFunctions,
     unhandledRejectionFlag: null as string | null,
     nextId: 0
@@ -1437,7 +1449,7 @@ function registerFunctionParamsInContext(statement: AnyNode, params: CFunctionPa
       const runtimeFunctionType = resolveFunctionParameterRuntimeType(statement.name, index, param, context)
 
       context.variables.set(param.name, 'function')
-      context.functionTypes.set(param.name, runtimeFunctionType ?? param.functionType)
+      context.functionTypes.set(param.name, normalizeFunctionType(runtimeFunctionType ?? param.functionType))
 
       if (param.nullable === true) {
         context.nullableVariables.add(param.name)
@@ -3924,7 +3936,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
     }
 
     if (context.functionNames.has(name)) {
-      return context.functionNames.get(name)
+      return context.functionNames.get(name)!
     }
   }
 

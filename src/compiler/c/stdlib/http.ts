@@ -11,8 +11,8 @@ import {
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { cJsonRuntimeCallName } from './json.ts'
-import type { IrProgram } from '../../types.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+import type { AnyNode, IrProgram } from '../../types.ts'
+import type { CHttpHandler, CPreparedExpression as PreparedExpression } from '../types.ts'
 
 type HttpStringBytesOperand = {
   lines: string[]
@@ -37,12 +37,12 @@ export type HttpLoweringDependencies = {
   emitStatementList: (body: any[], context: CFunctionContext) => string[]
 }
 
-export function emitHttpHandlerHead(wrapper: any): string {
+export function emitHttpHandlerHead(wrapper: CHttpHandler): string {
   return `static ccjs_status ${wrapper.name}(void* user, const ccjs_http_request* ccjs_request, ccjs_http_response* ccjs_response)`
 }
 
 export function emitHttpHandlerDeclaration(
-  wrapper: any,
+  wrapper: CHttpHandler,
   baseContext: CEmitContext,
   deps: HttpLoweringDependencies
 ): string[] {
@@ -50,10 +50,10 @@ export function emitHttpHandlerDeclaration(
   const expression = wrapper.expression
   const requestName = expression.params[0]?.name ?? null
   const responseName = expression.params[1]?.name ?? null
-  const httpContext = {
+  const httpContext: HttpHandlerContext = {
     requestName,
     responseName,
-    stringLocals: new Map()
+    stringLocals: new Map<string, string>()
   }
   context.statusReturn = true
 
@@ -303,7 +303,7 @@ function emitHttpHeaderArray(expression: any, context: CFunctionContext): HttpHe
   const lines = [`ccjs_http_header ${name}[] = {`]
 
   for (const property of expression.properties) {
-    const value = emitHttpStaticStringValue(property.value, { stringLocals: new Map() }, context)
+    const value = emitHttpStaticStringValue(property.value, { stringLocals: new Map<string, string>() }, context)
 
     if (value == null) {
       context.diagnostics.push(
@@ -843,8 +843,8 @@ function isHttpRequestEventCall(expression: any): boolean {
   )
 }
 
-export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<any, any> {
-  const handlers = new Map()
+export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<AnyNode, CHttpHandler> {
+  const handlers = new Map<AnyNode, CHttpHandler>()
   const register = (expression) => {
     if (expression?.type !== 'ArrowFunctionExpression') {
       return

@@ -24,6 +24,7 @@ import {
 import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
 import type { IrFunctionDeclaration } from '../../types.ts'
 import type {
+  CAsyncTaskWrapper,
   CFunctionParam,
   CKnownArrayElement,
   CKnownObjectField,
@@ -155,21 +156,26 @@ export function collectAsyncTaskWrappers(
   functions: IrFunctionNodeEntry[],
   context: CEmitContext,
   dependencies: AsyncTaskLoweringDependencies
-) {
+): Map<string, CAsyncTaskWrapper> {
   context.asyncTaskLoweringDependencies = dependencies
   const plannerContext = asAsyncTaskPlannerContext(context)
-  const wrappers = new Map()
+  const wrappers = new Map<string, CAsyncTaskWrapper>()
 
   for (const { declaration, node: item } of functions) {
     const params = resolveAsyncTaskWrapperParams(declaration, plannerContext)
-    const bodyPlan = params == null ? null : resolveAsyncTaskBodyPlan(item, declaration, plannerContext, params)
+
+    if (params == null) {
+      continue
+    }
+
+    const bodyPlan = resolveAsyncTaskBodyPlan(item, declaration, plannerContext, params)
 
     if (bodyPlan == null) {
       continue
     }
 
     const cName = emitCIdentifier(declaration.name)
-    const wrapper = {
+    const wrapper: CAsyncTaskWrapper = {
       key: declaration.name,
       functionName: declaration.name,
       frameTypeName: `ccjs_async_task_${cName}_frame`,

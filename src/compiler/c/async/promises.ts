@@ -2,6 +2,7 @@ import type { CEmitContext, CFunctionContext } from '../context.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
+  CPromiseChainWrapper,
   CRuntimeArrowCapture
 } from '../types.ts'
 export function cPromiseRuntimeCallName(callee: any): string | null {
@@ -690,8 +691,8 @@ export function collectPromiseChainWrappers(
   irPrograms: IrProgram[],
   context: CEmitContext,
   deps: PromiseChainLoweringDependencies
-): Map<any, any> {
-  const wrappers = new Map()
+): Map<string, CPromiseChainWrapper> {
+  const wrappers = new Map<string, CPromiseChainWrapper>()
   const declare = (scope, name, info) => {
     scope.set(name, info)
   }
@@ -788,7 +789,7 @@ export function collectPromiseChainWrappers(
       }
     }
 
-    const wrapper = {
+    const wrapper: CPromiseChainWrapper = {
       kind: 'promise-chain-arrow',
       key,
       name: `ccjs_promise_chain_arrow_${index}`,

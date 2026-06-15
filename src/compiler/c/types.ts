@@ -115,6 +115,11 @@ export type CFunctionType = {
   returnType: string
 }
 
+export type CFunctionReturnMapType = {
+  key: string | null
+  value: string | null
+}
+
 export type CRuntimeArrowCapture = {
   declaration?: AnyNode | null
   functionType?: CFunctionType | null
@@ -125,6 +130,82 @@ export type CRuntimeArrowCapture = {
   runtimeManaged?: boolean
   shape?: any
   valueType: string
+}
+
+export type CClassInfo = {
+  name: string
+  node: AnyNode
+  constructor: AnyNode | null
+  assignments: AnyNode[]
+  fields: CObjectShapeField[]
+  methods: Map<string, AnyNode>
+}
+
+export type CCallbackWrapper = {
+  kind: 'arrow' | 'named' | 'plain-arrow'
+  key: string
+  name: string
+  captures?: CRuntimeArrowCapture[]
+  contextTypeName?: string
+  expression?: AnyNode
+  finalizerName?: string
+  functionType: CFunctionType
+  needsEventLoop?: boolean
+  target?: string
+}
+
+export type CPromiseChainWrapper = {
+  kind: 'promise-chain-arrow'
+  key: string
+  name: string
+  captures: CRuntimeArrowCapture[]
+  contextTypeName: string
+  expression: AnyNode
+  finalizerName: string
+  needsEventLoop: boolean
+  returnShape: any
+  returnType: string
+}
+
+export type CAsyncTaskWrapper = {
+  key: string
+  functionName: string
+  frameTypeName: string
+  startName: string
+  resumeName: string
+  rejectName: string
+  finalizerName: string
+  params: CFunctionParam[]
+  awaits: any[]
+  frameLocals: any[]
+  hasTryRegion: boolean
+  prefixStatements: any[]
+  returnExpression: any
+  returnType: string
+  successPhases: any[]
+  tryHandler: any
+  tryPhases: any[]
+}
+
+export type CDgramMessageHandler = {
+  name: string
+  expression: AnyNode
+}
+
+export type CHttpHandler = {
+  name: string
+  expression: AnyNode
+}
+
+export type CNetHandler = {
+  kind: string
+  name: string
+  expression: AnyNode
+}
+
+export type CPromiseConstructorHandler = {
+  kind: 'reject' | 'resolve'
+  promise: string
 }
 
 export type CModuleOutputFile = {

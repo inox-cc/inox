@@ -1,37 +1,108 @@
 import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
-import type { CArrayElementInfo, CObjectShapeField } from './types.ts'
+import type { AnyNode, Diagnostic, IrFunctionEffect } from '../types.ts'
+import type {
+  CArrayElementInfo,
+  CAsyncTaskWrapper,
+  CCallbackWrapper,
+  CClassInfo,
+  CDgramMessageHandler,
+  CFunctionParam,
+  CFunctionReturnMapType,
+  CFunctionType,
+  CHttpHandler,
+  CNetHandler,
+  CObjectShapeField,
+  CPromiseChainWrapper,
+  CPromiseConstructorHandler
+} from './types.ts'
 
 export type CEmitContext = {
-  diagnostics: any[]
+  asyncTaskLoweringDependencies?: any
+  asyncTaskWrappers: Map<string, CAsyncTaskWrapper>
+  boxedMutableCaptureDeclarations: Set<AnyNode>
+  callbackArrowWrappers: Map<AnyNode, CCallbackWrapper>
+  callbackWrappers: Map<string, CCallbackWrapper>
+  classInfos: Map<string, CClassInfo>
+  classLoweringDependencies: any
+  collectionLoweringDependencies: any
+  cryptoImportNames: Set<string>
+  diagnostics: Diagnostic[]
+  dgramCreateSocketNames: Set<string>
+  dgramImportNames: Set<string>
+  dgramMessageHandlers: Map<AnyNode, CDgramMessageHandler>
+  externalEventLoopFunctions: Set<string>
+  functionAsyncFlags: Map<string, boolean>
+  functionNames: Map<string, string>
+  functionParams: Map<string, CFunctionParam[]>
+  functionReturnArrayElementDeclaredTypes: Map<string, string | null>
+  functionReturnArrayElementTypes: Map<string, string | null>
+  functionReturnMapTypes: Map<string, CFunctionReturnMapType>
+  functionReturnNullables: Map<string, boolean>
+  functionReturnPromiseValueTypes: Map<string, string | null>
+  functionReturnSetElementTypes: Map<string, string | null>
+  functionReturnShapes: Map<string, any>
+  functionReturnTypes: Map<string, string>
+  functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
+  httpCreateServerNames: Set<string>
+  httpHandlers: Map<AnyNode, CHttpHandler>
+  httpImportNames: Set<string>
+  jsGlobalRoots: Set<string>
+  netConnectNames: Set<string>
+  netCreateServerNames: Set<string>
+  netHandlers: Map<string, CNetHandler>
+  netImportNames: Set<string>
   nextId: number
+  nullableLoweringDependencies: any
+  promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
+  promiseChainWrappers: Map<string, CPromiseChainWrapper>
   processRuntime: boolean
+  runtimeFunctionParams: Map<string, CFunctionType>
+  statementLoweringDependencies: any
+  stringLoweringDependencies: any
+  throwingFunctions: Set<string>
   unhandledRejectionFlag: string | null
   [key: string]: any
 }
 
 export type CFunctionContext = CEmitContext & {
   arrayShapes: Map<string, CArrayElementInfo[]>
-  boxedValueTypes: Map<string, any>
+  boxedValueTypes: Map<string, string>
   boxedValues: string[]
   boxedVariables: Set<string>
+  classInstanceTypes: Map<string, string>
   cleanupEnabled: boolean
+  dgramBoundSockets: Set<string>
+  dgramMessageSockets: Set<string>
+  dgramReuseAddrSockets: Set<string>
   errorChannelUsed: boolean
+  errorObjectNames: Set<string>
   eventLoopUsed: boolean
   externalEventLoop: boolean
   functionErrorOut: string | null
   functionReturnOut: string | null
+  functionTypes: Map<string, CFunctionType>
+  mapTypes: Map<string, CFunctionReturnMapType>
+  narrowedNullableScalars: Set<string>
+  netReadingSockets: Set<string>
+  nullableVariables: Set<string>
   ownedCryptoHashes: string[]
   ownedCryptoHmacs: string[]
   ownedPromises: string[]
   ownedValues: string[]
   objectShapes: Map<string, CObjectShapeField[]>
+  promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
+  promiseRejectionValueTypes: Map<string, string>
+  promiseValueTypes: Map<string, string>
   returnNullable: boolean
   returnType: string
+  runtimeCallbacks: Set<string>
   runtimeArrayElementTypes: Map<string, string>
+  runtimeStrings: Set<string>
+  setElementTypes: Map<string, string>
   statusReturn: boolean
   throwingFunction: boolean
   usedCleanupGoto: boolean
-  variables: Map<string, any>
+  variables: Map<string, string>
 }
 
 export function createFunctionContext(
@@ -41,49 +112,49 @@ export function createFunctionContext(
 ): CFunctionContext {
   return {
     ...baseContext,
-    arrayShapes: new Map(),
+    arrayShapes: new Map<string, CArrayElementInfo[]>(),
     breakFlowUsed: false,
     breakTargets: [],
-    boxedValueTypes: new Map(),
+    boxedValueTypes: new Map<string, string>(),
     boxedValues: [],
-    boxedVariables: new Set(),
-    classInstanceTypes: new Map(),
+    boxedVariables: new Set<string>(),
+    classInstanceTypes: new Map<string, string>(),
     continueFlowUsed: false,
     continueTargets: [],
     cleanupEnabled: true,
-    dgramBoundSockets: new Set(),
-    dgramMessageSockets: new Set(),
-    dgramReuseAddrSockets: new Set(),
+    dgramBoundSockets: new Set<string>(),
+    dgramMessageSockets: new Set<string>(),
+    dgramReuseAddrSockets: new Set<string>(),
     errorChannelUsed: false,
-    errorObjectNames: new Set(),
+    errorObjectNames: new Set<string>(),
     errorTargets: [],
     functionErrorOut: null,
     functionReturnOut: null,
-    functionTypes: new Map(),
+    functionTypes: new Map<string, CFunctionType>(),
     eventLoopUsed: false,
     externalEventLoop: false,
-    mapTypes: new Map(),
-    netReadingSockets: new Set(),
-    narrowedNullableScalars: new Set(),
-    nullableVariables: new Set(),
-    objectShapes: new Map(),
+    mapTypes: new Map<string, CFunctionReturnMapType>(),
+    netReadingSockets: new Set<string>(),
+    narrowedNullableScalars: new Set<string>(),
+    nullableVariables: new Set<string>(),
+    objectShapes: new Map<string, CObjectShapeField[]>(),
     ownedPromises: [],
     ownedCryptoHashes: [],
     ownedCryptoHmacs: [],
     ownedValues: [],
-    promiseRejectionValueTypes: new Map(),
-    promiseConstructorHandlers: new Map(),
-    promiseValueTypes: new Map(),
+    promiseRejectionValueTypes: new Map<string, string>(),
+    promiseConstructorHandlers: new Map<string, CPromiseConstructorHandler>(),
+    promiseValueTypes: new Map<string, string>(),
     returnFlowUsed: false,
     returnTargets: [],
-    runtimeCallbacks: new Set(),
-    runtimeArrayElementTypes: new Map(),
-    setElementTypes: new Map(),
-    runtimeStrings: new Set(),
+    runtimeCallbacks: new Set<string>(),
+    runtimeArrayElementTypes: new Map<string, string>(),
+    setElementTypes: new Map<string, string>(),
+    runtimeStrings: new Set<string>(),
     statusReturn: false,
     throwingFunction: false,
     usedCleanupGoto: false,
-    variables: new Map(),
+    variables: new Map<string, string>(),
     returnNullable,
     returnType
   }

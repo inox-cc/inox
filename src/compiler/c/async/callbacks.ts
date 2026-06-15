@@ -18,7 +18,7 @@ import {
   type CEmitContext,
   type CFunctionContext
 } from '../context.ts'
-import type { CFunctionParam, CFunctionType, CRuntimeArrowCapture } from '../types.ts'
+import type { CCallbackWrapper, CFunctionParam, CFunctionType, CRuntimeArrowCapture } from '../types.ts'
 import type { IrProgram } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
@@ -195,8 +195,8 @@ export function collectCallbackWrappers(
   irPrograms: IrProgram[],
   context: CEmitContext,
   deps: CallbackLoweringDependencies
-): Map<any, any> {
-  const wrappers = new Map()
+): Map<string, CCallbackWrapper> {
+  const wrappers = new Map<string, CCallbackWrapper>()
   const pendingPlainFunctionArgs: any[] = []
   const register = (expression, functionType, scopes) => {
     const arrowNeedsEventLoop =
@@ -270,13 +270,15 @@ export function collectCallbackWrappers(
       return
     }
 
-    wrappers.set(key, {
+    const wrapper: CCallbackWrapper = {
       kind: 'named',
       key,
       name: `ccjs_callback_${emitCIdentifier(target)}_${wrappers.size}`,
       target,
       functionType
-    })
+    }
+
+    wrappers.set(key, wrapper)
   }
   const registerArrow = (expression, functionType, scopes) => {
     if (context.callbackArrowWrappers.has(expression)) {
@@ -297,7 +299,7 @@ export function collectCallbackWrappers(
       }
     }
 
-    const wrapper = {
+    const wrapper: CCallbackWrapper = {
       kind: 'arrow',
       key,
       name: `ccjs_callback_arrow_${index}`,
@@ -325,7 +327,7 @@ export function collectCallbackWrappers(
 
     const index = wrappers.size
     const key = `plain-arrow:${index}`
-    const wrapper = {
+    const wrapper: CCallbackWrapper = {
       kind: 'plain-arrow',
       key,
       name: `ccjs_callback_arrow_${index}`,
@@ -1400,7 +1402,7 @@ export function isSupportedMutableRuntimeArrowCapture(
   context: CFunctionContext
 ): boolean {
   return (
-    capture.mutable &&
+    capture.mutable === true &&
     ['number', 'boolean', 'string', 'object'].includes(capture.valueType) &&
     capture.declaration != null &&
     context.boxedMutableCaptureDeclarations.has(capture.declaration)

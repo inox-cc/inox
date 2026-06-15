@@ -13,6 +13,7 @@ import { cRuntimeValueTag, isManagedRuntimeReturnType } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
 import type {
+  CClassInfo,
   CFunctionParam,
   CPreparedExpression as PreparedExpression,
   CPreparedCallArgs as PreparedCallArgs
@@ -28,8 +29,8 @@ function classDeps(context: CFunctionContext): ClassLoweringDependencies {
   return context.classLoweringDependencies
 }
 
-export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]) {
-  const infos = new Map<string, AnyNode>()
+export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]): Map<string, CClassInfo> {
+  const infos = new Map<string, CClassInfo>()
 
   for (const item of classes) {
     const constructor = item.methods.find((method) => method.name === 'constructor') ?? null

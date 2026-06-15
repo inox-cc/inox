@@ -10,8 +10,12 @@ import {
   type CFunctionContext
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
-import type { IrProgram } from '../../types.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
+import type { AnyNode, IrProgram } from '../../types.ts'
+import type {
+  CDgramMessageHandler,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 
 type DgramMessageContext = {
   messageName: string | null
@@ -33,12 +37,12 @@ export type DgramLoweringDependencies = {
   staticObjectStringPropertyValue: (expression: any, key: string) => string | null
 }
 
-export function emitDgramMessageHandlerHead(wrapper: any): string {
+export function emitDgramMessageHandlerHead(wrapper: CDgramMessageHandler): string {
   return `static ccjs_status ${wrapper.name}(void* user, ccjs_dgram_socket* ccjs_socket, const char* ccjs_bytes, size_t ccjs_len, const char* ccjs_host, int ccjs_port)`
 }
 
 export function emitDgramMessageHandlerDeclaration(
-  wrapper: any,
+  wrapper: CDgramMessageHandler,
   baseContext: CEmitContext,
   deps: DgramLoweringDependencies
 ): string[] {
@@ -49,7 +53,7 @@ export function emitDgramMessageHandlerDeclaration(
   const dgramContext: DgramMessageContext = {
     messageName,
     rinfoName,
-    stringLocals: new Map()
+    stringLocals: new Map<string, string>()
   }
   context.statusReturn = true
 
@@ -251,8 +255,11 @@ export function emitPreparedDgramAddressPortExpression(
   }
 }
 
-export function collectDgramMessageHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<any, any> {
-  const handlers = new Map()
+export function collectDgramMessageHandlers(
+  irPrograms: IrProgram[],
+  context: CEmitContext
+): Map<AnyNode, CDgramMessageHandler> {
+  const handlers = new Map<AnyNode, CDgramMessageHandler>()
   const register = (expression) => {
     if (expression?.type !== 'ArrowFunctionExpression') {
       return
