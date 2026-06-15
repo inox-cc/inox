@@ -10,7 +10,7 @@ import {
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { isConsoleLog } from './console.ts'
-import type { IrProgram } from '../../types.ts'
+import type { AnyNode, IrProgram } from '../../types.ts'
 import type {
   CNetHandler,
   CPreparedExpression as PreparedExpression,
@@ -24,21 +24,34 @@ type NetHandlerContext = {
   stringLocals: Map<string, string>
 }
 
+type NetSocketAddressMember = {
+  field: 'address' | 'port'
+  runtime: string
+  socketName: string
+  tempName: string
+  valueType: 'number' | 'string'
+}
+
+type NetSocketCounterMember = {
+  runtime: string
+  socketName: string
+}
+
 export type NetLoweringDependencies = {
   createFunctionContext: (
     baseContext: CEmitContext,
     returnType: string,
     returnNullable?: boolean
   ) => CFunctionContext
-  emitConsoleLogStatement: (method: string, args: any[], context: CFunctionContext) => string[]
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitConsoleLogStatement: (method: string, args: AnyNode[], context: CFunctionContext) => string[]
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  emitStatementList: (body: any[], context: CFunctionContext) => string[]
-  findObjectLiteralPropertyValue: (expression: any, key: string) => any
+  emitStatementList: (body: AnyNode[], context: CFunctionContext) => string[]
+  findObjectLiteralPropertyValue: (expression: AnyNode, key: string) => AnyNode | null
 }
 
 export function emitNetHandlerHead(wrapper: CNetHandler): string {
@@ -127,7 +140,7 @@ export function emitNetHandlerDeclaration(
 }
 
 function emitNetHandlerStatement(
-  statement: any,
+  statement: AnyNode | null | undefined,
   netContext: NetHandlerContext,
   context: CFunctionContext,
   deps: NetLoweringDependencies
@@ -207,7 +220,7 @@ function emitNetHandlerStatement(
 }
 
 function emitNetHandlerSocketCallStatement(
-  expression: any,
+  expression: AnyNode,
   netContext: NetHandlerContext,
   context: CFunctionContext,
   deps: NetLoweringDependencies
@@ -270,7 +283,7 @@ function emitNetHandlerSocketCallStatement(
 }
 
 function emitNetHandlerConsoleLogStatement(
-  expression: any,
+  expression: AnyNode,
   netContext: NetHandlerContext,
   context: CFunctionContext,
   deps: NetLoweringDependencies
@@ -299,7 +312,7 @@ function emitNetHandlerConsoleLogStatement(
   return deps.emitConsoleLogStatement(expression.callee.property, expression.args, context)
 }
 
-function emitNetHandlerServerCallStatement(expression: any, context: CFunctionContext): string[] | null {
+function emitNetHandlerServerCallStatement(expression: AnyNode, context: CFunctionContext): string[] | null {
   if (
     expression.callee?.type !== 'MemberExpression' ||
     expression.callee.object?.type !== 'Reference' ||
@@ -316,7 +329,7 @@ function emitNetHandlerServerCallStatement(expression: any, context: CFunctionCo
 }
 
 export function emitNetSocketVariableDeclaration(
-  statement: any,
+  statement: AnyNode,
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] | null {
@@ -331,7 +344,7 @@ export function emitNetSocketVariableDeclaration(
 }
 
 export function emitNetServerVariableDeclaration(
-  statement: any,
+  statement: AnyNode,
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] | null {
@@ -345,7 +358,7 @@ export function emitNetServerVariableDeclaration(
   return emitNetServerCreateLines(statement.init, statement.name, context)
 }
 
-export function emitNetAddressVariableDeclaration(statement: any, context: CFunctionContext): string[] | null {
+export function emitNetAddressVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
   if (!isNetAddressCall(statement.init, context)) {
     return null
   }
@@ -361,7 +374,7 @@ export function emitNetAddressVariableDeclaration(statement: any, context: CFunc
   ]
 }
 
-export function emitNetAddressMemberVariableDeclaration(statement: any, context: CFunctionContext): string[] | null {
+export function emitNetAddressMemberVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
   const member = resolveNetSocketAddressMember(statement.init, context)
 
   if (member == null) {
@@ -390,7 +403,7 @@ export function emitNetAddressMemberVariableDeclaration(statement: any, context:
   ]
 }
 
-export function emitNetNumberVariableDeclaration(statement: any, context: CFunctionContext): string[] | null {
+export function emitNetNumberVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
   const counter = resolveNetSocketCounterMember(statement.init, context)
 
   if (counter == null) {
@@ -410,7 +423,7 @@ export function emitNetNumberVariableDeclaration(statement: any, context: CFunct
 }
 
 export function emitNetSocketCallStatement(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] | null {
@@ -459,7 +472,7 @@ export function emitNetSocketCallStatement(
 }
 
 export function emitNetServerCallStatement(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] | null {
@@ -510,7 +523,7 @@ export function emitNetServerCallStatement(
 }
 
 function emitNetSocketConnectLines(
-  expression: any,
+  expression: AnyNode,
   socketName: string,
   context: CFunctionContext,
   deps: NetLoweringDependencies,
@@ -562,7 +575,7 @@ function emitNetSocketConnectLines(
   return lines
 }
 
-function emitNetSocketOnLines(socketName: string, args: any[], context: CFunctionContext): string[] {
+function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFunctionContext): string[] {
   const eventName = args[0]?.type === 'StringLiteral' ? args[0].value : null
   const kind =
     eventName === 'data'
@@ -624,7 +637,7 @@ function emitNetSocketOnLines(socketName: string, args: any[], context: CFunctio
 function emitNetSocketWriteLines(
   socketName: string,
   method: string,
-  args: any[],
+  args: AnyNode[],
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] {
@@ -658,7 +671,7 @@ function emitNetSocketWriteLines(
   ]
 }
 
-function emitNetSocketSetEncodingLines(socketName: string, args: any[], context: CFunctionContext): string[] {
+function emitNetSocketSetEncodingLines(socketName: string, args: AnyNode[], context: CFunctionContext): string[] {
   const value = emitNetStaticStringValue(args[0], null)
 
   if (value == null) {
@@ -681,7 +694,7 @@ function emitNetSocketSetEncodingLines(socketName: string, args: any[], context:
 }
 
 function emitNetSocketOptionCallStatement(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] | null {
@@ -764,7 +777,7 @@ function emitNetMaybeReadStartLines(socketName: string, context: CFunctionContex
 }
 
 function emitNetServerCreateLines(
-  expression: any,
+  expression: AnyNode,
   serverName: string,
   context: CFunctionContext,
   options: { declare?: boolean } = {}
@@ -796,7 +809,7 @@ function emitNetServerCreateLines(
 
 function emitNetServerListenLines(
   serverName: string,
-  args: any[],
+  args: AnyNode[],
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] {
@@ -833,7 +846,7 @@ function emitNetServerListenLines(
   ]
 }
 
-function emitNetServerOnLines(serverName: string, args: any[], context: CFunctionContext): string[] {
+function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFunctionContext): string[] {
   const eventName = args[0]?.type === 'StringLiteral' ? args[0].value : null
   const kind =
     eventName === 'connection'
@@ -883,7 +896,7 @@ function emitNetServerOnLines(serverName: string, args: any[], context: CFunctio
 
 function emitNetServerCloseLines(
   serverName: string,
-  args: any[],
+  args: AnyNode[],
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] {
@@ -897,7 +910,7 @@ function emitNetServerCloseLines(
 }
 
 function emitNetZeroArgCallbackLines(
-  callback: any,
+  callback: AnyNode | null | undefined,
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] {
@@ -929,7 +942,7 @@ function emitNetZeroArgCallbackLines(
   return deps.emitStatementList(body, context)
 }
 
-function emitNetListenCallback(args: any[], options: any): any | null {
+function emitNetListenCallback(args: AnyNode[], options: AnyNode | null): AnyNode | null {
   if (options != null) {
     return args[1]?.type === 'ArrowFunctionExpression' ? args[1] : null
   }
@@ -937,11 +950,11 @@ function emitNetListenCallback(args: any[], options: any): any | null {
   return args.find((arg) => arg?.type === 'ArrowFunctionExpression') ?? null
 }
 
-function emitNetListenPortArg(args: any[]): any | null {
+function emitNetListenPortArg(args: AnyNode[]): AnyNode | null {
   return args[0]?.type === 'ArrowFunctionExpression' ? null : (args[0] ?? null)
 }
 
-function emitNetListenHostArg(args: any[]): any | null {
+function emitNetListenHostArg(args: AnyNode[]): AnyNode | null {
   if (args[1]?.type === 'StringLiteral' || (args[1]?.type === 'TemplateLiteral' && !args[1].raw.includes('${'))) {
     return args[1]
   }
@@ -949,7 +962,7 @@ function emitNetListenHostArg(args: any[]): any | null {
   return null
 }
 
-function emitNetListenBacklogArg(args: any[]): any | null {
+function emitNetListenBacklogArg(args: AnyNode[]): AnyNode | null {
   if (args[1]?.type === 'NumberLiteral') {
     return args[1]
   }
@@ -961,7 +974,7 @@ function emitNetListenBacklogArg(args: any[]): any | null {
   return null
 }
 
-function emitNetListenHostExpression(expression: any, context: CFunctionContext): string {
+function emitNetListenHostExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {
   if (expression == null) {
     return '0'
   }
@@ -984,7 +997,7 @@ function emitNetListenHostExpression(expression: any, context: CFunctionContext)
   return '0'
 }
 
-function emitNetConnectHostExpression(expression: any, context: CFunctionContext): string {
+function emitNetConnectHostExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {
   if (expression == null) {
     return '"127.0.0.1"'
   }
@@ -993,7 +1006,7 @@ function emitNetConnectHostExpression(expression: any, context: CFunctionContext
 }
 
 function emitNetBytesOperand(
-  expression: any,
+  expression: AnyNode | null | undefined,
   netContext: NetHandlerContext | null,
   context: CFunctionContext,
   deps: NetLoweringDependencies
@@ -1032,7 +1045,10 @@ function emitNetBytesOperand(
   return deps.emitPreparedStringBytesOperand(expression, context, 'ccjs_net_string')
 }
 
-function emitNetStaticStringValue(expression: any, netContext: NetHandlerContext | null): string | null {
+function emitNetStaticStringValue(
+  expression: AnyNode | null | undefined,
+  netContext: NetHandlerContext | null
+): string | null {
   if (expression?.type === 'StringLiteral') {
     return expression.value
   }
@@ -1055,7 +1071,7 @@ function emitNetStatusCheck(call: string, context: CFunctionContext): string[] {
 }
 
 export function emitPreparedNetAddressPortExpression(
-  expression: any,
+  expression: AnyNode | null | undefined,
   context: CFunctionContext
 ): PreparedExpression | null {
   if (
@@ -1074,7 +1090,7 @@ export function emitPreparedNetAddressPortExpression(
   }
 }
 
-export function resolveNetAddressStringMember(expression: any, context: CFunctionContext): string | null {
+export function resolveNetAddressStringMember(expression: AnyNode, context: CFunctionContext): string | null {
   if (
     expression?.type !== 'MemberExpression' ||
     !['address', 'family'].includes(expression.property) ||
@@ -1090,7 +1106,7 @@ export function resolveNetAddressStringMember(expression: any, context: CFunctio
     : `${expression.object.path[0]}.address`
 }
 
-function isNetAddressCall(expression: any, context: CFunctionContext): boolean {
+function isNetAddressCall(expression: AnyNode | null | undefined, context: CFunctionContext): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
@@ -1102,7 +1118,10 @@ function isNetAddressCall(expression: any, context: CFunctionContext): boolean {
   )
 }
 
-function resolveNetSocketAddressMember(expression: any, context: CFunctionContext): any | null {
+function resolveNetSocketAddressMember(
+  expression: AnyNode | null | undefined,
+  context: CFunctionContext
+): NetSocketAddressMember | null {
   if (
     expression?.type !== 'MemberExpression' ||
     expression.object?.type !== 'Reference' ||
@@ -1129,7 +1148,10 @@ function resolveNetSocketAddressMember(expression: any, context: CFunctionContex
   }
 }
 
-function resolveNetSocketCounterMember(expression: any, context: CFunctionContext): any | null {
+function resolveNetSocketCounterMember(
+  expression: AnyNode | null | undefined,
+  context: CFunctionContext
+): NetSocketCounterMember | null {
   if (
     expression?.type !== 'MemberExpression' ||
     expression.object?.type !== 'Reference' ||
@@ -1156,11 +1178,11 @@ function resolveNetSocketCounterMember(expression: any, context: CFunctionContex
   return null
 }
 
-function isNetSocketMethodCall(expression: any, method: string, context: CFunctionContext): boolean {
+function isNetSocketMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
   return isNetSocketAnyMethodCall(expression, context) && expression.callee.property === method
 }
 
-function isNetSocketAnyMethodCall(expression: any, context: CFunctionContext): boolean {
+function isNetSocketAnyMethodCall(expression: AnyNode, context: CFunctionContext): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
@@ -1170,11 +1192,11 @@ function isNetSocketAnyMethodCall(expression: any, context: CFunctionContext): b
   )
 }
 
-function isNetServerMethodCall(expression: any, method: string, context: CFunctionContext): boolean {
+function isNetServerMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
   return isNetServerAnyMethodCall(expression, context) && expression.callee.property === method
 }
 
-function isNetServerAnyMethodCall(expression: any, context: CFunctionContext): boolean {
+function isNetServerAnyMethodCall(expression: AnyNode, context: CFunctionContext): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
@@ -1184,7 +1206,7 @@ function isNetServerAnyMethodCall(expression: any, context: CFunctionContext): b
   )
 }
 
-function isNetCreateServerCall(expression: any, context: CEmitContext): boolean {
+function isNetCreateServerCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
   if (expression?.type !== 'CallExpression') {
     return false
   }
@@ -1206,7 +1228,7 @@ function isNetCreateServerCall(expression: any, context: CEmitContext): boolean 
   )
 }
 
-function isNetConnectCall(expression: any, context: CEmitContext): boolean {
+function isNetConnectCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
   if (expression?.type !== 'CallExpression') {
     return false
   }
@@ -1228,7 +1250,7 @@ function isNetConnectCall(expression: any, context: CEmitContext): boolean {
   )
 }
 
-function emitNetCreateServerConnectionListener(expression: any): any | null {
+function emitNetCreateServerConnectionListener(expression: AnyNode): AnyNode | null {
   if (expression.args[0]?.type === 'ArrowFunctionExpression') {
     return expression.args[0]
   }
@@ -1240,7 +1262,7 @@ function emitNetCreateServerConnectionListener(expression: any): any | null {
   return null
 }
 
-function emitNetConnectCallback(expression: any): any | null {
+function emitNetConnectCallback(expression: AnyNode): AnyNode | null {
   if (expression.args[0]?.type === 'ObjectLiteral') {
     return expression.args[1]?.type === 'ArrowFunctionExpression' ? expression.args[1] : null
   }
@@ -1256,7 +1278,11 @@ function emitNetConnectCallback(expression: any): any | null {
   return null
 }
 
-function findNetHandler(context: CEmitContext, expression: any, kind: string): CNetHandler | null {
+function findNetHandler(
+  context: CEmitContext,
+  expression: AnyNode | null | undefined,
+  kind: string
+): CNetHandler | null {
   if (expression == null) {
     return null
   }
@@ -1272,7 +1298,7 @@ function findNetHandler(context: CEmitContext, expression: any, kind: string): C
 
 export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<string, CNetHandler> {
   const handlers = new Map<string, CNetHandler>()
-  const register = (kind, expression) => {
+  const register = (kind: string, expression: AnyNode | null | undefined) => {
     if (expression?.type !== 'ArrowFunctionExpression') {
       return
     }
@@ -1291,7 +1317,7 @@ export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContex
       expression
     })
   }
-  const registerEventListener = (expression) => {
+  const registerEventListener = (expression: AnyNode | null | undefined) => {
     if (
       expression?.type !== 'CallExpression' ||
       expression.callee?.type !== 'MemberExpression' ||
@@ -1309,7 +1335,7 @@ export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContex
       register('error', expression.args[1])
     }
   }
-  const registerSocketEventListener = (expression) => {
+  const registerSocketEventListener = (expression: AnyNode | null | undefined) => {
     if (
       expression?.type !== 'CallExpression' ||
       expression.callee?.type !== 'MemberExpression' ||
@@ -1329,7 +1355,7 @@ export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContex
       register('socket-error', expression.args[1])
     }
   }
-  const registerSocketWriteCallback = (expression) => {
+  const registerSocketWriteCallback = (expression: AnyNode | null | undefined) => {
     if (
       expression?.type !== 'CallExpression' ||
       expression.callee?.type !== 'MemberExpression' ||
@@ -1344,7 +1370,7 @@ export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContex
       register('socket-write', callback)
     }
   }
-  const visitStatement = (statement) => {
+  const visitStatement = (statement: AnyNode | null | undefined) => {
     if (statement == null) {
       return
     }
@@ -1403,7 +1429,7 @@ export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContex
 
     if (statement.type === 'SwitchStatement') {
       visitExpression(statement.discriminant)
-      statement.cases.forEach((item) => {
+      statement.cases.forEach((item: AnyNode) => {
         visitExpression(item.test)
         item.consequent.forEach(visitStatement)
       })
@@ -1416,7 +1442,7 @@ export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContex
       visitStatement(statement.finalizer)
     }
   }
-  const visitExpression = (expression) => {
+  const visitExpression = (expression: AnyNode | null | undefined) => {
     if (expression == null) {
       return
     }
