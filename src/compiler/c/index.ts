@@ -1099,7 +1099,7 @@ export function emitCBundleFromIrModules(
   options: CEmitOptions = {}
 ): string {
   const irPrograms = collectIrPrograms(irModules)
-  const entryIndex = irModules.findIndex((module) => module.path === entry)
+  const entryIndex = irModules.findIndex((module: IrModuleRecord) => module.path === entry)
   const entryIrPrograms = collectIrPrograms(entryIndex < 0 ? irModules : irModules.slice(0, entryIndex + 1))
   const entryIr = findIrEntryProgram(irModules, entry)
 
@@ -1134,7 +1134,7 @@ function createThrowingFunctionInfo(
   functionEffects: IrFunctionEffect[]
 ) {
   const functionThrowValueTypes = new Map<string, IrFunctionEffect['throwValueTypes']>(
-    functionDeclarations.map((item) => [item.name, []])
+    functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, []])
   )
   const throwingFunctions = new Set()
 
@@ -1273,7 +1273,7 @@ function isBoxedFunctionParam(param: any, index: number, statement: AnyNode, con
 
 function collectExternalEventLoopFunctions(functions: AnyNode[]): Set<string> {
   const functionsByName = new Map(
-    functions.flatMap((item) => (typeof item.name === 'string' ? [[item.name, item]] : []))
+    functions.flatMap((item: AnyNode) => (typeof item.name === 'string' ? [[item.name, item]] : []))
   )
   const names = new Set<string>()
   let changed = true
@@ -1797,7 +1797,7 @@ function emitStatement(statement: AnyNode, context: CFunctionContext): string[] 
   if (statement.type === 'BlockStatement') {
     return withVariableScope(context, () => [
       '{',
-      ...emitStatementBody(statement, context).map((line) => `  ${line}`),
+      ...emitStatementBody(statement, context).map((line: string) => `  ${line}`),
       '}'
     ])
   }
@@ -1862,7 +1862,7 @@ function inferCatchBindingValueType(statement: AnyNode, context: CFunctionContex
     ...collectLocalAwaitRejectionValueTypes(statement.block, context)
   ]
 
-  return types.length > 0 && types.every((type) => type === 'error') ? 'object' : 'string'
+  return types.length > 0 && types.every((type: string) => type === 'error') ? 'object' : 'string'
 }
 
 function collectLocalAwaitRejectionValueTypes(
@@ -2920,13 +2920,13 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
       ...left.lines,
       ...emitPrepareOwnedValueWrite(temp),
       `if (${left.expression}.tag == CCJS_TAG_NULL) {`,
-      ...right.lines.map((line) => `  ${line}`),
+      ...right.lines.map((line: string) => `  ${line}`),
       `  ${temp} = ${right.expression};`,
-      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line) => `  ${line}`),
+      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line: string) => `  ${line}`),
       `  ccjs_retain(${temp});`,
       '} else {',
       `  ${temp} = ${left.expression};`,
-      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line) => `  ${line}`),
+      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line: string) => `  ${line}`),
       `  ccjs_retain(${temp});`,
       '}'
     ],
@@ -3054,7 +3054,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     if (member?.valueType === 'string') {
       return emitRuntimeStringLogValue(
-        (temp) =>
+        (temp: string) =>
           `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
         context
       )
@@ -3066,7 +3066,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     if (element?.valueType === 'string') {
       return emitRuntimeStringLogValue(
-        (temp) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
+        (temp: string) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
         context
       )
     }
@@ -3075,7 +3075,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     if (field?.valueType === 'string') {
       return emitRuntimeStringLogValue(
-        (temp) =>
+        (temp: string) =>
           `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
         context
       )
@@ -3173,7 +3173,7 @@ function emitNumberLogValue(expression: AnyNode, type: string, context: CFunctio
     if (member != null && ['number', 'boolean'].includes(member.valueType)) {
       return emitRuntimeNumberLogValue(
         member.valueType,
-        (temp) =>
+        (temp: string) =>
           `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
         context
       )
@@ -3186,7 +3186,7 @@ function emitNumberLogValue(expression: AnyNode, type: string, context: CFunctio
     if (element != null && ['number', 'boolean'].includes(element.valueType)) {
       return emitRuntimeNumberLogValue(
         element.valueType,
-        (temp) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
+        (temp: string) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
         context
       )
     }
@@ -3196,7 +3196,7 @@ function emitNumberLogValue(expression: AnyNode, type: string, context: CFunctio
     if (field != null && ['number', 'boolean'].includes(field.valueType)) {
       return emitRuntimeNumberLogValue(
         field.valueType,
-        (temp) =>
+        (temp: string) =>
           `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
         context
       )
@@ -3646,7 +3646,7 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
       `  if (${status} != CCJS_OK) ${emitFailureStatement(context)}`,
       ...(valueCheck === '' ? [] : [`  ${valueCheck}`]),
       `  ${emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${fulfilledValue}, &${out})`, context)}`,
-      ...(managedResult ? emitPrepareOwnedValueWrite(result).map((line) => `  ${line}`) : []),
+      ...(managedResult ? emitPrepareOwnedValueWrite(result).map((line: string) => `  ${line}`) : []),
       '}'
     ],
     expression: out,
@@ -3774,7 +3774,7 @@ function emitAwaitRejectedPromiseLines(
 
   return [
     `if (ccjs_promise_get_state(${promiseExpression}) == CCJS_PROMISE_REJECTED) {`,
-    ...emitPrepareOwnedValueWrite('ccjs_error').map((line) => `  ${line}`),
+    ...emitPrepareOwnedValueWrite('ccjs_error').map((line: string) => `  ${line}`),
     `  ${emitStatusCheck(`ccjs_promise_get_result(${promiseExpression}, &ccjs_error)`, context)}`,
     `  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`,
     '  ccjs_error_active = 1;',
@@ -4193,13 +4193,13 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
   for (const arg of expression.args) {
     const value = emitCValueExpression(arg, context)
 
-    lines.push(...value.lines.map((line) => `  ${line}`))
+    lines.push(...value.lines.map((line: string) => `  ${line}`))
     args.push(value.expression)
   }
 
   const out = nextCName(context, 'ccjs_callback_out')
   registerOwnedValue(context, out)
-  lines.push(...emitPrepareOwnedValueWrite(out).map((line) => `  ${line}`))
+  lines.push(...emitPrepareOwnedValueWrite(out).map((line: string) => `  ${line}`))
 
   if (args.length === 0) {
     lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, 0, 0, &${out})`, context)}`)
@@ -4253,11 +4253,11 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   for (const arg of expression.args) {
     const value = emitCValueExpression(arg, context)
 
-    lines.push(...value.lines.map((line) => `  ${line}`))
+    lines.push(...value.lines.map((line: string) => `  ${line}`))
     args.push(value.expression)
   }
 
-  lines.push(...emitPrepareOwnedValueWrite(out).map((line) => `  ${line}`))
+  lines.push(...emitPrepareOwnedValueWrite(out).map((line: string) => `  ${line}`))
 
   if (args.length === 0) {
     lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, 0, 0, &${out})`, context)}`)
