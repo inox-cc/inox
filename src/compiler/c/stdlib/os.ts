@@ -1,4 +1,5 @@
 import { osRuntimeConstantValue } from '../../stdlib/descriptors/os.ts'
+import type { AnyNode } from '../../types.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
@@ -12,7 +13,7 @@ import type {
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 
-export function cOsRuntimeMethodName(expression: any): string | null {
+export function cOsRuntimeMethodName(expression: AnyNode): string | null {
   if (expression?.type !== 'CallExpression' || typeof expression.osRuntimeMethod !== 'string') {
     return null
   }
@@ -20,7 +21,7 @@ export function cOsRuntimeMethodName(expression: any): string | null {
   return expression.osRuntimeMethod
 }
 
-export function cOsRuntimeConstantName(expression: any): string | null {
+export function cOsRuntimeConstantName(expression: AnyNode): string | null {
   if (typeof expression?.osRuntimeConstant !== 'string') {
     return null
   }
@@ -36,7 +37,10 @@ export function cOsRuntimeConstantValue(name: string): string | null {
   return osRuntimeConstantValue(name)
 }
 
-export function emitPreparedOsConstantExpression(expression: any, context: CFunctionContext): PreparedExpression | null {
+export function emitPreparedOsConstantExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
   const constant = cOsRuntimeConstantName(expression)
   const value = constant == null ? null : cOsRuntimeConstantValue(constant)
 
@@ -60,7 +64,7 @@ export function emitPreparedOsConstantExpression(expression: any, context: CFunc
 }
 
 export function emitPreparedOsStringCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {

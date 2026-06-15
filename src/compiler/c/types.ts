@@ -49,6 +49,10 @@ export type CObjectShapeField = CShapeValueMetadata & {
   readonly?: boolean
 }
 
+export type CObjectShape = {
+  fields?: CObjectShapeField[] | null
+}
+
 export type CObjectFieldInfo = CShapeValueMetadata & {
   index: number
   key: string | null
@@ -98,7 +102,7 @@ export type CFunctionParam = {
   nullable?: boolean
   promiseValueType?: string | null
   setElementType?: string | null
-  shape?: any
+  shape?: CObjectShape | null
   valueType: string
 }
 
@@ -111,7 +115,7 @@ export type CFunctionType = {
   returnNullable?: boolean
   returnPromiseValueType?: string | null
   returnSetElementType?: string | null
-  returnShape?: any
+  returnShape?: CObjectShape | null
   returnType: string
 }
 
@@ -128,7 +132,7 @@ export type CRuntimeArrowCapture = {
   name: string
   promiseSettlementKind?: 'reject' | 'resolve' | null
   runtimeManaged?: boolean
-  shape?: any
+  shape?: CObjectShape | null
   valueType: string
 }
 
@@ -187,7 +191,7 @@ export type CPromiseChainWrapper = {
   expression: AnyNode
   finalizerName: string
   needsEventLoop: boolean
-  returnShape: any
+  returnShape: CObjectShape | null
   returnType: string
 }
 
@@ -209,7 +213,7 @@ export type CAsyncTaskPrefixLocal = {
   mapKeyType?: string
   mapValueType?: string
   setElementType?: string
-  shape?: any
+  shape?: CObjectShape | null
 }
 
 export type CAsyncTaskPrefixFrameLocal = CAsyncTaskPrefixLocal & {
@@ -227,7 +231,7 @@ export type CAsyncTaskAwaitStep = {
   mapKeyType?: string
   mapValueType?: string
   setElementType?: string
-  shape?: any
+  shape?: CObjectShape | null
 }
 
 export type CAsyncTaskAwaitFrameLocal = CAsyncTaskAwaitStep & {

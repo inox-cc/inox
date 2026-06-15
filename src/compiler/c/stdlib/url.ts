@@ -1,4 +1,5 @@
 import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } from '../../stdlib/descriptors/url.ts'
+import type { AnyNode } from '../../types.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
@@ -9,22 +10,23 @@ import {
 } from '../context.ts'
 import { cStringLiteral } from '../identifiers.ts'
 import type {
+  CObjectShape,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
 
 export type UrlLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
+  registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
 }
 
-export function cUrlRuntimeMethodName(expression: any): string | null {
+export function cUrlRuntimeMethodName(expression: AnyNode): string | null {
   if (
     (expression?.type !== 'CallExpression' && expression?.type !== 'NewExpression') ||
     typeof expression.urlRuntimeMethod !== 'string'
@@ -36,7 +38,7 @@ export function cUrlRuntimeMethodName(expression: any): string | null {
 }
 
 export function emitPreparedUrlStringCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: UrlLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -63,7 +65,7 @@ export function emitPreparedUrlStringCallExpression(
 }
 
 export function emitPreparedUrlObjectExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: UrlLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -120,7 +122,7 @@ export function emitPreparedUrlObjectExpression(
 }
 
 export function emitPreparedUrlSearchParamsObjectExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: UrlLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -157,7 +159,7 @@ export function emitPreparedUrlSearchParamsObjectExpression(
 }
 
 export function emitPreparedUrlSearchParamsCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: UrlLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -261,7 +263,7 @@ export function emitPreparedUrlSearchParamsCallExpression(
 }
 
 export function emitUrlObjectFieldAssignment(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: UrlLoweringDependencies
 ): string[] | null {

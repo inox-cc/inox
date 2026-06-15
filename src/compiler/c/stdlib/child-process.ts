@@ -1,3 +1,4 @@
+import type { AnyNode } from '../../types.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
@@ -6,16 +7,17 @@ import {
   type CFunctionContext
 } from '../context.ts'
 import type {
+  CObjectShape,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 
 export type ChildProcessLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
 }
 
-export function cChildProcessRuntimeMethodName(expression: any): string | null {
+export function cChildProcessRuntimeMethodName(expression: AnyNode): string | null {
   if (expression?.type !== 'CallExpression' || typeof expression.childProcessRuntimeMethod !== 'string') {
     return null
   }
@@ -24,7 +26,7 @@ export function cChildProcessRuntimeMethodName(expression: any): string | null {
 }
 
 export function emitPreparedChildProcessCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: ChildProcessLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -68,7 +70,7 @@ export function emitPreparedChildProcessCallExpression(
       : dependencies.emitCValueExpression(optionsArg, context)
   const args =
     argArray?.type === 'ArrayLiteral'
-      ? argArray.elements.map((arg: any) => dependencies.emitCValueExpression(arg, context))
+      ? argArray.elements.map((arg: AnyNode) => dependencies.emitCValueExpression(arg, context))
       : []
 
   lines.push(...args.flatMap((arg: PreparedExpression) => arg.lines))

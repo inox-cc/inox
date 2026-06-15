@@ -14,6 +14,7 @@ import type {
   CKnownObjectIndexField,
   CKnownObjectMemberField,
   CObjectFieldInfo,
+  CObjectShape,
   CObjectIndexFieldInfo,
   CObjectShapeField,
   CPreparedExpression as PreparedExpression
@@ -24,10 +25,6 @@ export type ObjectVariableDeclarationDependencies = {
   emitCFieldFlags: (field: CObjectShapeField) => string
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
-}
-
-type CObjectShape = {
-  fields?: CObjectShapeField[] | null
 }
 
 export function isMemberAccessExpression(expression: AnyNode): boolean {

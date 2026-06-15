@@ -1,6 +1,6 @@
 import type { IrProgram, AnyNode } from '../../types.ts'
 
-export function isConsoleLog(expression: any): boolean {
+export function isConsoleLog(expression: AnyNode): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee.type === 'MemberExpression' &&

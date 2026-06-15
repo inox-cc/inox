@@ -1,4 +1,5 @@
 import { pathParseObjectFields, pathRuntimeConstantValue } from '../../stdlib/descriptors/path.ts'
+import type { AnyNode } from '../../types.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
@@ -8,16 +9,17 @@ import {
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type {
+  CObjectShape,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 
 export type PathLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
 }
 
-export function cPathRuntimeMethodName(expression: any): string | null {
+export function cPathRuntimeMethodName(expression: AnyNode): string | null {
   if (expression?.type !== 'CallExpression' || typeof expression.pathRuntimeMethod !== 'string') {
     return null
   }
@@ -25,7 +27,7 @@ export function cPathRuntimeMethodName(expression: any): string | null {
   return expression.pathRuntimeMethod
 }
 
-export function cPathRuntimeConstantName(expression: any): string | null {
+export function cPathRuntimeConstantName(expression: AnyNode): string | null {
   if (typeof expression?.pathRuntimeConstant !== 'string') {
     return null
   }
@@ -41,7 +43,10 @@ export function cPathRuntimeConstantValue(name: string): string | null {
   return pathRuntimeConstantValue(name)
 }
 
-export function emitPreparedPathConstantExpression(expression: any, context: CFunctionContext): PreparedExpression | null {
+export function emitPreparedPathConstantExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
   const constant = cPathRuntimeConstantName(expression)
   const value = constant == null ? null : cPathRuntimeConstantValue(constant)
 
@@ -65,7 +70,7 @@ export function emitPreparedPathConstantExpression(expression: any, context: CFu
 }
 
 export function emitPreparedPathObjectCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PathLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -100,7 +105,7 @@ export function emitPreparedPathObjectCallExpression(
 }
 
 export function emitPreparedPathStringCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PathLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -119,7 +124,7 @@ export function emitPreparedPathStringCallExpression(
   }
 
   if (method === 'join' || method === 'resolve') {
-    const args = expression.args.map((arg: any) => dependencies.emitCValueExpression(arg, context))
+    const args = expression.args.map((arg: AnyNode) => dependencies.emitCValueExpression(arg, context))
 
     lines.push(...args.flatMap((arg: PreparedExpression) => arg.lines))
     lines.push(...emitPrepareOwnedValueWrite(out))
@@ -205,7 +210,7 @@ export function emitPreparedPathStringCallExpression(
 }
 
 export function emitPreparedPathBooleanCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PathLoweringDependencies
 ): PreparedExpression | null {
