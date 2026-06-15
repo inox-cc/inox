@@ -48,8 +48,6 @@ import {
   nextCName,
   registerBoxedValue,
   registerEventLoop,
-  registerOwnedCryptoHash,
-  registerOwnedCryptoHmac,
   registerOwnedPromise,
   registerOwnedValue,
   shouldEmitCleanupLabel,
@@ -111,7 +109,17 @@ import {
 } from './stdlib/binary.ts'
 import { cChildProcessRuntimeMethodName } from './stdlib/child-process.ts'
 import { irProgramsUseConsoleRuntime, isConsoleLog } from './stdlib/console.ts'
-import { cryptoRuntimeMethodName } from './stdlib/crypto.ts'
+import {
+  cryptoRuntimeMethodName,
+  emitCryptoHashVariableDeclaration,
+  emitPreparedCryptoCallExpression,
+  emitPreparedCryptoHashCallExpression,
+  emitPreparedCryptoHashHandleExpression,
+  emitPreparedCryptoHmacCallExpression,
+  emitPreparedCryptoHmacHandleExpression,
+  emitPreparedCryptoNumberCallExpression,
+  type CryptoLoweringDependencies
+} from './stdlib/crypto.ts'
 import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from './stdlib/fetch.ts'
 import {
   cFsRuntimeConstantExpression,
@@ -176,6 +184,14 @@ import type {
   SourceLocation
 } from '../types.ts'
 export type { CModuleOutputFile } from './types.ts'
+
+const cryptoLoweringDependencies: CryptoLoweringDependencies = {
+  cStringLiteralNode,
+  emitCValueExpression,
+  emitPreparedNumberExpression,
+  emitPreparedStringBytesOperand,
+  inferExpressionType
+}
 
 type AsyncTaskSuccessPhaseKind = 'pre-finalizer' | 'prefix-finalizer' | 'body'
 type AsyncTaskTryPhaseKind = 'success-finalizer' | 'reject-finalizer' | 'handler-prelude' | 'handler-finalizer'
@@ -9692,7 +9708,7 @@ function emitStatement(statement, context) {
       return debugMemoryCall.lines
     }
 
-    const cryptoCall = emitPreparedCryptoCallExpression(statement.expression, context, {
+    const cryptoCall = emitPreparedCryptoCallExpression(statement.expression, context, cryptoLoweringDependencies, {
       discard: true
     })
 
@@ -9700,7 +9716,11 @@ function emitStatement(statement, context) {
       return cryptoCall.lines
     }
 
-    const cryptoNumberCall = emitPreparedCryptoNumberCallExpression(statement.expression, context)
+    const cryptoNumberCall = emitPreparedCryptoNumberCallExpression(
+      statement.expression,
+      context,
+      cryptoLoweringDependencies
+    )
 
     if (cryptoNumberCall != null) {
       return cryptoNumberCall.lines
@@ -9730,13 +9750,21 @@ function emitStatement(statement, context) {
       return timerCall.lines
     }
 
-    const cryptoHashCall = emitPreparedCryptoHashCallExpression(statement.expression, context)
+    const cryptoHashCall = emitPreparedCryptoHashCallExpression(
+      statement.expression,
+      context,
+      cryptoLoweringDependencies
+    )
 
     if (cryptoHashCall != null) {
       return cryptoHashCall.lines
     }
 
-    const cryptoHmacCall = emitPreparedCryptoHmacCallExpression(statement.expression, context)
+    const cryptoHmacCall = emitPreparedCryptoHmacCallExpression(
+      statement.expression,
+      context,
+      cryptoLoweringDependencies
+    )
 
     if (cryptoHmacCall != null) {
       return cryptoHmacCall.lines
@@ -11961,7 +11989,7 @@ function emitVariableDeclaration(statement, context) {
     return emitErrorObjectVariableDeclaration(statement, context).join('\n')
   }
 
-  const cryptoHashDeclaration = emitCryptoHashVariableDeclaration(statement, context)
+  const cryptoHashDeclaration = emitCryptoHashVariableDeclaration(statement, context, cryptoLoweringDependencies)
 
   if (cryptoHashDeclaration != null) {
     return cryptoHashDeclaration.join('\n')
@@ -12073,7 +12101,7 @@ function emitScalarVariableDeclaration(statement, context) {
     return [`ccjs_timer_handle* ${statement.name} = 0;`]
   }
 
-  const cryptoHashDeclaration = emitCryptoHashVariableDeclaration(statement, context)
+  const cryptoHashDeclaration = emitCryptoHashVariableDeclaration(statement, context, cryptoLoweringDependencies)
 
   if (cryptoHashDeclaration != null) {
     return cryptoHashDeclaration
@@ -12151,7 +12179,7 @@ function emitScalarVariableDeclaration(statement, context) {
   }
 
   if (inferred === 'crypto-hash') {
-    const handle = emitPreparedCryptoHashHandleExpression(statement.init, context)
+    const handle = emitPreparedCryptoHashHandleExpression(statement.init, context, cryptoLoweringDependencies)
 
     context.variables.set(statement.name, 'crypto-hash')
 
@@ -12159,7 +12187,7 @@ function emitScalarVariableDeclaration(statement, context) {
   }
 
   if (inferred === 'crypto-hmac') {
-    const handle = emitPreparedCryptoHmacHandleExpression(statement.init, context)
+    const handle = emitPreparedCryptoHmacHandleExpression(statement.init, context, cryptoLoweringDependencies)
 
     context.variables.set(statement.name, 'crypto-hmac')
 
@@ -12735,7 +12763,7 @@ function emitCValueExpression(expression, context) {
     return debugMemoryCall
   }
 
-  const cryptoCall = emitPreparedCryptoCallExpression(expression, context)
+  const cryptoCall = emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies)
 
   if (cryptoCall != null) {
     return cryptoCall
@@ -15169,7 +15197,7 @@ function emitPreparedNumberExpression(expression, context) {
       return binaryCall
     }
 
-    const cryptoCall = emitPreparedCryptoNumberCallExpression(expression, context)
+    const cryptoCall = emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies)
 
     if (cryptoCall != null) {
       return cryptoCall
@@ -15922,19 +15950,19 @@ function emitPreparedCallExpression(expression, context) {
     return collectionCall
   }
 
-  const cryptoHashCall = emitPreparedCryptoHashCallExpression(expression, context)
+  const cryptoHashCall = emitPreparedCryptoHashCallExpression(expression, context, cryptoLoweringDependencies)
 
   if (cryptoHashCall != null) {
     return cryptoHashCall
   }
 
-  const cryptoHmacCall = emitPreparedCryptoHmacCallExpression(expression, context)
+  const cryptoHmacCall = emitPreparedCryptoHmacCallExpression(expression, context, cryptoLoweringDependencies)
 
   if (cryptoHmacCall != null) {
     return cryptoHmacCall
   }
 
-  const cryptoCall = emitPreparedCryptoCallExpression(expression, context)
+  const cryptoCall = emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies)
 
   if (cryptoCall != null) {
     return cryptoCall
@@ -17810,413 +17838,6 @@ function emitPreparedDebugMemoryCallExpression(expression, context, options: { d
 
   return {
     lines,
-    expression: out
-  }
-}
-
-function emitCryptoHashVariableDeclaration(statement, context): string[] | null {
-  if (statement.init?.type !== 'CallExpression') {
-    return null
-  }
-
-  if (cryptoRuntimeMethodName(statement.init) === 'createHash') {
-    return (
-      emitPreparedCryptoHashCallExpression(statement.init, context, {
-        out: statement.name
-      })?.lines ?? null
-    )
-  }
-
-  if (cryptoRuntimeMethodName(statement.init) === 'createHmac') {
-    return (
-      emitPreparedCryptoHmacCallExpression(statement.init, context, {
-        out: statement.name
-      })?.lines ?? null
-    )
-  }
-
-  if (inferExpressionType(statement.init, context) !== 'crypto-hash') {
-    if (inferExpressionType(statement.init, context) !== 'crypto-hmac') {
-      return null
-    }
-
-    const handle = emitPreparedCryptoHmacHandleExpression(statement.init, context)
-
-    context.variables.set(statement.name, 'crypto-hmac')
-
-    return [...handle.lines, `ccjs_crypto_hmac* ${statement.name} = ${handle.expression};`]
-  }
-
-  const handle = emitPreparedCryptoHashHandleExpression(statement.init, context)
-
-  context.variables.set(statement.name, 'crypto-hash')
-
-  return [...handle.lines, `ccjs_crypto_hash* ${statement.name} = ${handle.expression};`]
-}
-
-function emitPreparedCryptoHashCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cryptoRuntimeMethodName(expression)
-
-  if (method === 'createHash') {
-    const algorithm = emitPreparedStringBytesOperand(
-      expression.args[0] ?? cStringLiteralNode('', expression.loc),
-      context,
-      'ccjs_crypto_algorithm'
-    )
-    const out = options.out ?? nextCName(context, 'ccjs_crypto_hash')
-
-    if (options.owned !== false) {
-      registerOwnedCryptoHash(context, out)
-    } else {
-      context.variables.set(out, 'crypto-hash')
-    }
-
-    return {
-      lines: [
-        ...algorithm.lines,
-        `ccjs_crypto_hash_free(${out});`,
-        `${out} = 0;`,
-        emitStatusCheck(
-          `ccjs_crypto_hash_create(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, &${out})`,
-          context
-        )
-      ],
-      expression: out
-    }
-  }
-
-  if (method !== 'Hash.update') {
-    return null
-  }
-
-  const handle = emitPreparedCryptoHashHandleExpression(expression.callee.object, context)
-  const data = emitCValueExpression(expression.args[0] ?? cStringLiteralNode('', expression.loc), context)
-
-  return {
-    lines: [
-      ...handle.lines,
-      ...data.lines,
-      emitStatusCheck(`ccjs_crypto_hash_update(${handle.expression}, ${data.expression})`, context)
-    ],
-    expression: handle.expression
-  }
-}
-
-function emitPreparedCryptoHmacCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cryptoRuntimeMethodName(expression)
-
-  if (method === 'createHmac') {
-    const algorithm = emitPreparedStringBytesOperand(
-      expression.args[0] ?? cStringLiteralNode('', expression.loc),
-      context,
-      'ccjs_crypto_algorithm'
-    )
-    const key = emitCValueExpression(expression.args[1] ?? cStringLiteralNode('', expression.loc), context)
-    const out = options.out ?? nextCName(context, 'ccjs_crypto_hmac')
-
-    if (options.owned !== false) {
-      registerOwnedCryptoHmac(context, out)
-    } else {
-      context.variables.set(out, 'crypto-hmac')
-    }
-
-    return {
-      lines: [
-        ...algorithm.lines,
-        ...key.lines,
-        `ccjs_crypto_hmac_free(${out});`,
-        `${out} = 0;`,
-        emitStatusCheck(
-          `ccjs_crypto_hmac_create(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${key.expression}, &${out})`,
-          context
-        )
-      ],
-      expression: out
-    }
-  }
-
-  if (method !== 'Hmac.update') {
-    return null
-  }
-
-  const handle = emitPreparedCryptoHmacHandleExpression(expression.callee.object, context)
-  const data = emitCValueExpression(expression.args[0] ?? cStringLiteralNode('', expression.loc), context)
-
-  return {
-    lines: [
-      ...handle.lines,
-      ...data.lines,
-      emitStatusCheck(`ccjs_crypto_hmac_update(${handle.expression}, ${data.expression})`, context)
-    ],
-    expression: handle.expression
-  }
-}
-
-function emitPreparedCryptoHashHandleExpression(expression, context) {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
-
-    if (context.variables.get(name) === 'crypto-hash') {
-      return {
-        lines: [],
-        expression: name
-      }
-    }
-  }
-
-  if (expression?.type === 'CallExpression') {
-    const call = emitPreparedCryptoHashCallExpression(expression, context)
-
-    if (call != null) {
-      return call
-    }
-  }
-
-  context.diagnostics.push(
-    diagnostic(
-      'CCJS_C_CRYPTO_HASH',
-      'this crypto hash expression is not supported by the current C backend slice',
-      expression?.loc
-    )
-  )
-
-  return {
-    lines: [],
-    expression: '0'
-  }
-}
-
-function emitPreparedCryptoHmacHandleExpression(expression, context) {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
-
-    if (context.variables.get(name) === 'crypto-hmac') {
-      return {
-        lines: [],
-        expression: name
-      }
-    }
-  }
-
-  if (expression?.type === 'CallExpression') {
-    const call = emitPreparedCryptoHmacCallExpression(expression, context)
-
-    if (call != null) {
-      return call
-    }
-  }
-
-  context.diagnostics.push(
-    diagnostic(
-      'CCJS_C_CRYPTO_HMAC',
-      'this crypto hmac expression is not supported by the current C backend slice',
-      expression?.loc
-    )
-  )
-
-  return {
-    lines: [],
-    expression: '0'
-  }
-}
-
-function emitPreparedCryptoCallExpression(expression, context, options: { discard?: boolean } = {}) {
-  const method = cryptoRuntimeMethodName(expression)
-
-  if (method == null || method === 'randomInt' || method === 'timingSafeEqual') {
-    return null
-  }
-
-  if (method === 'createHash' || method === 'Hash.update' || method === 'createHmac' || method === 'Hmac.update') {
-    return null
-  }
-
-  if (method === 'getHashes') {
-    const out = nextCName(context, 'ccjs_crypto_hashes')
-    registerOwnedValue(context, out)
-
-    return {
-      lines: [
-        ...emitPrepareOwnedValueWrite(out),
-        emitStatusCheck(`ccjs_crypto_get_hashes(&ccjs_default_allocator, &${out})`, context),
-        emitRuntimeValueCheck(out, 'CCJS_TAG_ARRAY', context)
-      ],
-      expression: options.discard === true ? '' : out
-    }
-  }
-
-  if (method === 'hash') {
-    const algorithm = emitPreparedStringBytesOperand(
-      expression.args[0] ?? cStringLiteralNode('', expression.loc),
-      context,
-      'ccjs_crypto_algorithm'
-    )
-    const data = emitCValueExpression(expression.args[1] ?? cStringLiteralNode('', expression.loc), context)
-    const out = nextCName(context, 'ccjs_crypto_digest')
-    const encoding = expression.cryptoHashDigestEncoding === 'bytes' ? 'bytes' : 'hex'
-    const digestCall =
-      encoding === 'hex'
-        ? `ccjs_crypto_hash_oneshot_hex(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${data.expression}, &${out})`
-        : `ccjs_crypto_hash_oneshot_bytes(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${data.expression}, &${out})`
-    const expectedTag = encoding === 'hex' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_BYTES'
-
-    registerOwnedValue(context, out)
-
-    return {
-      lines: [
-        ...algorithm.lines,
-        ...data.lines,
-        ...emitPrepareOwnedValueWrite(out),
-        emitStatusCheck(digestCall, context),
-        emitRuntimeValueCheck(out, expectedTag, context)
-      ],
-      expression: options.discard === true ? '' : out
-    }
-  }
-
-  if (method === 'Hash.digest' || method === 'Hmac.digest') {
-    const isHmac = method === 'Hmac.digest'
-    const handle = isHmac
-      ? emitPreparedCryptoHmacHandleExpression(expression.callee.object, context)
-      : emitPreparedCryptoHashHandleExpression(expression.callee.object, context)
-    const out = nextCName(context, 'ccjs_crypto_digest')
-    const encoding = expression.cryptoHashDigestEncoding === 'hex' ? 'hex' : 'bytes'
-    const digestCall =
-      encoding === 'hex'
-        ? `ccjs_crypto_${isHmac ? 'hmac' : 'hash'}_digest_hex(&ccjs_default_allocator, ${handle.expression}, &${out})`
-        : `ccjs_crypto_${isHmac ? 'hmac' : 'hash'}_digest_bytes(&ccjs_default_allocator, ${handle.expression}, &${out})`
-    const expectedTag = encoding === 'hex' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_BYTES'
-
-    registerOwnedValue(context, out)
-
-    return {
-      lines: [
-        ...handle.lines,
-        ...emitPrepareOwnedValueWrite(out),
-        emitStatusCheck(digestCall, context),
-        emitRuntimeValueCheck(out, expectedTag, context)
-      ],
-      expression: options.discard === true ? '' : out
-    }
-  }
-
-  if (method === 'getRandomValues' || method === 'randomFillSync') {
-    const value = emitCValueExpression(expression.args[0], context)
-    const preparedCall =
-      method === 'getRandomValues'
-        ? { lines: [], call: `ccjs_crypto_get_random_values(${value.expression})` }
-        : emitCryptoRandomFillCall(value.expression, expression, context)
-
-    if (options.discard === true) {
-      return {
-        lines: [...value.lines, ...preparedCall.lines, emitStatusCheck(preparedCall.call, context)],
-        expression: ''
-      }
-    }
-
-    const out = nextCName(context, 'ccjs_crypto_bytes')
-    registerOwnedValue(context, out)
-
-    return {
-      lines: [
-        ...value.lines,
-        ...preparedCall.lines,
-        emitStatusCheck(preparedCall.call, context),
-        ...emitPrepareOwnedValueWrite(out),
-        `${out} = ${value.expression};`,
-        emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context),
-        `ccjs_retain(${out});`
-      ],
-      expression: out
-    }
-  }
-
-  if (method === 'randomBytes') {
-    const size = emitPreparedNumberExpression(expression.args[0], context)
-    const out = nextCName(context, 'ccjs_crypto_bytes')
-    registerOwnedValue(context, out)
-
-    return {
-      lines: [
-        ...size.lines,
-        ...emitPrepareOwnedValueWrite(out),
-        emitStatusCheck(`ccjs_crypto_random_bytes(&ccjs_default_allocator, ${size.expression}, &${out})`, context),
-        emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context)
-      ],
-      expression: options.discard === true ? '' : out
-    }
-  }
-
-  const out = nextCName(context, 'ccjs_crypto_uuid')
-  registerOwnedValue(context, out)
-
-  return {
-    lines: [
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_crypto_random_uuid(&ccjs_default_allocator, &${out})`, context),
-      emitRuntimeValueCheck(out, 'CCJS_TAG_STRING', context)
-    ],
-    expression: options.discard === true ? '' : out
-  }
-}
-
-function emitCryptoRandomFillCall(value: string, expression, context): { lines: string[]; call: string } {
-  const offset =
-    expression.args[1] == null
-      ? { lines: [], expression: '0' }
-      : emitPreparedNumberExpression(expression.args[1], context)
-  const size =
-    expression.args[2] == null
-      ? { lines: [], expression: '0' }
-      : emitPreparedNumberExpression(expression.args[2], context)
-  const hasSize = expression.args[2] == null ? '0' : '1'
-
-  return {
-    lines: [...offset.lines, ...size.lines],
-    call: `ccjs_crypto_random_fill(${value}, ${offset.expression}, ${size.expression}, ${hasSize})`
-  }
-}
-
-function emitPreparedCryptoNumberCallExpression(expression, context) {
-  const method = cryptoRuntimeMethodName(expression)
-
-  if (method === 'timingSafeEqual') {
-    const left = emitCValueExpression(expression.args[0], context)
-    const right = emitCValueExpression(expression.args[1], context)
-    const out = nextCName(context, 'ccjs_crypto_equal')
-
-    return {
-      lines: [
-        ...left.lines,
-        ...right.lines,
-        `int ${out} = 0;`,
-        emitStatusCheck(`ccjs_crypto_timing_safe_equal(${left.expression}, ${right.expression}, &${out})`, context)
-      ],
-      expression: out
-    }
-  }
-
-  if (method !== 'randomInt') {
-    return null
-  }
-
-  const min =
-    expression.args.length === 1
-      ? { lines: [], expression: '0' }
-      : emitPreparedNumberExpression(expression.args[0], context)
-  const max = emitPreparedNumberExpression(
-    expression.args.length === 1 ? expression.args[0] : expression.args[1],
-    context
-  )
-  const out = nextCName(context, 'ccjs_crypto_int')
-
-  return {
-    lines: [
-      ...min.lines,
-      ...max.lines,
-      `ccjs_number ${out} = 0;`,
-      emitStatusCheck(`ccjs_crypto_random_int(${min.expression}, ${max.expression}, &${out})`, context)
-    ],
     expression: out
   }
 }
