@@ -1,15 +1,27 @@
 import { diagnostic } from '../../diagnostics.ts'
 import {
+  emitEventLoopReference,
+  emitFailureStatement,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
+  registerEventLoop,
   registerOwnedValue,
   withNullableScalarNarrowing
 } from '../context.ts'
+import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
+import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
+import { mathRuntimeMethodName } from '../runtime-methods.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import { cRuntimeValueTag, isManagedRuntimeReturnType } from '../value-types.ts'
+import {
+  cRuntimeValueTag,
+  isManagedRuntimeReturnType,
+  isNullableScalarParam,
+  isNullableScalarType
+} from '../value-types.ts'
+import { cTimeRuntimeCallName } from '../stdlib/time.ts'
 import {
   cUnsupportedExpressionCode,
   emitCOperator,
@@ -69,6 +81,437 @@ export type CScalarExpressionDependencies = {
   resolveKnownObjectIndex: (expression: any, context: any) => any | null
   resolveKnownObjectMember: (expression: any, context: any) => any | null
   resolveRuntimeArrayIndex: (expression: any, context: any) => any | null
+}
+
+type PreparedCallArgs = {
+  lines: string[]
+  args: string[]
+}
+
+export type CCallExpressionDependencies = {
+  currentErrorTarget: (context: any) => string | null
+  emitCExpression: (expression: any, context: any) => string
+  emitCNumberConversionValueExpression: (expression: any, context: any) => PreparedExpression | null
+  emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  emitFunctionValueExpression: (expression: any, context: any) => string
+  emitNullableFunctionValueExpression: (expression: any, functionType: any, context: any) => PreparedExpression
+  emitNullableScalarValueExpression: (expression: any, context: any) => PreparedExpression
+  emitPreparedArrayFilterCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedArrayMapCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedArrayPopCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedArraySortCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedClassMethodCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedCollectionCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedCryptoCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedCryptoHashCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedCryptoHmacCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedFetchHeadersCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedFsCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedFsStatsMethodExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedJsonCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
+  emitPreparedPathBooleanCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedPathStringCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedPromiseMethodExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedPromiseStaticExpression: (expression: any, context: any) => PreparedExpression | null
+  emitPreparedTimerCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedUrlSearchParamsCallExpression: (expression: any, context: any) => PreparedExpression | null
+  emitRuntimeCallbackCall: (expression: any, callbackType: any, context: any) => PreparedExpression
+  emitRuntimeCallbackValue: (expression: any, functionType: any, context: any) => PreparedExpression
+  isExternalEventLoopFunctionCallee: (callee: any, context: any) => boolean
+  isNullableFunctionType: (valueType: any, nullable: any) => boolean
+  isPromiseReturningFunctionCallee: (callee: any, context: any) => boolean
+  registerErrorChannel: (context: any) => void
+  resolveFunctionParams: (callee: any, context: any) => any[] | null
+  resolveRuntimeCallbackCalleeType: (callee: any, context: any) => any | null
+  resolveRuntimeFunctionArgumentType: (callee: any, index: number, param: any, context: any) => any | null
+}
+
+export function emitCallExpression(expression: any, context: any, deps: CCallExpressionDependencies): string {
+  return `${emitCallee(expression.callee, context)}(${expression.args.map((arg) => deps.emitCExpression(arg, context)).join(', ')})`
+}
+
+export function emitPreparedCallExpression(
+  expression: any,
+  context: any,
+  deps: CCallExpressionDependencies
+): PreparedExpression {
+  const mathCall = emitPreparedMathCallExpression(expression, context, deps)
+
+  if (mathCall != null) {
+    return mathCall
+  }
+
+  const pathStringCall = deps.emitPreparedPathStringCallExpression(expression, context)
+
+  if (pathStringCall != null) {
+    return pathStringCall
+  }
+
+  const pathBooleanCall = deps.emitPreparedPathBooleanCallExpression(expression, context)
+
+  if (pathBooleanCall != null) {
+    return pathBooleanCall
+  }
+
+  const fsStatsMethod = deps.emitPreparedFsStatsMethodExpression(expression, context)
+
+  if (fsStatsMethod != null) {
+    return fsStatsMethod
+  }
+
+  const numberConversion = deps.emitCNumberConversionValueExpression(expression, context)
+
+  if (numberConversion != null) {
+    return numberConversion
+  }
+
+  const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context)
+
+  if (classMethodCall != null) {
+    return classMethodCall
+  }
+
+  const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context)
+
+  if (arrayPopCall != null) {
+    return arrayPopCall
+  }
+
+  const arrayMapCall = deps.emitPreparedArrayMapCallExpression(expression, context)
+
+  if (arrayMapCall != null) {
+    return arrayMapCall
+  }
+
+  const arrayFilterCall = deps.emitPreparedArrayFilterCallExpression(expression, context)
+
+  if (arrayFilterCall != null) {
+    return arrayFilterCall
+  }
+
+  const arraySortCall = deps.emitPreparedArraySortCallExpression(expression, context)
+
+  if (arraySortCall != null) {
+    return arraySortCall
+  }
+
+  const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
+
+  if (collectionCall != null) {
+    return collectionCall
+  }
+
+  const cryptoHashCall = deps.emitPreparedCryptoHashCallExpression(expression, context)
+
+  if (cryptoHashCall != null) {
+    return cryptoHashCall
+  }
+
+  const cryptoHmacCall = deps.emitPreparedCryptoHmacCallExpression(expression, context)
+
+  if (cryptoHmacCall != null) {
+    return cryptoHmacCall
+  }
+
+  const cryptoCall = deps.emitPreparedCryptoCallExpression(expression, context)
+
+  if (cryptoCall != null) {
+    return cryptoCall
+  }
+
+  const fsCall = deps.emitPreparedFsCallExpression(expression, context)
+
+  if (fsCall != null) {
+    return fsCall
+  }
+
+  const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(expression, context)
+
+  if (fetchHeadersCall != null) {
+    return fetchHeadersCall
+  }
+
+  const urlSearchParamsCall = deps.emitPreparedUrlSearchParamsCallExpression(expression, context)
+
+  if (urlSearchParamsCall != null) {
+    return urlSearchParamsCall
+  }
+
+  const jsonCall = deps.emitPreparedJsonCallExpression(expression, context)
+
+  if (jsonCall != null) {
+    return jsonCall
+  }
+
+  const timerCall = deps.emitPreparedTimerCallExpression(expression, context, {
+    asValue: true
+  })
+
+  if (timerCall != null) {
+    return timerCall
+  }
+
+  const promise = deps.emitPreparedPromiseStaticExpression(expression, context)
+
+  if (promise != null) {
+    return promise
+  }
+
+  const promiseMethod = deps.emitPreparedPromiseMethodExpression(expression, context)
+
+  if (promiseMethod != null) {
+    return promiseMethod
+  }
+
+  const callbackType = deps.resolveRuntimeCallbackCalleeType(expression.callee, context)
+
+  if (callbackType != null) {
+    return deps.emitRuntimeCallbackCall(expression, callbackType, context)
+  }
+
+  const params = deps.resolveFunctionParams(expression.callee, context)
+
+  if (params == null) {
+    return {
+      lines: [],
+      expression: emitCallExpression(expression, context, deps)
+    }
+  }
+
+  const prepared = emitPreparedCallArgs(expression, params, context, deps)
+  const { lines, args } = prepared
+
+  if (isThrowingFunctionCallee(expression.callee, context)) {
+    return emitPreparedThrowingCallExpression(expression, args, lines, context, deps)
+  }
+
+  if (deps.isPromiseReturningFunctionCallee(expression.callee, context)) {
+    registerEventLoop(context)
+
+    return {
+      lines,
+      expression: `${emitCallee(expression.callee, context)}(${[emitEventLoopReference(context), ...args].join(', ')})`
+    }
+  }
+
+  if (deps.isExternalEventLoopFunctionCallee(expression.callee, context)) {
+    registerEventLoop(context)
+
+    return {
+      lines,
+      expression: `${emitCallee(expression.callee, context)}(${[emitEventLoopReference(context), ...args].join(', ')})`
+    }
+  }
+
+  return {
+    lines,
+    expression: `${emitCallee(expression.callee, context)}(${args.join(', ')})`
+  }
+}
+
+function emitPreparedMathCallExpression(
+  expression: any,
+  context: any,
+  deps: CCallExpressionDependencies
+): PreparedExpression | null {
+  const method = mathRuntimeMethodName(expression.callee)
+
+  if (method == null) {
+    return null
+  }
+
+  const args = expression.args.map((arg) => deps.emitPreparedNumberExpression(arg, context))
+
+  return {
+    lines: args.flatMap((arg) => arg.lines),
+    expression: `ccjs_math_${method}(${args.map((arg) => arg.expression).join(', ')})`
+  }
+}
+
+export function emitPreparedCallArgs(
+  expression: any,
+  params: any[],
+  context: any,
+  deps: CCallExpressionDependencies
+): PreparedCallArgs {
+  const lines: string[] = []
+  const args: string[] = []
+
+  for (const [index, arg] of expression.args.entries()) {
+    if (isNullableScalarParam(params[index])) {
+      const value = deps.emitNullableScalarValueExpression(arg, context)
+
+      lines.push(...value.lines)
+      args.push(value.expression)
+    } else if (deps.isNullableFunctionType(params[index]?.valueType, params[index]?.nullable)) {
+      const value = deps.emitNullableFunctionValueExpression(arg, params[index]?.functionType, context)
+
+      lines.push(...value.lines)
+      args.push(value.expression)
+    } else if (params[index]?.valueType === 'string') {
+      const value = deps.emitCValueExpression(arg, context)
+
+      lines.push(...value.lines)
+      args.push(value.expression)
+    } else if (params[index]?.valueType === 'object') {
+      const value = deps.emitCValueExpression(arg, context)
+
+      lines.push(...value.lines)
+      args.push(value.expression)
+    } else if (
+      params[index]?.valueType === 'bytes' ||
+      params[index]?.valueType === 'array' ||
+      params[index]?.valueType === 'map' ||
+      params[index]?.valueType === 'set'
+    ) {
+      const value = deps.emitCValueExpression(arg, context)
+
+      lines.push(...value.lines)
+      args.push(value.expression)
+    } else if (params[index]?.valueType === 'function') {
+      const runtimeFunctionType = deps.resolveRuntimeFunctionArgumentType(expression.callee, index, params[index], context)
+
+      if (runtimeFunctionType != null) {
+        const value = deps.emitRuntimeCallbackValue(arg, runtimeFunctionType, context)
+
+        lines.push(...value.lines)
+        args.push(value.expression)
+      } else {
+        args.push(deps.emitFunctionValueExpression(arg, context))
+      }
+    } else {
+      args.push(deps.emitCExpression(arg, context))
+    }
+  }
+
+  return {
+    lines,
+    args
+  }
+}
+
+function emitPreparedThrowingCallExpression(
+  expression: any,
+  args: string[],
+  preparedLines: string[],
+  context: any,
+  deps: CCallExpressionDependencies
+): PreparedExpression {
+  const name = expression.callee.path[0]
+  const returnInfo = resolveCFunctionCallReturnInfo(name, context)
+  const returnType = returnInfo.returnType
+  const returnNullable = returnInfo.returnNullable
+  const callArgs = [...args]
+  const lines: string[] = [...preparedLines]
+  let result = ''
+
+  if (deps.currentErrorTarget(context) == null && !context.throwingFunction) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_THROW',
+        'uncaught throwing function calls must be inside try/catch in the current C backend slice',
+        expression.loc
+      )
+    )
+  }
+
+  deps.registerErrorChannel(context)
+  lines.push(...emitPrepareOwnedValueWrite('ccjs_error'))
+
+  if (returnType !== 'void') {
+    if (isManagedRuntimeReturnType(returnType) || (returnNullable && isNullableScalarType(returnType))) {
+      result = nextCName(context, 'ccjs_call_result')
+      lines.push(`ccjs_value ${result} = ccjs_undefined_value();`)
+    } else {
+      result = nextCName(context, 'ccjs_call_result')
+      lines.push(`double ${result} = 0;`)
+    }
+
+    callArgs.push(`&${result}`)
+  }
+
+  callArgs.push('&ccjs_error')
+
+  const status = nextCName(context, 'ccjs_call_status')
+
+  lines.push(`ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${callArgs.join(', ')});`)
+  lines.push(...emitThrowingCallStatusCheck(status, context, deps))
+
+  return {
+    lines,
+    expression: result
+  }
+}
+
+function resolveCFunctionCallReturnInfo(name: string, context: any): { returnType: string; returnNullable: boolean } {
+  const returnType = context.functionReturnTypes.get(name) ?? 'void'
+
+  if (context.functionAsyncFlags.get(name) === true && returnType === 'promise') {
+    return {
+      returnType: context.functionReturnPromiseValueTypes.get(name) ?? 'void',
+      returnNullable: false
+    }
+  }
+
+  return {
+    returnType,
+    returnNullable: context.functionReturnNullables.get(name) === true
+  }
+}
+
+function emitThrowingCallStatusCheck(status: string, context: any, deps: CCallExpressionDependencies): string[] {
+  const target = deps.currentErrorTarget(context)
+  const lines = [`if (${status} == CCJS_ERR_THROW) {`, '  ccjs_error_active = 1;']
+
+  if (target != null) {
+    lines.push(`  goto ${target};`)
+  } else if (context.throwingFunction) {
+    lines.push('  ccjs_status_result = CCJS_ERR_THROW;')
+    lines.push('  goto ccjs_cleanup;')
+  } else {
+    lines.push(`  ${emitFailureStatement(context)}`)
+  }
+
+  lines.push('}')
+  lines.push(`if (${status} != CCJS_OK) ${emitFailureStatement(context)}`)
+
+  return lines
+}
+
+export function isThrowingFunctionCallee(callee: any, context: any): boolean {
+  return callee?.type === 'Reference' && callee.path.length === 1 && isThrowingFunctionName(callee.path[0], context)
+}
+
+export function isThrowingFunctionName(name: string, context: any): boolean {
+  return context.throwingFunctions?.has(name) === true
+}
+
+export function emitCallee(callee: any, context: any): string {
+  const timeRuntimeCall = cTimeRuntimeCallName(callee)
+
+  if (timeRuntimeCall != null) {
+    return timeRuntimeCall
+  }
+
+  if (callee.type === 'Reference' && callee.path.length === 1) {
+    if (isCJsGlobalRoot(callee.path[0], context)) {
+      reportCJsGlobalDiagnostic(context.diagnostics, callee.loc)
+      return '_'
+    }
+
+    return context.functionNames.get(callee.path[0]) ?? callee.path[0]
+  }
+
+  if (usesCJsGlobal(callee, context)) {
+    reportCJsGlobalDiagnostic(context.diagnostics, callee.loc)
+    return '_'
+  }
+
+  context.diagnostics.push(
+    diagnostic('CCJS_C_CALL_EXPR', 'this call expression is not supported by the current C backend slice', callee.loc)
+  )
+  return '_'
 }
 
 export function emitCExpression(expression: any, context: any, deps: CScalarExpressionDependencies): string {
