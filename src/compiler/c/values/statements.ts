@@ -9,6 +9,7 @@ import {
   withNullableScalarNarrowing,
   withVariableScope
 } from '../context.ts'
+import { normalizeFunctionType } from '../async/callbacks.ts'
 import { diagnostic } from '../../diagnostics.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cUnsupportedVariableDeclarationCode } from '../syntax.ts'
@@ -369,6 +370,40 @@ export function emitStringScalarVariableDeclaration(statement: any, context: any
     `${statement.kind === 'const' ? 'const ' : ''}char* ${statement.name} = ${deps.emitStringExpression(
       statement.init,
       context
+    )};`
+  ]
+}
+
+export function emitFunctionScalarVariableDeclaration(
+  statement: any,
+  context: any,
+  inferred: string
+): string[] | null {
+  if (inferred !== 'function') {
+    return null
+  }
+
+  const deps = statementDeps(context)
+  const runtimeFunctionType =
+    context.callbackArrowWrappers.get(statement.init)?.kind === 'arrow'
+      ? normalizeFunctionType(statement.functionType)
+      : null
+
+  context.variables.set(statement.name, 'function')
+  context.functionTypes.set(statement.name, runtimeFunctionType ?? statement.functionType)
+
+  if (deps.isRuntimeFunctionType(statement.functionType) || runtimeFunctionType != null) {
+    return deps.emitRuntimeCallbackVariableDeclaration(statement, context)
+  }
+
+  return [
+    `${deps.emitFunctionPointerVariable(
+      statement.name,
+      statement.init,
+      context,
+      statement.kind === 'const',
+      statement.functionType,
+      statement.loc
     )};`
   ]
 }

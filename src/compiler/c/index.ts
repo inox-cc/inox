@@ -353,6 +353,7 @@ import {
   emitContinueJump,
   emitContinueTargetLabel,
   emitExpressionStatement,
+  emitFunctionScalarVariableDeclaration,
   emitForOfStatement,
   emitForStatement,
   emitIfStatement,
@@ -2398,21 +2399,10 @@ function emitScalarVariableDeclaration(statement, context) {
     return stringScalarDeclaration
   }
 
-  if (inferred === 'function') {
-    const runtimeFunctionType = isRuntimeArrowCallbackExpression(statement.init, context)
-      ? normalizeFunctionType(statement.functionType)
-      : null
+  const functionScalarDeclaration = emitFunctionScalarVariableDeclaration(statement, context, inferred)
 
-    context.variables.set(statement.name, 'function')
-    context.functionTypes.set(statement.name, runtimeFunctionType ?? statement.functionType)
-
-    if (isRuntimeFunctionType(statement.functionType) || runtimeFunctionType != null) {
-      return emitRuntimeCallbackVariableDeclaration(statement, context)
-    }
-
-    return [
-      `${emitFunctionPointerVariable(statement.name, statement.init, context, statement.kind === 'const', statement.functionType, statement.loc)};`
-    ]
+  if (functionScalarDeclaration != null) {
+    return functionScalarDeclaration
   }
 
   if (isArrayMethodCall(statement.init)) {
@@ -8893,10 +8883,6 @@ function resolveRuntimeCallbackCalleeType(callee, context) {
   const functionType = context.functionTypes.get(name)
 
   return isSupportedRuntimeCallbackType(functionType) ? normalizeFunctionType(functionType) : null
-}
-
-function isRuntimeArrowCallbackExpression(expression, context) {
-  return context.callbackArrowWrappers.get(expression)?.kind === 'arrow'
 }
 
 function emitRuntimeCallbackVariableDeclaration(statement, context) {
