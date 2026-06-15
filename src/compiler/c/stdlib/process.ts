@@ -3,6 +3,22 @@ import {
   isProcessRuntimeStringProperty,
   processRuntimePropertyValueType
 } from '../../stdlib/descriptors/process.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
+
+type PreparedExpression = {
+  lines: string[]
+  expression: string
+}
+
+type PreparedCallOptions = {
+  out?: string
+  owned?: boolean
+}
+
+export type ProcessLoweringDependencies = {
+  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
+}
 
 export function cProcessRuntimeMethodName(expression: any): string | null {
   if (expression?.type !== 'CallExpression' || typeof expression.processRuntimeMethod !== 'string') {
@@ -48,4 +64,121 @@ export function cProcessRuntimeStringFunctionName(property: string): string | nu
 
 export function cProcessRuntimeEnvName(expression: any): string | null {
   return typeof expression?.processRuntimeEnvName === 'string' ? expression.processRuntimeEnvName : null
+}
+
+export function emitPreparedProcessStringExpression(
+  expression: any,
+  context: any,
+  dependencies: ProcessLoweringDependencies,
+  options: PreparedCallOptions = {}
+): PreparedExpression | null {
+  const method = cProcessRuntimeMethodName(expression)
+  const property = cProcessRuntimePropertyName(expression)
+  const stringProperty = cProcessRuntimeStringPropertyName(expression)
+  const envName = cProcessRuntimeEnvName(expression)
+
+  if (
+    method !== 'cwd' &&
+    !(property === 'argv' && expression?.type === 'IndexExpression') &&
+    stringProperty == null &&
+    envName == null
+  ) {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_process_string')
+  const lines: string[] = []
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  lines.push(...emitPrepareOwnedValueWrite(out))
+
+  if (method === 'cwd') {
+    lines.push(emitStatusCheck(`ccjs_process_cwd(&ccjs_default_allocator, &${out})`, context))
+  } else if (property === 'argv') {
+    const index = dependencies.emitPreparedNumberExpression(expression.index, context)
+
+    lines.unshift(...index.lines)
+    lines.push(
+      emitStatusCheck(`ccjs_process_argv(&ccjs_default_allocator, (int)(${index.expression}), &${out})`, context)
+    )
+  } else if (stringProperty != null) {
+    const functionName = cProcessRuntimeStringFunctionName(stringProperty)
+
+    lines.push(emitStatusCheck(`ccjs_process_${functionName}(&ccjs_default_allocator, &${out})`, context))
+  } else {
+    const name = envName ?? ''
+
+    lines.push(
+      emitStatusCheck(
+        `ccjs_process_env(&ccjs_default_allocator, ${cStringLiteral(name)}, ${utf8ByteLength(name)}, &${out})`,
+        context
+      )
+    )
+  }
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
+export function emitPreparedProcessNumberExpression(expression: any): PreparedExpression | null {
+  const property = cProcessRuntimeNumberPropertyName(expression)
+
+  if (property == null) {
+    return null
+  }
+
+  if (property === 'argv.length') {
+    return {
+      lines: [],
+      expression: 'ccjs_process_argv_length()'
+    }
+  }
+
+  if (property === 'pid') {
+    return {
+      lines: [],
+      expression: 'ccjs_process_pid()'
+    }
+  }
+
+  return {
+    lines: [],
+    expression: 'ccjs_process_get_exit_code()'
+  }
+}
+
+export function emitProcessExitStatement(
+  expression: any,
+  context: any,
+  dependencies: ProcessLoweringDependencies
+): string[] | null {
+  if (cProcessRuntimeMethodName(expression) !== 'exit') {
+    return null
+  }
+
+  const code =
+    expression.args[0] == null
+      ? { lines: [] as string[], expression: '0' }
+      : dependencies.emitPreparedNumberExpression(expression.args[0], context)
+
+  return [...code.lines, `ccjs_process_exit((int)(${code.expression}));`]
+}
+
+export function emitProcessExitCodeAssignment(
+  expression: any,
+  context: any,
+  dependencies: ProcessLoweringDependencies
+): string[] | null {
+  if (expression?.type !== 'AssignmentExpression' || cProcessRuntimePropertyName(expression) !== 'exitCode') {
+    return null
+  }
+
+  const value = dependencies.emitPreparedNumberExpression(expression.value, context)
+
+  return [...value.lines, `ccjs_process_set_exit_code((int)(${value.expression}));`]
 }

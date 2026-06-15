@@ -149,7 +149,11 @@ import {
   isBufferAllocCall,
   isBufferFromCall
 } from './stdlib/binary.ts'
-import { cChildProcessRuntimeMethodName } from './stdlib/child-process.ts'
+import {
+  cChildProcessRuntimeMethodName,
+  emitPreparedChildProcessCallExpression,
+  type ChildProcessLoweringDependencies
+} from './stdlib/child-process.ts'
 import { irProgramsUseConsoleRuntime, isConsoleLog } from './stdlib/console.ts'
 import {
   cryptoRuntimeMethodName,
@@ -223,16 +227,31 @@ import {
   emitPreparedJsonScalarParseExpression,
   type JsonDeclarationDependencies
 } from './stdlib/json.ts'
-import { cOsRuntimeConstantName, cOsRuntimeConstantValue, cOsRuntimeMethodName } from './stdlib/os.ts'
-import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from './stdlib/path.ts'
+import {
+  cOsRuntimeConstantName,
+  cOsRuntimeMethodName,
+  emitPreparedOsConstantExpression,
+  emitPreparedOsStringCallExpression
+} from './stdlib/os.ts'
+import {
+  cPathRuntimeConstantName,
+  cPathRuntimeMethodName,
+  emitPreparedPathBooleanCallExpression,
+  emitPreparedPathConstantExpression,
+  emitPreparedPathObjectCallExpression,
+  emitPreparedPathStringCallExpression,
+  type PathLoweringDependencies
+} from './stdlib/path.ts'
 import {
   cProcessRuntimeEnvName,
   cProcessRuntimeMethodName,
-  cProcessRuntimeNumberPropertyName,
   cProcessRuntimePropertyName,
   cProcessRuntimePropertyValueType,
-  cProcessRuntimeStringFunctionName,
-  cProcessRuntimeStringPropertyName
+  emitPreparedProcessNumberExpression,
+  emitPreparedProcessStringExpression,
+  emitProcessExitCodeAssignment,
+  emitProcessExitStatement,
+  type ProcessLoweringDependencies
 } from './stdlib/process.ts'
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import {
@@ -240,7 +259,15 @@ import {
   emitTimerVariableDeclaration,
   type TimerLoweringDependencies
 } from './stdlib/timers.ts'
-import { cUrlRuntimeMethodName } from './stdlib/url.ts'
+import {
+  cUrlRuntimeMethodName,
+  emitPreparedUrlObjectExpression,
+  emitPreparedUrlSearchParamsCallExpression,
+  emitPreparedUrlSearchParamsObjectExpression,
+  emitPreparedUrlStringCallExpression,
+  emitUrlObjectFieldAssignment,
+  type UrlLoweringDependencies
+} from './stdlib/url.ts'
 import {
   cUnsupportedExpressionCode,
   cUnsupportedVariableDeclarationCode,
@@ -265,8 +292,6 @@ import {
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
-import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } from '../stdlib/descriptors/url.ts'
-import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import {
   canLowerCNullishCoalescingExpression,
@@ -469,7 +494,8 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedAsyncFunctionPromiseCallExpression,
   emitPreparedBytesIndexAssignment,
   emitPreparedCallExpression,
-  emitPreparedChildProcessCallExpression,
+  emitPreparedChildProcessCallExpression: (expression, context, options) =>
+    emitPreparedChildProcessCallExpression(expression, context, childProcessLoweringDependencies, options),
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
   emitPreparedCryptoCallExpression: (expression, context, options) =>
@@ -491,7 +517,8 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     emitPreparedFsSyncStatementExpression(expression, context, fsLoweringDependencies),
   emitPreparedMapIndexAssignment,
   emitPreparedNumberExpression,
-  emitPreparedPathObjectCallExpression,
+  emitPreparedPathObjectCallExpression: (expression, context, options) =>
+    emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies, options),
   emitPreparedPromiseConstructorExpression,
   emitPreparedPromiseExpression,
   emitPreparedPromiseMethodExpression,
@@ -500,17 +527,22 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedTimerCallExpression: (expression, context, options) =>
     emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitPreparedUpdateExpression,
-  emitPreparedUrlObjectExpression,
-  emitPreparedUrlSearchParamsObjectExpression,
-  emitProcessExitCodeAssignment,
-  emitProcessExitStatement,
+  emitPreparedUrlObjectExpression: (expression, context, options) =>
+    emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies, options),
+  emitPreparedUrlSearchParamsObjectExpression: (expression, context, options) =>
+    emitPreparedUrlSearchParamsObjectExpression(expression, context, urlLoweringDependencies, options),
+  emitProcessExitCodeAssignment: (expression, context) =>
+    emitProcessExitCodeAssignment(expression, context, processLoweringDependencies),
+  emitProcessExitStatement: (expression, context) =>
+    emitProcessExitStatement(expression, context, processLoweringDependencies),
   emitPromiseConstructorSettlementCall,
   emitReference,
   emitRuntimeCallbackVariableDeclaration,
   emitScalarVariableDeclaration,
   emitStatement,
   emitStringExpression,
-  emitUrlObjectFieldAssignment,
+  emitUrlObjectFieldAssignment: (expression, context) =>
+    emitUrlObjectFieldAssignment(expression, context, urlLoweringDependencies),
   inferCatchBindingValueType,
   inferExpressionType,
   isArrayMethodCall,
@@ -578,6 +610,26 @@ const fsLoweringDependencies: FsLoweringDependencies = {
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
   inferExpressionType
+}
+
+const childProcessLoweringDependencies: ChildProcessLoweringDependencies = {
+  emitCValueExpression,
+  registerObjectShape
+}
+
+const pathLoweringDependencies: PathLoweringDependencies = {
+  emitCValueExpression,
+  registerObjectShape
+}
+
+const processLoweringDependencies: ProcessLoweringDependencies = {
+  emitPreparedNumberExpression
+}
+
+const urlLoweringDependencies: UrlLoweringDependencies = {
+  emitCValueExpression,
+  emitPreparedStringBytesOperand,
+  registerObjectShape
 }
 
 const collectionLoweringDependencies: CollectionLoweringDependencies = {
@@ -2877,7 +2929,11 @@ function emitCValueExpression(expression, context) {
     return emitCAwaitValueExpression(expression, context)
   }
 
-  const childProcessCall = emitPreparedChildProcessCallExpression(expression, context)
+  const childProcessCall = emitPreparedChildProcessCallExpression(
+    expression,
+    context,
+    childProcessLoweringDependencies
+  )
 
   if (childProcessCall != null) {
     return childProcessCall
@@ -2895,25 +2951,25 @@ function emitCValueExpression(expression, context) {
     return osStringCall
   }
 
-  const processString = emitPreparedProcessStringExpression(expression, context)
+  const processString = emitPreparedProcessStringExpression(expression, context, processLoweringDependencies)
 
   if (processString != null) {
     return processString
   }
 
-  const urlStringCall = emitPreparedUrlStringCallExpression(expression, context)
+  const urlStringCall = emitPreparedUrlStringCallExpression(expression, context, urlLoweringDependencies)
 
   if (urlStringCall != null) {
     return urlStringCall
   }
 
-  const urlObject = emitPreparedUrlObjectExpression(expression, context)
+  const urlObject = emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies)
 
   if (urlObject != null) {
     return urlObject
   }
 
-  const urlSearchParamsObject = emitPreparedUrlSearchParamsObjectExpression(expression, context)
+  const urlSearchParamsObject = emitPreparedUrlSearchParamsObjectExpression(expression, context, urlLoweringDependencies)
 
   if (urlSearchParamsObject != null) {
     return urlSearchParamsObject
@@ -2925,13 +2981,13 @@ function emitCValueExpression(expression, context) {
     return pathConstant
   }
 
-  const pathObject = emitPreparedPathObjectCallExpression(expression, context)
+  const pathObject = emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies)
 
   if (pathObject != null) {
     return pathObject
   }
 
-  const pathCall = emitPreparedPathStringCallExpression(expression, context)
+  const pathCall = emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies)
 
   if (pathCall != null) {
     return pathCall
@@ -2949,7 +3005,7 @@ function emitCValueExpression(expression, context) {
     return fetchHeadersCall
   }
 
-  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context)
+  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies)
 
   if (urlSearchParamsCall != null) {
     return urlSearchParamsCall
@@ -5163,19 +5219,19 @@ function emitPreparedNumberExpression(expression, context) {
     }
   }
 
-  const pathBooleanCall = emitPreparedPathBooleanCallExpression(expression, context)
+  const pathBooleanCall = emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies)
 
   if (pathBooleanCall != null) {
     return pathBooleanCall
   }
 
-  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context)
+  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies)
 
   if (urlSearchParamsCall != null && urlSearchParamsCall.valueType === 'boolean') {
     return urlSearchParamsCall
   }
 
-  const processNumber = emitPreparedProcessNumberExpression(expression, context)
+  const processNumber = emitPreparedProcessNumberExpression(expression)
 
   if (processNumber != null) {
     return processNumber
@@ -5777,13 +5833,13 @@ function emitPreparedCallExpression(expression, context) {
     return mathCall
   }
 
-  const pathStringCall = emitPreparedPathStringCallExpression(expression, context)
+  const pathStringCall = emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies)
 
   if (pathStringCall != null) {
     return pathStringCall
   }
 
-  const pathBooleanCall = emitPreparedPathBooleanCallExpression(expression, context)
+  const pathBooleanCall = emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies)
 
   if (pathBooleanCall != null) {
     return pathBooleanCall
@@ -5867,7 +5923,7 @@ function emitPreparedCallExpression(expression, context) {
     return fetchHeadersCall
   }
 
-  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context)
+  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies)
 
   if (urlSearchParamsCall != null) {
     return urlSearchParamsCall
@@ -6014,748 +6070,6 @@ function emitPreparedCallArgs(expression, params, context) {
   return {
     lines,
     args
-  }
-}
-
-function emitPreparedChildProcessCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cChildProcessRuntimeMethodName(expression)
-
-  if (method == null) {
-    return null
-  }
-
-  const command = emitCValueExpression(expression.args[0], context)
-  const out = options.out ?? nextCName(context, 'ccjs_child_process_output')
-  const lines = [...command.lines, ...emitPrepareOwnedValueWrite(out)]
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  if (method === 'execSync') {
-    const childOptions = emitCValueExpression(expression.args[1], context)
-    lines.push(...childOptions.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_child_process_exec_sync(&ccjs_default_allocator, ${command.expression}, ${childOptions.expression}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out
-    }
-  }
-
-  const second = expression.args[1]
-  const argArray = second?.type === 'ObjectLiteral' ? null : second
-  const optionsArg = second?.type === 'ObjectLiteral' ? second : expression.args[2]
-  const childOptions =
-    optionsArg == null
-      ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
-      : emitCValueExpression(optionsArg, context)
-  const args =
-    argArray?.type === 'ArrayLiteral' ? argArray.elements.map((arg) => emitCValueExpression(arg, context)) : []
-
-  lines.push(...args.flatMap((arg) => arg.lines))
-  lines.push(...childOptions.lines)
-
-  if (method === 'spawnSync') {
-    const shape = emitChildProcessSpawnSyncResultShape(context)
-    context.variables.set(out, 'object')
-    registerObjectShape(context, out, expression.shape)
-    lines.push(...shape.lines)
-
-    if (args.length === 0) {
-      lines.push(
-        emitStatusCheck(
-          `ccjs_child_process_spawn_sync(&ccjs_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, ${shape.expression}, &${out})`,
-          context
-        )
-      )
-    } else {
-      const argsName = nextCName(context, 'ccjs_child_process_args')
-
-      lines.push(`ccjs_value ${argsName}[] = { ${args.map((arg) => arg.expression).join(', ')} };`)
-      lines.push(
-        emitStatusCheck(
-          `ccjs_child_process_spawn_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, ${shape.expression}, &${out})`,
-          context
-        )
-      )
-    }
-
-    return {
-      lines,
-      expression: out
-    }
-  }
-
-  if (args.length === 0) {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, &${out})`,
-        context
-      )
-    )
-  } else {
-    const argsName = nextCName(context, 'ccjs_child_process_args')
-
-    lines.push(`ccjs_value ${argsName}[] = { ${args.map((arg) => arg.expression).join(', ')} };`)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, &${out})`,
-        context
-      )
-    )
-  }
-
-  return {
-    lines,
-    expression: out
-  }
-}
-
-function emitChildProcessSpawnSyncResultShape(context) {
-  const shapeName = nextCName(context, 'ccjs_shape_spawn_sync')
-  const fieldsName = `${shapeName}_fields`
-  const lines = [
-    `static const ccjs_field_info ${fieldsName}[] = {`,
-    `  { "status", CCJS_FIELD_READONLY },`,
-    `  { "stdout", CCJS_FIELD_READONLY },`,
-    `  { "stderr", CCJS_FIELD_READONLY },`,
-    '};',
-    `static const ccjs_shape ${shapeName} = {`,
-    '  3,',
-    `  ${fieldsName}`,
-    '};'
-  ]
-
-  return {
-    lines,
-    expression: `&${shapeName}`
-  }
-}
-
-function emitPreparedOsConstantExpression(expression, context) {
-  const constant = cOsRuntimeConstantName(expression)
-  const value = constant == null ? null : cOsRuntimeConstantValue(constant)
-
-  if (value == null) {
-    return null
-  }
-
-  const out = nextCName(context, 'ccjs_os_constant')
-  registerOwnedValue(context, out)
-
-  return {
-    lines: [
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(
-        `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
-        context
-      )
-    ],
-    expression: out
-  }
-}
-
-function emitPreparedOsStringCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cOsRuntimeMethodName(expression)
-
-  if (method == null) {
-    return null
-  }
-
-  const out = options.out ?? nextCName(context, 'ccjs_os_value')
-  const lines = emitPrepareOwnedValueWrite(out)
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  lines.push(emitStatusCheck(`ccjs_os_${method}(&ccjs_default_allocator, &${out})`, context))
-
-  return {
-    lines,
-    expression: out
-  }
-}
-
-function emitPreparedProcessStringExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cProcessRuntimeMethodName(expression)
-  const property = cProcessRuntimePropertyName(expression)
-  const stringProperty = cProcessRuntimeStringPropertyName(expression)
-  const envName = cProcessRuntimeEnvName(expression)
-
-  if (
-    method !== 'cwd' &&
-    !(property === 'argv' && expression?.type === 'IndexExpression') &&
-    stringProperty == null &&
-    envName == null
-  ) {
-    return null
-  }
-
-  const out = options.out ?? nextCName(context, 'ccjs_process_string')
-  const lines: string[] = []
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  lines.push(...emitPrepareOwnedValueWrite(out))
-
-  if (method === 'cwd') {
-    lines.push(emitStatusCheck(`ccjs_process_cwd(&ccjs_default_allocator, &${out})`, context))
-  } else if (property === 'argv') {
-    const index = emitPreparedNumberExpression(expression.index, context)
-
-    lines.unshift(...index.lines)
-    lines.push(
-      emitStatusCheck(`ccjs_process_argv(&ccjs_default_allocator, (int)(${index.expression}), &${out})`, context)
-    )
-  } else if (stringProperty != null) {
-    const functionName = cProcessRuntimeStringFunctionName(stringProperty)
-
-    lines.push(emitStatusCheck(`ccjs_process_${functionName}(&ccjs_default_allocator, &${out})`, context))
-  } else {
-    const name = envName ?? ''
-
-    lines.push(
-      emitStatusCheck(
-        `ccjs_process_env(&ccjs_default_allocator, ${cStringLiteral(name)}, ${utf8ByteLength(name)}, &${out})`,
-        context
-      )
-    )
-  }
-
-  return {
-    lines,
-    expression: out
-  }
-}
-
-function emitPreparedProcessNumberExpression(expression, context) {
-  const property = cProcessRuntimeNumberPropertyName(expression)
-
-  if (property == null) {
-    return null
-  }
-
-  if (property === 'argv.length') {
-    return {
-      lines: [],
-      expression: 'ccjs_process_argv_length()'
-    }
-  }
-
-  if (property === 'pid') {
-    return {
-      lines: [],
-      expression: 'ccjs_process_pid()'
-    }
-  }
-
-  return {
-    lines: [],
-    expression: 'ccjs_process_get_exit_code()'
-  }
-}
-
-function emitProcessExitStatement(expression, context): string[] | null {
-  if (cProcessRuntimeMethodName(expression) !== 'exit') {
-    return null
-  }
-
-  const code =
-    expression.args[0] == null
-      ? { lines: [] as string[], expression: '0' }
-      : emitPreparedNumberExpression(expression.args[0], context)
-
-  return [...code.lines, `ccjs_process_exit((int)(${code.expression}));`]
-}
-
-function emitProcessExitCodeAssignment(expression, context): string[] | null {
-  if (expression?.type !== 'AssignmentExpression' || cProcessRuntimePropertyName(expression) !== 'exitCode') {
-    return null
-  }
-
-  const value = emitPreparedNumberExpression(expression.value, context)
-
-  return [...value.lines, `ccjs_process_set_exit_code((int)(${value.expression}));`]
-}
-
-function emitPreparedUrlStringCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  if (cUrlRuntimeMethodName(expression) !== 'fileURLToPath') {
-    return null
-  }
-
-  const arg = emitCValueExpression(expression.args[0], context)
-  const out = options.out ?? nextCName(context, 'ccjs_url_path')
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  return {
-    lines: [
-      ...arg.lines,
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_url_file_url_to_path(&ccjs_default_allocator, ${arg.expression}, &${out})`, context)
-    ],
-    expression: out
-  }
-}
-
-function emitPreparedUrlObjectExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cUrlRuntimeMethodName(expression)
-
-  if (method !== 'pathToFileURL' && method !== 'URL') {
-    return null
-  }
-
-  const out = options.out ?? nextCName(context, 'ccjs_url_object')
-  const input = emitCValueExpression(expression.args[0], context)
-  const shape = emitUrlObjectShape(context)
-  const lines = [...input.lines, ...shape.lines, ...emitPrepareOwnedValueWrite(out)]
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  context.variables.set(out, 'object')
-  registerObjectShape(context, out, expression.shape)
-
-  if (method === 'pathToFileURL') {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_url_path_to_file_url(&ccjs_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out
-    }
-  }
-
-  const base =
-    expression.args[1] == null
-      ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
-      : emitCValueExpression(expression.args[1], context)
-
-  lines.push(...base.lines)
-  lines.push(
-    emitStatusCheck(
-      `ccjs_url_new(&ccjs_default_allocator, ${input.expression}, ${base.expression}, ${expression.args[1] == null ? '0' : '1'}, ${shape.expression}, &${out})`,
-      context
-    )
-  )
-
-  return {
-    lines,
-    expression: out
-  }
-}
-
-function emitPreparedUrlSearchParamsObjectExpression(
-  expression,
-  context,
-  options: { out?: string; owned?: boolean } = {}
-) {
-  if (cUrlRuntimeMethodName(expression) !== 'URLSearchParams') {
-    return null
-  }
-
-  const out = options.out ?? nextCName(context, 'ccjs_url_search_params')
-  const init =
-    expression.args[0] == null
-      ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
-      : emitCValueExpression(expression.args[0], context)
-  const shape = emitUrlSearchParamsObjectShape(context)
-  const lines = [...init.lines, ...shape.lines, ...emitPrepareOwnedValueWrite(out)]
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  context.variables.set(out, 'object')
-  registerObjectShape(context, out, expression.shape)
-  lines.push(
-    emitStatusCheck(
-      `ccjs_url_search_params_new(&ccjs_default_allocator, ${init.expression}, ${shape.expression}, &${out})`,
-      context
-    )
-  )
-
-  return {
-    lines,
-    expression: out
-  }
-}
-
-function emitPreparedUrlSearchParamsCallExpression(
-  expression,
-  context,
-  options: { out?: string; owned?: boolean } = {}
-) {
-  const method = cUrlRuntimeMethodName(expression)
-
-  if (method == null || !method.startsWith('URLSearchParams.')) {
-    return null
-  }
-
-  const receiver = emitCValueExpression(expression.callee.object, context)
-  const name =
-    expression.args[0] == null
-      ? null
-      : emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_url_param_name')
-  const lines = [
-    ...receiver.lines,
-    emitRuntimeTypeCheck(`${receiver.expression}.tag != CCJS_TAG_OBJECT || ${receiver.expression}.as.ref == 0`, context)
-  ]
-
-  if (name != null) {
-    lines.push(...name.lines)
-  }
-
-  if (method === 'URLSearchParams.has') {
-    const out = options.out ?? nextCName(context, 'ccjs_url_param_has')
-    lines.push(`int ${out} = 0;`)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_url_search_params_has(${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      valueType: 'boolean'
-    }
-  }
-
-  if (method === 'URLSearchParams.get' || method === 'URLSearchParams.toString') {
-    const out = options.out ?? nextCName(context, 'ccjs_url_param_value')
-
-    if (options.owned !== false) {
-      registerOwnedValue(context, out)
-    }
-
-    lines.push(...emitPrepareOwnedValueWrite(out))
-    lines.push(
-      method === 'URLSearchParams.get'
-        ? emitStatusCheck(
-            `ccjs_url_search_params_get(&ccjs_default_allocator, ${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'}, &${out})`,
-            context
-          )
-        : emitStatusCheck(
-            `ccjs_url_search_params_to_string(&ccjs_default_allocator, ${receiver.expression}, &${out})`,
-            context
-          )
-    )
-
-    return {
-      lines,
-      expression: out,
-      valueType: 'string',
-      nullable: method === 'URLSearchParams.get'
-    }
-  }
-
-  if (method === 'URLSearchParams.delete') {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_url_search_params_delete(&ccjs_default_allocator, ${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: '',
-      valueType: 'void'
-    }
-  }
-
-  const value = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_url_param_value')
-  lines.push(...value.lines)
-  lines.push(
-    emitStatusCheck(
-      method === 'URLSearchParams.set'
-        ? `ccjs_url_search_params_set(&ccjs_default_allocator, ${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'}, ${value.bytes}, ${value.length})`
-        : `ccjs_url_search_params_append(&ccjs_default_allocator, ${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'}, ${value.bytes}, ${value.length})`,
-      context
-    )
-  )
-
-  return {
-    lines,
-    expression: '',
-    valueType: 'void'
-  }
-}
-
-function emitUrlObjectShape(context) {
-  const shapeName = nextCName(context, 'ccjs_shape_url')
-  const fieldsName = `${shapeName}_fields`
-  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
-
-  for (const field of urlObjectFields) {
-    lines.push(`  { ${cStringLiteral(field)}, CCJS_FIELD_READONLY },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
-  lines.push(`  ${urlObjectFields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
-
-  return {
-    lines,
-    expression: `&${shapeName}`
-  }
-}
-
-function emitUrlSearchParamsObjectShape(context) {
-  const shapeName = nextCName(context, 'ccjs_shape_url_search_params')
-  const fieldsName = `${shapeName}_fields`
-  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
-
-  for (const field of urlSearchParamsObjectFields) {
-    lines.push(`  { ${cStringLiteral(field)}, 0 },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
-  lines.push(`  ${urlSearchParamsObjectFields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
-
-  return {
-    lines,
-    expression: `&${shapeName}`
-  }
-}
-
-function emitUrlObjectFieldAssignment(expression, context): string[] | null {
-  if (expression?.type !== 'AssignmentExpression' || expression.urlRuntimeMethod !== 'URL.setField') {
-    return null
-  }
-
-  const field = expression.urlRuntimeField
-  const fieldIndex = urlObjectFields.indexOf(field)
-
-  if (fieldIndex === -1 || !urlMutableObjectFields.includes(field)) {
-    return null
-  }
-
-  const object = emitCValueExpression(expression.target.object, context)
-  const value = emitCValueExpression(expression.value, context)
-
-  return [
-    ...object.lines,
-    ...value.lines,
-    emitStatusCheck(
-      `ccjs_url_set_field(&ccjs_default_allocator, ${object.expression}, ${fieldIndex}, ${value.expression})`,
-      context
-    )
-  ]
-}
-
-function emitPreparedPathConstantExpression(expression, context) {
-  const constant = cPathRuntimeConstantName(expression)
-  const value = constant == null ? null : cPathRuntimeConstantValue(constant)
-
-  if (value == null) {
-    return null
-  }
-
-  const out = nextCName(context, 'ccjs_path_constant')
-  registerOwnedValue(context, out)
-
-  return {
-    lines: [
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(
-        `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
-        context
-      )
-    ],
-    expression: out
-  }
-}
-
-function emitPreparedPathObjectCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  if (cPathRuntimeMethodName(expression) !== 'parse') {
-    return null
-  }
-
-  const out = options.out ?? nextCName(context, 'ccjs_path_object')
-  const input = emitCValueExpression(expression.args[0], context)
-  const shape = emitPathParseObjectShape(context)
-  const lines = [...input.lines, ...shape.lines, ...emitPrepareOwnedValueWrite(out)]
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  context.variables.set(out, 'object')
-  registerObjectShape(context, out, expression.shape)
-
-  lines.push(
-    emitStatusCheck(
-      `ccjs_path_parse(&ccjs_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
-      context
-    )
-  )
-
-  return {
-    lines,
-    expression: out
-  }
-}
-
-function emitPathParseObjectShape(context) {
-  const shapeName = nextCName(context, 'ccjs_shape_path_parse')
-  const fieldsName = `${shapeName}_fields`
-  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
-
-  for (const field of pathParseObjectFields) {
-    lines.push(`  { ${cStringLiteral(field)}, CCJS_FIELD_READONLY },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
-  lines.push(`  ${pathParseObjectFields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
-
-  return {
-    lines,
-    expression: `&${shapeName}`
-  }
-}
-
-function emitPreparedPathStringCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cPathRuntimeMethodName(expression)
-
-  if (method == null || method === 'isAbsolute' || method === 'parse') {
-    return null
-  }
-
-  const out = options.out ?? nextCName(context, 'ccjs_path_value')
-  const lines: string[] = []
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  if (method === 'join' || method === 'resolve') {
-    const args = expression.args.map((arg) => emitCValueExpression(arg, context))
-
-    lines.push(...args.flatMap((arg) => arg.lines))
-    lines.push(...emitPrepareOwnedValueWrite(out))
-
-    if (args.length === 0) {
-      lines.push(emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, 0, 0, &${out})`, context))
-    } else {
-      const argArray = nextCName(context, 'ccjs_path_args')
-
-      lines.push(`ccjs_value ${argArray}[] = { ${args.map((arg) => arg.expression).join(', ')} };`)
-      lines.push(
-        emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, ${argArray}, ${args.length}, &${out})`, context)
-      )
-    }
-
-    return {
-      lines,
-      expression: out
-    }
-  }
-
-  if (method === 'format') {
-    const object = emitCValueExpression(expression.args[0], context)
-
-    lines.push(...object.lines)
-    lines.push(...emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`ccjs_path_format(&ccjs_default_allocator, ${object.expression}, &${out})`, context))
-
-    return {
-      lines,
-      expression: out
-    }
-  }
-
-  const first = emitCValueExpression(expression.args[0], context)
-
-  lines.push(...first.lines)
-  lines.push(...emitPrepareOwnedValueWrite(out))
-
-  if (method === 'basename') {
-    const suffix =
-      expression.args[1] == null
-        ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
-        : emitCValueExpression(expression.args[1], context)
-
-    lines.push(...suffix.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_path_basename(&ccjs_default_allocator, ${first.expression}, ${suffix.expression}, ${expression.args[1] == null ? '0' : '1'}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out
-    }
-  }
-
-  if (method === 'relative') {
-    const to = emitCValueExpression(expression.args[1], context)
-
-    lines.push(...to.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_path_relative(&ccjs_default_allocator, ${first.expression}, ${to.expression}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out
-    }
-  }
-
-  lines.push(emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, ${first.expression}, &${out})`, context))
-
-  return {
-    lines,
-    expression: out
-  }
-}
-
-function emitPreparedPathBooleanCallExpression(expression, context) {
-  if (cPathRuntimeMethodName(expression) !== 'isAbsolute') {
-    return null
-  }
-
-  const value = emitCValueExpression(expression.args[0], context)
-  const out = nextCName(context, 'ccjs_path_is_absolute')
-
-  return {
-    lines: [
-      ...value.lines,
-      `int ${out} = 0;`,
-      emitStatusCheck(`ccjs_path_is_absolute(${value.expression}, &${out})`, context)
-    ],
-    expression: `(${out} ? 1 : 0)`
   }
 }
 
