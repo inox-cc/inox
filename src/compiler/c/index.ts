@@ -119,7 +119,15 @@ import {
 import { cJsonRuntimeCallName } from './stdlib/json.ts'
 import { cOsRuntimeConstantName, cOsRuntimeConstantValue, cOsRuntimeMethodName } from './stdlib/os.ts'
 import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from './stdlib/path.ts'
-import { cProcessRuntimeEnvName, cProcessRuntimeMethodName, cProcessRuntimePropertyName } from './stdlib/process.ts'
+import {
+  cProcessRuntimeEnvName,
+  cProcessRuntimeMethodName,
+  cProcessRuntimeNumberPropertyName,
+  cProcessRuntimePropertyName,
+  cProcessRuntimePropertyValueType,
+  cProcessRuntimeStringFunctionName,
+  cProcessRuntimeStringPropertyName
+} from './stdlib/process.ts'
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import {
   cTimerClearCallName,
@@ -16034,9 +16042,15 @@ function emitPreparedOsStringCallExpression(expression, context, options: { out?
 function emitPreparedProcessStringExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
   const method = cProcessRuntimeMethodName(expression)
   const property = cProcessRuntimePropertyName(expression)
+  const stringProperty = cProcessRuntimeStringPropertyName(expression)
   const envName = cProcessRuntimeEnvName(expression)
 
-  if (method !== 'cwd' && !(property === 'argv' && expression?.type === 'IndexExpression') && envName == null) {
+  if (
+    method !== 'cwd' &&
+    !(property === 'argv' && expression?.type === 'IndexExpression') &&
+    stringProperty == null &&
+    envName == null
+  ) {
     return null
   }
 
@@ -16058,6 +16072,10 @@ function emitPreparedProcessStringExpression(expression, context, options: { out
     lines.push(
       emitStatusCheck(`ccjs_process_argv(&ccjs_default_allocator, (int)(${index.expression}), &${out})`, context)
     )
+  } else if (stringProperty != null) {
+    const functionName = cProcessRuntimeStringFunctionName(stringProperty)
+
+    lines.push(emitStatusCheck(`ccjs_process_${functionName}(&ccjs_default_allocator, &${out})`, context))
   } else {
     const name = envName ?? ''
 
@@ -16076,8 +16094,24 @@ function emitPreparedProcessStringExpression(expression, context, options: { out
 }
 
 function emitPreparedProcessNumberExpression(expression, context) {
-  if (cProcessRuntimePropertyName(expression) !== 'exitCode') {
+  const property = cProcessRuntimeNumberPropertyName(expression)
+
+  if (property == null) {
     return null
+  }
+
+  if (property === 'argv.length') {
+    return {
+      lines: [],
+      expression: 'ccjs_process_argv_length()'
+    }
+  }
+
+  if (property === 'pid') {
+    return {
+      lines: [],
+      expression: 'ccjs_process_pid()'
+    }
   }
 
   return {
@@ -18939,12 +18973,14 @@ function inferExpressionType(expression, context) {
 
   const processProperty = cProcessRuntimePropertyName(expression)
 
-  if (processProperty === 'exitCode') {
-    return 'number'
-  }
-
   if (processProperty === 'argv' && expression?.type === 'IndexExpression') {
     return 'string'
+  }
+
+  const processPropertyType = cProcessRuntimePropertyValueType(expression)
+
+  if (processPropertyType != null) {
+    return processPropertyType
   }
 
   if (cProcessRuntimeEnvName(expression) != null) {
@@ -19362,6 +19398,7 @@ function isRuntimeProducedStringExpression(expression, context) {
     (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') ||
     cOsRuntimeConstantName(expression) != null ||
     cPathRuntimeConstantName(expression) != null ||
+    cProcessRuntimeStringPropertyName(expression) != null ||
     cProcessRuntimeEnvName(expression) != null ||
     (cProcessRuntimePropertyName(expression) === 'argv' && expression?.type === 'IndexExpression') ||
     (expression?.type === 'AwaitExpression' && inferExpressionType(expression, context) === 'string') ||

@@ -92,6 +92,8 @@ import {
   isNodeProcessImportSource,
   isProcessRuntimeMethod,
   isProcessRuntimeProperty,
+  processRuntimePropertyValueType,
+  isUnsupportedProcessRuntimeProperty,
   isUnsupportedProcessRuntimeMethod
 } from './stdlib/descriptors/process.ts'
 import {
@@ -809,6 +811,16 @@ class Checker {
         isOsRuntimeConstant(symbol.importedName)
       ) {
         expression.osRuntimeConstant = symbol.importedName
+      }
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeProcessImportSource(symbol.importSource) &&
+        symbol.importedName != null &&
+        isProcessRuntimeProperty(symbol.importedName)
+      ) {
+        expression.processRuntimeProperty = symbol.importedName
+        expression.valueType = processRuntimePropertyValueType(symbol.importedName) ?? 'unknown'
       }
 
       if (
@@ -2380,30 +2392,66 @@ class Checker {
   checkProcessMemberExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression)
 
-    if (path == null || path.length < 2) {
+    if (path == null || path.length < 1) {
       return null
     }
 
     const root = this.scope.resolve(path[0])
 
-    if (
-      root?.kind !== 'import' ||
-      !isNodeProcessImportSource(root.importSource) ||
-      (root.importedName !== 'default' && root.importedName !== 'process')
-    ) {
+    if (root?.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
       return null
     }
 
-    if (path.length === 2 && isProcessRuntimeProperty(path[1])) {
-      expression.processRuntimeProperty = path[1]
-      expression.valueType = path[1] === 'exitCode' ? 'number' : 'object'
-      return expression.valueType
+    if (root.importedName === 'default' || root.importedName === 'process') {
+      if (path.length === 2 && isUnsupportedProcessRuntimeProperty(path[1])) {
+        this.report(
+          'CCJS_NOT_IMPLEMENTED',
+          `node:process ${path[1]} is not implemented by the current C backend`,
+          expression.loc
+        )
+        expression.valueType = 'unknown'
+        return 'unknown'
+      }
+
+      if (path.length === 2 && isProcessRuntimeProperty(path[1])) {
+        expression.processRuntimeProperty = path[1]
+        expression.valueType = processRuntimePropertyValueType(path[1]) ?? 'unknown'
+        return expression.valueType
+      }
+
+      if (path.length === 3 && path[1] === 'env') {
+        expression.processRuntimeEnvName = path[2]
+        expression.valueType = 'string'
+        return 'string'
+      }
+
+      if (path.length === 3) {
+        const property = `${path[1]}.${path[2]}`
+
+        if (isProcessRuntimeProperty(property)) {
+          expression.processRuntimeProperty = property
+          expression.valueType = processRuntimePropertyValueType(property) ?? 'unknown'
+          return expression.valueType
+        }
+      }
+
+      return null
     }
 
-    if (path.length === 3 && path[1] === 'env') {
-      expression.processRuntimeEnvName = path[2]
+    if (path.length === 2 && root.importedName === 'env') {
+      expression.processRuntimeEnvName = path[1]
       expression.valueType = 'string'
       return 'string'
+    }
+
+    if (path.length === 2 && root.importedName != null) {
+      const property = `${root.importedName}.${path[1]}`
+
+      if (isProcessRuntimeProperty(property)) {
+        expression.processRuntimeProperty = property
+        expression.valueType = processRuntimePropertyValueType(property) ?? 'unknown'
+        return expression.valueType
+      }
     }
 
     return null
@@ -2437,17 +2485,21 @@ class Checker {
   checkProcessIndexExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.object)
 
-    if (path == null || path.length !== 2 || path[1] !== 'argv') {
+    if (path == null) {
       return null
     }
 
     const root = this.scope.resolve(path[0])
 
-    if (
-      root?.kind !== 'import' ||
-      !isNodeProcessImportSource(root.importSource) ||
-      (root.importedName !== 'default' && root.importedName !== 'process')
-    ) {
+    if (root?.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
+      return null
+    }
+
+    const isArgv =
+      ((root.importedName === 'default' || root.importedName === 'process') && path.length === 2 && path[1] === 'argv') ||
+      (root.importedName === 'argv' && path.length === 1)
+
+    if (!isArgv) {
       return null
     }
 
@@ -3155,6 +3207,12 @@ class Checker {
     if (isNodeProcessImportSource(source)) {
       if (isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)) {
         return 'function'
+      }
+
+      const propertyType = processRuntimePropertyValueType(importedName)
+
+      if (propertyType != null) {
+        return propertyType
       }
 
       if (importedName === 'default' || importedName === 'process') {
