@@ -1,0 +1,1392 @@
+import { collectIrTopLevelNodeEntries } from '../../ir.ts'
+import { isCJsGlobalRoot } from '../globals.ts'
+import { emitCFunctionName, emitCIdentifier } from '../identifiers.ts'
+import { isManagedRuntimeReturnType, emitCType } from '../value-types.ts'
+import { isPromiseConstructorExpression, functionTakesEventLoopParam } from './promises.ts'
+import { isTimerStartCallExpression, timerCallbackFunctionType } from '../stdlib/timers.ts'
+import {
+  createFunctionContext,
+  emitBoxedValueCleanup,
+  emitBoxedValueDeclarations,
+  emitCleanupReturn,
+  emitErrorChannelDeclarations,
+  emitLoopFlowDeclarations,
+  emitOwnedValueCleanup,
+  emitOwnedValueDeclarations,
+  emitReturnFlowDeclarations,
+  shouldEmitCleanupLabel
+} from '../context.ts'
+import type { IrProgram } from '../../types.ts'
+
+type PreparedExpression = {
+  lines: string[]
+  expression: string
+}
+
+export type CallbackLoweringDependencies = {
+  collectTemplatePlaceholderExpressions: (expression: any) => any[]
+  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
+  emitRuntimeCallbackRuntimeValueReturnLines: (argument: any, context: any) => string[]
+  emitStatementList: (statements: any[], context: any) => string[]
+  registerObjectShape: (context: any, name: string, shape: any) => void
+}
+
+export function functionUsesExternalEventLoop(node: any, externalNames: Set<any>): boolean {
+  let found = false
+  const visit = (value) => {
+    if (found || value == null) {
+      return
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+
+    if (typeof value !== 'object') {
+      return
+    }
+
+    if (isTimerStartCallExpression(value)) {
+      found = true
+      return
+    }
+
+    if (
+      value.type === 'CallExpression' &&
+      value.callee?.type === 'Reference' &&
+      value.callee.path.length === 1 &&
+      externalNames.has(value.callee.path[0])
+    ) {
+      found = true
+      return
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'loc' || key === 'shape') {
+        continue
+      }
+
+      visit(child)
+    }
+  }
+
+  visit(node)
+
+  return found
+}
+
+const genericFunctionType = {
+  kind: 'function',
+  params: [],
+  returnType: 'void'
+}
+
+export function normalizeFunctionType(functionType: any): any {
+  return functionType ?? genericFunctionType
+}
+
+export function isPlainFunctionPointerType(functionType: any): boolean {
+  return (
+    functionType == null ||
+    (functionType.returnType === 'void' &&
+      functionType.params.every((param) => ['number', 'boolean'].includes(param.valueType)))
+  )
+}
+
+export function isRuntimeFunctionType(functionType: any): boolean {
+  return (
+    functionType != null &&
+    isSupportedRuntimeCallbackReturnType(functionType.returnType) &&
+    functionType.params.some((param) => ['string', 'object'].includes(param.valueType)) &&
+    functionType.params.every((param) => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
+  )
+}
+
+export function isNullableFunctionType(valueType: any, nullable: any): boolean {
+  return valueType === 'function' && nullable === true
+}
+
+export function isSupportedRuntimeCallbackType(functionType: any): boolean {
+  const normalized = normalizeFunctionType(functionType)
+
+  return (
+    isSupportedRuntimeCallbackReturnType(normalized.returnType) &&
+    normalized.params.every((param) => ['number', 'boolean', 'string', 'object'].includes(param.valueType))
+  )
+}
+
+export function isSupportedRuntimeCallbackReturnType(returnType: any): boolean {
+  return ['void', 'number', 'boolean', 'string', 'object'].includes(returnType)
+}
+
+function runtimeFunctionParamKey(functionName, index) {
+  return `${functionName}:${index}`
+}
+
+export function markRuntimeFunctionParam(callee: any, index: number, functionType: any, context: any): void {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return
+  }
+
+  const name = callee.path[0]
+
+  if (!context.functionParams.has(name) || !isSupportedRuntimeCallbackType(functionType)) {
+    return
+  }
+
+  context.runtimeFunctionParams.set(runtimeFunctionParamKey(name, index), normalizeFunctionType(functionType))
+}
+
+export function resolveFunctionParameterRuntimeType(functionName: string, index: number, param: any, context: any): any | null {
+  const promoted = context.runtimeFunctionParams.get(runtimeFunctionParamKey(functionName, index))
+
+  if (promoted != null) {
+    return promoted
+  }
+
+  if (isNullableFunctionType(param.valueType, param.nullable)) {
+    return normalizeFunctionType(param.functionType)
+  }
+
+  return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
+}
+
+export function resolveRuntimeFunctionArgumentType(callee: any, index: number, param: any, context: any): any | null {
+  if (param?.valueType !== 'function') {
+    return null
+  }
+
+  if (callee?.type === 'Reference' && callee.path.length === 1) {
+    const promoted = context.runtimeFunctionParams.get(runtimeFunctionParamKey(callee.path[0], index))
+
+    if (promoted != null) {
+      return promoted
+    }
+  }
+
+  if (isNullableFunctionType(param.valueType, param.nullable)) {
+    return normalizeFunctionType(param.functionType)
+  }
+
+  return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
+}
+
+export function collectCallbackWrappers(irPrograms: IrProgram[], context: any, deps: CallbackLoweringDependencies): Map<any, any> {
+  const wrappers = new Map()
+  const pendingPlainFunctionArgs: any[] = []
+  const register = (expression, functionType, scopes) => {
+    const arrowNeedsEventLoop =
+      expression?.type === 'ArrowFunctionExpression' &&
+      functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions)
+
+    if (
+      isPlainFunctionPointerType(functionType) &&
+      expression?.type === 'ArrowFunctionExpression' &&
+      !arrowNeedsEventLoop
+    ) {
+      registerPlainArrow(expression, functionType, scopes)
+      return
+    }
+
+    if (arrowNeedsEventLoop && isSupportedRuntimeCallbackType(functionType)) {
+      registerRuntime(expression, functionType, scopes)
+      return
+    }
+
+    if (!isRuntimeFunctionType(functionType)) {
+      return
+    }
+
+    if (expression?.type === 'ArrowFunctionExpression') {
+      registerArrow(expression, functionType, scopes)
+      return
+    }
+
+    registerNamed(expression, functionType)
+  }
+  const registerRuntime = (expression, functionType, scopes) => {
+    const normalized = normalizeFunctionType(functionType)
+
+    if (!isSupportedRuntimeCallbackType(normalized)) {
+      return
+    }
+
+    if (expression?.type === 'ArrowFunctionExpression') {
+      registerArrow(expression, normalized, scopes)
+      return
+    }
+
+    registerNamed(expression, normalized)
+  }
+  const registerPlain = (expression, functionType, scopes) => {
+    if (expression?.type === 'ArrowFunctionExpression') {
+      registerPlainArrow(expression, functionType, scopes)
+    }
+  }
+  const hasCaptures = (expression, scopes) =>
+    expression?.type === 'ArrowFunctionExpression' && collectArrowCaptures(expression, scopes, context, deps).length > 0
+  const shouldPromotePlainFunctionExpression = (expression, functionType, scopes) =>
+    isPlainFunctionPointerType(functionType) &&
+    isSupportedRuntimeCallbackType(functionType) &&
+    hasCaptures(expression, scopes)
+  const registerNamed = (expression, functionType) => {
+    if (expression?.type !== 'Reference' || expression.path.length !== 1) {
+      return
+    }
+
+    const target = expression.path[0]
+
+    if (!context.functionNames.has(target)) {
+      return
+    }
+
+    const key = runtimeCallbackWrapperKey(target, functionType)
+
+    if (wrappers.has(key)) {
+      return
+    }
+
+    wrappers.set(key, {
+      kind: 'named',
+      key,
+      name: `ccjs_callback_${emitCIdentifier(target)}_${wrappers.size}`,
+      target,
+      functionType
+    })
+  }
+  const registerArrow = (expression, functionType, scopes) => {
+    if (context.callbackArrowWrappers.has(expression)) {
+      return
+    }
+
+    const index = wrappers.size
+    const key = `arrow:${index}`
+    const captures = collectArrowCaptures(expression, scopes, context, deps)
+
+    for (const capture of captures) {
+      if (
+        capture.mutable &&
+        ['number', 'boolean', 'string', 'object'].includes(capture.valueType) &&
+        capture.declaration != null
+      ) {
+        context.boxedMutableCaptureDeclarations.add(capture.declaration)
+      }
+    }
+
+    const wrapper = {
+      kind: 'arrow',
+      key,
+      name: `ccjs_callback_arrow_${index}`,
+      contextTypeName: `ccjs_callback_context_${index}`,
+      finalizerName: `ccjs_callback_context_${index}_finalize`,
+      expression,
+      functionType,
+      needsEventLoop: functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions),
+      captures
+    }
+
+    wrappers.set(key, wrapper)
+    context.callbackArrowWrappers.set(expression, wrapper)
+  }
+  const registerPlainArrow = (expression, functionType, scopes) => {
+    if (context.callbackArrowWrappers.has(expression)) {
+      return
+    }
+
+    const captures = collectArrowCaptures(expression, scopes, context, deps)
+
+    if (captures.length > 0) {
+      return
+    }
+
+    const index = wrappers.size
+    const key = `plain-arrow:${index}`
+    const wrapper = {
+      kind: 'plain-arrow',
+      key,
+      name: `ccjs_callback_arrow_${index}`,
+      expression,
+      functionType
+    }
+
+    wrappers.set(key, wrapper)
+    context.callbackArrowWrappers.set(expression, wrapper)
+  }
+  const declare = (scope, name, info) => {
+    scope.set(name, info)
+  }
+  const declareParams = (scope, params) => {
+    for (const param of params) {
+      declare(scope, param.name, {
+        name: param.name,
+        valueType: param.valueType,
+        declaration: param,
+        functionType: param.functionType,
+        nullable: param.nullable === true,
+        shape: param.shape,
+        runtimeManaged: ['string', 'object'].includes(param.valueType),
+        mutable: true
+      })
+    }
+  }
+  const declareVariable = (scope, statement, scopes) => {
+    const valueType =
+      statement.valueType === 'unknown' ? inferCapturedExpressionValueType(statement.init, scopes) : statement.valueType
+
+    declare(scope, statement.name, {
+      name: statement.name,
+      valueType,
+      functionType: statement.functionType,
+      declaration: statement,
+      nullable: statement.nullable === true,
+      shape: statement.shape,
+      runtimeCallback:
+        isNullableFunctionType(valueType, statement.nullable) ||
+        isRuntimeFunctionType(statement.functionType) ||
+        shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes),
+      runtimeManaged: isRuntimeManagedCaptureBinding(statement, scopes, valueType),
+      mutable: statement.kind === 'let'
+    })
+  }
+  const lookup = (name, scopes) => {
+    for (let index = scopes.length - 1; index >= 0; index -= 1) {
+      const entry = scopes[index].get(name)
+
+      if (entry != null) {
+        return entry
+      }
+    }
+
+    return null
+  }
+  const isRuntimeManagedCaptureBinding = (statement, scopes, valueType) => {
+    if (valueType === 'object') {
+      return true
+    }
+
+    if (valueType !== 'string') {
+      return false
+    }
+
+    if (statement.init?.type === 'StringLiteral') {
+      return false
+    }
+
+    if (statement.init?.type === 'TemplateLiteral' && !statement.init.raw.includes('${')) {
+      return false
+    }
+
+    if (statement.init?.type === 'Reference' && statement.init.path.length === 1) {
+      return lookup(statement.init.path[0], scopes)?.runtimeManaged === true
+    }
+
+    return true
+  }
+  const inferCapturedExpressionValueType = (expression, scopes) => {
+    if (expression?.valueType != null && expression.valueType !== 'unknown') {
+      return expression.valueType
+    }
+
+    if (expression?.type === 'Reference' && expression.path.length === 1) {
+      return lookup(expression.path[0], scopes)?.valueType ?? 'unknown'
+    }
+
+    if (expression?.type === 'MemberExpression') {
+      const object = inferCapturedExpressionInfo(expression.object, scopes)
+      const field = object.shape?.fields?.find((field) => field.name === expression.property)
+
+      return field?.valueType ?? 'unknown'
+    }
+
+    if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      const object = inferCapturedExpressionInfo(expression.object, scopes)
+      const field = object.shape?.fields?.find((field) => field.name === expression.index.value)
+
+      return field?.valueType ?? 'unknown'
+    }
+
+    return 'unknown'
+  }
+  const inferCapturedExpressionInfo = (expression, scopes) => {
+    if (expression?.type === 'Reference' && expression.path.length === 1) {
+      const entry = lookup(expression.path[0], scopes)
+
+      if (entry != null) {
+        return entry
+      }
+    }
+
+    return {
+      valueType: inferCapturedExpressionValueType(expression, scopes),
+      shape: null
+    }
+  }
+  const visitStatement = (statement, scopes) => {
+    if (statement?.type === 'VariableDeclaration') {
+      if (isNullableFunctionType(statement.valueType, statement.nullable)) {
+        registerRuntime(statement.init, statement.functionType, scopes)
+      } else if (shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes)) {
+        registerRuntime(statement.init, statement.functionType, scopes)
+      } else {
+        register(statement.init, statement.functionType, scopes)
+      }
+
+      visitExpression(statement.init, scopes)
+      declareVariable(scopes.at(-1), statement, scopes)
+      return
+    }
+
+    if (statement?.type === 'ExpressionStatement') {
+      visitExpression(statement.expression, scopes)
+      return
+    }
+
+    if (statement?.type === 'ReturnStatement') {
+      visitExpression(statement.argument, scopes)
+      return
+    }
+
+    if (statement?.type === 'ThrowStatement') {
+      visitExpression(statement.argument, scopes)
+      return
+    }
+
+    if (statement?.type === 'BlockStatement') {
+      const scope = new Map()
+      statement.body.forEach((item) => visitStatement(item, [...scopes, scope]))
+      return
+    }
+
+    if (statement?.type === 'IfStatement') {
+      visitExpression(statement.condition, scopes)
+      visitStatement(statement.consequent, scopes)
+      visitStatement(statement.alternate, scopes)
+      return
+    }
+
+    if (statement?.type === 'WhileStatement') {
+      visitExpression(statement.condition, scopes)
+      visitStatement(statement.body, scopes)
+      return
+    }
+
+    if (statement?.type === 'ForStatement') {
+      const scope = new Map()
+      const loopScopes = [...scopes, scope]
+
+      if (statement.init?.type === 'VariableDeclaration') {
+        visitStatement(statement.init, loopScopes)
+      } else {
+        visitExpression(statement.init, loopScopes)
+      }
+
+      visitExpression(statement.test, loopScopes)
+      visitExpression(statement.update, loopScopes)
+      visitStatement(statement.body, loopScopes)
+      return
+    }
+
+    if (statement?.type === 'ForOfStatement') {
+      visitExpression(statement.iterable, scopes)
+      const scope = new Map()
+      declare(scope, statement.name, {
+        name: statement.name,
+        valueType: 'unknown',
+        mutable: statement.kind === 'let'
+      })
+      visitStatement(statement.body, [...scopes, scope])
+      return
+    }
+
+    if (statement?.type === 'SwitchStatement') {
+      visitExpression(statement.discriminant, scopes)
+
+      for (const item of statement.cases) {
+        visitExpression(item.test, scopes)
+        const scope = new Map()
+        item.consequent.forEach((statement) => visitStatement(statement, [...scopes, scope]))
+      }
+    }
+
+    if (statement?.type === 'TryStatement') {
+      visitStatement(statement.block, scopes)
+      visitStatement(statement.handler?.body, scopes)
+      visitStatement(statement.finalizer, scopes)
+    }
+  }
+  const visitExpression = (expression, scopes) => {
+    if (expression == null) {
+      return
+    }
+
+    if (expression.type === 'CallExpression') {
+      if (isTimerStartCallExpression(expression)) {
+        registerRuntime(expression.args[0], timerCallbackFunctionType(), scopes)
+      }
+
+      const params = resolveStaticFunctionParams(expression.callee, context)
+
+      for (const [index, arg] of expression.args.entries()) {
+        const param = params?.[index]
+
+        if (param?.valueType === 'function') {
+          if (isNullableFunctionType(param.valueType, param.nullable)) {
+            registerRuntime(arg, param.functionType, scopes)
+          } else if (isRuntimeFunctionType(param.functionType)) {
+            registerRuntime(arg, param.functionType, scopes)
+          } else {
+            pendingPlainFunctionArgs.push({
+              callee: expression.callee,
+              index,
+              arg,
+              functionType: normalizeFunctionType(param.functionType),
+              scopes
+            })
+
+            const argInfo = arg.type === 'Reference' && arg.path.length === 1 ? lookup(arg.path[0], scopes) : null
+
+            if (hasCaptures(arg, scopes) || argInfo?.runtimeCallback === true) {
+              markRuntimeFunctionParam(expression.callee, index, param.functionType, context)
+            }
+          }
+        }
+
+        visitExpression(arg, scopes)
+      }
+
+      visitExpression(expression.callee, scopes)
+      return
+    }
+
+    if (expression.type === 'AssignmentExpression') {
+      const targetInfo =
+        expression.target?.type === 'Reference' && expression.target.path.length === 1
+          ? lookup(expression.target.path[0], scopes)
+          : null
+
+      if (isNullableFunctionType(targetInfo?.valueType, targetInfo?.nullable)) {
+        registerRuntime(expression.value, targetInfo.functionType, scopes)
+      }
+
+      visitExpression(expression.target, scopes)
+      visitExpression(expression.value, scopes)
+      return
+    }
+
+    if (expression.type === 'BinaryExpression') {
+      visitExpression(expression.left, scopes)
+      visitExpression(expression.right, scopes)
+      return
+    }
+
+    if (
+      expression.type === 'UnaryExpression' ||
+      expression.type === 'UpdateExpression' ||
+      expression.type === 'AwaitExpression'
+    ) {
+      visitExpression(expression.argument, scopes)
+      return
+    }
+
+    if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+      visitExpression(expression.object, scopes)
+      return
+    }
+
+    if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
+      visitExpression(expression.object, scopes)
+      visitExpression(expression.index, scopes)
+      return
+    }
+
+    if (expression.type === 'NewExpression' && isPromiseConstructorExpression(expression)) {
+      visitExpression(expression.callee, scopes)
+
+      const executor = expression.args[0]
+
+      if (executor?.type === 'ArrowFunctionExpression') {
+        const scope = new Map()
+
+        for (const [index, param] of executor.params.entries()) {
+          declare(scope, param.name, {
+            name: param.name,
+            valueType: 'promise-settlement',
+            promiseSettlementKind: index === 1 ? 'reject' : 'resolve',
+            loc: param.loc,
+            mutable: false
+          })
+        }
+
+        const executorScopes = [...scopes, scope]
+
+        if (executor.expressionBody) {
+          visitExpression(executor.body, executorScopes)
+        } else {
+          executor.body.forEach((statement) => visitStatement(statement, executorScopes))
+        }
+
+        return
+      }
+
+      expression.args.forEach((arg) => visitExpression(arg, scopes))
+      return
+    }
+
+    if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+      visitExpression(expression.callee, scopes)
+      expression.args.forEach((arg) => visitExpression(arg, scopes))
+      return
+    }
+
+    if (expression.type === 'ArrayLiteral') {
+      expression.elements.forEach((element) => visitExpression(element, scopes))
+      return
+    }
+
+    if (expression.type === 'ObjectLiteral') {
+      expression.properties.forEach((property) => visitExpression(property.value, scopes))
+      return
+    }
+
+    if (expression.type === 'ArrowFunctionExpression') {
+      const scope = new Map()
+
+      for (const param of expression.params) {
+        declare(scope, param.name, {
+          name: param.name,
+          valueType: param.valueType,
+          declaration: param,
+          functionType: param.functionType,
+          nullable: param.nullable === true,
+          shape: param.shape,
+          runtimeManaged: ['string', 'object'].includes(param.valueType),
+          mutable: false
+        })
+      }
+
+      const arrowScopes = [...scopes, scope]
+
+      if (expression.expressionBody) {
+        visitExpression(expression.body, arrowScopes)
+      } else {
+        expression.body.forEach((statement) => visitStatement(statement, arrowScopes))
+      }
+
+      return
+    }
+  }
+
+  for (const ir of irPrograms) {
+    const topLevelScope = new Map()
+
+    for (const item of collectIrTopLevelNodeEntries(ir)) {
+      if (item.kind === 'function') {
+        const scope = new Map()
+        declareParams(scope, item.node.params)
+        item.node.body.forEach((statement) => visitStatement(statement, [topLevelScope, scope]))
+      } else if (item.kind === 'statement') {
+        visitStatement(item.node, [topLevelScope])
+      }
+    }
+  }
+
+  for (const pending of pendingPlainFunctionArgs) {
+    if (
+      resolveRuntimeFunctionArgumentType(
+        pending.callee,
+        pending.index,
+        {
+          valueType: 'function',
+          functionType: pending.functionType
+        },
+        context
+      ) != null
+    ) {
+      registerRuntime(pending.arg, pending.functionType, pending.scopes)
+    } else {
+      registerPlain(pending.arg, pending.functionType, pending.scopes)
+    }
+  }
+
+  return wrappers
+}
+
+export function collectArrowCaptures(expression: any, outerScopes: Map<string, any>[], context: any, deps: CallbackLoweringDependencies): any[] {
+  const captures = new Map()
+  const localScope = new Map()
+  const localScopes = [localScope]
+
+  for (const param of expression.params) {
+    localScope.set(param.name, {
+      name: param.name,
+      valueType: param.valueType,
+      mutable: true
+    })
+  }
+
+  const lookup = (name, scopes) => {
+    for (let index = scopes.length - 1; index >= 0; index -= 1) {
+      const entry = scopes[index].get(name)
+
+      if (entry != null) {
+        return entry
+      }
+    }
+
+    return null
+  }
+  const addReference = (reference) => {
+    if (reference.path.length !== 1) {
+      return
+    }
+
+    const name = reference.path[0]
+
+    if (lookup(name, localScopes) != null || context.functionNames.has(name) || isCJsGlobalRoot(name, context)) {
+      return
+    }
+
+    const outer = lookup(name, outerScopes)
+
+    if (outer != null && !captures.has(name)) {
+      captures.set(name, {
+        ...outer,
+        name
+      })
+    }
+  }
+  const declareLocal = (statement) => {
+    localScopes[localScopes.length - 1].set(statement.name, {
+      name: statement.name,
+      valueType: statement.valueType,
+      functionType: statement.functionType,
+      shape: statement.shape,
+      mutable: statement.kind === 'let'
+    })
+  }
+  const visitStatement = (statement) => {
+    if (statement == null) {
+      return
+    }
+
+    if (statement.type === 'VariableDeclaration') {
+      visitExpression(statement.init)
+      declareLocal(statement)
+      return
+    }
+
+    if (statement.type === 'ExpressionStatement') {
+      visitExpression(statement.expression)
+      return
+    }
+
+    if (statement.type === 'ReturnStatement' || statement.type === 'ThrowStatement') {
+      visitExpression(statement.argument)
+      return
+    }
+
+    if (statement.type === 'BlockStatement') {
+      localScopes.push(new Map())
+      statement.body.forEach(visitStatement)
+      localScopes.pop()
+      return
+    }
+
+    if (statement.type === 'IfStatement') {
+      visitExpression(statement.condition)
+      visitStatement(statement.consequent)
+      visitStatement(statement.alternate)
+      return
+    }
+
+    if (statement.type === 'WhileStatement') {
+      visitExpression(statement.condition)
+      visitStatement(statement.body)
+      return
+    }
+
+    if (statement.type === 'ForStatement') {
+      localScopes.push(new Map())
+
+      if (statement.init?.type === 'VariableDeclaration') {
+        visitStatement(statement.init)
+      } else {
+        visitExpression(statement.init)
+      }
+
+      visitExpression(statement.test)
+      visitExpression(statement.update)
+      visitStatement(statement.body)
+      localScopes.pop()
+      return
+    }
+
+    if (statement.type === 'ForOfStatement') {
+      visitExpression(statement.iterable)
+      localScopes.push(
+        new Map([
+          [
+            statement.name,
+            {
+              name: statement.name,
+              valueType: 'unknown',
+              mutable: statement.kind === 'let'
+            }
+          ]
+        ])
+      )
+      visitStatement(statement.body)
+      localScopes.pop()
+      return
+    }
+
+    if (statement.type === 'SwitchStatement') {
+      visitExpression(statement.discriminant)
+
+      for (const item of statement.cases) {
+        visitExpression(item.test)
+        localScopes.push(new Map())
+        item.consequent.forEach(visitStatement)
+        localScopes.pop()
+      }
+    }
+
+    if (statement.type === 'TryStatement') {
+      visitStatement(statement.block)
+
+      if (statement.handler != null) {
+        const catchScope = new Map()
+
+        if (statement.handler.param != null) {
+          catchScope.set(statement.handler.param, {
+            name: statement.handler.param,
+            valueType: 'string',
+            mutable: true
+          })
+        }
+
+        localScopes.push(catchScope)
+        visitStatement(statement.handler.body)
+        localScopes.pop()
+      }
+
+      visitStatement(statement.finalizer)
+    }
+  }
+  const visitExpression = (node) => {
+    if (node == null) {
+      return
+    }
+
+    if (node.type === 'TemplateLiteral') {
+      for (const expression of deps.collectTemplatePlaceholderExpressions(node)) {
+        visitExpression(expression)
+      }
+
+      return
+    }
+
+    if (node.type === 'Reference') {
+      addReference(node)
+      return
+    }
+
+    if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
+      visitExpression(node.object)
+      return
+    }
+
+    if (node.type === 'IndexExpression' || node.type === 'OptionalIndexExpression') {
+      visitExpression(node.object)
+      visitExpression(node.index)
+      return
+    }
+
+    if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression' || node.type === 'NewExpression') {
+      visitExpression(node.callee)
+      node.args.forEach(visitExpression)
+      return
+    }
+
+    if (node.type === 'AssignmentExpression') {
+      visitExpression(node.target)
+      visitExpression(node.value)
+      return
+    }
+
+    if (node.type === 'BinaryExpression') {
+      visitExpression(node.left)
+      visitExpression(node.right)
+      return
+    }
+
+    if (node.type === 'UnaryExpression' || node.type === 'UpdateExpression' || node.type === 'AwaitExpression') {
+      visitExpression(node.argument)
+      return
+    }
+
+    if (node.type === 'ArrayLiteral') {
+      node.elements.forEach(visitExpression)
+      return
+    }
+
+    if (node.type === 'ObjectLiteral') {
+      node.properties.forEach((property) => visitExpression(property.value))
+    }
+  }
+
+  if (expression.expressionBody) {
+    visitExpression(expression.body)
+  } else {
+    expression.body.forEach(visitStatement)
+  }
+
+  return [...captures.values()]
+}
+
+function resolveStaticFunctionParams(callee: any, context: any): any[] | null {
+  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  return context.functionParams.get(callee.path[0]) ?? null
+}
+
+function runtimeCallbackWrapperKey(target: string, functionType: any): string {
+  return `${target}:${functionType.returnType}(${functionType.params.map((param) => param.valueType).join(',')})`
+}
+
+export function runtimeCallbackWrapperFor(target: string, functionType: any, context: any): any | null {
+  return context.callbackWrappers.get(runtimeCallbackWrapperKey(target, functionType)) ?? null
+}
+
+export function emitRuntimeCallbackWrapperHead(wrapper: any): string {
+  return `static ccjs_status ${wrapper.name}(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out)`
+}
+
+export function isRuntimeCallbackWrapper(wrapper: any): boolean {
+  return wrapper.kind !== 'plain-arrow'
+}
+
+export function emitPlainArrowCallbackWrapperHead(wrapper: any): string {
+  return `static ${emitFunctionPointerReturnType(wrapper.functionType)} ${wrapper.name}(${emitPlainArrowCallbackParams(wrapper)})`
+}
+
+function emitPlainArrowCallbackParams(wrapper: any): string {
+  const params = wrapper.functionType?.params ?? []
+
+  if (params.length === 0) {
+    return 'void'
+  }
+
+  return params
+    .map((param, index) => `${emitCType(param.valueType)} ${plainArrowCallbackParamName(wrapper, index)}`)
+    .join(', ')
+}
+
+export function emitPlainArrowCallbackWrapperDeclaration(wrapper: any, baseContext: any, deps: CallbackLoweringDependencies): string[] {
+  const context = createFunctionContext(baseContext, wrapper.functionType?.returnType ?? 'void')
+  context.cleanupEnabled = false
+
+  for (const [index, param] of (wrapper.functionType?.params ?? []).entries()) {
+    context.variables.set(plainArrowCallbackParamName(wrapper, index), param.valueType)
+  }
+
+  const statements = wrapper.expression.expressionBody
+    ? [
+        {
+          type: 'ExpressionStatement',
+          expression: wrapper.expression.body
+        }
+      ]
+    : wrapper.expression.body
+  const statementLines = deps.emitStatementList(statements, context)
+  const lines = [
+    `${emitPlainArrowCallbackWrapperHead(wrapper)} {`,
+    ...emitOwnedValueDeclarations(context).map((line) => `  ${line}`),
+    ...emitBoxedValueDeclarations(context).map((line) => `  ${line}`),
+    ...statementLines.map((line) => `  ${line}`)
+  ]
+
+  if (shouldEmitCleanupLabel(context)) {
+    lines.push('ccjs_cleanup:')
+    lines.push(...emitOwnedValueCleanup(context).map((line) => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map((line) => `  ${line}`))
+    lines.push(`  ${emitCleanupReturn(context)}`)
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function plainArrowCallbackParamName(wrapper: any, index: number): string {
+  return wrapper.expression.params[index]?.name ?? `ccjs_arg_${index}`
+}
+
+export function emitRuntimeCallbackWrapperDeclaration(wrapper: any, context: any, deps: CallbackLoweringDependencies): string[] {
+  if (wrapper.kind === 'arrow') {
+    return emitRuntimeArrowCallbackWrapperDeclaration(wrapper, context, deps)
+  }
+
+  const targetTakesEventLoop = functionTakesEventLoopParam(wrapper.target, context)
+  const lines = [
+    `${emitRuntimeCallbackWrapperHead(wrapper)} {`,
+    targetTakesEventLoop ? '  if (context == 0) return CCJS_ERR_TYPE;' : '  (void)context;',
+    `  if (out == 0 || arg_count != ${wrapper.functionType.params.length}${wrapper.functionType.params.length === 0 ? '' : ' || args == 0'}) return CCJS_ERR_TYPE;`,
+    '  *out = ccjs_undefined_value();'
+  ]
+  const args: string[] = []
+
+  for (const [index, param] of wrapper.functionType.params.entries()) {
+    lines.push(...emitRuntimeCallbackWrapperArgChecks(param, index).map((line) => `  ${line}`))
+    args.push(emitRuntimeCallbackWrapperArg(param, index))
+  }
+
+  const callArgs = targetTakesEventLoop ? ['(ccjs_loop*)context', ...args] : args
+  const call = `${context.functionNames.get(wrapper.target) ?? emitCFunctionName(wrapper.target)}(${callArgs.join(', ')})`
+
+  if (wrapper.functionType.returnType === 'number') {
+    lines.push(`  *out = ccjs_number_value(${call});`)
+  } else if (wrapper.functionType.returnType === 'boolean') {
+    lines.push(`  *out = ccjs_bool_value((${call}) != 0);`)
+  } else if (isManagedRuntimeReturnType(wrapper.functionType.returnType)) {
+    lines.push(`  *out = ${call};`)
+  } else {
+    lines.push(`  ${call};`)
+  }
+
+  lines.push('  return CCJS_OK;')
+  lines.push('}')
+
+  return lines
+}
+
+export function isRuntimeArrowCallbackWrapperWithContext(wrapper: any): boolean {
+  return wrapper.kind === 'arrow' && hasRuntimeArrowCallbackContext(wrapper)
+}
+
+export function isPromiseChainCallbackWrapperWithContext(wrapper: any): boolean {
+  return wrapper.kind === 'promise-chain-arrow' && hasRuntimeArrowCallbackContext(wrapper)
+}
+
+export function hasRuntimeArrowCallbackContext(wrapper: any): boolean {
+  return wrapper.captures.length > 0 || wrapper.needsEventLoop === true
+}
+
+export function emitRuntimeArrowCallbackContextType(wrapper: any): string[] {
+  return [
+    `typedef struct ${wrapper.contextTypeName} {`,
+    ...(wrapper.needsEventLoop === true ? ['  ccjs_loop* ccjs_loop;'] : []),
+    ...wrapper.captures.map(
+      (capture) => `  ${emitRuntimeArrowCaptureCType(capture)} ${emitRuntimeArrowCaptureField(capture)};`
+    ),
+    `} ${wrapper.contextTypeName};`
+  ]
+}
+
+export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: any): string[] {
+  const lines = [
+    `static void ${wrapper.finalizerName}(void* context) {`,
+    '  if (context == 0) return;',
+    `  ${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)context;`
+  ]
+
+  for (const capture of wrapper.captures.filter(isRetainedRuntimeArrowCapture)) {
+    lines.push(`  ccjs_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
+  }
+
+  for (const capture of wrapper.captures.filter(isPromiseSettlementRuntimeArrowCapture)) {
+    lines.push(`  if (captured->${emitRuntimeArrowCaptureField(capture)} != 0) {`)
+    lines.push(`    ccjs_promise_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
+    lines.push('  }')
+  }
+
+  lines.push(
+    `  ccjs_default_free(0, context, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
+  )
+  lines.push('}')
+
+  return lines
+}
+
+function emitRuntimeArrowCallbackWrapperDeclaration(wrapper: any, baseContext: any, deps: CallbackLoweringDependencies): string[] {
+  const lines: string[] = []
+
+  if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+    lines.push(...emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper))
+    lines.push('')
+  }
+
+  const context = createFunctionContext(baseContext, 'void')
+  context.cleanupEnabled = false
+  context.statusReturn = true
+  context.runtimeCallbackReturnType = wrapper.functionType.returnType
+  context.runtimeCallbackReturnShape = wrapper.functionType.returnShape ?? null
+  context.runtimeCallbackReturnOut = '(*out)'
+  context.runtimeCallbackCleanupLabel = 'ccjs_callback_cleanup'
+  const bodyLines: string[] = []
+
+  bodyLines.push(...emitRuntimeArrowCallbackContextLocals(wrapper, context, deps))
+  bodyLines.push(...emitRuntimeArrowCallbackParamPrelude(wrapper, context, deps))
+  const statementLines = emitRuntimeArrowCallbackStatementLines(wrapper, context, deps)
+
+  lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)} {`)
+
+  if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+    lines.push('  if (context == 0) return CCJS_ERR_TYPE;')
+  } else {
+    lines.push('  (void)context;')
+  }
+
+  lines.push(
+    `  if (out == 0 || arg_count != ${wrapper.functionType.params.length}${wrapper.functionType.params.length === 0 ? '' : ' || args == 0'}) return CCJS_ERR_TYPE;`
+  )
+  lines.push('  *out = ccjs_undefined_value();')
+  lines.push(...bodyLines.map((line) => `  ${line}`))
+  lines.push(...emitLoopFlowDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitReturnFlowDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitOwnedValueDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitErrorChannelDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...emitBoxedValueDeclarations(context).map((line) => `  ${line}`))
+  lines.push(...statementLines.map((line) => `  ${line}`))
+  if (context.usedRuntimeCallbackCleanupGoto === true) {
+    lines.push(`${context.runtimeCallbackCleanupLabel}:`)
+  }
+  lines.push(...emitOwnedValueCleanup(context).map((line) => `  ${line}`))
+  lines.push(...emitBoxedValueCleanup(context).map((line) => `  ${line}`))
+  lines.push('  return CCJS_OK;')
+  lines.push('}')
+
+  return lines
+}
+
+function emitRuntimeArrowCallbackStatementLines(wrapper: any, context: any, deps: CallbackLoweringDependencies): string[] {
+  if (wrapper.functionType.returnType === 'number' || wrapper.functionType.returnType === 'boolean') {
+    if (!wrapper.expression.expressionBody) {
+      return deps.emitStatementList(wrapper.expression.body, context)
+    }
+
+    const value = deps.emitPreparedNumberExpression(wrapper.expression.body, context)
+    const expression =
+      wrapper.functionType.returnType === 'number'
+        ? `ccjs_number_value(${value.expression})`
+        : `ccjs_bool_value((${value.expression}) != 0)`
+
+    return [...value.lines, `*out = ${expression};`]
+  }
+
+  if (isManagedRuntimeReturnType(wrapper.functionType.returnType)) {
+    if (!wrapper.expression.expressionBody) {
+      return deps.emitStatementList(wrapper.expression.body, context)
+    }
+
+    return deps.emitRuntimeCallbackRuntimeValueReturnLines(wrapper.expression.body, context)
+  }
+
+  const statements = wrapper.expression.expressionBody
+    ? [
+        {
+          type: 'ExpressionStatement',
+          expression: wrapper.expression.body
+        }
+      ]
+    : wrapper.expression.body
+
+  return deps.emitStatementList(statements, context)
+}
+
+export function emitRuntimeArrowCallbackContextLocals(wrapper: any, context: any, deps: CallbackLoweringDependencies): string[] {
+  if (!hasRuntimeArrowCallbackContext(wrapper)) {
+    return []
+  }
+
+  const lines = [`${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)context;`]
+
+  if (wrapper.needsEventLoop === true) {
+    context.eventLoopUsed = true
+    context.externalEventLoop = true
+    lines.push('if (captured->ccjs_loop == 0) return CCJS_ERR_TYPE;')
+    lines.push('ccjs_loop* ccjs_loop = captured->ccjs_loop;')
+  }
+
+  for (const capture of wrapper.captures) {
+    if (capture.valueType === 'promise-settlement') {
+      const promise = capture.name
+
+      context.promiseConstructorHandlers.set(capture.name, {
+        kind: capture.promiseSettlementKind ?? 'resolve',
+        promise
+      })
+      lines.push(`ccjs_promise* ${promise} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+      continue
+    }
+
+    context.variables.set(capture.name, capture.valueType)
+
+    if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
+      context.boxedVariables.add(capture.name)
+
+      if (capture.valueType === 'object') {
+        deps.registerObjectShape(context, capture.name, capture.shape)
+      }
+
+      lines.push(
+        `${emitRuntimeArrowCaptureCType(capture)} ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`
+      )
+      continue
+    }
+
+    if (isRetainedRuntimeArrowCapture(capture)) {
+      if (capture.valueType === 'string') {
+        context.runtimeStrings.add(capture.name)
+        lines.push(
+          `ccjs_string* ${capture.name} = (ccjs_string*)captured->${emitRuntimeArrowCaptureField(capture)}.as.ref;`
+        )
+        continue
+      }
+
+      if (capture.valueType === 'object') {
+        deps.registerObjectShape(context, capture.name, capture.shape)
+        lines.push(`ccjs_value ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+        continue
+      }
+    }
+
+    lines.push(
+      `${emitRuntimeArrowCaptureCType(capture)} ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`
+    )
+  }
+
+  return lines
+}
+
+function emitRuntimeArrowCallbackParamPrelude(wrapper: any, context: any, deps: CallbackLoweringDependencies): string[] {
+  const lines: string[] = []
+
+  for (const [index, param] of wrapper.functionType.params.entries()) {
+    const name = wrapper.expression.params[index]?.name ?? `ccjs_arg_${index}`
+
+    lines.push(...emitRuntimeCallbackWrapperArgChecks(param, index))
+    context.variables.set(name, param.valueType)
+
+    if (param.valueType === 'string') {
+      context.runtimeStrings.add(name)
+      lines.push(`ccjs_string* ${name} = (ccjs_string*)args[${index}].as.ref;`)
+      continue
+    }
+
+    if (param.valueType === 'object') {
+      deps.registerObjectShape(context, name, param.shape)
+      lines.push(`ccjs_value ${name} = args[${index}];`)
+      continue
+    }
+
+    if (param.valueType === 'number') {
+      lines.push(`double ${name} = args[${index}].as.number;`)
+      continue
+    }
+
+    if (param.valueType === 'boolean') {
+      lines.push(`double ${name} = args[${index}].as.boolean ? 1 : 0;`)
+    }
+  }
+
+  return lines
+}
+
+export function emitRuntimeArrowCaptureCType(capture: any): string {
+  if (capture.mutable) {
+    if (['number', 'boolean'].includes(capture.valueType)) {
+      return 'double*'
+    }
+
+    if (['string', 'object'].includes(capture.valueType)) {
+      return 'ccjs_value*'
+    }
+  }
+
+  if (isRetainedRuntimeArrowCapture(capture)) {
+    return 'ccjs_value'
+  }
+
+  if (capture.valueType === 'promise-settlement') {
+    return 'ccjs_promise*'
+  }
+
+  if (capture.valueType === 'string') {
+    return 'const char*'
+  }
+
+  if (capture.valueType === 'timer') {
+    return 'ccjs_timer_handle*'
+  }
+
+  return 'double'
+}
+
+export function emitRuntimeArrowCaptureField(capture: any): string {
+  return emitCIdentifier(capture.name)
+}
+
+export function isRetainedRuntimeArrowCapture(capture: any): boolean {
+  return capture.runtimeManaged === true && ['string', 'object'].includes(capture.valueType) && !capture.mutable
+}
+
+export function isPromiseSettlementRuntimeArrowCapture(capture: any): boolean {
+  return capture.valueType === 'promise-settlement'
+}
+
+export function isSupportedMutableRuntimeArrowCapture(capture: any, context: any): boolean {
+  return (
+    capture.mutable &&
+    ['number', 'boolean', 'string', 'object'].includes(capture.valueType) &&
+    capture.declaration != null &&
+    context.boxedMutableCaptureDeclarations.has(capture.declaration)
+  )
+}
+
+function emitRuntimeCallbackWrapperArgChecks(param: any, index: number): string[] {
+  if (param.valueType === 'string') {
+    return [`if (args[${index}].tag != CCJS_TAG_STRING || args[${index}].as.ref == 0) return CCJS_ERR_TYPE;`]
+  }
+
+  if (param.valueType === 'object') {
+    return [`if (args[${index}].tag != CCJS_TAG_OBJECT || args[${index}].as.ref == 0) return CCJS_ERR_TYPE;`]
+  }
+
+  if (param.valueType === 'number') {
+    return [`if (args[${index}].tag != CCJS_TAG_NUMBER) return CCJS_ERR_TYPE;`]
+  }
+
+  if (param.valueType === 'boolean') {
+    return [`if (args[${index}].tag != CCJS_TAG_BOOL) return CCJS_ERR_TYPE;`]
+  }
+
+  return []
+}
+
+function emitRuntimeCallbackWrapperArg(param: any, index: number): string {
+  if (param.valueType === 'number') {
+    return `args[${index}].as.number`
+  }
+
+  if (param.valueType === 'boolean') {
+    return `(args[${index}].as.boolean ? 1 : 0)`
+  }
+
+  return `args[${index}]`
+}
+
+export function emitFunctionPointerReturnType(functionType: any): string {
+  return emitCType(functionType?.returnType ?? 'void')
+}
+
+export function emitFunctionPointerParams(functionType: any): string {
+  if (functionType == null || functionType.params.length === 0) {
+    return 'void'
+  }
+
+  return functionType.params.map((param) => emitCType(param.valueType)).join(', ')
+}

@@ -28,6 +28,14 @@ export function cTimerClearCallName(callee: any): string | null {
   return isTimerClearMethod(callee.path[0]) ? callee.path[0] : null
 }
 
+export function isTimerStartCallExpression(expression: any): boolean {
+  if (expression?.type !== 'CallExpression') {
+    return false
+  }
+
+  return cTimerStartCallName(expression.callee) != null || expression.timerRuntimeMethod?.startsWith('set') === true
+}
+
 export function timerCallbackFunctionType(): any {
   return {
     kind: 'function',
