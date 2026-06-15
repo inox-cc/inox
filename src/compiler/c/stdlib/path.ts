@@ -1,8 +1,13 @@
 import { pathParseObjectFields, pathRuntimeConstantValue } from '../../stdlib/descriptors/path.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitStatusCheck,
+  nextCName,
+  registerOwnedValue,
+  type CFunctionContext
+} from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
-
 
 type PreparedCallOptions = {
   out?: string
@@ -10,8 +15,8 @@ type PreparedCallOptions = {
 }
 
 export type PathLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  registerObjectShape: (context: any, name: string, shape: any) => void
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
 }
 
 export function cPathRuntimeMethodName(expression: any): string | null {
@@ -38,7 +43,7 @@ export function cPathRuntimeConstantValue(name: string): string | null {
   return pathRuntimeConstantValue(name)
 }
 
-export function emitPreparedPathConstantExpression(expression: any, context: any): PreparedExpression | null {
+export function emitPreparedPathConstantExpression(expression: any, context: CFunctionContext): PreparedExpression | null {
   const constant = cPathRuntimeConstantName(expression)
   const value = constant == null ? null : cPathRuntimeConstantValue(constant)
 
@@ -63,7 +68,7 @@ export function emitPreparedPathConstantExpression(expression: any, context: any
 
 export function emitPreparedPathObjectCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PathLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -98,7 +103,7 @@ export function emitPreparedPathObjectCallExpression(
 
 export function emitPreparedPathStringCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PathLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -203,7 +208,7 @@ export function emitPreparedPathStringCallExpression(
 
 export function emitPreparedPathBooleanCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PathLoweringDependencies
 ): PreparedExpression | null {
   if (cPathRuntimeMethodName(expression) !== 'isAbsolute') {
@@ -223,7 +228,7 @@ export function emitPreparedPathBooleanCallExpression(
   }
 }
 
-function emitPathParseObjectShape(context: any): PreparedExpression {
+function emitPathParseObjectShape(context: CFunctionContext): PreparedExpression {
   const shapeName = nextCName(context, 'ccjs_shape_path_parse')
   const fieldsName = `${shapeName}_fields`
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]

@@ -1,8 +1,13 @@
 import { osRuntimeConstantValue } from '../../stdlib/descriptors/os.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitStatusCheck,
+  nextCName,
+  registerOwnedValue,
+  type CFunctionContext
+} from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
-
 
 type PreparedCallOptions = {
   out?: string
@@ -33,7 +38,7 @@ export function cOsRuntimeConstantValue(name: string): string | null {
   return osRuntimeConstantValue(name)
 }
 
-export function emitPreparedOsConstantExpression(expression: any, context: any): PreparedExpression | null {
+export function emitPreparedOsConstantExpression(expression: any, context: CFunctionContext): PreparedExpression | null {
   const constant = cOsRuntimeConstantName(expression)
   const value = constant == null ? null : cOsRuntimeConstantValue(constant)
 
@@ -58,7 +63,7 @@ export function emitPreparedOsConstantExpression(expression: any, context: any):
 
 export function emitPreparedOsStringCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cOsRuntimeMethodName(expression)

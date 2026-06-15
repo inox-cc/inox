@@ -3,10 +3,15 @@ import {
   isProcessRuntimeStringProperty,
   processRuntimePropertyValueType
 } from '../../stdlib/descriptors/process.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitStatusCheck,
+  nextCName,
+  registerOwnedValue,
+  type CFunctionContext
+} from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
-
 
 type PreparedCallOptions = {
   out?: string
@@ -14,7 +19,7 @@ type PreparedCallOptions = {
 }
 
 export type ProcessLoweringDependencies = {
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
 }
 
 export function cProcessRuntimeMethodName(expression: any): string | null {
@@ -65,7 +70,7 @@ export function cProcessRuntimeEnvName(expression: any): string | null {
 
 export function emitPreparedProcessStringExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: ProcessLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -151,7 +156,7 @@ export function emitPreparedProcessNumberExpression(expression: any): PreparedEx
 
 export function emitProcessExitStatement(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: ProcessLoweringDependencies
 ): string[] | null {
   if (cProcessRuntimeMethodName(expression) !== 'exit') {
@@ -168,7 +173,7 @@ export function emitProcessExitStatement(
 
 export function emitProcessExitCodeAssignment(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: ProcessLoweringDependencies
 ): string[] | null {
   if (expression?.type !== 'AssignmentExpression' || cProcessRuntimePropertyName(expression) !== 'exitCode') {
