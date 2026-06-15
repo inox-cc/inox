@@ -14,7 +14,9 @@ import {
   emitOwnedValueCleanup,
   emitOwnedValueDeclarations,
   emitReturnFlowDeclarations,
-  shouldEmitCleanupLabel
+  shouldEmitCleanupLabel,
+  type CEmitContext,
+  type CFunctionContext
 } from '../context.ts'
 import type { IrProgram } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
@@ -22,10 +24,10 @@ import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
 export type CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions: (expression: any) => any[]
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
-  emitRuntimeCallbackRuntimeValueReturnLines: (argument: any, context: any) => string[]
-  emitStatementList: (statements: any[], context: any) => string[]
-  registerObjectShape: (context: any, name: string, shape: any) => void
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitRuntimeCallbackRuntimeValueReturnLines: (argument: any, context: CFunctionContext) => string[]
+  emitStatementList: (statements: any[], context: CFunctionContext) => string[]
+  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
 }
 
 export function functionUsesExternalEventLoop(node: any, externalNames: Set<any>): boolean {
@@ -121,7 +123,7 @@ function runtimeFunctionParamKey(functionName, index) {
   return `${functionName}:${index}`
 }
 
-export function markRuntimeFunctionParam(callee: any, index: number, functionType: any, context: any): void {
+export function markRuntimeFunctionParam(callee: any, index: number, functionType: any, context: CEmitContext): void {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return
   }
@@ -135,7 +137,7 @@ export function markRuntimeFunctionParam(callee: any, index: number, functionTyp
   context.runtimeFunctionParams.set(runtimeFunctionParamKey(name, index), normalizeFunctionType(functionType))
 }
 
-export function resolveFunctionParameterRuntimeType(functionName: string, index: number, param: any, context: any): any | null {
+export function resolveFunctionParameterRuntimeType(functionName: string, index: number, param: any, context: CEmitContext): any | null {
   const promoted = context.runtimeFunctionParams.get(runtimeFunctionParamKey(functionName, index))
 
   if (promoted != null) {
@@ -149,7 +151,7 @@ export function resolveFunctionParameterRuntimeType(functionName: string, index:
   return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
 }
 
-export function resolveRuntimeFunctionArgumentType(callee: any, index: number, param: any, context: any): any | null {
+export function resolveRuntimeFunctionArgumentType(callee: any, index: number, param: any, context: CEmitContext): any | null {
   if (param?.valueType !== 'function') {
     return null
   }
@@ -169,7 +171,11 @@ export function resolveRuntimeFunctionArgumentType(callee: any, index: number, p
   return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
 }
 
-export function collectCallbackWrappers(irPrograms: IrProgram[], context: any, deps: CallbackLoweringDependencies): Map<any, any> {
+export function collectCallbackWrappers(
+  irPrograms: IrProgram[],
+  context: CEmitContext,
+  deps: CallbackLoweringDependencies
+): Map<any, any> {
   const wrappers = new Map()
   const pendingPlainFunctionArgs: any[] = []
   const register = (expression, functionType, scopes) => {
@@ -709,7 +715,12 @@ export function collectCallbackWrappers(irPrograms: IrProgram[], context: any, d
   return wrappers
 }
 
-export function collectArrowCaptures(expression: any, outerScopes: Map<string, any>[], context: any, deps: CallbackLoweringDependencies): any[] {
+export function collectArrowCaptures(
+  expression: any,
+  outerScopes: Map<string, any>[],
+  context: CEmitContext,
+  deps: CallbackLoweringDependencies
+): any[] {
   const captures = new Map()
   const localScope = new Map()
   const localScopes = [localScope]
@@ -942,7 +953,7 @@ export function collectArrowCaptures(expression: any, outerScopes: Map<string, a
   return [...captures.values()]
 }
 
-function resolveStaticFunctionParams(callee: any, context: any): any[] | null {
+function resolveStaticFunctionParams(callee: any, context: CEmitContext): any[] | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
@@ -954,7 +965,7 @@ function runtimeCallbackWrapperKey(target: string, functionType: any): string {
   return `${target}:${functionType.returnType}(${functionType.params.map((param) => param.valueType).join(',')})`
 }
 
-export function runtimeCallbackWrapperFor(target: string, functionType: any, context: any): any | null {
+export function runtimeCallbackWrapperFor(target: string, functionType: any, context: CEmitContext): any | null {
   return context.callbackWrappers.get(runtimeCallbackWrapperKey(target, functionType)) ?? null
 }
 
@@ -982,7 +993,11 @@ function emitPlainArrowCallbackParams(wrapper: any): string {
     .join(', ')
 }
 
-export function emitPlainArrowCallbackWrapperDeclaration(wrapper: any, baseContext: any, deps: CallbackLoweringDependencies): string[] {
+export function emitPlainArrowCallbackWrapperDeclaration(
+  wrapper: any,
+  baseContext: CEmitContext,
+  deps: CallbackLoweringDependencies
+): string[] {
   const context = createFunctionContext(baseContext, wrapper.functionType?.returnType ?? 'void')
   context.cleanupEnabled = false
 
@@ -1022,7 +1037,11 @@ function plainArrowCallbackParamName(wrapper: any, index: number): string {
   return wrapper.expression.params[index]?.name ?? `ccjs_arg_${index}`
 }
 
-export function emitRuntimeCallbackWrapperDeclaration(wrapper: any, context: any, deps: CallbackLoweringDependencies): string[] {
+export function emitRuntimeCallbackWrapperDeclaration(
+  wrapper: any,
+  context: CEmitContext,
+  deps: CallbackLoweringDependencies
+): string[] {
   if (wrapper.kind === 'arrow') {
     return emitRuntimeArrowCallbackWrapperDeclaration(wrapper, context, deps)
   }
@@ -1108,7 +1127,11 @@ export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: any
   return lines
 }
 
-function emitRuntimeArrowCallbackWrapperDeclaration(wrapper: any, baseContext: any, deps: CallbackLoweringDependencies): string[] {
+function emitRuntimeArrowCallbackWrapperDeclaration(
+  wrapper: any,
+  baseContext: CEmitContext,
+  deps: CallbackLoweringDependencies
+): string[] {
   const lines: string[] = []
 
   if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
@@ -1159,7 +1182,11 @@ function emitRuntimeArrowCallbackWrapperDeclaration(wrapper: any, baseContext: a
   return lines
 }
 
-function emitRuntimeArrowCallbackStatementLines(wrapper: any, context: any, deps: CallbackLoweringDependencies): string[] {
+function emitRuntimeArrowCallbackStatementLines(
+  wrapper: any,
+  context: CFunctionContext,
+  deps: CallbackLoweringDependencies
+): string[] {
   if (wrapper.functionType.returnType === 'number' || wrapper.functionType.returnType === 'boolean') {
     if (!wrapper.expression.expressionBody) {
       return deps.emitStatementList(wrapper.expression.body, context)
@@ -1194,7 +1221,11 @@ function emitRuntimeArrowCallbackStatementLines(wrapper: any, context: any, deps
   return deps.emitStatementList(statements, context)
 }
 
-export function emitRuntimeArrowCallbackContextLocals(wrapper: any, context: any, deps: CallbackLoweringDependencies): string[] {
+export function emitRuntimeArrowCallbackContextLocals(
+  wrapper: any,
+  context: CFunctionContext,
+  deps: CallbackLoweringDependencies
+): string[] {
   if (!hasRuntimeArrowCallbackContext(wrapper)) {
     return []
   }
@@ -1259,7 +1290,11 @@ export function emitRuntimeArrowCallbackContextLocals(wrapper: any, context: any
   return lines
 }
 
-function emitRuntimeArrowCallbackParamPrelude(wrapper: any, context: any, deps: CallbackLoweringDependencies): string[] {
+function emitRuntimeArrowCallbackParamPrelude(
+  wrapper: any,
+  context: CFunctionContext,
+  deps: CallbackLoweringDependencies
+): string[] {
   const lines: string[] = []
 
   for (const [index, param] of wrapper.functionType.params.entries()) {
@@ -1335,7 +1370,7 @@ export function isPromiseSettlementRuntimeArrowCapture(capture: any): boolean {
   return capture.valueType === 'promise-settlement'
 }
 
-export function isSupportedMutableRuntimeArrowCapture(capture: any, context: any): boolean {
+export function isSupportedMutableRuntimeArrowCapture(capture: any, context: CFunctionContext): boolean {
   return (
     capture.mutable &&
     ['number', 'boolean', 'string', 'object'].includes(capture.valueType) &&
