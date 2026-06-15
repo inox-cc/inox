@@ -202,7 +202,11 @@ import {
   cFsRuntimeExpressionMethod,
   isAsyncFsRuntimeCallExpression
 } from './stdlib/fs.ts'
-import { cJsonRuntimeCallName } from './stdlib/json.ts'
+import {
+  cJsonRuntimeCallName,
+  emitJsonParseVariableDeclaration,
+  type JsonDeclarationDependencies
+} from './stdlib/json.ts'
 import { cOsRuntimeConstantName, cOsRuntimeConstantValue, cOsRuntimeMethodName } from './stdlib/os.ts'
 import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from './stdlib/path.ts'
 import {
@@ -417,7 +421,8 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitHttpServerVariableDeclaration,
   emitHttpServerCallStatement: (expression, context) =>
     emitHttpServerCallStatement(expression, context, httpLoweringDependencies),
-  emitJsonParseVariableDeclaration,
+  emitJsonParseVariableDeclaration: (statement, context) =>
+    emitJsonParseVariableDeclaration(statement, context, jsonDeclarationDependencies),
   emitKnownArrayIndexAssignment,
   emitKnownArrayIndexVariableDeclaration,
   emitKnownObjectMemberAssignment,
@@ -525,6 +530,12 @@ const objectVariableDeclarationDependencies: ObjectVariableDeclarationDependenci
   emitCFieldFlags,
   emitCValueExpression,
   inferExpressionType
+}
+
+const jsonDeclarationDependencies: JsonDeclarationDependencies = {
+  emitCFieldFlags,
+  emitPreparedJsonCallExpression,
+  registerObjectShape
 }
 
 const collectionLoweringDependencies: CollectionLoweringDependencies = {
@@ -2326,65 +2337,6 @@ function inferRejectedValueType(expression, context, localErrorObjectNames = con
   }
 
   return 'unknown'
-}
-
-function emitJsonParseVariableDeclaration(statement, context) {
-  if (statement.init?.type !== 'CallExpression' || cJsonRuntimeCallName(statement.init.callee) !== 'parse') {
-    return null
-  }
-
-  if (statement.valueType !== 'object' || statement.shape?.fields == null) {
-    return null
-  }
-
-  const fields = statement.shape.fields
-  const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
-  const fieldsName = `${shapeName}_fields`
-  const parsed = nextCName(context, 'ccjs_json_object')
-  const parseCall = emitPreparedJsonCallExpression(statement.init, context, {
-    out: parsed
-  })
-  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
-
-  for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
-  lines.push(`  ${fields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
-
-  registerOwnedValue(context, statement.name)
-  context.variables.set(statement.name, 'object')
-  registerObjectShape(context, statement.name, statement.shape)
-
-  lines.push(...parseCall.lines)
-  lines.push(...emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`, context))
-
-  for (const [index, field] of fields.entries()) {
-    const value = nextCName(context, `ccjs_json_${emitCIdentifier(field.name)}`)
-    const tag = cRuntimeValueTag(field.valueType)
-
-    registerOwnedValue(context, value)
-    lines.push(...emitPrepareOwnedValueWrite(value))
-    lines.push(
-      emitStatusCheck(
-        `ccjs_object_get(${parsed}, ${cStringLiteral(field.name)}, ${utf8ByteLength(field.name)}, &${value})`,
-        context
-      )
-    )
-    lines.push(
-      ...(field.nullable === true
-        ? emitRuntimeNullableValueCheck(value, tag, context)
-        : [emitRuntimeValueCheck(value, tag, context)].filter(Boolean))
-    )
-    lines.push(emitStatusCheck(`ccjs_object_init_known(${statement.name}, ${index}, ${value})`, context))
-  }
-
-  return lines
 }
 
 function emitNullableRuntimeValueVariableDeclaration(statement, context) {
