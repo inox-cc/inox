@@ -9,7 +9,11 @@ import {
   type CFunctionContext
 } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 
 export type CryptoLoweringDependencies = {
   cStringLiteralNode: (value: string, loc?: any) => any
@@ -21,15 +25,6 @@ export type CryptoLoweringDependencies = {
     tempPrefix?: string
   ) => PreparedStringBytesOperand
   inferExpressionType: (expression: any, context: CFunctionContext) => string
-}
-
-type CryptoHandleOptions = {
-  out?: string
-  owned?: boolean
-}
-
-type CryptoValueOptions = {
-  discard?: boolean
 }
 
 export function cryptoRuntimeMethodName(expression: any): string | null {
@@ -113,7 +108,7 @@ export function emitPreparedCryptoHashCallExpression(
   expression: any,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies,
-  options: CryptoHandleOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cryptoRuntimeMethodName(expression)
 
@@ -166,7 +161,7 @@ export function emitPreparedCryptoHmacCallExpression(
   expression: any,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies,
-  options: CryptoHandleOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cryptoRuntimeMethodName(expression)
 
@@ -221,7 +216,7 @@ export function emitPreparedCryptoCallExpression(
   expression: any,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies,
-  options: CryptoValueOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cryptoRuntimeMethodName(expression)
 

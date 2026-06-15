@@ -287,6 +287,7 @@ import type {
   CModuleEmitOptions,
   CModuleOutputFile,
   CModulePlan,
+  CPreparedCallOptions as PreparedCallOptions,
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedExpression as PreparedExpression
 } from './types.ts'
@@ -552,11 +553,11 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedBytesIndexAssignment: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBytesIndexAssignment(expression, context, binaryLoweringDependencies),
   emitPreparedCallExpression,
-  emitPreparedChildProcessCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedChildProcessCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedChildProcessCallExpression(expression, context, childProcessLoweringDependencies, options),
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
-  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies, options),
   emitPreparedCryptoHashCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoHashCallExpression(expression, context, cryptoLoweringDependencies),
@@ -565,34 +566,34 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedCryptoNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedDebugMemoryCallExpression,
-  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFsCallExpression(expression, context, fsLoweringDependencies, options),
   emitPreparedFsSyncStatementExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFsSyncStatementExpression(expression, context, fsLoweringDependencies),
   emitPreparedMapIndexAssignment,
   emitPreparedNumberExpression,
-  emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies, options),
-  emitPreparedPromiseConstructorExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedPromiseConstructorExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedPromiseConstructorExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedPromiseExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedPromiseExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedPromiseMethodExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseReturningCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedPromiseReturningCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedPromiseReturningCallExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedPromiseStaticExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitPreparedUpdateExpression,
-  emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies, options),
-  emitPreparedUrlSearchParamsObjectExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedUrlSearchParamsObjectExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedUrlSearchParamsObjectExpression(expression, context, urlLoweringDependencies, options),
   emitProcessExitCodeAssignment: (expression: AnyNode, context: CFunctionContext) =>
     emitProcessExitCodeAssignment(expression, context, processLoweringDependencies),
@@ -707,9 +708,9 @@ const promiseLoweringDependencies: PromiseLoweringDependencies = {
   emitCValueExpression,
   emitPreparedAsyncFunctionPromiseCallExpression,
   emitPreparedCallExpression,
-  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PromiseCallOptions) =>
+  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PromiseCallOptions) =>
+  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFsCallExpression(expression, context, fsLoweringDependencies, options),
   emitRuntimeArrowCaptureStoreLines,
   emitStatementList,
@@ -925,7 +926,7 @@ const cCallExpressionDependencies: CCallExpressionDependencies = {
     emitPreparedPromiseMethodExpression(expression, context, promiseLoweringDependencies),
   emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPromiseStaticExpression(expression, context, promiseLoweringDependencies),
-  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
+  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies),
@@ -3377,15 +3378,10 @@ function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CF
   ]
 }
 
-type PromiseCallOptions = {
-  out?: string
-  owned?: boolean
-}
-
 function emitPreparedDebugMemoryCallExpression(
   expression: AnyNode,
   context: CFunctionContext,
-  options: { discard?: boolean } = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   if (cDebugRuntimeMethodName(expression) !== 'memory') {
     return null
@@ -3438,7 +3434,7 @@ function emitPreparedDebugMemoryCallExpression(
 function emitPreparedAsyncFunctionPromiseCallExpression(
   expression: AnyNode,
   context: CFunctionContext,
-  options: PromiseCallOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   if (
     expression?.type !== 'CallExpression' ||
@@ -3526,7 +3522,7 @@ function emitPreparedAsyncTaskPromiseCallExpression(
   expression: AnyNode,
   valueType: string,
   context: CFunctionContext,
-  options: PromiseCallOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
     return null
@@ -3560,7 +3556,7 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   expression: AnyNode,
   valueType: string,
   context: CFunctionContext,
-  options: PromiseCallOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   if (!isSupportedAsyncFunctionPromiseValueType(valueType)) {
     context.diagnostics.push(

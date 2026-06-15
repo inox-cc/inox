@@ -12,7 +12,11 @@ import {
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 
 export type FetchLoweringDependencies = {
   emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
@@ -23,11 +27,6 @@ export type FetchLoweringDependencies = {
   ) => PreparedStringBytesOperand
   findObjectLiteralPropertyValue: (expression: any, key: string) => any | null
   inferExpressionType: (expression: any, context: CFunctionContext) => string
-}
-
-type FetchCallOptions = {
-  out?: string
-  owned?: boolean
 }
 
 const fetchPromiseResultTypes: Record<string, string> = {
@@ -90,7 +89,7 @@ export function emitPreparedFetchCallExpression(
   expression: any,
   context: CFunctionContext,
   dependencies: FetchLoweringDependencies,
-  options: FetchCallOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cFetchRuntimeExpressionMethod(expression)
 
@@ -153,7 +152,7 @@ export function emitPreparedFetchHeadersCallExpression(
   expression: any,
   context: CFunctionContext,
   dependencies: FetchLoweringDependencies,
-  options: FetchCallOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cFetchRuntimeExpressionMethod(expression)
   const descriptor = method == null ? null : fetchHeadersCallDescriptors[method]

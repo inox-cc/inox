@@ -7,12 +7,10 @@ import {
   type CFunctionContext
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
-
-type PreparedCallOptions = {
-  out?: string
-  owned?: boolean
-}
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression
+} from '../types.ts'
 
 export type PathLoweringDependencies = {
   emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression

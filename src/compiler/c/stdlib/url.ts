@@ -8,12 +8,11 @@ import {
   type CFunctionContext
 } from '../context.ts'
 import { cStringLiteral } from '../identifiers.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
-
-type PreparedCallOptions = {
-  out?: string
-  owned?: boolean
-}
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 
 export type UrlLoweringDependencies = {
   emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression

@@ -10,7 +10,10 @@ import {
 import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression
+} from '../types.ts'
 
 export type ArrayLoweringDependencies = {
   emitCArrayLiteralValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
@@ -443,7 +446,7 @@ export function emitPreparedArrayPushCallExpression(expression: any, context: CF
 export function emitPreparedArrayPopCallExpression(
   expression: any,
   context: CFunctionContext,
-  options: { discard?: boolean } = {}
+  options: PreparedCallOptions = {}
 ) {
   if (
     expression?.type !== 'CallExpression' ||

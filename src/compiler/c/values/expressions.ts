@@ -37,7 +37,11 @@ import {
   isNullableScalarRuntimeExpression,
   resolveNullableScalarConditionNarrowing
 } from './nullable.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedCallArgs as PreparedCallArgs } from '../types.ts'
+import type {
+  CPreparedCallArgs as PreparedCallArgs,
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression
+} from '../types.ts'
 
 
 export type CScalarExpressionDependencies = {
@@ -109,7 +113,7 @@ export type CCallExpressionDependencies = {
   emitPreparedPathStringCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitPreparedPromiseMethodExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitPreparedPromiseStaticExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedTimerCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedTimerCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
   emitPreparedUrlSearchParamsCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitRuntimeCallbackCall: (expression: any, callbackType: any, context: CFunctionContext) => PreparedExpression
   emitRuntimeCallbackValue: (expression: any, functionType: any, context: CFunctionContext) => PreparedExpression

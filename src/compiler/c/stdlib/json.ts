@@ -9,7 +9,11 @@ import {
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 
 export function cJsonRuntimeCallName(callee: any): string | null {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
@@ -31,11 +35,6 @@ export type JsonDeclarationDependencies = {
   ) => PreparedStringBytesOperand
   inferExpressionType: (expression: any, context: CFunctionContext) => string
   registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
-}
-
-type JsonCallOptions = {
-  out?: string
-  owned?: boolean
 }
 
 export function emitJsonParseVariableDeclaration(
@@ -109,7 +108,7 @@ export function emitPreparedJsonCallExpression(
   expression: any,
   context: CFunctionContext,
   dependencies: JsonDeclarationDependencies,
-  options: JsonCallOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cJsonRuntimeCallName(expression?.callee)
 

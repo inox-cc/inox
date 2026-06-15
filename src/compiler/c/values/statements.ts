@@ -21,7 +21,11 @@ import { emitCConditionClause, emitCNegatedConditionClause } from './expressions
 import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedStatement as PreparedStatement } from '../types.ts'
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStatement as PreparedStatement
+} from '../types.ts'
 
 
 
@@ -75,36 +79,36 @@ export type StatementLoweringDependencies = {
   emitOptionalRuntimeCallbackCallExpression: (expression: any, context: CFunctionContext) => string[]
   emitPreparedArrayFilterCallExpression: (expression: any, context: CFunctionContext) => any | null
   emitPreparedArrayMapCallExpression: (expression: any, context: CFunctionContext) => any | null
-  emitPreparedArrayPopCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedArrayPopCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
   emitPreparedArrayPushCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitPreparedArraySortCallExpression: (expression: any, context: CFunctionContext) => any | null
-  emitPreparedAsyncFunctionPromiseCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedAsyncFunctionPromiseCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
   emitPreparedBytesIndexAssignment: (expression: any, context: CFunctionContext) => PreparedStatement | null
   emitPreparedCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedChildProcessCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedChildProcessCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
   emitPreparedClassMethodCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitPreparedCollectionCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedCryptoCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
   emitPreparedCryptoHashCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitPreparedCryptoHmacCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitPreparedCryptoNumberCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedDebugMemoryCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedFetchCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedFsCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedDebugMemoryCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedFetchCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedFetchHeadersCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedFsCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
   emitPreparedFsSyncStatementExpression: (expression: any, context: CFunctionContext) => PreparedStatement | null
   emitPreparedMapIndexAssignment: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedPathObjectCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedPromiseConstructorExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedPromiseExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedPromiseMethodExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedPromiseReturningCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedPromiseStaticExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedTimerCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedPathObjectCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedPromiseConstructorExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedPromiseExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedPromiseMethodExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedPromiseReturningCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedPromiseStaticExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedTimerCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
   emitPreparedUpdateExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedUrlObjectExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
-  emitPreparedUrlSearchParamsObjectExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedUrlObjectExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedUrlSearchParamsObjectExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
   emitProcessExitCodeAssignment: (expression: any, context: CFunctionContext) => string[] | null
   emitProcessExitStatement: (expression: any, context: CFunctionContext) => string[] | null
   emitPromiseConstructorSettlementCall: (expression: any, context: CFunctionContext) => string[] | null

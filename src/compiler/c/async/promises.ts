@@ -1,5 +1,8 @@
 import type { CEmitContext, CFunctionContext } from '../context.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression
+} from '../types.ts'
 export function cPromiseRuntimeCallName(callee: any): string | null {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
     return null
@@ -126,11 +129,6 @@ import { isManagedRuntimeReturnType } from '../value-types.ts'
 import type { CallbackLoweringDependencies } from './callbacks.ts'
 import type { IrProgram } from '../../types.ts'
 
-
-type PreparedCallOptions = {
-  out?: string
-  owned?: boolean
-}
 
 export type PromiseChainLoweringDependencies = {
   callbackLoweringDependencies: CallbackLoweringDependencies

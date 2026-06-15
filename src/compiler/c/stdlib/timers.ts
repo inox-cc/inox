@@ -12,17 +12,15 @@ import {
   registerEventLoop,
   type CFunctionContext
 } from '../context.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression
+} from '../types.ts'
 
 export type TimerLoweringDependencies = {
   emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitReference: (expression: any, context: CFunctionContext) => string
   emitRuntimeCallbackValue: (expression: any, functionType: any, context: CFunctionContext) => PreparedExpression
-}
-
-type TimerCallOptions = {
-  out?: string
-  asValue?: boolean
 }
 
 type TimerStartCallDescriptor = {
@@ -136,7 +134,7 @@ export function emitPreparedTimerCallExpression(
   expression: any,
   context: CFunctionContext,
   dependencies: TimerLoweringDependencies,
-  options: TimerCallOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = expression?.timerRuntimeMethod ?? cTimerRuntimeCallName(expression?.callee)
 

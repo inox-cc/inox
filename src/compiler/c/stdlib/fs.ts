@@ -12,7 +12,12 @@ import {
 } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedStatement as PreparedStatement, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
+import type {
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStatement as PreparedStatement,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 
 export type FsLoweringDependencies = {
   emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
@@ -23,11 +28,6 @@ export type FsLoweringDependencies = {
     tempPrefix?: string
   ) => PreparedStringBytesOperand
   inferExpressionType: (expression: any, context: CFunctionContext) => string
-}
-
-type FsCallOptions = {
-  out?: string
-  owned?: boolean
 }
 
 const fsPromiseResultTypes: Record<string, string> = {
@@ -161,7 +161,7 @@ export function emitPreparedFsCallExpression(
   expression: any,
   context: CFunctionContext,
   dependencies: FsLoweringDependencies,
-  options: FsCallOptions = {}
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
 

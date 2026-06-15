@@ -28,6 +28,13 @@ export type CPreparedCallArgs = {
   args: string[]
 }
 
+export type CPreparedCallOptions = {
+  asValue?: boolean
+  discard?: boolean
+  out?: string
+  owned?: boolean
+}
+
 export type CModuleOutputFile = {
   kind: 'header' | 'source'
   path: string
