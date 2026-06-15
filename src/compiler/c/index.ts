@@ -347,8 +347,6 @@ import {
   currentReturnTarget,
   emitBreakJump,
   emitBreakTargetLabel,
-  emitBoxedRuntimeValueVariableDeclaration,
-  emitBoxedScalarVariableDeclaration,
   emitCatchBindingTypeCheck,
   emitContinueJump,
   emitContinueTargetLabel,
@@ -363,6 +361,7 @@ import {
   emitRuntimeCallbackRuntimeValueReturnLines,
   emitRuntimeStringVariableDeclaration,
   emitRuntimeValueVariableDeclaration,
+  emitNumberBooleanScalarVariableDeclaration,
   emitStringScalarVariableDeclaration,
   emitStatementBody,
   emitStatementList,
@@ -2434,27 +2433,7 @@ function emitScalarVariableDeclaration(statement, context) {
     return cryptoHandleDeclaration
   }
 
-  if ((inferred === 'number' || inferred === 'boolean') && context.boxedMutableCaptureDeclarations.has(statement)) {
-    return emitBoxedScalarVariableDeclaration(statement, context)
-  }
-
-  if (!['number', 'boolean'].includes(inferred)) {
-    context.diagnostics.push(
-      diagnostic(
-        cUnsupportedExpressionCode(inferred),
-        'this expression is not supported by the current C backend slice',
-        statement.loc
-      )
-    )
-    return [`double ${statement.name} = 0;`]
-  }
-
-  const value = emitPreparedNumberExpression(statement.init, context)
-
-  return [
-    ...value.lines,
-    `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${value.expression};`
-  ]
+  return emitNumberBooleanScalarVariableDeclaration(statement, context, inferred)
 }
 
 function isBoxedRuntimeValueAssignment(expression, context) {

@@ -12,7 +12,7 @@ import {
 import { normalizeFunctionType } from '../async/callbacks.ts'
 import { diagnostic } from '../../diagnostics.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
-import { cUnsupportedVariableDeclarationCode } from '../syntax.ts'
+import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode } from '../syntax.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType } from '../value-types.ts'
 import { resolveRuntimeArrayElementType } from './arrays.ts'
 import { resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
@@ -405,6 +405,30 @@ export function emitFunctionScalarVariableDeclaration(
       statement.functionType,
       statement.loc
     )};`
+  ]
+}
+
+export function emitNumberBooleanScalarVariableDeclaration(statement: any, context: any, inferred: string): string[] {
+  if ((inferred === 'number' || inferred === 'boolean') && context.boxedMutableCaptureDeclarations.has(statement)) {
+    return emitBoxedScalarVariableDeclaration(statement, context)
+  }
+
+  if (!['number', 'boolean'].includes(inferred)) {
+    context.diagnostics.push(
+      diagnostic(
+        cUnsupportedExpressionCode(inferred),
+        'this expression is not supported by the current C backend slice',
+        statement.loc
+      )
+    )
+    return [`double ${statement.name} = 0;`]
+  }
+
+  const value = statementDeps(context).emitPreparedNumberExpression(statement.init, context)
+
+  return [
+    ...value.lines,
+    `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${value.expression};`
   ]
 }
 
