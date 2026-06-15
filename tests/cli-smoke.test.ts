@@ -1670,6 +1670,7 @@ function cRuntimeSources(): string[] {
     'runtime/c/src/fs/fs.c',
     'runtime/c/src/json/json.c',
     'runtime/c/src/objects/object.c',
+    'runtime/c/src/path/path.c',
     'runtime/c/src/strings/string.c',
     'runtime/c/src/time/time.c'
   ].map((source) => join(repoRoot, source))

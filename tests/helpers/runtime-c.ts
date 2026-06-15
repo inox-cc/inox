@@ -43,6 +43,7 @@ export function compileRuntimeProgram(
     'runtime/c/src/console/console.c',
     'runtime/c/src/fs/fs.c',
     'runtime/c/src/json/json.c',
+    'runtime/c/src/path/path.c',
     'runtime/c/src/time/time.c',
     '-o',
     output

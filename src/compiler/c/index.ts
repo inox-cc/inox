@@ -116,6 +116,7 @@ import {
   isAsyncFsRuntimeCallExpression
 } from './stdlib/fs.ts'
 import { cJsonRuntimeCallName } from './stdlib/json.ts'
+import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from './stdlib/path.ts'
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import {
   cTimerClearCallName,
@@ -258,6 +259,7 @@ function emitCModuleSource(
     runtimeRequirements.has('callback-values') ||
     signatureRuntimeTypes.has('function')
   const needsFsRuntime = runtimeRequirements.has('fs')
+  const needsPathRuntime = runtimeRequirements.has('path')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
@@ -293,6 +295,7 @@ function emitCModuleSource(
     needsNetRuntime ||
     needsCallbackRuntime ||
     needsCollectionRuntime ||
+    needsPathRuntime ||
     needsObjectRuntime ||
     needsClassRuntime ||
     needsJsonRuntime ||
@@ -312,6 +315,7 @@ function emitCModuleSource(
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
     needsFsRuntime ||
+    needsPathRuntime ||
     needsDgramRuntime ||
     needsFetchRuntime ||
     needsNetRuntime ||
@@ -344,6 +348,7 @@ function emitCModuleSource(
       needsBinaryRuntime,
       needsObjectRuntime,
       needsFsRuntime,
+      needsPathRuntime,
       needsJsonRuntime,
       needsTimerRuntime,
       needsConsoleRuntime,
@@ -800,6 +805,7 @@ function emitCUnit(
     [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) ||
     runtimeRequirements.has('callback-values')
   const needsFsRuntime = runtimeRequirements.has('fs')
+  const needsPathRuntime = runtimeRequirements.has('path')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
@@ -823,6 +829,7 @@ function emitCUnit(
     needsNetRuntime ||
     needsCallbackRuntime ||
     needsCollectionRuntime ||
+    needsPathRuntime ||
     needsObjectRuntime ||
     needsClassRuntime ||
     needsJsonRuntime ||
@@ -841,6 +848,7 @@ function emitCUnit(
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
     needsFsRuntime ||
+    needsPathRuntime ||
     needsDgramRuntime ||
     needsFetchRuntime ||
     needsNetRuntime
@@ -860,6 +868,7 @@ function emitCUnit(
     needsBinaryRuntime,
     needsObjectRuntime,
     needsFsRuntime,
+    needsPathRuntime,
     needsJsonRuntime,
     needsTimerRuntime,
     needsConsoleRuntime,
@@ -12472,6 +12481,18 @@ function emitCValueExpression(expression, context) {
     return emitCAwaitValueExpression(expression, context)
   }
 
+  const pathConstant = emitPreparedPathConstantExpression(expression, context)
+
+  if (pathConstant != null) {
+    return pathConstant
+  }
+
+  const pathCall = emitPreparedPathStringCallExpression(expression, context)
+
+  if (pathCall != null) {
+    return pathCall
+  }
+
   const fsSyncValue = emitPreparedFsSyncValueExpression(expression, context)
 
   if (fsSyncValue != null) {
@@ -14753,6 +14774,12 @@ function emitPreparedNumberExpression(expression, context) {
     }
   }
 
+  const pathBooleanCall = emitPreparedPathBooleanCallExpression(expression, context)
+
+  if (pathBooleanCall != null) {
+    return pathBooleanCall
+  }
+
   if (expression?.type === 'NumberLiteral') {
     return {
       lines: [],
@@ -15567,6 +15594,18 @@ function emitPreparedCallExpression(expression, context) {
     return mathCall
   }
 
+  const pathStringCall = emitPreparedPathStringCallExpression(expression, context)
+
+  if (pathStringCall != null) {
+    return pathStringCall
+  }
+
+  const pathBooleanCall = emitPreparedPathBooleanCallExpression(expression, context)
+
+  if (pathBooleanCall != null) {
+    return pathBooleanCall
+  }
+
   const fsStatsMethod = emitPreparedFsStatsMethodExpression(expression, context)
 
   if (fsStatsMethod != null) {
@@ -15774,6 +15813,134 @@ function emitPreparedCallArgs(expression, params, context) {
   return {
     lines,
     args
+  }
+}
+
+function emitPreparedPathConstantExpression(expression, context) {
+  const constant = cPathRuntimeConstantName(expression)
+  const value = constant == null ? null : cPathRuntimeConstantValue(constant)
+
+  if (value == null) {
+    return null
+  }
+
+  const out = nextCName(context, 'ccjs_path_constant')
+  registerOwnedValue(context, out)
+
+  return {
+    lines: [
+      ...emitPrepareOwnedValueWrite(out),
+      emitStatusCheck(
+        `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
+        context
+      )
+    ],
+    expression: out
+  }
+}
+
+function emitPreparedPathStringCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const method = cPathRuntimeMethodName(expression)
+
+  if (method == null || method === 'isAbsolute') {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_path_value')
+  const lines: string[] = []
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  if (method === 'join' || method === 'resolve') {
+    const args = expression.args.map((arg) => emitCValueExpression(arg, context))
+
+    lines.push(...args.flatMap((arg) => arg.lines))
+    lines.push(...emitPrepareOwnedValueWrite(out))
+
+    if (args.length === 0) {
+      lines.push(emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, 0, 0, &${out})`, context))
+    } else {
+      const argArray = nextCName(context, 'ccjs_path_args')
+
+      lines.push(`ccjs_value ${argArray}[] = { ${args.map((arg) => arg.expression).join(', ')} };`)
+      lines.push(
+        emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, ${argArray}, ${args.length}, &${out})`, context)
+      )
+    }
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  const first = emitCValueExpression(expression.args[0], context)
+
+  lines.push(...first.lines)
+  lines.push(...emitPrepareOwnedValueWrite(out))
+
+  if (method === 'basename') {
+    const suffix =
+      expression.args[1] == null
+        ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
+        : emitCValueExpression(expression.args[1], context)
+
+    lines.push(...suffix.lines)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_path_basename(&ccjs_default_allocator, ${first.expression}, ${suffix.expression}, ${expression.args[1] == null ? '0' : '1'}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  if (method === 'relative') {
+    const to = emitCValueExpression(expression.args[1], context)
+
+    lines.push(...to.lines)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_path_relative(&ccjs_default_allocator, ${first.expression}, ${to.expression}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  lines.push(emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, ${first.expression}, &${out})`, context))
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
+function emitPreparedPathBooleanCallExpression(expression, context) {
+  if (cPathRuntimeMethodName(expression) !== 'isAbsolute') {
+    return null
+  }
+
+  const value = emitCValueExpression(expression.args[0], context)
+  const out = nextCName(context, 'ccjs_path_is_absolute')
+
+  return {
+    lines: [
+      ...value.lines,
+      `int ${out} = 0;`,
+      emitStatusCheck(`ccjs_path_is_absolute(${value.expression}, &${out})`, context)
+    ],
+    expression: `(${out} ? 1 : 0)`
   }
 }
 
@@ -18368,6 +18535,18 @@ function resolveFunctionParams(callee, context) {
 }
 
 function inferExpressionType(expression, context) {
+  const pathConstant = cPathRuntimeConstantName(expression)
+
+  if (pathConstant != null) {
+    return 'string'
+  }
+
+  const pathMethod = cPathRuntimeMethodName(expression)
+
+  if (pathMethod != null) {
+    return pathMethod === 'isAbsolute' ? 'boolean' : 'string'
+  }
+
   if (expression?.type === 'CallExpression' && cTimeRuntimeCallName(expression.callee) != null) {
     return 'number'
   }
@@ -18759,6 +18938,7 @@ function isStringConcatExpression(expression, context) {
 function isRuntimeProducedStringExpression(expression, context) {
   return (
     (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') ||
+    cPathRuntimeConstantName(expression) != null ||
     (expression?.type === 'AwaitExpression' && inferExpressionType(expression, context) === 'string') ||
     isStringConcatExpression(expression, context) ||
     (expression?.type === 'TemplateLiteral' && expression.raw.includes('${')) ||

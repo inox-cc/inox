@@ -45,6 +45,10 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
     } else if (feature === 'objects') {
       requirements.add('managed-values')
       requirements.add('objects')
+    } else if (feature === 'path') {
+      requirements.add('managed-values')
+      requirements.add('path')
+      requirements.add('string-bytes')
     } else if (feature === 'weak-references') {
       requirements.add('managed-values')
       requirements.add('objects')
@@ -290,6 +294,12 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     features.add('fs')
   }
 
+  if (node.pathRuntimeConstant != null) {
+    features.add('path')
+    features.add('runtime-values')
+    features.add('string-bytes')
+  }
+
   if (node.type === 'OptionalCallExpression') {
     features.add('callback-values')
     features.add('runtime-values')
@@ -352,6 +362,12 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('debug-memory')
     features.add('objects')
     features.add('runtime-values')
+  }
+
+  if (pathRuntimeMethodName(expression) != null) {
+    features.add('path')
+    features.add('runtime-values')
+    features.add('string-bytes')
   }
 
   if (timerRuntimeCallName(expression.callee) != null) {
@@ -470,6 +486,14 @@ function debugRuntimeMethodName(expression: AnyNode): string | null {
   return debugRuntimeMethodNameFromPath(memberExpressionPath(expression.callee)) === expression.debugRuntimeMethod
     ? expression.debugRuntimeMethod
     : null
+}
+
+function pathRuntimeMethodName(expression: AnyNode): string | null {
+  if (expression.type !== 'CallExpression' || typeof expression.pathRuntimeMethod !== 'string') {
+    return null
+  }
+
+  return expression.pathRuntimeMethod
 }
 
 function isObjectFieldExpression(expression: AnyNode | null | undefined): boolean {

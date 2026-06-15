@@ -70,6 +70,12 @@ import {
 import { debugRuntimeMethodNameFromPath } from './stdlib/descriptors/debug.ts'
 import { mathRuntimeArgCount } from './stdlib/descriptors/math.ts'
 import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
+import {
+  isNodePathImportSource,
+  isPathRuntimeConstant,
+  isPathRuntimeMethod,
+  isUnsupportedPathRuntimeMethod
+} from './stdlib/descriptors/path.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -182,7 +188,7 @@ class Checker {
             {
               kind: 'import',
               mutable: false,
-              valueType: 'unknown',
+              valueType: this.runtimeImportValueType(item.source, specifier.imported),
               importedName: specifier.imported,
               importSource: item.source,
               loc: specifier.loc
@@ -772,6 +778,15 @@ class Checker {
       expression.shape = symbol?.shape ?? null
       expression.className = symbol?.className ?? null
 
+      if (
+        symbol?.kind === 'import' &&
+        isNodePathImportSource(symbol.importSource) &&
+        symbol.importedName != null &&
+        isPathRuntimeConstant(symbol.importedName)
+      ) {
+        expression.pathRuntimeConstant = symbol.importedName
+      }
+
       return symbol?.valueType ?? 'unknown'
     }
 
@@ -1028,6 +1043,12 @@ class Checker {
   }
 
   checkMemberExpression(expression: AnyNode): ValueType {
+    const pathConstantType = this.checkPathConstantMemberExpression(expression)
+
+    if (pathConstantType != null) {
+      return pathConstantType
+    }
+
     const fsConstantType = this.checkFsConstantMemberExpression(expression)
 
     if (fsConstantType != null) {
@@ -1595,6 +1616,12 @@ class Checker {
       return cryptoType
     }
 
+    const pathType = this.checkPathCall(expression)
+
+    if (pathType != null) {
+      return pathType
+    }
+
     const debugMemoryType = this.checkDebugMemoryCall(expression)
 
     if (debugMemoryType != null) {
@@ -1957,6 +1984,197 @@ class Checker {
     return null
   }
 
+  checkPathCall(expression: AnyNode): ValueType | null {
+    const call = this.resolvePathRuntimeCall(expression)
+
+    if (call == null) {
+      return null
+    }
+
+    if (call.unsupported) {
+      for (const arg of expression.args) {
+        this.checkExpression(arg)
+      }
+
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        `node:path ${call.method} is not implemented by the current C backend`,
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    const method = call.method
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    const returnType = method === 'isAbsolute' ? 'boolean' : 'string'
+
+    expression.valueType = returnType
+    expression.pathRuntimeMethod = method
+
+    if (method === 'join' || method === 'resolve') {
+      for (const [index, argType] of argTypes.entries()) {
+        this.checkAssignableType(
+          argType,
+          'string',
+          expression.args[index].loc,
+          false,
+          this.expressionCanBeNull(expression.args[index])
+        )
+      }
+
+      return returnType
+    }
+
+    if (method === 'basename') {
+      if (expression.args.length < 1 || expression.args.length > 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      for (const [index, argType] of argTypes.entries()) {
+        this.checkAssignableType(
+          argType,
+          'string',
+          expression.args[index].loc,
+          false,
+          this.expressionCanBeNull(expression.args[index])
+        )
+      }
+
+      return 'string'
+    }
+
+    const expectedArgs = method === 'relative' ? 2 : 1
+
+    if (expression.args.length !== expectedArgs) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function ${call.label} expects ${expectedArgs} argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    for (const [index, argType] of argTypes.entries()) {
+      this.checkAssignableType(
+        argType,
+        'string',
+        expression.args[index].loc,
+        false,
+        this.expressionCanBeNull(expression.args[index])
+      )
+    }
+
+    return returnType
+  }
+
+  resolvePathRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+    const path = memberExpressionPath(expression.callee)
+    const method = this.resolvePathRuntimeMethod(path)
+
+    if (method == null) {
+      return null
+    }
+
+    return {
+      method,
+      label: path == null ? method : path.join('.'),
+      unsupported: !isPathRuntimeMethod(method)
+    }
+  }
+
+  resolvePathRuntimeMethod(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (symbol?.kind === 'import' && isNodePathImportSource(symbol.importSource) && importedName != null) {
+        return isPathRuntimeMethod(importedName) || isUnsupportedPathRuntimeMethod(importedName) ? importedName : null
+      }
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodePathImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'path' || symbol.importedName === 'posix')
+      ) {
+        return isPathRuntimeMethod(path[1]) || isUnsupportedPathRuntimeMethod(path[1]) ? path[1] : null
+      }
+    }
+
+    if (path.length === 3 && path[1] === 'posix') {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodePathImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'path')
+      ) {
+        return isPathRuntimeMethod(path[2]) || isUnsupportedPathRuntimeMethod(path[2]) ? path[2] : null
+      }
+    }
+
+    return null
+  }
+
+  checkPathConstantMemberExpression(expression: AnyNode): ValueType | null {
+    const path = memberExpressionPath(expression)
+    const constant = this.resolvePathRuntimeConstant(path)
+
+    if (constant == null) {
+      return null
+    }
+
+    expression.valueType = 'string'
+    expression.pathRuntimeConstant = constant
+
+    return 'string'
+  }
+
+  resolvePathRuntimeConstant(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodePathImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'path' || symbol.importedName === 'posix') &&
+        isPathRuntimeConstant(path[1])
+      ) {
+        return path[1]
+      }
+    }
+
+    if (path.length === 3 && path[1] === 'posix') {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodePathImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'path') &&
+        isPathRuntimeConstant(path[2])
+      ) {
+        return path[2]
+      }
+    }
+
+    return null
+  }
+
   checkDebugMemoryCall(expression: AnyNode): ValueType | null {
     const method = debugRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
 
@@ -2269,6 +2487,24 @@ class Checker {
 
   supportsFetchHttps(): boolean {
     return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
+  }
+
+  runtimeImportValueType(source: string, importedName: string): ValueType {
+    if (isNodePathImportSource(source)) {
+      if (isPathRuntimeConstant(importedName)) {
+        return 'string'
+      }
+
+      if (isPathRuntimeMethod(importedName) || isUnsupportedPathRuntimeMethod(importedName)) {
+        return 'function'
+      }
+
+      if (importedName === 'default' || importedName === 'path' || importedName === 'posix') {
+        return 'object'
+      }
+    }
+
+    return 'unknown'
   }
 
   checkRuntimeBuiltinImport(statement: AnyNode): void {

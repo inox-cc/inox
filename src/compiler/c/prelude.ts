@@ -16,6 +16,7 @@ export function emitCPrelude(
   needsBinaryRuntime,
   needsObjectRuntime,
   needsFsRuntime,
+  needsPathRuntime,
   needsJsonRuntime,
   needsTimerRuntime,
   needsConsoleRuntime,
@@ -89,6 +90,9 @@ export function emitCPrelude(
     }
     if (needsJsonRuntime) {
       lines.push('#include "ccjs/json.h"')
+    }
+    if (needsPathRuntime) {
+      lines.push('#include "ccjs/path.h"')
     }
     if (needsCollectionRuntime) {
       lines.push('#include "ccjs/map.h"')
