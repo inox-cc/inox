@@ -421,6 +421,10 @@ import {
   type CValueExpressionDependencies
 } from './values/expressions.ts'
 import {
+  inferExpressionType as inferExpressionTypeWithDependencies,
+  type CExpressionTypeDependencies
+} from './values/types.ts'
+import {
   currentBreakTarget,
   currentContinueTarget,
   currentErrorTarget,
@@ -828,6 +832,53 @@ const netLoweringDependencies: NetLoweringDependencies = {
   emitPreparedStringBytesOperand,
   emitStatementList,
   findObjectLiteralPropertyValue
+}
+
+const expressionTypeDependencies: CExpressionTypeDependencies = {
+  binaryRuntimeExpressionReturnType,
+  cChildProcessRuntimeMethodName,
+  cDebugRuntimeMethodName,
+  cFetchRuntimeExpressionMethod,
+  cFsRuntimeExpressionMethod,
+  cJsonRuntimeCallName,
+  cOsRuntimeConstantName,
+  cOsRuntimeMethodName,
+  cPathRuntimeConstantName,
+  cPathRuntimeMethodName,
+  cProcessRuntimeEnvName,
+  cProcessRuntimeMethodName,
+  cProcessRuntimePropertyName,
+  cProcessRuntimePropertyValueType,
+  cPromiseRuntimeCallName,
+  cTimeRuntimeCallName,
+  cUrlRuntimeMethodName,
+  collectionConstructorName,
+  cryptoRuntimeMethodName,
+  emitPreparedNetAddressPortExpression,
+  isArrayLengthExpression,
+  isBinaryConstructorExpression,
+  isBinaryRuntimeCall,
+  isClassConstructorExpression,
+  isErrorConstructorExpression,
+  isFetchAbortControllerConstructorExpression,
+  isIndexAccessExpression,
+  isMemberAccessExpression,
+  isNumberConversionCall,
+  isPromiseConstructorExpression,
+  isStringConversionCall,
+  isStringPredicateCall,
+  isStringSliceCall,
+  isStringSplitCall,
+  isStringTrimCall,
+  knownValueType,
+  mathRuntimeMethodName,
+  resolveKnownArrayIndex,
+  resolveKnownArrayLength,
+  resolveKnownObjectIndex,
+  resolveKnownObjectMember,
+  resolveNetAddressStringMember,
+  resolvePromiseExpressionValueType,
+  resolveRuntimeArrayIndex
 }
 
 const cCallExpressionDependencies: CCallExpressionDependencies = {
@@ -4870,361 +4921,7 @@ function resolveFunctionParams(callee, context) {
 }
 
 function inferExpressionType(expression, context) {
-  const childProcessMethod = cChildProcessRuntimeMethodName(expression)
-
-  if (childProcessMethod != null) {
-    return childProcessMethod === 'spawnSync' ? 'object' : 'string'
-  }
-
-  if (cOsRuntimeConstantName(expression) != null || cOsRuntimeMethodName(expression) != null) {
-    return 'string'
-  }
-
-  const processMethod = cProcessRuntimeMethodName(expression)
-
-  if (processMethod != null) {
-    return processMethod === 'cwd' ? 'string' : 'void'
-  }
-
-  const processProperty = cProcessRuntimePropertyName(expression)
-
-  if (processProperty === 'argv' && expression?.type === 'IndexExpression') {
-    return 'string'
-  }
-
-  const processPropertyType = cProcessRuntimePropertyValueType(expression)
-
-  if (processPropertyType != null) {
-    return processPropertyType
-  }
-
-  if (cProcessRuntimeEnvName(expression) != null) {
-    return 'string'
-  }
-
-  const urlMethod = cUrlRuntimeMethodName(expression)
-
-  if (urlMethod != null) {
-    if (
-      urlMethod === 'fileURLToPath' ||
-      urlMethod === 'URLSearchParams.get' ||
-      urlMethod === 'URLSearchParams.toString'
-    ) {
-      return 'string'
-    }
-
-    if (urlMethod === 'URLSearchParams.has') {
-      return 'boolean'
-    }
-
-    if (
-      urlMethod === 'URLSearchParams.append' ||
-      urlMethod === 'URLSearchParams.delete' ||
-      urlMethod === 'URLSearchParams.set'
-    ) {
-      return 'void'
-    }
-
-    return 'object'
-  }
-
-  const pathConstant = cPathRuntimeConstantName(expression)
-
-  if (pathConstant != null) {
-    return 'string'
-  }
-
-  const pathMethod = cPathRuntimeMethodName(expression)
-
-  if (pathMethod != null) {
-    return pathMethod === 'isAbsolute' ? 'boolean' : pathMethod === 'parse' ? 'object' : 'string'
-  }
-
-  if (expression?.type === 'CallExpression' && cTimeRuntimeCallName(expression.callee) != null) {
-    return 'number'
-  }
-
-  if (expression?.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression) != null) {
-    return expression.valueType === 'promise' ? 'promise' : (expression.valueType ?? 'unknown')
-  }
-
-  if (expression?.type === 'CallExpression' && cFetchRuntimeExpressionMethod(expression) != null) {
-    return expression.valueType === 'promise' ? 'promise' : (expression.valueType ?? 'unknown')
-  }
-
-  if (expression?.type === 'CallExpression' && cJsonRuntimeCallName(expression.callee) != null) {
-    return expression.valueType ?? (cJsonRuntimeCallName(expression.callee) === 'parse' ? 'object' : 'string')
-  }
-
-  const cryptoMethod = cryptoRuntimeMethodName(expression)
-
-  if (cryptoMethod === 'createHash' || cryptoMethod === 'Hash.update') {
-    return 'crypto-hash'
-  }
-
-  if (cryptoMethod === 'createHmac' || cryptoMethod === 'Hmac.update') {
-    return 'crypto-hmac'
-  }
-
-  if (cryptoMethod === 'Hash.digest' || cryptoMethod === 'Hmac.digest' || cryptoMethod === 'hash') {
-    return expression.valueType ?? 'unknown'
-  }
-
-  if (cryptoMethod === 'getHashes') {
-    return 'array'
-  }
-
-  if (cryptoMethod === 'getRandomValues' || cryptoMethod === 'randomBytes' || cryptoMethod === 'randomFillSync') {
-    return 'bytes'
-  }
-
-  if (cryptoMethod === 'randomInt') {
-    return 'number'
-  }
-
-  if (cryptoMethod === 'timingSafeEqual') {
-    return 'boolean'
-  }
-
-  if (cryptoMethod === 'randomUUID') {
-    return 'string'
-  }
-
-  if (cDebugRuntimeMethodName(expression) === 'memory') {
-    return 'object'
-  }
-
-  if (
-    expression?.type === 'CallExpression' &&
-    cPromiseRuntimeCallName(expression.callee) != null &&
-    expression.valueType === 'promise'
-  ) {
-    return 'promise'
-  }
-
-  if (isPromiseConstructorExpression(expression)) {
-    return 'promise'
-  }
-
-  if (expression?.type === 'CallExpression' && mathRuntimeMethodName(expression.callee) != null) {
-    return 'number'
-  }
-
-  if (isNumberConversionCall(expression, context)) {
-    return 'number'
-  }
-
-  if (isErrorConstructorExpression(expression)) {
-    return 'object'
-  }
-
-  if (isFetchAbortControllerConstructorExpression(expression)) {
-    return 'object'
-  }
-
-  if (expression?.type === 'NewExpression' && collectionConstructorName(expression) === 'Map') {
-    return 'map'
-  }
-
-  if (expression?.type === 'NewExpression' && collectionConstructorName(expression) === 'Set') {
-    return 'set'
-  }
-
-  if (isClassConstructorExpression(expression, context)) {
-    return 'object'
-  }
-
-  if (isStringConversionCall(expression, context)) {
-    return 'string'
-  }
-
-  if (isStringTrimCall(expression, context)) {
-    return 'string'
-  }
-
-  if (isStringSliceCall(expression, context)) {
-    return 'string'
-  }
-
-  if (isStringSplitCall(expression, context)) {
-    return 'array'
-  }
-
-  if (isStringPredicateCall(expression, context)) {
-    return 'boolean'
-  }
-
-  if (isBinaryRuntimeCall(expression)) {
-    return expression.valueType ?? binaryRuntimeExpressionReturnType(expression) ?? 'bytes'
-  }
-
-  if (isBinaryConstructorExpression(expression)) {
-    return 'bytes'
-  }
-
-  if (expression?.type === 'CallExpression' && usesCJsGlobal(expression.callee, context)) {
-    return 'js-global'
-  }
-
-  if (expression?.type === 'NewExpression' && usesCJsGlobal(expression.callee, context)) {
-    return 'js-global'
-  }
-
-  if (expression?.valueType != null && expression.valueType !== 'unknown') {
-    return expression.valueType
-  }
-
-  if (expression?.type === 'StringLiteral') {
-    return 'string'
-  }
-
-  if (expression?.type === 'TemplateLiteral') {
-    return 'string'
-  }
-
-  if (expression?.type === 'Reference') {
-    return (
-      context.variables.get(expression.path.join('.')) ??
-      (context.functionNames.has(expression.path[0])
-        ? 'function'
-        : isCJsGlobalRoot(expression.path[0], context)
-          ? 'js-global'
-          : 'number')
-    )
-  }
-
-  if (expression?.type === 'ArrowFunctionExpression') {
-    return 'function'
-  }
-
-  if (expression?.type === 'BooleanLiteral') {
-    return 'boolean'
-  }
-
-  if (expression?.type === 'UnaryExpression') {
-    return expression.operator === '!' ? 'boolean' : 'number'
-  }
-
-  if (expression?.type === 'UpdateExpression') {
-    return 'number'
-  }
-
-  if (expression?.type === 'BinaryExpression') {
-    if (['===', '!==', '==', '!=', '<', '<=', '>', '>=', '&&', '||'].includes(expression.operator)) {
-      return 'boolean'
-    }
-
-    if (expression.operator === '??') {
-      const left = inferExpressionType(expression.left, context)
-
-      return left === 'null' || left === 'unknown' ? inferExpressionType(expression.right, context) : left
-    }
-
-    if (
-      expression.operator === '+' &&
-      (inferExpressionType(expression.left, context) === 'string' ||
-        inferExpressionType(expression.right, context) === 'string')
-    ) {
-      return 'string'
-    }
-
-    return 'number'
-  }
-
-  if (expression?.type === 'ArrayLiteral') {
-    return 'array'
-  }
-
-  if (expression?.type === 'ObjectLiteral') {
-    return 'object'
-  }
-
-  if (isMemberAccessExpression(expression)) {
-    if (emitPreparedNetAddressPortExpression(expression, context) != null) {
-      return 'number'
-    }
-
-    if (resolveNetAddressStringMember(expression, context) != null) {
-      return 'string'
-    }
-
-    if (isArrayLengthExpression(expression, context)) {
-      return 'number'
-    }
-
-    const length = resolveKnownArrayLength(expression, context)
-
-    if (length != null) {
-      return 'number'
-    }
-
-    const member = resolveKnownObjectMember(expression, context)
-
-    if (member != null) {
-      return member.valueType
-    }
-
-    return expression.type === 'OptionalMemberExpression' ? 'optional' : 'number'
-  }
-
-  if (isIndexAccessExpression(expression)) {
-    if (expression.collectionKind === 'map') {
-      return expression.valueType ?? 'unknown'
-    }
-
-    const element = resolveKnownArrayIndex(expression, context)
-    const field = resolveKnownObjectIndex(expression, context)
-    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
-
-    if (element != null) {
-      return element.valueType
-    }
-
-    if (field != null) {
-      return field.valueType
-    }
-
-    if (runtimeElement != null) {
-      return runtimeElement.valueType
-    }
-
-    return expression.type === 'OptionalIndexExpression' ? 'optional' : 'number'
-  }
-
-  if (expression?.type === 'CallExpression') {
-    if (expression.valueType != null && expression.valueType !== 'unknown') {
-      return expression.valueType
-    }
-
-    if (expression.callee.type === 'Reference') {
-      return context.functionReturnTypes.get(expression.callee.path[0]) ?? 'number'
-    }
-
-    return 'number'
-  }
-
-  if (expression?.type === 'NewExpression') {
-    return 'class'
-  }
-
-  if (expression?.type === 'AwaitExpression') {
-    const valueType =
-      knownValueType(expression.valueType) ?? resolvePromiseExpressionValueType(expression.argument, context)
-
-    if (valueType != null) {
-      return valueType
-    }
-
-    const argumentType = inferExpressionType(expression.argument, context)
-
-    return argumentType === 'promise' ? 'unknown' : argumentType
-  }
-
-  if (isOptionalChainExpression(expression)) {
-    return 'optional'
-  }
-
-  return 'number'
+  return inferExpressionTypeWithDependencies(expression, context, expressionTypeDependencies)
 }
 
 function isErrorConstructorExpression(expression) {
