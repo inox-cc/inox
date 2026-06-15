@@ -1770,7 +1770,7 @@ function emitThrowingFunctionPrelude(context: CFunctionContext): string[] {
   ]
 }
 
-function emitStatement(statement, context) {
+function emitStatement(statement: AnyNode, context: CFunctionContext): string[] {
   if (statement.type === 'BlockStatement') {
     return withVariableScope(context, () => [
       '{',
@@ -1830,7 +1830,7 @@ function emitStatement(statement, context) {
   return []
 }
 
-function inferCatchBindingValueType(statement, context) {
+function inferCatchBindingValueType(statement: AnyNode, context: CFunctionContext): string {
   const types = [
     ...collectIrLocalThrowValueTypes(statement.block, {
       errorObjectNames: context.errorObjectNames,
