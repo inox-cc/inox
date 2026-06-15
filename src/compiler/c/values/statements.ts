@@ -456,6 +456,55 @@ function emitRuntimeSetForOfStatement(statement, runtimeSet, context) {
   })
 }
 
+export function emitSwitchStatement(statement, context) {
+  const discriminant = statementDeps(context).emitPreparedNumberExpression(statement.discriminant, context)
+  const breakLabel = nextCName(context, 'ccjs_break')
+  const lines = [...discriminant.lines, `switch ((int)${discriminant.expression}) {`]
+
+  for (const item of statement.cases) {
+    lines.push(item.test == null ? '  default: {' : `  case ${emitSwitchCaseLabel(item.test, context)}: {`)
+    lines.push(
+      ...withBreakTarget(context, breakLabel, false, () =>
+        withVariableScope(context, () => emitStatementList(item.consequent, context))
+      ).map((line) => `    ${line}`)
+    )
+    lines.push('  }')
+  }
+
+  lines.push('}')
+  lines.push(...emitBreakTargetLabel(breakLabel, context))
+
+  return lines
+}
+
+function emitSwitchCaseLabel(expression, context) {
+  if (expression?.type === 'NumberLiteral') {
+    return `(int)${expression.value}`
+  }
+
+  if (expression?.type === 'BooleanLiteral') {
+    return `(int)${expression.value ? '1' : '0'}`
+  }
+
+  if (
+    expression?.type === 'UnaryExpression' &&
+    expression.argument.type === 'NumberLiteral' &&
+    ['+', '-'].includes(expression.operator)
+  ) {
+    return `(int)(${expression.operator}${expression.argument.value})`
+  }
+
+  context.diagnostics.push(
+    diagnostic(
+      'CCJS_C_SWITCH_CASE',
+      'C switch case labels must be numeric or boolean literals in the current backend slice',
+      expression?.loc
+    )
+  )
+
+  return '0'
+}
+
 export function emitCatchBindingTypeCheck(valueType) {
   return valueType === 'object'
     ? 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
