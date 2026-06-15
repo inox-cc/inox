@@ -347,6 +347,7 @@ import {
   emitStatementBody,
   emitStatementList,
   emitSwitchStatement,
+  emitThrowStatement,
   emitTryStatement,
   emitWhileStatement,
   registerErrorChannel,
@@ -377,12 +378,15 @@ const nullableLoweringDependencies: NullableLoweringDependencies = {
 const statementLoweringDependencies: StatementLoweringDependencies = {
   containsAwaitExpression,
   emitArrayVariableDeclaration,
+  emitCValueExpression,
   emitFailureStatement,
   emitPreparedForExpressionClause,
   emitPreparedForInitializer,
   emitPreparedNumberExpression,
   emitStatement,
   inferCatchBindingValueType,
+  inferExpressionType,
+  isErrorValueExpression,
   registerErrorObjectShape,
   resolveForOfElementType,
   resolveKnownForOfArray,
@@ -2670,50 +2674,6 @@ function emitPromiseReturnStatement(statement, context) {
   }
 
   return [...promise.lines, ...emitReturnJump(context)]
-}
-
-function emitThrowStatement(statement, context) {
-  const target = currentErrorTarget(context)
-
-  if (target == null && !context.throwingFunction) {
-    context.diagnostics.push(
-      diagnostic('CCJS_C_THROW', 'uncaught throw is not supported by the current C backend slice', statement.loc)
-    )
-    return []
-  }
-
-  const isErrorObject = isErrorValueExpression(statement.argument, context)
-
-  if (inferExpressionType(statement.argument, context) !== 'string' && !isErrorObject) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_THROW',
-        'C throw currently supports only string values and lightweight Error objects in local try/catch regions',
-        statement.loc
-      )
-    )
-    return []
-  }
-
-  registerErrorChannel(context)
-
-  const value = emitCValueExpression(statement.argument, context)
-
-  return [
-    ...value.lines,
-    ...emitPrepareOwnedValueWrite('ccjs_error'),
-    `ccjs_error = ${value.expression};`,
-    emitRuntimeTypeCheck(
-      isErrorObject
-        ? 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
-        : 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0',
-      context
-    ),
-    'ccjs_retain(ccjs_error);',
-    ...(target == null ? ['ccjs_status_result = CCJS_ERR_THROW;'] : []),
-    'ccjs_error_active = 1;',
-    `goto ${target ?? 'ccjs_cleanup'};`
-  ]
 }
 
 function inferCatchBindingValueType(statement, context) {
