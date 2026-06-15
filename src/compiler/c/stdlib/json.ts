@@ -3,7 +3,8 @@ import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
   nextCName,
-  registerOwnedValue
+  registerOwnedValue,
+  type CFunctionContext
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
@@ -22,14 +23,14 @@ export function cJsonRuntimeCallName(callee: any): string | null {
 
 export type JsonDeclarationDependencies = {
   emitCFieldFlags: (field: any) => string
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
     expression: any,
-    context: any,
+    context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  inferExpressionType: (expression: any, context: any) => string
-  registerObjectShape: (context: any, name: string, shape: any) => void
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
+  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
 }
 
 type JsonCallOptions = {
@@ -37,7 +38,11 @@ type JsonCallOptions = {
   owned?: boolean
 }
 
-export function emitJsonParseVariableDeclaration(statement, context, dependencies: JsonDeclarationDependencies) {
+export function emitJsonParseVariableDeclaration(
+  statement: any,
+  context: CFunctionContext,
+  dependencies: JsonDeclarationDependencies
+) {
   if (statement.init?.type !== 'CallExpression' || cJsonRuntimeCallName(statement.init.callee) !== 'parse') {
     return null
   }
@@ -102,7 +107,7 @@ export function emitJsonParseVariableDeclaration(statement, context, dependencie
 
 export function emitPreparedJsonCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: JsonDeclarationDependencies,
   options: JsonCallOptions = {}
 ): PreparedExpression | null {
@@ -148,7 +153,7 @@ export function emitPreparedJsonCallExpression(
 
 export function emitPreparedJsonScalarParseExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: JsonDeclarationDependencies
 ): PreparedExpression | null {
   if (expression?.type !== 'CallExpression' || cJsonRuntimeCallName(expression.callee) !== 'parse') {

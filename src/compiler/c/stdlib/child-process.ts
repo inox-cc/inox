@@ -1,6 +1,11 @@
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitStatusCheck,
+  nextCName,
+  registerOwnedValue,
+  type CFunctionContext
+} from '../context.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
-
 
 type PreparedCallOptions = {
   out?: string
@@ -8,8 +13,8 @@ type PreparedCallOptions = {
 }
 
 export type ChildProcessLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  registerObjectShape: (context: any, name: string, shape: any) => void
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
 }
 
 export function cChildProcessRuntimeMethodName(expression: any): string | null {
@@ -22,7 +27,7 @@ export function cChildProcessRuntimeMethodName(expression: any): string | null {
 
 export function emitPreparedChildProcessCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: ChildProcessLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -127,7 +132,7 @@ export function emitPreparedChildProcessCallExpression(
   }
 }
 
-function emitChildProcessSpawnSyncResultShape(context: any): PreparedExpression {
+function emitChildProcessSpawnSyncResultShape(context: CFunctionContext): PreparedExpression {
   const shapeName = nextCName(context, 'ccjs_shape_spawn_sync')
   const fieldsName = `${shapeName}_fields`
   const lines = [
