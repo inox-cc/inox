@@ -1280,11 +1280,11 @@ function collectExternalEventLoopFunctions(functions: AnyNode[]): Set<string> {
   return names
 }
 
-function findObjectLiteralPropertyValue(expression, key) {
+function findObjectLiteralPropertyValue(expression: AnyNode, key: string): AnyNode | null {
   return expression?.properties?.find((property) => property.key === key)?.value ?? null
 }
 
-function staticObjectStringPropertyValue(expression, key) {
+function staticObjectStringPropertyValue(expression: AnyNode, key: string): string | null {
   const value = findObjectLiteralPropertyValue(expression, key)
 
   if (value?.type === 'StringLiteral') {
@@ -1298,7 +1298,7 @@ function staticObjectStringPropertyValue(expression, key) {
   return null
 }
 
-function staticObjectBooleanPropertyValue(expression, key) {
+function staticObjectBooleanPropertyValue(expression: AnyNode, key: string): boolean | null {
   const value = findObjectLiteralPropertyValue(expression, key)
 
   if (value?.type === 'BooleanLiteral') {
@@ -1605,7 +1605,7 @@ function emitFunctionParameter(name: string, functionType: any, context: CEmitCo
   return emitFunctionPointerParameter(name, functionType)
 }
 
-function emitFunctionPointerParameter(name, functionType) {
+function emitFunctionPointerParameter(name: string, functionType: any): string {
   return `${emitFunctionPointerReturnType(functionType)} (*${name})(${emitFunctionPointerParams(functionType)})`
 }
 
@@ -1850,11 +1850,11 @@ function inferCatchBindingValueType(statement: AnyNode, context: CFunctionContex
 }
 
 function collectLocalAwaitRejectionValueTypes(
-  node,
-  context,
-  localPromiseRejectionValueTypes = new Map(),
-  localErrorObjectNames = new Set(context.errorObjectNames)
-) {
+  node: unknown,
+  context: CFunctionContext,
+  localPromiseRejectionValueTypes: Map<string, string> = new Map<string, string>(),
+  localErrorObjectNames: Set<string> = new Set(context.errorObjectNames)
+): string[] {
   if (node == null) {
     return []
   }
@@ -1875,46 +1875,48 @@ function collectLocalAwaitRejectionValueTypes(
     return []
   }
 
-  if (node.type === 'BlockStatement') {
+  const current = node as AnyNode
+
+  if (current.type === 'BlockStatement') {
     return collectLocalAwaitRejectionValueTypes(
-      node.body,
+      current.body,
       context,
       new Map(localPromiseRejectionValueTypes),
       new Set(localErrorObjectNames)
     )
   }
 
-  if (node.type === 'VariableDeclaration') {
+  if (current.type === 'VariableDeclaration') {
     const types = collectLocalAwaitRejectionValueTypes(
-      node.init,
+      current.init,
       context,
       localPromiseRejectionValueTypes,
       localErrorObjectNames
     )
 
-    if (isErrorConstructorExpression(node.init)) {
-      localErrorObjectNames.add(node.name)
+    if (isErrorConstructorExpression(current.init)) {
+      localErrorObjectNames.add(current.name)
     }
 
-    if (node.valueType === 'promise') {
+    if (current.valueType === 'promise') {
       const rejectionValueType = inferPromiseRejectionValueType(
-        node.init,
+        current.init,
         context,
         localPromiseRejectionValueTypes,
         localErrorObjectNames
       )
 
       if (rejectionValueType !== 'unknown') {
-        localPromiseRejectionValueTypes.set(node.name, rejectionValueType)
+        localPromiseRejectionValueTypes.set(current.name, rejectionValueType)
       }
     }
 
     return types
   }
 
-  if (node.type === 'AwaitExpression') {
+  if (current.type === 'AwaitExpression') {
     const rejectionValueType = inferPromiseRejectionValueType(
-      node.argument,
+      current.argument,
       context,
       localPromiseRejectionValueTypes,
       localErrorObjectNames
@@ -1923,17 +1925,17 @@ function collectLocalAwaitRejectionValueTypes(
     return rejectionValueType === 'unknown' ? [] : [rejectionValueType]
   }
 
-  return Object.values(node).flatMap((value) =>
+  return Object.values(current).flatMap((value: unknown) =>
     collectLocalAwaitRejectionValueTypes(value, context, localPromiseRejectionValueTypes, localErrorObjectNames)
   )
 }
 
 function inferPromiseRejectionValueType(
-  expression,
-  context,
-  localPromiseRejectionValueTypes = context.promiseRejectionValueTypes,
-  localErrorObjectNames = context.errorObjectNames
-) {
+  expression: AnyNode,
+  context: CFunctionContext,
+  localPromiseRejectionValueTypes: Map<string, string> = context.promiseRejectionValueTypes,
+  localErrorObjectNames: Set<string> = context.errorObjectNames
+): string {
   if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'reject') {
     return inferRejectedValueType(expression.args[0], context, localErrorObjectNames)
   }
