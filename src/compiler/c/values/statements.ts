@@ -7,7 +7,8 @@ import {
   registerBoxedValue,
   registerOwnedValue,
   withNullableScalarNarrowing,
-  withVariableScope
+  withVariableScope,
+  type CFunctionContext
 } from '../context.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import { diagnostic } from '../../diagnostics.ts'
@@ -25,131 +26,131 @@ import type { CPreparedExpression as PreparedExpression, CPreparedStatement as P
 
 
 export type StatementLoweringDependencies = {
-  emitArrayVariableDeclaration: (statement: any, context: any) => string[]
-  emitArrayFilterVariableDeclaration: (statement: any, filtered: any, context: any) => string[]
-  emitArrayMapVariableDeclaration: (statement: any, mapped: any, context: any) => string[]
-  emitArraySortVariableDeclaration: (statement: any, sorted: any, context: any) => string[]
-  emitBoxedObjectVariableDeclaration: (statement: any, context: any) => string[]
-  emitCAwaitValueExpression: (expression: any, context: any) => PreparedExpression
-  emitCExpression: (expression: any, context: any) => string
-  emitClassObjectVariableDeclaration: (statement: any, context: any) => string[]
-  emitCObjectLiteralValueExpression: (expression: any, context: any, shape?: any | null) => PreparedExpression
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  emitArrayVariableDeclaration: (statement: any, context: CFunctionContext) => string[]
+  emitArrayFilterVariableDeclaration: (statement: any, filtered: any, context: CFunctionContext) => string[]
+  emitArrayMapVariableDeclaration: (statement: any, mapped: any, context: CFunctionContext) => string[]
+  emitArraySortVariableDeclaration: (statement: any, sorted: any, context: CFunctionContext) => string[]
+  emitBoxedObjectVariableDeclaration: (statement: any, context: CFunctionContext) => string[]
+  emitCAwaitValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitCExpression: (expression: any, context: CFunctionContext) => string
+  emitClassObjectVariableDeclaration: (statement: any, context: CFunctionContext) => string[]
+  emitCObjectLiteralValueExpression: (expression: any, context: CFunctionContext, shape?: any | null) => PreparedExpression
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   collectionConstructorName: (expression: any) => string | null
-  emitDgramAddressVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitDgramNumberVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitDgramSocketVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitDgramSocketCallStatement: (expression: any, context: any) => string[] | null
-  emitDynamicObjectMemberVariableDeclaration: (statement: any, member: any, context: any) => string[]
-  emitDynamicObjectMemberAssignment: (expression: any, member: any, context: any) => string[]
-  emitErrorObjectVariableDeclaration: (statement: any, context: any) => string[]
-  emitFailureStatement: (context: any) => string
-  emitFetchAbortControllerVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitFetchAbortControllerAbortStatement: (expression: any, context: any) => string[] | null
+  emitDgramAddressVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitDgramNumberVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitDgramSocketVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitDgramSocketCallStatement: (expression: any, context: CFunctionContext) => string[] | null
+  emitDynamicObjectMemberVariableDeclaration: (statement: any, member: any, context: CFunctionContext) => string[]
+  emitDynamicObjectMemberAssignment: (expression: any, member: any, context: CFunctionContext) => string[]
+  emitErrorObjectVariableDeclaration: (statement: any, context: CFunctionContext) => string[]
+  emitFailureStatement: (context: CFunctionContext) => string
+  emitFetchAbortControllerVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitFetchAbortControllerAbortStatement: (expression: any, context: CFunctionContext) => string[] | null
   emitFunctionPointerVariable: (
     name: string,
     init: any,
-    context: any,
+    context: CFunctionContext,
     isConst: boolean,
     functionType: any,
     loc: any
   ) => string
-  emitHttpServerVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitHttpServerCallStatement: (expression: any, context: any) => string[] | null
-  emitJsonParseVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitKnownArrayIndexAssignment: (expression: any, element: any, context: any) => string[]
-  emitKnownArrayIndexVariableDeclaration: (statement: any, element: any, context: any) => string[]
-  emitKnownObjectMemberAssignment: (expression: any, member: any, context: any) => string[]
-  emitKnownObjectMemberVariableDeclaration: (statement: any, member: any, context: any) => string[]
-  emitNetAddressMemberVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitNetAddressVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitNetNumberVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitNetServerCallStatement: (expression: any, context: any) => string[] | null
-  emitNetServerVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitNetSocketCallStatement: (expression: any, context: any) => string[] | null
-  emitNetSocketVariableDeclaration: (statement: any, context: any) => string[] | null
-  emitNullableScalarValueExpression: (expression: any, context: any) => PreparedExpression
-  emitNullableRuntimeValueAssignment: (expression: any, context: any) => string[]
-  emitObjectVariableDeclaration: (statement: any, context: any) => string[]
-  emitOptionalRuntimeCallbackCallExpression: (expression: any, context: any) => string[]
-  emitPreparedArrayFilterCallExpression: (expression: any, context: any) => any | null
-  emitPreparedArrayMapCallExpression: (expression: any, context: any) => any | null
-  emitPreparedArrayPopCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedArrayPushCallExpression: (expression: any, context: any) => PreparedExpression | null
-  emitPreparedArraySortCallExpression: (expression: any, context: any) => any | null
-  emitPreparedAsyncFunctionPromiseCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedBytesIndexAssignment: (expression: any, context: any) => PreparedStatement | null
-  emitPreparedCallExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedChildProcessCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedClassMethodCallExpression: (expression: any, context: any) => PreparedExpression | null
-  emitPreparedCollectionCallExpression: (expression: any, context: any) => PreparedExpression | null
-  emitPreparedCryptoCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedCryptoHashCallExpression: (expression: any, context: any) => PreparedExpression | null
-  emitPreparedCryptoHmacCallExpression: (expression: any, context: any) => PreparedExpression | null
-  emitPreparedCryptoNumberCallExpression: (expression: any, context: any) => PreparedExpression | null
-  emitPreparedDebugMemoryCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedFetchCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedFsCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedFsSyncStatementExpression: (expression: any, context: any) => PreparedStatement | null
-  emitPreparedMapIndexAssignment: (expression: any, context: any) => PreparedExpression | null
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedPathObjectCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedPromiseConstructorExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedPromiseExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedPromiseMethodExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedPromiseReturningCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedPromiseStaticExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedTimerCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedUpdateExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedUrlObjectExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedUrlSearchParamsObjectExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitProcessExitCodeAssignment: (expression: any, context: any) => string[] | null
-  emitProcessExitStatement: (expression: any, context: any) => string[] | null
-  emitPromiseConstructorSettlementCall: (expression: any, context: any) => string[] | null
-  emitReference: (expression: any, context: any) => string
-  emitRuntimeCallbackVariableDeclaration: (statement: any, context: any) => string[]
-  emitScalarVariableDeclaration: (statement: any, context: any) => string[]
-  emitStatement: (statement: any, context: any) => string[]
-  emitStringExpression: (expression: any, context: any) => string
-  emitUrlObjectFieldAssignment: (expression: any, context: any) => string[] | null
-  inferCatchBindingValueType: (statement: any, context: any) => string
-  inferExpressionType: (expression: any, context: any) => string
+  emitHttpServerVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitHttpServerCallStatement: (expression: any, context: CFunctionContext) => string[] | null
+  emitJsonParseVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitKnownArrayIndexAssignment: (expression: any, element: any, context: CFunctionContext) => string[]
+  emitKnownArrayIndexVariableDeclaration: (statement: any, element: any, context: CFunctionContext) => string[]
+  emitKnownObjectMemberAssignment: (expression: any, member: any, context: CFunctionContext) => string[]
+  emitKnownObjectMemberVariableDeclaration: (statement: any, member: any, context: CFunctionContext) => string[]
+  emitNetAddressMemberVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitNetAddressVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitNetNumberVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitNetServerCallStatement: (expression: any, context: CFunctionContext) => string[] | null
+  emitNetServerVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitNetSocketCallStatement: (expression: any, context: CFunctionContext) => string[] | null
+  emitNetSocketVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
+  emitNullableScalarValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitNullableRuntimeValueAssignment: (expression: any, context: CFunctionContext) => string[]
+  emitObjectVariableDeclaration: (statement: any, context: CFunctionContext) => string[]
+  emitOptionalRuntimeCallbackCallExpression: (expression: any, context: CFunctionContext) => string[]
+  emitPreparedArrayFilterCallExpression: (expression: any, context: CFunctionContext) => any | null
+  emitPreparedArrayMapCallExpression: (expression: any, context: CFunctionContext) => any | null
+  emitPreparedArrayPopCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedArrayPushCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedArraySortCallExpression: (expression: any, context: CFunctionContext) => any | null
+  emitPreparedAsyncFunctionPromiseCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedBytesIndexAssignment: (expression: any, context: CFunctionContext) => PreparedStatement | null
+  emitPreparedCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedChildProcessCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedClassMethodCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCollectionCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCryptoCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedCryptoHashCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCryptoHmacCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCryptoNumberCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedDebugMemoryCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedFetchCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedFetchHeadersCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedFsCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedFsSyncStatementExpression: (expression: any, context: CFunctionContext) => PreparedStatement | null
+  emitPreparedMapIndexAssignment: (expression: any, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedPathObjectCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedPromiseConstructorExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedPromiseExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedPromiseMethodExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedPromiseReturningCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedPromiseStaticExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedTimerCallExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedUpdateExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedUrlObjectExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitPreparedUrlSearchParamsObjectExpression: (expression: any, context: CFunctionContext, options?: any) => PreparedExpression | null
+  emitProcessExitCodeAssignment: (expression: any, context: CFunctionContext) => string[] | null
+  emitProcessExitStatement: (expression: any, context: CFunctionContext) => string[] | null
+  emitPromiseConstructorSettlementCall: (expression: any, context: CFunctionContext) => string[] | null
+  emitReference: (expression: any, context: CFunctionContext) => string
+  emitRuntimeCallbackVariableDeclaration: (statement: any, context: CFunctionContext) => string[]
+  emitScalarVariableDeclaration: (statement: any, context: CFunctionContext) => string[]
+  emitStatement: (statement: any, context: CFunctionContext) => string[]
+  emitStringExpression: (expression: any, context: CFunctionContext) => string
+  emitUrlObjectFieldAssignment: (expression: any, context: CFunctionContext) => string[] | null
+  inferCatchBindingValueType: (statement: any, context: CFunctionContext) => string
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
   isArrayMethodCall: (expression: any) => boolean
-  isBoxedRuntimeValueAssignment: (expression: any, context: any) => boolean
-  isClassConstructorExpression: (expression: any, context: any) => boolean
+  isBoxedRuntimeValueAssignment: (expression: any, context: CFunctionContext) => boolean
+  isClassConstructorExpression: (expression: any, context: CFunctionContext) => boolean
   isConsoleLog: (expression: any) => boolean
   isCollectionConstructorExpression: (expression: any) => boolean
   isErrorConstructorExpression: (expression: any) => boolean
-  isErrorValueExpression: (expression: any, context: any) => boolean
+  isErrorValueExpression: (expression: any, context: CFunctionContext) => boolean
   isIndexAccessExpression: (expression: any) => boolean
   isMemberAccessExpression: (expression: any) => boolean
-  isNullableRuntimeValueAssignment: (expression: any, context: any) => boolean
-  isRuntimeProducedStringExpression: (expression: any, context: any) => boolean
-  registerErrorObjectShape: (context: any, name: string) => void
+  isNullableRuntimeValueAssignment: (expression: any, context: CFunctionContext) => boolean
+  isRuntimeProducedStringExpression: (expression: any, context: CFunctionContext) => boolean
+  registerErrorObjectShape: (context: CFunctionContext, name: string) => void
   resolveForOfElementType: (elements: any[]) => string
-  resolveKnownArrayIndex: (expression: any, context: any) => any | null
-  resolveKnownObjectIndex: (expression: any, context: any) => any | null
-  resolveKnownObjectMember: (expression: any, context: any) => any | null
-  resolveKnownForOfArray: (expression: any, context: any) => any | null
-  resolveNullableScalarConditionNarrowing: (expression: any, context: any) => {
+  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownForOfArray: (expression: any, context: CFunctionContext) => any | null
+  resolveNullableScalarConditionNarrowing: (expression: any, context: CFunctionContext) => {
     trueNames: string[]
     falseNames: string[]
   }
-  resolveRuntimeStringReference: (expression: any, context: any) => string | null
-  resolveRuntimeArrayIndex: (expression: any, context: any) => any | null
-  resolveRuntimeForOfArray: (expression: any, context: any) => any | null
-  resolveRuntimeForOfMap: (expression: any, context: any) => any | null
-  resolveRuntimeForOfSet: (expression: any, context: any) => any | null
-  emitBoxedRuntimeValueAssignment: (expression: any, context: any) => string[]
-  emitConsoleLogStatement: (method: string, args: any[], context: any) => string[]
+  resolveRuntimeStringReference: (expression: any, context: CFunctionContext) => string | null
+  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveRuntimeForOfArray: (expression: any, context: CFunctionContext) => any | null
+  resolveRuntimeForOfMap: (expression: any, context: CFunctionContext) => any | null
+  resolveRuntimeForOfSet: (expression: any, context: CFunctionContext) => any | null
+  emitBoxedRuntimeValueAssignment: (expression: any, context: CFunctionContext) => string[]
+  emitConsoleLogStatement: (method: string, args: any[], context: CFunctionContext) => string[]
 }
 
-function statementDeps(context: any): StatementLoweringDependencies {
+function statementDeps(context: CFunctionContext): StatementLoweringDependencies {
   return context.statementLoweringDependencies
 }
 
-export function emitStatementBody(statement, context) {
+export function emitStatementBody(statement, context: CFunctionContext) {
   if (statement.type === 'BlockStatement') {
     return emitStatementList(statement.body, context)
   }
@@ -157,7 +158,7 @@ export function emitStatementBody(statement, context) {
   return statementDeps(context).emitStatement(statement, context)
 }
 
-export function emitStatementList(statements, context) {
+export function emitStatementList(statements, context: CFunctionContext) {
   return statements.flatMap((statement) => {
     const lines = statementDeps(context).emitStatement(statement, context)
 
@@ -167,7 +168,7 @@ export function emitStatementList(statements, context) {
   })
 }
 
-function applyNullableScalarEarlyReturnNarrowing(statement, context) {
+function applyNullableScalarEarlyReturnNarrowing(statement, context: CFunctionContext) {
   if (
     statement.type !== 'IfStatement' ||
     statement.alternate != null ||
@@ -197,7 +198,7 @@ function statementDefinitelyReturns(statement) {
   return false
 }
 
-export function emitIfStatement(statement, context) {
+export function emitIfStatement(statement, context: CFunctionContext) {
   const condition = statementDeps(context).emitPreparedNumberExpression(statement.condition, context)
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const lines = [
@@ -224,7 +225,7 @@ export function emitIfStatement(statement, context) {
   return lines
 }
 
-export function emitWhileStatement(statement, context) {
+export function emitWhileStatement(statement, context: CFunctionContext) {
   const condition = statementDeps(context).emitPreparedNumberExpression(statement.condition, context)
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const breakLabel = nextCName(context, 'ccjs_break')
@@ -258,7 +259,7 @@ export function emitWhileStatement(statement, context) {
   ]
 }
 
-export function emitForStatement(statement, context) {
+export function emitForStatement(statement, context: CFunctionContext) {
   return withVariableScope(context, () => {
     const init = emitPreparedForInitializer(statement.init, context)
     const test = emitPreparedForExpressionClause(statement.test, context)
@@ -316,7 +317,7 @@ export function emitForStatement(statement, context) {
   })
 }
 
-export function emitRuntimeStringVariableDeclaration(statement, expression, context) {
+export function emitRuntimeStringVariableDeclaration(statement, expression, context: CFunctionContext) {
   const value = statementDeps(context).emitCValueExpression(expression, context)
   const lines = [
     ...value.lines,
@@ -329,7 +330,7 @@ export function emitRuntimeStringVariableDeclaration(statement, expression, cont
   return lines
 }
 
-export function emitStringScalarVariableDeclaration(statement: any, context: any, inferred: string): string[] | null {
+export function emitStringScalarVariableDeclaration(statement: any, context: CFunctionContext, inferred: string): string[] | null {
   if (inferred !== 'string') {
     return null
   }
@@ -367,7 +368,7 @@ export function emitStringScalarVariableDeclaration(statement: any, context: any
 
 export function emitFunctionScalarVariableDeclaration(
   statement: any,
-  context: any,
+  context: CFunctionContext,
   inferred: string
 ): string[] | null {
   if (inferred !== 'function') {
@@ -399,7 +400,7 @@ export function emitFunctionScalarVariableDeclaration(
   ]
 }
 
-export function emitNumberBooleanScalarVariableDeclaration(statement: any, context: any, inferred: string): string[] {
+export function emitNumberBooleanScalarVariableDeclaration(statement: any, context: CFunctionContext, inferred: string): string[] {
   if ((inferred === 'number' || inferred === 'boolean') && context.boxedMutableCaptureDeclarations.has(statement)) {
     return emitBoxedScalarVariableDeclaration(statement, context)
   }
@@ -423,7 +424,7 @@ export function emitNumberBooleanScalarVariableDeclaration(statement: any, conte
   ]
 }
 
-export function emitRuntimeValueVariableDeclaration(statement, expression, context) {
+export function emitRuntimeValueVariableDeclaration(statement, expression, context: CFunctionContext) {
   const valueType = statementDeps(context).inferExpressionType(expression, context)
   const expectedTag = cRuntimeValueTag(valueType)
   const value =
@@ -443,7 +444,7 @@ export function emitRuntimeValueVariableDeclaration(statement, expression, conte
   ]
 }
 
-export function registerRuntimeValueMetadata(name, valueType, declaration, expression, context) {
+export function registerRuntimeValueMetadata(name, valueType, declaration, expression, context: CFunctionContext) {
   context.variables.set(name, valueType)
 
   if (valueType === 'object') {
@@ -477,7 +478,7 @@ export function registerRuntimeValueMetadata(name, valueType, declaration, expre
   }
 }
 
-export function isRuntimeValueLocalExpression(expression, context) {
+export function isRuntimeValueLocalExpression(expression, context: CFunctionContext) {
   const valueType = statementDeps(context).inferExpressionType(expression, context)
 
   return (
@@ -489,7 +490,7 @@ export function isRuntimeValueLocalExpression(expression, context) {
   )
 }
 
-export function emitBoxedScalarVariableDeclaration(statement, context) {
+export function emitBoxedScalarVariableDeclaration(statement, context: CFunctionContext) {
   const deps = statementDeps(context)
   const value = deps.emitPreparedNumberExpression(statement.init, context)
   const inferred = deps.inferExpressionType(statement.init, context)
@@ -505,7 +506,7 @@ export function emitBoxedScalarVariableDeclaration(statement, context) {
   ]
 }
 
-export function emitBoxedRuntimeValueVariableDeclaration(statement, expression, context) {
+export function emitBoxedRuntimeValueVariableDeclaration(statement, expression, context: CFunctionContext) {
   const deps = statementDeps(context)
   const valueType = deps.inferExpressionType(expression, context)
   const value = deps.emitCValueExpression(expression, context)
@@ -525,7 +526,7 @@ export function emitBoxedRuntimeValueVariableDeclaration(statement, expression, 
   ]
 }
 
-export function reportCCollectionHashability(valueType, subject, loc, context) {
+export function reportCCollectionHashability(valueType, subject, loc, context: CFunctionContext) {
   if (valueType == null || valueType === 'unknown' || isCCollectionHashableType(valueType)) {
     return
   }
@@ -539,7 +540,7 @@ function isCCollectionHashableType(valueType) {
   return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
 }
 
-function emitCollectionVariableDeclaration(statement, context) {
+function emitCollectionVariableDeclaration(statement, context: CFunctionContext) {
   const deps = statementDeps(context)
   const constructor = deps.collectionConstructorName(statement.init)
 
@@ -598,7 +599,7 @@ function emitCollectionVariableDeclaration(statement, context) {
   return lines
 }
 
-function emitMapConstructorEntries(name, expression, context, loc) {
+function emitMapConstructorEntries(name, expression, context: CFunctionContext, loc) {
   const deps = statementDeps(context)
 
   if (expression == null) {
@@ -647,7 +648,7 @@ function emitMapConstructorEntries(name, expression, context, loc) {
   return lines
 }
 
-function emitSetConstructorValues(name, expression, context, loc) {
+function emitSetConstructorValues(name, expression, context: CFunctionContext, loc) {
   const deps = statementDeps(context)
 
   if (expression == null) {
@@ -678,7 +679,7 @@ function emitSetConstructorValues(name, expression, context, loc) {
   return lines
 }
 
-function emitDirentArrayIndexVariableDeclaration(statement, context) {
+function emitDirentArrayIndexVariableDeclaration(statement, context: CFunctionContext) {
   const expression = statement.init
 
   if (
@@ -710,7 +711,7 @@ function emitDirentArrayIndexVariableDeclaration(statement, context) {
   ]
 }
 
-function emitPreparedForInitializer(init, context) {
+function emitPreparedForInitializer(init, context: CFunctionContext) {
   if (init == null) {
     return {
       lines: [],
@@ -725,7 +726,7 @@ function emitPreparedForInitializer(init, context) {
   return emitPreparedForExpressionClause(init, context)
 }
 
-function emitPreparedForVariableDeclaration(statement, context) {
+function emitPreparedForVariableDeclaration(statement, context: CFunctionContext) {
   const deps = statementDeps(context)
   const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, {
     out: statement.name
@@ -980,7 +981,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
   }
 }
 
-function emitPreparedForExpressionClause(expression, context) {
+function emitPreparedForExpressionClause(expression, context: CFunctionContext) {
   if (expression == null) {
     return {
       lines: [],
@@ -991,7 +992,7 @@ function emitPreparedForExpressionClause(expression, context) {
   return statementDeps(context).emitPreparedNumberExpression(expression, context)
 }
 
-export function emitForOfStatement(statement, context) {
+export function emitForOfStatement(statement, context: CFunctionContext) {
   const setup: string[] = []
   let array: any = statementDeps(context).resolveKnownForOfArray(statement.iterable, context)
   let runtimeArray: any = null
@@ -1109,7 +1110,7 @@ export function emitForOfStatement(statement, context) {
   })
 }
 
-function emitRuntimeMapForOfStatement(statement, runtimeMap, context) {
+function emitRuntimeMapForOfStatement(statement, runtimeMap, context: CFunctionContext) {
   const keyType = runtimeMap.keyType ?? 'unknown'
   const valueType = runtimeMap.valueType ?? 'unknown'
 
@@ -1180,7 +1181,7 @@ function emitRuntimeMapForOfStatement(statement, runtimeMap, context) {
   })
 }
 
-function emitRuntimeSetForOfStatement(statement, runtimeSet, context) {
+function emitRuntimeSetForOfStatement(statement, runtimeSet, context: CFunctionContext) {
   const elementType = runtimeSet.elementType
 
   if (!['number', 'boolean', 'string'].includes(elementType)) {
@@ -1243,7 +1244,7 @@ function emitRuntimeSetForOfStatement(statement, runtimeSet, context) {
   })
 }
 
-export function emitSwitchStatement(statement, context) {
+export function emitSwitchStatement(statement, context: CFunctionContext) {
   const discriminant = statementDeps(context).emitPreparedNumberExpression(statement.discriminant, context)
   const breakLabel = nextCName(context, 'ccjs_break')
   const lines = [...discriminant.lines, `switch ((int)${discriminant.expression}) {`]
@@ -1264,7 +1265,7 @@ export function emitSwitchStatement(statement, context) {
   return lines
 }
 
-function emitSwitchCaseLabel(expression, context) {
+function emitSwitchCaseLabel(expression, context: CFunctionContext) {
   if (expression?.type === 'NumberLiteral') {
     return `(int)${expression.value}`
   }
@@ -1292,7 +1293,7 @@ function emitSwitchCaseLabel(expression, context) {
   return '0'
 }
 
-export function emitTryStatement(statement, context) {
+export function emitTryStatement(statement, context: CFunctionContext) {
   if (
     statement.handler != null &&
     currentErrorTarget(context) != null &&
@@ -1411,7 +1412,7 @@ export function emitTryStatement(statement, context) {
   return lines
 }
 
-export function emitThrowStatement(statement, context) {
+export function emitThrowStatement(statement, context: CFunctionContext) {
   const target = currentErrorTarget(context)
 
   if (target == null && !context.throwingFunction) {
@@ -1455,7 +1456,7 @@ export function emitThrowStatement(statement, context) {
   ]
 }
 
-export function emitReturnStatement(statement, context) {
+export function emitReturnStatement(statement, context: CFunctionContext) {
   const argument = normalizeCAsyncReturnArgument(statement.argument, context, statement.loc)
   const returnStatement =
     argument === statement.argument
@@ -1506,7 +1507,7 @@ export function emitReturnStatement(statement, context) {
   return [`return ${statementDeps(context).emitCExpression(argument, context)};`]
 }
 
-export function emitVariableDeclarationStatement(statement, context) {
+export function emitVariableDeclarationStatement(statement, context: CFunctionContext) {
   const deps = statementDeps(context)
   const dgramSocket = deps.emitDgramSocketVariableDeclaration(statement, context)
 
@@ -1768,7 +1769,7 @@ export function emitVariableDeclarationStatement(statement, context) {
   return deps.emitScalarVariableDeclaration(statement, context)
 }
 
-export function emitExpressionStatement(statement, context) {
+export function emitExpressionStatement(statement, context: CFunctionContext) {
   const deps = statementDeps(context)
 
   if (deps.isConsoleLog(statement.expression)) {
@@ -2031,7 +2032,7 @@ export function emitExpressionStatement(statement, context) {
   return []
 }
 
-function normalizeCAsyncReturnArgument(argument, context, loc) {
+function normalizeCAsyncReturnArgument(argument, context: CFunctionContext, loc) {
   if (
     argument == null ||
     context.returnType === 'promise' ||
@@ -2048,7 +2049,7 @@ function normalizeCAsyncReturnArgument(argument, context, loc) {
   }
 }
 
-function isRuntimeCallbackReturnContext(context) {
+function isRuntimeCallbackReturnContext(context: CFunctionContext) {
   return (
     context.statusReturn === true &&
     (context.runtimeCallbackReturnType === 'void' ||
@@ -2057,7 +2058,7 @@ function isRuntimeCallbackReturnContext(context) {
   )
 }
 
-function emitPromiseReturnStatement(statement, context) {
+function emitPromiseReturnStatement(statement, context: CFunctionContext) {
   const promise = statementDeps(context).emitPreparedPromiseExpression(statement.argument, context, {
     out: 'ccjs_return',
     owned: false
@@ -2078,7 +2079,7 @@ function emitPromiseReturnStatement(statement, context) {
   return [...promise.lines, ...emitReturnJump(context)]
 }
 
-function emitRuntimeCallbackReturnStatement(statement, context) {
+function emitRuntimeCallbackReturnStatement(statement, context: CFunctionContext) {
   if (context.runtimeCallbackReturnType === 'void') {
     return emitReturnJump(context)
   }
@@ -2090,7 +2091,7 @@ function emitRuntimeCallbackReturnStatement(statement, context) {
   return [...lines, ...emitReturnJump(context)]
 }
 
-function emitRuntimeCallbackScalarReturnLines(argument, context) {
+function emitRuntimeCallbackScalarReturnLines(argument, context: CFunctionContext) {
   const value =
     argument == null
       ? {
@@ -2106,7 +2107,7 @@ function emitRuntimeCallbackScalarReturnLines(argument, context) {
   return [...value.lines, `${context.runtimeCallbackReturnOut} = ${expression};`]
 }
 
-export function emitRuntimeCallbackRuntimeValueReturnLines(argument, context) {
+export function emitRuntimeCallbackRuntimeValueReturnLines(argument, context: CFunctionContext) {
   const expectedTag = cRuntimeValueTag(context.runtimeCallbackReturnType)
   const value =
     argument == null
@@ -2129,7 +2130,7 @@ export function emitRuntimeCallbackRuntimeValueReturnLines(argument, context) {
   ]
 }
 
-function emitRuntimeReturnValueExpression(argument, context, returnType, returnShape) {
+function emitRuntimeReturnValueExpression(argument, context: CFunctionContext, returnType, returnShape) {
   if (returnType === 'object' && argument?.type === 'ObjectLiteral') {
     return statementDeps(context).emitCObjectLiteralValueExpression(argument, context, returnShape)
   }
@@ -2137,7 +2138,7 @@ function emitRuntimeReturnValueExpression(argument, context, returnType, returnS
   return statementDeps(context).emitCValueExpression(argument, context)
 }
 
-function emitRuntimeValueReturnStatement(statement, context) {
+function emitRuntimeValueReturnStatement(statement, context: CFunctionContext) {
   if (statement.argument == null) {
     return emitReturnJump(context)
   }
@@ -2154,7 +2155,7 @@ function emitRuntimeValueReturnStatement(statement, context) {
   ]
 }
 
-function emitNullableScalarReturnStatement(statement, context) {
+function emitNullableScalarReturnStatement(statement, context: CFunctionContext) {
   const expectedTag = cRuntimeValueTag(context.returnType)
   const value =
     statement.argument == null
@@ -2178,16 +2179,16 @@ export function emitCatchBindingTypeCheck(valueType) {
     : 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
 }
 
-export function registerErrorChannel(context) {
+export function registerErrorChannel(context: CFunctionContext) {
   context.errorChannelUsed = true
   registerOwnedValue(context, 'ccjs_error')
 }
 
-export function currentErrorTarget(context) {
+export function currentErrorTarget(context: CFunctionContext) {
   return context.errorTargets.at(-1) ?? null
 }
 
-export function emitBreakJump(context) {
+export function emitBreakJump(context: CFunctionContext) {
   const target = currentBreakTarget(context)
 
   if (target == null) {
@@ -2203,7 +2204,7 @@ export function emitBreakJump(context) {
   return [`goto ${target.label};`]
 }
 
-export function emitContinueJump(context) {
+export function emitContinueJump(context: CFunctionContext) {
   const target = currentContinueTarget(context)
 
   if (target == null) {
@@ -2219,11 +2220,11 @@ export function emitContinueJump(context) {
   return [`goto ${target.label};`]
 }
 
-export function emitBreakTargetLabel(label, context) {
+export function emitBreakTargetLabel(label, context: CFunctionContext) {
   return [`${label}:`, ...(context.breakFlowUsed ? ['  if (ccjs_break_active) ccjs_break_active = 0;'] : []), ';']
 }
 
-export function emitContinueTargetLabel(label, context) {
+export function emitContinueTargetLabel(label, context: CFunctionContext) {
   return [
     `${label}:`,
     ...(context.continueFlowUsed ? ['  if (ccjs_continue_active) ccjs_continue_active = 0;'] : []),
@@ -2231,23 +2232,23 @@ export function emitContinueTargetLabel(label, context) {
   ]
 }
 
-function registerBreakFlow(context) {
+function registerBreakFlow(context: CFunctionContext) {
   context.breakFlowUsed = true
 }
 
-function registerContinueFlow(context) {
+function registerContinueFlow(context: CFunctionContext) {
   context.continueFlowUsed = true
 }
 
-export function currentBreakTarget(context) {
+export function currentBreakTarget(context: CFunctionContext) {
   return context.breakTargets.at(-1) ?? null
 }
 
-export function currentContinueTarget(context) {
+export function currentContinueTarget(context: CFunctionContext) {
   return context.continueTargets.at(-1) ?? null
 }
 
-export function withBreakTarget(context, label, throughFinally, callback) {
+export function withBreakTarget(context: CFunctionContext, label, throughFinally, callback) {
   if (label == null) {
     return callback()
   }
@@ -2264,7 +2265,7 @@ export function withBreakTarget(context, label, throughFinally, callback) {
   }
 }
 
-export function withContinueTarget(context, label, throughFinally, callback) {
+export function withContinueTarget(context: CFunctionContext, label, throughFinally, callback) {
   if (label == null) {
     return callback()
   }
@@ -2281,13 +2282,13 @@ export function withContinueTarget(context, label, throughFinally, callback) {
   }
 }
 
-export function withFinallyFlowTarget(context, label, callback) {
+export function withFinallyFlowTarget(context: CFunctionContext, label, callback) {
   return withReturnTarget(context, label, () =>
     withBreakTarget(context, label, true, () => withContinueTarget(context, label, true, callback))
   )
 }
 
-export function emitReturnJump(context) {
+export function emitReturnJump(context: CFunctionContext) {
   const target = currentReturnTarget(context)
 
   if (target != null) {
@@ -2299,7 +2300,7 @@ export function emitReturnJump(context) {
   return [emitReturnCleanupStatement(context)]
 }
 
-export function emitReturnCleanupStatement(context) {
+export function emitReturnCleanupStatement(context: CFunctionContext) {
   if (context.statusReturn && context.runtimeCallbackCleanupLabel != null) {
     context.usedRuntimeCallbackCleanupGoto = true
 
@@ -2315,15 +2316,15 @@ export function emitReturnCleanupStatement(context) {
   return context.returnType === 'void' ? 'return;' : 'return ccjs_return;'
 }
 
-function registerReturnFlow(context) {
+function registerReturnFlow(context: CFunctionContext) {
   context.returnFlowUsed = true
 }
 
-export function currentReturnTarget(context) {
+export function currentReturnTarget(context: CFunctionContext) {
   return context.returnTargets.at(-1) ?? null
 }
 
-export function withReturnTarget(context, target, callback) {
+export function withReturnTarget(context: CFunctionContext, target, callback) {
   if (target == null) {
     return callback()
   }
@@ -2337,7 +2338,7 @@ export function withReturnTarget(context, target, callback) {
   }
 }
 
-export function withErrorTarget(context, target, callback) {
+export function withErrorTarget(context: CFunctionContext, target, callback) {
   if (target == null) {
     return callback()
   }
