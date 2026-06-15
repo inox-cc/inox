@@ -287,6 +287,8 @@ import type {
   CKnownObjectField,
   CKnownObjectIndexField,
   CEmitOptions,
+  CFunctionParam,
+  CFunctionType,
   CModuleEmitOptions,
   CModuleOutputFile,
   CModulePlan,
@@ -1257,21 +1259,25 @@ function createBaseContext(
   }
 }
 
-function resolveFunctionReturnType(name: string, fallback: any, context: CEmitContext): any {
+function resolveFunctionReturnType(name: string, fallback: string, context: CEmitContext): string {
   return context.functionReturnTypes.get(name) ?? fallback
 }
 
-function resolveFunctionReturnNullable(name: string, fallback: any, context: CEmitContext): boolean {
+function resolveFunctionReturnNullable(name: string, fallback: boolean, context: CEmitContext): boolean {
   return context.functionReturnNullables.has(name)
     ? context.functionReturnNullables.get(name) === true
     : fallback === true
 }
 
-function resolveFunctionDeclarationParams(name: string, fallback: any[], context: CEmitContext): any[] {
+function resolveFunctionDeclarationParams(
+  name: string,
+  fallback: CFunctionParam[],
+  context: CEmitContext
+): CFunctionParam[] {
   return context.functionParams.get(name) ?? fallback
 }
 
-function isBoxedFunctionParam(param: any, index: number, statement: AnyNode, context: CEmitContext): boolean {
+function isBoxedFunctionParam(param: CFunctionParam, index: number, statement: AnyNode, context: CEmitContext): boolean {
   return context.boxedMutableCaptureDeclarations.has(statement.params[index] ?? param)
 }
 
@@ -1389,7 +1395,7 @@ function emitFunctionDeclaration(statement: AnyNode, baseContext: CEmitContext):
   return lines
 }
 
-function registerFunctionParamsInContext(statement: AnyNode, params: any[], context: CFunctionContext): void {
+function registerFunctionParamsInContext(statement: AnyNode, params: CFunctionParam[], context: CFunctionContext): void {
   for (const [index, param] of params.entries()) {
     if (isNullableScalarParam(param)) {
       context.variables.set(param.name, param.valueType)
@@ -1451,7 +1457,7 @@ function emitFunctionHead(statement: AnyNode, context: CEmitContext): string {
   const returnType = context.returnType ?? returnInfo.returnType
   const returnNullable = context.returnNullable ?? returnInfo.returnNullable
   const functionParams = resolveFunctionDeclarationParams(statement.name, statement.params, context)
-  const params = functionParams.map((param: any, index: number) => {
+  const params = functionParams.map((param: CFunctionParam, index: number) => {
     if (isNullableScalarParam(param)) {
       return `ccjs_value ${emitCScalarParamName(param.name)}`
     }
@@ -1552,13 +1558,13 @@ function emitClassMethodDeclaration(info: any, method: AnyNode, baseContext: CEm
 function emitClassMethodHead(info: any, method: AnyNode, context: CEmitContext): string {
   const params = [
     'ccjs_value this',
-    ...method.params.map((param: any, index: number) => emitClassMethodParam(param, index, method, context))
+    ...method.params.map((param: CFunctionParam, index: number) => emitClassMethodParam(param, index, method, context))
   ]
 
   return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${emitCClassMethodName(info.name, method.name)}(${params.join(', ')})`
 }
 
-function emitClassMethodParam(param: any, index: number, method: AnyNode, context: CEmitContext): string {
+function emitClassMethodParam(param: CFunctionParam, index: number, method: AnyNode, context: CEmitContext): string {
   if (isNullableScalarParam(param)) {
     return `ccjs_value ${emitCScalarParamName(param.name)}`
   }
@@ -1597,7 +1603,7 @@ function emitClassMethodParam(param: any, index: number, method: AnyNode, contex
 function resolveCFunctionReturnInfo(
   statement: AnyNode,
   context: CEmitContext
-): { returnType: any; returnNullable: boolean } {
+): { returnType: string; returnNullable: boolean } {
   const returnType = resolveFunctionReturnType(statement.name, statement.returnType, context)
   const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
 
@@ -1615,7 +1621,12 @@ function resolveCFunctionReturnInfo(
   }
 }
 
-function emitFunctionParameter(name: string, functionType: any, context: CEmitContext, loc: any): string {
+function emitFunctionParameter(
+  name: string,
+  functionType: CFunctionType | null | undefined,
+  context: CEmitContext,
+  loc: any
+): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
 
   if (isRuntimeFunctionType(functionType)) {
@@ -1625,7 +1636,7 @@ function emitFunctionParameter(name: string, functionType: any, context: CEmitCo
   return emitFunctionPointerParameter(name, functionType)
 }
 
-function emitFunctionPointerParameter(name: string, functionType: any): string {
+function emitFunctionPointerParameter(name: string, functionType: CFunctionType | null | undefined): string {
   return `${emitFunctionPointerReturnType(functionType)} (*${name})(${emitFunctionPointerParams(functionType)})`
 }
 
@@ -1634,7 +1645,7 @@ function emitFunctionPointerVariable(
   init: any,
   context: CFunctionContext,
   isConst: boolean,
-  functionType: any,
+  functionType: CFunctionType | null | undefined,
   loc: any
 ): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
@@ -1642,7 +1653,11 @@ function emitFunctionPointerVariable(
   return `${emitFunctionPointerReturnType(functionType)} (*${isConst ? 'const ' : ''}${name})(${emitFunctionPointerParams(functionType)}) = ${emitFunctionValueExpression(init, context)}`
 }
 
-function reportUnsupportedCFunctionType(functionType: any, context: CEmitContext, loc: any): void {
+function reportUnsupportedCFunctionType(
+  functionType: CFunctionType | null | undefined,
+  context: CEmitContext,
+  loc: any
+): void {
   if (functionType == null) {
     return
   }
@@ -1715,8 +1730,8 @@ function emitRuntimeParamPrelude(statement: AnyNode, context: CFunctionContext):
   return emitRuntimeParamPreludeForParams(statement, params, context)
 }
 
-function emitRuntimeParamPreludeForParams(statement: AnyNode, params: any[], context: CFunctionContext): string[] {
-  return params.flatMap((param: any, index: number) => {
+function emitRuntimeParamPreludeForParams(statement: AnyNode, params: CFunctionParam[], context: CFunctionContext): string[] {
+  return params.flatMap((param: CFunctionParam, index: number) => {
     if (isNullableScalarParam(param)) {
       const paramName = emitCScalarParamName(param.name)
       const expectedTag = cRuntimeValueTag(param.valueType)
@@ -2660,7 +2675,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
 
 function emitNullableFunctionValueExpression(
   expression: AnyNode,
-  functionType: any,
+  functionType: CFunctionType | null | undefined,
   context: CFunctionContext
 ): PreparedExpression {
   if (expression?.type === 'NullLiteral') {
@@ -3365,7 +3380,11 @@ function emitPreparedCallExpression(expression: AnyNode, context: CFunctionConte
   return emitPreparedCallExpressionWithDependencies(expression, context, cCallExpressionDependencies)
 }
 
-function emitPreparedCallArgs(expression: AnyNode, params: any[], context: CFunctionContext): PreparedCallArgs {
+function emitPreparedCallArgs(
+  expression: AnyNode,
+  params: CFunctionParam[],
+  context: CFunctionContext
+): PreparedCallArgs {
   return emitPreparedCallArgsWithDependencies(expression, params, context, cCallExpressionDependencies)
 }
 
@@ -3919,7 +3938,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
   return '0'
 }
 
-function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionContext): any | null {
+function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionContext): CFunctionType | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
@@ -3948,7 +3967,7 @@ function emitRuntimeCallbackVariableDeclaration(statement: AnyNode, context: CFu
 
 function emitRuntimeCallbackValue(
   expression: AnyNode,
-  functionType: any,
+  functionType: CFunctionType | null | undefined,
   context: CFunctionContext
 ): PreparedExpression {
   if (
@@ -3973,7 +3992,7 @@ function emitRuntimeCallbackValue(
 
 function emitRuntimeCallbackValueInto(
   expression: AnyNode,
-  functionType: any,
+  functionType: CFunctionType | null | undefined,
   out: string,
   context: CFunctionContext
 ): string[] {
@@ -4017,7 +4036,7 @@ function emitRuntimeCallbackValueInto(
     return [...emitPrepareOwnedValueWrite(out), `${out} = ccjs_undefined_value();`]
   }
 
-  const wrapper = runtimeCallbackWrapperFor(expression.path[0], functionType, context)
+  const wrapper = runtimeCallbackWrapperFor(expression.path[0], normalizeFunctionType(functionType), context)
 
   if (wrapper == null) {
     context.diagnostics.push(
@@ -4149,7 +4168,7 @@ function emitRuntimeArrowCaptureStoreLines(
 
 function emitRuntimeCallbackCall(
   expression: AnyNode,
-  functionType: any,
+  functionType: CFunctionType,
   context: CFunctionContext
 ): PreparedExpression {
   const lines: string[] = []
@@ -4296,7 +4315,7 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   }
 }
 
-function resolveFunctionParams(callee: AnyNode, context: CEmitContext): any[] | null {
+function resolveFunctionParams(callee: AnyNode, context: CEmitContext): CFunctionParam[] | null {
   if (callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }

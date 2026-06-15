@@ -18,6 +18,7 @@ import {
   type CEmitContext,
   type CFunctionContext
 } from '../context.ts'
+import type { CFunctionParam, CFunctionType } from '../types.ts'
 import type { IrProgram } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
@@ -75,17 +76,17 @@ export function functionUsesExternalEventLoop(node: any, externalNames: Set<any>
   return found
 }
 
-const genericFunctionType = {
+const genericFunctionType: CFunctionType = {
   kind: 'function',
   params: [],
   returnType: 'void'
 }
 
-export function normalizeFunctionType(functionType: any): any {
+export function normalizeFunctionType(functionType: CFunctionType | null | undefined): CFunctionType {
   return functionType ?? genericFunctionType
 }
 
-export function isPlainFunctionPointerType(functionType: any): boolean {
+export function isPlainFunctionPointerType(functionType: CFunctionType | null | undefined): boolean {
   return (
     functionType == null ||
     (functionType.returnType === 'void' &&
@@ -93,7 +94,7 @@ export function isPlainFunctionPointerType(functionType: any): boolean {
   )
 }
 
-export function isRuntimeFunctionType(functionType: any): boolean {
+export function isRuntimeFunctionType(functionType: CFunctionType | null | undefined): boolean {
   return (
     functionType != null &&
     isSupportedRuntimeCallbackReturnType(functionType.returnType) &&
@@ -106,7 +107,7 @@ export function isNullableFunctionType(valueType: any, nullable: any): boolean {
   return valueType === 'function' && nullable === true
 }
 
-export function isSupportedRuntimeCallbackType(functionType: any): boolean {
+export function isSupportedRuntimeCallbackType(functionType: CFunctionType | null | undefined): boolean {
   const normalized = normalizeFunctionType(functionType)
 
   return (
@@ -115,7 +116,11 @@ export function isSupportedRuntimeCallbackType(functionType: any): boolean {
   )
 }
 
-export function isSupportedRuntimeCallbackReturnType(returnType: any): boolean {
+export function isSupportedRuntimeCallbackReturnType(returnType: string | null | undefined): boolean {
+  if (returnType == null) {
+    return false
+  }
+
   return ['void', 'number', 'boolean', 'string', 'object'].includes(returnType)
 }
 
@@ -123,7 +128,12 @@ function runtimeFunctionParamKey(functionName, index) {
   return `${functionName}:${index}`
 }
 
-export function markRuntimeFunctionParam(callee: any, index: number, functionType: any, context: CEmitContext): void {
+export function markRuntimeFunctionParam(
+  callee: any,
+  index: number,
+  functionType: CFunctionType | null | undefined,
+  context: CEmitContext
+): void {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return
   }
@@ -137,7 +147,12 @@ export function markRuntimeFunctionParam(callee: any, index: number, functionTyp
   context.runtimeFunctionParams.set(runtimeFunctionParamKey(name, index), normalizeFunctionType(functionType))
 }
 
-export function resolveFunctionParameterRuntimeType(functionName: string, index: number, param: any, context: CEmitContext): any | null {
+export function resolveFunctionParameterRuntimeType(
+  functionName: string,
+  index: number,
+  param: CFunctionParam,
+  context: CEmitContext
+): CFunctionType | null {
   const promoted = context.runtimeFunctionParams.get(runtimeFunctionParamKey(functionName, index))
 
   if (promoted != null) {
@@ -151,7 +166,12 @@ export function resolveFunctionParameterRuntimeType(functionName: string, index:
   return isRuntimeFunctionType(param.functionType) ? normalizeFunctionType(param.functionType) : null
 }
 
-export function resolveRuntimeFunctionArgumentType(callee: any, index: number, param: any, context: CEmitContext): any | null {
+export function resolveRuntimeFunctionArgumentType(
+  callee: any,
+  index: number,
+  param: CFunctionParam,
+  context: CEmitContext
+): CFunctionType | null {
   if (param?.valueType !== 'function') {
     return null
   }
@@ -700,6 +720,7 @@ export function collectCallbackWrappers(
         pending.callee,
         pending.index,
         {
+          name: '',
           valueType: 'function',
           functionType: pending.functionType
         },
@@ -953,7 +974,7 @@ export function collectArrowCaptures(
   return [...captures.values()]
 }
 
-function resolveStaticFunctionParams(callee: any, context: CEmitContext): any[] | null {
+function resolveStaticFunctionParams(callee: any, context: CEmitContext): CFunctionParam[] | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
@@ -961,11 +982,15 @@ function resolveStaticFunctionParams(callee: any, context: CEmitContext): any[] 
   return context.functionParams.get(callee.path[0]) ?? null
 }
 
-function runtimeCallbackWrapperKey(target: string, functionType: any): string {
+function runtimeCallbackWrapperKey(target: string, functionType: CFunctionType): string {
   return `${target}:${functionType.returnType}(${functionType.params.map((param) => param.valueType).join(',')})`
 }
 
-export function runtimeCallbackWrapperFor(target: string, functionType: any, context: CEmitContext): any | null {
+export function runtimeCallbackWrapperFor(
+  target: string,
+  functionType: CFunctionType,
+  context: CEmitContext
+): any | null {
   return context.callbackWrappers.get(runtimeCallbackWrapperKey(target, functionType)) ?? null
 }
 
@@ -1379,7 +1404,7 @@ export function isSupportedMutableRuntimeArrowCapture(capture: any, context: CFu
   )
 }
 
-function emitRuntimeCallbackWrapperArgChecks(param: any, index: number): string[] {
+function emitRuntimeCallbackWrapperArgChecks(param: CFunctionParam, index: number): string[] {
   if (param.valueType === 'string') {
     return [`if (args[${index}].tag != CCJS_TAG_STRING || args[${index}].as.ref == 0) return CCJS_ERR_TYPE;`]
   }
@@ -1399,7 +1424,7 @@ function emitRuntimeCallbackWrapperArgChecks(param: any, index: number): string[
   return []
 }
 
-function emitRuntimeCallbackWrapperArg(param: any, index: number): string {
+function emitRuntimeCallbackWrapperArg(param: CFunctionParam, index: number): string {
   if (param.valueType === 'number') {
     return `args[${index}].as.number`
   }
@@ -1411,11 +1436,11 @@ function emitRuntimeCallbackWrapperArg(param: any, index: number): string {
   return `args[${index}]`
 }
 
-export function emitFunctionPointerReturnType(functionType: any): string {
+export function emitFunctionPointerReturnType(functionType: CFunctionType | null | undefined): string {
   return emitCType(functionType?.returnType ?? 'void')
 }
 
-export function emitFunctionPointerParams(functionType: any): string {
+export function emitFunctionPointerParams(functionType: CFunctionType | null | undefined): string {
   if (functionType == null || functionType.params.length === 0) {
     return 'void'
   }

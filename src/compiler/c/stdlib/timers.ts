@@ -13,6 +13,7 @@ import {
   type CFunctionContext
 } from '../context.ts'
 import type {
+  CFunctionType,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
@@ -20,7 +21,11 @@ import type {
 export type TimerLoweringDependencies = {
   emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitReference: (expression: any, context: CFunctionContext) => string
-  emitRuntimeCallbackValue: (expression: any, functionType: any, context: CFunctionContext) => PreparedExpression
+  emitRuntimeCallbackValue: (
+    expression: any,
+    functionType: CFunctionType | null | undefined,
+    context: CFunctionContext
+  ) => PreparedExpression
 }
 
 type TimerStartCallDescriptor = {

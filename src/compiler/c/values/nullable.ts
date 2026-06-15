@@ -21,7 +21,7 @@ import {
   resolveObjectExpressionIndex,
   resolveObjectExpressionMember
 } from './objects.ts'
-import type { CPreparedExpression as PreparedExpression, CRuntimeArrayElement } from '../types.ts'
+import type { CFunctionType, CPreparedExpression as PreparedExpression, CRuntimeArrayElement } from '../types.ts'
 
 export type NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression: (
@@ -32,7 +32,7 @@ export type NullableLoweringDependencies = {
   emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitNullableFunctionValueExpression: (
     expression: any,
-    functionType: any,
+    functionType: CFunctionType | null | undefined,
     context: CFunctionContext
   ) => PreparedExpression
   emitNullableScalarValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression

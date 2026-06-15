@@ -25,6 +25,7 @@ import type {
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
+  CFunctionType,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
   CPreparedStatement as PreparedStatement,
@@ -64,7 +65,7 @@ export type StatementLoweringDependencies = {
     init: any,
     context: CFunctionContext,
     isConst: boolean,
-    functionType: any,
+    functionType: CFunctionType | null | undefined,
     loc: any
   ) => string
   emitHttpServerVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null

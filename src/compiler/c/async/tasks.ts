@@ -24,6 +24,7 @@ import {
 import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
 import type { IrFunctionDeclaration } from '../../types.ts'
 import type {
+  CFunctionParam,
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
@@ -40,7 +41,7 @@ export type AsyncTaskLoweringDependencies = {
   emitFsBooleanFlag: (expression: any, field: string) => string
   emitPreparedCallArgs: (
     expression: any,
-    params: any[],
+    params: CFunctionParam[],
     context: CFunctionContext
   ) => { lines: string[]; args: string[] }
   emitPreparedCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression
@@ -68,8 +69,8 @@ export type AsyncTaskLoweringDependencies = {
     expression: any,
     context: CFunctionContext
   ) => void
-  resolveFunctionDeclarationParams: (name: string, fallback: any[], context: CEmitContext) => any[]
-  resolveFunctionParams: (callee: any, context: CFunctionContext) => any[] | null
+  resolveFunctionDeclarationParams: (name: string, fallback: CFunctionParam[], context: CEmitContext) => CFunctionParam[]
+  resolveFunctionParams: (callee: any, context: CFunctionContext) => CFunctionParam[] | null
   resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => CKnownArrayElement | null
   resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CKnownObjectIndexField | null
   resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CKnownObjectField | null
@@ -345,7 +346,11 @@ function resolveAsyncTaskWrapperParams(declaration: IrFunctionDeclaration, conte
     return null
   }
 
-  const params = asyncTaskDeps(context).resolveFunctionDeclarationParams(declaration.name, declaration.params, context)
+  const params = asyncTaskDeps(context).resolveFunctionDeclarationParams(
+    declaration.name,
+    declaration.params as CFunctionParam[],
+    context
+  )
 
   if (params.some((param) => param.nullable === true || !isSupportedAsyncTaskParamType(param.valueType))) {
     return null

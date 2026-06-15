@@ -12,12 +12,16 @@ import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedCallArgs as PreparedCallArgs } from '../types.ts'
+import type {
+  CFunctionParam,
+  CPreparedExpression as PreparedExpression,
+  CPreparedCallArgs as PreparedCallArgs
+} from '../types.ts'
 
 export type ClassLoweringDependencies = {
   emitCFieldFlags: (field: any) => string
   emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedCallArgs: (expression: any, params: any[], context: CFunctionContext) => PreparedCallArgs
+  emitPreparedCallArgs: (expression: any, params: CFunctionParam[], context: CFunctionContext) => PreparedCallArgs
 }
 
 function classDeps(context: CFunctionContext): ClassLoweringDependencies {

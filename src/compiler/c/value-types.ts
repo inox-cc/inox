@@ -122,7 +122,7 @@ export function isRuntimeNullableType(valueType: any): boolean {
   return cRuntimeValueTag(valueType) != null
 }
 
-export function isNullableScalarParam(param: any): boolean {
+export function isNullableScalarParam(param: { nullable?: boolean; valueType?: string } | null | undefined): boolean {
   return param?.nullable === true && isNullableScalarType(param.valueType)
 }
 

@@ -88,6 +88,33 @@ export type CRuntimeArrayElement = CArrayElementInfo & {
   index: number
 }
 
+export type CFunctionParam = {
+  arrayElementType?: string | null
+  functionType?: CFunctionType | null
+  loc?: AnyNode['loc']
+  mapKeyType?: string | null
+  mapValueType?: string | null
+  name: string
+  nullable?: boolean
+  promiseValueType?: string | null
+  setElementType?: string | null
+  shape?: any
+  valueType: string
+}
+
+export type CFunctionType = {
+  kind?: 'function'
+  params: CFunctionParam[]
+  returnArrayElementType?: string | null
+  returnMapKeyType?: string | null
+  returnMapValueType?: string | null
+  returnNullable?: boolean
+  returnPromiseValueType?: string | null
+  returnSetElementType?: string | null
+  returnShape?: any
+  returnType: string
+}
+
 export type CModuleOutputFile = {
   kind: 'header' | 'source'
   path: string

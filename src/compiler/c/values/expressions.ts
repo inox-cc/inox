@@ -41,6 +41,8 @@ import type {
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
+  CFunctionParam,
+  CFunctionType,
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
@@ -97,7 +99,11 @@ export type CCallExpressionDependencies = {
   emitCNumberConversionValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitFunctionValueExpression: (expression: any, context: CFunctionContext) => string
-  emitNullableFunctionValueExpression: (expression: any, functionType: any, context: CFunctionContext) => PreparedExpression
+  emitNullableFunctionValueExpression: (
+    expression: any,
+    functionType: CFunctionType | null | undefined,
+    context: CFunctionContext
+  ) => PreparedExpression
   emitNullableScalarValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitPreparedArrayFilterCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitPreparedArrayMapCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
@@ -120,14 +126,23 @@ export type CCallExpressionDependencies = {
   emitPreparedTimerCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
   emitPreparedUrlSearchParamsCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
   emitRuntimeCallbackCall: (expression: any, callbackType: any, context: CFunctionContext) => PreparedExpression
-  emitRuntimeCallbackValue: (expression: any, functionType: any, context: CFunctionContext) => PreparedExpression
+  emitRuntimeCallbackValue: (
+    expression: any,
+    functionType: CFunctionType | null | undefined,
+    context: CFunctionContext
+  ) => PreparedExpression
   isExternalEventLoopFunctionCallee: (callee: any, context: CFunctionContext) => boolean
   isNullableFunctionType: (valueType: any, nullable: any) => boolean
   isPromiseReturningFunctionCallee: (callee: any, context: CFunctionContext) => boolean
   registerErrorChannel: (context: CFunctionContext) => void
-  resolveFunctionParams: (callee: any, context: CFunctionContext) => any[] | null
+  resolveFunctionParams: (callee: any, context: CFunctionContext) => CFunctionParam[] | null
   resolveRuntimeCallbackCalleeType: (callee: any, context: CFunctionContext) => any | null
-  resolveRuntimeFunctionArgumentType: (callee: any, index: number, param: any, context: CFunctionContext) => any | null
+  resolveRuntimeFunctionArgumentType: (
+    callee: any,
+    index: number,
+    param: CFunctionParam,
+    context: CFunctionContext
+  ) => CFunctionType | null
 }
 
 export function emitCallExpression(expression: any, context: CFunctionContext, deps: CCallExpressionDependencies): string {
@@ -334,7 +349,7 @@ function emitPreparedMathCallExpression(
 
 export function emitPreparedCallArgs(
   expression: any,
-  params: any[],
+  params: CFunctionParam[],
   context: CFunctionContext,
   deps: CCallExpressionDependencies
 ): PreparedCallArgs {
