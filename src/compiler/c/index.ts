@@ -70,6 +70,7 @@ import {
 } from './modules.ts'
 import { emitCPrelude } from './prelude.ts'
 import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
+import { emitCUnit as emitCUnitWithDependencies, type CUnitDependencies } from './unit.ts'
 import {
   collectHttpRuntimeCreateServerNames,
   collectHttpRuntimeImportNames,
@@ -1047,6 +1048,22 @@ const cValueExpressionDependencies: CValueExpressionDependencies = {
   isStringTrimCall
 }
 
+const cUnitDependencies: CUnitDependencies = {
+  asyncTaskLoweringDependencies,
+  callbackLoweringDependencies,
+  collectExternalEventLoopFunctions,
+  createBaseContext,
+  dgramLoweringDependencies,
+  emitClassMethodDeclaration,
+  emitClassMethodHead,
+  emitFunctionDeclaration,
+  emitFunctionHead,
+  emitMainWrapper,
+  httpLoweringDependencies,
+  netLoweringDependencies,
+  promiseChainLoweringDependencies
+}
+
 export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
   return formatGeneratedC(emitCUnit([ir], ir, options, [ir]), 'ccjs.generated.c')
 }
@@ -1557,259 +1574,7 @@ function emitCUnit(
   options: CEmitOptions = {},
   entryIrPrograms: IrProgram[] = entryIrProgram == null ? [] : [entryIrProgram]
 ) {
-  const diagnostics: Diagnostic[] = []
-  const functionEntries = collectIrFunctionNodeEntries(irPrograms)
-  const functions = functionEntries.map((entry) => entry.node)
-  const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
-  const functionEffects = collectIrStoredFunctionEffects(irPrograms)
-  const globalUsages = collectIrGlobalUsages(irPrograms)
-  const globalRoots = collectIrGlobalRoots(irPrograms)
-  const runtimeRequirements = new Set(collectIrRuntimeRequirements(irPrograms))
-  const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
-  const classes = collectIrTopLevelNodesFromPrograms(irPrograms, 'class')
-  const jsGlobalRoots = new Set(globalRoots)
-  const baseContext = createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
-  baseContext.dgramImportNames = collectRuntimeImportNames(
-    irPrograms,
-    new Set(['dgram', 'node:dgram']),
-    new Set(['default', 'dgram'])
-  )
-  baseContext.dgramCreateSocketNames = collectRuntimeNamedImportNames(
-    irPrograms,
-    new Set(['dgram', 'node:dgram']),
-    'createSocket'
-  )
-  baseContext.cryptoImportNames = collectRuntimeImportNames(
-    irPrograms,
-    new Set(['node:crypto']),
-    new Set(['default', 'crypto'])
-  )
-  baseContext.httpImportNames = collectHttpRuntimeImportNames(irPrograms)
-  baseContext.httpCreateServerNames = collectHttpRuntimeCreateServerNames(irPrograms)
-  baseContext.netImportNames = collectRuntimeImportNames(
-    irPrograms,
-    new Set(['net', 'node:net']),
-    new Set(['default', 'net'])
-  )
-  baseContext.netCreateServerNames = collectRuntimeNamedImportNames(
-    irPrograms,
-    new Set(['net', 'node:net']),
-    'createServer'
-  )
-  baseContext.netConnectNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'connect')
-  for (const name of collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createConnection')) {
-    baseContext.netConnectNames.add(name)
-  }
-  baseContext.classInfos = createClassInfos(classes, diagnostics)
-  baseContext.externalEventLoopFunctions = collectExternalEventLoopFunctions(functions)
-  baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext, callbackLoweringDependencies)
-  baseContext.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, baseContext, promiseChainLoweringDependencies)
-  baseContext.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, baseContext, asyncTaskLoweringDependencies)
-  baseContext.dgramMessageHandlers = collectDgramMessageHandlers(irPrograms, baseContext)
-  baseContext.httpHandlers = collectHttpHandlers(irPrograms, baseContext)
-  baseContext.netHandlers = collectNetHandlers(irPrograms, baseContext)
-  const classMethods = collectClassMethods(baseContext)
-  const {
-    needsRuntime,
-    needsTimeRuntime,
-    needsMathRuntime,
-    needsCryptoRuntime,
-    needsDebugMemoryRuntime,
-    needsAsyncRuntime,
-    needsCallbackRuntime,
-    needsStringHeader,
-    needsCollectionRuntime,
-    needsBinaryRuntime,
-    needsObjectRuntime,
-    needsChildProcessRuntime,
-    needsFsRuntime,
-    needsOsRuntime,
-    needsPathRuntime,
-    needsUrlRuntime,
-    needsProcessRuntime,
-    needsJsonRuntime,
-    needsTimerRuntime,
-    needsConsoleRuntime,
-    needsDgramRuntime,
-    needsFetchRuntime,
-    needsHttpRuntime,
-    needsNetRuntime
-  } = resolveCRuntimePreludeRequirements({
-    classInfoCount: baseContext.classInfos.size,
-    cryptoContext: baseContext,
-    globalUsages,
-    hasRuntimeCallbackWrapper: [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper),
-    irPrograms,
-    runtimeRequirements,
-    throwingFunctionCount: baseContext.throwingFunctions.size
-  })
-  baseContext.processRuntime = needsProcessRuntime
-  baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
-  reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
-  reportUnsupportedCGlobalUsages(globalUsages, diagnostics, baseContext)
-  const lines = emitCPrelude(
-    needsRuntime,
-    needsTimeRuntime,
-    needsMathRuntime,
-    needsCryptoRuntime,
-    needsDebugMemoryRuntime,
-    needsAsyncRuntime,
-    needsCallbackRuntime,
-    needsStringHeader,
-    needsCollectionRuntime,
-    needsBinaryRuntime,
-    needsObjectRuntime,
-    needsChildProcessRuntime,
-    needsFsRuntime,
-    needsOsRuntime,
-    needsPathRuntime,
-    needsUrlRuntime,
-    needsProcessRuntime,
-    needsJsonRuntime,
-    needsTimerRuntime,
-    needsConsoleRuntime,
-    needsDgramRuntime,
-    needsFetchRuntime,
-    needsHttpRuntime,
-    needsNetRuntime,
-    options
-  )
-  const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(
-    isRuntimeArrowCallbackWrapperWithContext
-  )
-  const promiseChainCallbackWrappers = [...baseContext.promiseChainWrappers.values()].filter(
-    isPromiseChainCallbackWrapperWithContext
-  )
-
-  for (const wrapper of baseContext.asyncTaskWrappers.values()) {
-    lines.push(...emitAsyncTaskFrameType(wrapper))
-    lines.push('')
-  }
-
-  for (const wrapper of arrowCallbackWrappers) {
-    lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
-    lines.push('')
-  }
-
-  for (const wrapper of promiseChainCallbackWrappers) {
-    lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
-    lines.push('')
-  }
-
-  if (baseContext.unhandledRejectionFlag != null) {
-    lines.push(`static int ${baseContext.unhandledRejectionFlag} = 0;`)
-    lines.push('')
-  }
-
-  for (const item of functions) {
-    lines.push(`${emitFunctionHead(item, baseContext)};`)
-  }
-
-  for (const { info, method } of classMethods) {
-    lines.push(`${emitClassMethodHead(info, method, baseContext)};`)
-  }
-
-  for (const wrapper of baseContext.asyncTaskWrappers.values()) {
-    lines.push(...emitAsyncTaskWrapperPrototypes(wrapper))
-  }
-
-  for (const wrapper of baseContext.callbackWrappers.values()) {
-    if (wrapper.kind === 'plain-arrow') {
-      lines.push(`${emitPlainArrowCallbackWrapperHead(wrapper)};`)
-      continue
-    }
-
-    if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
-      lines.push(`static void ${wrapper.finalizerName}(void* context);`)
-    }
-
-    lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)};`)
-  }
-
-  for (const wrapper of baseContext.promiseChainWrappers.values()) {
-    if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
-      lines.push(`static void ${wrapper.finalizerName}(void* context);`)
-    }
-
-    lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
-  }
-
-  for (const wrapper of baseContext.dgramMessageHandlers.values()) {
-    lines.push(`${emitDgramMessageHandlerHead(wrapper)};`)
-  }
-
-  for (const wrapper of baseContext.httpHandlers.values()) {
-    lines.push(`${emitHttpHandlerHead(wrapper)};`)
-  }
-
-  for (const wrapper of baseContext.netHandlers.values()) {
-    lines.push(`${emitNetHandlerHead(wrapper)};`)
-  }
-
-  if (
-    functions.length > 0 ||
-    classMethods.length > 0 ||
-    baseContext.asyncTaskWrappers.size > 0 ||
-    baseContext.callbackWrappers.size > 0 ||
-    baseContext.promiseChainWrappers.size > 0 ||
-    baseContext.dgramMessageHandlers.size > 0 ||
-    baseContext.httpHandlers.size > 0 ||
-    baseContext.netHandlers.size > 0
-  ) {
-    lines.push('')
-  }
-
-  for (const wrapper of baseContext.asyncTaskWrappers.values()) {
-    lines.push(...emitAsyncTaskWrapperDeclaration(wrapper, baseContext, asyncTaskLoweringDependencies))
-    lines.push('')
-  }
-
-  for (const wrapper of baseContext.callbackWrappers.values()) {
-    lines.push(
-      ...(wrapper.kind === 'plain-arrow'
-        ? emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext, callbackLoweringDependencies)
-        : emitRuntimeCallbackWrapperDeclaration(wrapper, baseContext, callbackLoweringDependencies))
-    )
-    lines.push('')
-  }
-
-  for (const wrapper of baseContext.promiseChainWrappers.values()) {
-    lines.push(...emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext, promiseChainLoweringDependencies))
-    lines.push('')
-  }
-
-  for (const wrapper of baseContext.dgramMessageHandlers.values()) {
-    lines.push(...emitDgramMessageHandlerDeclaration(wrapper, baseContext, dgramLoweringDependencies))
-    lines.push('')
-  }
-
-  for (const wrapper of baseContext.httpHandlers.values()) {
-    lines.push(...emitHttpHandlerDeclaration(wrapper, baseContext, httpLoweringDependencies))
-    lines.push('')
-  }
-
-  for (const wrapper of baseContext.netHandlers.values()) {
-    lines.push(...emitNetHandlerDeclaration(wrapper, baseContext, netLoweringDependencies))
-    lines.push('')
-  }
-
-  for (const item of functions) {
-    lines.push(...emitFunctionDeclaration(item, baseContext))
-    lines.push('')
-  }
-
-  for (const { info, method } of classMethods) {
-    lines.push(...emitClassMethodDeclaration(info, method, baseContext))
-    lines.push('')
-  }
-
-  lines.push(...emitMainWrapper(entryIrPrograms, baseContext))
-
-  if (diagnostics.length > 0) {
-    throw new CompileError(diagnostics)
-  }
-
-  return `${lines.join('\n')}\n`
+  return emitCUnitWithDependencies(irPrograms, entryIrProgram, options, entryIrPrograms, cUnitDependencies)
 }
 
 function createThrowingFunctionInfo(
