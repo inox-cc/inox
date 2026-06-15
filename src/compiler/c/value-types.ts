@@ -1,3 +1,5 @@
+import type { CFunctionContext } from './context.ts'
+
 export function isManagedRuntimeReturnType(valueType: any): boolean {
   return (
     valueType === 'bytes' ||
@@ -69,7 +71,7 @@ export function emitThrowingFunctionOutType(type: any, nullable = false): string
   return emitCType(type)
 }
 
-export function isThrowingFunctionRuntimeOut(context: any): boolean {
+export function isThrowingFunctionRuntimeOut(context: CFunctionContext): boolean {
   return (
     isManagedRuntimeReturnType(context.returnType) ||
     (context.returnNullable === true && isNullableScalarType(context.returnType))

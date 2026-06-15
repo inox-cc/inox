@@ -1,10 +1,12 @@
-export function usesCJsGlobal(expression: any, context: any): boolean {
+import type { CEmitContext } from './context.ts'
+
+export function usesCJsGlobal(expression: any, context: CEmitContext): boolean {
   const root = rootReferenceName(expression)
 
   return root != null && isCJsGlobalRoot(root, context)
 }
 
-export function isCJsGlobalRoot(name: string, context: any): boolean {
+export function isCJsGlobalRoot(name: string, context: CEmitContext): boolean {
   return context.jsGlobalRoots.has(name)
 }
 

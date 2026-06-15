@@ -1,6 +1,10 @@
-import { emitRuntimeTypeCheck } from './context.ts'
+import { emitRuntimeTypeCheck, type CFunctionContext } from './context.ts'
 
-export function emitRuntimeNullableValueCheck(name: string, expectedTag: string | null, context: any): string[] {
+export function emitRuntimeNullableValueCheck(
+  name: string,
+  expectedTag: string | null,
+  context: CFunctionContext
+): string[] {
   if (expectedTag == null) {
     return []
   }
@@ -17,7 +21,7 @@ export function emitRuntimeNullableValueCheck(name: string, expectedTag: string 
   ]
 }
 
-export function emitRuntimeValueCheck(name: string, expectedTag: string | null, context: any): string {
+export function emitRuntimeValueCheck(name: string, expectedTag: string | null, context: CFunctionContext): string {
   if (expectedTag == null) {
     return ''
   }
@@ -33,7 +37,7 @@ export function emitRuntimeFieldValueCheck(
   value: string,
   expectedTag: string | null,
   expression: any,
-  context: any
+  context: CFunctionContext
 ): string[] {
   if (expression?.nullable === true) {
     return emitRuntimeNullableValueCheck(value, expectedTag, context)
