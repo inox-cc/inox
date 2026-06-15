@@ -2660,7 +2660,11 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
   }
 }
 
-function emitCObjectLiteralValueExpression(expression, context, shape: AnyNode | null = null) {
+function emitCObjectLiteralValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext,
+  shape: AnyNode | null = null
+): PreparedExpression {
   const temp = nextCName(context, 'ccjs_object')
   const shapeName = nextCName(context, 'ccjs_shape_value')
   const fieldsName = `${shapeName}_fields`
@@ -2706,7 +2710,7 @@ function emitCObjectLiteralValueExpression(expression, context, shape: AnyNode |
   }
 }
 
-function emitErrorObjectVariableDeclaration(statement, context) {
+function emitErrorObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'object')
   registerErrorObjectShape(context, statement.name)
@@ -2714,7 +2718,7 @@ function emitErrorObjectVariableDeclaration(statement, context) {
   return emitCErrorObjectInitLines(statement.name, statement.init, context)
 }
 
-function emitCErrorObjectValueExpression(expression, context) {
+function emitCErrorObjectValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const temp = nextCName(context, 'ccjs_error_object')
   registerOwnedValue(context, temp)
 
@@ -2724,7 +2728,7 @@ function emitCErrorObjectValueExpression(expression, context) {
   }
 }
 
-function emitCErrorObjectInitLines(target, expression, context) {
+function emitCErrorObjectInitLines(target: string, expression: AnyNode, context: CFunctionContext): string[] {
   const shapeName = nextCName(context, 'ccjs_shape_error')
   const fieldsName = `${shapeName}_fields`
   const parts = errorConstructorExpressions(expression, context)
@@ -2757,7 +2761,10 @@ function emitCErrorObjectInitLines(target, expression, context) {
   ]
 }
 
-function errorConstructorExpressions(expression, context) {
+function errorConstructorExpressions(
+  expression: AnyNode,
+  context: CFunctionContext
+): { message: AnyNode; code: AnyNode; cause: AnyNode } {
   if (expression.args.length > 2) {
     context.diagnostics.push(
       diagnostic(
@@ -2852,7 +2859,7 @@ function errorConstructorExpressions(expression, context) {
   }
 }
 
-function cStringLiteralNode(value, loc = null) {
+function cStringLiteralNode(value: string, loc: any = null): AnyNode {
   return {
     type: 'StringLiteral',
     value,
@@ -2860,14 +2867,14 @@ function cStringLiteralNode(value, loc = null) {
   }
 }
 
-function cNullLiteralNode(loc = null) {
+function cNullLiteralNode(loc: any = null): AnyNode {
   return {
     type: 'NullLiteral',
     loc
   }
 }
 
-function emitCNullishCoalescingValueExpression(expression, context) {
+function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   if (!canLowerCNullishCoalescingExpression(expression, context)) {
     context.diagnostics.push(
       diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
