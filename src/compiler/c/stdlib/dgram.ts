@@ -24,17 +24,17 @@ type DgramMessageContext = {
 }
 
 export type DgramLoweringDependencies = {
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  emitReference: (expression: any, context: CFunctionContext) => string
-  emitStatementList: (body: any[], context: CFunctionContext) => string[]
-  findObjectLiteralPropertyValue: (expression: any, key: string) => any
-  staticObjectBooleanPropertyValue: (expression: any, key: string) => boolean | null
-  staticObjectStringPropertyValue: (expression: any, key: string) => string | null
+  emitReference: (expression: AnyNode, context: CFunctionContext) => string
+  emitStatementList: (body: AnyNode[], context: CFunctionContext) => string[]
+  findObjectLiteralPropertyValue: (expression: AnyNode, key: string) => AnyNode | null
+  staticObjectBooleanPropertyValue: (expression: AnyNode, key: string) => boolean | null
+  staticObjectStringPropertyValue: (expression: AnyNode, key: string) => string | null
 }
 
 export function emitDgramMessageHandlerHead(wrapper: CDgramMessageHandler): string {
@@ -92,7 +92,7 @@ export function emitDgramMessageHandlerDeclaration(
 }
 
 export function emitDgramSocketVariableDeclaration(
-  statement: any,
+  statement: AnyNode,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): string[] | null {
@@ -106,7 +106,7 @@ export function emitDgramSocketVariableDeclaration(
   return emitDgramSocketCreateLines(statement.init, statement.name, context, deps)
 }
 
-export function emitDgramAddressVariableDeclaration(statement: any, context: CFunctionContext): string[] | null {
+export function emitDgramAddressVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
   if (!isDgramAddressCall(statement.init, context)) {
     return null
   }
@@ -125,7 +125,7 @@ export function emitDgramAddressVariableDeclaration(statement: any, context: CFu
 }
 
 export function emitDgramNumberVariableDeclaration(
-  statement: any,
+  statement: AnyNode,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): string[] | null {
@@ -167,7 +167,7 @@ export function emitDgramNumberVariableDeclaration(
 }
 
 export function emitDgramSocketCallStatement(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): string[] | null {
@@ -236,7 +236,7 @@ export function emitDgramSocketCallStatement(
 }
 
 export function emitPreparedDgramAddressPortExpression(
-  expression: any,
+  expression: AnyNode | null | undefined,
   context: CFunctionContext
 ): PreparedExpression | null {
   if (
@@ -260,7 +260,7 @@ export function collectDgramMessageHandlers(
   context: CEmitContext
 ): Map<AnyNode, CDgramMessageHandler> {
   const handlers = new Map<AnyNode, CDgramMessageHandler>()
-  const register = (expression) => {
+  const register = (expression: AnyNode | null | undefined) => {
     if (expression?.type !== 'ArrowFunctionExpression') {
       return
     }
@@ -274,7 +274,7 @@ export function collectDgramMessageHandlers(
       expression
     })
   }
-  const visitStatement = (statement) => {
+  const visitStatement = (statement: AnyNode | null | undefined) => {
     if (statement == null) {
       return
     }
@@ -333,7 +333,7 @@ export function collectDgramMessageHandlers(
 
     if (statement.type === 'SwitchStatement') {
       visitExpression(statement.discriminant)
-      statement.cases.forEach((item) => {
+      statement.cases.forEach((item: AnyNode) => {
         visitExpression(item.test)
         item.consequent.forEach(visitStatement)
       })
@@ -346,7 +346,7 @@ export function collectDgramMessageHandlers(
       visitStatement(statement.finalizer)
     }
   }
-  const visitExpression = (expression) => {
+  const visitExpression = (expression: AnyNode | null | undefined) => {
     if (expression == null) {
       return
     }
@@ -442,7 +442,7 @@ export function collectDgramMessageHandlers(
 }
 
 function emitDgramMessageHandlerStatement(
-  statement: any,
+  statement: AnyNode | null | undefined,
   dgramContext: DgramMessageContext,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
@@ -510,7 +510,7 @@ function emitDgramMessageHandlerStatement(
 }
 
 function emitDgramMessageHandlerSocketCallStatement(
-  expression: any,
+  expression: AnyNode,
   dgramContext: DgramMessageContext,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
@@ -531,7 +531,7 @@ function emitDgramMessageHandlerSocketCallStatement(
 }
 
 function emitDgramSocketCreateLines(
-  expression: any,
+  expression: AnyNode,
   socketName: string,
   context: CFunctionContext,
   deps: DgramLoweringDependencies,
@@ -540,7 +540,7 @@ function emitDgramSocketCreateLines(
   emitDgramSocketTypeDiagnostics(expression.args[0], context, deps)
 
   const listener = emitDgramCreateSocketMessageListener(expression)
-  const wrapper = context.dgramMessageHandlers.get(listener)
+  const wrapper = listener == null ? undefined : context.dgramMessageHandlers.get(listener)
 
   if (listener != null && (listener.type !== 'ArrowFunctionExpression' || wrapper == null)) {
     context.diagnostics.push(
@@ -574,7 +574,7 @@ function emitDgramSocketCreateLines(
 
 function emitDgramBindLines(
   socketName: string,
-  args: any[],
+  args: AnyNode[],
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): string[] {
@@ -623,7 +623,7 @@ function emitDgramBindLines(
   return lines
 }
 
-function emitDgramOnLines(socketName: string, args: any[], context: CFunctionContext): string[] {
+function emitDgramOnLines(socketName: string, args: AnyNode[], context: CFunctionContext): string[] {
   if (args[0]?.type !== 'StringLiteral' || args[0].value !== 'message') {
     context.diagnostics.push(
       diagnostic(
@@ -659,7 +659,7 @@ function emitDgramOnLines(socketName: string, args: any[], context: CFunctionCon
 
 function emitDgramConnectLines(
   socketName: string,
-  args: any[],
+  args: AnyNode[],
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): string[] {
@@ -696,7 +696,7 @@ function emitDgramConnectLines(
   ]
 }
 
-function emitDgramDisconnectLines(socketName: string, args: any[], context: CFunctionContext): string[] {
+function emitDgramDisconnectLines(socketName: string, args: AnyNode[], context: CFunctionContext): string[] {
   if (args.length > 0) {
     context.diagnostics.push(
       diagnostic('CCJS_DGRAM_SOCKET', 'socket.disconnect in the C backend does not take arguments', args[0]?.loc)
@@ -707,7 +707,7 @@ function emitDgramDisconnectLines(socketName: string, args: any[], context: CFun
 }
 
 function emitDgramSocketOptionCallStatement(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): string[] | null {
@@ -766,7 +766,7 @@ function emitDgramSocketOptionCallStatement(
 
 function emitDgramSendLines(
   socketName: string,
-  args: any[],
+  args: AnyNode[],
   context: CFunctionContext,
   deps: DgramLoweringDependencies,
   dgramContext: DgramMessageContext | null = null
@@ -831,7 +831,7 @@ function emitDgramSendLines(
 
 function emitDgramCloseLines(
   socketName: string,
-  args: any[],
+  args: AnyNode[],
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): string[] {
@@ -867,7 +867,7 @@ function emitDgramStatusCheck(
 }
 
 function emitDgramBytesOperand(
-  expression: any,
+  expression: AnyNode,
   dgramContext: DgramMessageContext | null,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
@@ -899,7 +899,7 @@ function emitDgramBytesOperand(
 }
 
 function emitDgramPortExpression(
-  expression: any,
+  expression: AnyNode,
   dgramContext: DgramMessageContext | null,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
@@ -923,7 +923,7 @@ function emitDgramPortExpression(
 }
 
 function emitDgramHostExpression(
-  expression: any,
+  expression: AnyNode | null | undefined,
   dgramContext: DgramMessageContext | null,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
@@ -970,7 +970,7 @@ function emitDgramHostExpression(
   return '0'
 }
 
-function resolveDgramAddressStringMember(expression: any, context: CFunctionContext): string | null {
+function resolveDgramAddressStringMember(expression: AnyNode, context: CFunctionContext): string | null {
   if (
     expression?.type !== 'MemberExpression' ||
     !['address', 'family'].includes(expression.property) ||
@@ -986,7 +986,10 @@ function resolveDgramAddressStringMember(expression: any, context: CFunctionCont
     : `${expression.object.path[0]}.address`
 }
 
-function resolveDgramRinfoMember(expression: any, dgramContext: DgramMessageContext | null): string | null {
+function resolveDgramRinfoMember(
+  expression: AnyNode | null | undefined,
+  dgramContext: DgramMessageContext | null
+): string | null {
   if (
     dgramContext?.rinfoName == null ||
     expression?.type !== 'MemberExpression' ||
@@ -1000,7 +1003,10 @@ function resolveDgramRinfoMember(expression: any, dgramContext: DgramMessageCont
   return ['address', 'family', 'port', 'size'].includes(expression.property) ? expression.property : null
 }
 
-function emitDgramStaticStringValue(expression: any, dgramContext: DgramMessageContext | null): string | null {
+function emitDgramStaticStringValue(
+  expression: AnyNode | null | undefined,
+  dgramContext: DgramMessageContext | null
+): string | null {
   if (expression?.type === 'StringLiteral') {
     return expression.value
   }
@@ -1017,7 +1023,7 @@ function emitDgramStaticStringValue(expression: any, dgramContext: DgramMessageC
 }
 
 function emitDgramZeroArgCallbackLines(
-  callback: any,
+  callback: AnyNode | null | undefined,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): string[] {
@@ -1049,11 +1055,11 @@ function emitDgramZeroArgCallbackLines(
   return deps.emitStatementList(body, context)
 }
 
-function isDgramSocketMethodCall(expression: any, method: string, context: CFunctionContext): boolean {
+function isDgramSocketMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
   return isDgramSocketAnyMethodCall(expression, context) && expression.callee.property === method
 }
 
-function isDgramSocketAnyMethodCall(expression: any, context: CFunctionContext): boolean {
+function isDgramSocketAnyMethodCall(expression: AnyNode, context: CFunctionContext): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
@@ -1063,7 +1069,7 @@ function isDgramSocketAnyMethodCall(expression: any, context: CFunctionContext):
   )
 }
 
-function isDgramAddressCall(expression: any, context: CFunctionContext): boolean {
+function isDgramAddressCall(expression: AnyNode | null | undefined, context: CFunctionContext): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
@@ -1074,7 +1080,7 @@ function isDgramAddressCall(expression: any, context: CFunctionContext): boolean
   )
 }
 
-function isDgramCreateSocketCall(expression: any, context: CEmitContext): boolean {
+function isDgramCreateSocketCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
   if (expression?.type !== 'CallExpression') {
     return false
   }
@@ -1096,7 +1102,7 @@ function isDgramCreateSocketCall(expression: any, context: CEmitContext): boolea
   )
 }
 
-function emitDgramCreateSocketMessageListener(expression: any): any {
+function emitDgramCreateSocketMessageListener(expression: AnyNode): AnyNode | null {
   if (expression.args[0]?.type === 'ArrowFunctionExpression') {
     return expression.args[0]
   }
@@ -1109,7 +1115,7 @@ function emitDgramCreateSocketMessageListener(expression: any): any {
 }
 
 function emitDgramSocketTypeDiagnostics(
-  expression: any,
+  expression: AnyNode | null | undefined,
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): void {
