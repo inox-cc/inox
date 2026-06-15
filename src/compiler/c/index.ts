@@ -128,6 +128,7 @@ import {
   emitRuntimeCallbackWrapperDeclaration,
   emitRuntimeCallbackWrapperHead,
   functionUsesExternalEventLoop,
+  hasRuntimeArrowCallbackContext,
   isNullableFunctionType,
   isPlainFunctionPointerType,
   isPromiseChainCallbackWrapperWithContext,
@@ -301,9 +302,11 @@ import type {
   CModuleOutputFile,
   CModulePlan,
   CObjectShape,
+  CObjectShapeField,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedExpression as PreparedExpression,
+  CRuntimeArrowCallbackWrapper,
   CRuntimeArrowCapture
 } from './types.ts'
 import {
@@ -494,9 +497,12 @@ import type {
   IrFunctionDeclaration,
   IrFunctionEffect,
   IrProgram,
-  ModuleGraph
+  ModuleGraph,
+  SourceLocation
 } from '../types.ts'
 export type { CModuleOutputFile } from './types.ts'
+
+type CSourceLocation = Partial<SourceLocation> | null | undefined
 
 const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression,
@@ -1640,7 +1646,7 @@ function emitFunctionParameter(
   name: string,
   functionType: CFunctionType | null | undefined,
   context: CEmitContext,
-  loc: any
+  loc: CSourceLocation
 ): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
 
@@ -1657,11 +1663,11 @@ function emitFunctionPointerParameter(name: string, functionType: CFunctionType 
 
 function emitFunctionPointerVariable(
   name: string,
-  init: any,
+  init: AnyNode,
   context: CFunctionContext,
   isConst: boolean,
   functionType: CFunctionType | null | undefined,
-  loc: any
+  loc: CSourceLocation
 ): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
 
@@ -1671,7 +1677,7 @@ function emitFunctionPointerVariable(
 function reportUnsupportedCFunctionType(
   functionType: CFunctionType | null | undefined,
   context: CEmitContext,
-  loc: any
+  loc: CSourceLocation
 ): void {
   if (functionType == null) {
     return
@@ -1685,7 +1691,7 @@ function reportUnsupportedCFunctionType(
     diagnostic(
       'CCJS_C_FUNCTION_VALUE',
       'typed C callbacks currently support only void callbacks with number/boolean/string/object parameters',
-      loc
+      loc ?? undefined
     )
   )
 }
@@ -2217,7 +2223,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   context.variables.set(statement.name, 'object')
   context.objectShapes.set(
     statement.name,
-    fields.map((field: any) => ({
+    fields.map((field: CObjectShapeField) => ({
       name: field.name,
       ownership: field.ownership ?? 'strong',
       valueType: field.valueType,
@@ -2936,7 +2942,7 @@ function errorConstructorExpressions(
   }
 }
 
-function cStringLiteralNode(value: string, loc: any = null): AnyNode {
+function cStringLiteralNode(value: string, loc: CSourceLocation = null): AnyNode {
   return {
     type: 'StringLiteral',
     value,
@@ -2944,7 +2950,7 @@ function cStringLiteralNode(value: string, loc: any = null): AnyNode {
   }
 }
 
-function cNullLiteralNode(loc: any = null): AnyNode {
+function cNullLiteralNode(loc: CSourceLocation = null): AnyNode {
   return {
     type: 'NullLiteral',
     loc
@@ -4022,7 +4028,7 @@ function emitRuntimeCallbackValueInto(
   if (expression?.type === 'ArrowFunctionExpression') {
     const wrapper = context.callbackArrowWrappers.get(expression)
 
-    if (wrapper == null) {
+    if (wrapper == null || wrapper.kind !== 'arrow') {
       context.diagnostics.push(
         diagnostic(
           'CCJS_C_FUNCTION_VALUE',
@@ -4081,7 +4087,11 @@ function emitRuntimeCallbackValueInto(
   ]
 }
 
-function emitRuntimeArrowCallbackValueInto(wrapper: any, out: string, context: CFunctionContext): string[] {
+function emitRuntimeArrowCallbackValueInto(
+  wrapper: CRuntimeArrowCallbackWrapper,
+  out: string,
+  context: CFunctionContext
+): string[] {
   const lines = [...emitPrepareOwnedValueWrite(out)]
 
   for (const capture of wrapper.captures) {
@@ -4106,7 +4116,7 @@ function emitRuntimeArrowCallbackValueInto(wrapper: any, out: string, context: C
     }
   }
 
-  if (!isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+  if (!hasRuntimeArrowCallbackContext(wrapper)) {
     lines.push(emitStatusCheck(`ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, 0, 0, &${out})`, context))
     return lines
   }
