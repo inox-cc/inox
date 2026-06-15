@@ -1,3 +1,18 @@
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import { diagnostic } from '../../diagnostics.ts'
+import { cStringLiteral } from '../identifiers.ts'
+
+type PreparedExpression = {
+  lines: string[]
+  expression: string
+}
+
+export type ObjectVariableDeclarationDependencies = {
+  emitCFieldFlags: (field: any) => string
+  emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  inferExpressionType: (expression: any, context: any) => string
+}
+
 export function isMemberAccessExpression(expression) {
   return expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression'
 }
@@ -166,4 +181,60 @@ export function registerObjectShape(context, name, shape) {
       setElementType: field.setElementType
     }))
   )
+}
+
+export function emitObjectVariableDeclaration(statement, context, dependencies: ObjectVariableDeclarationDependencies) {
+  const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
+  const fieldsName = `${shapeName}_fields`
+  const fields =
+    statement.shape?.fields ??
+    statement.init.properties.map((property) => ({
+      name: property.key,
+      readonly: false,
+      valueType: dependencies.inferExpressionType(property.value, context)
+    }))
+  const properties = new Map<string, any>(statement.init.properties.map((property) => [property.key, property]))
+  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+
+  for (const field of fields) {
+    lines.push(`  { ${cStringLiteral(field.name)}, ${dependencies.emitCFieldFlags(field)} },`)
+  }
+
+  lines.push('};')
+  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`  ${fields.length},`)
+  lines.push(`  ${fieldsName}`)
+  lines.push('};')
+  registerOwnedValue(context, statement.name)
+  lines.push(...emitPrepareOwnedValueWrite(statement.name))
+  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`, context))
+
+  context.variables.set(statement.name, 'object')
+  context.objectShapes.set(
+    statement.name,
+    fields.map((field) => ({
+      name: field.name,
+      ownership: field.ownership ?? 'strong',
+      valueType: field.valueType,
+      arrayElementType: field.arrayElementType,
+      mapKeyType: field.mapKeyType,
+      mapValueType: field.mapValueType,
+      setElementType: field.setElementType
+    }))
+  )
+
+  for (const [index, field] of fields.entries()) {
+    const property = properties.get(field.name)
+
+    if (property == null) {
+      context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
+      continue
+    }
+
+    const value = dependencies.emitCValueExpression(property.value, context)
+    lines.push(...value.lines)
+    lines.push(emitStatusCheck(`ccjs_object_init_known(${statement.name}, ${index}, ${value.expression})`, context))
+  }
+
+  return lines
 }
