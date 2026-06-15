@@ -195,7 +195,12 @@ import {
   resolveNetAddressStringMember,
   type NetLoweringDependencies
 } from './stdlib/net.ts'
-import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from './stdlib/fetch.ts'
+import {
+  cFetchRuntimeExpressionMethod,
+  emitFetchHeadersBooleanVariableDeclaration,
+  isAsyncFetchRuntimeCallExpression,
+  type FetchDeclarationDependencies
+} from './stdlib/fetch.ts'
 import {
   cFsRuntimeConstantExpression,
   cFsRuntimeExpressionMethod,
@@ -546,6 +551,10 @@ const jsonDeclarationDependencies: JsonDeclarationDependencies = {
 const timerDeclarationDependencies: TimerDeclarationDependencies = {
   emitPreparedTimerCallExpression,
   emitPreparedTimerHandleExpression
+}
+
+const fetchDeclarationDependencies: FetchDeclarationDependencies = {
+  emitPreparedFetchHeadersCallExpression
 }
 
 const collectionLoweringDependencies: CollectionLoweringDependencies = {
@@ -2370,13 +2379,14 @@ function emitScalarVariableDeclaration(statement, context) {
     return cryptoHashDeclaration
   }
 
-  const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const fetchHeadersBooleanDeclaration = emitFetchHeadersBooleanVariableDeclaration(
+    statement,
+    context,
+    fetchDeclarationDependencies
+  )
 
-  if (fetchHeadersCall != null && statement.valueType === 'boolean') {
-    context.variables.set(statement.name, 'boolean')
-    return fetchHeadersCall.lines
+  if (fetchHeadersBooleanDeclaration != null) {
+    return fetchHeadersBooleanDeclaration
   }
 
   const inferred = inferExpressionType(statement.init, context)
