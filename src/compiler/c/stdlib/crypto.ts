@@ -89,6 +89,31 @@ export function emitCryptoHashVariableDeclaration(
   return [...handle.lines, `ccjs_crypto_hash* ${statement.name} = ${handle.expression};`]
 }
 
+export function emitCryptoHandleVariableDeclaration(
+  statement: any,
+  context: any,
+  deps: CryptoLoweringDependencies,
+  inferred: string
+): string[] | null {
+  if (inferred === 'crypto-hash') {
+    const handle = emitPreparedCryptoHashHandleExpression(statement.init, context, deps)
+
+    context.variables.set(statement.name, 'crypto-hash')
+
+    return [...handle.lines, `ccjs_crypto_hash* ${statement.name} = ${handle.expression};`]
+  }
+
+  if (inferred === 'crypto-hmac') {
+    const handle = emitPreparedCryptoHmacHandleExpression(statement.init, context, deps)
+
+    context.variables.set(statement.name, 'crypto-hmac')
+
+    return [...handle.lines, `ccjs_crypto_hmac* ${statement.name} = ${handle.expression};`]
+  }
+
+  return null
+}
+
 export function emitPreparedCryptoHashCallExpression(
   expression: any,
   context: any,

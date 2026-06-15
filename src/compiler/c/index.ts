@@ -154,11 +154,10 @@ import { irProgramsUseConsoleRuntime, isConsoleLog } from './stdlib/console.ts'
 import {
   cryptoRuntimeMethodName,
   emitCryptoHashVariableDeclaration,
+  emitCryptoHandleVariableDeclaration,
   emitPreparedCryptoCallExpression,
   emitPreparedCryptoHashCallExpression,
-  emitPreparedCryptoHashHandleExpression,
   emitPreparedCryptoHmacCallExpression,
-  emitPreparedCryptoHmacHandleExpression,
   emitPreparedCryptoNumberCallExpression,
   type CryptoLoweringDependencies
 } from './stdlib/crypto.ts'
@@ -2445,20 +2444,15 @@ function emitScalarVariableDeclaration(statement, context) {
     return timerHandleDeclaration
   }
 
-  if (inferred === 'crypto-hash') {
-    const handle = emitPreparedCryptoHashHandleExpression(statement.init, context, cryptoLoweringDependencies)
+  const cryptoHandleDeclaration = emitCryptoHandleVariableDeclaration(
+    statement,
+    context,
+    cryptoLoweringDependencies,
+    inferred
+  )
 
-    context.variables.set(statement.name, 'crypto-hash')
-
-    return [...handle.lines, `ccjs_crypto_hash* ${statement.name} = ${handle.expression};`]
-  }
-
-  if (inferred === 'crypto-hmac') {
-    const handle = emitPreparedCryptoHmacHandleExpression(statement.init, context, cryptoLoweringDependencies)
-
-    context.variables.set(statement.name, 'crypto-hmac')
-
-    return [...handle.lines, `ccjs_crypto_hmac* ${statement.name} = ${handle.expression};`]
+  if (cryptoHandleDeclaration != null) {
+    return cryptoHandleDeclaration
   }
 
   if ((inferred === 'number' || inferred === 'boolean') && context.boxedMutableCaptureDeclarations.has(statement)) {
