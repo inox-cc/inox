@@ -407,7 +407,12 @@ import {
   resolveRuntimeStringReference,
   type StringLoweringDependencies
 } from './values/strings.ts'
-import { emitCConditionClause, emitCNegatedConditionClause } from './values/expressions.ts'
+import {
+  emitCConditionClause,
+  emitCNegatedConditionClause,
+  emitCValueExpression as emitCValueExpressionWithDependencies,
+  type CValueExpressionDependencies
+} from './values/expressions.ts'
 import {
   currentBreakTarget,
   currentContinueTarget,
@@ -816,6 +821,78 @@ const netLoweringDependencies: NetLoweringDependencies = {
   emitPreparedStringBytesOperand,
   emitStatementList,
   findObjectLiteralPropertyValue
+}
+
+const cValueExpressionDependencies: CValueExpressionDependencies = {
+  emitCArrayLiteralValueExpression,
+  emitCAwaitValueExpression,
+  emitCClassObjectValueExpression,
+  emitCErrorObjectValueExpression,
+  emitCNullishCoalescingValueExpression,
+  emitCNumberConversionValueExpression,
+  emitCObjectLiteralValueExpression,
+  emitCOptionalIndexValueExpression,
+  emitCOptionalMemberValueExpression,
+  emitCStringConcatValueExpression,
+  emitCStringConversionValueExpression,
+  emitCStringSliceValueExpression,
+  emitCStringSplitValueExpression,
+  emitCStringTrimValueExpression,
+  emitCTemplateLiteralValueExpression,
+  emitOptionalRuntimeCallbackCallValueExpression,
+  emitPreparedArrayPopCallExpression,
+  emitPreparedBinaryValueExpression: (expression, context) =>
+    emitPreparedBinaryValueExpression(expression, context, binaryLoweringDependencies),
+  emitPreparedCallExpression,
+  emitPreparedChildProcessCallExpression: (expression, context) =>
+    emitPreparedChildProcessCallExpression(expression, context, childProcessLoweringDependencies),
+  emitPreparedClassMethodCallExpression,
+  emitPreparedCollectionCallExpression,
+  emitPreparedCryptoCallExpression: (expression, context) =>
+    emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies),
+  emitPreparedDebugMemoryCallExpression,
+  emitPreparedFetchHeadersCallExpression: (expression, context) =>
+    emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies),
+  emitPreparedFsSyncValueExpression: (expression, context) =>
+    emitPreparedFsSyncValueExpression(expression, context, fsLoweringDependencies),
+  emitPreparedJsonCallExpression: (expression, context) =>
+    emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies),
+  emitPreparedKnownArrayIndexValueExpression,
+  emitPreparedKnownObjectIndexValueExpression,
+  emitPreparedKnownObjectMemberValueExpression,
+  emitPreparedMapIndexGetExpression,
+  emitPreparedNullableScalarRuntimeValueExpression,
+  emitPreparedOsConstantExpression,
+  emitPreparedOsStringCallExpression,
+  emitPreparedPathConstantExpression,
+  emitPreparedPathObjectCallExpression: (expression, context) =>
+    emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies),
+  emitPreparedPathStringCallExpression: (expression, context) =>
+    emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies),
+  emitPreparedProcessStringExpression: (expression, context) =>
+    emitPreparedProcessStringExpression(expression, context, processLoweringDependencies),
+  emitPreparedRuntimeArrayIndexValueExpression,
+  emitPreparedUrlObjectExpression: (expression, context) =>
+    emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies),
+  emitPreparedUrlSearchParamsCallExpression: (expression, context) =>
+    emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies),
+  emitPreparedUrlSearchParamsObjectExpression: (expression, context) =>
+    emitPreparedUrlSearchParamsObjectExpression(expression, context, urlLoweringDependencies),
+  emitPreparedUrlStringCallExpression: (expression, context) =>
+    emitPreparedUrlStringCallExpression(expression, context, urlLoweringDependencies),
+  inferExpressionType,
+  isBoxedRuntimeValueName,
+  isClassConstructorExpression,
+  isErrorConstructorExpression,
+  isIndexAccessExpression,
+  isMemberAccessExpression,
+  isNullableRuntimeExpression,
+  isNullableScalarRuntimeExpression,
+  isStringConcatExpression,
+  isStringConversionCall,
+  isStringSliceCall,
+  isStringSplitCall,
+  isStringTrimCall
 }
 
 export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
@@ -2987,366 +3064,7 @@ function emitArrayVariableDeclaration(statement, context) {
 }
 
 function emitCValueExpression(expression, context) {
-  if (isNullishCoalescingExpression(expression)) {
-    return emitCNullishCoalescingValueExpression(expression, context)
-  }
-
-  if (expression?.type === 'AwaitExpression') {
-    return emitCAwaitValueExpression(expression, context)
-  }
-
-  const childProcessCall = emitPreparedChildProcessCallExpression(
-    expression,
-    context,
-    childProcessLoweringDependencies
-  )
-
-  if (childProcessCall != null) {
-    return childProcessCall
-  }
-
-  const osConstant = emitPreparedOsConstantExpression(expression, context)
-
-  if (osConstant != null) {
-    return osConstant
-  }
-
-  const osStringCall = emitPreparedOsStringCallExpression(expression, context)
-
-  if (osStringCall != null) {
-    return osStringCall
-  }
-
-  const processString = emitPreparedProcessStringExpression(expression, context, processLoweringDependencies)
-
-  if (processString != null) {
-    return processString
-  }
-
-  const urlStringCall = emitPreparedUrlStringCallExpression(expression, context, urlLoweringDependencies)
-
-  if (urlStringCall != null) {
-    return urlStringCall
-  }
-
-  const urlObject = emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies)
-
-  if (urlObject != null) {
-    return urlObject
-  }
-
-  const urlSearchParamsObject = emitPreparedUrlSearchParamsObjectExpression(expression, context, urlLoweringDependencies)
-
-  if (urlSearchParamsObject != null) {
-    return urlSearchParamsObject
-  }
-
-  const pathConstant = emitPreparedPathConstantExpression(expression, context)
-
-  if (pathConstant != null) {
-    return pathConstant
-  }
-
-  const pathObject = emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies)
-
-  if (pathObject != null) {
-    return pathObject
-  }
-
-  const pathCall = emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies)
-
-  if (pathCall != null) {
-    return pathCall
-  }
-
-  const fsSyncValue = emitPreparedFsSyncValueExpression(expression, context, fsLoweringDependencies)
-
-  if (fsSyncValue != null) {
-    return fsSyncValue
-  }
-
-  const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies)
-
-  if (fetchHeadersCall != null) {
-    return fetchHeadersCall
-  }
-
-  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies)
-
-  if (urlSearchParamsCall != null) {
-    return urlSearchParamsCall
-  }
-
-  const jsonCall = emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies)
-
-  if (jsonCall != null) {
-    return jsonCall
-  }
-
-  const debugMemoryCall = emitPreparedDebugMemoryCallExpression(expression, context)
-
-  if (debugMemoryCall != null) {
-    return debugMemoryCall
-  }
-
-  const cryptoCall = emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies)
-
-  if (cryptoCall != null) {
-    return cryptoCall
-  }
-
-  const binaryValue = emitPreparedBinaryValueExpression(expression, context, binaryLoweringDependencies)
-
-  if (binaryValue != null) {
-    return binaryValue
-  }
-
-  const arrayPopCall = emitPreparedArrayPopCallExpression(expression, context)
-
-  if (arrayPopCall != null) {
-    return arrayPopCall
-  }
-
-  const mapIndexGet = emitPreparedMapIndexGetExpression(expression, context)
-
-  if (mapIndexGet != null) {
-    return mapIndexGet
-  }
-
-  if (isErrorConstructorExpression(expression)) {
-    return emitCErrorObjectValueExpression(expression, context)
-  }
-
-  if (isClassConstructorExpression(expression, context)) {
-    return emitCClassObjectValueExpression(expression, context)
-  }
-
-  if (expression?.type === 'OptionalCallExpression' && isNullableRuntimeExpression(expression, context)) {
-    return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
-  }
-
-  const numberConversion = emitCNumberConversionValueExpression(expression, context)
-
-  if (numberConversion != null) {
-    return numberConversion
-  }
-
-  if (isNullableScalarRuntimeExpression(expression, context)) {
-    return emitPreparedNullableScalarRuntimeValueExpression(expression, context)
-  }
-
-  if (isStringConversionCall(expression, context)) {
-    return emitCStringConversionValueExpression(expression, context)
-  }
-
-  if (isStringTrimCall(expression, context)) {
-    return emitCStringTrimValueExpression(expression, context)
-  }
-
-  if (isStringSliceCall(expression, context)) {
-    return emitCStringSliceValueExpression(expression, context)
-  }
-
-  if (isStringSplitCall(expression, context)) {
-    return emitCStringSplitValueExpression(expression, context)
-  }
-
-  if (isStringConcatExpression(expression, context)) {
-    return emitCStringConcatValueExpression(expression, context)
-  }
-
-  if (expression?.type === 'TemplateLiteral') {
-    return emitCTemplateLiteralValueExpression(expression, context)
-  }
-
-  if (expression?.type === 'ArrayLiteral') {
-    return emitCArrayLiteralValueExpression(expression, context)
-  }
-
-  if (expression?.type === 'ObjectLiteral') {
-    return emitCObjectLiteralValueExpression(expression, context)
-  }
-
-  if (expression?.type === 'StringLiteral') {
-    const temp = nextCName(context, 'ccjs_value')
-    registerOwnedValue(context, temp)
-
-    return {
-      lines: [
-        ...emitPrepareOwnedValueWrite(temp),
-        emitStatusCheck(
-          `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(expression.value)}, ${utf8ByteLength(expression.value)}, &${temp})`,
-          context
-        )
-      ],
-      expression: temp
-    }
-  }
-
-  if (expression?.type === 'NumberLiteral') {
-    return {
-      lines: [],
-      expression: `ccjs_number_value(${expression.value})`
-    }
-  }
-
-  if (expression?.type === 'BooleanLiteral') {
-    return {
-      lines: [],
-      expression: `ccjs_bool_value(${expression.value ? 'true' : 'false'})`
-    }
-  }
-
-  if (expression?.type === 'NullLiteral') {
-    return {
-      lines: [],
-      expression: 'ccjs_null_value()'
-    }
-  }
-
-  if (expression?.type === 'Reference') {
-    const name = expression.path.join('_')
-    const type = context.variables.get(name)
-
-    if (context.nullableVariables.has(name)) {
-      return {
-        lines: [],
-        expression: name
-      }
-    }
-
-    if (isBoxedRuntimeValueName(name, context)) {
-      const tag = type === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
-
-      return {
-        lines: [emitRuntimeTypeCheck(`(*${name}).tag != ${tag} || (*${name}).as.ref == 0`, context)],
-        expression: `(*${name})`
-      }
-    }
-
-    if (type === 'string' && context.runtimeStrings.has(name)) {
-      const temp = nextCName(context, 'ccjs_value')
-
-      return {
-        lines: [
-          `ccjs_value ${temp};`,
-          `${temp}.tag = CCJS_TAG_STRING;`,
-          `${temp}.as.ref = (ccjs_ref*)&${name}->header;`
-        ],
-        expression: temp
-      }
-    }
-
-    if (type === 'bytes' || type === 'object' || type === 'array') {
-      return {
-        lines: [],
-        expression: name
-      }
-    }
-
-    if (type === 'map' || type === 'set') {
-      return {
-        lines: [],
-        expression: name
-      }
-    }
-
-    if (type === 'number') {
-      return {
-        lines: [],
-        expression: `ccjs_number_value(${name})`
-      }
-    }
-
-    if (type === 'boolean') {
-      return {
-        lines: [],
-        expression: `ccjs_bool_value(${name})`
-      }
-    }
-  }
-
-  if (expression?.type === 'OptionalMemberExpression') {
-    return emitCOptionalMemberValueExpression(expression, context)
-  }
-
-  if (expression?.type === 'OptionalIndexExpression') {
-    return emitCOptionalIndexValueExpression(expression, context)
-  }
-
-  if (isMemberAccessExpression(expression)) {
-    const memberValue = emitPreparedKnownObjectMemberValueExpression(expression, context)
-
-    if (memberValue != null) {
-      return memberValue
-    }
-  }
-
-  if (isIndexAccessExpression(expression)) {
-    const arrayValue = emitPreparedKnownArrayIndexValueExpression(expression, context)
-
-    if (arrayValue != null) {
-      return arrayValue
-    }
-
-    const runtimeArrayValue = emitPreparedRuntimeArrayIndexValueExpression(expression, context)
-
-    if (runtimeArrayValue != null) {
-      return runtimeArrayValue
-    }
-
-    const objectValue = emitPreparedKnownObjectIndexValueExpression(expression, context)
-
-    if (objectValue != null) {
-      return objectValue
-    }
-  }
-
-  if (expression?.type === 'CallExpression' && isManagedRuntimeReturnType(inferExpressionType(expression, context))) {
-    const valueType = inferExpressionType(expression, context)
-    const collectionCall = emitPreparedCollectionCallExpression(expression, context)
-
-    if (collectionCall != null) {
-      return collectionCall
-    }
-
-    const classMethodCall = emitPreparedClassMethodCallExpression(expression, context)
-
-    if (classMethodCall != null) {
-      return classMethodCall
-    }
-
-    const temp = nextCName(context, 'ccjs_value')
-    const tag = cRuntimeValueTag(valueType)
-    registerOwnedValue(context, temp)
-    const call = emitPreparedCallExpression(expression, context)
-
-    return {
-      lines: [
-        ...call.lines,
-        ...emitPrepareOwnedValueWrite(temp),
-        `${temp} = ${call.expression};`,
-        emitRuntimeValueCheck(temp, tag, context)
-      ],
-      expression: temp
-    }
-  }
-
-  const unsupportedType = inferExpressionType(expression, context)
-  context.diagnostics.push(
-    diagnostic(
-      cUnsupportedExpressionCode(unsupportedType),
-      unsupportedType === 'function'
-        ? 'stored callback values need delayed closure lifetime support and are not supported by the current C backend slice'
-        : 'this object field expression is not supported by the current C backend slice',
-      expression?.loc
-    )
-  )
-
-  return {
-    lines: [],
-    expression: 'ccjs_undefined_value()'
-  }
+  return emitCValueExpressionWithDependencies(expression, context, cValueExpressionDependencies)
 }
 
 function emitNullableScalarValueExpression(expression, context) {
