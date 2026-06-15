@@ -287,6 +287,7 @@ import type {
   CModuleEmitOptions,
   CModuleOutputFile,
   CModulePlan,
+  CPreparedCallArgs as PreparedCallArgs,
   CPreparedExpression as PreparedExpression
 } from './types.ts'
 import {
@@ -3277,19 +3278,19 @@ function emitErrorLogObjectExpression(expression: AnyNode, context: CFunctionCon
   return emitCValueExpression(expression, context)
 }
 
-function emitPreparedNumberExpression(expression, context) {
+function emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   return emitPreparedNumberExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
-function emitCExpression(expression, context) {
+function emitCExpression(expression: AnyNode, context: CFunctionContext): string {
   return emitCExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
-function emitPreparedUpdateExpression(expression, context) {
+function emitPreparedUpdateExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   return emitPreparedUpdateExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
-function emitReference(expression, context) {
+function emitReference(expression: AnyNode, context: CFunctionContext): string {
   if (expression?.type === 'Reference') {
     const name = expression.path.join('_')
 
@@ -3310,19 +3311,19 @@ function emitReference(expression, context) {
   return '_'
 }
 
-function emitCallExpression(expression, context) {
+function emitCallExpression(expression: AnyNode, context: CFunctionContext): string {
   return emitCallExpressionWithDependencies(expression, context, cCallExpressionDependencies)
 }
 
-function emitPreparedCallExpression(expression, context) {
+function emitPreparedCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   return emitPreparedCallExpressionWithDependencies(expression, context, cCallExpressionDependencies)
 }
 
-function emitPreparedCallArgs(expression, params, context) {
+function emitPreparedCallArgs(expression: AnyNode, params: any[], context: CFunctionContext): PreparedCallArgs {
   return emitPreparedCallArgsWithDependencies(expression, params, context, cCallExpressionDependencies)
 }
 
-function emitFetchAbortControllerVariableDeclaration(statement, context) {
+function emitFetchAbortControllerVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
   if (!isFetchAbortControllerConstructorExpression(statement.init)) {
     return null
   }
@@ -3337,7 +3338,7 @@ function emitFetchAbortControllerVariableDeclaration(statement, context) {
   ]
 }
 
-function emitFetchAbortControllerAbortStatement(expression, context) {
+function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CFunctionContext): string[] | null {
   if (cFetchRuntimeExpressionMethod(expression) !== 'abort') {
     return null
   }
