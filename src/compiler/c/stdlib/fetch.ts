@@ -42,6 +42,34 @@ type FetchCallOptions = {
   owned?: boolean
 }
 
+const fetchPromiseResultTypes: Record<string, string> = {
+  fetch: 'object',
+  text: 'string'
+}
+
+const fetchResponseCallDescriptors: Record<string, { callName: string; valueType: string }> = {
+  text: { callName: 'ccjs_fetch_response_text', valueType: 'string' }
+}
+
+type FetchHeadersCallDescriptor =
+  | { kind: 'boolean'; callName: string; tempPrefix: string; valueType: 'boolean' }
+  | { kind: 'nullable-string'; callName: string; tempPrefix: string; valueType: 'string' }
+
+const fetchHeadersCallDescriptors: Record<string, FetchHeadersCallDescriptor> = {
+  headersGet: {
+    kind: 'nullable-string',
+    callName: 'ccjs_fetch_headers_get',
+    tempPrefix: 'ccjs_fetch_header_value',
+    valueType: 'string'
+  },
+  headersHas: {
+    kind: 'boolean',
+    callName: 'ccjs_fetch_headers_has',
+    tempPrefix: 'ccjs_fetch_header_has',
+    valueType: 'boolean'
+  }
+}
+
 export function cFetchRuntimeExpressionMethod(expression: any): string | null {
   return expression?.fetchRuntimeMethod ?? null
 }
@@ -85,7 +113,7 @@ export function emitPreparedFetchCallExpression(
   registerEventLoop(context)
 
   const out = options.out ?? nextCName(context, 'ccjs_promise')
-  const valueType = expression.promiseValueType ?? (method === 'text' ? 'string' : 'object')
+  const valueType = expression.promiseValueType ?? fetchPromiseResultTypes[method] ?? 'object'
 
   if (options.owned !== false) {
     registerOwnedPromise(context, out, valueType, 'error')
@@ -107,6 +135,12 @@ export function emitPreparedFetchCallExpression(
     }
   }
 
+  const descriptor = fetchResponseCallDescriptors[method]
+
+  if (descriptor == null) {
+    return null
+  }
+
   const response = dependencies.emitCValueExpression(expression.callee.object, context)
 
   return {
@@ -117,12 +151,12 @@ export function emitPreparedFetchCallExpression(
         context
       ),
       emitStatusCheck(
-        `ccjs_fetch_response_text(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
+        `${descriptor.callName}(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
         context
       )
     ],
     expression: out,
-    valueType,
+    valueType: descriptor.valueType,
     rejectionValueType: 'error'
   }
 }
@@ -134,8 +168,9 @@ export function emitPreparedFetchHeadersCallExpression(
   options: FetchCallOptions = {}
 ): PreparedExpression | null {
   const method = cFetchRuntimeExpressionMethod(expression)
+  const descriptor = method == null ? null : fetchHeadersCallDescriptors[method]
 
-  if (method !== 'headersGet' && method !== 'headersHas') {
+  if (descriptor == null) {
     return null
   }
 
@@ -147,21 +182,21 @@ export function emitPreparedFetchHeadersCallExpression(
     ...name.lines
   ]
 
-  if (method === 'headersHas') {
-    const out = options.out ?? nextCName(context, 'ccjs_fetch_header_has')
+  if (descriptor.kind === 'boolean') {
+    const out = options.out ?? nextCName(context, descriptor.tempPrefix)
     lines.push(`int ${out} = 0;`)
     lines.push(
-      emitStatusCheck(`ccjs_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
+      emitStatusCheck(`${descriptor.callName}(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
     )
 
     return {
       lines,
       expression: out,
-      valueType: 'boolean'
+      valueType: descriptor.valueType
     }
   }
 
-  const out = options.out ?? nextCName(context, 'ccjs_fetch_header_value')
+  const out = options.out ?? nextCName(context, descriptor.tempPrefix)
 
   if (options.owned !== false) {
     registerOwnedValue(context, out)
@@ -170,7 +205,7 @@ export function emitPreparedFetchHeadersCallExpression(
   lines.push(...emitPrepareOwnedValueWrite(out))
   lines.push(
     emitStatusCheck(
-      `ccjs_fetch_headers_get(&ccjs_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
+      `${descriptor.callName}(&ccjs_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
       context
     )
   )
@@ -178,7 +213,7 @@ export function emitPreparedFetchHeadersCallExpression(
   return {
     lines,
     expression: out,
-    valueType: 'string',
+    valueType: descriptor.valueType,
     nullable: true
   }
 }
