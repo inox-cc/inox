@@ -5,15 +5,20 @@ import { checkProgram } from './checker.ts'
 import { collectIrModuleRecords, collectIrRuntimeRequirements, lowerHirToIr } from './ir.ts'
 import { tokenize } from './lexer.ts'
 import { lowerProgram } from './lower.ts'
+import { createMemoryCompilerHost } from './memory-host.ts'
 import { buildModuleGraph } from './module-graph.ts'
 import { createNodeCompilerHost } from './node-host.ts'
 import { parse } from './parser.ts'
 import type { CompileOptions, CompileTarget, FileCompileResult, IrProgram, SourceCompileResult } from './types.ts'
 import type { CModuleOutputFile } from './codegen-c.ts'
+import type { MemoryCompilerHostOptions, MemoryCompilerSourceFile } from './memory-host.ts'
 
-type CModuleCompileOptions = CompileOptions & {
+export type CModuleCompileOptions = CompileOptions & {
   sourceRoot?: string
 }
+
+export type MemoryCompileOptions = CompileOptions & MemoryCompilerHostOptions
+export type MemoryCModuleCompileOptions = CModuleCompileOptions & MemoryCompilerHostOptions
 
 export type CModuleCompileResult = {
   target: 'c'
@@ -119,6 +124,26 @@ export async function compileFileToCModules(
   }
 }
 
+export async function compileMemoryPackageToIrModules(
+  entry: string,
+  files: MemoryCompilerSourceFile[],
+  options: MemoryCompileOptions = {}
+): Promise<GraphIrCompileResult> {
+  const host = createMemoryCompilerHost(files, { root: options.root })
+
+  return compileGraphToIrModules(entry, memoryCompileOptions(options, host))
+}
+
+export async function compileMemoryPackageToCModules(
+  entry: string,
+  files: MemoryCompilerSourceFile[],
+  options: MemoryCModuleCompileOptions = {}
+): Promise<CModuleCompileResult> {
+  const host = createMemoryCompilerHost(files, { root: options.root })
+
+  return compileFileToCModules(entry, memoryCModuleCompileOptions(options, host))
+}
+
 export async function compileGraphToIrModules(
   entry: string,
   options: CompileOptions = {}
@@ -151,4 +176,38 @@ function resolveCompileTarget(options: CompileOptions): CompileTarget {
   }
 
   throw new Error(`Unsupported target ${target}`)
+}
+
+function memoryCompileOptions(options: MemoryCompileOptions, host: CompileOptions['host']): CompileOptions {
+  return {
+    target: options.target,
+    callMain: options.callMain,
+    budgets: options.budgets,
+    capabilities: options.capabilities,
+    host,
+    loopBackend: options.loopBackend,
+    profile: options.profile,
+    random: options.random,
+    tlsBackend: options.tlsBackend
+  }
+}
+
+function memoryCModuleCompileOptions(
+  options: MemoryCModuleCompileOptions,
+  host: CompileOptions['host']
+): CModuleCompileOptions {
+  const base = memoryCompileOptions(options, host)
+
+  return {
+    target: base.target,
+    callMain: base.callMain,
+    budgets: base.budgets,
+    capabilities: base.capabilities,
+    host: base.host,
+    loopBackend: base.loopBackend,
+    profile: base.profile,
+    random: base.random,
+    tlsBackend: base.tlsBackend,
+    sourceRoot: options.sourceRoot
+  }
 }

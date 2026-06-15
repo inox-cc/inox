@@ -2,23 +2,27 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, posix } from 'node:path'
+import { join } from 'node:path'
 
 import {
   collectExports as collectExportsFromFacade,
+  createMemoryCompilerHost,
   createNodeCompilerHost
 } from '../src/compiler/module-graph.ts'
 import { collectExports, moduleId } from '../src/compiler/modules/exports.ts'
 import { buildModuleGraph } from '../src/compiler/modules/graph.ts'
 import { resolveExistingSource, resolveImport } from '../src/compiler/modules/resolve.ts'
-import { compileFileToCModules } from '../src/compiler/index.ts'
+import {
+  compileFileToCModules,
+  compileMemoryPackageToCModules,
+  compileMemoryPackageToIrModules
+} from '../src/compiler/index.ts'
 import {
   createImportAliasDeclaration,
   insertImportSyntheticDeclarations
 } from '../src/compiler/modules/synthetic-imports.ts'
 import { isRuntimeBuiltinImportSource } from '../src/compiler/runtime-builtins.ts'
 import type { AnyNode, ProgramNode } from '../src/compiler/types.ts'
-import type { CompilerHost } from '../src/compiler/module-graph.ts'
 
 const nodeCompilerHost = createNodeCompilerHost()
 
@@ -120,26 +124,24 @@ export function main(): void {
 })
 
 test('builds module graphs through an in-memory compiler host', async () => {
-  const host = createMemoryCompilerHost(
-    new Map([
-      [
-        '/project/dep.ts',
-        `export function answer(): number {
+  const host = createMemoryCompilerHost([
+    {
+      path: '/project/dep.ts',
+      source: `export function answer(): number {
   return 42
 }
 `
-      ],
-      [
-        '/project/index.ts',
-        `import { answer } from './dep'
+    },
+    {
+      path: '/project/index.ts',
+      source: `import { answer } from './dep'
 
 export function main(): void {
   console.log(answer())
 }
 `
-      ]
-    ])
-  )
+    }
+  ])
 
   const graph = await buildModuleGraph('/project/index.ts', {
     target: 'c',
@@ -155,26 +157,24 @@ export function main(): void {
 })
 
 test('emits C module files through an in-memory compiler host', async () => {
-  const host = createMemoryCompilerHost(
-    new Map([
-      [
-        '/project/lib.ts',
-        `export function greet(): void {
+  const host = createMemoryCompilerHost([
+    {
+      path: '/project/lib.ts',
+      source: `export function greet(): void {
   console.log('hello')
 }
 `
-      ],
-      [
-        '/project/index.ts',
-        `import { greet } from './lib'
+    },
+    {
+      path: '/project/index.ts',
+      source: `import { greet } from './lib'
 
 export function main(): void {
   greet()
 }
 `
-      ]
-    ])
-  )
+    }
+  ])
 
   const result = await compileFileToCModules('/project/index.ts', {
     host,
@@ -189,44 +189,41 @@ export function main(): void {
   assert.match(result.files.find((file) => file.path === 'index.c')?.code ?? '', /#include "lib\.h"/)
 })
 
-function createMemoryCompilerHost(files: Map<string, string>): CompilerHost {
-  return {
-    pathSeparator: '/',
-    posixPath: {
-      basename: posix.basename,
-      dirname: posix.dirname,
-      extname: posix.extname,
-      relative: posix.relative
-    },
-    dirname: posix.dirname,
-    extname: posix.extname,
-    isAbsolutePath: posix.isAbsolute,
-    joinPath: posix.join,
-    normalizePath: posix.normalize,
-    pathToFileUrl(path: string): string {
-      return `file://${path}`
-    },
-    async readFile(path: string): Promise<string> {
-      const source = files.get(posix.normalize(path))
-
-      if (source == null) {
-        throw new Error(`missing memory file ${path}`)
-      }
-
-      return source
-    },
-    relativePath: posix.relative,
-    resolvePath(path: string): string {
-      return posix.normalize(posix.isAbsolute(path) ? path : posix.resolve('/project', path))
-    },
-    shortHash(value: string): string {
-      let hash = 0
-
-      for (let index = 0; index < value.length; index += 1) {
-        hash = (hash * 31 + value.charCodeAt(index)) >>> 0
-      }
-
-      return hash.toString(16).padStart(8, '0').slice(0, 8)
-    }
-  }
+test('compiles memory packages through self-hosting entrypoints', async () => {
+  const files = [
+    {
+      path: '/project/math.ts',
+      source: `export function value(): number {
+  return 7
 }
+`
+    },
+    {
+      path: '/project/index.ts',
+      source: `import { value } from './math'
+
+export function main(): void {
+  console.log(value())
+}
+`
+    }
+  ]
+
+  const ir = await compileMemoryPackageToIrModules('/project/index.ts', files, {
+    target: 'c'
+  })
+  const modules = await compileMemoryPackageToCModules('/project/index.ts', files, {
+    sourceRoot: '/project',
+    target: 'c'
+  })
+
+  assert.deepEqual(
+    ir.graph.modules.map((module) => module.path),
+    ['/project/math.ts', '/project/index.ts']
+  )
+  assert.deepEqual(
+    modules.files.map((file) => file.path),
+    ['math.c', 'math.h', 'index.c', 'index.h']
+  )
+  assert.match(modules.files.find((file) => file.path === 'index.c')?.code ?? '', /#include "math\.h"/)
+})
