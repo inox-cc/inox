@@ -126,7 +126,7 @@ export type CRuntimeArrowCapture = {
   loc?: AnyNode['loc']
   mutable?: boolean
   name: string
-  promiseSettlementKind?: string | null
+  promiseSettlementKind?: 'reject' | 'resolve' | null
   runtimeManaged?: boolean
   shape?: any
   valueType: string
@@ -141,18 +141,37 @@ export type CClassInfo = {
   methods: Map<string, AnyNode>
 }
 
-export type CCallbackWrapper = {
-  kind: 'arrow' | 'named' | 'plain-arrow'
+export type CNamedCallbackWrapper = {
+  kind: 'named'
   key: string
   name: string
-  captures?: CRuntimeArrowCapture[]
-  contextTypeName?: string
-  expression?: AnyNode
-  finalizerName?: string
   functionType: CFunctionType
-  needsEventLoop?: boolean
-  target?: string
+  target: string
 }
+
+export type CRuntimeArrowCallbackWrapper = {
+  kind: 'arrow'
+  key: string
+  name: string
+  captures: CRuntimeArrowCapture[]
+  contextTypeName: string
+  expression: AnyNode
+  finalizerName: string
+  functionType: CFunctionType
+  needsEventLoop: boolean
+}
+
+export type CPlainArrowCallbackWrapper = {
+  kind: 'plain-arrow'
+  key: string
+  name: string
+  expression: AnyNode
+  functionType: CFunctionType
+}
+
+export type CRuntimeCallbackWrapper = CNamedCallbackWrapper | CRuntimeArrowCallbackWrapper
+
+export type CCallbackWrapper = CRuntimeCallbackWrapper | CPlainArrowCallbackWrapper
 
 export type CPromiseChainWrapper = {
   kind: 'promise-chain-arrow'
@@ -166,6 +185,8 @@ export type CPromiseChainWrapper = {
   returnShape: any
   returnType: string
 }
+
+export type CCallbackContextWrapper = CRuntimeArrowCallbackWrapper | CPromiseChainWrapper
 
 export type CAsyncTaskWrapper = {
   key: string

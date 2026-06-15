@@ -18,7 +18,17 @@ import {
   type CEmitContext,
   type CFunctionContext
 } from '../context.ts'
-import type { CCallbackWrapper, CFunctionParam, CFunctionType, CRuntimeArrowCapture } from '../types.ts'
+import type {
+  CCallbackContextWrapper,
+  CCallbackWrapper,
+  CFunctionParam,
+  CFunctionType,
+  CPlainArrowCallbackWrapper,
+  CPromiseChainWrapper,
+  CRuntimeArrowCallbackWrapper,
+  CRuntimeArrowCapture,
+  CRuntimeCallbackWrapper
+} from '../types.ts'
 import type { IrProgram } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
@@ -992,23 +1002,23 @@ export function runtimeCallbackWrapperFor(
   target: string,
   functionType: CFunctionType,
   context: CEmitContext
-): any | null {
+): CCallbackWrapper | null {
   return context.callbackWrappers.get(runtimeCallbackWrapperKey(target, functionType)) ?? null
 }
 
-export function emitRuntimeCallbackWrapperHead(wrapper: any): string {
+export function emitRuntimeCallbackWrapperHead(wrapper: CRuntimeCallbackWrapper): string {
   return `static ccjs_status ${wrapper.name}(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out)`
 }
 
-export function isRuntimeCallbackWrapper(wrapper: any): boolean {
+export function isRuntimeCallbackWrapper(wrapper: CCallbackWrapper): wrapper is CRuntimeCallbackWrapper {
   return wrapper.kind !== 'plain-arrow'
 }
 
-export function emitPlainArrowCallbackWrapperHead(wrapper: any): string {
+export function emitPlainArrowCallbackWrapperHead(wrapper: CPlainArrowCallbackWrapper): string {
   return `static ${emitFunctionPointerReturnType(wrapper.functionType)} ${wrapper.name}(${emitPlainArrowCallbackParams(wrapper)})`
 }
 
-function emitPlainArrowCallbackParams(wrapper: any): string {
+function emitPlainArrowCallbackParams(wrapper: CPlainArrowCallbackWrapper): string {
   const params = wrapper.functionType?.params ?? []
 
   if (params.length === 0) {
@@ -1021,7 +1031,7 @@ function emitPlainArrowCallbackParams(wrapper: any): string {
 }
 
 export function emitPlainArrowCallbackWrapperDeclaration(
-  wrapper: any,
+  wrapper: CPlainArrowCallbackWrapper,
   baseContext: CEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
@@ -1060,12 +1070,12 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   return lines
 }
 
-function plainArrowCallbackParamName(wrapper: any, index: number): string {
+function plainArrowCallbackParamName(wrapper: CPlainArrowCallbackWrapper, index: number): string {
   return wrapper.expression.params[index]?.name ?? `ccjs_arg_${index}`
 }
 
 export function emitRuntimeCallbackWrapperDeclaration(
-  wrapper: any,
+  wrapper: CRuntimeCallbackWrapper,
   context: CEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
@@ -1106,19 +1116,23 @@ export function emitRuntimeCallbackWrapperDeclaration(
   return lines
 }
 
-export function isRuntimeArrowCallbackWrapperWithContext(wrapper: any): boolean {
-  return wrapper.kind === 'arrow' && hasRuntimeArrowCallbackContext(wrapper)
+export function isRuntimeArrowCallbackWrapperWithContext(
+  wrapper: CCallbackWrapper | null | undefined
+): wrapper is CRuntimeArrowCallbackWrapper {
+  return wrapper?.kind === 'arrow' && hasRuntimeArrowCallbackContext(wrapper)
 }
 
-export function isPromiseChainCallbackWrapperWithContext(wrapper: any): boolean {
-  return wrapper.kind === 'promise-chain-arrow' && hasRuntimeArrowCallbackContext(wrapper)
+export function isPromiseChainCallbackWrapperWithContext(
+  wrapper: CPromiseChainWrapper | null | undefined
+): wrapper is CPromiseChainWrapper {
+  return wrapper?.kind === 'promise-chain-arrow' && hasRuntimeArrowCallbackContext(wrapper)
 }
 
-export function hasRuntimeArrowCallbackContext(wrapper: any): boolean {
+export function hasRuntimeArrowCallbackContext(wrapper: CCallbackContextWrapper): boolean {
   return wrapper.captures.length > 0 || wrapper.needsEventLoop === true
 }
 
-export function emitRuntimeArrowCallbackContextType(wrapper: any): string[] {
+export function emitRuntimeArrowCallbackContextType(wrapper: CCallbackContextWrapper): string[] {
   return [
     `typedef struct ${wrapper.contextTypeName} {`,
     ...(wrapper.needsEventLoop === true ? ['  ccjs_loop* ccjs_loop;'] : []),
@@ -1129,7 +1143,7 @@ export function emitRuntimeArrowCallbackContextType(wrapper: any): string[] {
   ]
 }
 
-export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: any): string[] {
+export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: CCallbackContextWrapper): string[] {
   const lines = [
     `static void ${wrapper.finalizerName}(void* context) {`,
     '  if (context == 0) return;',
@@ -1155,7 +1169,7 @@ export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: any
 }
 
 function emitRuntimeArrowCallbackWrapperDeclaration(
-  wrapper: any,
+  wrapper: CRuntimeArrowCallbackWrapper,
   baseContext: CEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
@@ -1210,7 +1224,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
 }
 
 function emitRuntimeArrowCallbackStatementLines(
-  wrapper: any,
+  wrapper: CRuntimeArrowCallbackWrapper,
   context: CFunctionContext,
   deps: CallbackLoweringDependencies
 ): string[] {
@@ -1249,7 +1263,7 @@ function emitRuntimeArrowCallbackStatementLines(
 }
 
 export function emitRuntimeArrowCallbackContextLocals(
-  wrapper: any,
+  wrapper: CCallbackContextWrapper,
   context: CFunctionContext,
   deps: CallbackLoweringDependencies
 ): string[] {
@@ -1318,7 +1332,7 @@ export function emitRuntimeArrowCallbackContextLocals(
 }
 
 function emitRuntimeArrowCallbackParamPrelude(
-  wrapper: any,
+  wrapper: CRuntimeArrowCallbackWrapper,
   context: CFunctionContext,
   deps: CallbackLoweringDependencies
 ): string[] {
