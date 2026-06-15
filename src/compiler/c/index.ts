@@ -2911,7 +2911,13 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
   }
 }
 
-function emitConsoleLogStatement(method, args, context) {
+type ConsoleLogValue = {
+  lines: string[]
+  format: string
+  values: string[]
+}
+
+function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[] {
   const stream = method === 'warn' || method === 'error' ? 'CCJS_CONSOLE_STDERR' : 'CCJS_CONSOLE_STDOUT'
   const isStdout = stream === 'CCJS_CONSOLE_STDOUT'
 
@@ -2952,7 +2958,7 @@ function emitConsoleLogStatement(method, args, context) {
   return lines
 }
 
-function emitConsoleLogValue(expression, context) {
+function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   const type = inferExpressionType(expression, context)
 
   if (type === 'string') {
@@ -2982,7 +2988,7 @@ function emitConsoleLogValue(expression, context) {
   }
 }
 
-function emitStringLogValue(expression, context) {
+function emitStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   if (expression?.type === 'Reference') {
     const name = expression.path.join('_')
 
@@ -3117,7 +3123,7 @@ function emitStringLogValue(expression, context) {
   }
 }
 
-function emitNumberLogValue(expression, type, context) {
+function emitNumberLogValue(expression: AnyNode, type: string, context: CFunctionContext): ConsoleLogValue {
   if (isMemberAccessExpression(expression)) {
     const stringLength = emitPreparedStringLengthExpression(expression, context)
 
@@ -3199,7 +3205,10 @@ function emitNumberLogValue(expression, type, context) {
   }
 }
 
-function emitRuntimeStringLogValue(emitGetCall, context) {
+function emitRuntimeStringLogValue(
+  emitGetCall: (temp: string) => string,
+  context: CFunctionContext
+): ConsoleLogValue {
   const value = nextCName(context, 'ccjs_log_value')
   const string = nextCName(context, 'ccjs_log_string')
   registerOwnedValue(context, value)
@@ -3216,7 +3225,11 @@ function emitRuntimeStringLogValue(emitGetCall, context) {
   }
 }
 
-function emitRuntimeNumberLogValue(valueType, emitGetCall, context) {
+function emitRuntimeNumberLogValue(
+  valueType: string,
+  emitGetCall: (temp: string) => string,
+  context: CFunctionContext
+): ConsoleLogValue {
   const value = nextCName(context, 'ccjs_log_value')
   registerOwnedValue(context, value)
 
@@ -3227,7 +3240,7 @@ function emitRuntimeNumberLogValue(valueType, emitGetCall, context) {
   }
 }
 
-function emitRuntimeErrorLogValue(expression, context) {
+function emitRuntimeErrorLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   const object = emitErrorLogObjectExpression(expression, context)
   const nameValue = nextCName(context, 'ccjs_log_value')
   const messageValue = nextCName(context, 'ccjs_log_value')
@@ -3253,7 +3266,7 @@ function emitRuntimeErrorLogValue(expression, context) {
   }
 }
 
-function emitErrorLogObjectExpression(expression, context) {
+function emitErrorLogObjectExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return {
       lines: [],
