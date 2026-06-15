@@ -198,8 +198,11 @@ import {
 import {
   cFetchRuntimeExpressionMethod,
   emitFetchHeadersBooleanVariableDeclaration,
+  emitPreparedFetchCallExpression,
+  emitPreparedFetchHeadersCallExpression,
+  emitPreparedFetchInitOperand,
   isAsyncFetchRuntimeCallExpression,
-  type FetchDeclarationDependencies
+  type FetchLoweringDependencies
 } from './stdlib/fetch.ts'
 import {
   cFsRuntimeConstantExpression,
@@ -471,8 +474,10 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedCryptoNumberCallExpression: (expression, context) =>
     emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedDebugMemoryCallExpression,
-  emitPreparedFetchCallExpression,
-  emitPreparedFetchHeadersCallExpression,
+  emitPreparedFetchCallExpression: (expression, context, options) =>
+    emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
+  emitPreparedFetchHeadersCallExpression: (expression, context, options) =>
+    emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies, options),
   emitPreparedFsCallExpression,
   emitPreparedFsSyncStatementExpression,
   emitPreparedMapIndexAssignment,
@@ -552,8 +557,11 @@ const timerLoweringDependencies: TimerLoweringDependencies = {
   emitRuntimeCallbackValue
 }
 
-const fetchDeclarationDependencies: FetchDeclarationDependencies = {
-  emitPreparedFetchHeadersCallExpression
+const fetchLoweringDependencies: FetchLoweringDependencies = {
+  emitCValueExpression,
+  emitPreparedStringBytesOperand,
+  findObjectLiteralPropertyValue,
+  inferExpressionType
 }
 
 const collectionLoweringDependencies: CollectionLoweringDependencies = {
@@ -639,7 +647,8 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitFsBooleanFlag,
   emitPreparedCallArgs,
   emitPreparedCallExpression,
-  emitPreparedFetchInitOperand,
+  emitPreparedFetchInitOperand: (expression, context) =>
+    emitPreparedFetchInitOperand(expression, context, fetchLoweringDependencies),
   emitPreparedFsAccessModeExpression,
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
@@ -2381,7 +2390,7 @@ function emitScalarVariableDeclaration(statement, context) {
   const fetchHeadersBooleanDeclaration = emitFetchHeadersBooleanVariableDeclaration(
     statement,
     context,
-    fetchDeclarationDependencies
+    fetchLoweringDependencies
   )
 
   if (fetchHeadersBooleanDeclaration != null) {
@@ -2917,7 +2926,7 @@ function emitCValueExpression(expression, context) {
     return fsSyncValue
   }
 
-  const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(expression, context)
+  const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies)
 
   if (fetchHeadersCall != null) {
     return fetchHeadersCall
@@ -5835,7 +5844,7 @@ function emitPreparedCallExpression(expression, context) {
     return fsCall
   }
 
-  const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(expression, context)
+  const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies)
 
   if (fetchHeadersCall != null) {
     return fetchHeadersCall
@@ -7057,109 +7066,6 @@ function emitPreparedFsCallExpression(expression, context, options: { out?: stri
   }
 }
 
-function emitPreparedFetchCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cFetchRuntimeExpressionMethod(expression)
-
-  if (method == null || expression?.valueType !== 'promise') {
-    return null
-  }
-
-  registerEventLoop(context)
-
-  const out = options.out ?? nextCName(context, 'ccjs_promise')
-  const valueType = expression.promiseValueType ?? (method === 'text' ? 'string' : 'object')
-
-  if (options.owned !== false) {
-    registerOwnedPromise(context, out, valueType, 'error')
-  }
-
-  if (method === 'fetch') {
-    const url = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_url')
-    const init = emitPreparedFetchInitOperand(expression, context)
-    const call =
-      init.expression === '0'
-        ? `ccjs_fetch(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, &${out})`
-        : `ccjs_fetch_with_init(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, ${init.expression}, &${out})`
-
-    return {
-      lines: [...url.lines, ...init.lines, emitStatusCheck(call, context)],
-      expression: out,
-      valueType,
-      rejectionValueType: 'error'
-    }
-  }
-
-  const response = emitCValueExpression(expression.callee.object, context)
-
-  return {
-    lines: [
-      ...response.lines,
-      emitRuntimeTypeCheck(
-        `${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`,
-        context
-      ),
-      emitStatusCheck(
-        `ccjs_fetch_response_text(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
-        context
-      )
-    ],
-    expression: out,
-    valueType,
-    rejectionValueType: 'error'
-  }
-}
-
-function emitPreparedFetchHeadersCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cFetchRuntimeExpressionMethod(expression)
-
-  if (method !== 'headersGet' && method !== 'headersHas') {
-    return null
-  }
-
-  const headers = emitCValueExpression(expression.callee.object, context)
-  const name = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_header_name')
-  const lines = [
-    ...headers.lines,
-    emitRuntimeTypeCheck(`${headers.expression}.tag != CCJS_TAG_OBJECT || ${headers.expression}.as.ref == 0`, context),
-    ...name.lines
-  ]
-
-  if (method === 'headersHas') {
-    const out = options.out ?? nextCName(context, 'ccjs_fetch_header_has')
-    lines.push(`int ${out} = 0;`)
-    lines.push(
-      emitStatusCheck(`ccjs_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
-    )
-
-    return {
-      lines,
-      expression: out,
-      valueType: 'boolean'
-    }
-  }
-
-  const out = options.out ?? nextCName(context, 'ccjs_fetch_header_value')
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  lines.push(...emitPrepareOwnedValueWrite(out))
-  lines.push(
-    emitStatusCheck(
-      `ccjs_fetch_headers_get(&ccjs_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
-      context
-    )
-  )
-
-  return {
-    lines,
-    expression: out,
-    valueType: 'string',
-    nullable: true
-  }
-}
-
 function emitFetchAbortControllerVariableDeclaration(statement, context) {
   if (!isFetchAbortControllerConstructorExpression(statement.init)) {
     return null
@@ -7190,130 +7096,6 @@ function emitFetchAbortControllerAbortStatement(expression, context) {
     ),
     emitStatusCheck(`ccjs_fetch_abort_controller_abort(${controller.expression})`, context)
   ]
-}
-
-function emitPreparedFetchInitOperand(expression, context) {
-  const init = expression.args[1]
-
-  if (init == null || init.type !== 'ObjectLiteral') {
-    return {
-      lines: [],
-      expression: '0'
-    }
-  }
-
-  const lines: string[] = []
-  const methodValue = findObjectLiteralPropertyValue(init, 'method')
-  const headersValue = findObjectLiteralPropertyValue(init, 'headers')
-  const bodyValue = findObjectLiteralPropertyValue(init, 'body')
-  const signalValue = findObjectLiteralPropertyValue(init, 'signal')
-  const redirectValue = findObjectLiteralPropertyValue(init, 'redirect')
-  const method =
-    methodValue == null
-      ? { lines: [] as string[], bytes: '0', length: '0' }
-      : emitPreparedStringBytesOperand(methodValue, context, 'ccjs_fetch_method')
-  const redirect =
-    redirectValue == null
-      ? { lines: [] as string[], bytes: '0', length: '0' }
-      : emitPreparedStringBytesOperand(redirectValue, context, 'ccjs_fetch_redirect')
-  const body =
-    bodyValue == null
-      ? { lines: [] as string[], bytes: '0', length: '0' }
-      : emitPreparedFetchBodyOperand(bodyValue, context)
-  const signal =
-    signalValue == null
-      ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
-      : emitPreparedFetchSignalOperand(signalValue, context)
-  let headersExpression = '0'
-  let headerCount = '0'
-
-  lines.push(...method.lines)
-
-  if (headersValue?.type === 'ObjectLiteral' && headersValue.properties.length > 0) {
-    const headersName = nextCName(context, 'ccjs_fetch_headers')
-    const headerInitializers: string[] = []
-
-    for (const property of headersValue.properties) {
-      const value = emitPreparedStringBytesOperand(property.value, context, 'ccjs_fetch_header')
-
-      lines.push(...value.lines)
-      headerInitializers.push(
-        `{ ${cStringLiteral(String(property.key))}, ${utf8ByteLength(String(property.key))}, ${value.bytes}, ${value.length} }`
-      )
-    }
-
-    lines.push(
-      `ccjs_fetch_header ${headersName}[${headersValue.properties.length}] = { ${headerInitializers.join(', ')} };`
-    )
-    headersExpression = headersName
-    headerCount = `${headersValue.properties.length}`
-  }
-
-  lines.push(...body.lines)
-  lines.push(...signal.lines)
-  lines.push(...redirect.lines)
-
-  const initName = nextCName(context, 'ccjs_fetch_init')
-
-  lines.push(
-    `ccjs_fetch_init ${initName} = { ${method.bytes}, ${method.length}, ${headersExpression}, ${headerCount}, ${body.bytes}, ${body.length}, ${signal.expression}, ${redirect.bytes}, ${redirect.length} };`
-  )
-
-  return {
-    lines,
-    expression: `&${initName}`
-  }
-}
-
-function emitPreparedFetchSignalOperand(expression, context) {
-  if (expression?.type === 'MemberExpression' && expression.property === 'signal') {
-    const controller = emitCValueExpression(expression.object, context)
-    const signal = nextCName(context, 'ccjs_fetch_signal')
-
-    registerOwnedValue(context, signal)
-
-    return {
-      lines: [
-        ...controller.lines,
-        emitRuntimeTypeCheck(
-          `${controller.expression}.tag != CCJS_TAG_OBJECT || ${controller.expression}.as.ref == 0`,
-          context
-        ),
-        ...emitPrepareOwnedValueWrite(signal),
-        emitStatusCheck(`ccjs_fetch_abort_controller_signal(${controller.expression}, &${signal})`, context)
-      ],
-      expression: signal
-    }
-  }
-
-  const signal = emitCValueExpression(expression, context)
-
-  return {
-    lines: [
-      ...signal.lines,
-      emitRuntimeTypeCheck(`${signal.expression}.tag != CCJS_TAG_OBJECT || ${signal.expression}.as.ref == 0`, context)
-    ],
-    expression: signal.expression
-  }
-}
-
-function emitPreparedFetchBodyOperand(expression, context) {
-  if (inferExpressionType(expression, context) === 'bytes') {
-    const value = emitCValueExpression(expression, context)
-    const bytes = nextCName(context, 'ccjs_fetch_body')
-
-    return {
-      lines: [
-        ...value.lines,
-        emitRuntimeValueCheck(value.expression, 'CCJS_TAG_BYTES', context),
-        `ccjs_bytes* ${bytes} = (ccjs_bytes*)${value.expression}.as.ref;`
-      ],
-      bytes: `(const char*)${bytes}->bytes`,
-      length: `${bytes}->len`
-    }
-  }
-
-  return emitPreparedStringBytesOperand(expression, context, 'ccjs_fetch_body')
 }
 
 function emitPreparedFsSyncValueExpression(expression, context) {
@@ -8252,7 +8034,7 @@ function emitPreparedAwaitPromiseExpression(expression, context) {
 }
 
 function emitPreparedPromiseExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const fetchCall = emitPreparedFetchCallExpression(expression, context, options)
+  const fetchCall = emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options)
 
   if (fetchCall != null) {
     return {
