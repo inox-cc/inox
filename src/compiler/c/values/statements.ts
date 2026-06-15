@@ -17,11 +17,15 @@ type PreparedExpression = {
 }
 
 export type StatementLoweringDependencies = {
+  containsAwaitExpression: (node: any) => boolean
   emitArrayVariableDeclaration: (statement: any, context: any) => string[]
+  emitFailureStatement: (context: any) => string
   emitPreparedForExpressionClause: (expression: any, context: any) => PreparedExpression
   emitPreparedForInitializer: (init: any, context: any) => PreparedExpression
   emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
   emitStatement: (statement: any, context: any) => string[]
+  inferCatchBindingValueType: (statement: any, context: any) => string
+  registerErrorObjectShape: (context: any, name: string) => void
   resolveForOfElementType: (elements: any[]) => string
   resolveKnownForOfArray: (expression: any, context: any) => any | null
   resolveNullableScalarConditionNarrowing: (expression: any, context: any) => {
@@ -503,6 +507,125 @@ function emitSwitchCaseLabel(expression, context) {
   )
 
   return '0'
+}
+
+export function emitTryStatement(statement, context) {
+  if (
+    statement.handler != null &&
+    currentErrorTarget(context) != null &&
+    statementDeps(context).containsAwaitExpression(statement.block)
+  ) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_ASYNC',
+        'nested async try/catch state-machine lowering is not supported by the current C backend slice',
+        statement.loc
+      )
+    )
+  }
+
+  registerErrorChannel(context)
+
+  const id = nextCName(context, 'ccjs_try')
+  const catchLabel = statement.handler == null ? null : `${id}_catch`
+  const finallyLabel = statement.finalizer == null ? null : `${id}_finally`
+  const endLabel = `${id}_end`
+  const throwTarget = catchLabel ?? finallyLabel
+  const outerReturnTarget = currentReturnTarget(context)
+  const outerBreakTarget = currentBreakTarget(context)
+  const outerContinueTarget = currentContinueTarget(context)
+  const lines = ['{']
+  const tryBody = withErrorTarget(context, throwTarget, () =>
+    withFinallyFlowTarget(context, finallyLabel, () =>
+      withVariableScope(context, () => emitStatementBody(statement.block, context))
+    )
+  )
+
+  lines.push(...tryBody.map((line) => `  ${line}`))
+  lines.push(`  goto ${finallyLabel ?? endLabel};`)
+
+  if (statement.handler != null && catchLabel != null) {
+    const catchValueType = statementDeps(context).inferCatchBindingValueType(statement, context)
+    const catchBody = withFinallyFlowTarget(context, finallyLabel, () =>
+      withVariableScope(context, () => {
+        const body: string[] = []
+
+        if (statement.handler.param != null) {
+          if (catchValueType === 'object') {
+            context.variables.set(statement.handler.param, 'object')
+            statementDeps(context).registerErrorObjectShape(context, statement.handler.param)
+            body.push(`ccjs_value ${statement.handler.param} = ccjs_error;`)
+          } else {
+            context.variables.set(statement.handler.param, 'string')
+            context.runtimeStrings.add(statement.handler.param)
+            body.push(`ccjs_string* ${statement.handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
+          }
+        }
+
+        body.push(...emitStatementBody(statement.handler.body, context))
+
+        return body
+      })
+    )
+
+    lines.push(`${catchLabel}:`)
+    lines.push(
+      `  if (${emitCatchBindingTypeCheck(catchValueType)}) ${statementDeps(context).emitFailureStatement(context)}`
+    )
+    lines.push('  ccjs_error_active = 0;')
+    lines.push('  {')
+    lines.push(...catchBody.map((line) => `    ${line}`))
+    lines.push('  }')
+    lines.push('  ccjs_release(ccjs_error);')
+    lines.push('  ccjs_error = ccjs_undefined_value();')
+  }
+
+  if (statement.finalizer != null && finallyLabel != null) {
+    const outerThrowTarget = currentErrorTarget(context)
+    const finalizerBody = withErrorTarget(context, outerThrowTarget, () =>
+      withReturnTarget(context, outerReturnTarget, () =>
+        withBreakTarget(context, outerBreakTarget?.label ?? null, outerBreakTarget?.throughFinally === true, () =>
+          withContinueTarget(
+            context,
+            outerContinueTarget?.label ?? null,
+            outerContinueTarget?.throughFinally === true,
+            () => withVariableScope(context, () => emitStatementBody(statement.finalizer, context))
+          )
+        )
+      )
+    )
+
+    lines.push(`${finallyLabel}:`)
+    lines.push(...finalizerBody.map((line) => `  ${line}`))
+
+    if (outerThrowTarget != null) {
+      lines.push(`  if (ccjs_error_active) goto ${outerThrowTarget};`)
+    } else {
+      lines.push(`  if (ccjs_error_active) ${statementDeps(context).emitFailureStatement(context)}`)
+    }
+
+    if (context.returnFlowUsed) {
+      if (outerReturnTarget != null) {
+        lines.push(`  if (ccjs_return_active) goto ${outerReturnTarget};`)
+      } else {
+        lines.push(`  if (ccjs_return_active) ${emitReturnCleanupStatement(context)}`)
+      }
+    }
+
+    if (context.breakFlowUsed && outerBreakTarget != null) {
+      lines.push(`  if (ccjs_break_active) goto ${outerBreakTarget.label};`)
+    }
+
+    if (context.continueFlowUsed && outerContinueTarget != null) {
+      lines.push(`  if (ccjs_continue_active) goto ${outerContinueTarget.label};`)
+    }
+  }
+
+  lines.push(`${endLabel}:`)
+  lines.push('  ;')
+  lines.push('}')
+
+  return lines
 }
 
 export function emitCatchBindingTypeCheck(valueType) {
