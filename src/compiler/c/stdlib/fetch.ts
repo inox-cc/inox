@@ -7,23 +7,22 @@ import {
   nextCName,
   registerEventLoop,
   registerOwnedPromise,
-  registerOwnedValue
+  registerOwnedValue,
+  type CFunctionContext
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-
-
 export type FetchLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
     expression: any,
-    context: any,
+    context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
   findObjectLiteralPropertyValue: (expression: any, key: string) => any | null
-  inferExpressionType: (expression: any, context: any) => string
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
 }
 
 type FetchCallOptions = {
@@ -71,7 +70,7 @@ export function isAsyncFetchRuntimeCallExpression(expression: any): boolean {
 
 export function emitFetchHeadersBooleanVariableDeclaration(
   statement: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FetchLoweringDependencies
 ): string[] | null {
   const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(statement.init, context, dependencies, {
@@ -89,7 +88,7 @@ export function emitFetchHeadersBooleanVariableDeclaration(
 
 export function emitPreparedFetchCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FetchLoweringDependencies,
   options: FetchCallOptions = {}
 ): PreparedExpression | null {
@@ -152,7 +151,7 @@ export function emitPreparedFetchCallExpression(
 
 export function emitPreparedFetchHeadersCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FetchLoweringDependencies,
   options: FetchCallOptions = {}
 ): PreparedExpression | null {
@@ -209,7 +208,7 @@ export function emitPreparedFetchHeadersCallExpression(
 
 export function emitPreparedFetchInitOperand(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FetchLoweringDependencies
 ): PreparedExpression {
   const init = expression.args[1]
@@ -286,7 +285,7 @@ export function emitPreparedFetchInitOperand(
 
 export function emitPreparedFetchSignalOperand(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FetchLoweringDependencies
 ): PreparedExpression {
   if (expression?.type === 'MemberExpression' && expression.property === 'signal') {
@@ -322,7 +321,7 @@ export function emitPreparedFetchSignalOperand(
 
 export function emitPreparedFetchBodyOperand(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FetchLoweringDependencies
 ): PreparedStringBytesOperand {
   if (dependencies.inferExpressionType(expression, context) === 'bytes') {
