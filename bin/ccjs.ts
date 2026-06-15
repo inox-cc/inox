@@ -54,6 +54,7 @@ const cRuntimeSourceGroups = {
   http: ['runtime/c/src/network/http.c'],
   json: ['runtime/c/src/json/json.c'],
   net: ['runtime/c/src/network/net.c'],
+  os: ['runtime/c/src/os/os.c'],
   path: ['runtime/c/src/path/path.c'],
   process: ['runtime/c/src/process/process.c'],
   url: ['runtime/c/src/url/url.c'],
@@ -307,6 +308,11 @@ function cRuntimeSourcesForCode(
     groups.add('net')
   }
 
+  if (usesCHeader(code, 'os')) {
+    groups.add('managed')
+    groups.add('os')
+  }
+
   if (usesCHeader(code, 'http')) {
     groups.add('async')
     groups.add('net')
@@ -539,7 +545,7 @@ function validateCapabilitiesConfig(value: unknown, fileName: string): void {
   }
 
   const capabilities = value as RuntimeCapabilities
-  const allowed = new Set(['entropy', 'fs', 'heap', 'monotonicClock', 'timers', 'wallClock'])
+  const allowed = new Set(['entropy', 'fs', 'heap', 'monotonicClock', 'os', 'timers', 'wallClock'])
 
   for (const [key, enabled] of Object.entries(capabilities)) {
     if (!allowed.has(key)) {

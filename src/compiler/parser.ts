@@ -156,7 +156,7 @@ class Parser {
     const specifiers: AnyNode[] = []
 
     while (!this.isValue('}') && !this.is('eof')) {
-      const imported = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected imported name')
+      const imported = this.parseImportSpecifierName()
       let local = imported.value
 
       if (this.matchIdentifier('as')) {
@@ -173,6 +173,14 @@ class Parser {
     this.expectValue('}', 'CCJS_EXPECTED_IMPORT', 'expected } after import specifiers')
 
     return specifiers
+  }
+
+  parseImportSpecifierName(): Token {
+    if (this.is('identifier') || this.is('keyword')) {
+      return this.advance()
+    }
+
+    return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected imported name')
   }
 
   parseFunctionDeclaration(exported: boolean, isAsync = false): AnyNode {

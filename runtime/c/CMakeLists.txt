@@ -35,6 +35,7 @@ set(CCJS_RUNTIME_SOURCES
   "${CCJS_RUNTIME_DIR}/src/network/http.c"
   "${CCJS_RUNTIME_DIR}/src/network/net.c"
   "${CCJS_RUNTIME_DIR}/src/objects/object.c"
+  "${CCJS_RUNTIME_DIR}/src/os/os.c"
   "${CCJS_RUNTIME_DIR}/src/path/path.c"
   "${CCJS_RUNTIME_DIR}/src/process/process.c"
   "${CCJS_RUNTIME_DIR}/src/strings/string.c"

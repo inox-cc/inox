@@ -42,6 +42,7 @@ export type IrFeature =
   | 'number-from-string-null'
   | 'numeric-casts'
   | 'objects'
+  | 'os'
   | 'path'
   | 'process'
   | 'runtime-values'
@@ -63,6 +64,7 @@ export type IrRuntimeRequirement =
   | 'json'
   | 'managed-values'
   | 'objects'
+  | 'os'
   | 'path'
   | 'process'
   | 'string-bytes'
@@ -223,6 +225,7 @@ export type RuntimeCapabilities = {
   fs?: boolean
   heap?: boolean
   monotonicClock?: boolean
+  os?: boolean
   timers?: boolean
   wallClock?: boolean
 }

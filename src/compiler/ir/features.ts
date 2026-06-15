@@ -49,6 +49,10 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
     } else if (feature === 'objects') {
       requirements.add('managed-values')
       requirements.add('objects')
+    } else if (feature === 'os') {
+      requirements.add('managed-values')
+      requirements.add('os')
+      requirements.add('string-bytes')
     } else if (feature === 'path') {
       requirements.add('managed-values')
       requirements.add('path')
@@ -224,6 +228,11 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
 
   if (node.type === 'FunctionDeclaration' || node.type === 'MethodDefinition') {
     recordCallableSignatureFeatures(node, features)
+  }
+
+  if (node.osRuntimeMethod != null || node.osRuntimeConstant != null) {
+    features.add('os')
+    features.add('runtime-values')
   }
 
   if (

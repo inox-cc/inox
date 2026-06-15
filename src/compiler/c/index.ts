@@ -117,6 +117,7 @@ import {
   isAsyncFsRuntimeCallExpression
 } from './stdlib/fs.ts'
 import { cJsonRuntimeCallName } from './stdlib/json.ts'
+import { cOsRuntimeConstantName, cOsRuntimeConstantValue, cOsRuntimeMethodName } from './stdlib/os.ts'
 import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from './stdlib/path.ts'
 import { cProcessRuntimeEnvName, cProcessRuntimeMethodName, cProcessRuntimePropertyName } from './stdlib/process.ts'
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
@@ -264,6 +265,7 @@ function emitCModuleSource(
     signatureRuntimeTypes.has('function')
   const needsChildProcessRuntime = runtimeRequirements.has('child-process')
   const needsFsRuntime = runtimeRequirements.has('fs')
+  const needsOsRuntime = runtimeRequirements.has('os')
   const needsPathRuntime = runtimeRequirements.has('path')
   const needsUrlRuntime = runtimeRequirements.has('url')
   const needsProcessRuntime = runtimeRequirements.has('process')
@@ -304,6 +306,7 @@ function emitCModuleSource(
     needsCallbackRuntime ||
     needsChildProcessRuntime ||
     needsCollectionRuntime ||
+    needsOsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
     needsProcessRuntime ||
@@ -327,6 +330,7 @@ function emitCModuleSource(
     runtimeRequirements.has('string-bytes') ||
     needsChildProcessRuntime ||
     needsFsRuntime ||
+    needsOsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
     needsProcessRuntime ||
@@ -364,6 +368,7 @@ function emitCModuleSource(
       needsObjectRuntime,
       needsChildProcessRuntime,
       needsFsRuntime,
+      needsOsRuntime,
       needsPathRuntime,
       needsUrlRuntime,
       needsProcessRuntime,
@@ -827,6 +832,7 @@ function emitCUnit(
     runtimeRequirements.has('callback-values')
   const needsChildProcessRuntime = runtimeRequirements.has('child-process')
   const needsFsRuntime = runtimeRequirements.has('fs')
+  const needsOsRuntime = runtimeRequirements.has('os')
   const needsPathRuntime = runtimeRequirements.has('path')
   const needsUrlRuntime = runtimeRequirements.has('url')
   const needsProcessRuntime = runtimeRequirements.has('process')
@@ -854,6 +860,7 @@ function emitCUnit(
     needsCallbackRuntime ||
     needsChildProcessRuntime ||
     needsCollectionRuntime ||
+    needsOsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
     needsProcessRuntime ||
@@ -876,6 +883,7 @@ function emitCUnit(
     runtimeRequirements.has('string-bytes') ||
     needsChildProcessRuntime ||
     needsFsRuntime ||
+    needsOsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
     needsProcessRuntime ||
@@ -900,6 +908,7 @@ function emitCUnit(
     needsObjectRuntime,
     needsChildProcessRuntime,
     needsFsRuntime,
+    needsOsRuntime,
     needsPathRuntime,
     needsUrlRuntime,
     needsProcessRuntime,
@@ -12549,6 +12558,18 @@ function emitCValueExpression(expression, context) {
     return childProcessCall
   }
 
+  const osConstant = emitPreparedOsConstantExpression(expression, context)
+
+  if (osConstant != null) {
+    return osConstant
+  }
+
+  const osStringCall = emitPreparedOsStringCallExpression(expression, context)
+
+  if (osStringCall != null) {
+    return osStringCall
+  }
+
   const processString = emitPreparedProcessStringExpression(expression, context)
 
   if (processString != null) {
@@ -15965,6 +15986,51 @@ function emitPreparedChildProcessCallExpression(expression, context, options: { 
   }
 }
 
+function emitPreparedOsConstantExpression(expression, context) {
+  const constant = cOsRuntimeConstantName(expression)
+  const value = constant == null ? null : cOsRuntimeConstantValue(constant)
+
+  if (value == null) {
+    return null
+  }
+
+  const out = nextCName(context, 'ccjs_os_constant')
+  registerOwnedValue(context, out)
+
+  return {
+    lines: [
+      ...emitPrepareOwnedValueWrite(out),
+      emitStatusCheck(
+        `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
+        context
+      )
+    ],
+    expression: out
+  }
+}
+
+function emitPreparedOsStringCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const method = cOsRuntimeMethodName(expression)
+
+  if (method == null) {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_os_value')
+  const lines = emitPrepareOwnedValueWrite(out)
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  lines.push(emitStatusCheck(`ccjs_os_${method}(&ccjs_default_allocator, &${out})`, context))
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
 function emitPreparedProcessStringExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
   const method = cProcessRuntimeMethodName(expression)
   const property = cProcessRuntimePropertyName(expression)
@@ -18861,6 +18927,10 @@ function inferExpressionType(expression, context) {
     return 'string'
   }
 
+  if (cOsRuntimeConstantName(expression) != null || cOsRuntimeMethodName(expression) != null) {
+    return 'string'
+  }
+
   const processMethod = cProcessRuntimeMethodName(expression)
 
   if (processMethod != null) {
@@ -19290,6 +19360,7 @@ function isStringConcatExpression(expression, context) {
 function isRuntimeProducedStringExpression(expression, context) {
   return (
     (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') ||
+    cOsRuntimeConstantName(expression) != null ||
     cPathRuntimeConstantName(expression) != null ||
     cProcessRuntimeEnvName(expression) != null ||
     (cProcessRuntimePropertyName(expression) === 'argv' && expression?.type === 'IndexExpression') ||

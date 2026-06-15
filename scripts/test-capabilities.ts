@@ -180,7 +180,7 @@ function validateCapabilities(value: unknown, rel: string, target: string): void
   }
 
   const capabilities = value as RuntimeCapabilities
-  const allowed = new Set(['entropy', 'fs', 'heap', 'monotonicClock', 'timers', 'wallClock'])
+  const allowed = new Set(['entropy', 'fs', 'heap', 'monotonicClock', 'os', 'timers', 'wallClock'])
 
   for (const [key, enabled] of Object.entries(capabilities)) {
     if (!allowed.has(key)) {

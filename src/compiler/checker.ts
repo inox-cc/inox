@@ -83,6 +83,12 @@ import {
   isUnsupportedPathRuntimeMethod
 } from './stdlib/descriptors/path.ts'
 import {
+  isNodeOsImportSource,
+  isOsRuntimeConstant,
+  isOsRuntimeMethod,
+  isUnsupportedOsRuntimeMethod
+} from './stdlib/descriptors/os.ts'
+import {
   isNodeProcessImportSource,
   isProcessRuntimeMethod,
   isProcessRuntimeProperty,
@@ -798,6 +804,15 @@ class Checker {
 
       if (
         symbol?.kind === 'import' &&
+        isNodeOsImportSource(symbol.importSource) &&
+        symbol.importedName != null &&
+        isOsRuntimeConstant(symbol.importedName)
+      ) {
+        expression.osRuntimeConstant = symbol.importedName
+      }
+
+      if (
+        symbol?.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
         symbol.importedName != null &&
         isPathRuntimeConstant(symbol.importedName)
@@ -1061,6 +1076,12 @@ class Checker {
   }
 
   checkMemberExpression(expression: AnyNode): ValueType {
+    const osConstantType = this.checkOsConstantMemberExpression(expression)
+
+    if (osConstantType != null) {
+      return osConstantType
+    }
+
     const processMemberType = this.checkProcessMemberExpression(expression)
 
     if (processMemberType != null) {
@@ -1658,6 +1679,12 @@ class Checker {
       return childProcessType
     }
 
+    const osType = this.checkOsCall(expression)
+
+    if (osType != null) {
+      return osType
+    }
+
     const processType = this.checkProcessCall(expression)
 
     if (processType != null) {
@@ -2125,6 +2152,133 @@ class Checker {
         encoding?.loc ?? options.loc
       )
     }
+  }
+
+  checkOsCall(expression: AnyNode): ValueType | null {
+    const call = this.resolveOsRuntimeCall(expression)
+
+    if (call == null) {
+      return null
+    }
+
+    for (const arg of expression.args) {
+      this.checkExpression(arg)
+    }
+
+    if (call.unsupported) {
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        `node:os ${call.method} is not implemented by the current C backend`,
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    if (expression.args.length !== 0) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    expression.osRuntimeMethod = call.method
+    expression.valueType = 'string'
+
+    return 'string'
+  }
+
+  resolveOsRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+    const path = memberExpressionPath(expression.callee)
+    const method = this.resolveOsRuntimeMethod(path)
+
+    if (method == null) {
+      return null
+    }
+
+    return {
+      method,
+      label: path == null ? method : path.join('.'),
+      unsupported: !isOsRuntimeMethod(method)
+    }
+  }
+
+  resolveOsRuntimeMethod(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (symbol?.kind === 'import' && isNodeOsImportSource(symbol.importSource) && importedName != null) {
+        return isOsRuntimeMethod(importedName) || isUnsupportedOsRuntimeMethod(importedName) ? importedName : null
+      }
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeOsImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'os')
+      ) {
+        return isOsRuntimeMethod(path[1]) || isUnsupportedOsRuntimeMethod(path[1]) ? path[1] : null
+      }
+    }
+
+    return null
+  }
+
+  checkOsConstantMemberExpression(expression: AnyNode): ValueType | null {
+    const constant = this.resolveOsRuntimeConstant(memberExpressionPath(expression))
+
+    if (constant == null) {
+      return null
+    }
+
+    expression.osRuntimeConstant = constant
+    expression.valueType = 'string'
+
+    return 'string'
+  }
+
+  resolveOsRuntimeConstant(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeOsImportSource(symbol.importSource) &&
+        importedName != null &&
+        isOsRuntimeConstant(importedName)
+      ) {
+        return importedName
+      }
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeOsImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'os') &&
+        isOsRuntimeConstant(path[1])
+      ) {
+        return path[1]
+      }
+    }
+
+    return null
   }
 
   checkProcessCall(expression: AnyNode): ValueType | null {
@@ -2956,6 +3110,20 @@ class Checker {
   }
 
   runtimeImportValueType(source: string, importedName: string): ValueType {
+    if (isNodeOsImportSource(source)) {
+      if (isOsRuntimeConstant(importedName)) {
+        return 'string'
+      }
+
+      if (isOsRuntimeMethod(importedName) || isUnsupportedOsRuntimeMethod(importedName)) {
+        return 'function'
+      }
+
+      if (importedName === 'default' || importedName === 'os') {
+        return 'object'
+      }
+    }
+
     if (isNodePathImportSource(source)) {
       if (isPathRuntimeConstant(importedName)) {
         return 'string'

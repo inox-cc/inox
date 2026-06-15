@@ -73,6 +73,7 @@ function collectCapabilityUsages(programs: IrProgram[], options: CompileOptions)
           ]
     }),
     ...collectEntropyCapabilityUsages(globalUsages, options),
+    ...programs.flatMap((program) => collectOsCapabilityUsages(program.body)),
     ...programs.flatMap((program) => collectHeapCapabilityUsages(program.body))
   ]
 }
@@ -99,6 +100,27 @@ function collectEntropyCapabilityUsages(globalUsages: IrGlobalUsage[], options: 
       })
     }
   }
+
+  return usages
+}
+
+function collectOsCapabilityUsages(node: unknown): CapabilityUsage[] {
+  const usages: CapabilityUsage[] = []
+
+  visitAstLike(node, (item) => {
+    const expression = item as AnyNode
+    const method = typeof expression.osRuntimeMethod === 'string' ? expression.osRuntimeMethod : null
+    const constant = typeof expression.osRuntimeConstant === 'string' ? expression.osRuntimeConstant : null
+
+    if (method != null || constant != null) {
+      usages.push({
+        key: 'os',
+        name: 'os',
+        path: method == null ? `os.${constant}` : `os.${method}`,
+        loc: expression.loc
+      })
+    }
+  })
 
   return usages
 }

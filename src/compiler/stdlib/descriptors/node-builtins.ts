@@ -11,6 +11,7 @@ export const implementedRuntimeBuiltinImportSources = [
   'node:fs/promises',
   'node:http',
   'node:net',
+  'node:os',
   'node:url',
   'node:process'
 ] as const
@@ -20,7 +21,6 @@ export const unsupportedRuntimeBuiltinImportSources = [
   'node:dns',
   'node:events',
   'node:https',
-  'node:os',
   'node:stream',
   'node:timers',
   'node:timers/promises',
