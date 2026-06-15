@@ -5,19 +5,22 @@ import {
   nextCName,
   registerOwnedCryptoHash,
   registerOwnedCryptoHmac,
-  registerOwnedValue
+  registerOwnedValue,
+  type CFunctionContext
 } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-
-
 export type CryptoLoweringDependencies = {
   cStringLiteralNode: (value: string, loc?: any) => any
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedStringBytesOperand: (expression: any, context: any, tempPrefix?: string) => PreparedStringBytesOperand
-  inferExpressionType: (expression: any, context: any) => string
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedStringBytesOperand: (
+    expression: any,
+    context: CFunctionContext,
+    tempPrefix?: string
+  ) => PreparedStringBytesOperand
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
 }
 
 type CryptoHandleOptions = {
@@ -39,7 +42,7 @@ export function cryptoRuntimeMethodName(expression: any): string | null {
 
 export function emitCryptoHashVariableDeclaration(
   statement: any,
-  context: any,
+  context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): string[] | null {
   if (statement.init?.type !== 'CallExpression') {
@@ -83,7 +86,7 @@ export function emitCryptoHashVariableDeclaration(
 
 export function emitCryptoHandleVariableDeclaration(
   statement: any,
-  context: any,
+  context: CFunctionContext,
   deps: CryptoLoweringDependencies,
   inferred: string
 ): string[] | null {
@@ -108,7 +111,7 @@ export function emitCryptoHandleVariableDeclaration(
 
 export function emitPreparedCryptoHashCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   deps: CryptoLoweringDependencies,
   options: CryptoHandleOptions = {}
 ): PreparedExpression | null {
@@ -161,7 +164,7 @@ export function emitPreparedCryptoHashCallExpression(
 
 export function emitPreparedCryptoHmacCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   deps: CryptoLoweringDependencies,
   options: CryptoHandleOptions = {}
 ): PreparedExpression | null {
@@ -216,7 +219,7 @@ export function emitPreparedCryptoHmacCallExpression(
 
 export function emitPreparedCryptoCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   deps: CryptoLoweringDependencies,
   options: CryptoValueOptions = {}
 ): PreparedExpression | null {
@@ -361,7 +364,7 @@ export function emitPreparedCryptoCallExpression(
 
 export function emitPreparedCryptoNumberCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): PreparedExpression | null {
   const method = cryptoRuntimeMethodName(expression)
@@ -409,7 +412,7 @@ export function emitPreparedCryptoNumberCallExpression(
 
 export function emitPreparedCryptoHashHandleExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): PreparedExpression {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
@@ -447,7 +450,7 @@ export function emitPreparedCryptoHashHandleExpression(
 
 export function emitPreparedCryptoHmacHandleExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): PreparedExpression {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
@@ -486,7 +489,7 @@ export function emitPreparedCryptoHmacHandleExpression(
 function emitCryptoRandomFillCall(
   value: string,
   expression: any,
-  context: any,
+  context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): { lines: string[]; call: string } {
   const offset =
