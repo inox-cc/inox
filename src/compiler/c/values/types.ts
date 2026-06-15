@@ -1,5 +1,6 @@
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { isOptionalChainExpression } from '../syntax.ts'
+import type { CFunctionContext } from '../context.ts'
 
 export type CExpressionTypeDependencies = {
   binaryRuntimeExpressionReturnType: (expression: any) => string | null
@@ -21,34 +22,38 @@ export type CExpressionTypeDependencies = {
   cUrlRuntimeMethodName: (expression: any) => string | null
   collectionConstructorName: (expression: any) => string | null
   cryptoRuntimeMethodName: (expression: any) => string | null
-  emitPreparedNetAddressPortExpression: (expression: any, context: any) => any | null
-  isArrayLengthExpression: (expression: any, context: any) => boolean
+  emitPreparedNetAddressPortExpression: (expression: any, context: CFunctionContext) => any | null
+  isArrayLengthExpression: (expression: any, context: CFunctionContext) => boolean
   isBinaryConstructorExpression: (expression: any) => boolean
   isBinaryRuntimeCall: (expression: any) => boolean
-  isClassConstructorExpression: (expression: any, context: any) => boolean
+  isClassConstructorExpression: (expression: any, context: CFunctionContext) => boolean
   isErrorConstructorExpression: (expression: any) => boolean
   isFetchAbortControllerConstructorExpression: (expression: any) => boolean
   isIndexAccessExpression: (expression: any) => boolean
   isMemberAccessExpression: (expression: any) => boolean
-  isNumberConversionCall: (expression: any, context: any) => boolean
+  isNumberConversionCall: (expression: any, context: CFunctionContext) => boolean
   isPromiseConstructorExpression: (expression: any) => boolean
-  isStringConversionCall: (expression: any, context: any) => boolean
-  isStringPredicateCall: (expression: any, context: any) => boolean
-  isStringSliceCall: (expression: any, context: any) => boolean
-  isStringSplitCall: (expression: any, context: any) => boolean
-  isStringTrimCall: (expression: any, context: any) => boolean
+  isStringConversionCall: (expression: any, context: CFunctionContext) => boolean
+  isStringPredicateCall: (expression: any, context: CFunctionContext) => boolean
+  isStringSliceCall: (expression: any, context: CFunctionContext) => boolean
+  isStringSplitCall: (expression: any, context: CFunctionContext) => boolean
+  isStringTrimCall: (expression: any, context: CFunctionContext) => boolean
   knownValueType: (valueType: any) => string | null
   mathRuntimeMethodName: (callee: any) => string | null
-  resolveKnownArrayIndex: (expression: any, context: any) => any | null
-  resolveKnownArrayLength: (expression: any, context: any) => any | null
-  resolveKnownObjectIndex: (expression: any, context: any) => any | null
-  resolveKnownObjectMember: (expression: any, context: any) => any | null
-  resolveNetAddressStringMember: (expression: any, context: any) => string | null
-  resolvePromiseExpressionValueType: (expression: any, context: any) => string | null
-  resolveRuntimeArrayIndex: (expression: any, context: any) => any | null
+  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownArrayLength: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveNetAddressStringMember: (expression: any, context: CFunctionContext) => string | null
+  resolvePromiseExpressionValueType: (expression: any, context: CFunctionContext) => string | null
+  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => any | null
 }
 
-export function inferExpressionType(expression: any, context: any, deps: CExpressionTypeDependencies): string {
+export function inferExpressionType(
+  expression: any,
+  context: CFunctionContext,
+  deps: CExpressionTypeDependencies
+): string {
   const childProcessMethod = deps.cChildProcessRuntimeMethodName(expression)
 
   if (childProcessMethod != null) {
