@@ -1,5 +1,6 @@
 import { fsRuntimeCallInfoFromPath, isAsyncFsRuntimeMethod } from '../../stdlib/descriptors/fs.ts'
 import { memberExpressionPath } from '../../member-paths.ts'
+import type { AnyNode } from '../../types.ts'
 import {
   emitEventLoopReference,
   emitPrepareOwnedValueWrite,
@@ -20,14 +21,14 @@ import type {
 } from '../types.ts'
 
 export type FsLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
 }
 
 const fsPromiseResultTypes: Record<string, string> = {
@@ -105,17 +106,17 @@ const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
   writeFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_write_file_sync' }
 }
 
-export function cFsRuntimeExpressionMethod(expression: any): string | null {
+export function cFsRuntimeExpressionMethod(expression: AnyNode): string | null {
   return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
 }
 
-export function isAsyncFsRuntimeCallExpression(expression: any): boolean {
+export function isAsyncFsRuntimeCallExpression(expression: AnyNode): boolean {
   const method = cFsRuntimeExpressionMethod(expression)
 
   return method != null && expression?.valueType === 'promise' && isAsyncFsRuntimeMethod(method)
 }
 
-export function cFsRuntimeConstantExpression(expression: any): string | null {
+export function cFsRuntimeConstantExpression(expression: AnyNode): string | null {
   const name = expression?.fsRuntimeConstant
 
   if (name === 'F_OK') {
@@ -137,7 +138,7 @@ export function cFsRuntimeConstantExpression(expression: any): string | null {
   return null
 }
 
-function cFsRuntimeCallName(callee: any): string | null {
+function cFsRuntimeCallName(callee: AnyNode): string | null {
   const path = memberExpressionPath(callee)
 
   if (path == null || path[0] !== 'fs') {
@@ -158,7 +159,7 @@ function cFsRuntimeCallName(callee: any): string | null {
 }
 
 export function emitPreparedFsCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: FsLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -240,7 +241,7 @@ export function emitPreparedFsCallExpression(
 }
 
 function emitPreparedFsAsyncDescriptorExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: FsLoweringDependencies,
   path: PreparedStringBytesOperand,
@@ -296,7 +297,7 @@ function emitPreparedFsAsyncDescriptorExpression(
 }
 
 export function emitPreparedFsSyncValueExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression | null {
@@ -332,7 +333,7 @@ export function emitPreparedFsSyncValueExpression(
 }
 
 export function emitPreparedFsSyncStatementExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedStatement | null {
@@ -392,7 +393,7 @@ export function emitPreparedFsSyncStatementExpression(
 }
 
 function emitPreparedFsSyncStatementDescriptor(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: FsLoweringDependencies,
   path: PreparedStringBytesOperand,
@@ -435,7 +436,7 @@ function emitPreparedFsSyncStatementDescriptor(
 }
 
 export function emitPreparedFsAccessModeExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression {
@@ -454,12 +455,12 @@ export function emitPreparedFsAccessModeExpression(
   }
 }
 
-export function emitFsBooleanFlag(expression: any, field: string): string {
+export function emitFsBooleanFlag(expression: AnyNode, field: string): string {
   return expression?.[field] === true ? 'true' : 'false'
 }
 
 export function emitPreparedFsStatsMethodExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression | null {
