@@ -2,7 +2,6 @@ import { diagnostic } from '../../diagnostics.ts'
 import { emitRuntimeTypeCheck, nextCName } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import { isBinaryRuntimeCall } from '../stdlib/binary.ts'
 import { cOsRuntimeConstantName } from '../stdlib/os.ts'
 import { cPathRuntimeConstantName } from '../stdlib/path.ts'
 import {
@@ -396,14 +395,6 @@ function isStringLengthObject(expression, context) {
   }
 
   return stringDeps(context).inferExpressionType(expression, context) === 'string'
-}
-
-export function isBytesToStringCall(expression, context) {
-  return (
-    isBinaryRuntimeCall(expression) &&
-    expression.binaryRuntimeMethod === 'toString' &&
-    stringDeps(context).inferExpressionType(expression.callee.object, context) === 'bytes'
-  )
 }
 
 export function isCStringRuntimeMethodName(name) {
