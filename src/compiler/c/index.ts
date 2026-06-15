@@ -252,6 +252,25 @@ import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
 import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } from '../stdlib/descriptors/url.ts'
 import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
+import {
+  emitPreparedStringBytesOperand,
+  emitPreparedStringCompareExpression,
+  emitPreparedStringLengthExpression,
+  emitPreparedStringPredicateCall,
+  emitStringExpression,
+  isBytesToStringCall,
+  isCStringRuntimeMethodName,
+  isRawStringLiteralExpression,
+  isRuntimeProducedStringExpression,
+  isStringConcatExpression,
+  isStringConversionCall,
+  isStringPredicateCall,
+  isStringSliceCall,
+  isStringSplitCall,
+  isStringTrimCall,
+  resolveRuntimeStringReference,
+  type StringLoweringDependencies
+} from './values/strings.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -262,6 +281,20 @@ import type {
   SourceLocation
 } from '../types.ts'
 export type { CModuleOutputFile } from './types.ts'
+
+const stringLoweringDependencies: StringLoweringDependencies = {
+  canLowerCNullishCoalescingExpression,
+  emitCallExpression,
+  emitCTemplateLiteralValueExpression,
+  emitCValueExpression,
+  emitReference,
+  inferExpressionType,
+  isBoxedRuntimeStringName,
+  isBoxedRuntimeStringReference,
+  isMemberAccessExpression,
+  resolveKnownObjectMember,
+  resolveNetAddressStringMember
+}
 
 const cryptoLoweringDependencies: CryptoLoweringDependencies = {
   cStringLiteralNode,
@@ -1410,6 +1443,7 @@ function createBaseContext(
     classInfos: new Map(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
+    stringLoweringDependencies,
     cryptoImportNames: new Set(),
     diagnostics,
     dgramCreateSocketNames: new Set(),
@@ -7641,83 +7675,6 @@ function emitErrorLogObjectExpression(expression, context) {
   return emitCValueExpression(expression, context)
 }
 
-function resolveRuntimeStringReference(expression, context) {
-  if (expression?.type !== 'Reference' || expression.path.length !== 1) {
-    return null
-  }
-
-  const name = expression.path[0]
-
-  return context.runtimeStrings.has(name) ? name : null
-}
-
-function emitStringExpression(expression, context) {
-  if (expression?.type === 'StringLiteral') {
-    return JSON.stringify(expression.value)
-  }
-
-  if (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
-    return JSON.stringify(expression.raw.slice(1, -1))
-  }
-
-  if (expression?.type === 'Reference') {
-    return emitReference(expression, context)
-  }
-
-  if (expression?.type === 'CallExpression') {
-    return emitCallExpression(expression, context)
-  }
-
-  if (isNullishCoalescingExpression(expression)) {
-    context.diagnostics.push(
-      diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
-    )
-    return '""'
-  }
-
-  if (isMemberAccessExpression(expression)) {
-    const member = resolveKnownObjectMember(expression, context)
-
-    if (member != null && ['number', 'boolean'].includes(member.valueType)) {
-      context.diagnostics.push(
-        diagnostic(
-          'CCJS_C_UNSUPPORTED_EXPR',
-          'object field access must be assigned before it can be used by the current C backend slice',
-          expression.loc
-        )
-      )
-      return '""'
-    }
-  }
-
-  if (expression?.type === 'AwaitExpression') {
-    context.diagnostics.push(
-      diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', expression?.loc)
-    )
-    return '""'
-  }
-
-  if (isOptionalChainExpression(expression)) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_OPTIONAL_CHAINING',
-        'optional chaining is not supported by the current C backend slice',
-        expression?.loc
-      )
-    )
-    return '""'
-  }
-
-  context.diagnostics.push(
-    diagnostic(
-      'CCJS_C_STRING_EXPR',
-      'this string expression is not supported by the current C backend slice',
-      expression?.loc
-    )
-  )
-  return '""'
-}
-
 function emitNumberExpression(expression, context) {
   return emitPreparedNumberExpression(expression, context).expression
 }
@@ -8058,38 +8015,6 @@ function emitPreparedNumberExpression(expression, context) {
   }
 }
 
-function emitPreparedStringLengthExpression(expression, context) {
-  if (
-    expression?.type !== 'MemberExpression' ||
-    expression.property !== 'length' ||
-    !isStringLengthObject(expression.object, context)
-  ) {
-    return null
-  }
-
-  const operand = emitPreparedStringBytesOperand(expression.object, context, 'ccjs_length_string')
-  const length = nextCName(context, 'ccjs_string_length')
-
-  return {
-    lines: [
-      ...operand.lines,
-      `size_t ${length} = ccjs_string_code_point_length_parts(${operand.bytes}, ${operand.length});`
-    ],
-    expression: `((double)${length})`
-  }
-}
-
-function emitPreparedStringCompareExpression(expression, context) {
-  const left = emitPreparedStringBytesOperand(expression.left, context)
-  const right = emitPreparedStringBytesOperand(expression.right, context)
-  const equals = `(${left.length} == ${right.length} && memcmp(${left.bytes}, ${right.bytes}, ${left.length}) == 0)`
-
-  return {
-    lines: [...left.lines, ...right.lines],
-    expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
-  }
-}
-
 function emitPreparedLogicalExpression(expression, context) {
   const left = emitPreparedNumberExpression(expression.left, context)
   const leftNarrowing = resolveNullableScalarConditionNarrowing(expression.left, context)
@@ -8273,17 +8198,6 @@ function clearNullableScalarNarrowing(name, context) {
   return []
 }
 
-function emitPreparedStringPredicateCall(expression, context) {
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_string_method_value')
-  const search = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_string_method_search')
-  const helper = cStringPredicateHelperName(expression.callee.property)
-
-  return {
-    lines: [...value.lines, ...search.lines],
-    expression: `(${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}) ? 1 : 0)`
-  }
-}
-
 function emitPreparedNumericCastExpression(expression, context) {
   if (!isNumericCastCall(expression, context)) {
     return null
@@ -8358,107 +8272,6 @@ function numericIntegerCastLimits(cast) {
   }
 
   return null
-}
-
-function emitPreparedStringBytesOperand(expression, context, tempPrefix = 'ccjs_cmp_string') {
-  if (expression?.type === 'StringLiteral') {
-    return {
-      lines: [],
-      bytes: cStringLiteral(expression.value),
-      length: `${utf8ByteLength(expression.value)}`
-    }
-  }
-
-  if (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
-    const value = expression.raw.slice(1, -1)
-
-    return {
-      lines: [],
-      bytes: cStringLiteral(value),
-      length: `${utf8ByteLength(value)}`
-    }
-  }
-
-  if (expression?.type === 'TemplateLiteral') {
-    const value = emitCTemplateLiteralValueExpression(expression, context)
-    const string = nextCName(context, tempPrefix)
-
-    return {
-      lines: [...value.lines, `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`],
-      bytes: `${string}->bytes`,
-      length: `${string}->len`
-    }
-  }
-
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
-
-    if (context.variables.get(name) === 'string') {
-      if (isBoxedRuntimeStringName(name, context)) {
-        const string = nextCName(context, tempPrefix)
-
-        return {
-          lines: [
-            emitRuntimeTypeCheck(`(*${name}).tag != CCJS_TAG_STRING || (*${name}).as.ref == 0`, context),
-            `ccjs_string* ${string} = (ccjs_string*)(*${name}).as.ref;`
-          ],
-          bytes: `${string}->bytes`,
-          length: `${string}->len`
-        }
-      }
-
-      const reference = emitReference(expression, context)
-
-      if (context.runtimeStrings.has(reference)) {
-        return {
-          lines: [],
-          bytes: `${reference}->bytes`,
-          length: `${reference}->len`
-        }
-      }
-
-      return {
-        lines: [],
-        bytes: reference,
-        length: `strlen(${reference})`
-      }
-    }
-  }
-
-  const netAddressMember = resolveNetAddressStringMember(expression, context)
-
-  if (netAddressMember != null) {
-    return {
-      lines: [],
-      bytes: netAddressMember,
-      length: `strlen(${netAddressMember})`
-    }
-  }
-
-  if (inferExpressionType(expression, context) === 'string') {
-    const value = emitCValueExpression(expression, context)
-    const string = nextCName(context, tempPrefix)
-
-    return {
-      lines: [...value.lines, `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`],
-      bytes: `${string}->bytes`,
-      length: `${string}->len`
-    }
-  }
-
-  context.diagnostics.push(
-    diagnostic(
-      'CCJS_C_STRING_EXPR',
-      'this string operand is not supported by the current C backend slice',
-      expression?.loc
-    )
-  )
-
-  return {
-    lines: [],
-    bytes: '""',
-    length: '0'
-  }
 }
 
 function emitPreparedUpdateExpression(expression, context) {
@@ -12534,51 +12347,6 @@ function isNullableRuntimeExpression(expression, context) {
   return expression?.nullable === true && isRuntimeNullableType(inferExpressionType(expression, context))
 }
 
-function isStringConcatExpression(expression, context) {
-  return (
-    expression?.type === 'BinaryExpression' &&
-    expression.operator === '+' &&
-    inferExpressionType(expression.left, context) === 'string' &&
-    inferExpressionType(expression.right, context) === 'string'
-  )
-}
-
-function isRuntimeProducedStringExpression(expression, context) {
-  return (
-    (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') ||
-    cOsRuntimeConstantName(expression) != null ||
-    cPathRuntimeConstantName(expression) != null ||
-    cProcessRuntimeStringPropertyName(expression) != null ||
-    cProcessRuntimeEnvName(expression) != null ||
-    (cProcessRuntimePropertyName(expression) === 'argv' && expression?.type === 'IndexExpression') ||
-    (expression?.type === 'AwaitExpression' && inferExpressionType(expression, context) === 'string') ||
-    isStringConcatExpression(expression, context) ||
-    (expression?.type === 'TemplateLiteral' && expression.raw.includes('${')) ||
-    (isNullishCoalescingExpression(expression) && canLowerCNullishCoalescingExpression(expression, context)) ||
-    isBoxedRuntimeStringReference(expression, context)
-  )
-}
-
-function isRawStringLiteralExpression(expression) {
-  return (
-    expression?.type === 'StringLiteral' || (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${'))
-  )
-}
-
-function isStringConversionCall(expression, context) {
-  if (
-    expression?.type !== 'CallExpression' ||
-    expression.callee.type !== 'Reference' ||
-    expression.callee.path.length !== 1 ||
-    expression.callee.path[0] !== 'String' ||
-    expression.args.length !== 1
-  ) {
-    return false
-  }
-
-  return ['boolean', 'null', 'number', 'string'].includes(inferExpressionType(expression.args[0], context))
-}
-
 function isNumberConversionCall(expression, context) {
   if (
     expression?.type !== 'CallExpression' ||
@@ -12605,68 +12373,6 @@ function isNumericCastCall(expression, context) {
   }
 
   return inferExpressionType(expression.args[0], context) === 'number'
-}
-
-function isStringTrimCall(expression, context) {
-  if (
-    expression?.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'trim' ||
-    expression.args.length !== 0
-  ) {
-    return false
-  }
-
-  return isStringLengthObject(expression.callee.object, context)
-}
-
-function isStringSliceCall(expression, context) {
-  if (
-    expression?.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'slice' ||
-    expression.args.length < 1 ||
-    expression.args.length > 2
-  ) {
-    return false
-  }
-
-  return (
-    isStringLengthObject(expression.callee.object, context) &&
-    expression.args.every((arg) => inferExpressionType(arg, context) === 'number')
-  )
-}
-
-function isStringSplitCall(expression, context) {
-  if (
-    expression?.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'split' ||
-    expression.args.length !== 1
-  ) {
-    return false
-  }
-
-  return (
-    isStringLengthObject(expression.callee.object, context) &&
-    inferExpressionType(expression.args[0], context) === 'string'
-  )
-}
-
-function isStringPredicateCall(expression, context) {
-  if (
-    expression?.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    !isStringPredicateMethod(expression.callee.property) ||
-    expression.args.length !== 1
-  ) {
-    return false
-  }
-
-  return (
-    isStringLengthObject(expression.callee.object, context) &&
-    inferExpressionType(expression.args[0], context) === 'string'
-  )
 }
 
 function isArrayMethodCall(expression) {
@@ -13789,40 +13495,6 @@ function emitPreparedCollectionSizeExpression(expression, context) {
   }
 }
 
-function cStringPredicateHelperName(method) {
-  if (method === 'startsWith') {
-    return 'ccjs_string_starts_with_parts'
-  }
-
-  if (method === 'endsWith') {
-    return 'ccjs_string_ends_with_parts'
-  }
-
-  return 'ccjs_string_includes_parts'
-}
-
-function isStringLengthObject(expression, context) {
-  if (expression == null) {
-    return false
-  }
-
-  if (expression.type === 'StringLiteral') {
-    return true
-  }
-
-  if (expression.type === 'TemplateLiteral') {
-    return true
-  }
-
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
-
-    return context.variables.get(name) === 'string' || context.runtimeStrings.has(name)
-  }
-
-  return inferExpressionType(expression, context) === 'string'
-}
-
 function isArrayLengthExpression(expression, context) {
   return (
     expression?.type === 'MemberExpression' &&
@@ -14368,14 +14040,6 @@ function isBytesSliceCall(expression, context) {
   )
 }
 
-function isBytesToStringCall(expression, context) {
-  return (
-    isBinaryRuntimeCall(expression) &&
-    expression.binaryRuntimeMethod === 'toString' &&
-    inferExpressionType(expression.callee.object, context) === 'bytes'
-  )
-}
-
 function isPromiseMethodCallExpression(expression, context) {
   return (
     expression?.type === 'CallExpression' &&
@@ -14383,8 +14047,4 @@ function isPromiseMethodCallExpression(expression, context) {
     ['catch', 'then'].includes(expression.callee.property) &&
     inferExpressionType(expression.callee.object, context) === 'promise'
   )
-}
-
-function isCStringRuntimeMethodName(name) {
-  return isStringRuntimeMethod(name)
 }
