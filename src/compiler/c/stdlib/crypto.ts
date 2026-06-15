@@ -1,4 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
+import type { AnyNode } from '../../types.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
@@ -16,18 +17,18 @@ import type {
 } from '../types.ts'
 
 export type CryptoLoweringDependencies = {
-  cStringLiteralNode: (value: string, loc?: any) => any
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  cStringLiteralNode: (value: string, loc?: AnyNode['loc']) => AnyNode
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
 }
 
-export function cryptoRuntimeMethodName(expression: any): string | null {
+export function cryptoRuntimeMethodName(expression: AnyNode): string | null {
   if (expression?.type !== 'CallExpression' || typeof expression.cryptoRuntimeMethod !== 'string') {
     return null
   }
@@ -36,7 +37,7 @@ export function cryptoRuntimeMethodName(expression: any): string | null {
 }
 
 export function emitCryptoHashVariableDeclaration(
-  statement: any,
+  statement: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): string[] | null {
@@ -80,7 +81,7 @@ export function emitCryptoHashVariableDeclaration(
 }
 
 export function emitCryptoHandleVariableDeclaration(
-  statement: any,
+  statement: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies,
   inferred: string
@@ -105,7 +106,7 @@ export function emitCryptoHandleVariableDeclaration(
 }
 
 export function emitPreparedCryptoHashCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -158,7 +159,7 @@ export function emitPreparedCryptoHashCallExpression(
 }
 
 export function emitPreparedCryptoHmacCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -213,7 +214,7 @@ export function emitPreparedCryptoHmacCallExpression(
 }
 
 export function emitPreparedCryptoCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -358,7 +359,7 @@ export function emitPreparedCryptoCallExpression(
 }
 
 export function emitPreparedCryptoNumberCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): PreparedExpression | null {
@@ -406,7 +407,7 @@ export function emitPreparedCryptoNumberCallExpression(
 }
 
 export function emitPreparedCryptoHashHandleExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): PreparedExpression {
@@ -444,7 +445,7 @@ export function emitPreparedCryptoHashHandleExpression(
 }
 
 export function emitPreparedCryptoHmacHandleExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): PreparedExpression {
@@ -483,7 +484,7 @@ export function emitPreparedCryptoHmacHandleExpression(
 
 function emitCryptoRandomFillCall(
   value: string,
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): { lines: string[]; call: string } {

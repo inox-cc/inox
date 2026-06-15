@@ -5,6 +5,7 @@ import {
   binaryStaticRuntimeMethodNameFromPath
 } from '../../stdlib/descriptors/binary.ts'
 import { diagnostic } from '../../diagnostics.ts'
+import type { AnyNode } from '../../types.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
@@ -14,17 +15,21 @@ import {
 } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { emitSliceIndexNormalizationLines } from '../values/slices.ts'
-import type { CPreparedExpression as PreparedExpression, CPreparedStatement as PreparedStatement, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
+import type {
+  CPreparedExpression as PreparedExpression,
+  CPreparedStatement as PreparedStatement,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 
 export type BinaryLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
 }
 
 const binaryRuntimeCallDescriptors = {
@@ -37,7 +42,7 @@ const binaryRuntimeCallDescriptors = {
   bytesToString: { callName: 'ccjs_bytes_to_string', tempPrefix: 'ccjs_bytes_string', expectedTag: 'CCJS_TAG_STRING' }
 } as const
 
-export function binaryRuntimeMethodName(callee: any): string | null {
+export function binaryRuntimeMethodName(callee: AnyNode): string | null {
   if (callee?.type !== 'MemberExpression') {
     return null
   }
@@ -49,19 +54,19 @@ export function binaryRuntimeMethodName(callee: any): string | null {
   return binaryInstanceRuntimeMethodName(callee.property)
 }
 
-export function isBinaryRuntimeCall(expression: any): boolean {
+export function isBinaryRuntimeCall(expression: AnyNode): boolean {
   return expression?.type === 'CallExpression' && typeof expression.binaryRuntimeMethod === 'string'
 }
 
-export function isBufferFromCall(expression: any): boolean {
+export function isBufferFromCall(expression: AnyNode): boolean {
   return isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'from'
 }
 
-export function isBufferAllocCall(expression: any): boolean {
+export function isBufferAllocCall(expression: AnyNode): boolean {
   return isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'alloc'
 }
 
-export function isBinaryConstructorExpression(expression: any): boolean {
+export function isBinaryConstructorExpression(expression: AnyNode): boolean {
   return (
     expression?.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
@@ -70,14 +75,14 @@ export function isBinaryConstructorExpression(expression: any): boolean {
   )
 }
 
-export function binaryRuntimeExpressionReturnType(expression: any): 'bytes' | 'string' | null {
+export function binaryRuntimeExpressionReturnType(expression: AnyNode): 'bytes' | 'string' | null {
   return typeof expression?.binaryRuntimeMethod === 'string'
     ? binaryRuntimeReturnType(expression.binaryRuntimeMethod)
     : null
 }
 
 export function emitPreparedBinaryValueExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression | null {
@@ -101,7 +106,7 @@ export function emitPreparedBinaryValueExpression(
 }
 
 function emitCBufferFromValueExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
@@ -125,7 +130,7 @@ function emitCBufferFromValueExpression(
 }
 
 function emitCBytesAllocValueExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
@@ -189,7 +194,7 @@ function emitCBytesAllocValueExpression(
 }
 
 function emitCBytesSliceValueExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
@@ -226,7 +231,7 @@ function emitCBytesSliceValueExpression(
 }
 
 function emitCBytesToStringValueExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
@@ -247,7 +252,7 @@ function emitCBytesToStringValueExpression(
 }
 
 export function emitPreparedBinaryNumberCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression | null {
@@ -264,7 +269,7 @@ export function emitPreparedBinaryNumberCallExpression(
 }
 
 export function emitPreparedBytesLengthExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression | null {
@@ -291,7 +296,7 @@ export function emitPreparedBytesLengthExpression(
 }
 
 export function emitPreparedBytesIndexExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression | null {
@@ -316,7 +321,7 @@ export function emitPreparedBytesIndexExpression(
 }
 
 export function emitPreparedBytesIndexAssignment(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedStatement | null {
@@ -346,7 +351,7 @@ export function emitPreparedBytesIndexAssignment(
 }
 
 export function isBytesSliceCall(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): boolean {
@@ -358,7 +363,7 @@ export function isBytesSliceCall(
 }
 
 export function isBytesToStringCall(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): boolean {
