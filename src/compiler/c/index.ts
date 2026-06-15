@@ -505,11 +505,11 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitCObjectLiteralValueExpression,
   emitCValueExpression,
   emitDgramAddressVariableDeclaration,
-  emitDgramNumberVariableDeclaration: (statement, context) =>
+  emitDgramNumberVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitDgramNumberVariableDeclaration(statement, context, dgramLoweringDependencies),
-  emitDgramSocketVariableDeclaration: (statement, context) =>
+  emitDgramSocketVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitDgramSocketVariableDeclaration(statement, context, dgramLoweringDependencies),
-  emitDgramSocketCallStatement: (expression, context) =>
+  emitDgramSocketCallStatement: (expression: AnyNode, context: CFunctionContext) =>
     emitDgramSocketCallStatement(expression, context, dgramLoweringDependencies),
   emitDynamicObjectMemberVariableDeclaration,
   emitDynamicObjectMemberAssignment,
@@ -519,9 +519,9 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitFetchAbortControllerAbortStatement,
   emitFunctionPointerVariable,
   emitHttpServerVariableDeclaration,
-  emitHttpServerCallStatement: (expression, context) =>
+  emitHttpServerCallStatement: (expression: AnyNode, context: CFunctionContext) =>
     emitHttpServerCallStatement(expression, context, httpLoweringDependencies),
-  emitJsonParseVariableDeclaration: (statement, context) =>
+  emitJsonParseVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitJsonParseVariableDeclaration(statement, context, jsonDeclarationDependencies),
   emitKnownArrayIndexAssignment,
   emitKnownArrayIndexVariableDeclaration,
@@ -530,17 +530,17 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitNetAddressMemberVariableDeclaration,
   emitNetAddressVariableDeclaration,
   emitNetNumberVariableDeclaration,
-  emitNetServerCallStatement: (expression, context) =>
+  emitNetServerCallStatement: (expression: AnyNode, context: CFunctionContext) =>
     emitNetServerCallStatement(expression, context, netLoweringDependencies),
-  emitNetServerVariableDeclaration: (statement, context) =>
+  emitNetServerVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitNetServerVariableDeclaration(statement, context, netLoweringDependencies),
-  emitNetSocketCallStatement: (expression, context) =>
+  emitNetSocketCallStatement: (expression: AnyNode, context: CFunctionContext) =>
     emitNetSocketCallStatement(expression, context, netLoweringDependencies),
-  emitNetSocketVariableDeclaration: (statement, context) =>
+  emitNetSocketVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitNetSocketVariableDeclaration(statement, context, netLoweringDependencies),
   emitNullableScalarValueExpression,
   emitNullableRuntimeValueAssignment,
-  emitObjectVariableDeclaration: (statement, context) =>
+  emitObjectVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitObjectVariableDeclaration(statement, context, objectVariableDeclarationDependencies),
   emitOptionalRuntimeCallbackCallExpression,
   emitPreparedArrayFilterCallExpression,
@@ -549,63 +549,63 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedArrayPushCallExpression,
   emitPreparedArraySortCallExpression,
   emitPreparedAsyncFunctionPromiseCallExpression,
-  emitPreparedBytesIndexAssignment: (expression, context) =>
+  emitPreparedBytesIndexAssignment: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBytesIndexAssignment(expression, context, binaryLoweringDependencies),
   emitPreparedCallExpression,
-  emitPreparedChildProcessCallExpression: (expression, context, options) =>
+  emitPreparedChildProcessCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedChildProcessCallExpression(expression, context, childProcessLoweringDependencies, options),
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
-  emitPreparedCryptoCallExpression: (expression, context, options) =>
+  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies, options),
-  emitPreparedCryptoHashCallExpression: (expression, context) =>
+  emitPreparedCryptoHashCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoHashCallExpression(expression, context, cryptoLoweringDependencies),
-  emitPreparedCryptoHmacCallExpression: (expression, context) =>
+  emitPreparedCryptoHmacCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoHmacCallExpression(expression, context, cryptoLoweringDependencies),
-  emitPreparedCryptoNumberCallExpression: (expression, context) =>
+  emitPreparedCryptoNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedDebugMemoryCallExpression,
-  emitPreparedFetchCallExpression: (expression, context, options) =>
+  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFetchHeadersCallExpression: (expression, context, options) =>
+  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFsCallExpression: (expression, context, options) =>
+  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedFsCallExpression(expression, context, fsLoweringDependencies, options),
-  emitPreparedFsSyncStatementExpression: (expression, context) =>
+  emitPreparedFsSyncStatementExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFsSyncStatementExpression(expression, context, fsLoweringDependencies),
   emitPreparedMapIndexAssignment,
   emitPreparedNumberExpression,
-  emitPreparedPathObjectCallExpression: (expression, context, options) =>
+  emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies, options),
-  emitPreparedPromiseConstructorExpression: (expression, context, options) =>
+  emitPreparedPromiseConstructorExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedPromiseConstructorExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseExpression: (expression, context, options) =>
+  emitPreparedPromiseExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedPromiseExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseMethodExpression: (expression, context, options) =>
+  emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedPromiseMethodExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseReturningCallExpression: (expression, context, options) =>
+  emitPreparedPromiseReturningCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedPromiseReturningCallExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseStaticExpression: (expression, context, options) =>
+  emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedPromiseStaticExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedTimerCallExpression: (expression, context, options) =>
+  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitPreparedUpdateExpression,
-  emitPreparedUrlObjectExpression: (expression, context, options) =>
+  emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies, options),
-  emitPreparedUrlSearchParamsObjectExpression: (expression, context, options) =>
+  emitPreparedUrlSearchParamsObjectExpression: (expression: AnyNode, context: CFunctionContext, options?: any) =>
     emitPreparedUrlSearchParamsObjectExpression(expression, context, urlLoweringDependencies, options),
-  emitProcessExitCodeAssignment: (expression, context) =>
+  emitProcessExitCodeAssignment: (expression: AnyNode, context: CFunctionContext) =>
     emitProcessExitCodeAssignment(expression, context, processLoweringDependencies),
-  emitProcessExitStatement: (expression, context) =>
+  emitProcessExitStatement: (expression: AnyNode, context: CFunctionContext) =>
     emitProcessExitStatement(expression, context, processLoweringDependencies),
-  emitPromiseConstructorSettlementCall: (expression, context) =>
+  emitPromiseConstructorSettlementCall: (expression: AnyNode, context: CFunctionContext) =>
     emitPromiseConstructorSettlementCall(expression, context, promiseLoweringDependencies),
   emitReference,
   emitRuntimeCallbackVariableDeclaration,
   emitScalarVariableDeclaration,
   emitStatement,
   emitStringExpression,
-  emitUrlObjectFieldAssignment: (expression, context) =>
+  emitUrlObjectFieldAssignment: (expression: AnyNode, context: CFunctionContext) =>
     emitUrlObjectFieldAssignment(expression, context, urlLoweringDependencies),
   inferCatchBindingValueType,
   inferExpressionType,
