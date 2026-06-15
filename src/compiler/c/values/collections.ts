@@ -1,21 +1,26 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { collectionConstructorNameFromPath } from '../../stdlib/descriptors/collections.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitStatusCheck,
+  nextCName,
+  registerOwnedValue,
+  type CFunctionContext
+} from '../context.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-
 type PreparedCollectionCall = PreparedExpression
 
 export type CollectionLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  inferExpressionType: (expression: any, context: any) => string
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
   isIndexAccessExpression: (expression: any) => boolean
   isMemberAccessExpression: (expression: any) => boolean
-  reportCCollectionHashability: (valueType: string, subject: string, loc: any, context: any) => void
-  resolveKnownObjectIndex: (expression: any, context: any) => any | null
-  resolveKnownObjectMember: (expression: any, context: any) => any | null
+  reportCCollectionHashability: (valueType: string, subject: string, loc: any, context: CFunctionContext) => void
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
 }
 
 const mapMethodDescriptors = {
@@ -38,11 +43,11 @@ const collectionSizeDescriptors = {
   set: { callName: 'ccjs_set_size', tempPrefix: 'ccjs_set_size' }
 } as const
 
-function collectionDeps(context: any): CollectionLoweringDependencies {
+function collectionDeps(context: CFunctionContext): CollectionLoweringDependencies {
   return context.collectionLoweringDependencies
 }
 
-export function emitPreparedCollectionReceiver(expression, context) {
+export function emitPreparedCollectionReceiver(expression: any, context: CFunctionContext) {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
     const type = context.variables.get(name)
@@ -117,7 +122,10 @@ export function collectionConstructorName(expression: any): string | null {
   return collectionConstructorNameFromPath(expression.callee.path)
 }
 
-export function emitPreparedCollectionCallExpression(expression, context): PreparedCollectionCall | null {
+export function emitPreparedCollectionCallExpression(
+  expression: any,
+  context: CFunctionContext
+): PreparedCollectionCall | null {
   if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
     return null
   }
@@ -139,7 +147,7 @@ export function emitPreparedCollectionCallExpression(expression, context): Prepa
   }
 }
 
-function emitPreparedMapMethodCall(name, expression, context): PreparedExpression {
+function emitPreparedMapMethodCall(name: string, expression: any, context: CFunctionContext): PreparedExpression {
   const method = expression.callee.property
   const descriptor = mapMethodDescriptors[method]
 
@@ -233,7 +241,10 @@ function emitPreparedMapMethodCall(name, expression, context): PreparedExpressio
   }
 }
 
-export function emitPreparedMapIndexGetExpression(expression, context): PreparedExpression | null {
+export function emitPreparedMapIndexGetExpression(
+  expression: any,
+  context: CFunctionContext
+): PreparedExpression | null {
   const mapIndex = emitPreparedMapIndexReceiver(expression, context)
 
   if (mapIndex == null) {
@@ -264,7 +275,7 @@ export function emitPreparedMapIndexGetExpression(expression, context): Prepared
   }
 }
 
-export function emitPreparedMapIndexAssignment(expression, context): PreparedExpression | null {
+export function emitPreparedMapIndexAssignment(expression: any, context: CFunctionContext): PreparedExpression | null {
   if (expression?.type !== 'AssignmentExpression') {
     return null
   }
@@ -295,7 +306,7 @@ export function emitPreparedMapIndexAssignment(expression, context): PreparedExp
   }
 }
 
-function emitPreparedMapIndexReceiver(expression, context) {
+function emitPreparedMapIndexReceiver(expression: any, context: CFunctionContext) {
   if (expression?.type !== 'IndexExpression' || expression.collectionKind !== 'map') {
     return null
   }
@@ -312,7 +323,7 @@ function emitPreparedMapIndexReceiver(expression, context) {
   }
 }
 
-function emitPreparedSetMethodCall(name, expression, context): PreparedExpression {
+function emitPreparedSetMethodCall(name: string, expression: any, context: CFunctionContext): PreparedExpression {
   const method = expression.callee.property
   const descriptor = setMethodDescriptors[method]
 
@@ -375,7 +386,7 @@ function emitPreparedSetMethodCall(name, expression, context): PreparedExpressio
   }
 }
 
-export function emitPreparedCollectionSizeExpression(expression, context) {
+export function emitPreparedCollectionSizeExpression(expression: any, context: CFunctionContext) {
   if (expression?.type !== 'MemberExpression' || expression.property !== 'size') {
     return null
   }
@@ -399,7 +410,7 @@ export function emitPreparedCollectionSizeExpression(expression, context) {
   }
 }
 
-export function resolveRuntimeSetElementType(expression, context) {
+export function resolveRuntimeSetElementType(expression: any, context: CFunctionContext) {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return context.setElementTypes.get(expression.path[0]) ?? null
   }
@@ -429,7 +440,7 @@ export function resolveRuntimeSetElementType(expression, context) {
   return null
 }
 
-export function resolveRuntimeMapType(expression, context) {
+export function resolveRuntimeMapType(expression: any, context: CFunctionContext) {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return context.mapTypes.get(expression.path[0]) ?? null
   }
@@ -480,7 +491,7 @@ function resolveFunctionReturnNameFromCall(expression) {
     : null
 }
 
-export function resolveRuntimeForOfSet(expression, context) {
+export function resolveRuntimeForOfSet(expression: any, context: CFunctionContext) {
   const elementType = resolveRuntimeSetElementType(expression, context)
 
   if (elementType == null) {
@@ -500,7 +511,7 @@ export function resolveRuntimeForOfSet(expression, context) {
   }
 }
 
-export function resolveRuntimeForOfMap(expression, context) {
+export function resolveRuntimeForOfMap(expression: any, context: CFunctionContext) {
   const mapType = resolveRuntimeMapType(expression, context)
 
   if (mapType == null) {

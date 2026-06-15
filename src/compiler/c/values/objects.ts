@@ -1,15 +1,20 @@
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitStatusCheck,
+  nextCName,
+  registerOwnedValue,
+  type CFunctionContext
+} from '../context.ts'
 import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-
 export type ObjectVariableDeclarationDependencies = {
   emitCFieldFlags: (field: any) => string
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  inferExpressionType: (expression: any, context: any) => string
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
 }
 
 export function isMemberAccessExpression(expression) {
@@ -20,7 +25,7 @@ export function isIndexAccessExpression(expression) {
   return expression?.type === 'IndexExpression' || expression?.type === 'OptionalIndexExpression'
 }
 
-export function resolveKnownObjectMember(expression, context) {
+export function resolveKnownObjectMember(expression: any, context: CFunctionContext) {
   if (!isMemberAccessExpression(expression)) {
     return null
   }
@@ -63,11 +68,11 @@ export function resolveObjectExpressionMember(expression) {
   return resolveObjectExpressionShapeField(expression.object, expression.property)
 }
 
-export function emitObjectValueReference(name, context) {
+export function emitObjectValueReference(name: string, context: CFunctionContext) {
   return context.boxedVariables.has(name) && context.variables.get(name) === 'object' ? `(*${name})` : name
 }
 
-export function resolveKnownObjectIndex(expression, context) {
+export function resolveKnownObjectIndex(expression: any, context: CFunctionContext) {
   if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
     return null
   }
@@ -146,7 +151,7 @@ export function resolveCObjectExpressionName(expression) {
   return null
 }
 
-export function updateKnownObjectMemberValueType(member, valueType, context) {
+export function updateKnownObjectMemberValueType(member: any, valueType: string, context: CFunctionContext) {
   if (valueType === 'unknown') {
     return
   }
@@ -163,7 +168,7 @@ export function updateKnownObjectMemberValueType(member, valueType, context) {
   }
 }
 
-export function emitPreparedKnownObjectMemberValueExpression(expression, context) {
+export function emitPreparedKnownObjectMemberValueExpression(expression: any, context: CFunctionContext) {
   const member = resolveKnownObjectMember(expression, context)
 
   if (member == null) {
@@ -175,7 +180,7 @@ export function emitPreparedKnownObjectMemberValueExpression(expression, context
   )
 }
 
-export function emitPreparedKnownObjectIndexValueExpression(expression, context) {
+export function emitPreparedKnownObjectIndexValueExpression(expression: any, context: CFunctionContext) {
   const field = resolveKnownObjectIndex(expression, context)
 
   if (field == null) {
@@ -187,7 +192,12 @@ export function emitPreparedKnownObjectIndexValueExpression(expression, context)
   )
 }
 
-function emitPreparedKnownObjectFieldValueExpression(field, expression, context, emitGetCall) {
+function emitPreparedKnownObjectFieldValueExpression(
+  field: any,
+  expression: any,
+  context: CFunctionContext,
+  emitGetCall: (temp: string) => string
+) {
   if (!['bytes', 'array', 'map', 'set', 'object', 'string'].includes(field.valueType)) {
     return null
   }
@@ -206,7 +216,7 @@ function emitPreparedKnownObjectFieldValueExpression(field, expression, context,
   }
 }
 
-export function registerObjectShape(context, name, shape) {
+export function registerObjectShape(context: CFunctionContext, name: string, shape: any) {
   if (shape?.fields == null) {
     return
   }
@@ -225,7 +235,11 @@ export function registerObjectShape(context, name, shape) {
   )
 }
 
-export function emitObjectVariableDeclaration(statement, context, dependencies: ObjectVariableDeclarationDependencies) {
+export function emitObjectVariableDeclaration(
+  statement: any,
+  context: CFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+) {
   const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
   const fieldsName = `${shapeName}_fields`
   const fields =

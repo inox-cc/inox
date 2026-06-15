@@ -1,5 +1,12 @@
 import { diagnostic } from '../../diagnostics.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitStatusCheck,
+  nextCName,
+  registerOwnedValue,
+  type CEmitContext,
+  type CFunctionContext
+} from '../context.ts'
 import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType } from '../value-types.ts'
@@ -7,15 +14,13 @@ import { emitObjectValueReference, resolveCObjectExpressionName } from './object
 import type { AnyNode, Diagnostic } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression, CPreparedCallArgs as PreparedCallArgs } from '../types.ts'
 
-
-
 export type ClassLoweringDependencies = {
   emitCFieldFlags: (field: any) => string
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedCallArgs: (expression: any, params: any[], context: any) => PreparedCallArgs
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedCallArgs: (expression: any, params: any[], context: CFunctionContext) => PreparedCallArgs
 }
 
-function classDeps(context: any): ClassLoweringDependencies {
+function classDeps(context: CFunctionContext): ClassLoweringDependencies {
   return context.classLoweringDependencies
 }
 
@@ -47,7 +52,7 @@ export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]) 
   return infos
 }
 
-export function collectClassMethods(context) {
+export function collectClassMethods(context: CEmitContext) {
   return [...context.classInfos.values()].flatMap((info) =>
     [...info.methods.values()].map((method) => ({
       info,
@@ -181,7 +186,7 @@ function isThisObjectExpression(expression: AnyNode) {
   )
 }
 
-export function emitClassObjectVariableDeclaration(statement, context) {
+export function emitClassObjectVariableDeclaration(statement: any, context: CFunctionContext) {
   const info = resolveClassConstructorInfo(statement.init, context)
 
   if (info == null) {
@@ -203,7 +208,7 @@ export function emitClassObjectVariableDeclaration(statement, context) {
   return emitCClassObjectInitLines(statement.name, statement.init, info, context)
 }
 
-export function emitCClassObjectValueExpression(expression, context) {
+export function emitCClassObjectValueExpression(expression: any, context: CFunctionContext) {
   const info = resolveClassConstructorInfo(expression, context)
   const temp = nextCName(context, 'ccjs_class_object')
   registerOwnedValue(context, temp)
@@ -229,7 +234,7 @@ export function emitCClassObjectValueExpression(expression, context) {
   }
 }
 
-function emitCClassObjectInitLines(target, expression, info, context) {
+function emitCClassObjectInitLines(target: string, expression: any, info: any, context: CFunctionContext) {
   const shapeName = nextCName(context, `ccjs_shape_${info.name}`)
   const fieldsName = `${shapeName}_fields`
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
@@ -269,7 +274,7 @@ function emitCClassObjectInitLines(target, expression, info, context) {
   return lines
 }
 
-export function registerClassObjectShape(context, name, info) {
+export function registerClassObjectShape(context: CFunctionContext, name: string, info: any) {
   context.objectShapes.set(
     name,
     info.fields.map((field) => ({
@@ -319,7 +324,7 @@ function substituteClassConstructorParams(node, args) {
   return copy
 }
 
-function resolveClassConstructorInfo(expression, context) {
+function resolveClassConstructorInfo(expression: any, context: CFunctionContext) {
   if (
     expression?.type !== 'NewExpression' ||
     expression.callee.type !== 'Reference' ||
@@ -331,11 +336,11 @@ function resolveClassConstructorInfo(expression, context) {
   return context.classInfos.get(expression.callee.path[0]) ?? null
 }
 
-export function isClassConstructorExpression(expression, context) {
+export function isClassConstructorExpression(expression: any, context: CFunctionContext) {
   return resolveClassConstructorInfo(expression, context) != null
 }
 
-export function emitPreparedClassMethodCallExpression(expression, context) {
+export function emitPreparedClassMethodCallExpression(expression: any, context: CFunctionContext) {
   const call = resolveClassMethodCallInfo(expression, context)
 
   if (call == null) {
@@ -394,7 +399,7 @@ export function emitPreparedClassMethodCallExpression(expression, context) {
   }
 }
 
-function resolveClassMethodCallInfo(expression, context) {
+function resolveClassMethodCallInfo(expression: any, context: CFunctionContext) {
   if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
     return null
   }
