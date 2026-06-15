@@ -38,6 +38,7 @@ import {
   setElementTypeNameFromTypeName
 } from './type-names.ts'
 import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
+import { unsupportedRuntimeBuiltinImportMessage } from './stdlib/descriptors/node-builtins.ts'
 import {
   fetchHeadersRuntimeMethod,
   isFetchAbortControllerMethod,
@@ -376,7 +377,7 @@ class Checker {
     }
 
     if (item.type === 'ImportDeclaration') {
-      this.checkLibuvOnlyRuntimeImport(item)
+      this.checkRuntimeBuiltinImport(item)
       return
     }
 
@@ -2270,8 +2271,15 @@ class Checker {
     return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
   }
 
-  checkLibuvOnlyRuntimeImport(statement: AnyNode): void {
+  checkRuntimeBuiltinImport(statement: AnyNode): void {
     if (statement.typeOnly) {
+      return
+    }
+
+    const unsupportedMessage = unsupportedRuntimeBuiltinImportMessage(statement.source)
+
+    if (unsupportedMessage != null) {
+      this.report('CCJS_NOT_IMPLEMENTED', unsupportedMessage, statement.loc)
       return
     }
 

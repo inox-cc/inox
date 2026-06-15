@@ -1,14 +1,11 @@
-export const runtimeBuiltinImportSources = new Set([
-  'dgram',
-  'fs',
-  'http',
-  'net',
-  'node:dgram',
-  'node:crypto',
-  'node:fs',
-  'node:fs/promises',
-  'node:http',
-  'node:net'
+import {
+  implementedRuntimeBuiltinImportSources,
+  unsupportedRuntimeBuiltinImportSources
+} from './stdlib/descriptors/node-builtins.ts'
+
+export const runtimeBuiltinImportSources = new Set<string>([
+  ...implementedRuntimeBuiltinImportSources,
+  ...unsupportedRuntimeBuiltinImportSources
 ])
 
 export function isRuntimeBuiltinImportSource(specifier: string): boolean {

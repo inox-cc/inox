@@ -19,6 +19,8 @@ test('classifies runtime builtin import sources from a shared helper', () => {
   assert.equal(isRuntimeBuiltinImportSource('node:fs'), true)
   assert.equal(isRuntimeBuiltinImportSource('node:fs/promises'), true)
   assert.equal(isRuntimeBuiltinImportSource('node:http'), true)
+  assert.equal(isRuntimeBuiltinImportSource('node:path'), true)
+  assert.equal(isRuntimeBuiltinImportSource('node:timers/promises'), true)
   assert.equal(isRuntimeBuiltinImportSource('./node:fs'), false)
 })
 
