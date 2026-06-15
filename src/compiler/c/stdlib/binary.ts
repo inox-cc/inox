@@ -5,23 +5,26 @@ import {
   binaryStaticRuntimeMethodNameFromPath
 } from '../../stdlib/descriptors/binary.ts'
 import { diagnostic } from '../../diagnostics.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitStatusCheck,
+  nextCName,
+  registerOwnedValue,
+  type CFunctionContext
+} from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { emitSliceIndexNormalizationLines } from '../values/slices.ts'
 import type { CPreparedExpression as PreparedExpression, CPreparedStatement as PreparedStatement, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-
-
-
 export type BinaryLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
     expression: any,
-    context: any,
+    context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  inferExpressionType: (expression: any, context: any) => string
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
 }
 
 const binaryRuntimeCallDescriptors = {
@@ -75,7 +78,7 @@ export function binaryRuntimeExpressionReturnType(expression: any): 'bytes' | 's
 
 export function emitPreparedBinaryValueExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression | null {
   if (isBufferFromCall(expression)) {
@@ -99,7 +102,7 @@ export function emitPreparedBinaryValueExpression(
 
 function emitCBufferFromValueExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
   const descriptor = binaryRuntimeCallDescriptors.fromData
@@ -123,7 +126,7 @@ function emitCBufferFromValueExpression(
 
 function emitCBytesAllocValueExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
   const descriptor = binaryRuntimeCallDescriptors.newBytes
@@ -187,7 +190,7 @@ function emitCBytesAllocValueExpression(
 
 function emitCBytesSliceValueExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
   const descriptor = binaryRuntimeCallDescriptors.slice
@@ -224,7 +227,7 @@ function emitCBytesSliceValueExpression(
 
 function emitCBytesToStringValueExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
   const descriptor = binaryRuntimeCallDescriptors.bytesToString
@@ -245,7 +248,7 @@ function emitCBytesToStringValueExpression(
 
 export function emitPreparedBinaryNumberCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression | null {
   if (expression?.type === 'CallExpression' && expression.binaryRuntimeMethod === 'isBuffer') {
@@ -262,7 +265,7 @@ export function emitPreparedBinaryNumberCallExpression(
 
 export function emitPreparedBytesLengthExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression | null {
   if (
@@ -289,7 +292,7 @@ export function emitPreparedBytesLengthExpression(
 
 export function emitPreparedBytesIndexExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression | null {
   if (expression?.type !== 'IndexExpression' || dependencies.inferExpressionType(expression.object, context) !== 'bytes') {
@@ -314,7 +317,7 @@ export function emitPreparedBytesIndexExpression(
 
 export function emitPreparedBytesIndexAssignment(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedStatement | null {
   if (
@@ -344,7 +347,7 @@ export function emitPreparedBytesIndexAssignment(
 
 export function isBytesSliceCall(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): boolean {
   return (
@@ -356,7 +359,7 @@ export function isBytesSliceCall(
 
 export function isBytesToStringCall(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): boolean {
   return (

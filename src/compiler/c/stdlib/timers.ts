@@ -9,15 +9,15 @@ import {
   emitFailureStatement,
   emitStatusCheck,
   nextCName,
-  registerEventLoop
+  registerEventLoop,
+  type CFunctionContext
 } from '../context.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-
 export type TimerLoweringDependencies = {
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
-  emitReference: (expression: any, context: any) => string
-  emitRuntimeCallbackValue: (expression: any, functionType: any, context: any) => PreparedExpression
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitReference: (expression: any, context: CFunctionContext) => string
+  emitRuntimeCallbackValue: (expression: any, functionType: any, context: CFunctionContext) => PreparedExpression
 }
 
 type TimerCallOptions = {
@@ -92,7 +92,7 @@ export function timerCallbackFunctionType(): any {
 
 export function emitTimerVariableDeclaration(
   statement: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: TimerLoweringDependencies,
   inferred?: string
 ): string[] | null {
@@ -134,7 +134,7 @@ export function emitTimerVariableDeclaration(
 
 export function emitPreparedTimerCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: TimerLoweringDependencies,
   options: TimerCallOptions = {}
 ): PreparedExpression | null {
@@ -238,7 +238,7 @@ export function emitPreparedTimerCallExpression(
 
 export function emitPreparedTimerHandleExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: TimerLoweringDependencies
 ): PreparedExpression {
   if (
