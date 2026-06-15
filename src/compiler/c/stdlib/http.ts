@@ -33,8 +33,8 @@ type HttpHandlerContext = {
 }
 
 export type HttpLoweringDependencies = {
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitStatementList: (body: any[], context: CFunctionContext) => string[]
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitStatementList: (body: AnyNode[], context: CFunctionContext) => string[]
 }
 
 export function emitHttpHandlerHead(wrapper: CHttpHandler): string {
@@ -92,7 +92,7 @@ export function emitHttpHandlerDeclaration(
 }
 
 function emitHttpHandlerStatement(
-  statement: any,
+  statement: AnyNode | null | undefined,
   httpContext: HttpHandlerContext,
   context: CFunctionContext,
   deps: HttpLoweringDependencies
@@ -195,7 +195,7 @@ function emitHttpHandlerStatement(
 }
 
 function emitHttpResponseStatusAssignment(
-  expression: any,
+  expression: AnyNode,
   httpContext: HttpHandlerContext,
   context: CFunctionContext
 ): string[] | null {
@@ -213,7 +213,7 @@ function emitHttpResponseStatusAssignment(
 }
 
 function emitHttpResponseCallStatement(
-  expression: any,
+  expression: AnyNode,
   httpContext: HttpHandlerContext,
   context: CFunctionContext
 ): string[] | null {
@@ -266,7 +266,7 @@ function emitHttpResponseCallStatement(
   return null
 }
 
-function emitHttpHeaderArray(expression: any, context: CFunctionContext): HttpHeaderArray {
+function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CFunctionContext): HttpHeaderArray {
   if (expression == null) {
     return {
       lines: [],
@@ -331,7 +331,7 @@ function emitHttpHeaderArray(expression: any, context: CFunctionContext): HttpHe
 }
 
 function emitHttpConditionExpression(
-  expression: any,
+  expression: AnyNode | null | undefined,
   httpContext: HttpHandlerContext,
   context: CFunctionContext
 ): string {
@@ -366,7 +366,7 @@ function emitHttpConditionExpression(
 }
 
 function emitHttpRequestStringCompareExpression(
-  expression: any,
+  expression: AnyNode,
   httpContext: HttpHandlerContext,
   context: CFunctionContext
 ): string | null {
@@ -392,7 +392,7 @@ function emitHttpRequestStringCompareExpression(
 }
 
 function emitHttpStringBytesOperand(
-  expression: any,
+  expression: AnyNode | null | undefined,
   httpContext: HttpHandlerContext,
   context: CFunctionContext
 ): HttpStringBytesOperand {
@@ -448,7 +448,7 @@ function emitHttpStringBytesOperand(
 }
 
 function emitHttpStaticStringValue(
-  expression: any,
+  expression: AnyNode | null | undefined,
   httpContext: Partial<HttpHandlerContext>,
   context: CFunctionContext
 ): string | null {
@@ -475,7 +475,10 @@ function emitHttpStaticStringValue(
   return emitHttpStaticJsonStringifyValue(expression, context)
 }
 
-function emitHttpStaticJsonStringifyValue(expression: any, context: CFunctionContext): string | null {
+function emitHttpStaticJsonStringifyValue(
+  expression: AnyNode | null | undefined,
+  context: CFunctionContext
+): string | null {
   if (
     expression?.type !== 'CallExpression' ||
     cJsonRuntimeCallName(expression.callee) !== 'stringify' ||
@@ -487,7 +490,7 @@ function emitHttpStaticJsonStringifyValue(expression: any, context: CFunctionCon
   return emitHttpStaticJsonValue(expression.args[0], context)
 }
 
-function emitHttpStaticJsonValue(expression: any, context: CFunctionContext): string | null {
+function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context: CFunctionContext): string | null {
   if (expression?.type === 'StringLiteral') {
     return JSON.stringify(expression.value)
   }
@@ -537,7 +540,7 @@ function emitHttpStaticJsonValue(expression: any, context: CFunctionContext): st
   return null
 }
 
-function emitHttpStatusCodeExpression(expression: any, context: CFunctionContext): string {
+function emitHttpStatusCodeExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {
   if (expression?.type === 'NumberLiteral') {
     return `(int)(${expression.value})`
   }
@@ -558,7 +561,7 @@ function emitHttpStatusCheck(call: string, context: CFunctionContext): string[] 
   return ['{', `  ccjs_status ${status} = ${call};`, `  if (${status} != CCJS_OK) return ${status};`, '}']
 }
 
-function isHttpResponseReference(expression: any, httpContext: HttpHandlerContext): boolean {
+function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
   return (
     httpContext.responseName != null &&
     expression?.type === 'Reference' &&
@@ -567,7 +570,7 @@ function isHttpResponseReference(expression: any, httpContext: HttpHandlerContex
   )
 }
 
-function resolveHttpRequestStringMember(expression: any, httpContext: HttpHandlerContext): string | null {
+function resolveHttpRequestStringMember(expression: AnyNode, httpContext: HttpHandlerContext): string | null {
   if (
     httpContext.requestName == null ||
     expression?.type !== 'MemberExpression' ||
@@ -581,7 +584,7 @@ function resolveHttpRequestStringMember(expression: any, httpContext: HttpHandle
   return expression.property === 'method' || expression.property === 'url' ? expression.property : null
 }
 
-export function emitHttpServerVariableDeclaration(statement: any, context: CFunctionContext): string[] | null {
+export function emitHttpServerVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
   if (!isHttpCreateServerCall(statement.init, context)) {
     return null
   }
@@ -593,7 +596,7 @@ export function emitHttpServerVariableDeclaration(statement: any, context: CFunc
 }
 
 export function emitHttpServerCallStatement(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: HttpLoweringDependencies
 ): string[] | null {
@@ -633,7 +636,7 @@ export function emitHttpServerCallStatement(
 }
 
 function emitHttpServerCreateLines(
-  expression: any,
+  expression: AnyNode,
   serverName: string,
   context: CFunctionContext,
   options: { declare?: boolean } = {}
@@ -665,7 +668,7 @@ function emitHttpServerCreateLines(
 
 function emitHttpServerListenLines(
   serverName: string,
-  args: any[],
+  args: AnyNode[],
   context: CFunctionContext,
   deps: HttpLoweringDependencies
 ): string[] {
@@ -700,7 +703,7 @@ function emitHttpServerListenLines(
   ]
 }
 
-function emitHttpServerOnRequestLines(serverName: string, args: any[], context: CFunctionContext): string[] {
+function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], context: CFunctionContext): string[] {
   if (args[0]?.type !== 'StringLiteral' || args[0].value !== 'request') {
     context.diagnostics.push(
       diagnostic(
@@ -731,7 +734,7 @@ function emitHttpServerOnRequestLines(serverName: string, args: any[], context: 
 
 function emitHttpServerCloseLines(
   serverName: string,
-  args: any[],
+  args: AnyNode[],
   context: CFunctionContext,
   deps: HttpLoweringDependencies
 ): string[] {
@@ -745,7 +748,7 @@ function emitHttpServerCloseLines(
 }
 
 function emitHttpZeroArgCallbackLines(
-  callback: any,
+  callback: AnyNode | null | undefined,
   context: CFunctionContext,
   deps: HttpLoweringDependencies
 ): string[] {
@@ -777,7 +780,7 @@ function emitHttpZeroArgCallbackLines(
   return deps.emitStatementList(body, context)
 }
 
-function emitHttpListenHostExpression(expression: any, context: CFunctionContext): string {
+function emitHttpListenHostExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {
   if (expression == null) {
     return '0'
   }
@@ -800,7 +803,7 @@ function emitHttpListenHostExpression(expression: any, context: CFunctionContext
   return '0'
 }
 
-function isHttpServerMethodCall(expression: any, method: string, context: CFunctionContext): boolean {
+function isHttpServerMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
@@ -811,7 +814,7 @@ function isHttpServerMethodCall(expression: any, method: string, context: CFunct
   )
 }
 
-function isHttpCreateServerCall(expression: any, context: CEmitContext): boolean {
+function isHttpCreateServerCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
   if (expression?.type !== 'CallExpression') {
     return false
   }
@@ -833,7 +836,7 @@ function isHttpCreateServerCall(expression: any, context: CEmitContext): boolean
   )
 }
 
-function isHttpRequestEventCall(expression: any): boolean {
+function isHttpRequestEventCall(expression: AnyNode): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
@@ -845,7 +848,7 @@ function isHttpRequestEventCall(expression: any): boolean {
 
 export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<AnyNode, CHttpHandler> {
   const handlers = new Map<AnyNode, CHttpHandler>()
-  const register = (expression) => {
+  const register = (expression: AnyNode | null | undefined) => {
     if (expression?.type !== 'ArrowFunctionExpression') {
       return
     }
@@ -859,7 +862,7 @@ export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitConte
       expression
     })
   }
-  const visitStatement = (statement) => {
+  const visitStatement = (statement: AnyNode | null | undefined) => {
     if (statement == null) {
       return
     }
@@ -918,7 +921,7 @@ export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitConte
 
     if (statement.type === 'SwitchStatement') {
       visitExpression(statement.discriminant)
-      statement.cases.forEach((item) => {
+      statement.cases.forEach((item: AnyNode) => {
         visitExpression(item.test)
         item.consequent.forEach(visitStatement)
       })
@@ -931,7 +934,7 @@ export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitConte
       visitStatement(statement.finalizer)
     }
   }
-  const visitExpression = (expression) => {
+  const visitExpression = (expression: AnyNode | null | undefined) => {
     if (expression == null) {
       return
     }
