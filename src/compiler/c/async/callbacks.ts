@@ -29,21 +29,45 @@ import type {
   CRuntimeArrowCapture,
   CRuntimeCallbackWrapper
 } from '../types.ts'
-import type { IrProgram } from '../../types.ts'
+import type { AnyNode, IrProgram } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
 
 export type CallbackLoweringDependencies = {
-  collectTemplatePlaceholderExpressions: (expression: any) => any[]
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitRuntimeCallbackRuntimeValueReturnLines: (argument: any, context: CFunctionContext) => string[]
-  emitStatementList: (statements: any[], context: CFunctionContext) => string[]
+  collectTemplatePlaceholderExpressions: (expression: AnyNode) => AnyNode[]
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitRuntimeCallbackRuntimeValueReturnLines: (argument: AnyNode, context: CFunctionContext) => string[]
+  emitStatementList: (statements: AnyNode[], context: CFunctionContext) => string[]
   registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
 }
 
-export function functionUsesExternalEventLoop(node: any, externalNames: Set<any>): boolean {
+type CallbackScopeBinding = {
+  declaration?: AnyNode | CFunctionParam | null
+  functionType?: CFunctionType | null
+  loc?: AnyNode['loc']
+  mutable?: boolean
+  name: string
+  nullable?: boolean
+  promiseSettlementKind?: 'reject' | 'resolve' | null
+  runtimeCallback?: boolean
+  runtimeManaged?: boolean
+  shape?: any
+  valueType: string
+}
+
+type CallbackScope = Map<string, CallbackScopeBinding>
+
+type PendingPlainFunctionArg = {
+  arg: AnyNode
+  callee: AnyNode
+  functionType: CFunctionType
+  index: number
+  scopes: CallbackScope[]
+}
+
+export function functionUsesExternalEventLoop(node: AnyNode, externalNames: Set<string>): boolean {
   let found = false
-  const visit = (value) => {
+  const visit = (value: unknown): void => {
     if (found || value == null) {
       return
     }
@@ -57,22 +81,24 @@ export function functionUsesExternalEventLoop(node: any, externalNames: Set<any>
       return
     }
 
-    if (isTimerStartCallExpression(value)) {
+    const current = value as AnyNode
+
+    if (isTimerStartCallExpression(current)) {
       found = true
       return
     }
 
     if (
-      value.type === 'CallExpression' &&
-      value.callee?.type === 'Reference' &&
-      value.callee.path.length === 1 &&
-      externalNames.has(value.callee.path[0])
+      current.type === 'CallExpression' &&
+      current.callee?.type === 'Reference' &&
+      current.callee.path.length === 1 &&
+      externalNames.has(current.callee.path[0])
     ) {
       found = true
       return
     }
 
-    for (const [key, child] of Object.entries(value)) {
+    for (const [key, child] of Object.entries(current)) {
       if (key === 'loc' || key === 'shape') {
         continue
       }
@@ -113,7 +139,7 @@ export function isRuntimeFunctionType(functionType: CFunctionType | null | undef
   )
 }
 
-export function isNullableFunctionType(valueType: any, nullable: any): boolean {
+export function isNullableFunctionType(valueType: string | null | undefined, nullable: boolean | null | undefined): boolean {
   return valueType === 'function' && nullable === true
 }
 
@@ -134,12 +160,12 @@ export function isSupportedRuntimeCallbackReturnType(returnType: string | null |
   return ['void', 'number', 'boolean', 'string', 'object'].includes(returnType)
 }
 
-function runtimeFunctionParamKey(functionName, index) {
+function runtimeFunctionParamKey(functionName: string, index: number): string {
   return `${functionName}:${index}`
 }
 
 export function markRuntimeFunctionParam(
-  callee: any,
+  callee: AnyNode,
   index: number,
   functionType: CFunctionType | null | undefined,
   context: CEmitContext
@@ -177,7 +203,7 @@ export function resolveFunctionParameterRuntimeType(
 }
 
 export function resolveRuntimeFunctionArgumentType(
-  callee: any,
+  callee: AnyNode,
   index: number,
   param: CFunctionParam,
   context: CEmitContext
@@ -207,8 +233,12 @@ export function collectCallbackWrappers(
   deps: CallbackLoweringDependencies
 ): Map<string, CCallbackWrapper> {
   const wrappers = new Map<string, CCallbackWrapper>()
-  const pendingPlainFunctionArgs: any[] = []
-  const register = (expression, functionType, scopes) => {
+  const pendingPlainFunctionArgs: PendingPlainFunctionArg[] = []
+  const register = (
+    expression: AnyNode,
+    functionType: CFunctionType | null | undefined,
+    scopes: CallbackScope[]
+  ): void => {
     const arrowNeedsEventLoop =
       expression?.type === 'ArrowFunctionExpression' &&
       functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions)
@@ -218,7 +248,7 @@ export function collectCallbackWrappers(
       expression?.type === 'ArrowFunctionExpression' &&
       !arrowNeedsEventLoop
     ) {
-      registerPlainArrow(expression, functionType, scopes)
+      registerPlainArrow(expression, normalizeFunctionType(functionType), scopes)
       return
     }
 
@@ -232,13 +262,17 @@ export function collectCallbackWrappers(
     }
 
     if (expression?.type === 'ArrowFunctionExpression') {
-      registerArrow(expression, functionType, scopes)
+      registerArrow(expression, normalizeFunctionType(functionType), scopes)
       return
     }
 
-    registerNamed(expression, functionType)
+    registerNamed(expression, normalizeFunctionType(functionType))
   }
-  const registerRuntime = (expression, functionType, scopes) => {
+  const registerRuntime = (
+    expression: AnyNode,
+    functionType: CFunctionType | null | undefined,
+    scopes: CallbackScope[]
+  ): void => {
     const normalized = normalizeFunctionType(functionType)
 
     if (!isSupportedRuntimeCallbackType(normalized)) {
@@ -252,18 +286,26 @@ export function collectCallbackWrappers(
 
     registerNamed(expression, normalized)
   }
-  const registerPlain = (expression, functionType, scopes) => {
+  const registerPlain = (
+    expression: AnyNode,
+    functionType: CFunctionType | null | undefined,
+    scopes: CallbackScope[]
+  ): void => {
     if (expression?.type === 'ArrowFunctionExpression') {
-      registerPlainArrow(expression, functionType, scopes)
+      registerPlainArrow(expression, normalizeFunctionType(functionType), scopes)
     }
   }
-  const hasCaptures = (expression, scopes) =>
+  const hasCaptures = (expression: AnyNode, scopes: CallbackScope[]): boolean =>
     expression?.type === 'ArrowFunctionExpression' && collectArrowCaptures(expression, scopes, context, deps).length > 0
-  const shouldPromotePlainFunctionExpression = (expression, functionType, scopes) =>
+  const shouldPromotePlainFunctionExpression = (
+    expression: AnyNode,
+    functionType: CFunctionType | null | undefined,
+    scopes: CallbackScope[]
+  ): boolean =>
     isPlainFunctionPointerType(functionType) &&
     isSupportedRuntimeCallbackType(functionType) &&
     hasCaptures(expression, scopes)
-  const registerNamed = (expression, functionType) => {
+  const registerNamed = (expression: AnyNode, functionType: CFunctionType): void => {
     if (expression?.type !== 'Reference' || expression.path.length !== 1) {
       return
     }
@@ -290,7 +332,7 @@ export function collectCallbackWrappers(
 
     wrappers.set(key, wrapper)
   }
-  const registerArrow = (expression, functionType, scopes) => {
+  const registerArrow = (expression: AnyNode, functionType: CFunctionType, scopes: CallbackScope[]): void => {
     if (context.callbackArrowWrappers.has(expression)) {
       return
     }
@@ -324,7 +366,7 @@ export function collectCallbackWrappers(
     wrappers.set(key, wrapper)
     context.callbackArrowWrappers.set(expression, wrapper)
   }
-  const registerPlainArrow = (expression, functionType, scopes) => {
+  const registerPlainArrow = (expression: AnyNode, functionType: CFunctionType, scopes: CallbackScope[]): void => {
     if (context.callbackArrowWrappers.has(expression)) {
       return
     }
@@ -348,10 +390,10 @@ export function collectCallbackWrappers(
     wrappers.set(key, wrapper)
     context.callbackArrowWrappers.set(expression, wrapper)
   }
-  const declare = (scope, name, info) => {
+  const declare = (scope: CallbackScope, name: string, info: CallbackScopeBinding): void => {
     scope.set(name, info)
   }
-  const declareParams = (scope, params) => {
+  const declareParams = (scope: CallbackScope, params: CFunctionParam[]): void => {
     for (const param of params) {
       declare(scope, param.name, {
         name: param.name,
@@ -365,7 +407,7 @@ export function collectCallbackWrappers(
       })
     }
   }
-  const declareVariable = (scope, statement, scopes) => {
+  const declareVariable = (scope: CallbackScope, statement: AnyNode, scopes: CallbackScope[]): void => {
     const valueType =
       statement.valueType === 'unknown' ? inferCapturedExpressionValueType(statement.init, scopes) : statement.valueType
 
@@ -384,7 +426,7 @@ export function collectCallbackWrappers(
       mutable: statement.kind === 'let'
     })
   }
-  const lookup = (name, scopes) => {
+  const lookup = (name: string, scopes: CallbackScope[]): CallbackScopeBinding | null => {
     for (let index = scopes.length - 1; index >= 0; index -= 1) {
       const entry = scopes[index].get(name)
 
@@ -395,7 +437,11 @@ export function collectCallbackWrappers(
 
     return null
   }
-  const isRuntimeManagedCaptureBinding = (statement, scopes, valueType) => {
+  const isRuntimeManagedCaptureBinding = (
+    statement: AnyNode,
+    scopes: CallbackScope[],
+    valueType: string
+  ): boolean => {
     if (valueType === 'object') {
       return true
     }
@@ -418,7 +464,7 @@ export function collectCallbackWrappers(
 
     return true
   }
-  const inferCapturedExpressionValueType = (expression, scopes) => {
+  const inferCapturedExpressionValueType = (expression: AnyNode, scopes: CallbackScope[]): string => {
     if (expression?.valueType != null && expression.valueType !== 'unknown') {
       return expression.valueType
     }
@@ -443,7 +489,7 @@ export function collectCallbackWrappers(
 
     return 'unknown'
   }
-  const inferCapturedExpressionInfo = (expression, scopes) => {
+  const inferCapturedExpressionInfo = (expression: AnyNode, scopes: CallbackScope[]): CallbackScopeBinding => {
     if (expression?.type === 'Reference' && expression.path.length === 1) {
       const entry = lookup(expression.path[0], scopes)
 
@@ -454,10 +500,11 @@ export function collectCallbackWrappers(
 
     return {
       valueType: inferCapturedExpressionValueType(expression, scopes),
+      name: '',
       shape: null
     }
   }
-  const visitStatement = (statement, scopes) => {
+  const visitStatement = (statement: AnyNode | null | undefined, scopes: CallbackScope[]): void => {
     if (statement?.type === 'VariableDeclaration') {
       if (isNullableFunctionType(statement.valueType, statement.nullable)) {
         registerRuntime(statement.init, statement.functionType, scopes)
@@ -468,7 +515,7 @@ export function collectCallbackWrappers(
       }
 
       visitExpression(statement.init, scopes)
-      declareVariable(scopes.at(-1), statement, scopes)
+      declareVariable(scopes[scopes.length - 1], statement, scopes)
       return
     }
 
@@ -488,7 +535,7 @@ export function collectCallbackWrappers(
     }
 
     if (statement?.type === 'BlockStatement') {
-      const scope = new Map()
+      const scope: CallbackScope = new Map()
       statement.body.forEach((item) => visitStatement(item, [...scopes, scope]))
       return
     }
@@ -507,7 +554,7 @@ export function collectCallbackWrappers(
     }
 
     if (statement?.type === 'ForStatement') {
-      const scope = new Map()
+      const scope: CallbackScope = new Map()
       const loopScopes = [...scopes, scope]
 
       if (statement.init?.type === 'VariableDeclaration') {
@@ -524,7 +571,7 @@ export function collectCallbackWrappers(
 
     if (statement?.type === 'ForOfStatement') {
       visitExpression(statement.iterable, scopes)
-      const scope = new Map()
+      const scope: CallbackScope = new Map()
       declare(scope, statement.name, {
         name: statement.name,
         valueType: 'unknown',
@@ -539,8 +586,8 @@ export function collectCallbackWrappers(
 
       for (const item of statement.cases) {
         visitExpression(item.test, scopes)
-        const scope = new Map()
-        item.consequent.forEach((statement) => visitStatement(statement, [...scopes, scope]))
+        const scope: CallbackScope = new Map()
+        item.consequent.forEach((statement: AnyNode) => visitStatement(statement, [...scopes, scope]))
       }
     }
 
@@ -550,7 +597,7 @@ export function collectCallbackWrappers(
       visitStatement(statement.finalizer, scopes)
     }
   }
-  const visitExpression = (expression, scopes) => {
+  const visitExpression = (expression: AnyNode | null | undefined, scopes: CallbackScope[]): void => {
     if (expression == null) {
       return
     }
@@ -600,7 +647,7 @@ export function collectCallbackWrappers(
           ? lookup(expression.target.path[0], scopes)
           : null
 
-      if (isNullableFunctionType(targetInfo?.valueType, targetInfo?.nullable)) {
+      if (targetInfo != null && isNullableFunctionType(targetInfo.valueType, targetInfo.nullable)) {
         registerRuntime(expression.value, targetInfo.functionType, scopes)
       }
 
@@ -641,7 +688,7 @@ export function collectCallbackWrappers(
       const executor = expression.args[0]
 
       if (executor?.type === 'ArrowFunctionExpression') {
-        const scope = new Map()
+        const scope: CallbackScope = new Map()
 
         for (const [index, param] of executor.params.entries()) {
           declare(scope, param.name, {
@@ -685,7 +732,7 @@ export function collectCallbackWrappers(
     }
 
     if (expression.type === 'ArrowFunctionExpression') {
-      const scope = new Map()
+      const scope: CallbackScope = new Map()
 
       for (const param of expression.params) {
         declare(scope, param.name, {
@@ -713,11 +760,11 @@ export function collectCallbackWrappers(
   }
 
   for (const ir of irPrograms) {
-    const topLevelScope = new Map()
+    const topLevelScope: CallbackScope = new Map()
 
     for (const item of collectIrTopLevelNodeEntries(ir)) {
       if (item.kind === 'function') {
-        const scope = new Map()
+        const scope: CallbackScope = new Map()
         declareParams(scope, item.node.params)
         item.node.body.forEach((statement) => visitStatement(statement, [topLevelScope, scope]))
       } else if (item.kind === 'statement') {
@@ -749,13 +796,13 @@ export function collectCallbackWrappers(
 }
 
 export function collectArrowCaptures(
-  expression: any,
-  outerScopes: Map<string, any>[],
+  expression: AnyNode,
+  outerScopes: CallbackScope[],
   context: CEmitContext,
   deps: CallbackLoweringDependencies
 ): CRuntimeArrowCapture[] {
   const captures = new Map<string, CRuntimeArrowCapture>()
-  const localScope = new Map()
+  const localScope: CallbackScope = new Map()
   const localScopes = [localScope]
 
   for (const param of expression.params) {
@@ -766,7 +813,7 @@ export function collectArrowCaptures(
     })
   }
 
-  const lookup = (name, scopes) => {
+  const lookup = (name: string, scopes: CallbackScope[]): CallbackScopeBinding | null => {
     for (let index = scopes.length - 1; index >= 0; index -= 1) {
       const entry = scopes[index].get(name)
 
@@ -777,7 +824,7 @@ export function collectArrowCaptures(
 
     return null
   }
-  const addReference = (reference) => {
+  const addReference = (reference: AnyNode): void => {
     if (reference.path.length !== 1) {
       return
     }
@@ -797,7 +844,7 @@ export function collectArrowCaptures(
       })
     }
   }
-  const declareLocal = (statement) => {
+  const declareLocal = (statement: AnyNode): void => {
     localScopes[localScopes.length - 1].set(statement.name, {
       name: statement.name,
       valueType: statement.valueType,
@@ -806,7 +853,7 @@ export function collectArrowCaptures(
       mutable: statement.kind === 'let'
     })
   }
-  const visitStatement = (statement) => {
+  const visitStatement = (statement: AnyNode | null | undefined): void => {
     if (statement == null) {
       return
     }
@@ -828,7 +875,7 @@ export function collectArrowCaptures(
     }
 
     if (statement.type === 'BlockStatement') {
-      localScopes.push(new Map())
+      localScopes.push(new Map<string, CallbackScopeBinding>())
       statement.body.forEach(visitStatement)
       localScopes.pop()
       return
@@ -848,7 +895,7 @@ export function collectArrowCaptures(
     }
 
     if (statement.type === 'ForStatement') {
-      localScopes.push(new Map())
+      localScopes.push(new Map<string, CallbackScopeBinding>())
 
       if (statement.init?.type === 'VariableDeclaration') {
         visitStatement(statement.init)
@@ -866,7 +913,7 @@ export function collectArrowCaptures(
     if (statement.type === 'ForOfStatement') {
       visitExpression(statement.iterable)
       localScopes.push(
-        new Map([
+        new Map<string, CallbackScopeBinding>([
           [
             statement.name,
             {
@@ -887,7 +934,7 @@ export function collectArrowCaptures(
 
       for (const item of statement.cases) {
         visitExpression(item.test)
-        localScopes.push(new Map())
+        localScopes.push(new Map<string, CallbackScopeBinding>())
         item.consequent.forEach(visitStatement)
         localScopes.pop()
       }
@@ -897,7 +944,7 @@ export function collectArrowCaptures(
       visitStatement(statement.block)
 
       if (statement.handler != null) {
-        const catchScope = new Map()
+        const catchScope: CallbackScope = new Map()
 
         if (statement.handler.param != null) {
           catchScope.set(statement.handler.param, {
@@ -915,7 +962,7 @@ export function collectArrowCaptures(
       visitStatement(statement.finalizer)
     }
   }
-  const visitExpression = (node) => {
+  const visitExpression = (node: AnyNode | null | undefined): void => {
     if (node == null) {
       return
     }
@@ -986,7 +1033,7 @@ export function collectArrowCaptures(
   return [...captures.values()]
 }
 
-function resolveStaticFunctionParams(callee: any, context: CEmitContext): CFunctionParam[] | null {
+function resolveStaticFunctionParams(callee: AnyNode, context: CEmitContext): CFunctionParam[] | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
