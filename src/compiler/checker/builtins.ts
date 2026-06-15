@@ -147,6 +147,12 @@ export const urlObjectShape: ObjectShapeInfo = {
   }))
 }
 
+export const urlSearchParamsObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'url.URLSearchParams',
+  fields: []
+}
+
 export const pathParseObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'path.ParsedPath',

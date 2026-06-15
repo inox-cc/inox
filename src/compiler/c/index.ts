@@ -161,7 +161,7 @@ import {
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
-import { urlObjectFields } from '../stdlib/descriptors/url.ts'
+import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } from '../stdlib/descriptors/url.ts'
 import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import type {
@@ -9392,6 +9392,14 @@ function emitStatement(statement, context) {
       return urlObject.lines
     }
 
+    const urlSearchParamsObject = emitPreparedUrlSearchParamsObjectExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (urlSearchParamsObject != null) {
+      return urlSearchParamsObject.lines
+    }
+
     const asyncPromiseCall = emitPreparedAsyncFunctionPromiseCallExpression(statement.init, context, {
       out: statement.name
     })
@@ -9740,6 +9748,12 @@ function emitStatement(statement, context) {
 
     if (mapIndexAssignment != null) {
       return mapIndexAssignment.lines
+    }
+
+    const urlFieldAssignment = emitUrlObjectFieldAssignment(statement.expression, context)
+
+    if (urlFieldAssignment != null) {
+      return urlFieldAssignment
     }
 
     if (statement.expression.target.type === 'MemberExpression') {
@@ -12611,6 +12625,12 @@ function emitCValueExpression(expression, context) {
     return urlObject
   }
 
+  const urlSearchParamsObject = emitPreparedUrlSearchParamsObjectExpression(expression, context)
+
+  if (urlSearchParamsObject != null) {
+    return urlSearchParamsObject
+  }
+
   const pathConstant = emitPreparedPathConstantExpression(expression, context)
 
   if (pathConstant != null) {
@@ -12639,6 +12659,12 @@ function emitCValueExpression(expression, context) {
 
   if (fetchHeadersCall != null) {
     return fetchHeadersCall
+  }
+
+  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context)
+
+  if (urlSearchParamsCall != null) {
+    return urlSearchParamsCall
   }
 
   const jsonCall = emitPreparedJsonCallExpression(expression, context)
@@ -14916,6 +14942,12 @@ function emitPreparedNumberExpression(expression, context) {
     return pathBooleanCall
   }
 
+  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context)
+
+  if (urlSearchParamsCall != null && urlSearchParamsCall.valueType === 'boolean') {
+    return urlSearchParamsCall
+  }
+
   const processNumber = emitPreparedProcessNumberExpression(expression, context)
 
   if (processNumber != null) {
@@ -15814,6 +15846,12 @@ function emitPreparedCallExpression(expression, context) {
     return fetchHeadersCall
   }
 
+  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context)
+
+  if (urlSearchParamsCall != null) {
+    return urlSearchParamsCall
+  }
+
   const jsonCall = emitPreparedJsonCallExpression(expression, context)
 
   if (jsonCall != null) {
@@ -16238,6 +16276,131 @@ function emitPreparedUrlObjectExpression(expression, context, options: { out?: s
   }
 }
 
+function emitPreparedUrlSearchParamsObjectExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  if (cUrlRuntimeMethodName(expression) !== 'URLSearchParams') {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_url_search_params')
+  const init =
+    expression.args[0] == null
+      ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
+      : emitCValueExpression(expression.args[0], context)
+  const shape = emitUrlSearchParamsObjectShape(context)
+  const lines = [...init.lines, ...shape.lines, ...emitPrepareOwnedValueWrite(out)]
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  context.variables.set(out, 'object')
+  registerObjectShape(context, out, expression.shape)
+  lines.push(
+    emitStatusCheck(
+      `ccjs_url_search_params_new(&ccjs_default_allocator, ${init.expression}, ${shape.expression}, &${out})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
+function emitPreparedUrlSearchParamsCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const method = cUrlRuntimeMethodName(expression)
+
+  if (method == null || !method.startsWith('URLSearchParams.')) {
+    return null
+  }
+
+  const receiver = emitCValueExpression(expression.callee.object, context)
+  const name = expression.args[0] == null ? null : emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_url_param_name')
+  const lines = [
+    ...receiver.lines,
+    emitRuntimeTypeCheck(`${receiver.expression}.tag != CCJS_TAG_OBJECT || ${receiver.expression}.as.ref == 0`, context)
+  ]
+
+  if (name != null) {
+    lines.push(...name.lines)
+  }
+
+  if (method === 'URLSearchParams.has') {
+    const out = options.out ?? nextCName(context, 'ccjs_url_param_has')
+    lines.push(`int ${out} = 0;`)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_url_search_params_has(${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      valueType: 'boolean'
+    }
+  }
+
+  if (method === 'URLSearchParams.get' || method === 'URLSearchParams.toString') {
+    const out = options.out ?? nextCName(context, 'ccjs_url_param_value')
+
+    if (options.owned !== false) {
+      registerOwnedValue(context, out)
+    }
+
+    lines.push(...emitPrepareOwnedValueWrite(out))
+    lines.push(
+      method === 'URLSearchParams.get'
+        ? emitStatusCheck(
+            `ccjs_url_search_params_get(&ccjs_default_allocator, ${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'}, &${out})`,
+            context
+          )
+        : emitStatusCheck(`ccjs_url_search_params_to_string(&ccjs_default_allocator, ${receiver.expression}, &${out})`, context)
+    )
+
+    return {
+      lines,
+      expression: out,
+      valueType: 'string',
+      nullable: method === 'URLSearchParams.get'
+    }
+  }
+
+  if (method === 'URLSearchParams.delete') {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_url_search_params_delete(&ccjs_default_allocator, ${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: '',
+      valueType: 'void'
+    }
+  }
+
+  const value = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_url_param_value')
+  lines.push(...value.lines)
+  lines.push(
+    emitStatusCheck(
+      method === 'URLSearchParams.set'
+        ? `ccjs_url_search_params_set(&ccjs_default_allocator, ${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'}, ${value.bytes}, ${value.length})`
+        : `ccjs_url_search_params_append(&ccjs_default_allocator, ${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'}, ${value.bytes}, ${value.length})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: '',
+    valueType: 'void'
+  }
+}
+
 function emitUrlObjectShape(context) {
   const shapeName = nextCName(context, 'ccjs_shape_url')
   const fieldsName = `${shapeName}_fields`
@@ -16257,6 +16420,49 @@ function emitUrlObjectShape(context) {
     lines,
     expression: `&${shapeName}`
   }
+}
+
+function emitUrlSearchParamsObjectShape(context) {
+  const shapeName = nextCName(context, 'ccjs_shape_url_search_params')
+  const fieldsName = `${shapeName}_fields`
+  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+
+  for (const field of urlSearchParamsObjectFields) {
+    lines.push(`  { ${cStringLiteral(field)}, 0 },`)
+  }
+
+  lines.push('};')
+  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`  ${urlSearchParamsObjectFields.length},`)
+  lines.push(`  ${fieldsName}`)
+  lines.push('};')
+
+  return {
+    lines,
+    expression: `&${shapeName}`
+  }
+}
+
+function emitUrlObjectFieldAssignment(expression, context): string[] | null {
+  if (expression?.type !== 'AssignmentExpression' || expression.urlRuntimeMethod !== 'URL.setField') {
+    return null
+  }
+
+  const field = expression.urlRuntimeField
+  const fieldIndex = urlObjectFields.indexOf(field)
+
+  if (fieldIndex === -1 || !urlMutableObjectFields.includes(field)) {
+    return null
+  }
+
+  const object = emitCValueExpression(expression.target.object, context)
+  const value = emitCValueExpression(expression.value, context)
+
+  return [
+    ...object.lines,
+    ...value.lines,
+    emitStatusCheck(`ccjs_url_set_field(&ccjs_default_allocator, ${object.expression}, ${fieldIndex}, ${value.expression})`, context)
+  ]
 }
 
 function emitPreparedPathConstantExpression(expression, context) {
@@ -19072,7 +19278,27 @@ function inferExpressionType(expression, context) {
   const urlMethod = cUrlRuntimeMethodName(expression)
 
   if (urlMethod != null) {
-    return urlMethod === 'fileURLToPath' ? 'string' : 'object'
+    if (
+      urlMethod === 'fileURLToPath' ||
+      urlMethod === 'URLSearchParams.get' ||
+      urlMethod === 'URLSearchParams.toString'
+    ) {
+      return 'string'
+    }
+
+    if (urlMethod === 'URLSearchParams.has') {
+      return 'boolean'
+    }
+
+    if (
+      urlMethod === 'URLSearchParams.append' ||
+      urlMethod === 'URLSearchParams.delete' ||
+      urlMethod === 'URLSearchParams.set'
+    ) {
+      return 'void'
+    }
+
+    return 'object'
   }
 
   const pathConstant = cPathRuntimeConstantName(expression)

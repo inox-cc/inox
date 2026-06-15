@@ -21,7 +21,8 @@ import {
   libuvOnlyRuntimeImports,
   numericCastNames,
   pathParseObjectShape,
-  urlObjectShape
+  urlObjectShape,
+  urlSearchParamsObjectShape
 } from './checker/builtins.ts'
 import { Scope } from './checker/scope.ts'
 import { fsRuntimeCallInfo, isFsRuntimeImportSymbol, removedFsRuntimeMethodInfo } from './checker/std/fs.ts'
@@ -100,8 +101,10 @@ import {
 import {
   isNodeUrlImportSource,
   isUnsupportedUrlRuntimeMethod,
+  isUrlMutableObjectField,
   isUrlRuntimeConstructor,
-  isUrlRuntimeMethod
+  isUrlRuntimeMethod,
+  isUrlSearchParamsRuntimeMethod
 } from './stdlib/descriptors/url.ts'
 import type {
   AnyNode,
@@ -1242,6 +1245,19 @@ class Checker {
       return valueType
     }
 
+    if (shape.builtin === 'url.URL' && isUrlMutableObjectField(expression.target.property)) {
+      this.checkAssignableType(
+        valueType,
+        'string',
+        expression.value.loc,
+        false,
+        this.expressionCanBeNull(expression.value)
+      )
+      expression.urlRuntimeMethod = 'URL.setField'
+      expression.urlRuntimeField = expression.target.property
+      return valueType
+    }
+
     const field = this.findShapeField(shape, expression.target.property)
 
     if (field == null) {
@@ -1660,6 +1676,12 @@ class Checker {
 
     if (fetchHeadersMethodType != null) {
       return fetchHeadersMethodType
+    }
+
+    const urlSearchParamsMethodType = this.checkUrlSearchParamsMethodCall(expression)
+
+    if (urlSearchParamsMethodType != null) {
+      return urlSearchParamsMethodType
     }
 
     const fsType = this.checkFsCall(expression)
@@ -2174,9 +2196,7 @@ class Checker {
       return null
     }
 
-    for (const arg of expression.args) {
-      this.checkExpression(arg)
-    }
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     if (call.unsupported) {
       this.report(
@@ -2519,9 +2539,7 @@ class Checker {
       return null
     }
 
-    for (const arg of expression.args) {
-      this.checkExpression(arg)
-    }
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
     if (call.unsupported) {
       this.report(
@@ -2542,13 +2560,26 @@ class Checker {
     }
 
     if (expression.args[0] != null) {
-      this.checkAssignableType(
-        expression.args[0].valueType ?? 'unknown',
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
+      if (call.method === 'fileURLToPath') {
+        const argType = argTypes[0] ?? 'unknown'
+        const shape = this.resolveExpressionShape(expression.args[0])
+
+        if (argType !== 'string' && !(argType === 'object' && shape?.builtin === 'url.URL')) {
+          this.report(
+            'CCJS_TYPE_MISMATCH',
+            `function ${call.label} expects string or URL, got ${argType}`,
+            expression.args[0].loc
+          )
+        }
+      } else {
+        this.checkAssignableType(
+          argTypes[0] ?? 'unknown',
+          'string',
+          expression.args[0].loc,
+          false,
+          this.expressionCanBeNull(expression.args[0])
+        )
+      }
     }
 
     expression.urlRuntimeMethod = call.method
@@ -2560,6 +2591,57 @@ class Checker {
     }
 
     expression.valueType = 'string'
+    return 'string'
+  }
+
+  checkUrlSearchParamsMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || !isUrlSearchParamsRuntimeMethod(expression.callee.property)) {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const shape = this.resolveExpressionShape(expression.callee.object)
+
+    if (objectType !== 'object' || shape?.builtin !== 'url.URLSearchParams') {
+      return null
+    }
+
+    const method = expression.callee.property
+    const expectedArgs = method === 'set' || method === 'append' ? 2 : method === 'toString' ? 0 : 1
+
+    if (expression.args.length !== expectedArgs) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function URLSearchParams.${method} expects ${expectedArgs} argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    for (const arg of expression.args) {
+      this.checkAssignableType(
+        this.checkExpression(arg),
+        'string',
+        arg.loc,
+        false,
+        this.expressionCanBeNull(arg)
+      )
+    }
+
+    expression.urlRuntimeMethod = `URLSearchParams.${method}`
+
+    if (method === 'has') {
+      expression.valueType = 'boolean'
+      return 'boolean'
+    }
+
+    if (method === 'append' || method === 'delete' || method === 'set') {
+      expression.valueType = 'void'
+      return 'void'
+    }
+
+    expression.valueType = 'string'
+    expression.nullable = method === 'get'
+
     return 'string'
   }
 
@@ -5263,6 +5345,56 @@ class Checker {
       return null
     }
 
+    if (importedName === 'URLSearchParams') {
+      if (expression.args.length > 1) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `URLSearchParams constructor expects 0 or 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (expression.args[0] != null) {
+        const argType = argTypes[0]
+
+        if (argType !== 'string' && argType !== 'object') {
+          this.report(
+            'CCJS_TYPE_MISMATCH',
+            `URLSearchParams constructor expects string or object, got ${argType}`,
+            expression.args[0].loc
+          )
+        }
+
+        if (expression.args[0].type === 'ObjectLiteral') {
+          for (const property of expression.args[0].properties) {
+            this.checkAssignableType(
+              property.value.valueType ?? this.checkExpression(property.value),
+              'string',
+              property.value.loc,
+              false,
+              this.expressionCanBeNull(property.value)
+            )
+          }
+        } else {
+          const shape = this.resolveExpressionShape(expression.args[0])
+
+          if (shape != null) {
+            for (const field of shape.fields) {
+              const fieldType = this.resolveFieldDeclaredType(field)
+
+              this.checkAssignableType(fieldType.valueType, 'string', expression.args[0].loc, fieldType.nullable)
+            }
+          }
+        }
+      }
+
+      expression.urlRuntimeMethod = 'URLSearchParams'
+      expression.valueType = 'object'
+      expression.shape = urlSearchParamsObjectShape
+
+      return 'object'
+    }
+
     if (expression.args.length < 1 || expression.args.length > 2) {
       this.report(
         'CCJS_ARG_COUNT',
@@ -5272,6 +5404,10 @@ class Checker {
     }
 
     for (const [index, argType] of argTypes.entries()) {
+      if (index === 1 && argType === 'object' && this.resolveExpressionShape(expression.args[index])?.builtin === 'url.URL') {
+        continue
+      }
+
       this.checkAssignableType(
         argType,
         'string',
