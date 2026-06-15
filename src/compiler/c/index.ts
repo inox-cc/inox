@@ -51,9 +51,6 @@ import {
   withVariableScope
 } from './context.ts'
 import {
-  isSupportedCCryptoGlobalUsage,
-  isSupportedCFetchGlobalUsage,
-  isSupportedCMathGlobalUsage,
   reportCJsGlobalDiagnostic,
   reportUnsupportedCGlobalUsages,
   reportUnsupportedCSyntaxFeatures
@@ -72,6 +69,7 @@ import {
   uniqueCModuleImports
 } from './modules.ts'
 import { emitCPrelude } from './prelude.ts'
+import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
   collectHttpRuntimeCreateServerNames,
   collectHttpRuntimeImportNames,
@@ -161,7 +159,7 @@ import {
   emitPreparedChildProcessCallExpression,
   type ChildProcessLoweringDependencies
 } from './stdlib/child-process.ts'
-import { irProgramsUseConsoleRuntime, isConsoleLog } from './stdlib/console.ts'
+import { isConsoleLog } from './stdlib/console.ts'
 import {
   cryptoRuntimeMethodName,
   emitCryptoHashVariableDeclaration,
@@ -1087,86 +1085,41 @@ function emitCModuleSource(
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
-  const needsCallbackRuntime =
-    [...context.callbackWrappers.values()].some(isRuntimeCallbackWrapper) ||
-    runtimeRequirements.has('callback-values') ||
-    signatureRuntimeTypes.has('function')
-  const needsChildProcessRuntime = runtimeRequirements.has('child-process')
-  const needsFsRuntime = runtimeRequirements.has('fs')
-  const needsOsRuntime = runtimeRequirements.has('os')
-  const needsPathRuntime = runtimeRequirements.has('path')
-  const needsUrlRuntime = runtimeRequirements.has('url')
-  const needsProcessRuntime = runtimeRequirements.has('process')
-  const needsJsonRuntime = runtimeRequirements.has('json')
-  const needsTimerRuntime = runtimeRequirements.has('timers')
-  const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
-  const needsFetchRuntime = globalUsages.some(isSupportedCFetchGlobalUsage)
-  const needsAsyncRuntime =
-    runtimeRequirements.has('async-runtime') ||
-    needsFetchRuntime ||
-    needsFsRuntime ||
-    needsTimerRuntime ||
-    signatureRuntimeTypes.has('promise')
-  const needsCollectionRuntime =
-    runtimeRequirements.has('collections') ||
-    signatureRuntimeTypes.has('array') ||
-    signatureRuntimeTypes.has('map') ||
-    signatureRuntimeTypes.has('set')
-  const needsBinaryRuntime = runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
-  const needsClassRuntime = context.classInfos.size > 0
-  const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
-  const needsObjectRuntime =
-    runtimeRequirements.has('objects') ||
-    needsFsRuntime ||
-    needsFetchRuntime ||
-    needsClassRuntime ||
-    needsPathRuntime ||
-    needsUrlRuntime ||
-    signatureRuntimeTypes.has('object')
-  const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
-  const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
-  const needsRuntime =
-    context.throwingFunctions.size > 0 ||
-    needsAsyncRuntime ||
-    needsDgramRuntime ||
-    needsFetchRuntime ||
-    needsHttpRuntime ||
-    needsNetRuntime ||
-    needsCallbackRuntime ||
-    needsChildProcessRuntime ||
-    needsCollectionRuntime ||
-    needsOsRuntime ||
-    needsPathRuntime ||
-    needsUrlRuntime ||
-    needsProcessRuntime ||
-    needsObjectRuntime ||
-    needsClassRuntime ||
-    needsJsonRuntime ||
-    signatureRuntimeTypes.size > 0 ||
-    runtimeRequirements.has('managed-values')
-  const needsTimeRuntime =
-    runtimeRequirements.has('clocks') ||
-    needsAsyncRuntime ||
-    needsDgramRuntime ||
-    needsFetchRuntime ||
-    needsHttpRuntime ||
+  const {
+    needsRuntime,
+    needsTimeRuntime,
+    needsMathRuntime,
+    needsCryptoRuntime,
+    needsDebugMemoryRuntime,
+    needsAsyncRuntime,
+    needsCallbackRuntime,
+    needsStringHeader,
+    needsCollectionRuntime,
+    needsBinaryRuntime,
+    needsObjectRuntime,
+    needsChildProcessRuntime,
+    needsFsRuntime,
+    needsOsRuntime,
+    needsPathRuntime,
+    needsUrlRuntime,
+    needsProcessRuntime,
+    needsJsonRuntime,
+    needsTimerRuntime,
+    needsConsoleRuntime,
+    needsDgramRuntime,
+    needsFetchRuntime,
+    needsHttpRuntime,
     needsNetRuntime
-  const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
-  const needsCryptoRuntime =
-    runtimeRequirements.has('crypto') || globalUsages.some((usage) => isSupportedCCryptoGlobalUsage(usage, context))
-  const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
-  const needsStringHeader =
-    runtimeRequirements.has('string-bytes') ||
-    needsChildProcessRuntime ||
-    needsFsRuntime ||
-    needsOsRuntime ||
-    needsPathRuntime ||
-    needsUrlRuntime ||
-    needsProcessRuntime ||
-    needsDgramRuntime ||
-    needsFetchRuntime ||
-    needsNetRuntime ||
-    signatureRuntimeTypes.has('string')
+  } = resolveCRuntimePreludeRequirements({
+    classInfoCount: context.classInfos.size,
+    cryptoContext: context,
+    globalUsages,
+    hasRuntimeCallbackWrapper: [...context.callbackWrappers.values()].some(isRuntimeCallbackWrapper),
+    irPrograms,
+    runtimeRequirements,
+    signatureRuntimeTypes,
+    throwingFunctionCount: context.throwingFunctions.size
+  })
   const classMethods = collectClassMethods(context)
 
   context.processRuntime = needsProcessRuntime
@@ -1656,74 +1609,40 @@ function emitCUnit(
   baseContext.httpHandlers = collectHttpHandlers(irPrograms, baseContext)
   baseContext.netHandlers = collectNetHandlers(irPrograms, baseContext)
   const classMethods = collectClassMethods(baseContext)
-  const needsCallbackRuntime =
-    [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) ||
-    runtimeRequirements.has('callback-values')
-  const needsChildProcessRuntime = runtimeRequirements.has('child-process')
-  const needsFsRuntime = runtimeRequirements.has('fs')
-  const needsOsRuntime = runtimeRequirements.has('os')
-  const needsPathRuntime = runtimeRequirements.has('path')
-  const needsUrlRuntime = runtimeRequirements.has('url')
-  const needsProcessRuntime = runtimeRequirements.has('process')
-  const needsJsonRuntime = runtimeRequirements.has('json')
-  const needsTimerRuntime = runtimeRequirements.has('timers')
-  const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
-  const needsFetchRuntime = globalUsages.some(isSupportedCFetchGlobalUsage)
-  const needsAsyncRuntime =
-    runtimeRequirements.has('async-runtime') || needsFetchRuntime || needsFsRuntime || needsTimerRuntime
-  const needsCollectionRuntime = runtimeRequirements.has('collections')
-  const needsBinaryRuntime = runtimeRequirements.has('binary')
-  const needsClassRuntime = baseContext.classInfos.size > 0
-  const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
-  const needsObjectRuntime =
-    runtimeRequirements.has('objects') ||
-    needsFsRuntime ||
-    needsFetchRuntime ||
-    needsClassRuntime ||
-    needsPathRuntime ||
-    needsUrlRuntime
-  const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
-  const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
-  const needsRuntime =
-    baseContext.throwingFunctions.size > 0 ||
-    needsAsyncRuntime ||
-    needsDgramRuntime ||
-    needsFetchRuntime ||
-    needsHttpRuntime ||
-    needsNetRuntime ||
-    needsCallbackRuntime ||
-    needsChildProcessRuntime ||
-    needsCollectionRuntime ||
-    needsOsRuntime ||
-    needsPathRuntime ||
-    needsUrlRuntime ||
-    needsProcessRuntime ||
-    needsObjectRuntime ||
-    needsClassRuntime ||
-    needsJsonRuntime ||
-    runtimeRequirements.has('managed-values')
-  const needsTimeRuntime =
-    runtimeRequirements.has('clocks') ||
-    needsAsyncRuntime ||
-    needsDgramRuntime ||
-    needsFetchRuntime ||
-    needsHttpRuntime ||
+  const {
+    needsRuntime,
+    needsTimeRuntime,
+    needsMathRuntime,
+    needsCryptoRuntime,
+    needsDebugMemoryRuntime,
+    needsAsyncRuntime,
+    needsCallbackRuntime,
+    needsStringHeader,
+    needsCollectionRuntime,
+    needsBinaryRuntime,
+    needsObjectRuntime,
+    needsChildProcessRuntime,
+    needsFsRuntime,
+    needsOsRuntime,
+    needsPathRuntime,
+    needsUrlRuntime,
+    needsProcessRuntime,
+    needsJsonRuntime,
+    needsTimerRuntime,
+    needsConsoleRuntime,
+    needsDgramRuntime,
+    needsFetchRuntime,
+    needsHttpRuntime,
     needsNetRuntime
-  const needsMathRuntime = globalUsages.some(isSupportedCMathGlobalUsage)
-  const needsCryptoRuntime =
-    runtimeRequirements.has('crypto') || globalUsages.some((usage) => isSupportedCCryptoGlobalUsage(usage, baseContext))
-  const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
-  const needsStringHeader =
-    runtimeRequirements.has('string-bytes') ||
-    needsChildProcessRuntime ||
-    needsFsRuntime ||
-    needsOsRuntime ||
-    needsPathRuntime ||
-    needsUrlRuntime ||
-    needsProcessRuntime ||
-    needsDgramRuntime ||
-    needsFetchRuntime ||
-    needsNetRuntime
+  } = resolveCRuntimePreludeRequirements({
+    classInfoCount: baseContext.classInfos.size,
+    cryptoContext: baseContext,
+    globalUsages,
+    hasRuntimeCallbackWrapper: [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper),
+    irPrograms,
+    runtimeRequirements,
+    throwingFunctionCount: baseContext.throwingFunctions.size
+  })
   baseContext.processRuntime = needsProcessRuntime
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
