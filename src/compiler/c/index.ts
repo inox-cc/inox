@@ -3674,7 +3674,7 @@ function emitPreparedAwaitPromiseExpression(expression: AnyNode, context: CFunct
   return null
 }
 
-function emitCAwaitValueExpression(expression, context) {
+function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const asyncCall = emitCAsyncFunctionAwaitExpression(expression, context)
 
   if (asyncCall != null) {
@@ -3731,7 +3731,11 @@ function emitCAwaitValueExpression(expression, context) {
   }
 }
 
-function emitAwaitRejectedPromiseLines(promiseExpression, rejectionValueType, context) {
+function emitAwaitRejectedPromiseLines(
+  promiseExpression: string,
+  rejectionValueType: string,
+  context: CFunctionContext
+): string[] {
   const target = currentErrorTarget(context)
   const rejectedTypeCheck =
     rejectionValueType === 'error'
@@ -3757,7 +3761,7 @@ function emitAwaitRejectedPromiseLines(promiseExpression, rejectionValueType, co
   ]
 }
 
-function emitCAsyncFunctionAwaitExpression(expression, context) {
+function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
   const callExpression = expression.argument
 
   if (callExpression?.type !== 'CallExpression' || !isAsyncFunctionCallee(callExpression.callee, context)) {
@@ -3820,19 +3824,19 @@ function emitCAsyncFunctionAwaitExpression(expression, context) {
   }
 }
 
-function isThrowingFunctionCallee(callee, context) {
+function isThrowingFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
   return isThrowingFunctionCalleeFromExpressions(callee, context)
 }
 
-function isThrowingFunctionName(name, context) {
+function isThrowingFunctionName(name: string, context: CEmitContext): boolean {
   return isThrowingFunctionNameFromExpressions(name, context)
 }
 
-function emitCallee(callee, context) {
+function emitCallee(callee: AnyNode, context: CFunctionContext): string {
   return emitCalleeFromExpressions(callee, context)
 }
 
-function emitFunctionValueExpression(expression, context) {
+function emitFunctionValueExpression(expression: AnyNode, context: CFunctionContext): string {
   if (expression?.type === 'ArrowFunctionExpression') {
     const wrapper = context.callbackArrowWrappers.get(expression)
 

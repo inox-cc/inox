@@ -9,6 +9,7 @@ import {
   registerEventLoop,
   registerOwnedValue,
   withNullableScalarNarrowing,
+  type CEmitContext,
   type CFunctionContext
 } from '../context.ts'
 import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
@@ -473,11 +474,11 @@ function emitThrowingCallStatusCheck(status: string, context: CFunctionContext, 
   return lines
 }
 
-export function isThrowingFunctionCallee(callee: any, context: CFunctionContext): boolean {
+export function isThrowingFunctionCallee(callee: any, context: CEmitContext): boolean {
   return callee?.type === 'Reference' && callee.path.length === 1 && isThrowingFunctionName(callee.path[0], context)
 }
 
-export function isThrowingFunctionName(name: string, context: CFunctionContext): boolean {
+export function isThrowingFunctionName(name: string, context: CEmitContext): boolean {
   return context.throwingFunctions?.has(name) === true
 }
 
