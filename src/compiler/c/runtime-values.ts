@@ -1,4 +1,5 @@
 import { emitRuntimeTypeCheck, type CFunctionContext } from './context.ts'
+import type { AnyNode } from '../types.ts'
 
 export function emitRuntimeNullableValueCheck(
   name: string,
@@ -36,7 +37,7 @@ export function emitRuntimeValueCheck(name: string, expectedTag: string | null, 
 export function emitRuntimeFieldValueCheck(
   value: string,
   expectedTag: string | null,
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext
 ): string[] {
   if (expression?.nullable === true) {

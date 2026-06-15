@@ -3,6 +3,7 @@ import {
   isProcessRuntimeStringProperty,
   processRuntimePropertyValueType
 } from '../../stdlib/descriptors/process.ts'
+import type { AnyNode } from '../../types.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
@@ -17,10 +18,10 @@ import type {
 } from '../types.ts'
 
 export type ProcessLoweringDependencies = {
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
 }
 
-export function cProcessRuntimeMethodName(expression: any): string | null {
+export function cProcessRuntimeMethodName(expression: AnyNode): string | null {
   if (expression?.type !== 'CallExpression' || typeof expression.processRuntimeMethod !== 'string') {
     return null
   }
@@ -28,7 +29,7 @@ export function cProcessRuntimeMethodName(expression: any): string | null {
   return expression.processRuntimeMethod
 }
 
-export function cProcessRuntimePropertyName(expression: any): string | null {
+export function cProcessRuntimePropertyName(expression: AnyNode): string | null {
   if (typeof expression?.processRuntimeProperty !== 'string') {
     return null
   }
@@ -36,19 +37,19 @@ export function cProcessRuntimePropertyName(expression: any): string | null {
   return expression.processRuntimeProperty
 }
 
-export function cProcessRuntimePropertyValueType(expression: any): 'string' | 'number' | 'object' | null {
+export function cProcessRuntimePropertyValueType(expression: AnyNode): 'string' | 'number' | 'object' | null {
   const property = cProcessRuntimePropertyName(expression)
 
   return property == null ? null : processRuntimePropertyValueType(property)
 }
 
-export function cProcessRuntimeStringPropertyName(expression: any): string | null {
+export function cProcessRuntimeStringPropertyName(expression: AnyNode): string | null {
   const property = cProcessRuntimePropertyName(expression)
 
   return property != null && isProcessRuntimeStringProperty(property) ? property : null
 }
 
-export function cProcessRuntimeNumberPropertyName(expression: any): string | null {
+export function cProcessRuntimeNumberPropertyName(expression: AnyNode): string | null {
   const property = cProcessRuntimePropertyName(expression)
 
   return property != null && isProcessRuntimeNumberProperty(property) ? property : null
@@ -62,12 +63,12 @@ export function cProcessRuntimeStringFunctionName(property: string): string | nu
   return isProcessRuntimeStringProperty(property) ? property : null
 }
 
-export function cProcessRuntimeEnvName(expression: any): string | null {
+export function cProcessRuntimeEnvName(expression: AnyNode): string | null {
   return typeof expression?.processRuntimeEnvName === 'string' ? expression.processRuntimeEnvName : null
 }
 
 export function emitPreparedProcessStringExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: ProcessLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -125,7 +126,7 @@ export function emitPreparedProcessStringExpression(
   }
 }
 
-export function emitPreparedProcessNumberExpression(expression: any): PreparedExpression | null {
+export function emitPreparedProcessNumberExpression(expression: AnyNode): PreparedExpression | null {
   const property = cProcessRuntimeNumberPropertyName(expression)
 
   if (property == null) {
@@ -153,7 +154,7 @@ export function emitPreparedProcessNumberExpression(expression: any): PreparedEx
 }
 
 export function emitProcessExitStatement(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: ProcessLoweringDependencies
 ): string[] | null {
@@ -170,7 +171,7 @@ export function emitProcessExitStatement(
 }
 
 export function emitProcessExitCodeAssignment(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: ProcessLoweringDependencies
 ): string[] | null {

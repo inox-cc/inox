@@ -9,6 +9,17 @@ import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
 import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
+export type CGlobalUsageSupportContext = {
+  cryptoImportNames?: Set<string>
+  dgramCreateSocketNames?: Set<string>
+  dgramImportNames?: Set<string>
+  httpCreateServerNames?: Set<string>
+  httpImportNames?: Set<string>
+  netConnectNames?: Set<string>
+  netCreateServerNames?: Set<string>
+  netImportNames?: Set<string>
+}
+
 export function reportUnsupportedCSyntaxFeatures(
   _syntaxFeatures: IrSyntaxFeatureUsage[],
   _diagnostics: Diagnostic[]
@@ -17,7 +28,7 @@ export function reportUnsupportedCSyntaxFeatures(
 export function reportUnsupportedCGlobalUsages(
   globalUsages: IrGlobalUsage[],
   diagnostics: Diagnostic[],
-  context
+  context: CGlobalUsageSupportContext
 ): void {
   for (const usage of globalUsages) {
     if (!isSupportedCGlobalUsage(usage, context)) {
@@ -26,7 +37,7 @@ export function reportUnsupportedCGlobalUsages(
   }
 }
 
-function isSupportedCGlobalUsage(usage: IrGlobalUsage, context): boolean {
+function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
   const path = usage.path.join('.')
 
   return (
@@ -92,7 +103,7 @@ export function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {
   return usage.path.length === 1 && isFetchGlobalRoot(usage.path[0])
 }
 
-function isSupportedCDgramGlobalUsage(usage: IrGlobalUsage, context): boolean {
+function isSupportedCDgramGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
   return (
     (usage.path.length === 2 &&
       usage.path[1] === 'createSocket' &&
@@ -101,7 +112,7 @@ function isSupportedCDgramGlobalUsage(usage: IrGlobalUsage, context): boolean {
   )
 }
 
-function isSupportedCHttpGlobalUsage(usage: IrGlobalUsage, context): boolean {
+function isSupportedCHttpGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
   return (
     (usage.path.length === 2 &&
       usage.path[1] === 'createServer' &&
@@ -110,7 +121,7 @@ function isSupportedCHttpGlobalUsage(usage: IrGlobalUsage, context): boolean {
   )
 }
 
-function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context): boolean {
+function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
   return (
     (usage.path.length === 2 && usage.path[1] === 'createServer' && context.netImportNames?.has(usage.root) === true) ||
     (usage.path.length === 2 &&
@@ -121,7 +132,10 @@ function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context): boolean {
   )
 }
 
-export function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage, context?: any): boolean {
+export function isSupportedCCryptoGlobalUsage(
+  usage: IrGlobalUsage,
+  context?: CGlobalUsageSupportContext
+): boolean {
   return (
     cryptoRuntimeMethodNameFromPath(usage.path) != null ||
     (usage.path.length === 2 &&

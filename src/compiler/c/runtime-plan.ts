@@ -5,6 +5,8 @@ import {
 } from './diagnostics.ts'
 import { irProgramsUseRuntimeImport } from './runtime-imports.ts'
 import { irProgramsUseConsoleRuntime } from './stdlib/console.ts'
+import type { CGlobalUsageSupportContext } from './diagnostics.ts'
+import type { IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
 
 export type CRuntimePreludeRequirements = {
   needsRuntime: boolean
@@ -35,11 +37,11 @@ export type CRuntimePreludeRequirements = {
 
 export type CRuntimePreludeRequirementInput = {
   classInfoCount: number
-  cryptoContext: any
-  globalUsages: any[]
+  cryptoContext: CGlobalUsageSupportContext
+  globalUsages: IrGlobalUsage[]
   hasRuntimeCallbackWrapper: boolean
-  irPrograms: any[]
-  runtimeRequirements: Set<string>
+  irPrograms: IrProgram[]
+  runtimeRequirements: Set<IrRuntimeRequirement>
   signatureRuntimeTypes?: Set<string>
   throwingFunctionCount: number
 }
