@@ -1,6 +1,40 @@
 import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
 
-export function createFunctionContext(baseContext: any, returnType: any, returnNullable = false): any {
+export type CEmitContext = {
+  diagnostics: any[]
+  nextId: number
+  processRuntime: boolean
+  unhandledRejectionFlag: string | null
+  [key: string]: any
+}
+
+export type CFunctionContext = CEmitContext & {
+  boxedValueTypes: Map<string, any>
+  boxedValues: string[]
+  boxedVariables: Set<string>
+  cleanupEnabled: boolean
+  errorChannelUsed: boolean
+  eventLoopUsed: boolean
+  externalEventLoop: boolean
+  functionErrorOut: string | null
+  functionReturnOut: string | null
+  ownedCryptoHashes: string[]
+  ownedCryptoHmacs: string[]
+  ownedPromises: string[]
+  ownedValues: string[]
+  returnNullable: boolean
+  returnType: string
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  variables: Map<string, any>
+}
+
+export function createFunctionContext(
+  baseContext: CEmitContext,
+  returnType: string,
+  returnNullable = false
+): CFunctionContext {
   return {
     ...baseContext,
     arrayShapes: new Map(),
@@ -51,15 +85,15 @@ export function createFunctionContext(baseContext: any, returnType: any, returnN
   }
 }
 
-export function emitStatusCheck(call: string, context: any): string {
+export function emitStatusCheck(call: string, context: CFunctionContext): string {
   return `if (${call} != CCJS_OK) ${emitFailureStatement(context)}`
 }
 
-export function emitRuntimeTypeCheck(condition: string, context: any): string {
+export function emitRuntimeTypeCheck(condition: string, context: CFunctionContext): string {
   return `if (${condition}) ${emitFailureStatement(context)}`
 }
 
-export function emitFailureStatement(context: any): string {
+export function emitFailureStatement(context: CFunctionContext): string {
   if (context.failureStatement != null) {
     context.failureStatementUsed = true
     return context.failureStatement
@@ -82,14 +116,14 @@ export function emitFailureStatement(context: any): string {
   return context.returnType === 'void' ? 'return;' : 'return 0;'
 }
 
-export function registerOwnedValue(context: any, name: string): void {
+export function registerOwnedValue(context: CFunctionContext, name: string): void {
   if (!context.ownedValues.includes(name)) {
     context.ownedValues.push(name)
   }
 }
 
 export function registerOwnedPromise(
-  context: any,
+  context: CFunctionContext,
   name: string,
   valueType: any = 'unknown',
   rejectionValueType: any = 'unknown'
@@ -103,7 +137,7 @@ export function registerOwnedPromise(
   context.promiseRejectionValueTypes.set(name, rejectionValueType)
 }
 
-export function registerOwnedCryptoHash(context: any, name: string): void {
+export function registerOwnedCryptoHash(context: CFunctionContext, name: string): void {
   if (!context.ownedCryptoHashes.includes(name)) {
     context.ownedCryptoHashes.push(name)
   }
@@ -111,7 +145,7 @@ export function registerOwnedCryptoHash(context: any, name: string): void {
   context.variables.set(name, 'crypto-hash')
 }
 
-export function registerOwnedCryptoHmac(context: any, name: string): void {
+export function registerOwnedCryptoHmac(context: CFunctionContext, name: string): void {
   if (!context.ownedCryptoHmacs.includes(name)) {
     context.ownedCryptoHmacs.push(name)
   }
@@ -119,12 +153,12 @@ export function registerOwnedCryptoHmac(context: any, name: string): void {
   context.variables.set(name, 'crypto-hmac')
 }
 
-export function registerEventLoop(context: any): void {
+export function registerEventLoop(context: CFunctionContext): void {
   context.eventLoopUsed = true
   context.usedCleanupGoto = true
 }
 
-export function registerBoxedValue(context: any, name: string, valueType: any = 'number'): void {
+export function registerBoxedValue(context: CFunctionContext, name: string, valueType: any = 'number'): void {
   if (!context.boxedValues.includes(name)) {
     context.boxedValues.push(name)
   }
@@ -136,7 +170,7 @@ export function emitPrepareOwnedValueWrite(name: string): string[] {
   return [`ccjs_release(${name});`, `${name} = ccjs_undefined_value();`]
 }
 
-export function shouldEmitCleanupLabel(context: any): boolean {
+export function shouldEmitCleanupLabel(context: CFunctionContext): boolean {
   return (
     context.throwingFunction ||
     context.returnType !== 'void' ||
@@ -151,7 +185,7 @@ export function shouldEmitCleanupLabel(context: any): boolean {
   )
 }
 
-export function emitReturnValueDeclarations(context: any): string[] {
+export function emitReturnValueDeclarations(context: CFunctionContext): string[] {
   if (context.returnType === 'promise') {
     return ['ccjs_promise* ccjs_return = 0;']
   }
@@ -171,22 +205,22 @@ export function emitReturnValueDeclarations(context: any): string[] {
   return []
 }
 
-export function emitStatusResultDeclarations(context: any): string[] {
+export function emitStatusResultDeclarations(context: CFunctionContext): string[] {
   return context.throwingFunction ? ['ccjs_status ccjs_status_result = CCJS_OK;'] : []
 }
 
-export function emitLoopFlowDeclarations(context: any): string[] {
+export function emitLoopFlowDeclarations(context: CFunctionContext): string[] {
   return [
     ...(context.breakFlowUsed ? ['int ccjs_break_active = 0;'] : []),
     ...(context.continueFlowUsed ? ['int ccjs_continue_active = 0;'] : [])
   ]
 }
 
-export function emitReturnFlowDeclarations(context: any): string[] {
+export function emitReturnFlowDeclarations(context: CFunctionContext): string[] {
   return context.returnFlowUsed ? ['int ccjs_return_active = 0;'] : []
 }
 
-export function emitOwnedValueDeclarations(context: any): string[] {
+export function emitOwnedValueDeclarations(context: CFunctionContext): string[] {
   return [
     ...context.ownedValues.map((name: string) => `ccjs_value ${name} = ccjs_undefined_value();`),
     ...context.ownedCryptoHashes.map((name: string) => `ccjs_crypto_hash* ${name} = 0;`),
@@ -194,27 +228,27 @@ export function emitOwnedValueDeclarations(context: any): string[] {
   ]
 }
 
-export function emitOwnedPromiseDeclarations(context: any): string[] {
+export function emitOwnedPromiseDeclarations(context: CFunctionContext): string[] {
   return context.ownedPromises.map((name: string) => `ccjs_promise* ${name} = 0;`)
 }
 
-export function emitEventLoopDeclarations(context: any): string[] {
+export function emitEventLoopDeclarations(context: CFunctionContext): string[] {
   return context.eventLoopUsed && !context.externalEventLoop
     ? ['ccjs_loop ccjs_loop;', 'int ccjs_loop_active = 0;']
     : []
 }
 
-export function emitErrorChannelDeclarations(context: any): string[] {
+export function emitErrorChannelDeclarations(context: CFunctionContext): string[] {
   return context.errorChannelUsed ? ['int ccjs_error_active = 0;'] : []
 }
 
-export function emitBoxedValueDeclarations(context: any): string[] {
+export function emitBoxedValueDeclarations(context: CFunctionContext): string[] {
   return context.boxedValues.map((name: string) =>
     isRuntimeBoxedValueType(context.boxedValueTypes.get(name)) ? `ccjs_value* ${name} = 0;` : `double* ${name} = 0;`
   )
 }
 
-export function emitOwnedValueCleanup(context: any): string[] {
+export function emitOwnedValueCleanup(context: CFunctionContext): string[] {
   return [
     ...context.ownedCryptoHmacs.toReversed().map((name: string) => `ccjs_crypto_hmac_free(${name});`),
     ...context.ownedCryptoHashes.toReversed().map((name: string) => `ccjs_crypto_hash_free(${name});`),
@@ -222,7 +256,7 @@ export function emitOwnedValueCleanup(context: any): string[] {
   ]
 }
 
-export function emitOwnedPromiseCleanup(context: any): string[] {
+export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
   return context.ownedPromises.toReversed().flatMap((name: string) => {
     const release = `if (${name} != 0) ccjs_promise_release(${name});`
 
@@ -240,7 +274,7 @@ export function emitOwnedPromiseCleanup(context: any): string[] {
   })
 }
 
-export function emitEventLoopInit(context: any): string[] {
+export function emitEventLoopInit(context: CFunctionContext): string[] {
   if (!context.eventLoopUsed) {
     return []
   }
@@ -256,7 +290,7 @@ export function emitEventLoopInit(context: any): string[] {
   ]
 }
 
-export function emitEventLoopDrain(context: any): string[] {
+export function emitEventLoopDrain(context: CFunctionContext): string[] {
   if (!context.eventLoopUsed || context.externalEventLoop) {
     return []
   }
@@ -271,17 +305,17 @@ export function emitEventLoopDrain(context: any): string[] {
   ]
 }
 
-export function emitEventLoopCleanup(context: any): string[] {
+export function emitEventLoopCleanup(context: CFunctionContext): string[] {
   return context.eventLoopUsed && !context.externalEventLoop
     ? ['if (ccjs_loop_active) ccjs_loop_dispose(&ccjs_loop);']
     : []
 }
 
-export function emitEventLoopReference(context: any): string {
+export function emitEventLoopReference(context: CFunctionContext): string {
   return context.externalEventLoop ? 'ccjs_loop' : '&ccjs_loop'
 }
 
-export function emitEventLoopNextTimeExpression(context: any): string {
+export function emitEventLoopNextTimeExpression(context: CFunctionContext): string {
   return emitEventLoopCurrentTimeExpression()
 }
 
@@ -289,7 +323,7 @@ export function emitEventLoopCurrentTimeExpression(): string {
   return 'ccjs_performance_now()'
 }
 
-export function emitEventLoopSleepUntilNextTimerLines(context: any, indent = ''): string[] {
+export function emitEventLoopSleepUntilNextTimerLines(context: CFunctionContext, indent = ''): string[] {
   const loop = emitEventLoopReference(context)
 
   return [
@@ -305,7 +339,7 @@ export function emitEventLoopSleepUntilNextTimerLines(context: any, indent = '')
   ]
 }
 
-export function emitBoxedValueCleanup(context: any): string[] {
+export function emitBoxedValueCleanup(context: CFunctionContext): string[] {
   return context.boxedValues
     .toReversed()
     .flatMap((name: string) =>
@@ -324,7 +358,7 @@ export function isRuntimeBoxedValueType(valueType: any): boolean {
   return ['string', 'object'].includes(valueType)
 }
 
-export function emitCleanupReturn(context: any): string[] {
+export function emitCleanupReturn(context: CFunctionContext): string[] {
   if (context.throwingFunction) {
     return emitThrowingFunctionCleanupReturn(context)
   }
@@ -340,7 +374,7 @@ export function emitCleanupReturn(context: any): string[] {
   return ['return;']
 }
 
-export function emitThrowingFunctionErrorTransfer(context: any): string[] {
+export function emitThrowingFunctionErrorTransfer(context: CFunctionContext): string[] {
   if (!context.throwingFunction) {
     return []
   }
@@ -353,7 +387,7 @@ export function emitThrowingFunctionErrorTransfer(context: any): string[] {
   ]
 }
 
-export function emitThrowingFunctionCleanupReturn(context: any): string[] {
+export function emitThrowingFunctionCleanupReturn(context: CFunctionContext): string[] {
   const lines = ['if (ccjs_status_result != CCJS_OK) return ccjs_status_result;']
 
   if (context.returnType !== 'void') {
@@ -365,14 +399,14 @@ export function emitThrowingFunctionCleanupReturn(context: any): string[] {
   return lines
 }
 
-export function nextCName(context: any, prefix: string): string {
+export function nextCName(context: CFunctionContext, prefix: string): string {
   const name = `${prefix}_${context.nextId}`
   context.nextId += 1
 
   return name
 }
 
-export function withVariableScope(context: any, callback: () => any): any {
+export function withVariableScope(context: CFunctionContext, callback: () => any): any {
   const previous = context.variables
   const previousArrayShapes = context.arrayShapes
   const previousBoxedVariables = context.boxedVariables
@@ -431,7 +465,7 @@ export function withVariableScope(context: any, callback: () => any): any {
   }
 }
 
-export function withNullableScalarNarrowing(context: any, names: string[], callback: () => any): any {
+export function withNullableScalarNarrowing(context: CFunctionContext, names: string[], callback: () => any): any {
   if (names.length === 0) {
     return callback()
   }
@@ -450,7 +484,7 @@ export function withNullableScalarNarrowing(context: any, names: string[], callb
   }
 }
 
-export function narrowNullableScalars(context: any, names: string[]): void {
+export function narrowNullableScalars(context: CFunctionContext, names: string[]): void {
   for (const name of names) {
     context.narrowedNullableScalars.add(name)
   }

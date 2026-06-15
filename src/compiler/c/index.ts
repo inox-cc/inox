@@ -48,6 +48,7 @@ import {
   registerOwnedPromise,
   registerOwnedValue,
   shouldEmitCleanupLabel,
+  type CEmitContext,
   withVariableScope
 } from './context.ts'
 import {
@@ -1157,11 +1158,11 @@ function emitCFieldFlags(field: AnyNode): string {
 }
 
 function createBaseContext(
-  diagnostics,
+  diagnostics: Diagnostic[],
   functionDeclarations: IrFunctionDeclaration[],
   functionEffects: IrFunctionEffect[],
   jsGlobalRoots: Set<string>
-) {
+): CEmitContext {
   const throwing = createThrowingFunctionInfo(functionDeclarations, functionEffects)
 
   return {
