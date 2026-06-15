@@ -1002,21 +1002,21 @@ const cValueExpressionDependencies: CValueExpressionDependencies = {
   emitCTemplateLiteralValueExpression,
   emitOptionalRuntimeCallbackCallValueExpression,
   emitPreparedArrayPopCallExpression,
-  emitPreparedBinaryValueExpression: (expression, context) =>
+  emitPreparedBinaryValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBinaryValueExpression(expression, context, binaryLoweringDependencies),
   emitPreparedCallExpression,
-  emitPreparedChildProcessCallExpression: (expression, context) =>
+  emitPreparedChildProcessCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedChildProcessCallExpression(expression, context, childProcessLoweringDependencies),
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
-  emitPreparedCryptoCallExpression: (expression, context) =>
+  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedDebugMemoryCallExpression,
-  emitPreparedFetchHeadersCallExpression: (expression, context) =>
+  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies),
-  emitPreparedFsSyncValueExpression: (expression, context) =>
+  emitPreparedFsSyncValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFsSyncValueExpression(expression, context, fsLoweringDependencies),
-  emitPreparedJsonCallExpression: (expression, context) =>
+  emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies),
   emitPreparedKnownArrayIndexValueExpression,
   emitPreparedKnownObjectIndexValueExpression,
@@ -1026,20 +1026,20 @@ const cValueExpressionDependencies: CValueExpressionDependencies = {
   emitPreparedOsConstantExpression,
   emitPreparedOsStringCallExpression,
   emitPreparedPathConstantExpression,
-  emitPreparedPathObjectCallExpression: (expression, context) =>
+  emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies),
-  emitPreparedPathStringCallExpression: (expression, context) =>
+  emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies),
-  emitPreparedProcessStringExpression: (expression, context) =>
+  emitPreparedProcessStringExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedProcessStringExpression(expression, context, processLoweringDependencies),
   emitPreparedRuntimeArrayIndexValueExpression,
-  emitPreparedUrlObjectExpression: (expression, context) =>
+  emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies),
-  emitPreparedUrlSearchParamsCallExpression: (expression, context) =>
+  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies),
-  emitPreparedUrlSearchParamsObjectExpression: (expression, context) =>
+  emitPreparedUrlSearchParamsObjectExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedUrlSearchParamsObjectExpression(expression, context, urlLoweringDependencies),
-  emitPreparedUrlStringCallExpression: (expression, context) =>
+  emitPreparedUrlStringCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedUrlStringCallExpression(expression, context, urlLoweringDependencies),
   inferExpressionType,
   isBoxedRuntimeValueName,
