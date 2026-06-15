@@ -1348,34 +1348,34 @@ function emitFunctionDeclaration(statement: AnyNode, baseContext: CEmitContext):
 
   const bodyLines: string[] = []
 
-  bodyLines.push(...emitRuntimeParamPreludeForParams(statement, params, context).map((line) => `  ${line}`))
+  bodyLines.push(...emitRuntimeParamPreludeForParams(statement, params, context).map((line: string) => `  ${line}`))
 
-  bodyLines.push(...emitStatementList(statement.body, context).map((line) => `  ${line}`))
+  bodyLines.push(...emitStatementList(statement.body, context).map((line: string) => `  ${line}`))
 
   const lines = [
     `${emitFunctionHead(statement, context)} {`,
-    ...emitThrowingFunctionPrelude(context).map((line) => `  ${line}`),
-    ...emitReturnValueDeclarations(context).map((line) => `  ${line}`),
-    ...emitStatusResultDeclarations(context).map((line) => `  ${line}`),
-    ...emitLoopFlowDeclarations(context).map((line) => `  ${line}`),
-    ...emitReturnFlowDeclarations(context).map((line) => `  ${line}`),
-    ...emitEventLoopDeclarations(context).map((line) => `  ${line}`),
-    ...emitOwnedValueDeclarations(context).map((line) => `  ${line}`),
-    ...emitOwnedPromiseDeclarations(context).map((line) => `  ${line}`),
-    ...emitErrorChannelDeclarations(context).map((line) => `  ${line}`),
-    ...emitBoxedValueDeclarations(context).map((line) => `  ${line}`),
-    ...emitEventLoopInit(context).map((line) => `  ${line}`),
+    ...emitThrowingFunctionPrelude(context).map((line: string) => `  ${line}`),
+    ...emitReturnValueDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitStatusResultDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitLoopFlowDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitReturnFlowDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitEventLoopDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitOwnedValueDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitOwnedPromiseDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitErrorChannelDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitBoxedValueDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitEventLoopInit(context).map((line: string) => `  ${line}`),
     ...bodyLines
   ]
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
-    lines.push(...emitThrowingFunctionErrorTransfer(context).map((line) => `  ${line}`))
-    lines.push(...emitOwnedValueCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitOwnedPromiseCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitEventLoopCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitBoxedValueCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitCleanupReturn(context).map((line) => `  ${line}`))
+    lines.push(...emitThrowingFunctionErrorTransfer(context).map((line: string) => `  ${line}`))
+    lines.push(...emitOwnedValueCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitOwnedPromiseCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitEventLoopCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitCleanupReturn(context).map((line: string) => `  ${line}`))
   } else if (context.returnType !== 'void') {
     lines.push(`  return ${context.returnType === 'string' ? '""' : '0'};`)
   }
@@ -1447,7 +1447,7 @@ function emitFunctionHead(statement: AnyNode, context: CEmitContext): string {
   const returnType = context.returnType ?? returnInfo.returnType
   const returnNullable = context.returnNullable ?? returnInfo.returnNullable
   const functionParams = resolveFunctionDeclarationParams(statement.name, statement.params, context)
-  const params = functionParams.map((param, index) => {
+  const params = functionParams.map((param: any, index: number) => {
     if (isNullableScalarParam(param)) {
       return `ccjs_value ${emitCScalarParamName(param.name)}`
     }
@@ -1514,28 +1514,28 @@ function emitClassMethodDeclaration(info: any, method: AnyNode, baseContext: CEm
 
   const bodyLines: string[] = []
 
-  bodyLines.push(...emitRuntimeParamPreludeForParams(method, params, context).map((line) => `  ${line}`))
-  bodyLines.push(...emitStatementList(method.body, context).map((line) => `  ${line}`))
+  bodyLines.push(...emitRuntimeParamPreludeForParams(method, params, context).map((line: string) => `  ${line}`))
+  bodyLines.push(...emitStatementList(method.body, context).map((line: string) => `  ${line}`))
 
   const lines = [
     `${emitClassMethodHead(info, method, context)} {`,
-    ...emitReturnValueDeclarations(context).map((line) => `  ${line}`),
-    ...emitStatusResultDeclarations(context).map((line) => `  ${line}`),
-    ...emitLoopFlowDeclarations(context).map((line) => `  ${line}`),
-    ...emitReturnFlowDeclarations(context).map((line) => `  ${line}`),
-    ...emitOwnedValueDeclarations(context).map((line) => `  ${line}`),
-    ...emitOwnedPromiseDeclarations(context).map((line) => `  ${line}`),
-    ...emitErrorChannelDeclarations(context).map((line) => `  ${line}`),
-    ...emitBoxedValueDeclarations(context).map((line) => `  ${line}`),
+    ...emitReturnValueDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitStatusResultDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitLoopFlowDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitReturnFlowDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitOwnedValueDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitOwnedPromiseDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitErrorChannelDeclarations(context).map((line: string) => `  ${line}`),
+    ...emitBoxedValueDeclarations(context).map((line: string) => `  ${line}`),
     ...bodyLines
   ]
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
-    lines.push(...emitOwnedValueCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitOwnedPromiseCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitBoxedValueCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitCleanupReturn(context).map((line) => `  ${line}`))
+    lines.push(...emitOwnedValueCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitOwnedPromiseCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitCleanupReturn(context).map((line: string) => `  ${line}`))
   } else if (context.returnType !== 'void') {
     lines.push(`  return ${context.returnType === 'string' ? 'ccjs_undefined_value()' : '0'};`)
   }
@@ -1548,7 +1548,7 @@ function emitClassMethodDeclaration(info: any, method: AnyNode, baseContext: CEm
 function emitClassMethodHead(info: any, method: AnyNode, context: CEmitContext): string {
   const params = [
     'ccjs_value this',
-    ...method.params.map((param, index) => emitClassMethodParam(param, index, method, context))
+    ...method.params.map((param: any, index: number) => emitClassMethodParam(param, index, method, context))
   ]
 
   return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${emitCClassMethodName(info.name, method.name)}(${params.join(', ')})`
@@ -1662,29 +1662,29 @@ function emitMainWrapper(irPrograms: IrProgram[], baseContext: CEmitContext): st
   const bodyLines: string[] = []
   const lines = [context.processRuntime ? 'int main(int argc, char** argv) {' : 'int main(void) {']
 
-  bodyLines.push(...emitStatementList(body, context).map((line) => `  ${line}`))
+  bodyLines.push(...emitStatementList(body, context).map((line: string) => `  ${line}`))
 
   if (context.processRuntime) {
     lines.push('  ccjs_process_init(argc, argv);')
   }
-  lines.push(...emitLoopFlowDeclarations(context).map((line) => `  ${line}`))
-  lines.push(...emitReturnValueDeclarations(context).map((line) => `  ${line}`))
-  lines.push(...emitReturnFlowDeclarations(context).map((line) => `  ${line}`))
-  lines.push(...emitEventLoopDeclarations(context).map((line) => `  ${line}`))
-  lines.push(...emitOwnedValueDeclarations(context).map((line) => `  ${line}`))
-  lines.push(...emitOwnedPromiseDeclarations(context).map((line) => `  ${line}`))
-  lines.push(...emitErrorChannelDeclarations(context).map((line) => `  ${line}`))
-  lines.push(...emitBoxedValueDeclarations(context).map((line) => `  ${line}`))
-  lines.push(...emitEventLoopInit(context).map((line) => `  ${line}`))
+  lines.push(...emitLoopFlowDeclarations(context).map((line: string) => `  ${line}`))
+  lines.push(...emitReturnValueDeclarations(context).map((line: string) => `  ${line}`))
+  lines.push(...emitReturnFlowDeclarations(context).map((line: string) => `  ${line}`))
+  lines.push(...emitEventLoopDeclarations(context).map((line: string) => `  ${line}`))
+  lines.push(...emitOwnedValueDeclarations(context).map((line: string) => `  ${line}`))
+  lines.push(...emitOwnedPromiseDeclarations(context).map((line: string) => `  ${line}`))
+  lines.push(...emitErrorChannelDeclarations(context).map((line: string) => `  ${line}`))
+  lines.push(...emitBoxedValueDeclarations(context).map((line: string) => `  ${line}`))
+  lines.push(...emitEventLoopInit(context).map((line: string) => `  ${line}`))
   lines.push(...bodyLines)
-  lines.push(...emitEventLoopDrain(context).map((line) => `  ${line}`))
+  lines.push(...emitEventLoopDrain(context).map((line: string) => `  ${line}`))
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
-    lines.push(...emitOwnedValueCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitOwnedPromiseCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitEventLoopCleanup(context).map((line) => `  ${line}`))
-    lines.push(...emitBoxedValueCleanup(context).map((line) => `  ${line}`))
+    lines.push(...emitOwnedValueCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitOwnedPromiseCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitEventLoopCleanup(context).map((line: string) => `  ${line}`))
+    lines.push(...emitBoxedValueCleanup(context).map((line: string) => `  ${line}`))
   }
 
   lines.push(`  return ${emitMainReturnExpression(context)};`)
@@ -1712,7 +1712,7 @@ function emitRuntimeParamPrelude(statement: AnyNode, context: CFunctionContext):
 }
 
 function emitRuntimeParamPreludeForParams(statement: AnyNode, params: any[], context: CFunctionContext): string[] {
-  return params.flatMap((param, index) => {
+  return params.flatMap((param: any, index: number) => {
     if (isNullableScalarParam(param)) {
       const paramName = emitCScalarParamName(param.name)
       const expectedTag = cRuntimeValueTag(param.valueType)
