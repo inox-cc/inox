@@ -49,6 +49,11 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       requirements.add('managed-values')
       requirements.add('path')
       requirements.add('string-bytes')
+    } else if (feature === 'url') {
+      requirements.add('managed-values')
+      requirements.add('objects')
+      requirements.add('string-bytes')
+      requirements.add('url')
     } else if (feature === 'weak-references') {
       requirements.add('managed-values')
       requirements.add('objects')
@@ -255,7 +260,7 @@ function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
     }
   }
 
-  if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression') {
+  if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression' || node.type === 'NewExpression') {
     recordCallFeatures(node, features)
   }
 
@@ -366,6 +371,12 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
 
   if (pathRuntimeMethodName(expression) != null) {
     features.add('path')
+    features.add('runtime-values')
+    features.add('string-bytes')
+  }
+
+  if (urlRuntimeMethodName(expression) != null) {
+    features.add('url')
     features.add('runtime-values')
     features.add('string-bytes')
   }
@@ -494,6 +505,17 @@ function pathRuntimeMethodName(expression: AnyNode): string | null {
   }
 
   return expression.pathRuntimeMethod
+}
+
+function urlRuntimeMethodName(expression: AnyNode): string | null {
+  if (
+    (expression.type !== 'CallExpression' && expression.type !== 'NewExpression') ||
+    typeof expression.urlRuntimeMethod !== 'string'
+  ) {
+    return null
+  }
+
+  return expression.urlRuntimeMethod
 }
 
 function isObjectFieldExpression(expression: AnyNode | null | undefined): boolean {

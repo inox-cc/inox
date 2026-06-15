@@ -19,7 +19,8 @@ import {
   fsStatsObjectShape,
   globals,
   libuvOnlyRuntimeImports,
-  numericCastNames
+  numericCastNames,
+  urlObjectShape
 } from './checker/builtins.ts'
 import { Scope } from './checker/scope.ts'
 import { fsRuntimeCallInfo, isFsRuntimeImportSymbol, removedFsRuntimeMethodInfo } from './checker/std/fs.ts'
@@ -76,6 +77,12 @@ import {
   isPathRuntimeMethod,
   isUnsupportedPathRuntimeMethod
 } from './stdlib/descriptors/path.ts'
+import {
+  isNodeUrlImportSource,
+  isUnsupportedUrlRuntimeMethod,
+  isUrlRuntimeConstructor,
+  isUrlRuntimeMethod
+} from './stdlib/descriptors/url.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -1616,6 +1623,12 @@ class Checker {
       return cryptoType
     }
 
+    const urlType = this.checkUrlCall(expression)
+
+    if (urlType != null) {
+      return urlType
+    }
+
     const pathType = this.checkPathCall(expression)
 
     if (pathType != null) {
@@ -1932,6 +1945,101 @@ class Checker {
     }
 
     return 'string'
+  }
+
+  checkUrlCall(expression: AnyNode): ValueType | null {
+    const call = this.resolveUrlRuntimeCall(expression)
+
+    if (call == null) {
+      return null
+    }
+
+    for (const arg of expression.args) {
+      this.checkExpression(arg)
+    }
+
+    if (call.unsupported) {
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        `node:url ${call.method} is not implemented by the current C backend`,
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    if (expression.args.length !== 1) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (expression.args[0] != null) {
+      this.checkAssignableType(
+        expression.args[0].valueType ?? 'unknown',
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+    }
+
+    expression.urlRuntimeMethod = call.method
+
+    if (call.method === 'pathToFileURL') {
+      expression.valueType = 'object'
+      expression.shape = urlObjectShape
+      return 'object'
+    }
+
+    expression.valueType = 'string'
+    return 'string'
+  }
+
+  resolveUrlRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+    const path = memberExpressionPath(expression.callee)
+    const method = this.resolveUrlRuntimeMethod(path)
+
+    if (method == null) {
+      return null
+    }
+
+    return {
+      method,
+      label: path == null ? method : path.join('.'),
+      unsupported: !isUrlRuntimeMethod(method)
+    }
+  }
+
+  resolveUrlRuntimeMethod(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (symbol?.kind === 'import' && isNodeUrlImportSource(symbol.importSource) && importedName != null) {
+        return isUrlRuntimeMethod(importedName) || isUnsupportedUrlRuntimeMethod(importedName) ? importedName : null
+      }
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeUrlImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'url')
+      ) {
+        return isUrlRuntimeMethod(path[1]) || isUnsupportedUrlRuntimeMethod(path[1]) ? path[1] : null
+      }
+    }
+
+    return null
   }
 
   resolveCryptoRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
@@ -2500,6 +2608,20 @@ class Checker {
       }
 
       if (importedName === 'default' || importedName === 'path' || importedName === 'posix') {
+        return 'object'
+      }
+    }
+
+    if (isNodeUrlImportSource(source)) {
+      if (
+        isUrlRuntimeMethod(importedName) ||
+        isUrlRuntimeConstructor(importedName) ||
+        isUnsupportedUrlRuntimeMethod(importedName)
+      ) {
+        return 'function'
+      }
+
+      if (importedName === 'default' || importedName === 'url') {
         return 'object'
       }
     }
@@ -4348,6 +4470,12 @@ class Checker {
 
     const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
+    const urlType = this.checkUrlConstructorExpression(expression, argTypes)
+
+    if (urlType != null) {
+      return urlType
+    }
+
     if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
       this.checkExpression(expression.callee)
       return 'object'
@@ -4456,6 +4584,57 @@ class Checker {
 
     expression.className = expression.callee.path[0]
     expression.shape = symbol.shape ?? null
+    return 'object'
+  }
+
+  checkUrlConstructorExpression(expression: AnyNode, argTypes: ValueType[]): ValueType | null {
+    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+      return null
+    }
+
+    const symbol = this.scope.resolve(expression.callee.path[0])
+    const importedName = symbol?.importedName
+
+    if (symbol?.kind !== 'import' || !isNodeUrlImportSource(symbol.importSource) || importedName == null) {
+      return null
+    }
+
+    if (isUnsupportedUrlRuntimeMethod(importedName)) {
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        `node:url ${importedName} is not implemented by the current C backend`,
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    if (!isUrlRuntimeConstructor(importedName)) {
+      return null
+    }
+
+    if (expression.args.length < 1 || expression.args.length > 2) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `URL constructor expects 1 or 2 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    for (const [index, argType] of argTypes.entries()) {
+      this.checkAssignableType(
+        argType,
+        'string',
+        expression.args[index].loc,
+        false,
+        this.expressionCanBeNull(expression.args[index])
+      )
+    }
+
+    expression.urlRuntimeMethod = 'URL'
+    expression.valueType = 'object'
+    expression.shape = urlObjectShape
+
     return 'object'
   }
 

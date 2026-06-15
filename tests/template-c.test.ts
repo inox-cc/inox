@@ -224,6 +224,7 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
     'runtime/c/src/json/json.c',
     'runtime/c/src/path/path.c',
     'runtime/c/src/time/time.c',
+    'runtime/c/src/url/url.c',
     '-o',
     output
   ])

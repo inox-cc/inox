@@ -9,7 +9,8 @@ export const implementedRuntimeBuiltinImportSources = [
   'node:fs',
   'node:fs/promises',
   'node:http',
-  'node:net'
+  'node:net',
+  'node:url'
 ] as const
 
 export const unsupportedRuntimeBuiltinImportSources = [
@@ -24,7 +25,6 @@ export const unsupportedRuntimeBuiltinImportSources = [
   'node:timers',
   'node:timers/promises',
   'node:tls',
-  'node:url',
   'node:worker_threads',
   'node:zlib'
 ] as const

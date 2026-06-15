@@ -1,5 +1,6 @@
 import type { ObjectShapeInfo, SymbolInfo } from '../types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
+import { urlObjectFields } from '../stdlib/descriptors/url.ts'
 
 export const errorObjectShape: ObjectShapeInfo = {
   kind: 'object',
@@ -133,6 +134,16 @@ export const fetchAbortControllerObjectShape: ObjectShapeInfo = {
       readonly: true
     }
   ]
+}
+
+export const urlObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'url.URL',
+  fields: urlObjectFields.map((name) => ({
+    name,
+    valueType: 'string',
+    readonly: true
+  }))
 }
 
 export const debugMemoryStatsObjectShape: ObjectShapeInfo = {

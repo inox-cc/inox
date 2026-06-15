@@ -124,6 +124,7 @@ import {
   cTimerStartCallName,
   timerCallbackFunctionType
 } from './stdlib/timers.ts'
+import { cUrlRuntimeMethodName } from './stdlib/url.ts'
 import {
   cUnsupportedExpressionCode,
   cUnsupportedVariableDeclarationCode,
@@ -149,6 +150,7 @@ import {
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
+import { urlObjectFields } from '../stdlib/descriptors/url.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import type {
   AnyNode,
@@ -260,6 +262,7 @@ function emitCModuleSource(
     signatureRuntimeTypes.has('function')
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsPathRuntime = runtimeRequirements.has('path')
+  const needsUrlRuntime = runtimeRequirements.has('url')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
@@ -283,6 +286,7 @@ function emitCModuleSource(
     needsFsRuntime ||
     needsFetchRuntime ||
     needsClassRuntime ||
+    needsUrlRuntime ||
     signatureRuntimeTypes.has('object')
   const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
   const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
@@ -296,6 +300,7 @@ function emitCModuleSource(
     needsCallbackRuntime ||
     needsCollectionRuntime ||
     needsPathRuntime ||
+    needsUrlRuntime ||
     needsObjectRuntime ||
     needsClassRuntime ||
     needsJsonRuntime ||
@@ -316,6 +321,7 @@ function emitCModuleSource(
     runtimeRequirements.has('string-bytes') ||
     needsFsRuntime ||
     needsPathRuntime ||
+    needsUrlRuntime ||
     needsDgramRuntime ||
     needsFetchRuntime ||
     needsNetRuntime ||
@@ -349,6 +355,7 @@ function emitCModuleSource(
       needsObjectRuntime,
       needsFsRuntime,
       needsPathRuntime,
+      needsUrlRuntime,
       needsJsonRuntime,
       needsTimerRuntime,
       needsConsoleRuntime,
@@ -806,6 +813,7 @@ function emitCUnit(
     runtimeRequirements.has('callback-values')
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsPathRuntime = runtimeRequirements.has('path')
+  const needsUrlRuntime = runtimeRequirements.has('url')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
@@ -817,7 +825,7 @@ function emitCUnit(
   const needsClassRuntime = baseContext.classInfos.size > 0
   const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
   const needsObjectRuntime =
-    runtimeRequirements.has('objects') || needsFsRuntime || needsFetchRuntime || needsClassRuntime
+    runtimeRequirements.has('objects') || needsFsRuntime || needsFetchRuntime || needsClassRuntime || needsUrlRuntime
   const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
   const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
   const needsRuntime =
@@ -830,6 +838,7 @@ function emitCUnit(
     needsCallbackRuntime ||
     needsCollectionRuntime ||
     needsPathRuntime ||
+    needsUrlRuntime ||
     needsObjectRuntime ||
     needsClassRuntime ||
     needsJsonRuntime ||
@@ -849,6 +858,7 @@ function emitCUnit(
     runtimeRequirements.has('string-bytes') ||
     needsFsRuntime ||
     needsPathRuntime ||
+    needsUrlRuntime ||
     needsDgramRuntime ||
     needsFetchRuntime ||
     needsNetRuntime
@@ -869,6 +879,7 @@ function emitCUnit(
     needsObjectRuntime,
     needsFsRuntime,
     needsPathRuntime,
+    needsUrlRuntime,
     needsJsonRuntime,
     needsTimerRuntime,
     needsConsoleRuntime,
@@ -9310,6 +9321,14 @@ function emitStatement(statement, context) {
       return fetchAbortController
     }
 
+    const urlObject = emitPreparedUrlObjectExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (urlObject != null) {
+      return urlObject.lines
+    }
+
     const asyncPromiseCall = emitPreparedAsyncFunctionPromiseCallExpression(statement.init, context, {
       out: statement.name
     })
@@ -12479,6 +12498,18 @@ function emitCValueExpression(expression, context) {
 
   if (expression?.type === 'AwaitExpression') {
     return emitCAwaitValueExpression(expression, context)
+  }
+
+  const urlStringCall = emitPreparedUrlStringCallExpression(expression, context)
+
+  if (urlStringCall != null) {
+    return urlStringCall
+  }
+
+  const urlObject = emitPreparedUrlObjectExpression(expression, context)
+
+  if (urlObject != null) {
+    return urlObject
   }
 
   const pathConstant = emitPreparedPathConstantExpression(expression, context)
@@ -15816,6 +15847,101 @@ function emitPreparedCallArgs(expression, params, context) {
   }
 }
 
+function emitPreparedUrlStringCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  if (cUrlRuntimeMethodName(expression) !== 'fileURLToPath') {
+    return null
+  }
+
+  const arg = emitCValueExpression(expression.args[0], context)
+  const out = options.out ?? nextCName(context, 'ccjs_url_path')
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  return {
+    lines: [
+      ...arg.lines,
+      ...emitPrepareOwnedValueWrite(out),
+      emitStatusCheck(`ccjs_url_file_url_to_path(&ccjs_default_allocator, ${arg.expression}, &${out})`, context)
+    ],
+    expression: out
+  }
+}
+
+function emitPreparedUrlObjectExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const method = cUrlRuntimeMethodName(expression)
+
+  if (method !== 'pathToFileURL' && method !== 'URL') {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_url_object')
+  const input = emitCValueExpression(expression.args[0], context)
+  const shape = emitUrlObjectShape(context)
+  const lines = [...input.lines, ...shape.lines, ...emitPrepareOwnedValueWrite(out)]
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  context.variables.set(out, 'object')
+  registerObjectShape(context, out, expression.shape)
+
+  if (method === 'pathToFileURL') {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_url_path_to_file_url(&ccjs_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  const base =
+    expression.args[1] == null
+      ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
+      : emitCValueExpression(expression.args[1], context)
+
+  lines.push(...base.lines)
+  lines.push(
+    emitStatusCheck(
+      `ccjs_url_new(&ccjs_default_allocator, ${input.expression}, ${base.expression}, ${expression.args[1] == null ? '0' : '1'}, ${shape.expression}, &${out})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
+function emitUrlObjectShape(context) {
+  const shapeName = nextCName(context, 'ccjs_shape_url')
+  const fieldsName = `${shapeName}_fields`
+  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+
+  for (const field of urlObjectFields) {
+    lines.push(`  { ${cStringLiteral(field)}, CCJS_FIELD_READONLY },`)
+  }
+
+  lines.push('};')
+  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`  ${urlObjectFields.length},`)
+  lines.push(`  ${fieldsName}`)
+  lines.push('};')
+
+  return {
+    lines,
+    expression: `&${shapeName}`
+  }
+}
+
 function emitPreparedPathConstantExpression(expression, context) {
   const constant = cPathRuntimeConstantName(expression)
   const value = constant == null ? null : cPathRuntimeConstantValue(constant)
@@ -18535,6 +18661,12 @@ function resolveFunctionParams(callee, context) {
 }
 
 function inferExpressionType(expression, context) {
+  const urlMethod = cUrlRuntimeMethodName(expression)
+
+  if (urlMethod != null) {
+    return urlMethod === 'fileURLToPath' ? 'string' : 'object'
+  }
+
   const pathConstant = cPathRuntimeConstantName(expression)
 
   if (pathConstant != null) {

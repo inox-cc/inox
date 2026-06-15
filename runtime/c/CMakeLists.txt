@@ -37,6 +37,7 @@ set(CCJS_RUNTIME_SOURCES
   "${CCJS_RUNTIME_DIR}/src/path/path.c"
   "${CCJS_RUNTIME_DIR}/src/strings/string.c"
   "${CCJS_RUNTIME_DIR}/src/time/time.c"
+  "${CCJS_RUNTIME_DIR}/src/url/url.c"
 )
 
 if(CCJS_LOOP_BACKEND STREQUAL "embedded")

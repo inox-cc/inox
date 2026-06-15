@@ -1672,7 +1672,8 @@ function cRuntimeSources(): string[] {
     'runtime/c/src/objects/object.c',
     'runtime/c/src/path/path.c',
     'runtime/c/src/strings/string.c',
-    'runtime/c/src/time/time.c'
+    'runtime/c/src/time/time.c',
+    'runtime/c/src/url/url.c'
   ].map((source) => join(repoRoot, source))
 }
 

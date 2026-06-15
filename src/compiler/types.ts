@@ -45,6 +45,7 @@ export type IrFeature =
   | 'runtime-values'
   | 'string-bytes'
   | 'timers'
+  | 'url'
   | 'weak-references'
 
 export type IrRuntimeRequirement =
@@ -62,6 +63,7 @@ export type IrRuntimeRequirement =
   | 'path'
   | 'string-bytes'
   | 'timers'
+  | 'url'
   | 'weak-references'
 
 export type IrThrowValueType = 'error' | 'other' | 'string'
