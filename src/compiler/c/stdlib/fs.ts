@@ -7,24 +7,22 @@ import {
   registerEventLoop,
   registerOwnedPromise,
   registerOwnedValue,
-  nextCName
+  nextCName,
+  type CFunctionContext
 } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
 import type { CPreparedExpression as PreparedExpression, CPreparedStatement as PreparedStatement, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-
-
-
 export type FsLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
     expression: any,
-    context: any,
+    context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  inferExpressionType: (expression: any, context: any) => string
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
 }
 
 type FsCallOptions = {
@@ -161,7 +159,7 @@ function cFsRuntimeCallName(callee: any): string | null {
 
 export function emitPreparedFsCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FsLoweringDependencies,
   options: FsCallOptions = {}
 ): PreparedExpression | null {
@@ -243,7 +241,7 @@ export function emitPreparedFsCallExpression(
 
 function emitPreparedFsAsyncDescriptorExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FsLoweringDependencies,
   path: PreparedStringBytesOperand,
   lines: string[],
@@ -299,7 +297,7 @@ function emitPreparedFsAsyncDescriptorExpression(
 
 export function emitPreparedFsSyncValueExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
@@ -335,7 +333,7 @@ export function emitPreparedFsSyncValueExpression(
 
 export function emitPreparedFsSyncStatementExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedStatement | null {
   const method = cFsRuntimeExpressionMethod(expression)
@@ -395,7 +393,7 @@ export function emitPreparedFsSyncStatementExpression(
 
 function emitPreparedFsSyncStatementDescriptor(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FsLoweringDependencies,
   path: PreparedStringBytesOperand,
   lines: string[],
@@ -438,7 +436,7 @@ function emitPreparedFsSyncStatementDescriptor(
 
 export function emitPreparedFsAccessModeExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression {
   if (expression.args[1] == null) {
@@ -462,7 +460,7 @@ export function emitFsBooleanFlag(expression: any, field: string): string {
 
 export function emitPreparedFsStatsMethodExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
