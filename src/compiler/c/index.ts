@@ -351,6 +351,7 @@ import {
   emitSwitchStatement,
   emitThrowStatement,
   emitTryStatement,
+  emitVariableDeclarationStatement,
   emitWhileStatement,
   registerErrorChannel,
   withBreakTarget,
@@ -380,24 +381,81 @@ const nullableLoweringDependencies: NullableLoweringDependencies = {
 const statementLoweringDependencies: StatementLoweringDependencies = {
   containsAwaitExpression,
   emitArrayVariableDeclaration,
+  emitArrayFilterVariableDeclaration,
+  emitArrayMapVariableDeclaration,
+  emitArraySortVariableDeclaration,
+  emitBoxedObjectVariableDeclaration,
   emitCAwaitValueExpression,
+  emitClassObjectVariableDeclaration,
   emitCExpression,
   emitCObjectLiteralValueExpression,
   emitCValueExpression,
+  emitCollectionVariableDeclaration,
+  emitDgramAddressVariableDeclaration,
+  emitDgramNumberVariableDeclaration: (statement, context) =>
+    emitDgramNumberVariableDeclaration(statement, context, dgramLoweringDependencies),
+  emitDgramSocketVariableDeclaration: (statement, context) =>
+    emitDgramSocketVariableDeclaration(statement, context, dgramLoweringDependencies),
+  emitDirentArrayIndexVariableDeclaration,
+  emitDynamicObjectMemberVariableDeclaration,
+  emitErrorObjectVariableDeclaration,
   emitFailureStatement,
+  emitFetchAbortControllerVariableDeclaration,
+  emitHttpServerVariableDeclaration,
+  emitJsonParseVariableDeclaration,
+  emitKnownArrayIndexVariableDeclaration,
+  emitKnownObjectMemberVariableDeclaration,
+  emitNetAddressMemberVariableDeclaration,
+  emitNetAddressVariableDeclaration,
+  emitNetNumberVariableDeclaration,
+  emitNetServerVariableDeclaration: (statement, context) =>
+    emitNetServerVariableDeclaration(statement, context, netLoweringDependencies),
+  emitNetSocketVariableDeclaration: (statement, context) =>
+    emitNetSocketVariableDeclaration(statement, context, netLoweringDependencies),
   emitNullableScalarValueExpression,
+  emitNullableRuntimeValueVariableDeclaration,
+  emitObjectVariableDeclaration,
+  emitPreparedArrayFilterCallExpression,
+  emitPreparedArrayMapCallExpression,
+  emitPreparedArraySortCallExpression,
+  emitPreparedAsyncFunctionPromiseCallExpression,
+  emitPreparedChildProcessCallExpression,
+  emitPreparedFetchCallExpression,
+  emitPreparedFetchHeadersCallExpression,
   emitPreparedForExpressionClause,
   emitPreparedForInitializer,
+  emitPreparedFsCallExpression,
   emitPreparedNumberExpression,
+  emitPreparedPathObjectCallExpression,
+  emitPreparedPromiseConstructorExpression,
   emitPreparedPromiseExpression,
+  emitPreparedPromiseMethodExpression,
+  emitPreparedPromiseReturningCallExpression,
+  emitPreparedPromiseStaticExpression,
+  emitPreparedUrlObjectExpression,
+  emitPreparedUrlSearchParamsObjectExpression,
+  emitRuntimeStringVariableDeclaration,
+  emitRuntimeValueVariableDeclaration,
+  emitScalarVariableDeclaration,
   emitStatement,
   inferCatchBindingValueType,
   inferExpressionType,
+  isClassConstructorExpression,
+  isCollectionConstructorExpression,
+  isErrorConstructorExpression,
   isErrorValueExpression,
+  isIndexAccessExpression,
+  isMemberAccessExpression,
+  isRuntimeNullableType,
+  isRuntimeValueLocalExpression,
   registerErrorObjectShape,
   resolveForOfElementType,
+  resolveKnownArrayIndex,
   resolveKnownForOfArray,
+  resolveKnownObjectIndex,
+  resolveKnownObjectMember,
   resolveNullableScalarConditionNarrowing,
+  resolveRuntimeArrayIndex,
   resolveRuntimeForOfArray,
   resolveRuntimeForOfMap,
   resolveRuntimeForOfSet
@@ -2060,264 +2118,7 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'VariableDeclaration') {
-    const dgramSocket = emitDgramSocketVariableDeclaration(statement, context, dgramLoweringDependencies)
-
-    if (dgramSocket != null) {
-      return dgramSocket
-    }
-
-    const dgramNumber = emitDgramNumberVariableDeclaration(statement, context, dgramLoweringDependencies)
-
-    if (dgramNumber != null) {
-      return dgramNumber
-    }
-
-    const dgramAddress = emitDgramAddressVariableDeclaration(statement, context)
-
-    if (dgramAddress != null) {
-      return dgramAddress
-    }
-
-    const httpServer = emitHttpServerVariableDeclaration(statement, context)
-
-    if (httpServer != null) {
-      return httpServer
-    }
-
-    const netServer = emitNetServerVariableDeclaration(statement, context, netLoweringDependencies)
-
-    if (netServer != null) {
-      return netServer
-    }
-
-    const netSocket = emitNetSocketVariableDeclaration(statement, context, netLoweringDependencies)
-
-    if (netSocket != null) {
-      return netSocket
-    }
-
-    const netAddress = emitNetAddressVariableDeclaration(statement, context)
-
-    if (netAddress != null) {
-      return netAddress
-    }
-
-    const netAddressMember = emitNetAddressMemberVariableDeclaration(statement, context)
-
-    if (netAddressMember != null) {
-      return netAddressMember
-    }
-
-    const netNumber = emitNetNumberVariableDeclaration(statement, context)
-
-    if (netNumber != null) {
-      return netNumber
-    }
-
-    const fetchAbortController = emitFetchAbortControllerVariableDeclaration(statement, context)
-
-    if (fetchAbortController != null) {
-      return fetchAbortController
-    }
-
-    const childProcessObject = emitPreparedChildProcessCallExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (childProcessObject != null && statement.init?.childProcessRuntimeMethod === 'spawnSync') {
-      return childProcessObject.lines
-    }
-
-    const pathObject = emitPreparedPathObjectCallExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (pathObject != null) {
-      return pathObject.lines
-    }
-
-    const urlObject = emitPreparedUrlObjectExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (urlObject != null) {
-      return urlObject.lines
-    }
-
-    const urlSearchParamsObject = emitPreparedUrlSearchParamsObjectExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (urlSearchParamsObject != null) {
-      return urlSearchParamsObject.lines
-    }
-
-    const asyncPromiseCall = emitPreparedAsyncFunctionPromiseCallExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (asyncPromiseCall != null) {
-      return asyncPromiseCall.lines
-    }
-
-    const promiseMethod = emitPreparedPromiseMethodExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (promiseMethod != null) {
-      return promiseMethod.lines
-    }
-
-    const fetchCall = emitPreparedFetchCallExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (fetchCall != null) {
-      return fetchCall.lines
-    }
-
-    const fsCall = emitPreparedFsCallExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (fsCall != null) {
-      return fsCall.lines
-    }
-
-    const promiseConstructor = emitPreparedPromiseConstructorExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (promiseConstructor != null) {
-      return promiseConstructor.lines
-    }
-
-    const promise = emitPreparedPromiseStaticExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (promise != null) {
-      return promise.lines
-    }
-
-    const promiseCall = emitPreparedPromiseReturningCallExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (promiseCall != null) {
-      return promiseCall.lines
-    }
-
-    if (isCollectionConstructorExpression(statement.init)) {
-      return emitCollectionVariableDeclaration(statement, context)
-    }
-
-    const arrayMapCall = emitPreparedArrayMapCallExpression(statement.init, context)
-
-    if (arrayMapCall != null) {
-      return emitArrayMapVariableDeclaration(statement, arrayMapCall, context)
-    }
-
-    const arrayFilterCall = emitPreparedArrayFilterCallExpression(statement.init, context)
-
-    if (arrayFilterCall != null) {
-      return emitArrayFilterVariableDeclaration(statement, arrayFilterCall, context)
-    }
-
-    const arraySortCall = emitPreparedArraySortCallExpression(statement.init, context)
-
-    if (arraySortCall != null) {
-      return emitArraySortVariableDeclaration(statement, arraySortCall, context)
-    }
-
-    const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(statement.init, context, {
-      out: statement.name
-    })
-
-    if (fetchHeadersCall != null && statement.valueType === 'boolean') {
-      context.variables.set(statement.name, 'boolean')
-      return fetchHeadersCall.lines
-    }
-
-    if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
-      return emitNullableRuntimeValueVariableDeclaration(statement, context)
-    }
-
-    if (isErrorConstructorExpression(statement.init)) {
-      return emitErrorObjectVariableDeclaration(statement, context)
-    }
-
-    if (isClassConstructorExpression(statement.init, context)) {
-      return emitClassObjectVariableDeclaration(statement, context)
-    }
-
-    const jsonParseDeclaration = emitJsonParseVariableDeclaration(statement, context)
-
-    if (jsonParseDeclaration != null) {
-      return jsonParseDeclaration
-    }
-
-    if (statement.init?.type === 'ObjectLiteral') {
-      if (context.boxedMutableCaptureDeclarations.has(statement)) {
-        return emitBoxedObjectVariableDeclaration(statement, context)
-      }
-
-      return emitObjectVariableDeclaration(statement, context)
-    }
-
-    if (statement.init?.type === 'ArrayLiteral') {
-      return emitArrayVariableDeclaration(statement, context)
-    }
-
-    if (isMemberAccessExpression(statement.init)) {
-      const member = resolveKnownObjectMember(statement.init, context)
-
-      if (member != null) {
-        return emitKnownObjectMemberVariableDeclaration(statement, member, context)
-      }
-    }
-
-    if (isIndexAccessExpression(statement.init)) {
-      const direntElement = emitDirentArrayIndexVariableDeclaration(statement, context)
-
-      if (direntElement != null) {
-        return direntElement
-      }
-
-      const element = resolveKnownArrayIndex(statement.init, context)
-
-      if (element != null) {
-        return emitKnownArrayIndexVariableDeclaration(statement, element, context)
-      }
-
-      const field = resolveKnownObjectIndex(statement.init, context)
-
-      if (field != null) {
-        return emitDynamicObjectMemberVariableDeclaration(statement, field, context)
-      }
-    }
-
-    if (isRuntimeValueLocalExpression(statement.init, context)) {
-      return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
-    }
-
-    if (isIndexAccessExpression(statement.init)) {
-      const runtimeElement = resolveRuntimeArrayIndex(statement.init, context)
-
-      if (runtimeElement?.valueType === 'object') {
-        return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
-      }
-    }
-
-    if (
-      statement.init?.type === 'CallExpression' &&
-      statement.nullable !== true &&
-      inferExpressionType(statement.init, context) === 'string'
-    ) {
-      return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
-    }
-
-    return emitScalarVariableDeclaration(statement, context)
+    return emitVariableDeclarationStatement(statement, context)
   }
 
   if (statement.type === 'ExpressionStatement' && isConsoleLog(statement.expression)) {

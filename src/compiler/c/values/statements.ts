@@ -21,27 +21,80 @@ type PreparedExpression = {
 export type StatementLoweringDependencies = {
   containsAwaitExpression: (node: any) => boolean
   emitArrayVariableDeclaration: (statement: any, context: any) => string[]
+  emitArrayFilterVariableDeclaration: (statement: any, filtered: any, context: any) => string[]
+  emitArrayMapVariableDeclaration: (statement: any, mapped: any, context: any) => string[]
+  emitArraySortVariableDeclaration: (statement: any, sorted: any, context: any) => string[]
+  emitBoxedObjectVariableDeclaration: (statement: any, context: any) => string[]
   emitCAwaitValueExpression: (expression: any, context: any) => PreparedExpression
   emitCExpression: (expression: any, context: any) => string
+  emitClassObjectVariableDeclaration: (statement: any, context: any) => string[]
   emitCObjectLiteralValueExpression: (expression: any, context: any, shape?: any | null) => PreparedExpression
   emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  emitCollectionVariableDeclaration: (statement: any, context: any) => string[]
+  emitDgramAddressVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitDgramNumberVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitDgramSocketVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitDirentArrayIndexVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitDynamicObjectMemberVariableDeclaration: (statement: any, member: any, context: any) => string[]
+  emitErrorObjectVariableDeclaration: (statement: any, context: any) => string[]
   emitFailureStatement: (context: any) => string
+  emitFetchAbortControllerVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitHttpServerVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitJsonParseVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitKnownArrayIndexVariableDeclaration: (statement: any, element: any, context: any) => string[]
+  emitKnownObjectMemberVariableDeclaration: (statement: any, member: any, context: any) => string[]
+  emitNetAddressMemberVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitNetAddressVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitNetNumberVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitNetServerVariableDeclaration: (statement: any, context: any) => string[] | null
+  emitNetSocketVariableDeclaration: (statement: any, context: any) => string[] | null
   emitNullableScalarValueExpression: (expression: any, context: any) => PreparedExpression
+  emitNullableRuntimeValueVariableDeclaration: (statement: any, context: any) => string[]
+  emitObjectVariableDeclaration: (statement: any, context: any) => string[]
+  emitPreparedArrayFilterCallExpression: (expression: any, context: any) => any | null
+  emitPreparedArrayMapCallExpression: (expression: any, context: any) => any | null
+  emitPreparedArraySortCallExpression: (expression: any, context: any) => any | null
+  emitPreparedAsyncFunctionPromiseCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedChildProcessCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedFetchCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedFetchHeadersCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
   emitPreparedForExpressionClause: (expression: any, context: any) => PreparedExpression
   emitPreparedForInitializer: (init: any, context: any) => PreparedExpression
+  emitPreparedFsCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
   emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
+  emitPreparedPathObjectCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedPromiseConstructorExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
   emitPreparedPromiseExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedPromiseMethodExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedPromiseReturningCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedPromiseStaticExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedUrlObjectExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitPreparedUrlSearchParamsObjectExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitRuntimeStringVariableDeclaration: (statement: any, expression: any, context: any) => string[]
+  emitRuntimeValueVariableDeclaration: (statement: any, expression: any, context: any) => string[]
+  emitScalarVariableDeclaration: (statement: any, context: any) => string[]
   emitStatement: (statement: any, context: any) => string[]
   inferCatchBindingValueType: (statement: any, context: any) => string
   inferExpressionType: (expression: any, context: any) => string
+  isClassConstructorExpression: (expression: any, context: any) => boolean
+  isCollectionConstructorExpression: (expression: any) => boolean
+  isErrorConstructorExpression: (expression: any) => boolean
   isErrorValueExpression: (expression: any, context: any) => boolean
+  isIndexAccessExpression: (expression: any) => boolean
+  isMemberAccessExpression: (expression: any) => boolean
+  isRuntimeNullableType: (valueType: any) => boolean
+  isRuntimeValueLocalExpression: (expression: any, context: any) => boolean
   registerErrorObjectShape: (context: any, name: string) => void
   resolveForOfElementType: (elements: any[]) => string
+  resolveKnownArrayIndex: (expression: any, context: any) => any | null
+  resolveKnownObjectIndex: (expression: any, context: any) => any | null
+  resolveKnownObjectMember: (expression: any, context: any) => any | null
   resolveKnownForOfArray: (expression: any, context: any) => any | null
   resolveNullableScalarConditionNarrowing: (expression: any, context: any) => {
     trueNames: string[]
     falseNames: string[]
   }
+  resolveRuntimeArrayIndex: (expression: any, context: any) => any | null
   resolveRuntimeForOfArray: (expression: any, context: any) => any | null
   resolveRuntimeForOfMap: (expression: any, context: any) => any | null
   resolveRuntimeForOfSet: (expression: any, context: any) => any | null
@@ -731,6 +784,268 @@ export function emitReturnStatement(statement, context) {
   }
 
   return [`return ${statementDeps(context).emitCExpression(argument, context)};`]
+}
+
+export function emitVariableDeclarationStatement(statement, context) {
+  const deps = statementDeps(context)
+  const dgramSocket = deps.emitDgramSocketVariableDeclaration(statement, context)
+
+  if (dgramSocket != null) {
+    return dgramSocket
+  }
+
+  const dgramNumber = deps.emitDgramNumberVariableDeclaration(statement, context)
+
+  if (dgramNumber != null) {
+    return dgramNumber
+  }
+
+  const dgramAddress = deps.emitDgramAddressVariableDeclaration(statement, context)
+
+  if (dgramAddress != null) {
+    return dgramAddress
+  }
+
+  const httpServer = deps.emitHttpServerVariableDeclaration(statement, context)
+
+  if (httpServer != null) {
+    return httpServer
+  }
+
+  const netServer = deps.emitNetServerVariableDeclaration(statement, context)
+
+  if (netServer != null) {
+    return netServer
+  }
+
+  const netSocket = deps.emitNetSocketVariableDeclaration(statement, context)
+
+  if (netSocket != null) {
+    return netSocket
+  }
+
+  const netAddress = deps.emitNetAddressVariableDeclaration(statement, context)
+
+  if (netAddress != null) {
+    return netAddress
+  }
+
+  const netAddressMember = deps.emitNetAddressMemberVariableDeclaration(statement, context)
+
+  if (netAddressMember != null) {
+    return netAddressMember
+  }
+
+  const netNumber = deps.emitNetNumberVariableDeclaration(statement, context)
+
+  if (netNumber != null) {
+    return netNumber
+  }
+
+  const fetchAbortController = deps.emitFetchAbortControllerVariableDeclaration(statement, context)
+
+  if (fetchAbortController != null) {
+    return fetchAbortController
+  }
+
+  const childProcessObject = deps.emitPreparedChildProcessCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (childProcessObject != null && statement.init?.childProcessRuntimeMethod === 'spawnSync') {
+    return childProcessObject.lines
+  }
+
+  const pathObject = deps.emitPreparedPathObjectCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (pathObject != null) {
+    return pathObject.lines
+  }
+
+  const urlObject = deps.emitPreparedUrlObjectExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (urlObject != null) {
+    return urlObject.lines
+  }
+
+  const urlSearchParamsObject = deps.emitPreparedUrlSearchParamsObjectExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (urlSearchParamsObject != null) {
+    return urlSearchParamsObject.lines
+  }
+
+  const asyncPromiseCall = deps.emitPreparedAsyncFunctionPromiseCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (asyncPromiseCall != null) {
+    return asyncPromiseCall.lines
+  }
+
+  const promiseMethod = deps.emitPreparedPromiseMethodExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (promiseMethod != null) {
+    return promiseMethod.lines
+  }
+
+  const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (fetchCall != null) {
+    return fetchCall.lines
+  }
+
+  const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (fsCall != null) {
+    return fsCall.lines
+  }
+
+  const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (promiseConstructor != null) {
+    return promiseConstructor.lines
+  }
+
+  const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (promise != null) {
+    return promise.lines
+  }
+
+  const promiseCall = deps.emitPreparedPromiseReturningCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (promiseCall != null) {
+    return promiseCall.lines
+  }
+
+  if (deps.isCollectionConstructorExpression(statement.init)) {
+    return deps.emitCollectionVariableDeclaration(statement, context)
+  }
+
+  const arrayMapCall = deps.emitPreparedArrayMapCallExpression(statement.init, context)
+
+  if (arrayMapCall != null) {
+    return deps.emitArrayMapVariableDeclaration(statement, arrayMapCall, context)
+  }
+
+  const arrayFilterCall = deps.emitPreparedArrayFilterCallExpression(statement.init, context)
+
+  if (arrayFilterCall != null) {
+    return deps.emitArrayFilterVariableDeclaration(statement, arrayFilterCall, context)
+  }
+
+  const arraySortCall = deps.emitPreparedArraySortCallExpression(statement.init, context)
+
+  if (arraySortCall != null) {
+    return deps.emitArraySortVariableDeclaration(statement, arraySortCall, context)
+  }
+
+  const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (fetchHeadersCall != null && statement.valueType === 'boolean') {
+    context.variables.set(statement.name, 'boolean')
+    return fetchHeadersCall.lines
+  }
+
+  if (statement.nullable === true && deps.isRuntimeNullableType(statement.valueType)) {
+    return deps.emitNullableRuntimeValueVariableDeclaration(statement, context)
+  }
+
+  if (deps.isErrorConstructorExpression(statement.init)) {
+    return deps.emitErrorObjectVariableDeclaration(statement, context)
+  }
+
+  if (deps.isClassConstructorExpression(statement.init, context)) {
+    return deps.emitClassObjectVariableDeclaration(statement, context)
+  }
+
+  const jsonParseDeclaration = deps.emitJsonParseVariableDeclaration(statement, context)
+
+  if (jsonParseDeclaration != null) {
+    return jsonParseDeclaration
+  }
+
+  if (statement.init?.type === 'ObjectLiteral') {
+    if (context.boxedMutableCaptureDeclarations.has(statement)) {
+      return deps.emitBoxedObjectVariableDeclaration(statement, context)
+    }
+
+    return deps.emitObjectVariableDeclaration(statement, context)
+  }
+
+  if (statement.init?.type === 'ArrayLiteral') {
+    return deps.emitArrayVariableDeclaration(statement, context)
+  }
+
+  if (deps.isMemberAccessExpression(statement.init)) {
+    const member = deps.resolveKnownObjectMember(statement.init, context)
+
+    if (member != null) {
+      return deps.emitKnownObjectMemberVariableDeclaration(statement, member, context)
+    }
+  }
+
+  if (deps.isIndexAccessExpression(statement.init)) {
+    const direntElement = deps.emitDirentArrayIndexVariableDeclaration(statement, context)
+
+    if (direntElement != null) {
+      return direntElement
+    }
+
+    const element = deps.resolveKnownArrayIndex(statement.init, context)
+
+    if (element != null) {
+      return deps.emitKnownArrayIndexVariableDeclaration(statement, element, context)
+    }
+
+    const field = deps.resolveKnownObjectIndex(statement.init, context)
+
+    if (field != null) {
+      return deps.emitDynamicObjectMemberVariableDeclaration(statement, field, context)
+    }
+  }
+
+  if (deps.isRuntimeValueLocalExpression(statement.init, context)) {
+    return deps.emitRuntimeValueVariableDeclaration(statement, statement.init, context)
+  }
+
+  if (deps.isIndexAccessExpression(statement.init)) {
+    const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
+
+    if (runtimeElement?.valueType === 'object') {
+      return deps.emitRuntimeValueVariableDeclaration(statement, statement.init, context)
+    }
+  }
+
+  if (
+    statement.init?.type === 'CallExpression' &&
+    statement.nullable !== true &&
+    deps.inferExpressionType(statement.init, context) === 'string'
+  ) {
+    return deps.emitRuntimeStringVariableDeclaration(statement, statement.init, context)
+  }
+
+  return deps.emitScalarVariableDeclaration(statement, context)
 }
 
 function normalizeCAsyncReturnArgument(argument, context, loc) {
