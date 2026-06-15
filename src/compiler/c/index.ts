@@ -342,8 +342,10 @@ import {
   emitForOfStatement,
   emitForStatement,
   emitIfStatement,
+  emitReturnStatement,
   emitReturnCleanupStatement,
   emitReturnJump,
+  emitRuntimeCallbackRuntimeValueReturnLines,
   emitStatementBody,
   emitStatementList,
   emitSwitchStatement,
@@ -378,11 +380,16 @@ const nullableLoweringDependencies: NullableLoweringDependencies = {
 const statementLoweringDependencies: StatementLoweringDependencies = {
   containsAwaitExpression,
   emitArrayVariableDeclaration,
+  emitCAwaitValueExpression,
+  emitCExpression,
+  emitCObjectLiteralValueExpression,
   emitCValueExpression,
   emitFailureStatement,
+  emitNullableScalarValueExpression,
   emitPreparedForExpressionClause,
   emitPreparedForInitializer,
   emitPreparedNumberExpression,
+  emitPreparedPromiseExpression,
   emitStatement,
   inferCatchBindingValueType,
   inferExpressionType,
@@ -2581,54 +2588,7 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ReturnStatement') {
-    const argument = normalizeCAsyncReturnArgument(statement.argument, context, statement.loc)
-    const returnStatement =
-      argument === statement.argument
-        ? statement
-        : {
-            ...statement,
-            argument
-          }
-
-    if (isRuntimeCallbackReturnContext(context)) {
-      return emitRuntimeCallbackReturnStatement(returnStatement, context)
-    }
-
-    if (context.returnType === 'promise') {
-      return emitPromiseReturnStatement(returnStatement, context)
-    }
-
-    if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
-      return emitNullableScalarReturnStatement(returnStatement, context)
-    }
-
-    if (isManagedRuntimeReturnType(context.returnType)) {
-      return emitRuntimeValueReturnStatement(returnStatement, context)
-    }
-
-    if (context.returnType !== 'void') {
-      const value =
-        argument == null
-          ? {
-              lines: [],
-              expression: '0'
-            }
-          : emitPreparedNumberExpression(argument, context)
-
-      return [...value.lines, `ccjs_return = ${value.expression};`, ...emitReturnJump(context)]
-    }
-
-    const value = argument?.type === 'AwaitExpression' ? emitCAwaitValueExpression(argument, context) : null
-
-    if (argument == null || context.returnType === 'void') {
-      if (context.cleanupEnabled) {
-        return [...(value?.lines ?? []), ...emitReturnJump(context)]
-      }
-
-      return ['return;']
-    }
-
-    return [`return ${emitCExpression(argument, context)};`]
+    return emitReturnStatement(statement, context)
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'OptionalCallExpression') {
@@ -2636,44 +2596,6 @@ function emitStatement(statement, context) {
   }
 
   return []
-}
-
-function normalizeCAsyncReturnArgument(argument, context, loc) {
-  if (
-    argument == null ||
-    context.returnType === 'promise' ||
-    (argument.valueType !== 'promise' && inferExpressionType(argument, context) !== 'promise')
-  ) {
-    return argument
-  }
-
-  return {
-    type: 'AwaitExpression',
-    argument,
-    valueType: context.returnType,
-    loc
-  }
-}
-
-function emitPromiseReturnStatement(statement, context) {
-  const promise = emitPreparedPromiseExpression(statement.argument, context, {
-    out: 'ccjs_return',
-    owned: false
-  })
-
-  if (promise == null) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_ASYNC',
-        'this Promise return expression is not supported by the current C backend slice',
-        statement.loc
-      )
-    )
-
-    return emitReturnJump(context)
-  }
-
-  return [...promise.lines, ...emitReturnJump(context)]
 }
 
 function inferCatchBindingValueType(statement, context) {
@@ -3096,109 +3018,6 @@ function emitPreparedForExpressionClause(expression, context) {
   }
 
   return emitPreparedNumberExpression(expression, context)
-}
-
-function isRuntimeCallbackReturnContext(context) {
-  return (
-    context.statusReturn === true &&
-    (context.runtimeCallbackReturnType === 'void' ||
-      ['number', 'boolean'].includes(context.runtimeCallbackReturnType) ||
-      isManagedRuntimeReturnType(context.runtimeCallbackReturnType))
-  )
-}
-
-function emitRuntimeCallbackReturnStatement(statement, context) {
-  if (context.runtimeCallbackReturnType === 'void') {
-    return emitReturnJump(context)
-  }
-
-  const lines = isManagedRuntimeReturnType(context.runtimeCallbackReturnType)
-    ? emitRuntimeCallbackRuntimeValueReturnLines(statement.argument, context)
-    : emitRuntimeCallbackScalarReturnLines(statement.argument, context)
-
-  return [...lines, ...emitReturnJump(context)]
-}
-
-function emitRuntimeCallbackScalarReturnLines(argument, context) {
-  const value =
-    argument == null
-      ? {
-          lines: [],
-          expression: '0'
-        }
-      : emitPreparedNumberExpression(argument, context)
-  const expression =
-    context.runtimeCallbackReturnType === 'number'
-      ? `ccjs_number_value(${value.expression})`
-      : `ccjs_bool_value((${value.expression}) != 0)`
-
-  return [...value.lines, `${context.runtimeCallbackReturnOut} = ${expression};`]
-}
-
-function emitRuntimeCallbackRuntimeValueReturnLines(argument, context) {
-  const expectedTag = cRuntimeValueTag(context.runtimeCallbackReturnType)
-  const value =
-    argument == null
-      ? {
-          lines: [],
-          expression: 'ccjs_undefined_value()'
-        }
-      : emitRuntimeReturnValueExpression(
-          argument,
-          context,
-          context.runtimeCallbackReturnType,
-          context.runtimeCallbackReturnShape
-        )
-
-  return [
-    ...value.lines,
-    `${context.runtimeCallbackReturnOut} = ${value.expression};`,
-    emitRuntimeValueCheck(context.runtimeCallbackReturnOut, expectedTag, context),
-    `ccjs_retain(${context.runtimeCallbackReturnOut});`
-  ]
-}
-
-function emitRuntimeReturnValueExpression(argument, context, returnType, returnShape) {
-  if (returnType === 'object' && argument?.type === 'ObjectLiteral') {
-    return emitCObjectLiteralValueExpression(argument, context, returnShape)
-  }
-
-  return emitCValueExpression(argument, context)
-}
-
-function emitRuntimeValueReturnStatement(statement, context) {
-  if (statement.argument == null) {
-    return emitReturnJump(context)
-  }
-
-  const expectedTag = cRuntimeValueTag(context.returnType)
-  const value = emitRuntimeReturnValueExpression(statement.argument, context, context.returnType, context.returnShape)
-
-  return [
-    ...value.lines,
-    `ccjs_return = ${value.expression};`,
-    emitRuntimeValueCheck('ccjs_return', expectedTag, context),
-    'ccjs_retain(ccjs_return);',
-    ...emitReturnJump(context)
-  ]
-}
-
-function emitNullableScalarReturnStatement(statement, context) {
-  const expectedTag = cRuntimeValueTag(context.returnType)
-  const value =
-    statement.argument == null
-      ? {
-          lines: [],
-          expression: 'ccjs_null_value()'
-        }
-      : emitNullableScalarValueExpression(statement.argument, context)
-
-  return [
-    ...value.lines,
-    `ccjs_return = ${value.expression};`,
-    ...emitRuntimeNullableValueCheck('ccjs_return', expectedTag, context),
-    ...emitReturnJump(context)
-  ]
 }
 
 function emitDirentArrayIndexVariableDeclaration(statement, context) {
