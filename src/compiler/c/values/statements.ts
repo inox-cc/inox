@@ -12,6 +12,8 @@ import { diagnostic } from '../../diagnostics.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cUnsupportedVariableDeclarationCode } from '../syntax.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType } from '../value-types.ts'
+import { resolveRuntimeArrayElementType } from './arrays.ts'
+import { resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
 import { registerObjectShape } from './objects.ts'
 
@@ -112,7 +114,6 @@ export type StatementLoweringDependencies = {
   emitPromiseConstructorSettlementCall: (expression: any, context: any) => string[] | null
   emitReference: (expression: any, context: any) => string
   emitRuntimeCallbackVariableDeclaration: (statement: any, context: any) => string[]
-  emitRuntimeValueVariableDeclaration: (statement: any, expression: any, context: any) => string[]
   emitScalarVariableDeclaration: (statement: any, context: any) => string[]
   emitStatement: (statement: any, context: any) => string[]
   emitStringExpression: (expression: any, context: any) => string
@@ -132,7 +133,6 @@ export type StatementLoweringDependencies = {
   isRuntimeNullableType: (valueType: any) => boolean
   isRuntimeFunctionType: (functionType: any) => boolean
   isRuntimeProducedStringExpression: (expression: any, context: any) => boolean
-  isRuntimeValueLocalExpression: (expression: any, context: any) => boolean
   registerErrorObjectShape: (context: any, name: string) => void
   resolveForOfElementType: (elements: any[]) => string
   resolveKnownArrayIndex: (expression: any, context: any) => any | null
@@ -334,6 +334,72 @@ export function emitRuntimeStringVariableDeclaration(statement, expression, cont
   context.runtimeStrings.add(statement.name)
 
   return lines
+}
+
+export function emitRuntimeValueVariableDeclaration(statement, expression, context) {
+  const valueType = statementDeps(context).inferExpressionType(expression, context)
+  const expectedTag = cRuntimeValueTag(valueType)
+  const value =
+    valueType === 'object' && expression?.type === 'ObjectLiteral'
+      ? statementDeps(context).emitCObjectLiteralValueExpression(expression, context, statement.shape)
+      : statementDeps(context).emitCValueExpression(expression, context)
+
+  registerOwnedValue(context, statement.name)
+  registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
+
+  return [
+    ...value.lines,
+    ...emitPrepareOwnedValueWrite(statement.name),
+    `${statement.name} = ${value.expression};`,
+    emitRuntimeValueCheck(statement.name, expectedTag, context),
+    `ccjs_retain(${statement.name});`
+  ]
+}
+
+export function registerRuntimeValueMetadata(name, valueType, declaration, expression, context) {
+  context.variables.set(name, valueType)
+
+  if (valueType === 'object') {
+    registerObjectShape(context, name, declaration.shape ?? expression?.shape ?? null)
+  } else if (valueType === 'array') {
+    const fsDirentArray =
+      expression?.fsRuntimeMethod === 'readDirDirents' || expression?.fsRuntimeMethod === 'readDirDirentsSync'
+    context.runtimeArrayElementTypes.set(
+      name,
+      declaration.arrayElementType ??
+        resolveRuntimeArrayElementType(expression, context) ??
+        expression?.arrayElementType ??
+        (fsDirentArray ? 'object' : null) ??
+        'unknown'
+    )
+  } else if (valueType === 'map') {
+    const mapType = resolveRuntimeMapType(expression, context)
+
+    context.mapTypes.set(name, {
+      key: declaration.mapKeyType ?? mapType?.key ?? expression?.mapKeyType ?? 'unknown',
+      value: declaration.mapValueType ?? mapType?.value ?? expression?.mapValueType ?? 'unknown'
+    })
+  } else if (valueType === 'set') {
+    context.setElementTypes.set(
+      name,
+      declaration.setElementType ??
+        resolveRuntimeSetElementType(expression, context) ??
+        expression?.setElementType ??
+        'unknown'
+    )
+  }
+}
+
+export function isRuntimeValueLocalExpression(expression, context) {
+  const valueType = statementDeps(context).inferExpressionType(expression, context)
+
+  return (
+    valueType === 'bytes' ||
+    valueType === 'object' ||
+    valueType === 'array' ||
+    valueType === 'map' ||
+    valueType === 'set'
+  )
 }
 
 function emitDirentArrayIndexVariableDeclaration(statement, context) {
@@ -547,9 +613,9 @@ function emitPreparedForVariableDeclaration(statement, context) {
     }
   }
 
-  if (deps.isRuntimeValueLocalExpression(statement.init, context)) {
+  if (isRuntimeValueLocalExpression(statement.init, context)) {
     return {
-      lines: deps.emitRuntimeValueVariableDeclaration(statement, statement.init, context),
+      lines: emitRuntimeValueVariableDeclaration(statement, statement.init, context),
       expression: ''
     }
   }
@@ -1403,15 +1469,15 @@ export function emitVariableDeclarationStatement(statement, context) {
     }
   }
 
-  if (deps.isRuntimeValueLocalExpression(statement.init, context)) {
-    return deps.emitRuntimeValueVariableDeclaration(statement, statement.init, context)
+  if (isRuntimeValueLocalExpression(statement.init, context)) {
+    return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
   }
 
   if (deps.isIndexAccessExpression(statement.init)) {
     const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
 
     if (runtimeElement?.valueType === 'object') {
-      return deps.emitRuntimeValueVariableDeclaration(statement, statement.init, context)
+      return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
     }
   }
 

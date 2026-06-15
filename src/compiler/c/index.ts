@@ -348,6 +348,7 @@ import {
   emitReturnJump,
   emitRuntimeCallbackRuntimeValueReturnLines,
   emitRuntimeStringVariableDeclaration,
+  emitRuntimeValueVariableDeclaration,
   emitStatementBody,
   emitStatementList,
   emitSwitchStatement,
@@ -355,6 +356,8 @@ import {
   emitTryStatement,
   emitVariableDeclarationStatement,
   emitWhileStatement,
+  isRuntimeValueLocalExpression,
+  registerRuntimeValueMetadata,
   registerErrorChannel,
   withBreakTarget,
   withContinueTarget,
@@ -473,7 +476,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPromiseConstructorSettlementCall,
   emitReference,
   emitRuntimeCallbackVariableDeclaration,
-  emitRuntimeValueVariableDeclaration,
   emitScalarVariableDeclaration,
   emitStatement,
   emitStringExpression,
@@ -493,7 +495,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   isRuntimeFunctionType,
   isRuntimeNullableType,
   isRuntimeProducedStringExpression,
-  isRuntimeValueLocalExpression,
   registerErrorObjectShape,
   resolveForOfElementType,
   resolveKnownArrayIndex,
@@ -2315,72 +2316,6 @@ function inferRejectedValueType(expression, context, localErrorObjectNames = con
   }
 
   return 'unknown'
-}
-
-function emitRuntimeValueVariableDeclaration(statement, expression, context) {
-  const valueType = inferExpressionType(expression, context)
-  const expectedTag = cRuntimeValueTag(valueType)
-  const value =
-    valueType === 'object' && expression?.type === 'ObjectLiteral'
-      ? emitCObjectLiteralValueExpression(expression, context, statement.shape)
-      : emitCValueExpression(expression, context)
-
-  registerOwnedValue(context, statement.name)
-  registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
-
-  return [
-    ...value.lines,
-    ...emitPrepareOwnedValueWrite(statement.name),
-    `${statement.name} = ${value.expression};`,
-    emitRuntimeValueCheck(statement.name, expectedTag, context),
-    `ccjs_retain(${statement.name});`
-  ]
-}
-
-function registerRuntimeValueMetadata(name, valueType, declaration, expression, context) {
-  context.variables.set(name, valueType)
-
-  if (valueType === 'object') {
-    registerObjectShape(context, name, declaration.shape ?? expression?.shape ?? null)
-  } else if (valueType === 'array') {
-    const fsDirentArray =
-      expression?.fsRuntimeMethod === 'readDirDirents' || expression?.fsRuntimeMethod === 'readDirDirentsSync'
-    context.runtimeArrayElementTypes.set(
-      name,
-      declaration.arrayElementType ??
-        resolveRuntimeArrayElementType(expression, context) ??
-        expression?.arrayElementType ??
-        (fsDirentArray ? 'object' : null) ??
-        'unknown'
-    )
-  } else if (valueType === 'map') {
-    const mapType = resolveRuntimeMapType(expression, context)
-
-    context.mapTypes.set(name, {
-      key: declaration.mapKeyType ?? mapType?.key ?? expression?.mapKeyType ?? 'unknown',
-      value: declaration.mapValueType ?? mapType?.value ?? expression?.mapValueType ?? 'unknown'
-    })
-  } else if (valueType === 'set') {
-    context.setElementTypes.set(
-      name,
-      declaration.setElementType ??
-        resolveRuntimeSetElementType(expression, context) ??
-        expression?.setElementType ??
-        'unknown'
-    )
-  }
-}
-
-function isRuntimeValueLocalExpression(expression, context) {
-  const valueType = inferExpressionType(expression, context)
-
-  return (
-    valueType === 'bytes' ||
-    valueType === 'object' ||
-    valueType === 'array' ||
-    valueType === 'map' ||
-    valueType === 'set'
-  )
 }
 
 function reportCCollectionHashability(valueType, subject, loc, context) {
