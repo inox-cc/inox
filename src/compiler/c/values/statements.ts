@@ -9,11 +9,11 @@ import {
   withNullableScalarNarrowing,
   withVariableScope
 } from '../context.ts'
-import { normalizeFunctionType } from '../async/callbacks.ts'
+import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import { diagnostic } from '../../diagnostics.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
-import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode } from '../syntax.ts'
-import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType } from '../value-types.ts'
+import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
+import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType, isRuntimeNullableType } from '../value-types.ts'
 import { resolveRuntimeArrayElementType } from './arrays.ts'
 import { resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
@@ -31,7 +31,6 @@ type PreparedStatement = {
 }
 
 export type StatementLoweringDependencies = {
-  containsAwaitExpression: (node: any) => boolean
   emitArrayVariableDeclaration: (statement: any, context: any) => string[]
   emitArrayFilterVariableDeclaration: (statement: any, filtered: any, context: any) => string[]
   emitArrayMapVariableDeclaration: (statement: any, mapped: any, context: any) => string[]
@@ -132,8 +131,6 @@ export type StatementLoweringDependencies = {
   isIndexAccessExpression: (expression: any) => boolean
   isMemberAccessExpression: (expression: any) => boolean
   isNullableRuntimeValueAssignment: (expression: any, context: any) => boolean
-  isRuntimeNullableType: (valueType: any) => boolean
-  isRuntimeFunctionType: (functionType: any) => boolean
   isRuntimeProducedStringExpression: (expression: any, context: any) => boolean
   registerErrorObjectShape: (context: any, name: string) => void
   resolveForOfElementType: (elements: any[]) => string
@@ -392,7 +389,7 @@ export function emitFunctionScalarVariableDeclaration(
   context.variables.set(statement.name, 'function')
   context.functionTypes.set(statement.name, runtimeFunctionType ?? statement.functionType)
 
-  if (deps.isRuntimeFunctionType(statement.functionType) || runtimeFunctionType != null) {
+  if (isRuntimeFunctionType(statement.functionType) || runtimeFunctionType != null) {
     return deps.emitRuntimeCallbackVariableDeclaration(statement, context)
   }
 
@@ -825,7 +822,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
     }
   }
 
-  if (statement.nullable === true && deps.isRuntimeNullableType(statement.valueType)) {
+  if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
     return {
       lines: emitNullableRuntimeValueVariableDeclaration(statement, context),
       expression: ''
@@ -946,7 +943,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
     context.variables.set(statement.name, 'function')
     context.functionTypes.set(statement.name, statement.functionType)
 
-    if (deps.isRuntimeFunctionType(statement.functionType)) {
+    if (isRuntimeFunctionType(statement.functionType)) {
       return {
         lines: deps.emitRuntimeCallbackVariableDeclaration(statement, context),
         expression: ''
@@ -1305,7 +1302,7 @@ export function emitTryStatement(statement, context) {
   if (
     statement.handler != null &&
     currentErrorTarget(context) != null &&
-    statementDeps(context).containsAwaitExpression(statement.block)
+    containsAwaitExpression(statement.block)
   ) {
     context.diagnostics.push(
       diagnostic(
@@ -1696,7 +1693,7 @@ export function emitVariableDeclarationStatement(statement, context) {
     return fetchHeadersCall.lines
   }
 
-  if (statement.nullable === true && deps.isRuntimeNullableType(statement.valueType)) {
+  if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
     return emitNullableRuntimeValueVariableDeclaration(statement, context)
   }
 

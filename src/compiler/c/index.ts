@@ -235,7 +235,6 @@ import { cUrlRuntimeMethodName } from './stdlib/url.ts'
 import {
   cUnsupportedExpressionCode,
   cUnsupportedVariableDeclarationCode,
-  containsAwaitExpression,
   emitCOperator,
   isNullishCoalescingExpression,
   isOptionalChainExpression
@@ -404,7 +403,6 @@ const nullableLoweringDependencies: NullableLoweringDependencies = {
 
 const statementLoweringDependencies: StatementLoweringDependencies = {
   collectionConstructorName,
-  containsAwaitExpression,
   emitArrayVariableDeclaration,
   emitArrayFilterVariableDeclaration,
   emitArrayMapVariableDeclaration,
@@ -511,8 +509,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   isIndexAccessExpression,
   isMemberAccessExpression,
   isNullableRuntimeValueAssignment,
-  isRuntimeFunctionType,
-  isRuntimeNullableType,
   isRuntimeProducedStringExpression,
   registerErrorObjectShape,
   resolveForOfElementType,
