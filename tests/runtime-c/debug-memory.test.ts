@@ -1,5 +1,5 @@
 import test from 'node:test'
-import { assert, join, mkdtemp, rm, runCommand, tmpdir, writeFile } from '../helpers/runtime-c.ts'
+import { assert, compileRuntimeProgram, join, mkdtemp, rm, runCommand, tmpdir, writeFile } from '../helpers/runtime-c.ts'
 
 test('CLI links debug memory runtime when ccjs.__debug.memory is used', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -30,6 +30,235 @@ console.log(after.allocCount - before.allocCount)
 
     assert.equal(run.code, 0, run.stderr)
     assert.ok(Number.parseFloat(run.stdout.trim()) > 0, run.stdout)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('compiled C debug memory snapshots catch managed value leaks after helper return', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-debug-memory-managed-'))
+  const entry = join(dir, 'main.ts')
+  const output = join(dir, 'main')
+
+  try {
+    await writeFile(
+      entry,
+      `function makeManagedValues(): number {
+  const scores = [1, 2, 3]
+  const user = { name: 'Ada', score: 7 }
+  return 9
+}
+
+const baselineA = ccjs.__debug.memory()
+const baselineB = ccjs.__debug.memory()
+const statsObjectAllocs = baselineB.liveAllocCount - baselineA.liveAllocCount
+const statsObjectBytes = baselineB.liveBytes - baselineA.liveBytes
+const before = ccjs.__debug.memory()
+const total = makeManagedValues()
+const after = ccjs.__debug.memory()
+
+console.log(
+  total,
+  after.liveAllocCount - before.liveAllocCount - statsObjectAllocs,
+  after.liveBytes - before.liveBytes - statsObjectBytes,
+  after.liveWeakCells - before.liveWeakCells,
+  after.livePromises - before.livePromises,
+  after.liveCallbacks - before.liveCallbacks
+)
+`
+    )
+
+    const build = await runCommand(process.execPath, ['bin/ccjs.ts', 'build', entry, '--target', 'c', '-o', output])
+
+    assert.equal(build.code, 0, build.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '9 0 0 0 0 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('compiled C debug memory snapshots catch weak cell leaks after helper return', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-debug-memory-weak-'))
+  const entry = join(dir, 'main.ts')
+  const output = join(dir, 'main')
+
+  try {
+    await writeFile(
+      entry,
+      `type Parent = {
+  name: string
+}
+
+type Child = {
+  weak parent: Parent | null
+}
+
+function makeWeakChild(): number {
+  const parent: Parent = { name: 'Ada' }
+  const child: Child = { parent }
+  const name = child.parent?.name ?? 'missing'
+  if (name == 'missing') {
+    return 0
+  }
+  return 1
+}
+
+const baselineA = ccjs.__debug.memory()
+const baselineB = ccjs.__debug.memory()
+const statsObjectAllocs = baselineB.liveAllocCount - baselineA.liveAllocCount
+const statsObjectBytes = baselineB.liveBytes - baselineA.liveBytes
+const before = ccjs.__debug.memory()
+const total = makeWeakChild()
+const after = ccjs.__debug.memory()
+
+console.log(
+  total,
+  after.liveAllocCount - before.liveAllocCount - statsObjectAllocs,
+  after.liveBytes - before.liveBytes - statsObjectBytes,
+  after.liveWeakCells - before.liveWeakCells
+)
+`
+    )
+
+    const build = await runCommand(process.execPath, ['bin/ccjs.ts', 'build', entry, '--target', 'c', '-o', output])
+
+    assert.equal(build.code, 0, build.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 0 0 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('C debug memory counters return to zero for array map and set cleanup', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-debug-memory-containers-'))
+  const source = join(dir, 'debug-memory-containers.c')
+  const output = join(dir, 'debug-memory-containers')
+
+  try {
+    await writeFile(
+      source,
+      `#include <stdio.h>
+#include <stdlib.h>
+#include "ccjs/allocator.h"
+#include "ccjs/array.h"
+#include "ccjs/debug.h"
+#include "ccjs/map.h"
+#include "ccjs/set.h"
+#include "ccjs/string.h"
+
+static void* base_alloc(void* user, size_t size, size_t align) {
+  (void)user;
+  (void)align;
+  return calloc(1, size);
+}
+
+static void* base_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {
+  (void)user;
+  (void)old_size;
+  (void)align;
+  return realloc(ptr, new_size);
+}
+
+static void base_free(void* user, void* ptr, size_t size, size_t align) {
+  (void)user;
+  (void)size;
+  (void)align;
+  free(ptr);
+}
+
+int main(void) {
+  ccjs_allocator base = { 0, base_alloc, base_realloc, base_free };
+  ccjs_allocator allocator = ccjs_debug_allocator(&base);
+  ccjs_debug_memory_stats stats;
+  ccjs_value key = ccjs_undefined_value();
+  ccjs_value value = ccjs_undefined_value();
+  ccjs_value array = ccjs_undefined_value();
+  ccjs_value map = ccjs_undefined_value();
+  ccjs_value set = ccjs_undefined_value();
+
+  ccjs_debug_memory_reset();
+
+  if (ccjs_string_from_literal(&allocator, "key", 3, &key) != CCJS_OK) return 1;
+  if (ccjs_string_from_literal(&allocator, "value", 5, &value) != CCJS_OK) return 2;
+  if (ccjs_array_new(&allocator, 1, &array) != CCJS_OK) return 3;
+  if (ccjs_array_set(array, 0, key) != CCJS_OK) return 4;
+  if (ccjs_map_new(&allocator, &map) != CCJS_OK) return 5;
+  if (ccjs_map_set(map, key, value) != CCJS_OK) return 6;
+  if (ccjs_set_new(&allocator, &set) != CCJS_OK) return 7;
+  if (ccjs_set_add(set, key) != CCJS_OK) return 8;
+
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 2) return 9;
+  if (stats.live_refs_by_kind[CCJS_REF_ARRAY] != 1) return 10;
+  if (stats.live_refs_by_kind[CCJS_REF_MAP] != 1) return 11;
+  if (stats.live_refs_by_kind[CCJS_REF_SET] != 1) return 12;
+
+  ccjs_release(key);
+  ccjs_release(value);
+  ccjs_release(array);
+  ccjs_release(map);
+  ccjs_release(set);
+
+  ccjs_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 0) return 13;
+  if (stats.live_refs_by_kind[CCJS_REF_ARRAY] != 0) return 14;
+  if (stats.live_refs_by_kind[CCJS_REF_MAP] != 0) return 15;
+  if (stats.live_refs_by_kind[CCJS_REF_SET] != 0) return 16;
+  if (stats.live_alloc_count != 0 || stats.live_bytes != 0) return 17;
+  if (stats.alloc_count != stats.free_count) return 18;
+
+  printf("containers ok\\n");
+  return 0;
+}
+`
+    )
+
+    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_DEBUG_MEMORY=1'])
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'containers ok\n')
   } finally {
     await rm(dir, {
       recursive: true,
