@@ -19,6 +19,7 @@
     "libuv:bootstrap": "node scripts/bootstrap-libuv.ts",
     "build": "node scripts/build.ts",
     "clean": "node scripts/clean.ts",
+    "audit:self-hosting": "node scripts/audit-self-hosting.ts",
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts tests/**/*.test.ts",
