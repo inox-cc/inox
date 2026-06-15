@@ -15,6 +15,7 @@ export function emitCPrelude(
   needsCollectionRuntime,
   needsBinaryRuntime,
   needsObjectRuntime,
+  needsChildProcessRuntime,
   needsFsRuntime,
   needsPathRuntime,
   needsUrlRuntime,
@@ -83,6 +84,9 @@ export function emitCPrelude(
     }
     if (needsBinaryRuntime) {
       lines.push('#include "ccjs/binary.h"')
+    }
+    if (needsChildProcessRuntime) {
+      lines.push('#include "ccjs/child_process.h"')
     }
     if (needsCryptoRuntime) {
       lines.push('#include "ccjs/crypto.h"')

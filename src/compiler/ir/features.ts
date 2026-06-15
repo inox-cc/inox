@@ -32,6 +32,10 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
   for (const feature of features) {
     if (feature === 'runtime-values') {
       requirements.add('managed-values')
+    } else if (feature === 'child-process') {
+      requirements.add('child-process')
+      requirements.add('managed-values')
+      requirements.add('string-bytes')
     } else if (feature === 'binary') {
       requirements.add('binary')
       requirements.add('managed-values')
@@ -397,6 +401,12 @@ function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void
     features.add('string-bytes')
   }
 
+  if (childProcessRuntimeMethodName(expression) != null) {
+    features.add('child-process')
+    features.add('runtime-values')
+    features.add('string-bytes')
+  }
+
   if (timerRuntimeCallName(expression.callee) != null) {
     features.add('timers')
   }
@@ -540,6 +550,14 @@ function processRuntimeMethodName(expression: AnyNode): string | null {
   }
 
   return expression.processRuntimeMethod
+}
+
+function childProcessRuntimeMethodName(expression: AnyNode): string | null {
+  if (expression.type !== 'CallExpression' || typeof expression.childProcessRuntimeMethod !== 'string') {
+    return null
+  }
+
+  return expression.childProcessRuntimeMethod
 }
 
 function isObjectFieldExpression(expression: AnyNode | null | undefined): boolean {

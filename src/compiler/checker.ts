@@ -72,6 +72,11 @@ import { debugRuntimeMethodNameFromPath } from './stdlib/descriptors/debug.ts'
 import { mathRuntimeArgCount } from './stdlib/descriptors/math.ts'
 import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
 import {
+  isChildProcessRuntimeMethod,
+  isNodeChildProcessImportSource,
+  isUnsupportedChildProcessRuntimeMethod
+} from './stdlib/descriptors/child-process.ts'
+import {
   isNodePathImportSource,
   isPathRuntimeConstant,
   isPathRuntimeMethod,
@@ -1647,6 +1652,12 @@ class Checker {
       return cryptoType
     }
 
+    const childProcessType = this.checkChildProcessCall(expression)
+
+    if (childProcessType != null) {
+      return childProcessType
+    }
+
     const processType = this.checkProcessCall(expression)
 
     if (processType != null) {
@@ -1975,6 +1986,145 @@ class Checker {
     }
 
     return 'string'
+  }
+
+  checkChildProcessCall(expression: AnyNode): ValueType | null {
+    const call = this.resolveChildProcessRuntimeCall(expression)
+
+    if (call == null) {
+      return null
+    }
+
+    if (call.unsupported) {
+      for (const arg of expression.args) {
+        this.checkExpression(arg)
+      }
+
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        `node:child_process ${call.method} is not implemented by the current C backend`,
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    if (call.method === 'execSync') {
+      if (expression.args.length !== 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (expression.args[0] != null) {
+        this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc)
+      }
+
+      this.checkChildProcessUtf8Options(expression.args[1], expression.loc)
+    } else {
+      if (expression.args.length < 2 || expression.args.length > 3) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 2 or 3 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (expression.args[0] != null) {
+        this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc)
+      }
+
+      const args = expression.args[1]
+      const options = expression.args[2]
+
+      if (args?.type !== 'ArrayLiteral') {
+        this.report(
+          'CCJS_NOT_IMPLEMENTED',
+          'node:child_process execFileSync currently expects a string[] literal args argument',
+          args?.loc ?? expression.loc
+        )
+      } else {
+        for (const element of args.elements) {
+          this.checkAssignableType(this.checkExpression(element), 'string', element.loc)
+        }
+      }
+
+      this.checkChildProcessUtf8Options(options, expression.loc)
+    }
+
+    expression.childProcessRuntimeMethod = call.method
+    expression.valueType = 'string'
+
+    return 'string'
+  }
+
+  resolveChildProcessRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+    const path = memberExpressionPath(expression.callee)
+    const method = this.resolveChildProcessRuntimeMethod(path)
+
+    if (method == null) {
+      return null
+    }
+
+    return {
+      method,
+      label: path == null ? method : path.join('.'),
+      unsupported: !isChildProcessRuntimeMethod(method)
+    }
+  }
+
+  resolveChildProcessRuntimeMethod(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (symbol?.kind === 'import' && isNodeChildProcessImportSource(symbol.importSource) && importedName != null) {
+        return isChildProcessRuntimeMethod(importedName) || isUnsupportedChildProcessRuntimeMethod(importedName)
+          ? importedName
+          : null
+      }
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeChildProcessImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'childProcess')
+      ) {
+        return isChildProcessRuntimeMethod(path[1]) || isUnsupportedChildProcessRuntimeMethod(path[1]) ? path[1] : null
+      }
+    }
+
+    return null
+  }
+
+  checkChildProcessUtf8Options(options: AnyNode | null | undefined, loc: SourceLocation | undefined): void {
+    if (options?.type !== 'ObjectLiteral') {
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        'node:child_process sync helpers currently require { encoding: "utf8" }',
+        options?.loc ?? loc
+      )
+      return
+    }
+
+    const encoding = options.properties.find((property) => property.key === 'encoding')?.value
+
+    if (encoding?.type !== 'StringLiteral' || encoding.value !== 'utf8') {
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        'node:child_process sync helpers currently support only { encoding: "utf8" }',
+        encoding?.loc ?? options.loc
+      )
+    }
   }
 
   checkProcessCall(expression: AnyNode): ValueType | null {
@@ -2840,6 +2990,16 @@ class Checker {
       }
 
       if (importedName === 'default' || importedName === 'process') {
+        return 'object'
+      }
+    }
+
+    if (isNodeChildProcessImportSource(source)) {
+      if (isChildProcessRuntimeMethod(importedName) || isUnsupportedChildProcessRuntimeMethod(importedName)) {
+        return 'function'
+      }
+
+      if (importedName === 'default' || importedName === 'childProcess') {
         return 'object'
       }
     }

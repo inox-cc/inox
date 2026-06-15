@@ -107,6 +107,7 @@ import {
   isBufferAllocCall,
   isBufferFromCall
 } from './stdlib/binary.ts'
+import { cChildProcessRuntimeMethodName } from './stdlib/child-process.ts'
 import { irProgramsUseConsoleRuntime, isConsoleLog } from './stdlib/console.ts'
 import { cryptoRuntimeMethodName } from './stdlib/crypto.ts'
 import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from './stdlib/fetch.ts'
@@ -261,6 +262,7 @@ function emitCModuleSource(
     [...context.callbackWrappers.values()].some(isRuntimeCallbackWrapper) ||
     runtimeRequirements.has('callback-values') ||
     signatureRuntimeTypes.has('function')
+  const needsChildProcessRuntime = runtimeRequirements.has('child-process')
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsPathRuntime = runtimeRequirements.has('path')
   const needsUrlRuntime = runtimeRequirements.has('url')
@@ -300,6 +302,7 @@ function emitCModuleSource(
     needsHttpRuntime ||
     needsNetRuntime ||
     needsCallbackRuntime ||
+    needsChildProcessRuntime ||
     needsCollectionRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
@@ -322,6 +325,7 @@ function emitCModuleSource(
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
+    needsChildProcessRuntime ||
     needsFsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
@@ -358,6 +362,7 @@ function emitCModuleSource(
       needsCollectionRuntime,
       needsBinaryRuntime,
       needsObjectRuntime,
+      needsChildProcessRuntime,
       needsFsRuntime,
       needsPathRuntime,
       needsUrlRuntime,
@@ -820,6 +825,7 @@ function emitCUnit(
   const needsCallbackRuntime =
     [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper) ||
     runtimeRequirements.has('callback-values')
+  const needsChildProcessRuntime = runtimeRequirements.has('child-process')
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsPathRuntime = runtimeRequirements.has('path')
   const needsUrlRuntime = runtimeRequirements.has('url')
@@ -846,6 +852,7 @@ function emitCUnit(
     needsHttpRuntime ||
     needsNetRuntime ||
     needsCallbackRuntime ||
+    needsChildProcessRuntime ||
     needsCollectionRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
@@ -867,6 +874,7 @@ function emitCUnit(
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
+    needsChildProcessRuntime ||
     needsFsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
@@ -890,6 +898,7 @@ function emitCUnit(
     needsCollectionRuntime,
     needsBinaryRuntime,
     needsObjectRuntime,
+    needsChildProcessRuntime,
     needsFsRuntime,
     needsPathRuntime,
     needsUrlRuntime,
@@ -12534,6 +12543,12 @@ function emitCValueExpression(expression, context) {
     return emitCAwaitValueExpression(expression, context)
   }
 
+  const childProcessCall = emitPreparedChildProcessCallExpression(expression, context)
+
+  if (childProcessCall != null) {
+    return childProcessCall
+  }
+
   const processString = emitPreparedProcessStringExpression(expression, context)
 
   if (processString != null) {
@@ -15893,6 +15908,63 @@ function emitPreparedCallArgs(expression, params, context) {
   }
 }
 
+function emitPreparedChildProcessCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const method = cChildProcessRuntimeMethodName(expression)
+
+  if (method == null) {
+    return null
+  }
+
+  const command = emitCValueExpression(expression.args[0], context)
+  const out = options.out ?? nextCName(context, 'ccjs_child_process_output')
+  const lines = [...command.lines, ...emitPrepareOwnedValueWrite(out)]
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  if (method === 'execSync') {
+    lines.push(
+      emitStatusCheck(`ccjs_child_process_exec_sync(&ccjs_default_allocator, ${command.expression}, &${out})`, context)
+    )
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  const argArray = expression.args[1]
+  const args =
+    argArray?.type === 'ArrayLiteral' ? argArray.elements.map((arg) => emitCValueExpression(arg, context)) : []
+
+  lines.push(...args.flatMap((arg) => arg.lines))
+
+  if (args.length === 0) {
+    lines.push(
+      emitStatusCheck(
+        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, 0, 0, &${out})`,
+        context
+      )
+    )
+  } else {
+    const argsName = nextCName(context, 'ccjs_child_process_args')
+
+    lines.push(`ccjs_value ${argsName}[] = { ${args.map((arg) => arg.expression).join(', ')} };`)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, &${out})`,
+        context
+      )
+    )
+  }
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
 function emitPreparedProcessStringExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
   const method = cProcessRuntimeMethodName(expression)
   const property = cProcessRuntimePropertyName(expression)
@@ -18785,6 +18857,10 @@ function resolveFunctionParams(callee, context) {
 }
 
 function inferExpressionType(expression, context) {
+  if (cChildProcessRuntimeMethodName(expression) != null) {
+    return 'string'
+  }
+
   const processMethod = cProcessRuntimeMethodName(expression)
 
   if (processMethod != null) {

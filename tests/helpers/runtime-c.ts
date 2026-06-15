@@ -36,6 +36,7 @@ export function compileRuntimeProgram(
     'runtime/c/src/async/loop.c',
     'runtime/c/src/async/promise.c',
     'runtime/c/src/strings/string.c',
+    'runtime/c/src/child_process/child_process.c',
     'runtime/c/src/objects/object.c',
     'runtime/c/src/arrays/array.c',
     'runtime/c/src/collections/map.c',

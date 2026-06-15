@@ -1658,6 +1658,7 @@ function cRuntimeSources(): string[] {
     'runtime/c/src/async/loop.c',
     'runtime/c/src/async/promise.c',
     'runtime/c/src/binary/binary.c',
+    'runtime/c/src/child_process/child_process.c',
     'runtime/c/src/collections/map.c',
     'runtime/c/src/collections/set.c',
     'runtime/c/src/console/console.c',

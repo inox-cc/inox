@@ -19,6 +19,7 @@ set(CCJS_RUNTIME_SOURCES
   "${CCJS_RUNTIME_DIR}/src/arrays/array.c"
   "${CCJS_RUNTIME_DIR}/src/async/promise.c"
   "${CCJS_RUNTIME_DIR}/src/binary/binary.c"
+  "${CCJS_RUNTIME_DIR}/src/child_process/child_process.c"
   "${CCJS_RUNTIME_DIR}/src/collections/map.c"
   "${CCJS_RUNTIME_DIR}/src/collections/set.c"
   "${CCJS_RUNTIME_DIR}/src/console/console.c"
