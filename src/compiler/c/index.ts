@@ -48,7 +48,6 @@ import {
   registerOwnedPromise,
   registerOwnedValue,
   shouldEmitCleanupLabel,
-  withNullableScalarNarrowing,
   withVariableScope
 } from './context.ts'
 import {
@@ -279,7 +278,6 @@ import {
 import {
   cUnsupportedExpressionCode,
   cUnsupportedVariableDeclarationCode,
-  emitCOperator,
   isNullishCoalescingExpression,
   isOptionalChainExpression
 } from './syntax.ts'
@@ -303,12 +301,10 @@ import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import {
   canLowerCNullishCoalescingExpression,
-  canLowerCScalarNullishCoalescingExpression,
   clearNullableScalarNarrowing,
   emitCOptionalIndexValueExpression,
   emitCOptionalMemberValueExpression,
   emitNullableRuntimeValueVariableDeclaration,
-  isNarrowedNullableScalarReference,
   isNullableRuntimeExpression,
   isNullableScalarRuntimeExpression,
   resolveNullableScalarConditionNarrowing,
@@ -409,8 +405,12 @@ import {
 } from './values/strings.ts'
 import {
   emitCConditionClause,
+  emitCExpression as emitCExpressionWithDependencies,
   emitCNegatedConditionClause,
   emitCValueExpression as emitCValueExpressionWithDependencies,
+  emitPreparedNumberExpression as emitPreparedNumberExpressionWithDependencies,
+  emitPreparedUpdateExpression as emitPreparedUpdateExpressionWithDependencies,
+  type CScalarExpressionDependencies,
   type CValueExpressionDependencies
 } from './values/expressions.ts'
 import {
@@ -821,6 +821,50 @@ const netLoweringDependencies: NetLoweringDependencies = {
   emitPreparedStringBytesOperand,
   emitStatementList,
   findObjectLiteralPropertyValue
+}
+
+const cScalarExpressionDependencies: CScalarExpressionDependencies = {
+  cFsRuntimeConstantExpression,
+  emitCAwaitValueExpression,
+  emitCValueExpression,
+  emitObjectValueReference,
+  emitPreparedArrayLengthExpression,
+  emitPreparedBinaryNumberCallExpression: (expression, context) =>
+    emitPreparedBinaryNumberCallExpression(expression, context, binaryLoweringDependencies),
+  emitPreparedBytesIndexExpression: (expression, context) =>
+    emitPreparedBytesIndexExpression(expression, context, binaryLoweringDependencies),
+  emitPreparedBytesLengthExpression: (expression, context) =>
+    emitPreparedBytesLengthExpression(expression, context, binaryLoweringDependencies),
+  emitPreparedCallExpression,
+  emitPreparedClassMethodCallExpression,
+  emitPreparedCollectionCallExpression,
+  emitPreparedCollectionSizeExpression,
+  emitPreparedCryptoNumberCallExpression: (expression, context) =>
+    emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies),
+  emitPreparedDgramAddressPortExpression,
+  emitPreparedJsonScalarParseExpression: (expression, context) =>
+    emitPreparedJsonScalarParseExpression(expression, context, jsonDeclarationDependencies),
+  emitPreparedNetAddressPortExpression,
+  emitPreparedPathBooleanCallExpression: (expression, context) =>
+    emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies),
+  emitPreparedProcessNumberExpression,
+  emitPreparedRuntimeArrayIndexValue,
+  emitPreparedStringCompareExpression,
+  emitPreparedStringLengthExpression,
+  emitPreparedStringPredicateCall,
+  emitPreparedUrlSearchParamsCallExpression: (expression, context) =>
+    emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies),
+  emitReference,
+  emitStringExpression,
+  inferExpressionType,
+  isIndexAccessExpression,
+  isMemberAccessExpression,
+  isStringPredicateCall,
+  reportCJsGlobalDiagnostic,
+  resolveKnownArrayIndex,
+  resolveKnownObjectIndex,
+  resolveKnownObjectMember,
+  resolveRuntimeArrayIndex
 }
 
 const cValueExpressionDependencies: CValueExpressionDependencies = {
@@ -3814,613 +3858,16 @@ function emitErrorLogObjectExpression(expression, context) {
   return emitCValueExpression(expression, context)
 }
 
-function emitNumberExpression(expression, context) {
-  return emitPreparedNumberExpression(expression, context).expression
-}
-
 function emitPreparedNumberExpression(expression, context) {
-  const classMethodCall = emitPreparedClassMethodCallExpression(expression, context)
-
-  if (classMethodCall != null && classMethodCall.expression !== '') {
-    return classMethodCall
-  }
-
-  const fsConstant = cFsRuntimeConstantExpression(expression)
-
-  if (fsConstant != null) {
-    return {
-      lines: [],
-      expression: fsConstant
-    }
-  }
-
-  if (expression?.bufferRuntimeConstant === 'MAX_LENGTH') {
-    return {
-      lines: [],
-      expression: '((double)((size_t)-1))'
-    }
-  }
-
-  const pathBooleanCall = emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies)
-
-  if (pathBooleanCall != null) {
-    return pathBooleanCall
-  }
-
-  const urlSearchParamsCall = emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies)
-
-  if (urlSearchParamsCall != null && urlSearchParamsCall.valueType === 'boolean') {
-    return urlSearchParamsCall
-  }
-
-  const processNumber = emitPreparedProcessNumberExpression(expression)
-
-  if (processNumber != null) {
-    return processNumber
-  }
-
-  if (expression?.type === 'NumberLiteral') {
-    return {
-      lines: [],
-      expression: expression.value
-    }
-  }
-
-  if (isNarrowedNullableScalarReference(expression, context)) {
-    const name = expression.path[0]
-    const valueType = context.variables.get(name)
-
-    return {
-      lines: [],
-      expression: valueType === 'boolean' ? `(${name}.as.boolean ? 1 : 0)` : `${name}.as.number`
-    }
-  }
-
-  if (isNullableScalarRuntimeExpression(expression, context)) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_NULLISH',
-        'nullable scalar values must be narrowed with ?? before scalar use in the current C backend slice',
-        expression.loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: '0'
-    }
-  }
-
-  if (expression?.type === 'Reference') {
-    return {
-      lines: [],
-      expression: emitReference(expression, context)
-    }
-  }
-
-  if (expression?.type === 'BooleanLiteral') {
-    return {
-      lines: [],
-      expression: expression.value ? '1' : '0'
-    }
-  }
-
-  if (expression?.type === 'UnaryExpression') {
-    const argument = emitPreparedNumberExpression(expression.argument, context)
-
-    return {
-      lines: argument.lines,
-      expression: `(${expression.operator}${argument.expression})`
-    }
-  }
-
-  if (expression?.type === 'UpdateExpression') {
-    return emitPreparedUpdateExpression(expression, context)
-  }
-
-  if (expression?.type === 'BinaryExpression') {
-    const scalarNullish = emitPreparedScalarNullishCoalescingExpression(expression, context)
-
-    if (scalarNullish != null) {
-      return scalarNullish
-    }
-
-    if (isNullishCoalescingExpression(expression)) {
-      context.diagnostics.push(
-        diagnostic(
-          'CCJS_C_NULLISH',
-          'nullish coalescing is not supported by the current C backend slice',
-          expression.loc
-        )
-      )
-
-      return {
-        lines: [],
-        expression: '0'
-      }
-    }
-
-    const leftType = inferExpressionType(expression.left, context)
-    const rightType = inferExpressionType(expression.right, context)
-    const nullableNullCompare = emitPreparedNullableNullCompareExpression(expression, context)
-
-    if (nullableNullCompare != null) {
-      return nullableNullCompare
-    }
-
-    if (['===', '!==', '==', '!='].includes(expression.operator) && leftType === 'string' && rightType === 'string') {
-      return emitPreparedStringCompareExpression(expression, context)
-    }
-
-    if (leftType === 'string' || rightType === 'string') {
-      context.diagnostics.push(
-        diagnostic(
-          'CCJS_C_STRING_EXPR',
-          'string binary expressions are not supported by the current C backend slice',
-          expression.loc
-        )
-      )
-
-      return {
-        lines: [],
-        expression: '0'
-      }
-    }
-
-    if (['&&', '||'].includes(expression.operator)) {
-      return emitPreparedLogicalExpression(expression, context)
-    }
-
-    const left = emitPreparedNumberExpression(expression.left, context)
-    const right = emitPreparedNumberExpression(expression.right, context)
-
-    return {
-      lines: [...left.lines, ...right.lines],
-      expression: `(${left.expression} ${emitCOperator(expression.operator)} ${right.expression})`
-    }
-  }
-
-  if (expression?.type === 'AssignmentExpression') {
-    const value = emitPreparedNumberExpression(expression.value, context)
-
-    return {
-      lines: value.lines,
-      expression: `(${emitReference(expression.target, context)} = ${value.expression})`
-    }
-  }
-
-  if (expression?.type === 'CallExpression') {
-    const jsonScalarParse = emitPreparedJsonScalarParseExpression(expression, context, jsonDeclarationDependencies)
-
-    if (jsonScalarParse != null) {
-      return jsonScalarParse
-    }
-
-    const binaryCall = emitPreparedBinaryNumberCallExpression(expression, context, binaryLoweringDependencies)
-
-    if (binaryCall != null) {
-      return binaryCall
-    }
-
-    const cryptoCall = emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies)
-
-    if (cryptoCall != null) {
-      return cryptoCall
-    }
-
-    const numericCast = emitPreparedNumericCastExpression(expression, context)
-
-    if (numericCast != null) {
-      return numericCast
-    }
-
-    if (isStringPredicateCall(expression, context)) {
-      return emitPreparedStringPredicateCall(expression, context)
-    }
-
-    const collectionCall = emitPreparedCollectionCallExpression(expression, context)
-
-    if (collectionCall != null) {
-      return collectionCall
-    }
-
-    return emitPreparedCallExpression(expression, context)
-  }
-
-  if (isMemberAccessExpression(expression)) {
-    const dgramAddressPort = emitPreparedDgramAddressPortExpression(expression, context)
-
-    if (dgramAddressPort != null) {
-      return dgramAddressPort
-    }
-
-    const netAddressPort = emitPreparedNetAddressPortExpression(expression, context)
-
-    if (netAddressPort != null) {
-      return netAddressPort
-    }
-
-    const stringLength = emitPreparedStringLengthExpression(expression, context)
-
-    if (stringLength != null) {
-      return stringLength
-    }
-
-    const length = emitPreparedArrayLengthExpression(expression, context)
-
-    if (length != null) {
-      return length
-    }
-
-    const collectionSize = emitPreparedCollectionSizeExpression(expression, context)
-
-    if (collectionSize != null) {
-      return collectionSize
-    }
-
-    const bytesLength = emitPreparedBytesLengthExpression(expression, context, binaryLoweringDependencies)
-
-    if (bytesLength != null) {
-      return bytesLength
-    }
-
-    const member = resolveKnownObjectMember(expression, context)
-
-    if (member != null && ['number', 'boolean'].includes(member.valueType)) {
-      return emitPreparedRuntimeNumberValue(
-        member.valueType,
-        (temp) =>
-          `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
-        context
-      )
-    }
-  }
-
-  if (isIndexAccessExpression(expression)) {
-    const element = resolveKnownArrayIndex(expression, context)
-
-    if (element != null && ['number', 'boolean'].includes(element.valueType)) {
-      return emitPreparedRuntimeNumberValue(
-        element.valueType,
-        (temp) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
-        context
-      )
-    }
-
-    const field = resolveKnownObjectIndex(expression, context)
-
-    if (field != null && ['number', 'boolean'].includes(field.valueType)) {
-      return emitPreparedRuntimeNumberValue(
-        field.valueType,
-        (temp) =>
-          `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
-        context
-      )
-    }
-
-    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
-
-    if (runtimeElement != null && ['number', 'boolean'].includes(runtimeElement.valueType)) {
-      const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_expr_value')
-
-      return {
-        lines: value.lines,
-        expression:
-          runtimeElement.valueType === 'boolean'
-            ? `(${value.expression}.as.boolean ? 1 : 0)`
-            : `${value.expression}.as.number`
-      }
-    }
-
-    const bytesIndex = emitPreparedBytesIndexExpression(expression, context, binaryLoweringDependencies)
-
-    if (bytesIndex != null) {
-      return bytesIndex
-    }
-  }
-
-  if (expression?.type === 'AwaitExpression') {
-    const valueType = inferExpressionType(expression, context)
-    const awaited = emitCAwaitValueExpression(expression, context)
-
-    return {
-      lines: awaited.lines,
-      expression:
-        valueType === 'boolean' ? `(${awaited.expression}.as.boolean ? 1 : 0)` : `${awaited.expression}.as.number`
-    }
-  }
-
-  if (isOptionalChainExpression(expression)) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_OPTIONAL_CHAINING',
-        'optional chaining is not supported by the current C backend slice',
-        expression?.loc
-      )
-    )
-    return {
-      lines: [],
-      expression: '0'
-    }
-  }
-
-  context.diagnostics.push(
-    diagnostic('CCJS_C_NUMBER_EXPR', 'this number expression is not supported by the current C backend slice')
-  )
-
-  return {
-    lines: [],
-    expression: '0'
-  }
-}
-
-function emitPreparedLogicalExpression(expression, context) {
-  const left = emitPreparedNumberExpression(expression.left, context)
-  const leftNarrowing = resolveNullableScalarConditionNarrowing(expression.left, context)
-  const rightNarrowed = expression.operator === '&&' ? leftNarrowing.trueNames : leftNarrowing.falseNames
-  const right = withNullableScalarNarrowing(context, rightNarrowed, () =>
-    emitPreparedNumberExpression(expression.right, context)
-  )
-  const temp = nextCName(context, 'ccjs_logical')
-
-  if (expression.operator === '&&') {
-    return {
-      lines: [
-        ...left.lines,
-        `double ${temp} = 0;`,
-        `if ${emitCConditionClause(left.expression)} {`,
-        ...right.lines.map((line) => `  ${line}`),
-        `  ${temp} = ${right.expression};`,
-        '}'
-      ],
-      expression: temp
-    }
-  }
-
-  return {
-    lines: [
-      ...left.lines,
-      `double ${temp} = 0;`,
-      `if ${emitCConditionClause(left.expression)} {`,
-      `  ${temp} = 1;`,
-      '} else {',
-      ...right.lines.map((line) => `  ${line}`),
-      `  ${temp} = ${right.expression};`,
-      '}'
-    ],
-    expression: temp
-  }
-}
-
-function emitPreparedScalarNullishCoalescingExpression(expression, context) {
-  if (!canLowerCScalarNullishCoalescingExpression(expression, context)) {
-    return null
-  }
-
-  const valueType = inferExpressionType(expression, context)
-  const expectedTag = cRuntimeValueTag(valueType)
-  const left = emitCValueExpression(expression.left, context)
-  const right = emitPreparedNumberExpression(expression.right, context)
-  const temp = nextCName(context, 'ccjs_nullable_scalar')
-  const leftValue = valueType === 'boolean' ? `(${left.expression}.as.boolean ? 1 : 0)` : `${left.expression}.as.number`
-
-  return {
-    lines: [
-      ...left.lines,
-      `double ${temp} = 0;`,
-      `if (${left.expression}.tag == CCJS_TAG_NULL) {`,
-      ...right.lines.map((line) => `  ${line}`),
-      `  ${temp} = ${right.expression};`,
-      '} else {',
-      `  ${emitRuntimeTypeCheck(`${left.expression}.tag != ${expectedTag}`, context)}`,
-      `  ${temp} = ${leftValue};`,
-      '}'
-    ],
-    expression: temp
-  }
-}
-
-function emitPreparedNullableNullCompareExpression(expression, context) {
-  if (!['===', '!==', '==', '!='].includes(expression.operator)) {
-    return null
-  }
-
-  const nullable = expression.left?.type === 'NullLiteral' ? expression.right : expression.left
-  const maybeNull = expression.left?.type === 'NullLiteral' ? expression.left : expression.right
-
-  if (maybeNull?.type !== 'NullLiteral' || !isNullableRuntimeExpression(nullable, context)) {
-    return null
-  }
-
-  const value = emitCValueExpression(nullable, context)
-  const equals = `(${value.expression}.tag == CCJS_TAG_NULL)`
-
-  return {
-    lines: value.lines,
-    expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
-  }
-}
-
-function emitPreparedNumericCastExpression(expression, context) {
-  if (!isNumericCastCall(expression, context)) {
-    return null
-  }
-
-  const cast = expression.callee.path[0]
-  const value = emitPreparedNumberExpression(expression.args[0], context)
-
-  if (cast === 'f64') {
-    return value
-  }
-
-  if (cast === 'f32') {
-    const result = nextCName(context, 'ccjs_f32')
-
-    return {
-      lines: [...value.lines, `double ${result} = (double)((float)${value.expression});`],
-      expression: result
-    }
-  }
-
-  const limits = numericIntegerCastLimits(cast)
-
-  if (limits == null) {
-    return null
-  }
-
-  const raw = nextCName(context, `ccjs_${cast}_value`)
-  const truncated = nextCName(context, `ccjs_${cast}_truncated`)
-  const result = nextCName(context, `ccjs_${cast}`)
-
-  return {
-    lines: [
-      ...value.lines,
-      `double ${raw} = ${value.expression};`,
-      emitRuntimeTypeCheck(`${raw} != ${raw} || (${raw} - ${raw}) != 0`, context),
-      emitRuntimeTypeCheck(`${raw} <= ${limits.preMin} || ${raw} >= ${limits.preMax}`, context),
-      `long long ${truncated} = (long long)${raw};`,
-      emitRuntimeTypeCheck(`${truncated} < ${limits.min}LL || ${truncated} > ${limits.max}LL`, context),
-      `double ${result} = (double)${truncated};`
-    ],
-    expression: result
-  }
-}
-
-function numericIntegerCastLimits(cast) {
-  if (cast === 'i32') {
-    return {
-      preMin: '-2147483649.0',
-      preMax: '2147483648.0',
-      min: '-2147483648',
-      max: '2147483647'
-    }
-  }
-
-  if (cast === 'u32') {
-    return {
-      preMin: '-1.0',
-      preMax: '4294967296.0',
-      min: '0',
-      max: '4294967295'
-    }
-  }
-
-  if (cast === 'u64') {
-    return {
-      preMin: '-1.0',
-      preMax: '9007199254740992.0',
-      min: '0',
-      max: '9007199254740991'
-    }
-  }
-
-  return null
-}
-
-function emitPreparedUpdateExpression(expression, context) {
-  const reference = emitReference(expression.argument, context)
-  const operator = expression.operator === '--' ? '--' : '++'
-
-  if (expression.prefix !== false) {
-    return {
-      lines: [],
-      expression: `(${operator}${reference})`
-    }
-  }
-
-  const previous = nextCName(context, 'ccjs_update_previous')
-
-  return {
-    lines: [`double ${previous} = ${reference};`, `${reference}${operator};`],
-    expression: previous
-  }
-}
-
-function emitPreparedRuntimeNumberValue(valueType, emitGetCall, context) {
-  const value = nextCName(context, 'ccjs_expr_value')
-  registerOwnedValue(context, value)
-
-  return {
-    lines: [...emitPrepareOwnedValueWrite(value), emitStatusCheck(emitGetCall(value), context)],
-    expression: valueType === 'boolean' ? `(${value}.as.boolean ? 1 : 0)` : `${value}.as.number`
-  }
+  return emitPreparedNumberExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
 function emitCExpression(expression, context) {
-  if (isNullishCoalescingExpression(expression)) {
-    context.diagnostics.push(
-      diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
-    )
-    return '0'
-  }
+  return emitCExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
+}
 
-  const type = inferExpressionType(expression, context)
-
-  if (type === 'string') {
-    return emitStringExpression(expression, context)
-  }
-
-  if (type === 'function') {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_FUNCTION_VALUE',
-        'function values are not supported by the current C backend slice',
-        expression?.loc
-      )
-    )
-    return '0'
-  }
-
-  if (type === 'timer') {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_TIMER_HANDLE',
-        'timer handles can only be stored or passed to clear timer functions in the current C backend slice',
-        expression?.loc
-      )
-    )
-    return '0'
-  }
-
-  if (type === 'crypto-hash') {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_CRYPTO_HASH',
-        'crypto hash handles can only be stored or used through Hash.update() and Hash.digest() in the current C backend slice',
-        expression?.loc
-      )
-    )
-    return '0'
-  }
-
-  if (type === 'crypto-hmac') {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_CRYPTO_HMAC',
-        'crypto hmac handles can only be stored or used through Hmac.update() and Hmac.digest() in the current C backend slice',
-        expression?.loc
-      )
-    )
-    return '0'
-  }
-
-  if (type === 'optional') {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_OPTIONAL_CHAINING',
-        'optional chaining is not supported by the current C backend slice',
-        expression?.loc
-      )
-    )
-    return '0'
-  }
-
-  if (type === 'js-global') {
-    reportCJsGlobalDiagnostic(context.diagnostics, expression?.loc)
-    return '0'
-  }
-
-  return emitNumberExpression(expression, context)
+function emitPreparedUpdateExpression(expression, context) {
+  return emitPreparedUpdateExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
 function emitReference(expression, context) {
@@ -6119,18 +5566,4 @@ function registerErrorObjectShape(context, name) {
       valueType: 'object'
     }
   ])
-}
-
-function isNumericCastCall(expression, context) {
-  if (
-    expression?.type !== 'CallExpression' ||
-    expression.callee.type !== 'Reference' ||
-    expression.callee.path.length !== 1 ||
-    !['i32', 'u32', 'u64', 'f32', 'f64'].includes(expression.callee.path[0]) ||
-    expression.args.length !== 1
-  ) {
-    return false
-  }
-
-  return inferExpressionType(expression.args[0], context) === 'number'
 }
