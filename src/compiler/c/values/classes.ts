@@ -16,14 +16,21 @@ import type {
   CClassInfo,
   CClassMethod,
   CFunctionParam,
+  CObjectShapeField,
   CPreparedExpression as PreparedExpression,
   CPreparedCallArgs as PreparedCallArgs
 } from '../types.ts'
 
 export type ClassLoweringDependencies = {
-  emitCFieldFlags: (field: any) => string
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedCallArgs: (expression: any, params: CFunctionParam[], context: CFunctionContext) => PreparedCallArgs
+  emitCFieldFlags: (field: CObjectShapeField) => string
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedCallArgs: (expression: AnyNode, params: CFunctionParam[], context: CFunctionContext) => PreparedCallArgs
+}
+
+type ClassMethodCallInfo = {
+  info: CClassInfo
+  method: AnyNode | null
+  objectExpression: string
 }
 
 function classDeps(context: CFunctionContext): ClassLoweringDependencies {
@@ -192,7 +199,7 @@ function isThisObjectExpression(expression: AnyNode) {
   )
 }
 
-export function emitClassObjectVariableDeclaration(statement: any, context: CFunctionContext) {
+export function emitClassObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
   const info = resolveClassConstructorInfo(statement.init, context)
 
   if (info == null) {
@@ -214,7 +221,7 @@ export function emitClassObjectVariableDeclaration(statement: any, context: CFun
   return emitCClassObjectInitLines(statement.name, statement.init, info, context)
 }
 
-export function emitCClassObjectValueExpression(expression: any, context: CFunctionContext) {
+export function emitCClassObjectValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const info = resolveClassConstructorInfo(expression, context)
   const temp = nextCName(context, 'ccjs_class_object')
   registerOwnedValue(context, temp)
@@ -240,7 +247,12 @@ export function emitCClassObjectValueExpression(expression: any, context: CFunct
   }
 }
 
-function emitCClassObjectInitLines(target: string, expression: any, info: any, context: CFunctionContext) {
+function emitCClassObjectInitLines(
+  target: string,
+  expression: AnyNode,
+  info: CClassInfo,
+  context: CFunctionContext
+): string[] {
   const shapeName = nextCName(context, `ccjs_shape_${info.name}`)
   const fieldsName = `${shapeName}_fields`
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
@@ -270,7 +282,7 @@ function emitCClassObjectInitLines(target: string, expression: any, info: any, c
     }
 
     const value = classDeps(context).emitCValueExpression(
-      substituteClassConstructorParams(assignment.value, constructorArgs),
+      substituteClassConstructorParams(assignment.value, constructorArgs) as AnyNode,
       context
     )
     lines.push(...value.lines)
@@ -280,7 +292,7 @@ function emitCClassObjectInitLines(target: string, expression: any, info: any, c
   return lines
 }
 
-export function registerClassObjectShape(context: CFunctionContext, name: string, info: any) {
+export function registerClassObjectShape(context: CFunctionContext, name: string, info: CClassInfo): void {
   context.objectShapes.set(
     name,
     info.fields.map((field) => ({
@@ -295,7 +307,7 @@ export function registerClassObjectShape(context: CFunctionContext, name: string
   )
 }
 
-function mapClassConstructorArgs(expression, info) {
+function mapClassConstructorArgs(expression: AnyNode, info: CClassInfo): Map<string, AnyNode> {
   const args = new Map<string, AnyNode>()
   const params = info.constructor?.params ?? []
 
@@ -308,7 +320,7 @@ function mapClassConstructorArgs(expression, info) {
   return args
 }
 
-function substituteClassConstructorParams(node, args) {
+function substituteClassConstructorParams(node: unknown, args: Map<string, AnyNode>): unknown {
   if (node == null || typeof node !== 'object') {
     return node
   }
@@ -317,11 +329,13 @@ function substituteClassConstructorParams(node, args) {
     return node.map((item) => substituteClassConstructorParams(item, args))
   }
 
-  if (node.type === 'Reference' && node.path.length === 1 && args.has(node.path[0])) {
-    return args.get(node.path[0])
+  const current = node as AnyNode
+
+  if (current.type === 'Reference' && current.path.length === 1 && args.has(current.path[0])) {
+    return args.get(current.path[0])
   }
 
-  const copy = {}
+  const copy: AnyNode = {}
 
   for (const [key, value] of Object.entries(node)) {
     copy[key] = substituteClassConstructorParams(value, args)
@@ -330,7 +344,7 @@ function substituteClassConstructorParams(node, args) {
   return copy
 }
 
-function resolveClassConstructorInfo(expression: any, context: CFunctionContext) {
+function resolveClassConstructorInfo(expression: AnyNode, context: CFunctionContext): CClassInfo | null {
   if (
     expression?.type !== 'NewExpression' ||
     expression.callee.type !== 'Reference' ||
@@ -342,11 +356,14 @@ function resolveClassConstructorInfo(expression: any, context: CFunctionContext)
   return context.classInfos.get(expression.callee.path[0]) ?? null
 }
 
-export function isClassConstructorExpression(expression: any, context: CFunctionContext) {
+export function isClassConstructorExpression(expression: AnyNode, context: CFunctionContext): boolean {
   return resolveClassConstructorInfo(expression, context) != null
 }
 
-export function emitPreparedClassMethodCallExpression(expression: any, context: CFunctionContext) {
+export function emitPreparedClassMethodCallExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
   const call = resolveClassMethodCallInfo(expression, context)
 
   if (call == null) {
@@ -405,7 +422,7 @@ export function emitPreparedClassMethodCallExpression(expression: any, context: 
   }
 }
 
-function resolveClassMethodCallInfo(expression: any, context: CFunctionContext) {
+function resolveClassMethodCallInfo(expression: AnyNode, context: CFunctionContext): ClassMethodCallInfo | null {
   if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
     return null
   }
@@ -435,6 +452,6 @@ function resolveClassMethodCallInfo(expression: any, context: CFunctionContext) 
   }
 }
 
-export function emitCClassMethodName(className, methodName) {
+export function emitCClassMethodName(className: string, methodName: string): string {
   return `ccjs_method_${emitCIdentifier(className)}_${emitCIdentifier(methodName)}`
 }
