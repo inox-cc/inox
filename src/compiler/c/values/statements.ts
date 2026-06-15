@@ -2071,11 +2071,12 @@ function normalizeCAsyncReturnArgument(argument, context: CFunctionContext, loc)
 }
 
 function isRuntimeCallbackReturnContext(context: CFunctionContext) {
+  const returnType = context.runtimeCallbackReturnType
+
   return (
     context.statusReturn === true &&
-    (context.runtimeCallbackReturnType === 'void' ||
-      ['number', 'boolean'].includes(context.runtimeCallbackReturnType) ||
-      isManagedRuntimeReturnType(context.runtimeCallbackReturnType))
+    returnType != null &&
+    (returnType === 'void' || ['number', 'boolean'].includes(returnType) || isManagedRuntimeReturnType(returnType))
   )
 }
 
@@ -2129,6 +2130,10 @@ function emitRuntimeCallbackScalarReturnLines(argument, context: CFunctionContex
 }
 
 export function emitRuntimeCallbackRuntimeValueReturnLines(argument, context: CFunctionContext) {
+  if (context.runtimeCallbackReturnType == null || context.runtimeCallbackReturnOut == null) {
+    return emitReturnJump(context)
+  }
+
   const expectedTag = cRuntimeValueTag(context.runtimeCallbackReturnType)
   const value =
     argument == null

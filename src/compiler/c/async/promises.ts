@@ -68,7 +68,7 @@ export function resolvePromiseReturningFunctionValueType(callee: AnyNode, contex
   return context.functionReturnPromiseValueTypes.get(callee.path[0]) ?? 'unknown'
 }
 
-export function resolvePromiseExpressionValueType(expression: AnyNode, context: CEmitContext): string | null {
+export function resolvePromiseExpressionValueType(expression: AnyNode, context: CFunctionContext): string | null {
   const directType = knownValueType(expression?.promiseValueType)
 
   if (directType != null) {

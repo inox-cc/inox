@@ -1,5 +1,12 @@
 import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect } from '../types.ts'
+import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
+import type { ArrayLoweringDependencies } from './values/arrays.ts'
+import type { ClassLoweringDependencies } from './values/classes.ts'
+import type { CollectionLoweringDependencies } from './values/collections.ts'
+import type { NullableLoweringDependencies } from './values/nullable.ts'
+import type { StatementLoweringDependencies } from './values/statements.ts'
+import type { StringLoweringDependencies } from './values/strings.ts'
 import type {
   CArrayElementInfo,
   CAsyncTaskWrapper,
@@ -11,20 +18,27 @@ import type {
   CFunctionType,
   CHttpHandler,
   CNetHandler,
+  CObjectShape,
   CObjectShapeField,
   CPromiseChainWrapper,
   CPromiseConstructorHandler
 } from './types.ts'
 
+export type CLoopFlowTarget = {
+  label: string
+  throughFinally: boolean
+}
+
 export type CEmitContext = {
-  asyncTaskLoweringDependencies?: any
+  arrayLoweringDependencies: ArrayLoweringDependencies
+  asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   asyncTaskWrappers: Map<string, CAsyncTaskWrapper>
   boxedMutableCaptureDeclarations: Set<AnyNode>
   callbackArrowWrappers: Map<AnyNode, CCallbackWrapper>
   callbackWrappers: Map<string, CCallbackWrapper>
   classInfos: Map<string, CClassInfo>
-  classLoweringDependencies: any
-  collectionLoweringDependencies: any
+  classLoweringDependencies: ClassLoweringDependencies
+  collectionLoweringDependencies: CollectionLoweringDependencies
   cryptoImportNames: Set<string>
   diagnostics: Diagnostic[]
   dgramCreateSocketNames: Set<string>
@@ -40,9 +54,10 @@ export type CEmitContext = {
   functionReturnNullables: Map<string, boolean>
   functionReturnPromiseValueTypes: Map<string, string | null>
   functionReturnSetElementTypes: Map<string, string | null>
-  functionReturnShapes: Map<string, any>
+  functionReturnShapes: Map<string, CObjectShape | null>
   functionReturnTypes: Map<string, string>
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
+  forceRuntimeStringDeclarations?: Set<string>
   httpCreateServerNames: Set<string>
   httpHandlers: Map<AnyNode, CHttpHandler>
   httpImportNames: Set<string>
@@ -52,32 +67,38 @@ export type CEmitContext = {
   netHandlers: Map<string, CNetHandler>
   netImportNames: Set<string>
   nextId: number
-  nullableLoweringDependencies: any
+  nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
   promiseChainWrappers: Map<string, CPromiseChainWrapper>
   processRuntime: boolean
   runtimeFunctionParams: Map<string, CFunctionType>
-  statementLoweringDependencies: any
-  stringLoweringDependencies: any
+  statementLoweringDependencies: StatementLoweringDependencies
+  stringLoweringDependencies: StringLoweringDependencies
   throwingFunctions: Set<string>
   unhandledRejectionFlag: string | null
-  [key: string]: any
 }
 
 export type CFunctionContext = CEmitContext & {
   arrayShapes: Map<string, CArrayElementInfo[]>
+  breakFlowUsed: boolean
+  breakTargets: CLoopFlowTarget[]
   boxedValueTypes: Map<string, string>
   boxedValues: string[]
   boxedVariables: Set<string>
   classInstanceTypes: Map<string, string>
   cleanupEnabled: boolean
+  continueFlowUsed: boolean
+  continueTargets: CLoopFlowTarget[]
   dgramBoundSockets: Set<string>
   dgramMessageSockets: Set<string>
   dgramReuseAddrSockets: Set<string>
   errorChannelUsed: boolean
   errorObjectNames: Set<string>
+  errorTargets: string[]
   eventLoopUsed: boolean
   externalEventLoop: boolean
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
   functionErrorOut: string | null
   functionReturnOut: string | null
   functionTypes: Map<string, CFunctionType>
@@ -94,7 +115,14 @@ export type CFunctionContext = CEmitContext & {
   promiseRejectionValueTypes: Map<string, string>
   promiseValueTypes: Map<string, string>
   returnNullable: boolean
+  returnFlowUsed: boolean
+  returnShape?: CObjectShape | null
+  returnTargets: string[]
   returnType: string
+  runtimeCallbackCleanupLabel?: string
+  runtimeCallbackReturnOut?: string
+  runtimeCallbackReturnShape?: CObjectShape | null
+  runtimeCallbackReturnType?: string
   runtimeCallbacks: Set<string>
   runtimeArrayElementTypes: Map<string, string>
   runtimeStrings: Set<string>
@@ -102,6 +130,7 @@ export type CFunctionContext = CEmitContext & {
   statusReturn: boolean
   throwingFunction: boolean
   usedCleanupGoto: boolean
+  usedRuntimeCallbackCleanupGoto?: boolean
   variables: Map<string, string>
 }
 
@@ -200,8 +229,8 @@ export function registerOwnedValue(context: CFunctionContext, name: string): voi
 export function registerOwnedPromise(
   context: CFunctionContext,
   name: string,
-  valueType: any = 'unknown',
-  rejectionValueType: any = 'unknown'
+  valueType: string = 'unknown',
+  rejectionValueType: string = 'unknown'
 ): void {
   if (!context.ownedPromises.includes(name)) {
     context.ownedPromises.push(name)
@@ -233,7 +262,7 @@ export function registerEventLoop(context: CFunctionContext): void {
   context.usedCleanupGoto = true
 }
 
-export function registerBoxedValue(context: CFunctionContext, name: string, valueType: any = 'number'): void {
+export function registerBoxedValue(context: CFunctionContext, name: string, valueType: string = 'number'): void {
   if (!context.boxedValues.includes(name)) {
     context.boxedValues.push(name)
   }
@@ -429,8 +458,8 @@ export function emitBoxedValueCleanup(context: CFunctionContext): string[] {
     )
 }
 
-export function isRuntimeBoxedValueType(valueType: any): boolean {
-  return ['string', 'object'].includes(valueType)
+export function isRuntimeBoxedValueType(valueType: string | null | undefined): boolean {
+  return valueType != null && ['string', 'object'].includes(valueType)
 }
 
 export function emitCleanupReturn(context: CFunctionContext): string[] {
@@ -481,7 +510,7 @@ export function nextCName(context: CFunctionContext, prefix: string): string {
   return name
 }
 
-export function withVariableScope(context: CFunctionContext, callback: () => any): any {
+export function withVariableScope<T>(context: CFunctionContext, callback: () => T): T {
   const previous = context.variables
   const previousArrayShapes = context.arrayShapes
   const previousBoxedVariables = context.boxedVariables
@@ -540,7 +569,7 @@ export function withVariableScope(context: CFunctionContext, callback: () => any
   }
 }
 
-export function withNullableScalarNarrowing(context: CFunctionContext, names: string[], callback: () => any): any {
+export function withNullableScalarNarrowing<T>(context: CFunctionContext, names: string[], callback: () => T): T {
   if (names.length === 0) {
     return callback()
   }

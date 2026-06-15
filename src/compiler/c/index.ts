@@ -300,6 +300,7 @@ import type {
   CModuleEmitOptions,
   CModuleOutputFile,
   CModulePlan,
+  CObjectShape,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedExpression as PreparedExpression,
@@ -1198,6 +1199,7 @@ function createBaseContext(
     classInfos: new Map<string, CClassInfo>(),
     callbackArrowWrappers: new Map<AnyNode, CCallbackWrapper>(),
     callbackWrappers: new Map<string, CCallbackWrapper>(),
+    asyncTaskLoweringDependencies,
     statementLoweringDependencies,
     classLoweringDependencies,
     nullableLoweringDependencies,
@@ -1240,7 +1242,7 @@ function createBaseContext(
     functionReturnPromiseValueTypes: new Map<string, string | null>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnPromiseValueType ?? null])
     ),
-    functionReturnShapes: new Map<string, any>(
+    functionReturnShapes: new Map<string, CObjectShape | null>(
       functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnShape ?? null])
     ),
     functionReturnSetElementTypes: new Map<string, string | null>(
@@ -1467,8 +1469,8 @@ function registerFunctionParamsInContext(statement: AnyNode, params: CFunctionPa
 function emitFunctionHead(statement: AnyNode, context: CEmitContext): string {
   const name = context.functionNames.get(statement.name) ?? emitCFunctionName(statement.name)
   const returnInfo = resolveCFunctionReturnInfo(statement, context)
-  const returnType = context.returnType ?? returnInfo.returnType
-  const returnNullable = context.returnNullable ?? returnInfo.returnNullable
+  const returnType = returnInfo.returnType
+  const returnNullable = returnInfo.returnNullable
   const functionParams = resolveFunctionDeclarationParams(statement.name, statement.params, context)
   const params = functionParams.map((param: CFunctionParam, index: number) => {
     if (isNullableScalarParam(param)) {
