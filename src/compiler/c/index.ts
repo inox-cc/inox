@@ -253,6 +253,16 @@ import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } 
 import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import {
+  canLowerCNullishCoalescingExpression,
+  canLowerCScalarNullishCoalescingExpression,
+  clearNullableScalarNarrowing,
+  isNarrowedNullableScalarReference,
+  isNullableRuntimeExpression,
+  isNullableScalarRuntimeExpression,
+  resolveNullableScalarConditionNarrowing,
+  type NullableLoweringDependencies
+} from './values/nullable.ts'
+import {
   emitObjectValueReference,
   isIndexAccessExpression,
   isMemberAccessExpression,
@@ -318,6 +328,12 @@ import type {
   SourceLocation
 } from '../types.ts'
 export type { CModuleOutputFile } from './types.ts'
+
+const nullableLoweringDependencies: NullableLoweringDependencies = {
+  inferExpressionType,
+  isNumberConversionCall,
+  resolveRuntimeCallbackCalleeType
+}
 
 const collectionLoweringDependencies: CollectionLoweringDependencies = {
   emitCValueExpression,
@@ -1497,6 +1513,7 @@ function createBaseContext(
     classInfos: new Map(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
+    nullableLoweringDependencies,
     collectionLoweringDependencies,
     arrayLoweringDependencies,
     stringLoweringDependencies,
@@ -5115,12 +5132,6 @@ function emitBoxedRuntimeValueAssignment(expression, context) {
   ]
 }
 
-function isNullableScalarRuntimeExpression(expression, context) {
-  return (
-    isNullableScalarType(inferExpressionType(expression, context)) && isNullableRuntimeExpression(expression, context)
-  )
-}
-
 function isBoxedRuntimeValueName(name, context) {
   return context.boxedVariables.has(name) && isRuntimeBoxedValueType(context.variables.get(name))
 }
@@ -8156,102 +8167,6 @@ function emitPreparedNullableNullCompareExpression(expression, context) {
     lines: value.lines,
     expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
   }
-}
-
-function resolveNullableScalarConditionNarrowing(expression, context) {
-  if (expression?.type !== 'BinaryExpression') {
-    return emptyNullableScalarNarrowing()
-  }
-
-  if (expression.operator === '&&') {
-    const left = resolveNullableScalarConditionNarrowing(expression.left, context)
-    const right = withNullableScalarNarrowing(context, left.trueNames, () =>
-      resolveNullableScalarConditionNarrowing(expression.right, context)
-    )
-
-    return {
-      trueNames: uniqueNames([...left.trueNames, ...right.trueNames]),
-      falseNames: intersectNames(left.falseNames, uniqueNames([...left.trueNames, ...right.falseNames]))
-    }
-  }
-
-  if (expression.operator === '||') {
-    const left = resolveNullableScalarConditionNarrowing(expression.left, context)
-    const right = withNullableScalarNarrowing(context, left.falseNames, () =>
-      resolveNullableScalarConditionNarrowing(expression.right, context)
-    )
-
-    return {
-      trueNames: intersectNames(left.trueNames, uniqueNames([...left.falseNames, ...right.trueNames])),
-      falseNames: uniqueNames([...left.falseNames, ...right.falseNames])
-    }
-  }
-
-  return resolveNullableScalarNullCheckNarrowing(expression, context)
-}
-
-function resolveNullableScalarNullCheckNarrowing(expression, context) {
-  if (expression?.type !== 'BinaryExpression' || !['===', '!==', '==', '!='].includes(expression.operator)) {
-    return emptyNullableScalarNarrowing()
-  }
-
-  const nullable = expression.left?.type === 'NullLiteral' ? expression.right : expression.left
-  const maybeNull = expression.left?.type === 'NullLiteral' ? expression.left : expression.right
-
-  if (maybeNull?.type !== 'NullLiteral' || nullable?.type !== 'Reference' || nullable.path.length !== 1) {
-    return emptyNullableScalarNarrowing()
-  }
-
-  const name = nullable.path[0]
-
-  if (!context.nullableVariables.has(name) || !isRuntimeNullableType(context.variables.get(name))) {
-    return emptyNullableScalarNarrowing()
-  }
-
-  if (['!==', '!='].includes(expression.operator)) {
-    return {
-      trueNames: [name],
-      falseNames: []
-    }
-  }
-
-  return {
-    trueNames: [],
-    falseNames: [name]
-  }
-}
-
-function emptyNullableScalarNarrowing() {
-  return {
-    trueNames: [],
-    falseNames: []
-  }
-}
-
-function uniqueNames(names) {
-  return [...new Set(names)]
-}
-
-function intersectNames(left, right) {
-  const rightNames = new Set(right)
-
-  return uniqueNames(left.filter((name) => rightNames.has(name)))
-}
-
-function isNarrowedNullableScalarReference(expression, context) {
-  return (
-    expression?.type === 'Reference' &&
-    expression.path.length === 1 &&
-    context.narrowedNullableScalars.has(expression.path[0]) &&
-    context.nullableVariables.has(expression.path[0]) &&
-    isNullableScalarType(context.variables.get(expression.path[0]))
-  )
-}
-
-function clearNullableScalarNarrowing(name, context) {
-  context.narrowedNullableScalars.delete(name)
-
-  return []
 }
 
 function emitPreparedNumericCastExpression(expression, context) {
@@ -12345,62 +12260,6 @@ function registerErrorObjectShape(context, name) {
       valueType: 'object'
     }
   ])
-}
-
-function canLowerCNullishCoalescingExpression(expression, context) {
-  if (!isNullishCoalescingExpression(expression)) {
-    return false
-  }
-
-  const resultType = inferExpressionType(expression, context)
-
-  return (
-    isRuntimeNullableType(resultType) &&
-    (inferExpressionType(expression.left, context) === 'null' || isNullableRuntimeExpression(expression.left, context))
-  )
-}
-
-function canLowerCScalarNullishCoalescingExpression(expression, context) {
-  if (!isNullishCoalescingExpression(expression)) {
-    return false
-  }
-
-  const resultType = inferExpressionType(expression, context)
-
-  return (
-    ['number', 'boolean'].includes(resultType) &&
-    (inferExpressionType(expression.left, context) === 'null' || isNullableRuntimeExpression(expression.left, context))
-  )
-}
-
-function isNullableRuntimeExpression(expression, context) {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return context.nullableVariables.has(expression.path[0])
-  }
-
-  if (isNumberConversionCall(expression, context)) {
-    return true
-  }
-
-  if (
-    expression?.type === 'CallExpression' &&
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1
-  ) {
-    return context.functionReturnNullables.get(expression.callee.path[0]) === true
-  }
-
-  if (expression?.type === 'OptionalCallExpression') {
-    const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
-
-    return functionType != null && isRuntimeNullableType(functionType.returnType)
-  }
-
-  if (isNullishCoalescingExpression(expression)) {
-    return false
-  }
-
-  return expression?.nullable === true && isRuntimeNullableType(inferExpressionType(expression, context))
 }
 
 function isNumberConversionCall(expression, context) {
