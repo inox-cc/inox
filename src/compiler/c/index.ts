@@ -329,7 +329,6 @@ import {
   emitStringExpression,
   isBytesToStringCall,
   isCStringRuntimeMethodName,
-  isRawStringLiteralExpression,
   isRuntimeProducedStringExpression,
   isStringConcatExpression,
   isStringConversionCall,
@@ -363,6 +362,7 @@ import {
   emitRuntimeCallbackRuntimeValueReturnLines,
   emitRuntimeStringVariableDeclaration,
   emitRuntimeValueVariableDeclaration,
+  emitStringScalarVariableDeclaration,
   emitStatementBody,
   emitStatementList,
   emitSwitchStatement,
@@ -2392,31 +2392,10 @@ function emitScalarVariableDeclaration(statement, context) {
   const inferred = inferExpressionType(statement.init, context)
   context.variables.set(statement.name, inferred)
 
-  if (inferred === 'string') {
-    if (context.boxedMutableCaptureDeclarations.has(statement)) {
-      return emitBoxedRuntimeValueVariableDeclaration(statement, statement.init, context)
-    }
+  const stringScalarDeclaration = emitStringScalarVariableDeclaration(statement, context, inferred)
 
-    const runtimeString = resolveRuntimeStringReference(statement.init, context)
-
-    if (runtimeString != null) {
-      context.runtimeStrings.add(statement.name)
-      return [`${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString};`]
-    }
-
-    const runtimeElement = resolveRuntimeArrayIndex(statement.init, context)
-
-    if (context.forceRuntimeStringDeclarations?.has(statement.name) && isRawStringLiteralExpression(statement.init)) {
-      return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
-    }
-
-    if (isRuntimeProducedStringExpression(statement.init, context) || runtimeElement?.valueType === 'string') {
-      return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
-    }
-
-    return [
-      `${statement.kind === 'const' ? 'const ' : ''}char* ${statement.name} = ${emitStringExpression(statement.init, context)};`
-    ]
+  if (stringScalarDeclaration != null) {
+    return stringScalarDeclaration
   }
 
   if (inferred === 'function') {

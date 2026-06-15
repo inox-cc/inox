@@ -18,6 +18,7 @@ import { resolveRuntimeMapType, resolveRuntimeSetElementType } from './collectio
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
 import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
+import { isRawStringLiteralExpression } from './strings.ts'
 
 type PreparedExpression = {
   lines: string[]
@@ -334,6 +335,42 @@ export function emitRuntimeStringVariableDeclaration(statement, expression, cont
   context.runtimeStrings.add(statement.name)
 
   return lines
+}
+
+export function emitStringScalarVariableDeclaration(statement: any, context: any, inferred: string): string[] | null {
+  if (inferred !== 'string') {
+    return null
+  }
+
+  const deps = statementDeps(context)
+
+  if (context.boxedMutableCaptureDeclarations.has(statement)) {
+    return emitBoxedRuntimeValueVariableDeclaration(statement, statement.init, context)
+  }
+
+  const runtimeString = deps.resolveRuntimeStringReference(statement.init, context)
+
+  if (runtimeString != null) {
+    context.runtimeStrings.add(statement.name)
+    return [`${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString};`]
+  }
+
+  const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
+
+  if (context.forceRuntimeStringDeclarations?.has(statement.name) && isRawStringLiteralExpression(statement.init)) {
+    return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
+  }
+
+  if (deps.isRuntimeProducedStringExpression(statement.init, context) || runtimeElement?.valueType === 'string') {
+    return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
+  }
+
+  return [
+    `${statement.kind === 'const' ? 'const ' : ''}char* ${statement.name} = ${deps.emitStringExpression(
+      statement.init,
+      context
+    )};`
+  ]
 }
 
 export function emitRuntimeValueVariableDeclaration(statement, expression, context) {
