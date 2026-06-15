@@ -188,6 +188,51 @@ export type CPromiseChainWrapper = {
 
 export type CCallbackContextWrapper = CRuntimeArrowCallbackWrapper | CPromiseChainWrapper
 
+export type CAsyncTaskParam = CFunctionParam & {
+  argName: string
+  fieldName: string
+}
+
+export type CAsyncTaskFrameLocalKind = 'prefix' | 'await'
+
+export type CAsyncTaskPrefixLocal = {
+  name: string
+  type: string
+  fieldName: string
+  arrayElementType?: string
+  forceRuntimeStringDeclaration?: boolean
+  mapKeyType?: string
+  mapValueType?: string
+  setElementType?: string
+  shape?: any
+}
+
+export type CAsyncTaskPrefixFrameLocal = CAsyncTaskPrefixLocal & {
+  kind: 'prefix'
+}
+
+export type CAsyncTaskAwaitStep = {
+  index: number
+  name: string | null
+  type: string
+  fieldName: string | null
+  arrayElementType?: string
+  awaitedExpression: AnyNode | null
+  awaitedPromiseExpression: AnyNode | null
+  mapKeyType?: string
+  mapValueType?: string
+  setElementType?: string
+  shape?: any
+}
+
+export type CAsyncTaskAwaitFrameLocal = CAsyncTaskAwaitStep & {
+  kind: 'await'
+  fieldName: string
+  name: string
+}
+
+export type CAsyncTaskFrameLocal = CAsyncTaskAwaitFrameLocal | CAsyncTaskPrefixFrameLocal
+
 export type CAsyncTaskWrapper = {
   key: string
   functionName: string
@@ -196,9 +241,9 @@ export type CAsyncTaskWrapper = {
   resumeName: string
   rejectName: string
   finalizerName: string
-  params: CFunctionParam[]
-  awaits: any[]
-  frameLocals: any[]
+  params: CAsyncTaskParam[]
+  awaits: CAsyncTaskAwaitStep[]
+  frameLocals: CAsyncTaskFrameLocal[]
   hasTryRegion: boolean
   prefixStatements: any[]
   returnExpression: any

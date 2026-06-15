@@ -24,6 +24,13 @@ import {
 import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
 import type { IrFunctionDeclaration } from '../../types.ts'
 import type {
+  CAsyncTaskAwaitFrameLocal,
+  CAsyncTaskAwaitStep,
+  CAsyncTaskFrameLocal,
+  CAsyncTaskFrameLocalKind,
+  CAsyncTaskParam,
+  CAsyncTaskPrefixFrameLocal,
+  CAsyncTaskPrefixLocal,
   CAsyncTaskWrapper,
   CFunctionParam,
   CKnownArrayElement,
@@ -100,15 +107,6 @@ type AsyncTaskPhase = {
   statements: any[]
 }
 
-type AsyncTaskFrameLocalKind = 'prefix' | 'await'
-
-type AsyncTaskFrameLocal = Record<string, any> & {
-  kind: AsyncTaskFrameLocalKind
-  name: string | null
-  type: string
-  fieldName: string
-}
-
 type AsyncTaskTryHandlerPlan = {
   param: string | null
   statements: any[]
@@ -123,9 +121,9 @@ type AsyncTaskTryRegionDraft = {
 }
 
 type AsyncTaskBodyDraft = {
-  awaits: any[]
+  awaits: CAsyncTaskAwaitStep[]
   prefixStatements: any[]
-  prefixLocals: any[]
+  prefixLocals: CAsyncTaskPrefixLocal[]
   successPreFinalizerStatements: any[]
   successPrefixFinalizerStatements: any[]
   successStatements: any[]
@@ -135,9 +133,9 @@ type AsyncTaskBodyDraft = {
 }
 
 type AsyncTaskBodyPlan = {
-  awaits: any[]
+  awaits: CAsyncTaskAwaitStep[]
   prefixStatements: any[]
-  frameLocals: AsyncTaskFrameLocal[]
+  frameLocals: CAsyncTaskFrameLocal[]
   successPhases: AsyncTaskPhase[]
   tryPhases: AsyncTaskPhase[]
   returnExpression: any
@@ -221,21 +219,29 @@ function createAsyncTaskBodyPlan(body: AsyncTaskBodyDraft): AsyncTaskBodyPlan {
   }
 }
 
-function createAsyncTaskFrameLocals(prefixLocals, awaits, livePrefixLocalNames): AsyncTaskFrameLocal[] {
+function createAsyncTaskFrameLocals(
+  prefixLocals: CAsyncTaskPrefixLocal[],
+  awaits: CAsyncTaskAwaitStep[],
+  livePrefixLocalNames: Set<string>
+): CAsyncTaskFrameLocal[] {
   return [
     ...prefixLocals
       .filter((local) => livePrefixLocalNames.has(local.name))
-      .map((local) => ({
+      .map((local): CAsyncTaskFrameLocal => ({
         ...local,
         kind: 'prefix' as const
       })),
     ...awaits
-      .filter((item) => item.fieldName != null)
-      .map((item) => ({
+      .filter(isAsyncTaskAwaitFrameLocal)
+      .map((item): CAsyncTaskFrameLocal => ({
         ...item,
         kind: 'await' as const
       }))
   ]
+}
+
+function isAsyncTaskAwaitFrameLocal(item: CAsyncTaskAwaitStep): item is CAsyncTaskAwaitFrameLocal {
+  return item.fieldName != null && item.name != null
 }
 
 function collectAsyncTaskLiveAcrossSuspensionNames({ awaits, successPhases, tryPhases, returnExpression, tryHandler }) {
@@ -441,7 +447,9 @@ function resolveAsyncTaskBodyPlan(
   }
 
   for (const item of awaits ?? []) {
-    returnContext.variables.set(item.name, item.type)
+    if (item.name != null) {
+      returnContext.variables.set(item.name, item.type)
+    }
   }
 
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
@@ -980,7 +988,7 @@ function hasUnsupportedAsyncTaskTryControlFlow(node) {
   return Object.values(node).some((value) => hasUnsupportedAsyncTaskTryControlFlow(value))
 }
 
-function resolveAsyncTaskAwaitSteps(statements, context) {
+function resolveAsyncTaskAwaitSteps(statements, context): CAsyncTaskAwaitStep[] | null {
   const result = resolveAsyncTaskAwaitStepsAndTrailingStatements(statements, context)
 
   if (result == null || result.trailingStatements.length > 0) {
@@ -990,8 +998,11 @@ function resolveAsyncTaskAwaitSteps(statements, context) {
   return result.awaits
 }
 
-function resolveAsyncTaskAwaitStepsAndTrailingStatements(statements, context) {
-  const awaits: Array<Record<string, any>> = []
+function resolveAsyncTaskAwaitStepsAndTrailingStatements(
+  statements,
+  context
+): { awaits: CAsyncTaskAwaitStep[]; trailingStatements: any[] } | null {
+  const awaits: CAsyncTaskAwaitStep[] = []
 
   for (let index = 0; index < statements.length; ) {
     const statement = statements[index]
@@ -1038,7 +1049,7 @@ function resolveAsyncTaskAwaitStepsAndTrailingStatements(statements, context) {
       }
 }
 
-function resolveAsyncTaskDirectAwaitStep(statement, context, index) {
+function resolveAsyncTaskDirectAwaitStep(statement, context, index): CAsyncTaskAwaitStep | null {
   if (statement?.type !== 'VariableDeclaration' || statement.init?.type !== 'AwaitExpression') {
     return null
   }
@@ -1081,7 +1092,7 @@ function resolveAsyncTaskDirectAwaitStep(statement, context, index) {
   }
 }
 
-function resolveAsyncTaskStatementAwaitStep(statement, context, index) {
+function resolveAsyncTaskStatementAwaitStep(statement, context, index): CAsyncTaskAwaitStep | null {
   if (statement?.type !== 'ExpressionStatement' || statement.expression?.type !== 'AwaitExpression') {
     return null
   }
@@ -1106,7 +1117,12 @@ function resolveAsyncTaskStatementAwaitStep(statement, context, index) {
   }
 }
 
-function resolveAsyncTaskLocalPromiseAwaitStep(promiseStatement, awaitStatement, context, index) {
+function resolveAsyncTaskLocalPromiseAwaitStep(
+  promiseStatement,
+  awaitStatement,
+  context,
+  index
+): CAsyncTaskAwaitStep | null {
   if (awaitStatement?.type !== 'VariableDeclaration' || awaitStatement.init?.type !== 'AwaitExpression') {
     return null
   }
@@ -1270,7 +1286,7 @@ function resolveAsyncTaskReturnValueExpression(
   return null
 }
 
-export function emitAsyncTaskFrameType(wrapper) {
+export function emitAsyncTaskFrameType(wrapper: CAsyncTaskWrapper): string[] {
   return [
     `typedef struct ${wrapper.frameTypeName} {`,
     '  ccjs_loop* ccjs_loop;',
@@ -1291,7 +1307,7 @@ function emitAsyncTaskStorageInit(valueType) {
   return isManagedRuntimeReturnType(valueType) ? 'ccjs_undefined_value()' : '0'
 }
 
-export function emitAsyncTaskWrapperPrototypes(wrapper) {
+export function emitAsyncTaskWrapperPrototypes(wrapper: CAsyncTaskWrapper): string[] {
   return [
     `static ccjs_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)});`,
     `static ccjs_status ${wrapper.resumeName}(void* context, ccjs_value ccjs_value_input);`,
@@ -1301,10 +1317,10 @@ export function emitAsyncTaskWrapperPrototypes(wrapper) {
 }
 
 export function emitAsyncTaskWrapperDeclaration(
-  wrapper,
+  wrapper: CAsyncTaskWrapper,
   baseContext: CEmitContext,
   dependencies: AsyncTaskLoweringDependencies
-) {
+): string[] {
   baseContext.asyncTaskLoweringDependencies = dependencies
   return [
     ...emitAsyncTaskStartDeclaration(wrapper, baseContext),
@@ -1317,7 +1333,7 @@ export function emitAsyncTaskWrapperDeclaration(
   ]
 }
 
-function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
+function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: CEmitContext): string[] {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', 0)
   context.forceRuntimeStringDeclarations = new Set(
     collectAsyncTaskFrameLocals(wrapper, 'prefix')
@@ -1376,7 +1392,7 @@ function emitAsyncTaskStartDeclaration(wrapper, baseContext) {
   return lines
 }
 
-function emitAsyncTaskStartParams(wrapper) {
+function emitAsyncTaskStartParams(wrapper: CAsyncTaskWrapper): string {
   const params = [
     'ccjs_loop* ccjs_loop',
     ...wrapper.params.map((param) => `${emitCType(param.valueType)} ${param.argName}`),
@@ -1386,25 +1402,25 @@ function emitAsyncTaskStartParams(wrapper) {
   return params.join(', ')
 }
 
-function registerAsyncTaskParams(wrapper, context) {
+function registerAsyncTaskParams(wrapper: CAsyncTaskWrapper, context: CFunctionContext): void {
   for (const param of wrapper.params) {
     registerAsyncTaskLocalMetadata(param.name, param.valueType, param, context)
   }
 }
 
-function registerAsyncTaskAwaitLocals(wrapper, context, count) {
+function registerAsyncTaskAwaitLocals(wrapper: CAsyncTaskWrapper, context: CFunctionContext, count: number): void {
   for (const item of collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)) {
     registerAsyncTaskLocalMetadata(item.name, item.type, item, context)
   }
 }
 
-function registerAsyncTaskPrefixLocals(wrapper, context) {
+function registerAsyncTaskPrefixLocals(wrapper: CAsyncTaskWrapper, context: CFunctionContext): void {
   for (const local of collectAsyncTaskFrameLocals(wrapper, 'prefix')) {
     registerAsyncTaskLocalMetadata(local.name, local.type, local, context)
   }
 }
 
-function emitAsyncTaskStorePrefixLocalLines(wrapper) {
+function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[] {
   return collectAsyncTaskFrameLocals(wrapper, 'prefix').flatMap((local) => {
     if (local.type === 'string') {
       return [
@@ -1427,7 +1443,11 @@ function emitAsyncTaskStorePrefixLocalLines(wrapper) {
   })
 }
 
-function emitAsyncTaskVisibleLocalReads(wrapper, count, options = { includePrefixLocals: true }) {
+function emitAsyncTaskVisibleLocalReads(
+  wrapper: CAsyncTaskWrapper,
+  count: number,
+  options = { includePrefixLocals: true }
+): string[] {
   return [
     ...wrapper.params.flatMap((param) => emitAsyncTaskVisibleLocalRead(param.name, param.valueType, param.fieldName)),
     ...(options.includePrefixLocals === false
@@ -1441,15 +1461,29 @@ function emitAsyncTaskVisibleLocalReads(wrapper, count, options = { includePrefi
   ]
 }
 
-function collectAsyncTaskFrameLocals(wrapper, kind: AsyncTaskFrameLocalKind | null = null) {
+function collectAsyncTaskFrameLocals(wrapper: CAsyncTaskWrapper, kind: 'prefix'): CAsyncTaskPrefixFrameLocal[]
+function collectAsyncTaskFrameLocals(wrapper: CAsyncTaskWrapper, kind: 'await'): CAsyncTaskAwaitFrameLocal[]
+function collectAsyncTaskFrameLocals(wrapper: CAsyncTaskWrapper): CAsyncTaskFrameLocal[]
+function collectAsyncTaskFrameLocals(
+  wrapper: CAsyncTaskWrapper,
+  kind: CAsyncTaskFrameLocalKind | null = null
+): CAsyncTaskFrameLocal[] {
   return (wrapper.frameLocals ?? []).filter((local) => kind == null || local.kind === kind)
 }
 
-function collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count) {
+function collectAsyncTaskVisibleAwaitFrameLocals(
+  wrapper: CAsyncTaskWrapper,
+  count: number
+): CAsyncTaskAwaitFrameLocal[] {
   return collectAsyncTaskFrameLocals(wrapper, 'await').filter((local) => local.index < count && local.name != null)
 }
 
-function registerAsyncTaskLocalMetadata(name, valueType, item, context) {
+function registerAsyncTaskLocalMetadata(
+  name: string,
+  valueType: string,
+  item: CAsyncTaskFrameLocal | CAsyncTaskParam,
+  context: CFunctionContext
+): void {
   context.variables.set(name, valueType)
 
   if (valueType === 'string') {
