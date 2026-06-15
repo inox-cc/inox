@@ -253,6 +253,15 @@ import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } 
 import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import {
+  emitPreparedCollectionReceiver,
+  emitPreparedCollectionSizeExpression,
+  resolveRuntimeForOfMap,
+  resolveRuntimeForOfSet,
+  resolveRuntimeMapType,
+  resolveRuntimeSetElementType,
+  type CollectionLoweringDependencies
+} from './values/collections.ts'
+import {
   emitPreparedArrayLengthExpression,
   emitPreparedRuntimeArrayIndexValue,
   isArrayLengthExpression,
@@ -297,6 +306,16 @@ import type {
   SourceLocation
 } from '../types.ts'
 export type { CModuleOutputFile } from './types.ts'
+
+const collectionLoweringDependencies: CollectionLoweringDependencies = {
+  emitCValueExpression,
+  emitPreparedCollectionCallExpression,
+  inferExpressionType,
+  isIndexAccessExpression,
+  isMemberAccessExpression,
+  resolveKnownObjectIndex,
+  resolveKnownObjectMember
+}
 
 const arrayLoweringDependencies: ArrayLoweringDependencies = {
   emitCValueExpression,
@@ -1466,6 +1485,7 @@ function createBaseContext(
     classInfos: new Map(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
+    collectionLoweringDependencies,
     arrayLoweringDependencies,
     stringLoweringDependencies,
     cryptoImportNames: new Set(),
@@ -13206,65 +13226,6 @@ function emitPreparedCollectionCallExpression(expression, context) {
   }
 }
 
-function emitPreparedCollectionReceiver(expression, context) {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
-    const type = context.variables.get(name)
-
-    return type === 'map' || type === 'set'
-      ? {
-          type,
-          lines: [],
-          expression: name
-        }
-      : null
-  }
-
-  if (expression?.type === 'CallExpression') {
-    const valueType = inferExpressionType(expression, context)
-
-    if (valueType !== 'map' && valueType !== 'set') {
-      return null
-    }
-
-    const call = emitPreparedCollectionCallExpression(expression, context)
-
-    if (call != null && call.expression !== '') {
-      return {
-        type: valueType,
-        lines: call.lines,
-        expression: call.expression
-      }
-    }
-
-    const value = emitCValueExpression(expression, context)
-
-    return {
-      type: valueType,
-      lines: value.lines,
-      expression: value.expression
-    }
-  }
-
-  if (isMemberAccessExpression(expression) || isIndexAccessExpression(expression)) {
-    const valueType = inferExpressionType(expression, context)
-
-    if (valueType !== 'map' && valueType !== 'set') {
-      return null
-    }
-
-    const value = emitCValueExpression(expression, context)
-
-    return {
-      type: valueType,
-      lines: value.lines,
-      expression: value.expression
-    }
-  }
-
-  return null
-}
-
 function emitPreparedMapMethodCall(name, expression, context) {
   const method = expression.callee.property
 
@@ -13487,30 +13448,6 @@ function emitPreparedSetMethodCall(name, expression, context) {
   }
 }
 
-function emitPreparedCollectionSizeExpression(expression, context) {
-  if (expression?.type !== 'MemberExpression' || expression.property !== 'size') {
-    return null
-  }
-
-  const receiver = emitPreparedCollectionReceiver(expression.object, context)
-
-  if (receiver == null) {
-    return null
-  }
-
-  const out = nextCName(context, `ccjs_${receiver.type}_size`)
-  const helper = receiver.type === 'map' ? 'ccjs_map_size' : 'ccjs_set_size'
-
-  return {
-    lines: [
-      ...receiver.lines,
-      `size_t ${out} = 0;`,
-      emitStatusCheck(`${helper}(${receiver.expression}, &${out})`, context)
-    ],
-    expression: out
-  }
-}
-
 function isMemberAccessExpression(expression) {
   return expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression'
 }
@@ -13679,128 +13616,6 @@ function registerObjectShape(context, name, shape) {
       setElementType: field.setElementType
     }))
   )
-}
-
-function resolveRuntimeSetElementType(expression, context) {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return context.setElementTypes.get(expression.path[0]) ?? null
-  }
-
-  if (expression?.type === 'CallExpression' || expression?.type === 'NewExpression') {
-    const functionReturn = expression.type === 'CallExpression' ? resolveFunctionReturnNameFromCall(expression) : null
-
-    return expression.valueType === 'set'
-      ? (expression.setElementType ??
-          (functionReturn == null ? null : context.functionReturnSetElementTypes.get(functionReturn)) ??
-          'unknown')
-      : null
-  }
-
-  if (expression?.type === 'MemberExpression') {
-    const member = resolveKnownObjectMember(expression, context)
-
-    return member?.valueType === 'set' ? (member.setElementType ?? 'unknown') : null
-  }
-
-  if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    const field = resolveKnownObjectIndex(expression, context)
-
-    return field?.valueType === 'set' ? (field.setElementType ?? 'unknown') : null
-  }
-
-  return null
-}
-
-function resolveRuntimeMapType(expression, context) {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return context.mapTypes.get(expression.path[0]) ?? null
-  }
-
-  if (expression?.type === 'CallExpression' || expression?.type === 'NewExpression') {
-    const functionReturn = expression.type === 'CallExpression' ? resolveFunctionReturnNameFromCall(expression) : null
-    const functionReturnMap =
-      functionReturn == null ? null : (context.functionReturnMapTypes.get(functionReturn) ?? null)
-
-    return expression.valueType === 'map'
-      ? {
-          key: expression.mapKeyType ?? functionReturnMap?.key ?? 'unknown',
-          value: expression.mapValueType ?? functionReturnMap?.value ?? 'unknown'
-        }
-      : null
-  }
-
-  if (expression?.type === 'MemberExpression') {
-    const member = resolveKnownObjectMember(expression, context)
-
-    return member?.valueType === 'map'
-      ? {
-          key: member.mapKeyType ?? 'unknown',
-          value: member.mapValueType ?? 'unknown'
-        }
-      : null
-  }
-
-  if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    const field = resolveKnownObjectIndex(expression, context)
-
-    return field?.valueType === 'map'
-      ? {
-          key: field.mapKeyType ?? 'unknown',
-          value: field.mapValueType ?? 'unknown'
-        }
-      : null
-  }
-
-  return null
-}
-
-function resolveFunctionReturnNameFromCall(expression) {
-  return expression?.type === 'CallExpression' &&
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1
-    ? expression.callee.path[0]
-    : null
-}
-
-function resolveRuntimeForOfSet(expression, context) {
-  const elementType = resolveRuntimeSetElementType(expression, context)
-
-  if (elementType == null) {
-    return null
-  }
-
-  const receiver = emitPreparedCollectionReceiver(expression, context)
-
-  if (receiver == null || receiver.type !== 'set') {
-    return null
-  }
-
-  return {
-    name: receiver.expression,
-    elementType,
-    lines: receiver.lines
-  }
-}
-
-function resolveRuntimeForOfMap(expression, context) {
-  const mapType = resolveRuntimeMapType(expression, context)
-
-  if (mapType == null) {
-    return null
-  }
-
-  const receiver = emitPreparedCollectionReceiver(expression, context)
-
-  if (receiver == null || receiver.type !== 'map') {
-    return null
-  }
-
-  return {
-    name: receiver.expression,
-    keyType: mapType.key,
-    valueType: mapType.value,
-    lines: receiver.lines
-  }
 }
 
 function isBytesSliceCall(expression, context) {
