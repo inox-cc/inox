@@ -44,7 +44,6 @@ import {
   emitStatusResultDeclarations,
   emitThrowingFunctionErrorTransfer,
   isRuntimeBoxedValueType,
-  narrowNullableScalars,
   nextCName,
   registerBoxedValue,
   registerEventLoop,
@@ -329,6 +328,7 @@ import {
   resolveRuntimeStringReference,
   type StringLoweringDependencies
 } from './values/strings.ts'
+import { emitStatementBody, emitStatementList, type StatementLoweringDependencies } from './values/statements.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -344,6 +344,11 @@ const nullableLoweringDependencies: NullableLoweringDependencies = {
   inferExpressionType,
   isNumberConversionCall,
   resolveRuntimeCallbackCalleeType
+}
+
+const statementLoweringDependencies: StatementLoweringDependencies = {
+  emitStatement,
+  resolveNullableScalarConditionNarrowing
 }
 
 const classLoweringDependencies: ClassLoweringDependencies = {
@@ -1368,6 +1373,7 @@ function createBaseContext(
     classInfos: new Map(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
+    statementLoweringDependencies,
     classLoweringDependencies,
     nullableLoweringDependencies,
     collectionLoweringDependencies,
@@ -3553,54 +3559,6 @@ function withErrorTarget(context, target, callback) {
   } finally {
     context.errorTargets.pop()
   }
-}
-
-function emitStatementBody(statement, context) {
-  if (statement.type === 'BlockStatement') {
-    return emitStatementList(statement.body, context)
-  }
-
-  return emitStatement(statement, context)
-}
-
-function emitStatementList(statements, context) {
-  return statements.flatMap((statement) => {
-    const lines = emitStatement(statement, context)
-
-    applyNullableScalarEarlyReturnNarrowing(statement, context)
-
-    return lines
-  })
-}
-
-function applyNullableScalarEarlyReturnNarrowing(statement, context) {
-  if (
-    statement.type !== 'IfStatement' ||
-    statement.alternate != null ||
-    !statementDefinitelyReturns(statement.consequent)
-  ) {
-    return
-  }
-
-  const narrowing = resolveNullableScalarConditionNarrowing(statement.condition, context)
-
-  narrowNullableScalars(context, narrowing.falseNames)
-}
-
-function statementDefinitelyReturns(statement) {
-  if (statement.type === 'ReturnStatement') {
-    return true
-  }
-
-  if (statement.type === 'BlockStatement') {
-    return statement.body.some(statementDefinitelyReturns)
-  }
-
-  if (statement.type === 'IfStatement' && statement.alternate != null) {
-    return statementDefinitelyReturns(statement.consequent) && statementDefinitelyReturns(statement.alternate)
-  }
-
-  return false
 }
 
 function emitForInitializer(init, context) {
