@@ -253,6 +253,18 @@ import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } 
 import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import {
+  emitObjectValueReference,
+  isIndexAccessExpression,
+  isMemberAccessExpression,
+  registerObjectShape,
+  resolveCObjectExpressionName,
+  resolveKnownObjectIndex,
+  resolveKnownObjectMember,
+  resolveObjectExpressionIndex,
+  resolveObjectExpressionMember,
+  updateKnownObjectMemberValueType
+} from './values/objects.ts'
+import {
   emitPreparedCollectionReceiver,
   emitPreparedCollectionSizeExpression,
   resolveRuntimeForOfMap,
@@ -13446,176 +13458,6 @@ function emitPreparedSetMethodCall(name, expression, context) {
     lines: [],
     expression: '0'
   }
-}
-
-function isMemberAccessExpression(expression) {
-  return expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression'
-}
-
-function isIndexAccessExpression(expression) {
-  return expression?.type === 'IndexExpression' || expression?.type === 'OptionalIndexExpression'
-}
-
-function resolveKnownObjectMember(expression, context) {
-  if (!isMemberAccessExpression(expression)) {
-    return null
-  }
-
-  const objectName = resolveCObjectExpressionName(expression.object)
-
-  if (objectName == null) {
-    return null
-  }
-
-  const fields = context.objectShapes.get(objectName)
-
-  if (fields == null) {
-    return null
-  }
-
-  const index = fields.findIndex((field) => field.name === expression.property)
-
-  if (index === -1) {
-    return null
-  }
-
-  return {
-    objectName,
-    key: null,
-    index,
-    valueType: fields[index].valueType,
-    arrayElementType: fields[index].arrayElementType,
-    mapKeyType: fields[index].mapKeyType,
-    mapValueType: fields[index].mapValueType,
-    setElementType: fields[index].setElementType
-  }
-}
-
-function resolveObjectExpressionMember(expression) {
-  if (!isMemberAccessExpression(expression)) {
-    return null
-  }
-
-  return resolveObjectExpressionShapeField(expression.object, expression.property)
-}
-
-function emitObjectValueReference(name, context) {
-  return context.boxedVariables.has(name) && context.variables.get(name) === 'object' ? `(*${name})` : name
-}
-
-function resolveKnownObjectIndex(expression, context) {
-  if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
-    return null
-  }
-
-  const objectName = resolveCObjectExpressionName(expression.object)
-
-  if (objectName == null) {
-    return null
-  }
-
-  const fields = context.objectShapes.get(objectName)
-
-  if (fields == null) {
-    return null
-  }
-
-  const index = fields.findIndex((field) => field.name === expression.index.value)
-
-  if (index === -1) {
-    return null
-  }
-
-  return {
-    objectName,
-    key: expression.index.value,
-    index,
-    valueType: fields[index].valueType,
-    arrayElementType: fields[index].arrayElementType,
-    mapKeyType: fields[index].mapKeyType,
-    mapValueType: fields[index].mapValueType,
-    setElementType: fields[index].setElementType
-  }
-}
-
-function resolveObjectExpressionIndex(expression) {
-  if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
-    return null
-  }
-
-  return resolveObjectExpressionShapeField(expression.object, expression.index.value)
-}
-
-function resolveObjectExpressionShapeField(objectExpression, key) {
-  const fields = objectExpression?.shape?.fields
-
-  if (fields == null) {
-    return null
-  }
-
-  const index = fields.findIndex((field) => field.name === key)
-
-  if (index === -1) {
-    return null
-  }
-
-  return {
-    key,
-    index,
-    valueType: fields[index].valueType,
-    arrayElementType: fields[index].arrayElementType,
-    mapKeyType: fields[index].mapKeyType,
-    mapValueType: fields[index].mapValueType,
-    setElementType: fields[index].setElementType
-  }
-}
-
-function resolveCObjectExpressionName(expression) {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return expression.path[0]
-  }
-
-  if (expression?.type === 'ThisExpression') {
-    return 'this'
-  }
-
-  return null
-}
-
-function updateKnownObjectMemberValueType(member, valueType, context) {
-  if (valueType === 'unknown') {
-    return
-  }
-
-  const fields = context.objectShapes.get(member.objectName)
-
-  if (fields == null || fields[member.index] == null) {
-    return
-  }
-
-  fields[member.index] = {
-    ...fields[member.index],
-    valueType
-  }
-}
-
-function registerObjectShape(context, name, shape) {
-  if (shape?.fields == null) {
-    return
-  }
-
-  context.objectShapes.set(
-    name,
-    shape.fields.map((field) => ({
-      name: field.name,
-      ownership: field.ownership ?? 'strong',
-      valueType: field.valueType,
-      arrayElementType: field.arrayElementType,
-      mapKeyType: field.mapKeyType,
-      mapValueType: field.mapValueType,
-      setElementType: field.setElementType
-    }))
-  )
 }
 
 function isBytesSliceCall(expression, context) {
