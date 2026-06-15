@@ -23,6 +23,12 @@ import {
 } from './promises.ts'
 import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
 import type { IrFunctionDeclaration } from '../../types.ts'
+import type {
+  CKnownArrayElement,
+  CKnownObjectField,
+  CKnownObjectIndexField,
+  CRuntimeArrayElement
+} from '../types.ts'
 import type { IrFunctionNodeEntry } from '../../ir.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
@@ -64,11 +70,11 @@ export type AsyncTaskLoweringDependencies = {
   ) => void
   resolveFunctionDeclarationParams: (name: string, fallback: any[], context: CEmitContext) => any[]
   resolveFunctionParams: (callee: any, context: CFunctionContext) => any[] | null
-  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => CKnownArrayElement | null
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CKnownObjectIndexField | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CKnownObjectField | null
   resolveRuntimeArrayElementType: (expression: any, context: CFunctionContext) => string | null
-  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => CRuntimeArrayElement | null
   resolveRuntimeMapType: (expression: any, context: CFunctionContext) => { key: string; value: string } | null
   resolveRuntimeSetElementType: (expression: any, context: CFunctionContext) => string | null
   resolveRuntimeStringReference: (expression: any, context: CFunctionContext) => string | null

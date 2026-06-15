@@ -22,9 +22,13 @@ import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
 import type {
+  CKnownArrayElement,
+  CKnownObjectField,
+  CKnownObjectIndexField,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
-  CPreparedStatement as PreparedStatement
+  CPreparedStatement as PreparedStatement,
+  CRuntimeArrayElement
 } from '../types.ts'
 
 
@@ -45,8 +49,12 @@ export type StatementLoweringDependencies = {
   emitDgramNumberVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
   emitDgramSocketVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
   emitDgramSocketCallStatement: (expression: any, context: CFunctionContext) => string[] | null
-  emitDynamicObjectMemberVariableDeclaration: (statement: any, member: any, context: CFunctionContext) => string[]
-  emitDynamicObjectMemberAssignment: (expression: any, member: any, context: CFunctionContext) => string[]
+  emitDynamicObjectMemberVariableDeclaration: (
+    statement: any,
+    member: CKnownObjectIndexField,
+    context: CFunctionContext
+  ) => string[]
+  emitDynamicObjectMemberAssignment: (expression: any, member: CKnownObjectIndexField, context: CFunctionContext) => string[]
   emitErrorObjectVariableDeclaration: (statement: any, context: CFunctionContext) => string[]
   emitFailureStatement: (context: CFunctionContext) => string
   emitFetchAbortControllerVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
@@ -62,10 +70,18 @@ export type StatementLoweringDependencies = {
   emitHttpServerVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
   emitHttpServerCallStatement: (expression: any, context: CFunctionContext) => string[] | null
   emitJsonParseVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
-  emitKnownArrayIndexAssignment: (expression: any, element: any, context: CFunctionContext) => string[]
-  emitKnownArrayIndexVariableDeclaration: (statement: any, element: any, context: CFunctionContext) => string[]
-  emitKnownObjectMemberAssignment: (expression: any, member: any, context: CFunctionContext) => string[]
-  emitKnownObjectMemberVariableDeclaration: (statement: any, member: any, context: CFunctionContext) => string[]
+  emitKnownArrayIndexAssignment: (expression: any, element: CKnownArrayElement, context: CFunctionContext) => string[]
+  emitKnownArrayIndexVariableDeclaration: (
+    statement: any,
+    element: CKnownArrayElement,
+    context: CFunctionContext
+  ) => string[]
+  emitKnownObjectMemberAssignment: (expression: any, member: CKnownObjectField, context: CFunctionContext) => string[]
+  emitKnownObjectMemberVariableDeclaration: (
+    statement: any,
+    member: CKnownObjectField,
+    context: CFunctionContext
+  ) => string[]
   emitNetAddressMemberVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
   emitNetAddressVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
   emitNetNumberVariableDeclaration: (statement: any, context: CFunctionContext) => string[] | null
@@ -133,16 +149,16 @@ export type StatementLoweringDependencies = {
   isRuntimeProducedStringExpression: (expression: any, context: CFunctionContext) => boolean
   registerErrorObjectShape: (context: CFunctionContext, name: string) => void
   resolveForOfElementType: (elements: any[]) => string
-  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => CKnownArrayElement | null
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CKnownObjectIndexField | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CKnownObjectField | null
   resolveKnownForOfArray: (expression: any, context: CFunctionContext) => any | null
   resolveNullableScalarConditionNarrowing: (expression: any, context: CFunctionContext) => {
     trueNames: string[]
     falseNames: string[]
   }
   resolveRuntimeStringReference: (expression: any, context: CFunctionContext) => string | null
-  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => CRuntimeArrayElement | null
   resolveRuntimeForOfArray: (expression: any, context: CFunctionContext) => any | null
   resolveRuntimeForOfMap: (expression: any, context: CFunctionContext) => any | null
   resolveRuntimeForOfSet: (expression: any, context: CFunctionContext) => any | null

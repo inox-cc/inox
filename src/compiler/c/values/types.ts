@@ -1,6 +1,7 @@
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { isOptionalChainExpression } from '../syntax.ts'
 import type { CFunctionContext } from '../context.ts'
+import type { CKnownArrayElement, CKnownObjectField, CKnownObjectIndexField, CRuntimeArrayElement } from '../types.ts'
 
 export type CExpressionTypeDependencies = {
   binaryRuntimeExpressionReturnType: (expression: any) => string | null
@@ -40,13 +41,13 @@ export type CExpressionTypeDependencies = {
   isStringTrimCall: (expression: any, context: CFunctionContext) => boolean
   knownValueType: (valueType: any) => string | null
   mathRuntimeMethodName: (callee: any) => string | null
-  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => CKnownArrayElement | null
   resolveKnownArrayLength: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CKnownObjectIndexField | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CKnownObjectField | null
   resolveNetAddressStringMember: (expression: any, context: CFunctionContext) => string | null
   resolvePromiseExpressionValueType: (expression: any, context: CFunctionContext) => string | null
-  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => CRuntimeArrayElement | null
 }
 
 export function inferExpressionType(

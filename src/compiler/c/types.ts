@@ -35,6 +35,59 @@ export type CPreparedCallOptions = {
   owned?: boolean
 }
 
+export type CShapeValueMetadata = {
+  arrayElementType?: string | null
+  mapKeyType?: string | null
+  mapValueType?: string | null
+  setElementType?: string | null
+  valueType: string
+}
+
+export type CObjectShapeField = CShapeValueMetadata & {
+  name: string
+  ownership?: string
+  readonly?: boolean
+}
+
+export type CObjectFieldInfo = CShapeValueMetadata & {
+  index: number
+  key: string | null
+  objectName?: string
+}
+
+export type CObjectIndexFieldInfo = CObjectFieldInfo & {
+  key: string
+}
+
+export type CObjectMemberFieldInfo = CObjectFieldInfo & {
+  key: null
+}
+
+export type CKnownObjectField = CObjectFieldInfo & {
+  objectName: string
+}
+
+export type CKnownObjectIndexField = CKnownObjectField & {
+  key: string
+}
+
+export type CKnownObjectMemberField = CKnownObjectField & {
+  key: null
+}
+
+export type CArrayElementInfo = {
+  valueType: string
+}
+
+export type CKnownArrayElement = CArrayElementInfo & {
+  arrayName: string
+  index: number
+}
+
+export type CRuntimeArrayElement = CArrayElementInfo & {
+  index: number
+}
+
 export type CModuleOutputFile = {
   kind: 'header' | 'source'
   path: string

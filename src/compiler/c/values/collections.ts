@@ -9,7 +9,11 @@ import {
 } from '../context.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+import type {
+  CObjectFieldInfo,
+  CObjectIndexFieldInfo,
+  CPreparedExpression as PreparedExpression
+} from '../types.ts'
 
 type PreparedCollectionCall = PreparedExpression
 
@@ -19,8 +23,8 @@ export type CollectionLoweringDependencies = {
   isIndexAccessExpression: (expression: any) => boolean
   isMemberAccessExpression: (expression: any) => boolean
   reportCCollectionHashability: (valueType: string, subject: string, loc: any, context: CFunctionContext) => void
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CObjectIndexFieldInfo | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CObjectFieldInfo | null
 }
 
 const mapMethodDescriptors = {

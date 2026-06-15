@@ -1,4 +1,5 @@
 import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
+import type { CArrayElementInfo, CObjectShapeField } from './types.ts'
 
 export type CEmitContext = {
   diagnostics: any[]
@@ -9,6 +10,7 @@ export type CEmitContext = {
 }
 
 export type CFunctionContext = CEmitContext & {
+  arrayShapes: Map<string, CArrayElementInfo[]>
   boxedValueTypes: Map<string, any>
   boxedValues: string[]
   boxedVariables: Set<string>
@@ -22,8 +24,10 @@ export type CFunctionContext = CEmitContext & {
   ownedCryptoHmacs: string[]
   ownedPromises: string[]
   ownedValues: string[]
+  objectShapes: Map<string, CObjectShapeField[]>
   returnNullable: boolean
   returnType: string
+  runtimeArrayElementTypes: Map<string, string>
   statusReturn: boolean
   throwingFunction: boolean
   usedCleanupGoto: boolean

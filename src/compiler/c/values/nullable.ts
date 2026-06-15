@@ -21,7 +21,7 @@ import {
   resolveObjectExpressionIndex,
   resolveObjectExpressionMember
 } from './objects.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+import type { CPreparedExpression as PreparedExpression, CRuntimeArrayElement } from '../types.ts'
 
 export type NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression: (
@@ -368,7 +368,11 @@ function emitCOptionalObjectReadValueExpression(
   }
 }
 
-function emitCOptionalArrayIndexValueExpression(arrayExpression: any, element: any, context: CFunctionContext) {
+function emitCOptionalArrayIndexValueExpression(
+  arrayExpression: any,
+  element: CRuntimeArrayElement,
+  context: CFunctionContext
+) {
   const array = nullableDeps(context).emitCValueExpression(arrayExpression, context)
   const temp = nextCName(context, 'ccjs_optional_value')
   const expectedTag = cRuntimeValueTag(element.valueType)

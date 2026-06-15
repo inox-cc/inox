@@ -11,8 +11,11 @@ import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import type {
+  CKnownArrayElement,
+  CObjectFieldInfo,
   CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression
+  CPreparedExpression as PreparedExpression,
+  CRuntimeArrayElement
 } from '../types.ts'
 
 export type ArrayLoweringDependencies = {
@@ -21,8 +24,8 @@ export type ArrayLoweringDependencies = {
   emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   inferExpressionType: (expression: any, context: CFunctionContext) => string
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CObjectFieldInfo | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CObjectFieldInfo | null
 }
 
 function arrayDeps(context: CFunctionContext): ArrayLoweringDependencies {
@@ -45,7 +48,7 @@ export function isArrayLengthExpression(expression: any, context: CFunctionConte
   )
 }
 
-export function resolveKnownArrayIndex(expression: any, context: CFunctionContext) {
+export function resolveKnownArrayIndex(expression: any, context: CFunctionContext): CKnownArrayElement | null {
   if (
     expression?.type !== 'IndexExpression' ||
     expression.object.type !== 'Reference' ||
@@ -75,7 +78,7 @@ export function resolveKnownArrayIndex(expression: any, context: CFunctionContex
   }
 }
 
-export function resolveRuntimeArrayIndex(expression: any, context: CFunctionContext) {
+export function resolveRuntimeArrayIndex(expression: any, context: CFunctionContext): CRuntimeArrayElement | null {
   if (expression?.type !== 'IndexExpression' || expression.index.type !== 'NumberLiteral') {
     return null
   }
@@ -96,7 +99,7 @@ export function resolveRuntimeArrayIndex(expression: any, context: CFunctionCont
       }
 }
 
-export function resolveOptionalRuntimeArrayIndex(expression: any, context: CFunctionContext) {
+export function resolveOptionalRuntimeArrayIndex(expression: any, context: CFunctionContext): CRuntimeArrayElement | null {
   if (expression?.type !== 'OptionalIndexExpression' || expression.index.type !== 'NumberLiteral') {
     return null
   }
@@ -157,7 +160,7 @@ function resolveFunctionReturnNameFromCall(expression) {
 
 export function emitPreparedRuntimeArrayIndexValue(
   expression: any,
-  element: any,
+  element: CRuntimeArrayElement,
   context: CFunctionContext,
   prefix = 'ccjs_array_item'
 ) {
@@ -319,7 +322,11 @@ export function resolveForOfElementType(elements) {
   return elements.every((element) => element.valueType === first.valueType) ? first.valueType : 'unknown'
 }
 
-export function updateKnownArrayElementValueType(element: any, valueType: string, context: CFunctionContext) {
+export function updateKnownArrayElementValueType(
+  element: CKnownArrayElement,
+  valueType: string,
+  context: CFunctionContext
+): void {
   if (valueType === 'unknown') {
     return
   }

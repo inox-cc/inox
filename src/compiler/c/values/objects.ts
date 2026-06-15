@@ -9,7 +9,14 @@ import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+import type {
+  CKnownObjectField,
+  CKnownObjectIndexField,
+  CKnownObjectMemberField,
+  CObjectFieldInfo,
+  CObjectIndexFieldInfo,
+  CPreparedExpression as PreparedExpression
+} from '../types.ts'
 
 export type ObjectVariableDeclarationDependencies = {
   emitCFieldFlags: (field: any) => string
@@ -25,7 +32,7 @@ export function isIndexAccessExpression(expression) {
   return expression?.type === 'IndexExpression' || expression?.type === 'OptionalIndexExpression'
 }
 
-export function resolveKnownObjectMember(expression: any, context: CFunctionContext) {
+export function resolveKnownObjectMember(expression: any, context: CFunctionContext): CKnownObjectMemberField | null {
   if (!isMemberAccessExpression(expression)) {
     return null
   }
@@ -60,7 +67,7 @@ export function resolveKnownObjectMember(expression: any, context: CFunctionCont
   }
 }
 
-export function resolveObjectExpressionMember(expression) {
+export function resolveObjectExpressionMember(expression: any): CObjectFieldInfo | null {
   if (!isMemberAccessExpression(expression)) {
     return null
   }
@@ -72,7 +79,7 @@ export function emitObjectValueReference(name: string, context: CFunctionContext
   return context.boxedVariables.has(name) && context.variables.get(name) === 'object' ? `(*${name})` : name
 }
 
-export function resolveKnownObjectIndex(expression: any, context: CFunctionContext) {
+export function resolveKnownObjectIndex(expression: any, context: CFunctionContext): CKnownObjectIndexField | null {
   if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
     return null
   }
@@ -107,7 +114,7 @@ export function resolveKnownObjectIndex(expression: any, context: CFunctionConte
   }
 }
 
-export function resolveObjectExpressionIndex(expression) {
+export function resolveObjectExpressionIndex(expression: any): CObjectIndexFieldInfo | null {
   if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
     return null
   }
@@ -115,7 +122,7 @@ export function resolveObjectExpressionIndex(expression) {
   return resolveObjectExpressionShapeField(expression.object, expression.index.value)
 }
 
-function resolveObjectExpressionShapeField(objectExpression, key) {
+function resolveObjectExpressionShapeField(objectExpression: any, key: string): CObjectIndexFieldInfo | null {
   const fields = objectExpression?.shape?.fields
 
   if (fields == null) {
@@ -151,7 +158,11 @@ export function resolveCObjectExpressionName(expression) {
   return null
 }
 
-export function updateKnownObjectMemberValueType(member: any, valueType: string, context: CFunctionContext) {
+export function updateKnownObjectMemberValueType(
+  member: CKnownObjectField,
+  valueType: string,
+  context: CFunctionContext
+): void {
   if (valueType === 'unknown') {
     return
   }
@@ -193,7 +204,7 @@ export function emitPreparedKnownObjectIndexValueExpression(expression: any, con
 }
 
 function emitPreparedKnownObjectFieldValueExpression(
-  field: any,
+  field: CKnownObjectField,
   expression: any,
   context: CFunctionContext,
   emitGetCall: (temp: string) => string

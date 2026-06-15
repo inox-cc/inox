@@ -38,9 +38,13 @@ import {
   resolveNullableScalarConditionNarrowing
 } from './nullable.ts'
 import type {
+  CKnownArrayElement,
+  CKnownObjectField,
+  CKnownObjectIndexField,
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression
+  CPreparedExpression as PreparedExpression,
+  CRuntimeArrayElement
 } from '../types.ts'
 
 
@@ -65,7 +69,7 @@ export type CScalarExpressionDependencies = {
   emitPreparedProcessNumberExpression: (expression: any) => PreparedExpression | null
   emitPreparedRuntimeArrayIndexValue: (
     expression: any,
-    element: any,
+    element: CRuntimeArrayElement,
     context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedExpression
@@ -80,10 +84,10 @@ export type CScalarExpressionDependencies = {
   isMemberAccessExpression: (expression: any) => boolean
   isStringPredicateCall: (expression: any, context: CFunctionContext) => boolean
   reportCJsGlobalDiagnostic: (diagnostics: any, loc: any) => void
-  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
-  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => CKnownArrayElement | null
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CKnownObjectIndexField | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CKnownObjectField | null
+  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => CRuntimeArrayElement | null
 }
 
 

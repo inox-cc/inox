@@ -23,7 +23,7 @@ import { cUnsupportedExpressionCode, isNullishCoalescingExpression, isOptionalCh
 import { isStringPredicateMethod, isStringRuntimeMethod } from '../../stdlib/descriptors/collections.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
 import type { Diagnostic, SourceLocation } from '../../types.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+import type { CObjectFieldInfo, CPreparedExpression as PreparedExpression } from '../types.ts'
 
 type StringDiagnosticContext = {
   diagnostics: Diagnostic[]
@@ -50,7 +50,7 @@ export type StringLoweringDependencies = {
   isBoxedRuntimeStringName: (name: string, context: CFunctionContext) => boolean
   isBoxedRuntimeStringReference: (expression: any, context: CFunctionContext) => boolean
   isMemberAccessExpression: (expression: any) => boolean
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CObjectFieldInfo | null
   resolveNetAddressStringMember: (expression: any, context: CFunctionContext) => string | null
 }
 
