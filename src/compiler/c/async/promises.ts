@@ -101,16 +101,24 @@ export function resolveCAsyncFunctionAwaitValueType(callee: any, context: any): 
 
 
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
+import { diagnostic } from '../../diagnostics.ts'
 import {
   createFunctionContext,
   emitBoxedValueCleanup,
   emitBoxedValueDeclarations,
+  emitEventLoopReference,
   emitErrorChannelDeclarations,
+  emitFailureStatement,
   emitLoopFlowDeclarations,
   emitOwnedValueCleanup,
   emitOwnedValueDeclarations,
+  emitPrepareOwnedValueWrite,
   emitReturnFlowDeclarations,
-  emitRuntimeTypeCheck
+  emitRuntimeTypeCheck,
+  emitStatusCheck,
+  nextCName,
+  registerEventLoop,
+  registerOwnedPromise
 } from '../context.ts'
 import { isManagedRuntimeReturnType } from '../value-types.ts'
 import type { CallbackLoweringDependencies } from './callbacks.ts'
@@ -119,6 +127,14 @@ import type { IrProgram } from '../../types.ts'
 type PreparedExpression = {
   lines: string[]
   expression: string
+  valueType?: string
+  rejectionValueType?: string
+  nullable?: boolean
+}
+
+type PreparedCallOptions = {
+  out?: string
+  owned?: boolean
 }
 
 export type PromiseChainLoweringDependencies = {
@@ -131,6 +147,536 @@ export type PromiseChainLoweringDependencies = {
   emitStatementList: (statements: any[], context: any) => string[]
   functionUsesExternalEventLoop: (node: any, externalNames: Set<any>) => boolean
   isPromiseChainCallbackWrapperWithContext: (wrapper: any) => boolean
+}
+
+export type PromiseLoweringDependencies = {
+  emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  emitPreparedAsyncFunctionPromiseCallExpression: (
+    expression: any,
+    context: any,
+    options?: PreparedCallOptions
+  ) => PreparedExpression | null
+  emitPreparedCallExpression: (expression: any, context: any) => PreparedExpression
+  emitPreparedFetchCallExpression: (
+    expression: any,
+    context: any,
+    options?: PreparedCallOptions
+  ) => PreparedExpression | null
+  emitPreparedFsCallExpression: (
+    expression: any,
+    context: any,
+    options?: PreparedCallOptions
+  ) => PreparedExpression | null
+  emitRuntimeArrowCaptureStoreLines: (capture: any, contextName: string, context: any) => string[]
+  emitStatementList: (statements: any[], context: any) => string[]
+  inferExpressionType: (expression: any, context: any) => string
+  inferRejectedValueType: (expression: any, context: any) => string
+  isPromiseChainCallbackWrapperWithContext: (wrapper: any) => boolean
+}
+
+export function emitPreparedPromiseStaticExpression(
+  expression: any,
+  context: any,
+  dependencies: PromiseLoweringDependencies,
+  options: PreparedCallOptions = {}
+): PreparedExpression | null {
+  const method = cPromiseRuntimeCallName(expression?.callee)
+
+  if (method == null || expression?.valueType !== 'promise') {
+    return null
+  }
+
+  registerEventLoop(context)
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const rejectionValueType = method === 'reject' ? dependencies.inferRejectedValueType(expression.args[0], context) : 'unknown'
+
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, expression.promiseValueType ?? 'unknown', rejectionValueType)
+  }
+  const runtimeCall = method === 'resolve' ? 'ccjs_promise_resolved' : 'ccjs_promise_rejected'
+  const value =
+    expression.args[0] == null
+      ? {
+          lines: [],
+          expression: 'ccjs_undefined_value()'
+        }
+      : dependencies.emitCValueExpression(expression.args[0], context)
+
+  return {
+    lines: [
+      ...value.lines,
+      emitStatusCheck(`${runtimeCall}(${emitEventLoopReference(context)}, ${value.expression}, &${out})`, context)
+    ],
+    expression: out,
+    rejectionValueType
+  }
+}
+
+export function emitPreparedPromiseConstructorExpression(
+  expression: any,
+  context: any,
+  dependencies: PromiseLoweringDependencies,
+  options: PreparedCallOptions = {}
+): PreparedExpression | null {
+  if (!isPromiseConstructorExpression(expression) || expression?.valueType !== 'promise') {
+    return null
+  }
+
+  registerEventLoop(context)
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const executor = expression.args[0]
+  const valueType = expression.promiseValueType ?? 'unknown'
+  const rejectionValueType = promiseConstructorRejectionValueType(executor, context, dependencies)
+
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, valueType, rejectionValueType)
+  }
+
+  const lines = [emitStatusCheck(`ccjs_promise_new(${emitEventLoopReference(context)}, &${out})`, context)]
+
+  if (executor?.type !== 'ArrowFunctionExpression') {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_ASYNC',
+        'Promise constructor currently supports only arrow-function executors in C',
+        expression.loc
+      )
+    )
+
+    return {
+      lines,
+      expression: out,
+      valueType,
+      rejectionValueType
+    }
+  }
+
+  const resolveName = executor.params[0]?.name ?? null
+  const rejectName = executor.params[1]?.name ?? null
+  const statements = executor.expressionBody
+    ? [
+        {
+          type: 'ExpressionStatement',
+          expression: executor.body,
+          loc: executor.body?.loc ?? executor.loc
+        }
+      ]
+    : executor.body
+
+  lines.push(
+    ...withPromiseConstructorHandlers(context, resolveName, rejectName, out, () =>
+      dependencies.emitStatementList(statements, context)
+    )
+  )
+
+  return {
+    lines,
+    expression: out,
+    valueType,
+    rejectionValueType
+  }
+}
+
+export function emitPromiseConstructorSettlementCall(
+  expression: any,
+  context: any,
+  dependencies: PromiseLoweringDependencies
+): string[] | null {
+  if (
+    expression?.type !== 'CallExpression' ||
+    expression.callee?.type !== 'Reference' ||
+    expression.callee.path.length !== 1
+  ) {
+    return null
+  }
+
+  const handler = context.promiseConstructorHandlers.get(expression.callee.path[0])
+
+  if (handler == null) {
+    return null
+  }
+
+  if (expression.args.length > 1) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_ASYNC',
+        'Promise constructor resolve/reject handlers currently support at most one argument in C',
+        expression.loc
+      )
+    )
+  }
+
+  const value =
+    expression.args[0] == null
+      ? {
+          lines: [],
+          expression: 'ccjs_undefined_value()'
+        }
+      : dependencies.emitCValueExpression(expression.args[0], context)
+  const runtimeCall = handler.kind === 'resolve' ? 'ccjs_promise_resolve' : 'ccjs_promise_reject'
+
+  return [...value.lines, emitStatusCheck(`${runtimeCall}(${handler.promise}, ${value.expression})`, context)]
+}
+
+export function emitPreparedPromiseMethodExpression(
+  expression: any,
+  context: any,
+  dependencies: PromiseLoweringDependencies,
+  options: PreparedCallOptions = {}
+): PreparedExpression | null {
+  if (!isPromiseMethodCallExpression(expression, context, dependencies)) {
+    return null
+  }
+
+  const method = expression.callee.property
+  const callback = expression.args[0]
+  const wrapper = callback == null ? null : context.promiseChainArrowWrappers.get(callback)
+
+  if (wrapper == null) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_ASYNC',
+        'Promise.then/catch currently supports only non-capturing expression-body, single-return block-body, straight-line block-body or simple control-flow block-body arrow callbacks in C',
+        expression.loc
+      )
+    )
+
+    return {
+      lines: [],
+      expression: '0',
+      valueType: expression.promiseValueType ?? 'unknown',
+      rejectionValueType: 'unknown'
+    }
+  }
+
+  const receiver = emitPreparedPromiseExpression(expression.callee.object, context, dependencies)
+
+  if (receiver == null) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_ASYNC',
+        'this Promise chain receiver is not supported by the current C backend slice',
+        expression.loc
+      )
+    )
+
+    return {
+      lines: [],
+      expression: '0',
+      valueType: expression.promiseValueType ?? 'unknown',
+      rejectionValueType: 'unknown'
+    }
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const valueType = expression.promiseValueType ?? 'unknown'
+  const rejectionValueType = method === 'then' ? (receiver.rejectionValueType ?? 'unknown') : 'unknown'
+  const callbackContext = emitPromiseChainCallbackContext(wrapper, context, dependencies)
+  const runtimeCall =
+    method === 'then'
+      ? `ccjs_promise_chain(${receiver.expression}, ${wrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
+      : `ccjs_promise_catch(${receiver.expression}, ${wrapper.name}, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
+  const runtimeCallLines =
+    callbackContext.expression === '0'
+      ? [emitStatusCheck(runtimeCall, context)]
+      : [
+          `if (${runtimeCall} != CCJS_OK) {`,
+          `  ${wrapper.finalizerName}(${callbackContext.expression});`,
+          `  ${emitFailureStatement(context)}`,
+          '}'
+        ]
+
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, valueType, rejectionValueType)
+  }
+
+  return {
+    lines: [...receiver.lines, ...callbackContext.lines, ...runtimeCallLines],
+    expression: out,
+    valueType,
+    rejectionValueType
+  }
+}
+
+export function emitPreparedPromiseExpression(
+  expression: any,
+  context: any,
+  dependencies: PromiseLoweringDependencies,
+  options: PreparedCallOptions = {}
+): PreparedExpression | null {
+  const fetchCall = dependencies.emitPreparedFetchCallExpression(expression, context, options)
+
+  if (fetchCall != null) {
+    return {
+      ...fetchCall,
+      valueType: resolvePromiseExpressionValueType(expression, context) ?? fetchCall.valueType ?? 'unknown'
+    }
+  }
+
+  const fsCall = dependencies.emitPreparedFsCallExpression(expression, context, options)
+
+  if (fsCall != null) {
+    return {
+      ...fsCall,
+      valueType: resolvePromiseExpressionValueType(expression, context) ?? 'unknown'
+    }
+  }
+
+  const promiseConstructor = emitPreparedPromiseConstructorExpression(expression, context, dependencies, options)
+
+  if (promiseConstructor != null) {
+    return {
+      ...promiseConstructor,
+      valueType: resolvePromiseExpressionValueType(expression, context) ?? promiseConstructor.valueType ?? 'unknown'
+    }
+  }
+
+  const promiseResolve = emitPreparedPromiseStaticExpression(expression, context, dependencies, options)
+
+  if (promiseResolve != null) {
+    return {
+      ...promiseResolve,
+      valueType: resolvePromiseExpressionValueType(expression, context) ?? 'unknown'
+    }
+  }
+
+  const promiseMethod = emitPreparedPromiseMethodExpression(expression, context, dependencies, options)
+
+  if (promiseMethod != null) {
+    return {
+      ...promiseMethod,
+      valueType: resolvePromiseExpressionValueType(expression, context) ?? 'unknown'
+    }
+  }
+
+  const asyncPromiseCall = dependencies.emitPreparedAsyncFunctionPromiseCallExpression(expression, context, options)
+
+  if (asyncPromiseCall != null) {
+    return {
+      ...asyncPromiseCall,
+      valueType: resolvePromiseExpressionValueType(expression, context) ?? 'unknown'
+    }
+  }
+
+  const promiseCall = emitPreparedPromiseReturningCallExpression(expression, context, dependencies, options)
+
+  if (promiseCall != null) {
+    return promiseCall
+  }
+
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+
+    if (context.variables.get(name) === 'promise') {
+      return {
+        lines: [],
+        expression: name,
+        valueType: context.promiseValueTypes.get(name) ?? 'unknown',
+        rejectionValueType: context.promiseRejectionValueTypes.get(name) ?? 'unknown'
+      }
+    }
+  }
+
+  return null
+}
+
+export function emitPreparedPromiseReturningCallExpression(
+  expression: any,
+  context: any,
+  dependencies: PromiseLoweringDependencies,
+  options: PreparedCallOptions = {}
+): PreparedExpression | null {
+  if (expression?.type !== 'CallExpression' || !isPromiseReturningFunctionCallee(expression.callee, context)) {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const valueType = resolvePromiseReturningFunctionValueType(expression.callee, context)
+  const call = dependencies.emitPreparedCallExpression(expression, context)
+
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, valueType)
+  }
+
+  return {
+    lines: [...call.lines, `${out} = ${call.expression};`, `if (${out} == 0) ${emitFailureStatement(context)}`],
+    expression: out,
+    valueType,
+    rejectionValueType: 'unknown'
+  }
+}
+
+function withPromiseConstructorHandlers(
+  context: any,
+  resolveName: string | null,
+  rejectName: string | null,
+  promise: string,
+  callback: () => string[]
+): string[] {
+  const previous = context.promiseConstructorHandlers
+  context.promiseConstructorHandlers = new Map(previous)
+
+  if (resolveName != null) {
+    context.promiseConstructorHandlers.set(resolveName, {
+      kind: 'resolve',
+      promise
+    })
+  }
+
+  if (rejectName != null) {
+    context.promiseConstructorHandlers.set(rejectName, {
+      kind: 'reject',
+      promise
+    })
+  }
+
+  try {
+    return callback()
+  } finally {
+    context.promiseConstructorHandlers = previous
+  }
+}
+
+function promiseConstructorRejectionValueType(
+  executor: any,
+  context: any,
+  dependencies: PromiseLoweringDependencies
+): string {
+  if (executor?.type !== 'ArrowFunctionExpression') {
+    return 'unknown'
+  }
+
+  const rejectName = executor.params[1]?.name
+
+  if (rejectName == null) {
+    return 'unknown'
+  }
+
+  const types: string[] = []
+  const visit = (node: any) => {
+    if (node == null) {
+      return
+    }
+
+    if (Array.isArray(node)) {
+      node.forEach(visit)
+      return
+    }
+
+    if (typeof node !== 'object') {
+      return
+    }
+
+    if (
+      node.type === 'CallExpression' &&
+      node.callee?.type === 'Reference' &&
+      node.callee.path.length === 1 &&
+      node.callee.path[0] === rejectName
+    ) {
+      types.push(dependencies.inferRejectedValueType(node.args[0], context))
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'loc' || key === 'callee') {
+        continue
+      }
+
+      visit(value)
+    }
+  }
+
+  visit(executor.expressionBody ? executor.body : executor.body)
+
+  return uniqueValueTypes(types)
+}
+
+function uniqueValueTypes(types: string[]): string {
+  const [first] = types
+
+  if (first == null) {
+    return 'unknown'
+  }
+
+  return types.every((type) => type === first) ? first : 'unknown'
+}
+
+function emitPromiseChainCallbackContext(
+  wrapper: any,
+  context: any,
+  dependencies: PromiseLoweringDependencies
+): {
+  lines: string[]
+  expression: string
+  finalizer: string
+} {
+  if (!dependencies.isPromiseChainCallbackWrapperWithContext(wrapper)) {
+    return {
+      lines: [],
+      expression: '0',
+      finalizer: '0'
+    }
+  }
+
+  const lines: string[] = []
+
+  for (const capture of wrapper.captures) {
+    if (capture.mutable) {
+      context.diagnostics.push(
+        diagnostic(
+          'CCJS_C_ASYNC',
+          'mutable Promise callback captures are outside the current C backend MVP; use const captures or move mutation outside the Promise callback',
+          wrapper.expression.loc
+        )
+      )
+    }
+
+    if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
+      context.diagnostics.push(
+        diagnostic(
+          'CCJS_C_ASYNC',
+          'capturing Promise callbacks currently support only const number/boolean/string/object bindings',
+          wrapper.expression.loc
+        )
+      )
+    }
+  }
+
+  const contextName = nextCName(context, 'ccjs_promise_callback_ctx')
+
+  lines.push(
+    `${wrapper.contextTypeName}* ${contextName} = ccjs_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
+  )
+  lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
+
+  if (wrapper.needsEventLoop === true) {
+    registerEventLoop(context)
+    lines.push(`${contextName}->ccjs_loop = ${emitEventLoopReference(context)};`)
+  }
+
+  for (const capture of wrapper.captures) {
+    lines.push(...dependencies.emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
+  }
+
+  return {
+    lines,
+    expression: contextName,
+    finalizer: wrapper.finalizerName
+  }
+}
+
+function isPromiseMethodCallExpression(
+  expression: any,
+  context: any,
+  dependencies: PromiseLoweringDependencies
+): boolean {
+  return (
+    expression?.type === 'CallExpression' &&
+    expression.callee?.type === 'MemberExpression' &&
+    ['catch', 'then'].includes(expression.callee.property) &&
+    dependencies.inferExpressionType(expression.callee.object, context) === 'promise'
+  )
 }
 
 export function collectPromiseChainWrappers(irPrograms: IrProgram[], context: any, deps: PromiseChainLoweringDependencies): Map<any, any> {
