@@ -4,6 +4,7 @@ import {
   emitStatusCheck,
   narrowNullableScalars,
   nextCName,
+  registerBoxedValue,
   registerOwnedValue,
   withNullableScalarNarrowing,
   withVariableScope
@@ -34,7 +35,6 @@ export type StatementLoweringDependencies = {
   emitArrayMapVariableDeclaration: (statement: any, mapped: any, context: any) => string[]
   emitArraySortVariableDeclaration: (statement: any, sorted: any, context: any) => string[]
   emitBoxedObjectVariableDeclaration: (statement: any, context: any) => string[]
-  emitBoxedRuntimeValueVariableDeclaration: (statement: any, expression: any, context: any) => string[]
   emitCAwaitValueExpression: (expression: any, context: any) => PreparedExpression
   emitCExpression: (expression: any, context: any) => string
   emitClassObjectVariableDeclaration: (statement: any, context: any) => string[]
@@ -400,6 +400,42 @@ export function isRuntimeValueLocalExpression(expression, context) {
     valueType === 'map' ||
     valueType === 'set'
   )
+}
+
+export function emitBoxedScalarVariableDeclaration(statement, context) {
+  const deps = statementDeps(context)
+  const value = deps.emitPreparedNumberExpression(statement.init, context)
+  const inferred = deps.inferExpressionType(statement.init, context)
+
+  registerBoxedValue(context, statement.name, inferred)
+  context.boxedVariables.add(statement.name)
+
+  return [
+    ...value.lines,
+    `${statement.name} = ccjs_default_alloc(0, sizeof(double), _Alignof(double));`,
+    `if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`,
+    `*${statement.name} = ${value.expression};`
+  ]
+}
+
+export function emitBoxedRuntimeValueVariableDeclaration(statement, expression, context) {
+  const deps = statementDeps(context)
+  const valueType = deps.inferExpressionType(expression, context)
+  const value = deps.emitCValueExpression(expression, context)
+  const tag = valueType === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
+
+  registerBoxedValue(context, statement.name, valueType)
+  context.boxedVariables.add(statement.name)
+  context.variables.set(statement.name, valueType)
+
+  return [
+    ...value.lines,
+    `${statement.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`,
+    `if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`,
+    `*${statement.name} = ${value.expression};`,
+    emitRuntimeTypeCheck(`(*${statement.name}).tag != ${tag} || (*${statement.name}).as.ref == 0`, context),
+    `ccjs_retain(*${statement.name});`
+  ]
 }
 
 export function reportCCollectionHashability(valueType, subject, loc, context) {
@@ -779,7 +815,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
   if (inferred === 'string') {
     if (context.boxedMutableCaptureDeclarations.has(statement)) {
       return {
-        lines: deps.emitBoxedRuntimeValueVariableDeclaration(statement, statement.init, context),
+        lines: emitBoxedRuntimeValueVariableDeclaration(statement, statement.init, context),
         expression: ''
       }
     }

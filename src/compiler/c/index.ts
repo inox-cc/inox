@@ -343,6 +343,8 @@ import {
   currentReturnTarget,
   emitBreakJump,
   emitBreakTargetLabel,
+  emitBoxedRuntimeValueVariableDeclaration,
+  emitBoxedScalarVariableDeclaration,
   emitCatchBindingTypeCheck,
   emitContinueJump,
   emitContinueTargetLabel,
@@ -403,7 +405,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitArrayMapVariableDeclaration,
   emitArraySortVariableDeclaration,
   emitBoxedObjectVariableDeclaration,
-  emitBoxedRuntimeValueVariableDeclaration,
   emitCAwaitValueExpression,
   emitClassObjectVariableDeclaration,
   emitCExpression,
@@ -2486,40 +2487,6 @@ function emitScalarVariableDeclaration(statement, context) {
   return [
     ...value.lines,
     `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${value.expression};`
-  ]
-}
-
-function emitBoxedScalarVariableDeclaration(statement, context) {
-  const value = emitPreparedNumberExpression(statement.init, context)
-  const inferred = inferExpressionType(statement.init, context)
-
-  registerBoxedValue(context, statement.name, inferred)
-  context.boxedVariables.add(statement.name)
-
-  return [
-    ...value.lines,
-    `${statement.name} = ccjs_default_alloc(0, sizeof(double), _Alignof(double));`,
-    `if (${statement.name} == 0) ${emitFailureStatement(context)}`,
-    `*${statement.name} = ${value.expression};`
-  ]
-}
-
-function emitBoxedRuntimeValueVariableDeclaration(statement, expression, context) {
-  const valueType = inferExpressionType(expression, context)
-  const value = emitCValueExpression(expression, context)
-  const tag = valueType === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
-
-  registerBoxedValue(context, statement.name, valueType)
-  context.boxedVariables.add(statement.name)
-  context.variables.set(statement.name, valueType)
-
-  return [
-    ...value.lines,
-    `${statement.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`,
-    `if (${statement.name} == 0) ${emitFailureStatement(context)}`,
-    `*${statement.name} = ${value.expression};`,
-    emitRuntimeTypeCheck(`(*${statement.name}).tag != ${tag} || (*${statement.name}).as.ref == 0`, context),
-    `ccjs_retain(*${statement.name});`
   ]
 }
 
