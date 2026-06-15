@@ -401,7 +401,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     emitDgramSocketVariableDeclaration(statement, context, dgramLoweringDependencies),
   emitDgramSocketCallStatement: (expression, context) =>
     emitDgramSocketCallStatement(expression, context, dgramLoweringDependencies),
-  emitDirentArrayIndexVariableDeclaration,
   emitDynamicObjectMemberVariableDeclaration,
   emitDynamicObjectMemberAssignment,
   emitErrorObjectVariableDeclaration,
@@ -2316,38 +2315,6 @@ function inferRejectedValueType(expression, context, localErrorObjectNames = con
   }
 
   return 'unknown'
-}
-
-function emitDirentArrayIndexVariableDeclaration(statement, context) {
-  const expression = statement.init
-
-  if (
-    expression?.type !== 'IndexExpression' ||
-    expression.object.type !== 'Reference' ||
-    expression.index.type !== 'NumberLiteral' ||
-    expression.arrayElementDeclaredType !== 'fs.Dirent'
-  ) {
-    return null
-  }
-
-  const index = Number.parseInt(expression.index.value, 10)
-
-  if (!Number.isInteger(index) || index < 0) {
-    return null
-  }
-
-  const array = emitCValueExpression(expression.object, context)
-  registerOwnedValue(context, statement.name)
-  context.variables.set(statement.name, 'object')
-  registerObjectShape(context, statement.name, expression.shape)
-
-  return [
-    ...array.lines,
-    ...emitPrepareOwnedValueWrite(statement.name),
-    emitStatusCheck(`ccjs_array_get(${array.expression}, ${index}, &${statement.name})`, context),
-    emitRuntimeValueCheck(statement.name, 'CCJS_TAG_OBJECT', context),
-    `ccjs_retain(${statement.name});`
-  ]
 }
 
 function emitRuntimeValueVariableDeclaration(statement, expression, context) {

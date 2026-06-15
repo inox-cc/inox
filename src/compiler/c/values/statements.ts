@@ -13,6 +13,7 @@ import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime
 import { cUnsupportedVariableDeclarationCode } from '../syntax.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType } from '../value-types.ts'
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
+import { registerObjectShape } from './objects.ts'
 
 type PreparedExpression = {
   lines: string[]
@@ -41,7 +42,6 @@ export type StatementLoweringDependencies = {
   emitDgramNumberVariableDeclaration: (statement: any, context: any) => string[] | null
   emitDgramSocketVariableDeclaration: (statement: any, context: any) => string[] | null
   emitDgramSocketCallStatement: (expression: any, context: any) => string[] | null
-  emitDirentArrayIndexVariableDeclaration: (statement: any, context: any) => string[] | null
   emitDynamicObjectMemberVariableDeclaration: (statement: any, member: any, context: any) => string[]
   emitDynamicObjectMemberAssignment: (expression: any, member: any, context: any) => string[]
   emitErrorObjectVariableDeclaration: (statement: any, context: any) => string[]
@@ -334,6 +334,38 @@ export function emitRuntimeStringVariableDeclaration(statement, expression, cont
   context.runtimeStrings.add(statement.name)
 
   return lines
+}
+
+function emitDirentArrayIndexVariableDeclaration(statement, context) {
+  const expression = statement.init
+
+  if (
+    expression?.type !== 'IndexExpression' ||
+    expression.object.type !== 'Reference' ||
+    expression.index.type !== 'NumberLiteral' ||
+    expression.arrayElementDeclaredType !== 'fs.Dirent'
+  ) {
+    return null
+  }
+
+  const index = Number.parseInt(expression.index.value, 10)
+
+  if (!Number.isInteger(index) || index < 0) {
+    return null
+  }
+
+  const array = statementDeps(context).emitCValueExpression(expression.object, context)
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'object')
+  registerObjectShape(context, statement.name, expression.shape)
+
+  return [
+    ...array.lines,
+    ...emitPrepareOwnedValueWrite(statement.name),
+    emitStatusCheck(`ccjs_array_get(${array.expression}, ${index}, &${statement.name})`, context),
+    emitRuntimeValueCheck(statement.name, 'CCJS_TAG_OBJECT', context),
+    `ccjs_retain(${statement.name});`
+  ]
 }
 
 function emitPreparedForInitializer(init, context) {
@@ -1352,7 +1384,7 @@ export function emitVariableDeclarationStatement(statement, context) {
   }
 
   if (deps.isIndexAccessExpression(statement.init)) {
-    const direntElement = deps.emitDirentArrayIndexVariableDeclaration(statement, context)
+    const direntElement = emitDirentArrayIndexVariableDeclaration(statement, context)
 
     if (direntElement != null) {
       return direntElement
