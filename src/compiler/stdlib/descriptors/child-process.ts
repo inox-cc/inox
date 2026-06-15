@@ -1,6 +1,6 @@
-export const childProcessRuntimeMethods = ['execFileSync', 'execSync'] as const
+export const childProcessRuntimeMethods = ['execFileSync', 'execSync', 'spawnSync'] as const
 
-export const unsupportedChildProcessRuntimeMethods = ['exec', 'execFile', 'fork', 'spawn', 'spawnSync'] as const
+export const unsupportedChildProcessRuntimeMethods = ['exec', 'execFile', 'fork', 'spawn'] as const
 
 export type ChildProcessRuntimeMethod = (typeof childProcessRuntimeMethods)[number]
 

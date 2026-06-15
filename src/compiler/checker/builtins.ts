@@ -153,6 +153,28 @@ export const urlSearchParamsObjectShape: ObjectShapeInfo = {
   fields: []
 }
 
+export const childProcessSpawnSyncResultShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'child_process.SpawnSyncReturns',
+  fields: [
+    {
+      name: 'status',
+      valueType: 'number',
+      readonly: true
+    },
+    {
+      name: 'stdout',
+      valueType: 'string',
+      readonly: true
+    },
+    {
+      name: 'stderr',
+      valueType: 'string',
+      readonly: true
+    }
+  ]
+}
+
 export const pathParseObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'path.ParsedPath',

@@ -3,11 +3,13 @@ import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.t
 
 test('lowers node:child_process sync helpers to the C runtime', () => {
   const result = compileSource(
-    `import { execFileSync, execSync } from 'node:child_process'
+    `import { execFileSync, execSync, spawnSync } from 'node:child_process'
 
 export function main(): void {
-  console.log(execSync('printf ccjs', { encoding: 'utf8' }))
-  console.log(execFileSync('printf', ['child'], { encoding: 'utf8' }))
+  console.log(execSync('printf ccjs', { encoding: 'utf8', cwd: '/tmp', env: { PATH: '/bin:/usr/bin' } }))
+  console.log(execFileSync('printf', ['child'], { encoding: 'utf8', stdio: 'pipe' }))
+  const spawned = spawnSync('printf', ['spawn'], { encoding: 'utf8', timeout: 1000 })
+  console.log(spawned.status, spawned.stdout, spawned.stderr)
 }
 `,
     {
@@ -26,6 +28,8 @@ export function main(): void {
   assert.match(result.code, /#include "ccjs\/child_process\.h"/)
   assert.match(result.code, /ccjs_child_process_exec_sync\(&ccjs_default_allocator,/)
   assert.match(result.code, /ccjs_child_process_exec_file_sync\(&ccjs_default_allocator,/)
+  assert.match(result.code, /ccjs_child_process_spawn_sync\(&ccjs_default_allocator,/)
+  assert.match(result.code, /static const ccjs_field_info ccjs_shape_spawn_sync_\d+_fields\[\]/)
 })
 
 test('lowers default node:child_process namespace helper', () => {
@@ -69,13 +73,13 @@ execSync('printf ccjs')
   )
 })
 
-test('reports unsupported node:child_process methods at compile time only', () => {
+test('reports unsupported node:child_process sync options at compile time only', () => {
   assert.throws(
     () => {
       compileSource(
         `import { spawnSync } from 'node:child_process'
 
-spawnSync('printf', ['ccjs'])
+spawnSync('printf', ['ccjs'], { encoding: 'utf8', shell: true })
 `,
         {
           target: 'c'
@@ -92,7 +96,38 @@ spawnSync('printf', ['ccjs'])
         true
       )
       assert.equal(
-        error.diagnostics.some((item) => item.message.includes('node:child_process spawnSync is not implemented')),
+        error.diagnostics.some((item) => item.message.includes('sync option shell is not implemented')),
+        true
+      )
+      return true
+    }
+  )
+})
+
+test('reports unsupported node:child_process methods at compile time only', () => {
+  assert.throws(
+    () => {
+      compileSource(
+        `import { spawn } from 'node:child_process'
+
+spawn('printf', ['ccjs'])
+`,
+        {
+          target: 'c'
+        }
+      )
+    },
+    (error) => {
+      if (!(error instanceof CompileError)) {
+        return false
+      }
+
+      assert.equal(
+        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('node:child_process spawn is not implemented')),
         true
       )
       return true

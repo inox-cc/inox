@@ -25,10 +25,18 @@ test('generated C node:child_process sync helpers compile and run with runtime s
 
   try {
     const result = compileSource(
-      `import { execFileSync, execSync } from 'node:child_process'
+      `import { execFileSync, execSync, spawnSync } from 'node:child_process'
 
 console.log(execSync('printf exec', { encoding: 'utf8' }))
 console.log(execFileSync('printf', ['file'], { encoding: 'utf8' }))
+console.log(execSync('printf "$CCJS_STAGE"', { encoding: 'utf8', env: { CCJS_STAGE: 'env', PATH: '/bin:/usr/bin' } }))
+console.log(execSync('basename "$PWD" | tr -d "\\n"', { encoding: 'utf8', cwd: ${JSON.stringify(dir)} }))
+
+const spawned = spawnSync('/bin/sh', ['-c', 'printf out; printf err >&2; exit 3'], { encoding: 'utf8' })
+console.log(spawned.status, spawned.stdout, spawned.stderr)
+
+const ignored = spawnSync('/bin/sh', ['-c', 'printf ignored; printf error >&2'], { encoding: 'utf8', stdio: 'ignore' })
+console.log(ignored.status, ignored.stdout, ignored.stderr)
 
 `,
       {
@@ -45,7 +53,7 @@ console.log(execFileSync('printf', ['file'], { encoding: 'utf8' }))
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'exec\nfile\n')
+    assert.equal(run.stdout, `exec\nfile\nenv\n${dir.split('/').pop()}\n3 out err\n0  \n`)
   } finally {
     await rm(dir, {
       recursive: true,

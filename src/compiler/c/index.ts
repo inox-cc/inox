@@ -9376,6 +9376,14 @@ function emitStatement(statement, context) {
       return fetchAbortController
     }
 
+    const childProcessObject = emitPreparedChildProcessCallExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (childProcessObject != null && statement.init?.childProcessRuntimeMethod === 'spawnSync') {
+      return childProcessObject.lines
+    }
+
     const pathObject = emitPreparedPathObjectCallExpression(statement.init, context, {
       out: statement.name
     })
@@ -16012,8 +16020,13 @@ function emitPreparedChildProcessCallExpression(expression, context, options: { 
   }
 
   if (method === 'execSync') {
+    const childOptions = emitCValueExpression(expression.args[1], context)
+    lines.push(...childOptions.lines)
     lines.push(
-      emitStatusCheck(`ccjs_child_process_exec_sync(&ccjs_default_allocator, ${command.expression}, &${out})`, context)
+      emitStatusCheck(
+        `ccjs_child_process_exec_sync(&ccjs_default_allocator, ${command.expression}, ${childOptions.expression}, &${out})`,
+        context
+      )
     )
 
     return {
@@ -16022,16 +16035,52 @@ function emitPreparedChildProcessCallExpression(expression, context, options: { 
     }
   }
 
-  const argArray = expression.args[1]
+  const second = expression.args[1]
+  const argArray = second?.type === 'ObjectLiteral' ? null : second
+  const optionsArg = second?.type === 'ObjectLiteral' ? second : expression.args[2]
+  const childOptions =
+    optionsArg == null ? { lines: [] as string[], expression: 'ccjs_undefined_value()' } : emitCValueExpression(optionsArg, context)
   const args =
     argArray?.type === 'ArrayLiteral' ? argArray.elements.map((arg) => emitCValueExpression(arg, context)) : []
 
   lines.push(...args.flatMap((arg) => arg.lines))
+  lines.push(...childOptions.lines)
+
+  if (method === 'spawnSync') {
+    const shape = emitChildProcessSpawnSyncResultShape(context)
+    context.variables.set(out, 'object')
+    registerObjectShape(context, out, expression.shape)
+    lines.push(...shape.lines)
+
+    if (args.length === 0) {
+      lines.push(
+        emitStatusCheck(
+          `ccjs_child_process_spawn_sync(&ccjs_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, ${shape.expression}, &${out})`,
+          context
+        )
+      )
+    } else {
+      const argsName = nextCName(context, 'ccjs_child_process_args')
+
+      lines.push(`ccjs_value ${argsName}[] = { ${args.map((arg) => arg.expression).join(', ')} };`)
+      lines.push(
+        emitStatusCheck(
+          `ccjs_child_process_spawn_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, ${shape.expression}, &${out})`,
+          context
+        )
+      )
+    }
+
+    return {
+      lines,
+      expression: out
+    }
+  }
 
   if (args.length === 0) {
     lines.push(
       emitStatusCheck(
-        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, 0, 0, &${out})`,
+        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, &${out})`,
         context
       )
     )
@@ -16041,7 +16090,7 @@ function emitPreparedChildProcessCallExpression(expression, context, options: { 
     lines.push(`ccjs_value ${argsName}[] = { ${args.map((arg) => arg.expression).join(', ')} };`)
     lines.push(
       emitStatusCheck(
-        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, &${out})`,
+        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, &${out})`,
         context
       )
     )
@@ -16050,6 +16099,27 @@ function emitPreparedChildProcessCallExpression(expression, context, options: { 
   return {
     lines,
     expression: out
+  }
+}
+
+function emitChildProcessSpawnSyncResultShape(context) {
+  const shapeName = nextCName(context, 'ccjs_shape_spawn_sync')
+  const fieldsName = `${shapeName}_fields`
+  const lines = [
+    `static const ccjs_field_info ${fieldsName}[] = {`,
+    `  { "status", CCJS_FIELD_READONLY },`,
+    `  { "stdout", CCJS_FIELD_READONLY },`,
+    `  { "stderr", CCJS_FIELD_READONLY },`,
+    '};',
+    `static const ccjs_shape ${shapeName} = {`,
+    '  3,',
+    `  ${fieldsName}`,
+    '};'
+  ]
+
+  return {
+    lines,
+    expression: `&${shapeName}`
   }
 }
 
@@ -19245,8 +19315,10 @@ function resolveFunctionParams(callee, context) {
 }
 
 function inferExpressionType(expression, context) {
-  if (cChildProcessRuntimeMethodName(expression) != null) {
-    return 'string'
+  const childProcessMethod = cChildProcessRuntimeMethodName(expression)
+
+  if (childProcessMethod != null) {
+    return childProcessMethod === 'spawnSync' ? 'object' : 'string'
   }
 
   if (cOsRuntimeConstantName(expression) != null || cOsRuntimeMethodName(expression) != null) {

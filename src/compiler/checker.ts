@@ -10,6 +10,7 @@ import {
   isSwitchableType
 } from './checker/assignability.ts'
 import {
+  childProcessSpawnSyncResultShape,
   debugMemoryStatsObjectShape,
   errorObjectShape,
   fetchAbortControllerObjectShape,
@@ -2084,8 +2085,14 @@ class Checker {
         this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc)
       }
 
-      this.checkChildProcessUtf8Options(expression.args[1], expression.loc)
-    } else {
+      this.checkChildProcessSyncOptions(expression.args[1], expression.loc, true)
+      expression.childProcessRuntimeMethod = call.method
+      expression.valueType = 'string'
+
+      return 'string'
+    }
+
+    if (call.method === 'execFileSync') {
       if (expression.args.length < 2 || expression.args.length > 3) {
         this.report(
           'CCJS_ARG_COUNT',
@@ -2098,10 +2105,11 @@ class Checker {
         this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc)
       }
 
-      const args = expression.args[1]
-      const options = expression.args[2]
+      const second = expression.args[1]
+      const args = second?.type === 'ObjectLiteral' ? null : second
+      const options = second?.type === 'ObjectLiteral' ? second : expression.args[2]
 
-      if (args?.type !== 'ArrayLiteral') {
+      if (args != null && args.type !== 'ArrayLiteral') {
         this.report(
           'CCJS_NOT_IMPLEMENTED',
           'node:child_process execFileSync currently expects a string[] literal args argument',
@@ -2113,13 +2121,47 @@ class Checker {
         }
       }
 
-      this.checkChildProcessUtf8Options(options, expression.loc)
+      this.checkChildProcessSyncOptions(options, expression.loc, true)
+      expression.childProcessRuntimeMethod = call.method
+      expression.valueType = 'string'
+
+      return 'string'
     }
 
-    expression.childProcessRuntimeMethod = call.method
-    expression.valueType = 'string'
+    if (expression.args.length < 1 || expression.args.length > 3) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function ${call.label} expects 1 to 3 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
 
-    return 'string'
+    if (expression.args[0] != null) {
+      this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc)
+    }
+
+    const second = expression.args[1]
+    const args = second?.type === 'ObjectLiteral' ? null : second
+    const options = second?.type === 'ObjectLiteral' ? second : expression.args[2]
+
+    if (args != null && args.type !== 'ArrayLiteral') {
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        'node:child_process spawnSync currently expects a string[] literal args argument',
+        args.loc
+      )
+    } else if (args?.type === 'ArrayLiteral') {
+      for (const element of args.elements) {
+        this.checkAssignableType(this.checkExpression(element), 'string', element.loc)
+      }
+    }
+
+    this.checkChildProcessSyncOptions(options, expression.loc, true)
+    expression.childProcessRuntimeMethod = call.method
+    expression.valueType = 'object'
+    expression.shape = childProcessSpawnSyncResultShape
+
+    return 'object'
   }
 
   resolveChildProcessRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
@@ -2168,7 +2210,11 @@ class Checker {
     return null
   }
 
-  checkChildProcessUtf8Options(options: AnyNode | null | undefined, loc: SourceLocation | undefined): void {
+  checkChildProcessSyncOptions(
+    options: AnyNode | null | undefined,
+    loc: SourceLocation | undefined,
+    requireEncoding: boolean
+  ): void {
     if (options?.type !== 'ObjectLiteral') {
       this.report(
         'CCJS_NOT_IMPLEMENTED',
@@ -2180,11 +2226,65 @@ class Checker {
 
     const encoding = options.properties.find((property) => property.key === 'encoding')?.value
 
-    if (encoding?.type !== 'StringLiteral' || encoding.value !== 'utf8') {
+    if (requireEncoding && (encoding?.type !== 'StringLiteral' || encoding.value !== 'utf8')) {
       this.report(
         'CCJS_NOT_IMPLEMENTED',
         'node:child_process sync helpers currently support only { encoding: "utf8" }',
         encoding?.loc ?? options.loc
+      )
+    }
+
+    for (const property of options.properties) {
+      if (property.key === 'encoding') {
+        continue
+      }
+
+      if (property.key === 'cwd') {
+        this.checkAssignableType(this.checkExpression(property.value), 'string', property.value.loc)
+        continue
+      }
+
+      if (property.key === 'stdio') {
+        if (
+          property.value.type !== 'StringLiteral' ||
+          (property.value.value !== 'pipe' && property.value.value !== 'ignore')
+        ) {
+          this.report(
+            'CCJS_NOT_IMPLEMENTED',
+            "node:child_process sync helpers currently support stdio: 'pipe' or 'ignore'",
+            property.value.loc
+          )
+        }
+        continue
+      }
+
+      if (property.key === 'timeout') {
+        this.checkAssignableType(this.checkExpression(property.value), 'number', property.value.loc)
+        continue
+      }
+
+      if (property.key === 'env') {
+        if (property.value.type !== 'ObjectLiteral') {
+          this.checkExpression(property.value)
+          this.report(
+            'CCJS_NOT_IMPLEMENTED',
+            'node:child_process sync helpers currently expect env to be an object literal',
+            property.value.loc
+          )
+          continue
+        }
+
+        for (const envProperty of property.value.properties) {
+          this.checkAssignableType(this.checkExpression(envProperty.value), 'string', envProperty.value.loc)
+        }
+        continue
+      }
+
+      this.checkExpression(property.value)
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        `node:child_process sync option ${property.key} is not implemented by the current C backend`,
+        property.loc
       )
     }
   }
