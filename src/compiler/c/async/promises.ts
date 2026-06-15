@@ -6,7 +6,10 @@ import type {
   CPromiseChainWrapper,
   CRuntimeArrowCapture
 } from '../types.ts'
-export function cPromiseRuntimeCallName(callee: any): string | null {
+import type { AnyNode, IrProgram } from '../../types.ts'
+import type { CallbackLoweringDependencies, CallbackScope, CallbackScopeBinding } from './callbacks.ts'
+
+export function cPromiseRuntimeCallName(callee: AnyNode): string | null {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
     return null
   }
@@ -18,7 +21,7 @@ export function cPromiseRuntimeCallName(callee: any): string | null {
   return ['resolve', 'reject'].includes(callee.property) ? callee.property : null
 }
 
-export function isPromiseConstructorExpression(expression: any): boolean {
+export function isPromiseConstructorExpression(expression: AnyNode): boolean {
   return (
     expression?.type === 'NewExpression' &&
     expression.callee?.type === 'Reference' &&
@@ -27,7 +30,7 @@ export function isPromiseConstructorExpression(expression: any): boolean {
   )
 }
 
-export function isPromiseMethodAst(expression: any): boolean {
+export function isPromiseMethodAst(expression: AnyNode): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee?.type === 'MemberExpression' &&
@@ -43,7 +46,7 @@ export function functionTakesEventLoopParam(name: string, context: CEmitContext)
   return isPlainPromiseReturningFunctionName(name, context) || context.externalEventLoopFunctions.has(name)
 }
 
-export function isPromiseReturningFunctionCallee(callee: any, context: CEmitContext): boolean {
+export function isPromiseReturningFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
   return (
     callee?.type === 'Reference' &&
     callee.path.length === 1 &&
@@ -51,13 +54,13 @@ export function isPromiseReturningFunctionCallee(callee: any, context: CEmitCont
   )
 }
 
-export function isExternalEventLoopFunctionCallee(callee: any, context: CEmitContext): boolean {
+export function isExternalEventLoopFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
   return (
     callee?.type === 'Reference' && callee.path.length === 1 && context.externalEventLoopFunctions.has(callee.path[0])
   )
 }
 
-export function resolvePromiseReturningFunctionValueType(callee: any, context: CEmitContext): string {
+export function resolvePromiseReturningFunctionValueType(callee: AnyNode, context: CEmitContext): string {
   if (!isPromiseReturningFunctionCallee(callee, context)) {
     return 'unknown'
   }
@@ -65,7 +68,7 @@ export function resolvePromiseReturningFunctionValueType(callee: any, context: C
   return context.functionReturnPromiseValueTypes.get(callee.path[0]) ?? 'unknown'
 }
 
-export function resolvePromiseExpressionValueType(expression: any, context: CEmitContext): string | null {
+export function resolvePromiseExpressionValueType(expression: AnyNode, context: CEmitContext): string | null {
   const directType = knownValueType(expression?.promiseValueType)
 
   if (directType != null) {
@@ -89,17 +92,17 @@ export function resolvePromiseExpressionValueType(expression: any, context: CEmi
   return null
 }
 
-export function knownValueType(valueType: any): string | null {
+export function knownValueType(valueType: string | null | undefined): string | null {
   return valueType == null || valueType === 'unknown' ? null : valueType
 }
 
-export function isAsyncFunctionCallee(callee: any, context: CEmitContext): boolean {
+export function isAsyncFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
   return (
     callee?.type === 'Reference' && callee.path.length === 1 && context.functionAsyncFlags.get(callee.path[0]) === true
   )
 }
 
-export function resolveCAsyncFunctionAwaitValueType(callee: any, context: CEmitContext): string | null {
+export function resolveCAsyncFunctionAwaitValueType(callee: AnyNode, context: CEmitContext): string | null {
   if (!isAsyncFunctionCallee(callee, context)) {
     return null
   }
@@ -129,48 +132,46 @@ import {
   registerOwnedPromise
 } from '../context.ts'
 import { isManagedRuntimeReturnType } from '../value-types.ts'
-import type { CallbackLoweringDependencies } from './callbacks.ts'
-import type { IrProgram } from '../../types.ts'
 
 
 export type PromiseChainLoweringDependencies = {
   callbackLoweringDependencies: CallbackLoweringDependencies
   collectArrowCaptures: (
-    expression: any,
-    outerScopes: Map<string, any>[],
+    expression: AnyNode,
+    outerScopes: CallbackScope[],
     context: CEmitContext,
     deps: CallbackLoweringDependencies
   ) => CRuntimeArrowCapture[]
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitRuntimeArrowCallbackContextFinalizerDeclaration: (wrapper: CCallbackContextWrapper) => string[]
   emitRuntimeArrowCallbackContextLocals: (
     wrapper: CCallbackContextWrapper,
     context: CFunctionContext,
     deps: CallbackLoweringDependencies
   ) => string[]
-  emitRuntimeCallbackRuntimeValueReturnLines: (argument: any, context: CFunctionContext) => string[]
-  emitStatementList: (statements: any[], context: CFunctionContext) => string[]
-  functionUsesExternalEventLoop: (node: any, externalNames: Set<any>) => boolean
+  emitRuntimeCallbackRuntimeValueReturnLines: (argument: AnyNode, context: CFunctionContext) => string[]
+  emitStatementList: (statements: AnyNode[], context: CFunctionContext) => string[]
+  functionUsesExternalEventLoop: (node: AnyNode, externalNames: Set<string>) => boolean
   isPromiseChainCallbackWrapperWithContext: (
     wrapper: CPromiseChainWrapper | null | undefined
   ) => wrapper is CPromiseChainWrapper
 }
 
 export type PromiseLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedAsyncFunctionPromiseCallExpression: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
   ) => PreparedExpression | null
-  emitPreparedCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedFetchCallExpression: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
   ) => PreparedExpression | null
   emitPreparedFsCallExpression: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
   ) => PreparedExpression | null
@@ -179,16 +180,27 @@ export type PromiseLoweringDependencies = {
     contextName: string,
     context: CFunctionContext
   ) => string[]
-  emitStatementList: (statements: any[], context: CFunctionContext) => string[]
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
-  inferRejectedValueType: (expression: any, context: CFunctionContext) => string
+  emitStatementList: (statements: AnyNode[], context: CFunctionContext) => string[]
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
+  inferRejectedValueType: (expression: AnyNode, context: CFunctionContext) => string
   isPromiseChainCallbackWrapperWithContext: (
     wrapper: CPromiseChainWrapper | null | undefined
   ) => wrapper is CPromiseChainWrapper
 }
 
+type PromiseChainArrowBody =
+  | {
+      kind: 'prepared-return'
+      prefixStatements: AnyNode[]
+      returnExpression: AnyNode | null
+    }
+  | {
+      kind: 'statement-list'
+      statements: AnyNode[]
+    }
+
 export function emitPreparedPromiseStaticExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -227,7 +239,7 @@ export function emitPreparedPromiseStaticExpression(
 }
 
 export function emitPreparedPromiseConstructorExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -293,7 +305,7 @@ export function emitPreparedPromiseConstructorExpression(
 }
 
 export function emitPromiseConstructorSettlementCall(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): string[] | null {
@@ -334,7 +346,7 @@ export function emitPromiseConstructorSettlementCall(
 }
 
 export function emitPreparedPromiseMethodExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -414,7 +426,7 @@ export function emitPreparedPromiseMethodExpression(
 }
 
 export function emitPreparedPromiseExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -496,7 +508,7 @@ export function emitPreparedPromiseExpression(
 }
 
 export function emitPreparedPromiseReturningCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -553,7 +565,7 @@ function withPromiseConstructorHandlers(
 }
 
 function promiseConstructorRejectionValueType(
-  executor: any,
+  executor: AnyNode,
   context: CFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): string {
@@ -568,7 +580,7 @@ function promiseConstructorRejectionValueType(
   }
 
   const types: string[] = []
-  const visit = (node: any) => {
+  const visit = (node: unknown): void => {
     if (node == null) {
       return
     }
@@ -582,16 +594,18 @@ function promiseConstructorRejectionValueType(
       return
     }
 
+    const current = node as AnyNode
+
     if (
-      node.type === 'CallExpression' &&
-      node.callee?.type === 'Reference' &&
-      node.callee.path.length === 1 &&
-      node.callee.path[0] === rejectName
+      current.type === 'CallExpression' &&
+      current.callee?.type === 'Reference' &&
+      current.callee.path.length === 1 &&
+      current.callee.path[0] === rejectName
     ) {
-      types.push(dependencies.inferRejectedValueType(node.args[0], context))
+      types.push(dependencies.inferRejectedValueType(current.args[0], context))
     }
 
-    for (const [key, value] of Object.entries(node)) {
+    for (const [key, value] of Object.entries(current)) {
       if (key === 'loc' || key === 'callee') {
         continue
       }
@@ -680,7 +694,7 @@ function emitPromiseChainCallbackContext(
 }
 
 function isPromiseMethodCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): boolean {
@@ -698,10 +712,10 @@ export function collectPromiseChainWrappers(
   deps: PromiseChainLoweringDependencies
 ): Map<string, CPromiseChainWrapper> {
   const wrappers = new Map<string, CPromiseChainWrapper>()
-  const declare = (scope, name, info) => {
+  const declare = (scope: CallbackScope, name: string, info: CallbackScopeBinding): void => {
     scope.set(name, info)
   }
-  const declareParams = (scope, params) => {
+  const declareParams = (scope: CallbackScope, params: AnyNode[]): void => {
     for (const param of params) {
       declare(scope, param.name, {
         name: param.name,
@@ -715,7 +729,7 @@ export function collectPromiseChainWrappers(
       })
     }
   }
-  const lookup = (name, scopes) => {
+  const lookup = (name: string, scopes: CallbackScope[]): CallbackScopeBinding | null => {
     for (let index = scopes.length - 1; index >= 0; index -= 1) {
       const entry = scopes[index].get(name)
 
@@ -726,7 +740,11 @@ export function collectPromiseChainWrappers(
 
     return null
   }
-  const isRuntimeManagedCaptureBinding = (statement, scopes, valueType) => {
+  const isRuntimeManagedCaptureBinding = (
+    statement: AnyNode,
+    scopes: CallbackScope[],
+    valueType: string
+  ): boolean => {
     if (valueType === 'object') {
       return true
     }
@@ -749,7 +767,7 @@ export function collectPromiseChainWrappers(
 
     return true
   }
-  const declareVariable = (scope, statement, scopes) => {
+  const declareVariable = (scope: CallbackScope, statement: AnyNode, scopes: CallbackScope[]): void => {
     declare(scope, statement.name, {
       name: statement.name,
       valueType: statement.valueType,
@@ -761,7 +779,7 @@ export function collectPromiseChainWrappers(
       mutable: statement.kind === 'let'
     })
   }
-  const register = (expression, scopes) => {
+  const register = (expression: AnyNode, scopes: CallbackScope[]): void => {
     if (!isPromiseMethodAst(expression)) {
       return
     }
@@ -810,14 +828,14 @@ export function collectPromiseChainWrappers(
     wrappers.set(key, wrapper)
     context.promiseChainArrowWrappers.set(callback, wrapper)
   }
-  const visitStatement = (statement, scopes) => {
+  const visitStatement = (statement: AnyNode | null | undefined, scopes: CallbackScope[]): void => {
     if (statement == null) {
       return
     }
 
     if (statement.type === 'VariableDeclaration') {
       visitExpression(statement.init, scopes)
-      declareVariable(scopes.at(-1), statement, scopes)
+      declareVariable(scopes[scopes.length - 1], statement, scopes)
       return
     }
 
@@ -832,7 +850,7 @@ export function collectPromiseChainWrappers(
     }
 
     if (statement.type === 'BlockStatement') {
-      const scope = new Map()
+      const scope: CallbackScope = new Map()
       statement.body.forEach((item) => visitStatement(item, [...scopes, scope]))
       return
     }
@@ -851,7 +869,7 @@ export function collectPromiseChainWrappers(
     }
 
     if (statement.type === 'ForStatement') {
-      const scope = new Map()
+      const scope: CallbackScope = new Map()
       const loopScopes = [...scopes, scope]
 
       if (statement.init?.type === 'VariableDeclaration') {
@@ -868,7 +886,7 @@ export function collectPromiseChainWrappers(
 
     if (statement.type === 'ForOfStatement') {
       visitExpression(statement.iterable, scopes)
-      const scope = new Map()
+      const scope: CallbackScope = new Map()
       declare(scope, statement.name, {
         name: statement.name,
         valueType: 'unknown',
@@ -883,8 +901,8 @@ export function collectPromiseChainWrappers(
 
       for (const item of statement.cases) {
         visitExpression(item.test, scopes)
-        const scope = new Map()
-        item.consequent.forEach((statement) => visitStatement(statement, [...scopes, scope]))
+        const scope: CallbackScope = new Map()
+        item.consequent.forEach((statement: AnyNode) => visitStatement(statement, [...scopes, scope]))
       }
       return
     }
@@ -895,7 +913,7 @@ export function collectPromiseChainWrappers(
       visitStatement(statement.finalizer, scopes)
     }
   }
-  const visitExpression = (expression, scopes) => {
+  const visitExpression = (expression: AnyNode | null | undefined, scopes: CallbackScope[]): void => {
     if (expression == null) {
       return
     }
@@ -956,11 +974,11 @@ export function collectPromiseChainWrappers(
   }
 
   for (const ir of irPrograms) {
-    const topLevelScope = new Map()
+    const topLevelScope: CallbackScope = new Map()
 
     for (const item of collectIrTopLevelNodeEntries(ir)) {
       if (item.kind === 'function') {
-        const scope = new Map()
+        const scope: CallbackScope = new Map()
         declareParams(scope, item.node.params)
         item.node.body.forEach((statement) => visitStatement(statement, [topLevelScope, scope]))
       } else if (item.kind === 'statement') {
@@ -1089,11 +1107,15 @@ function emitPromiseChainCallbackStatementLines(
 }
 
 function emitPromiseChainCallbackReturnLines(
-  returnExpression: any,
+  returnExpression: AnyNode | null,
   wrapper: CPromiseChainWrapper,
   context: CFunctionContext,
   deps: PromiseChainLoweringDependencies
 ): string[] {
+  if (returnExpression == null) {
+    return []
+  }
+
   if (wrapper.returnType === 'number' || wrapper.returnType === 'boolean') {
     const value = deps.emitPreparedNumberExpression(returnExpression, context)
     const expression =
@@ -1111,7 +1133,7 @@ function emitPromiseChainCallbackReturnLines(
   return []
 }
 
-export function resolvePromiseChainArrowBody(callback: any): any | null {
+export function resolvePromiseChainArrowBody(callback: AnyNode): PromiseChainArrowBody | null {
   if (callback?.type !== 'ArrowFunctionExpression') {
     return null
   }
@@ -1160,11 +1182,11 @@ export function resolvePromiseChainArrowBody(callback: any): any | null {
   }
 }
 
-function isStraightLinePromiseCallbackStatement(statement: any): boolean {
+function isStraightLinePromiseCallbackStatement(statement: AnyNode): boolean {
   return statement?.type === 'VariableDeclaration' || statement?.type === 'ExpressionStatement'
 }
 
-function isPromiseChainCallbackStatement(statement: any): boolean {
+function isPromiseChainCallbackStatement(statement: AnyNode | null | undefined): boolean {
   if (statement == null) {
     return false
   }
@@ -1209,6 +1231,6 @@ function isPromiseChainCallbackStatement(statement: any): boolean {
   )
 }
 
-function isPromiseChainCallbackSwitchStatement(statement: any): boolean {
+function isPromiseChainCallbackSwitchStatement(statement: AnyNode): boolean {
   return statement.cases.every((item) => item.consequent.every(isPromiseChainCallbackStatement))
 }

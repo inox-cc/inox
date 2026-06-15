@@ -41,7 +41,7 @@ export type CallbackLoweringDependencies = {
   registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
 }
 
-type CallbackScopeBinding = {
+export type CallbackScopeBinding = {
   declaration?: AnyNode | CFunctionParam | null
   functionType?: CFunctionType | null
   loc?: AnyNode['loc']
@@ -55,7 +55,7 @@ type CallbackScopeBinding = {
   valueType: string
 }
 
-type CallbackScope = Map<string, CallbackScopeBinding>
+export type CallbackScope = Map<string, CallbackScopeBinding>
 
 type PendingPlainFunctionArg = {
   arg: AnyNode
