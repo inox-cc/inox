@@ -4,13 +4,19 @@ const sourceExtensions = ['', '.ts', '.js']
 
 export async function resolveExistingSource(path: string, host: CompilerHost): Promise<string> {
   const normalized = host.normalizePath(host.isAbsolutePath(path) ? path : host.resolvePath(path))
-  const candidates =
-    host.extname(normalized) === ''
-      ? [
-          ...sourceExtensions.map((ext) => `${normalized}${ext}`),
-          ...sourceExtensions.map((ext) => host.joinPath(normalized, `index${ext}`))
-        ]
-      : [normalized]
+  const candidates: string[] = []
+
+  if (host.extname(normalized) === '') {
+    for (const ext of sourceExtensions) {
+      candidates.push(`${normalized}${ext}`)
+    }
+
+    for (const ext of sourceExtensions) {
+      candidates.push(host.joinPath(normalized, `index${ext}`))
+    }
+  } else {
+    candidates.push(normalized)
+  }
 
   for (const candidate of candidates) {
     try {

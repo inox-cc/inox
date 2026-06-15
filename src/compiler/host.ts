@@ -11,7 +11,7 @@ export type CompilerHost = {
   dirname(path: string): string
   extname(path: string): string
   isAbsolutePath(path: string): boolean
-  joinPath(...parts: string[]): string
+  joinPath(left: string, right: string): string
   normalizePath(path: string): string
   pathToFileUrl(path: string): string
   readFile(path: string): Promise<string>

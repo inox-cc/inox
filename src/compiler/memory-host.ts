@@ -14,10 +14,14 @@ export function createMemoryCompilerHost(
   options: MemoryCompilerHostOptions = {}
 ): CompilerHost {
   const root = normalizePosixPath(options.root ?? '/')
-  const sources = files.map((file) => ({
-    path: resolvePosixPath(file.path, root),
-    source: file.source
-  }))
+  const sources: MemoryCompilerSourceFile[] = []
+
+  for (const file of files) {
+    sources.push({
+      path: resolvePosixPath(file.path, root),
+      source: file.source
+    })
+  }
 
   return {
     pathSeparator: '/',
@@ -62,23 +66,16 @@ function resolvePosixPath(path: string, root: string): string {
   return normalizePosixPath(isAbsolutePosixPath(path) ? path : joinPosixPath(root, path))
 }
 
-function joinPosixPath(...parts: string[]): string {
-  let joined = ''
-
-  for (const part of parts) {
-    if (part === '') {
-      continue
-    }
-
-    if (isAbsolutePosixPath(part)) {
-      joined = part
-      continue
-    }
-
-    joined = joined === '' || joined.endsWith('/') ? `${joined}${part}` : `${joined}/${part}`
+function joinPosixPath(left: string, right: string): string {
+  if (right === '') {
+    return normalizePosixPath(left)
   }
 
-  return normalizePosixPath(joined)
+  if (isAbsolutePosixPath(right)) {
+    return normalizePosixPath(right)
+  }
+
+  return normalizePosixPath(left === '' || left.endsWith('/') ? `${left}${right}` : `${left}/${right}`)
 }
 
 function normalizePosixPath(path: string): string {

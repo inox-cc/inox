@@ -16,7 +16,9 @@ export function createNodeCompilerHost(): CompilerHost {
     dirname,
     extname,
     isAbsolutePath: isAbsolute,
-    joinPath: join,
+    joinPath(left: string, right: string): string {
+      return join(left, right)
+    },
     normalizePath: normalize,
     pathToFileUrl(path: string): string {
       return pathToFileURL(path).href

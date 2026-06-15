@@ -168,13 +168,19 @@ function resolveKnownCModuleImport(
   host: CModuleEmitOptions['host']
 ): string | null {
   const normalized = host.normalizePath(host.resolvePath(host.joinPath(host.dirname(from), specifier)))
-  const candidates =
-    host.extname(normalized) === ''
-      ? [
-          ...cModuleSourceExtensions.map((extension) => `${normalized}${extension}`),
-          ...cModuleSourceExtensions.map((extension) => host.joinPath(normalized, `index${extension}`))
-        ]
-      : [normalized]
+  const candidates: string[] = []
+
+  if (host.extname(normalized) === '') {
+    for (const extension of cModuleSourceExtensions) {
+      candidates.push(`${normalized}${extension}`)
+    }
+
+    for (const extension of cModuleSourceExtensions) {
+      candidates.push(host.joinPath(normalized, `index${extension}`))
+    }
+  } else {
+    candidates.push(normalized)
+  }
 
   return candidates.find((candidate) => modulePaths.has(candidate)) ?? null
 }
