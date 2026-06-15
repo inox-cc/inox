@@ -133,7 +133,11 @@ type AsyncTaskBodyPlan = {
   tryHandler: AsyncTaskTryHandlerPlan | null
 }
 
+type AsyncTaskPlannerContext = CFunctionContext
 
+function asAsyncTaskPlannerContext(context: CEmitContext): AsyncTaskPlannerContext {
+  return context as AsyncTaskPlannerContext
+}
 
 export function collectAsyncTaskWrappers(
   functions: IrFunctionNodeEntry[],
@@ -141,11 +145,12 @@ export function collectAsyncTaskWrappers(
   dependencies: AsyncTaskLoweringDependencies
 ) {
   context.asyncTaskLoweringDependencies = dependencies
+  const plannerContext = asAsyncTaskPlannerContext(context)
   const wrappers = new Map()
 
   for (const { declaration, node: item } of functions) {
-    const params = resolveAsyncTaskWrapperParams(declaration, context)
-    const bodyPlan = params == null ? null : resolveAsyncTaskBodyPlan(item, declaration, context, params)
+    const params = resolveAsyncTaskWrapperParams(declaration, plannerContext)
+    const bodyPlan = params == null ? null : resolveAsyncTaskBodyPlan(item, declaration, plannerContext, params)
 
     if (bodyPlan == null) {
       continue
@@ -325,7 +330,7 @@ function appendAsyncTaskTryPhase(phases: AsyncTaskPhase[], kind: AsyncTaskTryPha
   })
 }
 
-function resolveAsyncTaskWrapperParams(declaration: IrFunctionDeclaration, context) {
+function resolveAsyncTaskWrapperParams(declaration: IrFunctionDeclaration, context: AsyncTaskPlannerContext) {
   if (
     declaration.async !== true ||
     declaration.returnType !== 'promise' ||
@@ -365,7 +370,12 @@ function isSupportedAsyncTaskValueType(valueType) {
   )
 }
 
-function resolveAsyncTaskBodyPlan(statement, declaration: IrFunctionDeclaration, context, params) {
+function resolveAsyncTaskBodyPlan(
+  statement,
+  declaration: IrFunctionDeclaration,
+  context: AsyncTaskPlannerContext,
+  params
+) {
   if (
     declaration.async !== true ||
     declaration.returnType !== 'promise' ||
@@ -431,7 +441,7 @@ function resolveAsyncTaskBodyPlan(statement, declaration: IrFunctionDeclaration,
   })
 }
 
-function resolveAsyncTaskTryBodyPlan(statement, context, params, returnType) {
+function resolveAsyncTaskTryBodyPlan(statement, context: AsyncTaskPlannerContext, params, returnType) {
   if (statement.body.length !== 1 || statement.body[0]?.type !== 'TryStatement') {
     return null
   }
@@ -492,7 +502,7 @@ function resolveAsyncTaskTryBodyPlan(statement, context, params, returnType) {
   })
 }
 
-function resolveAsyncTaskNestedTryBodyPlan(tryStatement, context, params, returnType) {
+function resolveAsyncTaskNestedTryBodyPlan(tryStatement, context: AsyncTaskPlannerContext, params, returnType) {
   const tryChainResult = collectAsyncTaskNestedTryChain(tryStatement)
 
   if (tryChainResult == null || tryChainResult.chain.length < 2) {
@@ -707,7 +717,7 @@ function collectAsyncTaskTryFinalizerStatements(finalizers, fromIndex, toIndex) 
   return statements
 }
 
-function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
+function resolveAsyncTaskPrefixLocals(context: AsyncTaskPlannerContext, params, prefixStatements) {
   const result = createAsyncTaskExpressionContext(context, params, [])
   const locals: any[] = []
 
@@ -773,7 +783,7 @@ function resolveAsyncTaskPrefixLocals(context, params, prefixStatements) {
   }
 }
 
-function registerAsyncTaskStatementListLocals(context, statements) {
+function registerAsyncTaskStatementListLocals(context: AsyncTaskPlannerContext, statements) {
   for (const statement of statements) {
     if (statement?.type !== 'VariableDeclaration') {
       continue
@@ -815,7 +825,7 @@ function isSupportedAsyncTaskFramePrefixLocalType(valueType) {
   )
 }
 
-function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
+function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context: AsyncTaskPlannerContext) {
   if (!isSupportedAsyncTaskFramePrefixLocalType(valueType)) {
     return false
   }
@@ -823,7 +833,7 @@ function isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context) {
   return valueType !== 'string' || isRuntimeStringPrefixLocalDeclaration(statement, context)
 }
 
-function isRuntimeStringPrefixLocalDeclaration(statement, context) {
+function isRuntimeStringPrefixLocalDeclaration(statement, context: AsyncTaskPlannerContext) {
   const expression = statement?.init
 
   if (
@@ -857,7 +867,7 @@ function isRawStringLiteralExpression(expression) {
   )
 }
 
-function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
+function resolveAsyncTaskTryHandler(handler, context: AsyncTaskPlannerContext, params, returnType) {
   if (handler == null) {
     return null
   }
@@ -891,7 +901,11 @@ function resolveAsyncTaskTryHandler(handler, context, params, returnType) {
   }
 }
 
-function createAsyncTaskExpressionContext(context, params, awaits) {
+function createAsyncTaskExpressionContext(
+  context: AsyncTaskPlannerContext,
+  params,
+  awaits
+): AsyncTaskPlannerContext {
   const result = {
     ...context,
     mapTypes: new Map(context.mapTypes ?? []),
@@ -900,7 +914,7 @@ function createAsyncTaskExpressionContext(context, params, awaits) {
     setElementTypes: new Map(context.setElementTypes ?? []),
     variables: new Map(context.variables ?? []),
     runtimeStrings: new Set(context.runtimeStrings ?? [])
-  }
+  } as AsyncTaskPlannerContext
 
   for (const param of params) {
     registerAsyncTaskLocalMetadata(param.name, param.valueType, param, result)
@@ -1207,7 +1221,11 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression, context) {
   return isSupportedAsyncTaskValueType(valueType)
 }
 
-function resolveAsyncTaskReturnValueExpression(expression, returnType, context) {
+function resolveAsyncTaskReturnValueExpression(
+  expression,
+  returnType,
+  context: AsyncTaskPlannerContext
+) {
   if (returnType === 'void') {
     return expression == null ? null : expression
   }
