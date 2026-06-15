@@ -76,7 +76,17 @@ import {
   isUnsupportedNodeCryptoMethod
 } from './stdlib/descriptors/crypto.ts'
 import { debugRuntimeMethodNameFromPath } from './stdlib/descriptors/debug.ts'
+import {
+  isNodeEventsImportSource,
+  isUnsupportedEventsRuntimeExport,
+  unsupportedEventsRuntimeExportReason
+} from './stdlib/descriptors/events.ts'
 import { mathRuntimeArgCount } from './stdlib/descriptors/math.ts'
+import {
+  isNodeStreamImportSource,
+  isUnsupportedStreamRuntimeExport,
+  unsupportedStreamRuntimeExportReason
+} from './stdlib/descriptors/stream.ts'
 import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
 import {
   isChildProcessRuntimeMethod,
@@ -1605,6 +1615,12 @@ class Checker {
       return bufferUnsupportedType
     }
 
+    const eventStreamUnsupportedType = this.checkEventStreamUnsupportedCall(expression)
+
+    if (eventStreamUnsupportedType != null) {
+      return eventStreamUnsupportedType
+    }
+
     const stringConversionType = this.checkStringConversionCall(expression)
 
     if (stringConversionType != null) {
@@ -2036,6 +2052,129 @@ class Checker {
         isUnsupportedBufferRuntimeExport(path[1])
       ) {
         return path[1]
+      }
+    }
+
+    return null
+  }
+
+  checkEventStreamUnsupportedCall(expression: AnyNode): ValueType | null {
+    const usage = this.resolveUnsupportedEventStreamRuntimeExport(memberExpressionPath(expression.callee))
+
+    if (usage == null) {
+      return null
+    }
+
+    for (const arg of expression.args) {
+      this.checkExpression(arg)
+    }
+
+    this.report(
+      'CCJS_NOT_IMPLEMENTED',
+      `${usage.source} ${usage.name} is not implemented by the current C backend: ${usage.reason}`,
+      expression.loc
+    )
+    expression.valueType = 'unknown'
+
+    return 'unknown'
+  }
+
+  checkEventStreamUnsupportedConstructor(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+      return null
+    }
+
+    const usage = this.resolveUnsupportedEventStreamRuntimeExport(expression.callee.path)
+
+    if (usage == null) {
+      return null
+    }
+
+    this.report(
+      'CCJS_NOT_IMPLEMENTED',
+      `${usage.source} ${usage.name} is not implemented by the current C backend: ${usage.reason}`,
+      expression.loc
+    )
+    expression.valueType = 'unknown'
+
+    return 'unknown'
+  }
+
+  resolveUnsupportedEventStreamRuntimeExport(
+    path: readonly string[] | null | undefined
+  ): { source: 'node:events' | 'node:stream'; name: string; reason: string } | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (symbol?.kind === 'import' && importedName != null) {
+        if (isNodeEventsImportSource(symbol.importSource) && isUnsupportedEventsRuntimeExport(importedName)) {
+          return {
+            source: 'node:events',
+            name: importedName,
+            reason: unsupportedEventsRuntimeExportReason(importedName)
+          }
+        }
+
+        if (isNodeStreamImportSource(symbol.importSource) && isUnsupportedStreamRuntimeExport(importedName)) {
+          return {
+            source: 'node:stream',
+            name: importedName,
+            reason: unsupportedStreamRuntimeExportReason(importedName)
+          }
+        }
+      }
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeEventsImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'events') &&
+        isUnsupportedEventsRuntimeExport(path[1])
+      ) {
+        return {
+          source: 'node:events',
+          name: path[1],
+          reason: unsupportedEventsRuntimeExportReason(path[1])
+        }
+      }
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeStreamImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'stream') &&
+        isUnsupportedStreamRuntimeExport(path[1])
+      ) {
+        return {
+          source: 'node:stream',
+          name: path[1],
+          reason: unsupportedStreamRuntimeExportReason(path[1])
+        }
+      }
+    }
+
+    if (path.length === 3 && path[1] === 'promises') {
+      const symbol = this.scope.resolve(path[0])
+      const exportName = `promises.${path[2]}`
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeStreamImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'stream') &&
+        isUnsupportedStreamRuntimeExport(exportName)
+      ) {
+        return {
+          source: 'node:stream',
+          name: exportName,
+          reason: unsupportedStreamRuntimeExportReason(exportName)
+        }
       }
     }
 
@@ -3639,6 +3778,26 @@ class Checker {
       }
 
       if (isUnsupportedBufferRuntimeExport(importedName)) {
+        return 'function'
+      }
+    }
+
+    if (isNodeEventsImportSource(source)) {
+      if (importedName === 'default' || importedName === 'events') {
+        return 'object'
+      }
+
+      if (isUnsupportedEventsRuntimeExport(importedName)) {
+        return 'function'
+      }
+    }
+
+    if (isNodeStreamImportSource(source)) {
+      if (importedName === 'default' || importedName === 'stream' || importedName === 'promises') {
+        return 'object'
+      }
+
+      if (isUnsupportedStreamRuntimeExport(importedName)) {
         return 'function'
       }
     }
@@ -5486,6 +5645,12 @@ class Checker {
     }
 
     const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+
+    const eventStreamConstructorType = this.checkEventStreamUnsupportedConstructor(expression)
+
+    if (eventStreamConstructorType != null) {
+      return eventStreamConstructorType
+    }
 
     const urlType = this.checkUrlConstructorExpression(expression, argTypes)
 

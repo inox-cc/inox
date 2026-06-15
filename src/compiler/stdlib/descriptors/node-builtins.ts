@@ -8,20 +8,20 @@ export const implementedRuntimeBuiltinImportSources = [
   'node:crypto',
   'node:child_process',
   'node:dgram',
+  'node:events',
   'node:fs',
   'node:fs/promises',
   'node:http',
   'node:net',
   'node:os',
+  'node:stream',
   'node:url',
   'node:process'
 ] as const
 
 export const unsupportedRuntimeBuiltinImportSources = [
   'node:dns',
-  'node:events',
   'node:https',
-  'node:stream',
   'node:timers',
   'node:timers/promises',
   'node:tls',
