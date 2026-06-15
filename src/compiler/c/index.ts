@@ -162,6 +162,7 @@ import {
 } from './value-types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
 import { urlObjectFields } from '../stdlib/descriptors/url.ts'
+import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import type {
   AnyNode,
@@ -300,6 +301,7 @@ function emitCModuleSource(
     needsFsRuntime ||
     needsFetchRuntime ||
     needsClassRuntime ||
+    needsPathRuntime ||
     needsUrlRuntime ||
     signatureRuntimeTypes.has('object')
   const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
@@ -855,7 +857,12 @@ function emitCUnit(
   const needsClassRuntime = baseContext.classInfos.size > 0
   const needsDgramRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['dgram', 'node:dgram']))
   const needsObjectRuntime =
-    runtimeRequirements.has('objects') || needsFsRuntime || needsFetchRuntime || needsClassRuntime || needsUrlRuntime
+    runtimeRequirements.has('objects') ||
+    needsFsRuntime ||
+    needsFetchRuntime ||
+    needsClassRuntime ||
+    needsPathRuntime ||
+    needsUrlRuntime
   const needsHttpRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['http', 'node:http']))
   const needsNetRuntime = irProgramsUseRuntimeImport(irPrograms, new Set(['net', 'node:net']))
   const needsRuntime =
@@ -9369,6 +9376,14 @@ function emitStatement(statement, context) {
       return fetchAbortController
     }
 
+    const pathObject = emitPreparedPathObjectCallExpression(statement.init, context, {
+      out: statement.name
+    })
+
+    if (pathObject != null) {
+      return pathObject.lines
+    }
+
     const urlObject = emitPreparedUrlObjectExpression(statement.init, context, {
       out: statement.name
     })
@@ -12600,6 +12615,12 @@ function emitCValueExpression(expression, context) {
 
   if (pathConstant != null) {
     return pathConstant
+  }
+
+  const pathObject = emitPreparedPathObjectCallExpression(expression, context)
+
+  if (pathObject != null) {
+    return pathObject
   }
 
   const pathCall = emitPreparedPathStringCallExpression(expression, context)
@@ -16261,10 +16282,58 @@ function emitPreparedPathConstantExpression(expression, context) {
   }
 }
 
+function emitPreparedPathObjectCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  if (cPathRuntimeMethodName(expression) !== 'parse') {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_path_object')
+  const input = emitCValueExpression(expression.args[0], context)
+  const shape = emitPathParseObjectShape(context)
+  const lines = [...input.lines, ...shape.lines, ...emitPrepareOwnedValueWrite(out)]
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  context.variables.set(out, 'object')
+  registerObjectShape(context, out, expression.shape)
+
+  lines.push(
+    emitStatusCheck(`ccjs_path_parse(&ccjs_default_allocator, ${input.expression}, ${shape.expression}, &${out})`, context)
+  )
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
+function emitPathParseObjectShape(context) {
+  const shapeName = nextCName(context, 'ccjs_shape_path_parse')
+  const fieldsName = `${shapeName}_fields`
+  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+
+  for (const field of pathParseObjectFields) {
+    lines.push(`  { ${cStringLiteral(field)}, CCJS_FIELD_READONLY },`)
+  }
+
+  lines.push('};')
+  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`  ${pathParseObjectFields.length},`)
+  lines.push(`  ${fieldsName}`)
+  lines.push('};')
+
+  return {
+    lines,
+    expression: `&${shapeName}`
+  }
+}
+
 function emitPreparedPathStringCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
   const method = cPathRuntimeMethodName(expression)
 
-  if (method == null || method === 'isAbsolute') {
+  if (method == null || method === 'isAbsolute' || method === 'parse') {
     return null
   }
 
@@ -16291,6 +16360,19 @@ function emitPreparedPathStringCallExpression(expression, context, options: { ou
         emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, ${argArray}, ${args.length}, &${out})`, context)
       )
     }
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  if (method === 'format') {
+    const object = emitCValueExpression(expression.args[0], context)
+
+    lines.push(...object.lines)
+    lines.push(...emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(`ccjs_path_format(&ccjs_default_allocator, ${object.expression}, &${out})`, context))
 
     return {
       lines,
@@ -19002,7 +19084,7 @@ function inferExpressionType(expression, context) {
   const pathMethod = cPathRuntimeMethodName(expression)
 
   if (pathMethod != null) {
-    return pathMethod === 'isAbsolute' ? 'boolean' : 'string'
+    return pathMethod === 'isAbsolute' ? 'boolean' : pathMethod === 'parse' ? 'object' : 'string'
   }
 
   if (expression?.type === 'CallExpression' && cTimeRuntimeCallName(expression.callee) != null) {

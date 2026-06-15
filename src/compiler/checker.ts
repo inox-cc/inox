@@ -20,6 +20,7 @@ import {
   globals,
   libuvOnlyRuntimeImports,
   numericCastNames,
+  pathParseObjectShape,
   urlObjectShape
 } from './checker/builtins.ts'
 import { Scope } from './checker/scope.ts'
@@ -2679,10 +2680,55 @@ class Checker {
 
     const method = call.method
     const argTypes = expression.args.map((arg) => this.checkExpression(arg))
-    const returnType = method === 'isAbsolute' ? 'boolean' : 'string'
+    const returnType = method === 'isAbsolute' ? 'boolean' : method === 'parse' ? 'object' : 'string'
 
     expression.valueType = returnType
     expression.pathRuntimeMethod = method
+
+    if (method === 'parse') {
+      if (expression.args.length !== 1) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (argTypes[0] != null) {
+        this.checkAssignableType(
+          argTypes[0],
+          'string',
+          expression.args[0].loc,
+          false,
+          this.expressionCanBeNull(expression.args[0])
+        )
+      }
+
+      expression.shape = pathParseObjectShape
+      return 'object'
+    }
+
+    if (method === 'format') {
+      if (expression.args.length !== 1) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (argTypes[0] != null) {
+        this.checkAssignableType(
+          argTypes[0],
+          'object',
+          expression.args[0].loc,
+          false,
+          this.expressionCanBeNull(expression.args[0])
+        )
+      }
+
+      return 'string'
+    }
 
     if (method === 'join' || method === 'resolve') {
       for (const [index, argType] of argTypes.entries()) {

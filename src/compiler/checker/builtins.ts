@@ -1,5 +1,6 @@
 import type { ObjectShapeInfo, SymbolInfo } from '../types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
+import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { urlObjectFields } from '../stdlib/descriptors/url.ts'
 
 export const errorObjectShape: ObjectShapeInfo = {
@@ -140,6 +141,16 @@ export const urlObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'url.URL',
   fields: urlObjectFields.map((name) => ({
+    name,
+    valueType: 'string',
+    readonly: true
+  }))
+}
+
+export const pathParseObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'path.ParsedPath',
+  fields: pathParseObjectFields.map((name) => ({
     name,
     valueType: 'string',
     readonly: true

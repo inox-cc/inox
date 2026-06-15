@@ -4,14 +4,17 @@ export const pathRuntimeMethods = [
   'extname',
   'isAbsolute',
   'join',
+  'format',
   'normalize',
+  'parse',
   'relative',
   'resolve'
 ] as const
 
 export const pathRuntimeConstants = ['delimiter', 'sep'] as const
+export const pathParseObjectFields = ['root', 'dir', 'base', 'ext', 'name'] as const
 
-export const unsupportedPathRuntimeMethods = ['format', 'matchesGlob', 'parse', 'toNamespacedPath'] as const
+export const unsupportedPathRuntimeMethods = ['matchesGlob', 'toNamespacedPath'] as const
 
 export type PathRuntimeMethod = (typeof pathRuntimeMethods)[number]
 export type PathRuntimeConstant = (typeof pathRuntimeConstants)[number]
