@@ -44,6 +44,81 @@ type FsCallOptions = {
   owned?: boolean
 }
 
+const fsPromiseResultTypes: Record<string, string> = {
+  access: 'void',
+  appendFile: 'void',
+  appendFileBytes: 'void',
+  copyFile: 'void',
+  lstat: 'object',
+  mkdir: 'void',
+  readDir: 'array',
+  readDirDirents: 'array',
+  readFile: 'string',
+  readFileBytes: 'bytes',
+  readlink: 'string',
+  realpath: 'string',
+  rename: 'void',
+  rm: 'void',
+  stat: 'object',
+  symlink: 'void',
+  unlink: 'void',
+  writeFile: 'void',
+  writeFileBytes: 'void'
+}
+
+type FsAsyncCallDescriptor =
+  | { kind: 'path-out'; callName: string }
+  | { kind: 'bytes-value-out'; callName: string }
+  | { kind: 'path-arg-out'; callName: string; tempPrefix: string }
+  | { kind: 'string-bytes-out'; callName: string }
+
+const fsAsyncCallDescriptors: Record<string, FsAsyncCallDescriptor> = {
+  appendFile: { kind: 'string-bytes-out', callName: 'ccjs_fs_append_file' },
+  appendFileBytes: { kind: 'bytes-value-out', callName: 'ccjs_fs_append_file_bytes' },
+  copyFile: { kind: 'path-arg-out', callName: 'ccjs_fs_copy_file', tempPrefix: 'ccjs_fs_dest_path' },
+  lstat: { kind: 'path-out', callName: 'ccjs_fs_lstat' },
+  readDir: { kind: 'path-out', callName: 'ccjs_fs_read_dir' },
+  readDirDirents: { kind: 'path-out', callName: 'ccjs_fs_read_dir_dirents' },
+  readFile: { kind: 'path-out', callName: 'ccjs_fs_read_file' },
+  readFileBytes: { kind: 'path-out', callName: 'ccjs_fs_read_file_bytes' },
+  readlink: { kind: 'path-out', callName: 'ccjs_fs_readlink' },
+  realpath: { kind: 'path-out', callName: 'ccjs_fs_realpath' },
+  rename: { kind: 'path-arg-out', callName: 'ccjs_fs_rename', tempPrefix: 'ccjs_fs_new_path' },
+  stat: { kind: 'path-out', callName: 'ccjs_fs_stat' },
+  symlink: { kind: 'path-arg-out', callName: 'ccjs_fs_symlink', tempPrefix: 'ccjs_fs_link_path' },
+  unlink: { kind: 'path-out', callName: 'ccjs_fs_unlink' },
+  writeFile: { kind: 'string-bytes-out', callName: 'ccjs_fs_write_file' },
+  writeFileBytes: { kind: 'bytes-value-out', callName: 'ccjs_fs_write_file_bytes' }
+}
+
+const fsSyncValueCallNames: Record<string, string> = {
+  lstatSync: 'ccjs_fs_lstat_sync',
+  readDirDirentsSync: 'ccjs_fs_read_dir_dirents_sync',
+  readDirSync: 'ccjs_fs_read_dir_sync',
+  readFileBytesSync: 'ccjs_fs_read_file_bytes_sync',
+  readFileSync: 'ccjs_fs_read_file_sync',
+  readlinkSync: 'ccjs_fs_readlink_sync',
+  realpathSync: 'ccjs_fs_realpath_sync',
+  statSync: 'ccjs_fs_stat_sync'
+}
+
+type FsSyncStatementDescriptor =
+  | { kind: 'path'; callName: string }
+  | { kind: 'bytes-value'; callName: string }
+  | { kind: 'path-arg'; callName: string; tempPrefix: string }
+  | { kind: 'string-bytes'; callName: string }
+
+const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
+  appendFileBytesSync: { kind: 'bytes-value', callName: 'ccjs_fs_append_file_bytes_sync' },
+  appendFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_append_file_sync' },
+  copyFileSync: { kind: 'path-arg', callName: 'ccjs_fs_copy_file_sync', tempPrefix: 'ccjs_fs_dest_path' },
+  renameSync: { kind: 'path-arg', callName: 'ccjs_fs_rename_sync', tempPrefix: 'ccjs_fs_new_path' },
+  symlinkSync: { kind: 'path-arg', callName: 'ccjs_fs_symlink_sync', tempPrefix: 'ccjs_fs_link_path' },
+  unlinkSync: { kind: 'path', callName: 'ccjs_fs_unlink_sync' },
+  writeFileBytesSync: { kind: 'bytes-value', callName: 'ccjs_fs_write_file_bytes_sync' },
+  writeFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_write_file_sync' }
+}
+
 export function cFsRuntimeExpressionMethod(expression: any): string | null {
   return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
 }
@@ -115,124 +190,16 @@ export function emitPreparedFsCallExpression(
     registerOwnedPromise(
       context,
       out,
-      expression.promiseValueType ??
-        ([
-          'access',
-          'appendFile',
-          'appendFileBytes',
-          'copyFile',
-          'mkdir',
-          'rename',
-          'rm',
-          'symlink',
-          'unlink',
-          'writeFile',
-          'writeFileBytes'
-        ].includes(method)
-          ? 'void'
-          : method === 'readDir' || method === 'readDirDirents'
-            ? 'array'
-            : method === 'stat' || method === 'lstat'
-              ? 'object'
-              : method === 'realpath' || method === 'readlink'
-                ? 'string'
-                : method === 'readFileBytes'
-                  ? 'bytes'
-                  : 'string'),
+      expression.promiseValueType ?? fsPromiseResultTypes[method] ?? 'string',
       'error'
     )
   }
   const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines = [...path.lines]
+  const descriptor = fsAsyncCallDescriptors[method]
 
-  if (method === 'readFile') {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_read_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'readFileBytes') {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_read_file_bytes(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'readDir') {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_read_dir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'readDirDirents') {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_read_dir_dirents(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'stat' || method === 'lstat') {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_${method}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'realpath' || method === 'readlink') {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_${method}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
+  if (descriptor != null) {
+    return emitPreparedFsAsyncDescriptorExpression(expression, context, dependencies, path, lines, out, descriptor)
   }
 
   if (method === 'access') {
@@ -242,79 +209,6 @@ export function emitPreparedFsCallExpression(
     lines.push(
       emitStatusCheck(
         `ccjs_fs_access(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${mode.expression}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'appendFileBytes') {
-    const bytes = dependencies.emitCValueExpression(expression.args[1], context)
-
-    lines.push(...bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_append_file_bytes(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.expression}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'appendFile') {
-    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
-
-    lines.push(...bytes.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_append_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'copyFile') {
-    const destPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_dest_path')
-
-    lines.push(...destPath.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_copy_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'symlink') {
-    const linkPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_link_path')
-
-    lines.push(...linkPath.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_symlink(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length}, &${out})`,
         context
       )
     )
@@ -341,21 +235,6 @@ export function emitPreparedFsCallExpression(
     }
   }
 
-  if (method === 'unlink') {
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_unlink(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
   if (method === 'rm') {
     lines.push(
       emitStatusCheck(
@@ -371,52 +250,57 @@ export function emitPreparedFsCallExpression(
     }
   }
 
-  if (method === 'rename') {
-    const newPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_new_path')
+  return null
+}
 
-    lines.push(...newPath.lines)
+function emitPreparedFsAsyncDescriptorExpression(
+  expression: any,
+  context: any,
+  dependencies: FsLoweringDependencies,
+  path: PreparedStringBytesOperand,
+  lines: string[],
+  out: string,
+  descriptor: FsAsyncCallDescriptor
+): PreparedExpression {
+  if (descriptor.kind === 'path-out') {
     lines.push(
       emitStatusCheck(
-        `ccjs_fs_rename(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length}, &${out})`,
+        `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
         context
       )
     )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'writeFileBytes') {
+  } else if (descriptor.kind === 'bytes-value-out') {
     const bytes = dependencies.emitCValueExpression(expression.args[1], context)
 
     lines.push(...bytes.lines)
     lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
     lines.push(
       emitStatusCheck(
-        `ccjs_fs_write_file_bytes(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.expression}, &${out})`,
+        `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.expression}, &${out})`,
         context
       )
     )
+  } else if (descriptor.kind === 'path-arg-out') {
+    const argumentPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, descriptor.tempPrefix)
 
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
-
-  lines.push(...bytes.lines)
-  lines.push(
-    emitStatusCheck(
-      `ccjs_fs_write_file(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &${out})`,
-      context
+    lines.push(...argumentPath.lines)
+    lines.push(
+      emitStatusCheck(
+        `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${argumentPath.bytes}, ${argumentPath.length}, &${out})`,
+        context
+      )
     )
-  )
+  } else {
+    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+
+    lines.push(...bytes.lines)
+    lines.push(
+      emitStatusCheck(
+        `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &${out})`,
+        context
+      )
+    )
+  }
 
   return {
     lines,
@@ -432,19 +316,9 @@ export function emitPreparedFsSyncValueExpression(
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (
-    method == null ||
-    ![
-      'lstatSync',
-      'readFileBytesSync',
-      'readFileSync',
-      'readDirDirentsSync',
-      'readDirSync',
-      'readlinkSync',
-      'realpathSync',
-      'statSync'
-    ].includes(method)
-  ) {
+  const callName = method == null ? null : fsSyncValueCallNames[method]
+
+  if (callName == null) {
     return null
   }
 
@@ -458,22 +332,7 @@ export function emitPreparedFsSyncValueExpression(
   const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const out = nextCName(context, 'ccjs_fs_value')
   registerOwnedValue(context, out)
-  const call =
-    method === 'readFileSync'
-      ? `ccjs_fs_read_file_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-      : method === 'readFileBytesSync'
-        ? `ccjs_fs_read_file_bytes_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-        : method === 'readDirSync'
-          ? `ccjs_fs_read_dir_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-          : method === 'readDirDirentsSync'
-            ? `ccjs_fs_read_dir_dirents_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-            : method === 'realpathSync'
-              ? `ccjs_fs_realpath_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-              : method === 'readlinkSync'
-                ? `ccjs_fs_readlink_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-                : method === 'statSync'
-                  ? `ccjs_fs_stat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-                  : `ccjs_fs_lstat_sync(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+  const call = `${callName}(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
 
   return {
     lines: [
@@ -492,96 +351,25 @@ export function emitPreparedFsSyncStatementExpression(
   dependencies: FsLoweringDependencies
 ): PreparedStatement | null {
   const method = cFsRuntimeExpressionMethod(expression)
+  const descriptor = method == null ? null : fsSyncStatementDescriptors[method]
+  const specialMethod = method === 'accessSync' || method === 'mkdirSync' || method === 'rmSync'
 
-  if (
-    method == null ||
-    ![
-      'accessSync',
-      'appendFileBytesSync',
-      'appendFileSync',
-      'copyFileSync',
-      'mkdirSync',
-      'renameSync',
-      'rmSync',
-      'symlinkSync',
-      'unlinkSync',
-      'writeFileBytesSync',
-      'writeFileSync'
-    ].includes(method)
-  ) {
+  if (method == null || (descriptor == null && !specialMethod)) {
     return null
   }
 
   const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines = [...path.lines]
 
+  if (descriptor != null) {
+    return emitPreparedFsSyncStatementDescriptor(expression, context, dependencies, path, lines, descriptor)
+  }
+
   if (method === 'accessSync') {
     const mode = emitPreparedFsAccessModeExpression(expression, context, dependencies)
 
     lines.push(...mode.lines)
     lines.push(emitStatusCheck(`ccjs_fs_access_sync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
-
-    return {
-      lines
-    }
-  }
-
-  if (method === 'appendFileBytesSync') {
-    const bytes = dependencies.emitCValueExpression(expression.args[1], context)
-
-    lines.push(...bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
-    lines.push(
-      emitStatusCheck(`ccjs_fs_append_file_bytes_sync(${path.bytes}, ${path.length}, ${bytes.expression})`, context)
-    )
-
-    return {
-      lines
-    }
-  }
-
-  if (method === 'appendFileSync') {
-    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
-
-    lines.push(...bytes.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_append_file_sync(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`,
-        context
-      )
-    )
-
-    return {
-      lines
-    }
-  }
-
-  if (method === 'copyFileSync') {
-    const destPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_dest_path')
-
-    lines.push(...destPath.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_copy_file_sync(${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length})`,
-        context
-      )
-    )
-
-    return {
-      lines
-    }
-  }
-
-  if (method === 'symlinkSync') {
-    const linkPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_link_path')
-
-    lines.push(...linkPath.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_symlink_sync(${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length})`,
-        context
-      )
-    )
 
     return {
       lines
@@ -601,14 +389,6 @@ export function emitPreparedFsSyncStatementExpression(
     }
   }
 
-  if (method === 'unlinkSync') {
-    lines.push(emitStatusCheck(`ccjs_fs_unlink_sync(${path.bytes}, ${path.length})`, context))
-
-    return {
-      lines
-    }
-  }
-
   if (method === 'rmSync') {
     lines.push(
       emitStatusCheck(
@@ -622,42 +402,46 @@ export function emitPreparedFsSyncStatementExpression(
     }
   }
 
-  if (method === 'renameSync') {
-    const newPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_new_path')
+  return null
+}
 
-    lines.push(...newPath.lines)
-    lines.push(
-      emitStatusCheck(
-        `ccjs_fs_rename_sync(${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length})`,
-        context
-      )
-    )
-
-    return {
-      lines
-    }
-  }
-
-  if (method === 'writeFileBytesSync') {
+function emitPreparedFsSyncStatementDescriptor(
+  expression: any,
+  context: any,
+  dependencies: FsLoweringDependencies,
+  path: PreparedStringBytesOperand,
+  lines: string[],
+  descriptor: FsSyncStatementDescriptor
+): PreparedStatement {
+  if (descriptor.kind === 'path') {
+    lines.push(emitStatusCheck(`${descriptor.callName}(${path.bytes}, ${path.length})`, context))
+  } else if (descriptor.kind === 'bytes-value') {
     const bytes = dependencies.emitCValueExpression(expression.args[1], context)
 
     lines.push(...bytes.lines)
     lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(emitStatusCheck(`${descriptor.callName}(${path.bytes}, ${path.length}, ${bytes.expression})`, context))
+  } else if (descriptor.kind === 'path-arg') {
+    const argumentPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, descriptor.tempPrefix)
+
+    lines.push(...argumentPath.lines)
     lines.push(
-      emitStatusCheck(`ccjs_fs_write_file_bytes_sync(${path.bytes}, ${path.length}, ${bytes.expression})`, context)
+      emitStatusCheck(
+        `${descriptor.callName}(${path.bytes}, ${path.length}, ${argumentPath.bytes}, ${argumentPath.length})`,
+        context
+      )
     )
+  } else {
+    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
 
-    return {
-      lines
-    }
+    lines.push(...bytes.lines)
+    lines.push(
+      emitStatusCheck(
+        `${descriptor.callName}(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`,
+        context
+      )
+    )
   }
-
-  const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
-
-  lines.push(...bytes.lines)
-  lines.push(
-    emitStatusCheck(`ccjs_fs_write_file_sync(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`, context)
-  )
 
   return {
     lines

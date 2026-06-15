@@ -175,6 +175,7 @@ export async function main(): Promise<void> {
   const stats = await fs.promises.stat('/tmp/value.txt')
   const link = await fs.promises.lstat('/tmp/link.txt')
   await fs.promises.access('/tmp/value.txt', fs.constants.R_OK)
+  fs.accessSync('/tmp/value.txt', fs.constants.W_OK)
   const syncStats = fs.statSync('/tmp/value.txt')
   const ok = stats.isFile() && !syncStats.isDirectory()
   console.log(stats.size, link.mode, ok)
@@ -198,6 +199,7 @@ export async function main(): Promise<void> {
   assert.match(c.code, /ccjs_fs_stat\(&ccjs_loop, "\/tmp\/value\.txt", 14, &ccjs_promise_\d+\)/)
   assert.match(c.code, /ccjs_fs_lstat\(&ccjs_loop, "\/tmp\/link\.txt", 13, &ccjs_promise_\d+\)/)
   assert.match(c.code, /ccjs_fs_access\(&ccjs_loop, "\/tmp\/value\.txt", 14, \(\(int\)CCJS_FS_R_OK\), &ccjs_promise_\d+\)/)
+  assert.match(c.code, /ccjs_fs_access_sync\("\/tmp\/value\.txt", 14, \(\(int\)CCJS_FS_W_OK\)\)/)
   assert.match(
     c.code,
     /if \(ccjs_fs_stat_sync\(&ccjs_default_allocator, "\/tmp\/value\.txt", 14, &ccjs_fs_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
