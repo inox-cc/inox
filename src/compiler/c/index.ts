@@ -3878,7 +3878,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
   return '0'
 }
 
-function resolveRuntimeCallbackCalleeType(callee, context) {
+function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionContext): any | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
@@ -3894,7 +3894,7 @@ function resolveRuntimeCallbackCalleeType(callee, context) {
   return isSupportedRuntimeCallbackType(functionType) ? normalizeFunctionType(functionType) : null
 }
 
-function emitRuntimeCallbackVariableDeclaration(statement, context) {
+function emitRuntimeCallbackVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
   const functionType = normalizeFunctionType(statement.functionType)
 
   context.variables.set(statement.name, 'function')
@@ -3905,7 +3905,11 @@ function emitRuntimeCallbackVariableDeclaration(statement, context) {
   return emitRuntimeCallbackValueInto(statement.init, functionType, statement.name, context)
 }
 
-function emitRuntimeCallbackValue(expression, functionType, context) {
+function emitRuntimeCallbackValue(
+  expression: AnyNode,
+  functionType: any,
+  context: CFunctionContext
+): PreparedExpression {
   if (
     expression?.type === 'Reference' &&
     expression.path.length === 1 &&
@@ -3926,7 +3930,12 @@ function emitRuntimeCallbackValue(expression, functionType, context) {
   }
 }
 
-function emitRuntimeCallbackValueInto(expression, functionType, out, context) {
+function emitRuntimeCallbackValueInto(
+  expression: AnyNode,
+  functionType: any,
+  out: string,
+  context: CFunctionContext
+): string[] {
   if (
     expression?.type === 'Reference' &&
     expression.path.length === 1 &&
@@ -3997,7 +4006,7 @@ function emitRuntimeCallbackValueInto(expression, functionType, out, context) {
   ]
 }
 
-function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
+function emitRuntimeArrowCallbackValueInto(wrapper: any, out: string, context: CFunctionContext): string[] {
   const lines = [...emitPrepareOwnedValueWrite(out)]
 
   for (const capture of wrapper.captures) {
@@ -4053,7 +4062,11 @@ function emitRuntimeArrowCallbackValueInto(wrapper, out, context) {
   return lines
 }
 
-function emitRuntimeArrowCaptureStoreLines(capture, contextName, context) {
+function emitRuntimeArrowCaptureStoreLines(
+  capture: any,
+  contextName: string,
+  context: CFunctionContext
+): string[] {
   const field = `${contextName}->${emitRuntimeArrowCaptureField(capture)}`
 
   if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
@@ -4093,7 +4106,11 @@ function emitRuntimeArrowCaptureStoreLines(capture, contextName, context) {
   return [`${field} = ${capture.name};`]
 }
 
-function emitRuntimeCallbackCall(expression, functionType, context) {
+function emitRuntimeCallbackCall(
+  expression: AnyNode,
+  functionType: any,
+  context: CFunctionContext
+): PreparedExpression {
   const lines: string[] = []
   const args: string[] = []
 
@@ -4130,7 +4147,7 @@ function emitRuntimeCallbackCall(expression, functionType, context) {
   }
 }
 
-function emitOptionalRuntimeCallbackCallExpression(expression, context) {
+function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context: CFunctionContext): string[] {
   const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
 
   if (functionType == null) {
@@ -4176,7 +4193,10 @@ function emitOptionalRuntimeCallbackCallExpression(expression, context) {
   return lines
 }
 
-function emitOptionalRuntimeCallbackCallValueExpression(expression, context) {
+function emitOptionalRuntimeCallbackCallValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression {
   const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
   const resultType = inferExpressionType(expression, context)
   const expectedTag = cRuntimeValueTag(resultType)
@@ -4235,7 +4255,7 @@ function emitOptionalRuntimeCallbackCallValueExpression(expression, context) {
   }
 }
 
-function resolveFunctionParams(callee, context) {
+function resolveFunctionParams(callee: AnyNode, context: CEmitContext): any[] | null {
   if (callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
@@ -4243,11 +4263,11 @@ function resolveFunctionParams(callee, context) {
   return context.functionParams.get(callee.path[0]) ?? null
 }
 
-function inferExpressionType(expression, context) {
+function inferExpressionType(expression: AnyNode, context: CFunctionContext): string {
   return inferExpressionTypeWithDependencies(expression, context, expressionTypeDependencies)
 }
 
-function isErrorConstructorExpression(expression) {
+function isErrorConstructorExpression(expression: AnyNode): boolean {
   return (
     expression?.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
@@ -4256,7 +4276,7 @@ function isErrorConstructorExpression(expression) {
   )
 }
 
-function isFetchAbortControllerConstructorExpression(expression) {
+function isFetchAbortControllerConstructorExpression(expression: AnyNode): boolean {
   return (
     expression?.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
@@ -4265,11 +4285,15 @@ function isFetchAbortControllerConstructorExpression(expression) {
   )
 }
 
-function isErrorValueExpression(expression, context) {
+function isErrorValueExpression(expression: AnyNode, context: CFunctionContext): boolean {
   return isKnownErrorValueExpression(expression, context, context.errorObjectNames)
 }
 
-function isKnownErrorValueExpression(expression, context, errorObjectNames) {
+function isKnownErrorValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext,
+  errorObjectNames: Set<string>
+): boolean {
   if (isErrorConstructorExpression(expression)) {
     return true
   }
@@ -4281,7 +4305,7 @@ function isKnownErrorValueExpression(expression, context, errorObjectNames) {
   return false
 }
 
-function registerErrorObjectShape(context, name) {
+function registerErrorObjectShape(context: CFunctionContext, name: string): void {
   context.errorObjectNames.add(name)
   context.objectShapes.set(name, [
     {
