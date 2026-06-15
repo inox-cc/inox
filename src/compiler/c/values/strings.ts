@@ -1,7 +1,14 @@
 import { CompileError, diagnostic } from '../../diagnostics.ts'
 import { tokenize } from '../../lexer.ts'
 import { parse } from '../../parser.ts'
-import { emitPrepareOwnedValueWrite, emitRuntimeTypeCheck, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitRuntimeTypeCheck,
+  emitStatusCheck,
+  nextCName,
+  registerOwnedValue,
+  type CFunctionContext
+} from '../context.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
@@ -18,26 +25,40 @@ import { emitSliceIndexNormalizationLines } from './slices.ts'
 import type { Diagnostic, SourceLocation } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-
-export type StringLoweringDependencies = {
-  canLowerCNullishCoalescingExpression: (expression: any, context: any) => boolean
-  emitCallExpression: (expression: any, context: any) => string
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
-  emitReference: (expression: any, context: any) => string
-  inferExpressionType: (expression: any, context: any) => string
-  isBoxedRuntimeStringName: (name: string, context: any) => boolean
-  isBoxedRuntimeStringReference: (expression: any, context: any) => boolean
-  isMemberAccessExpression: (expression: any) => boolean
-  resolveKnownObjectMember: (expression: any, context: any) => any | null
-  resolveNetAddressStringMember: (expression: any, context: any) => string | null
+type StringDiagnosticContext = {
+  diagnostics: Diagnostic[]
 }
 
-function stringDeps(context: any): StringLoweringDependencies {
+type TemplateLiteralPart =
+  | {
+      type: 'text'
+      value: string
+    }
+  | {
+      type: 'placeholder'
+      value: string
+      loc: SourceLocation
+    }
+
+export type StringLoweringDependencies = {
+  canLowerCNullishCoalescingExpression: (expression: any, context: CFunctionContext) => boolean
+  emitCallExpression: (expression: any, context: CFunctionContext) => string
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitReference: (expression: any, context: CFunctionContext) => string
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
+  isBoxedRuntimeStringName: (name: string, context: CFunctionContext) => boolean
+  isBoxedRuntimeStringReference: (expression: any, context: CFunctionContext) => boolean
+  isMemberAccessExpression: (expression: any) => boolean
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveNetAddressStringMember: (expression: any, context: CFunctionContext) => string | null
+}
+
+function stringDeps(context: CFunctionContext): StringLoweringDependencies {
   return context.stringLoweringDependencies
 }
 
-export function resolveRuntimeStringReference(expression, context) {
+export function resolveRuntimeStringReference(expression: any, context: CFunctionContext) {
   if (expression?.type !== 'Reference' || expression.path.length !== 1) {
     return null
   }
@@ -47,7 +68,7 @@ export function resolveRuntimeStringReference(expression, context) {
   return context.runtimeStrings.has(name) ? name : null
 }
 
-export function emitStringExpression(expression, context) {
+export function emitStringExpression(expression: any, context: CFunctionContext) {
   if (expression?.type === 'StringLiteral') {
     return JSON.stringify(expression.value)
   }
@@ -114,7 +135,7 @@ export function emitStringExpression(expression, context) {
   return '""'
 }
 
-export function emitPreparedStringLengthExpression(expression, context) {
+export function emitPreparedStringLengthExpression(expression: any, context: CFunctionContext) {
   if (
     expression?.type !== 'MemberExpression' ||
     expression.property !== 'length' ||
@@ -135,7 +156,7 @@ export function emitPreparedStringLengthExpression(expression, context) {
   }
 }
 
-export function emitPreparedStringCompareExpression(expression, context) {
+export function emitPreparedStringCompareExpression(expression: any, context: CFunctionContext) {
   const left = emitPreparedStringBytesOperand(expression.left, context)
   const right = emitPreparedStringBytesOperand(expression.right, context)
   const equals = `(${left.length} == ${right.length} && memcmp(${left.bytes}, ${right.bytes}, ${left.length}) == 0)`
@@ -146,7 +167,7 @@ export function emitPreparedStringCompareExpression(expression, context) {
   }
 }
 
-export function emitPreparedStringPredicateCall(expression, context) {
+export function emitPreparedStringPredicateCall(expression: any, context: CFunctionContext) {
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_string_method_value')
   const search = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_string_method_search')
   const helper = cStringPredicateHelperName(expression.callee.property)
@@ -157,7 +178,11 @@ export function emitPreparedStringPredicateCall(expression, context) {
   }
 }
 
-export function emitPreparedStringBytesOperand(expression, context, tempPrefix = 'ccjs_cmp_string') {
+export function emitPreparedStringBytesOperand(
+  expression: any,
+  context: CFunctionContext,
+  tempPrefix = 'ccjs_cmp_string'
+) {
   if (expression?.type === 'StringLiteral') {
     return {
       lines: [],
@@ -258,7 +283,7 @@ export function emitPreparedStringBytesOperand(expression, context, tempPrefix =
   }
 }
 
-export function emitCStringConcatValueExpression(expression, context) {
+export function emitCStringConcatValueExpression(expression: any, context: CFunctionContext) {
   const left = emitPreparedStringBytesOperand(expression.left, context)
   const right = emitPreparedStringBytesOperand(expression.right, context)
   const temp = nextCName(context, 'ccjs_value')
@@ -278,7 +303,7 @@ export function emitCStringConcatValueExpression(expression, context) {
   }
 }
 
-export function emitCTemplateLiteralValueExpression(expression, context) {
+export function emitCTemplateLiteralValueExpression(expression: any, context: CFunctionContext) {
   const parts = parseTemplateLiteralParts(expression.raw, context, expression.loc)
   const operands = parts
     .map((part) => {
@@ -364,7 +389,7 @@ export function emitCTemplateLiteralValueExpression(expression, context) {
   }
 }
 
-function emitPreparedTemplatePlaceholderBytesOperand(expression, context) {
+function emitPreparedTemplatePlaceholderBytesOperand(expression: any, context: CFunctionContext) {
   const type = stringDeps(context).inferExpressionType(expression, context)
 
   if (type === 'string') {
@@ -409,7 +434,7 @@ function emitPreparedTemplatePlaceholderBytesOperand(expression, context) {
   }
 }
 
-export function emitCStringConversionValueExpression(expression, context) {
+export function emitCStringConversionValueExpression(expression: any, context: CFunctionContext) {
   const [arg] = expression.args
   const type = stringDeps(context).inferExpressionType(arg, context)
   const temp = nextCName(context, 'ccjs_value')
@@ -453,7 +478,7 @@ export function emitCStringConversionValueExpression(expression, context) {
   }
 }
 
-export function emitCNumberConversionValueExpression(expression, context) {
+export function emitCNumberConversionValueExpression(expression: any, context: CFunctionContext) {
   if (!isNumberConversionCall(expression, context)) {
     return null
   }
@@ -472,7 +497,7 @@ export function emitCNumberConversionValueExpression(expression, context) {
   }
 }
 
-export function emitCStringTrimValueExpression(expression, context) {
+export function emitCStringTrimValueExpression(expression: any, context: CFunctionContext) {
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_trim_string')
   const temp = nextCName(context, 'ccjs_value')
   registerOwnedValue(context, temp)
@@ -490,7 +515,7 @@ export function emitCStringTrimValueExpression(expression, context) {
   }
 }
 
-export function emitCStringSliceValueExpression(expression, context) {
+export function emitCStringSliceValueExpression(expression: any, context: CFunctionContext) {
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_slice_string')
   const start = stringDeps(context).emitPreparedNumberExpression(expression.args[0], context)
   const lengthName = nextCName(context, 'ccjs_slice_length')
@@ -529,7 +554,7 @@ export function emitCStringSliceValueExpression(expression, context) {
   }
 }
 
-export function emitCStringSplitValueExpression(expression, context) {
+export function emitCStringSplitValueExpression(expression: any, context: CFunctionContext) {
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_split_string')
   const separator = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_split_separator')
   const temp = nextCName(context, 'ccjs_split_array')
@@ -551,7 +576,7 @@ export function emitCStringSplitValueExpression(expression, context) {
   }
 }
 
-export function isStringConcatExpression(expression, context) {
+export function isStringConcatExpression(expression: any, context: CFunctionContext) {
   return (
     expression?.type === 'BinaryExpression' &&
     expression.operator === '+' &&
@@ -560,7 +585,7 @@ export function isStringConcatExpression(expression, context) {
   )
 }
 
-export function isRuntimeProducedStringExpression(expression, context) {
+export function isRuntimeProducedStringExpression(expression: any, context: CFunctionContext) {
   return (
     (expression?.type === 'CallExpression' && stringDeps(context).inferExpressionType(expression, context) === 'string') ||
     cOsRuntimeConstantName(expression) != null ||
@@ -582,7 +607,7 @@ export function isRawStringLiteralExpression(expression) {
   )
 }
 
-export function isStringConversionCall(expression, context) {
+export function isStringConversionCall(expression: any, context: CFunctionContext) {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
@@ -596,7 +621,7 @@ export function isStringConversionCall(expression, context) {
   return ['boolean', 'null', 'number', 'string'].includes(stringDeps(context).inferExpressionType(expression.args[0], context))
 }
 
-export function isNumberConversionCall(expression, context) {
+export function isNumberConversionCall(expression: any, context: CFunctionContext) {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
@@ -610,7 +635,7 @@ export function isNumberConversionCall(expression, context) {
   return stringDeps(context).inferExpressionType(expression.args[0], context) === 'string'
 }
 
-export function isStringTrimCall(expression, context) {
+export function isStringTrimCall(expression: any, context: CFunctionContext) {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
@@ -623,7 +648,7 @@ export function isStringTrimCall(expression, context) {
   return isStringLengthObject(expression.callee.object, context)
 }
 
-export function isStringSliceCall(expression, context) {
+export function isStringSliceCall(expression: any, context: CFunctionContext) {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
@@ -640,7 +665,7 @@ export function isStringSliceCall(expression, context) {
   )
 }
 
-export function isStringSplitCall(expression, context) {
+export function isStringSplitCall(expression: any, context: CFunctionContext) {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
@@ -656,7 +681,7 @@ export function isStringSplitCall(expression, context) {
   )
 }
 
-export function isStringPredicateCall(expression, context) {
+export function isStringPredicateCall(expression: any, context: CFunctionContext) {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
@@ -684,7 +709,7 @@ function cStringPredicateHelperName(method) {
   return 'ccjs_string_includes_parts'
 }
 
-function isStringLengthObject(expression, context) {
+function isStringLengthObject(expression: any, context: CFunctionContext) {
   if (expression == null) {
     return false
   }
@@ -706,8 +731,8 @@ function isStringLengthObject(expression, context) {
   return stringDeps(context).inferExpressionType(expression, context) === 'string'
 }
 
-function parseTemplateLiteralParts(raw, context, loc) {
-  const parts: { type: string; value: string; loc?: SourceLocation }[] = []
+function parseTemplateLiteralParts(raw: string, context: StringDiagnosticContext, loc: SourceLocation | undefined) {
+  const parts: TemplateLiteralPart[] = []
   let text = ''
   let index = 1
   const end = raw.endsWith('`') ? raw.length - 1 : raw.length
@@ -919,7 +944,7 @@ function parseTemplatePlaceholderCaptureExpression(value, loc) {
   }
 }
 
-function parseTemplatePlaceholderExpression(value, loc, context) {
+function parseTemplatePlaceholderExpression(value: string, loc: SourceLocation, context: CFunctionContext) {
   if (value === '') {
     context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'empty template placeholder in C template literal', loc))
     return null
@@ -963,7 +988,7 @@ function parseTemplatePlaceholderExpression(value, loc, context) {
   }
 }
 
-function validateTemplatePlaceholderExpressionReferences(expression, context) {
+function validateTemplatePlaceholderExpressionReferences(expression: any, context: CFunctionContext) {
   const reported = new Set<string>()
   let valid = true
 
@@ -1009,7 +1034,12 @@ function validateTemplatePlaceholderExpressionReferences(expression, context) {
   }
 }
 
-function isKnownTemplatePlaceholderReference(expression, parent, key, context) {
+function isKnownTemplatePlaceholderReference(
+  expression: any,
+  parent: any,
+  key: string,
+  context: CFunctionContext
+) {
   const name = expression.path[0]
 
   return (
