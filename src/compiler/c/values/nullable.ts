@@ -1,8 +1,23 @@
-import { withNullableScalarNarrowing } from '../context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  registerOwnedValue,
+  withNullableScalarNarrowing
+} from '../context.ts'
+import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { isNullishCoalescingExpression } from '../syntax.ts'
-import { isNullableScalarType, isRuntimeNullableType } from '../value-types.ts'
+import { cRuntimeValueTag, isNullableScalarType, isRuntimeNullableType } from '../value-types.ts'
+import { registerObjectShape } from './objects.ts'
+
+type PreparedExpression = {
+  lines: string[]
+  expression: string
+}
 
 export type NullableLoweringDependencies = {
+  emitCObjectLiteralValueExpression: (expression: any, context: any, shape?: any | null) => PreparedExpression
+  emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  emitNullableFunctionValueExpression: (expression: any, functionType: any, context: any) => PreparedExpression
+  emitNullableScalarValueExpression: (expression: any, context: any) => PreparedExpression
   inferExpressionType: (expression: any, context: any) => string
   isNumberConversionCall: (expression: any, context: any) => boolean
   resolveRuntimeCallbackCalleeType: (callee: any, context: any) => any | null
@@ -168,4 +183,58 @@ export function isNullableRuntimeExpression(expression, context) {
   }
 
   return expression?.nullable === true && isRuntimeNullableType(nullableDeps(context).inferExpressionType(expression, context))
+}
+
+export function emitNullableRuntimeValueVariableDeclaration(statement, context) {
+  const valueType = statement.valueType
+  const expectedTag = cRuntimeValueTag(valueType)
+
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, valueType)
+  context.nullableVariables.add(statement.name)
+
+  if (valueType === 'object') {
+    registerObjectShape(context, statement.name, statement.shape)
+  } else if (valueType === 'array') {
+    context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType ?? 'unknown')
+  } else if (valueType === 'map') {
+    context.mapTypes.set(statement.name, {
+      key: statement.mapKeyType ?? 'unknown',
+      value: statement.mapValueType ?? 'unknown'
+    })
+  } else if (valueType === 'set') {
+    context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
+  } else if (valueType === 'function') {
+    context.functionTypes.set(statement.name, normalizeNullableFunctionType(statement.functionType))
+    context.runtimeCallbacks.add(statement.name)
+  }
+
+  if (statement.init == null || statement.init.type === 'NullLiteral') {
+    return [...emitPrepareOwnedValueWrite(statement.name), `${statement.name} = ccjs_null_value();`]
+  }
+
+  const deps = nullableDeps(context)
+  const value = isNullableScalarType(valueType)
+    ? deps.emitNullableScalarValueExpression(statement.init, context)
+    : valueType === 'function'
+      ? deps.emitNullableFunctionValueExpression(statement.init, statement.functionType, context)
+      : statement.init.type === 'ObjectLiteral'
+        ? deps.emitCObjectLiteralValueExpression(statement.init, context, statement.shape)
+        : deps.emitCValueExpression(statement.init, context)
+
+  return [
+    ...value.lines,
+    ...emitPrepareOwnedValueWrite(statement.name),
+    `${statement.name} = ${value.expression};`,
+    ...emitRuntimeNullableValueCheck(statement.name, expectedTag, context),
+    `ccjs_retain(${statement.name});`
+  ]
+}
+
+function normalizeNullableFunctionType(functionType) {
+  return functionType ?? {
+    kind: 'function',
+    params: functionType?.params ?? [],
+    returnType: functionType?.returnType ?? 'void'
+  }
 }

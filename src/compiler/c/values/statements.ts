@@ -15,6 +15,7 @@ import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType } fr
 import { resolveRuntimeArrayElementType } from './arrays.ts'
 import { resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
+import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 
 type PreparedExpression = {
@@ -74,7 +75,6 @@ export type StatementLoweringDependencies = {
   emitNetSocketVariableDeclaration: (statement: any, context: any) => string[] | null
   emitNullableScalarValueExpression: (expression: any, context: any) => PreparedExpression
   emitNullableRuntimeValueAssignment: (expression: any, context: any) => string[]
-  emitNullableRuntimeValueVariableDeclaration: (statement: any, context: any) => string[]
   emitObjectVariableDeclaration: (statement: any, context: any) => string[]
   emitOptionalRuntimeCallbackCallExpression: (expression: any, context: any) => string[]
   emitPreparedArrayFilterCallExpression: (expression: any, context: any) => any | null
@@ -695,7 +695,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
 
   if (statement.nullable === true && deps.isRuntimeNullableType(statement.valueType)) {
     return {
-      lines: deps.emitNullableRuntimeValueVariableDeclaration(statement, context),
+      lines: emitNullableRuntimeValueVariableDeclaration(statement, context),
       expression: ''
     }
   }
@@ -1565,7 +1565,7 @@ export function emitVariableDeclarationStatement(statement, context) {
   }
 
   if (statement.nullable === true && deps.isRuntimeNullableType(statement.valueType)) {
-    return deps.emitNullableRuntimeValueVariableDeclaration(statement, context)
+    return emitNullableRuntimeValueVariableDeclaration(statement, context)
   }
 
   if (deps.isErrorConstructorExpression(statement.init)) {

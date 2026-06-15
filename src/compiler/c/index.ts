@@ -259,6 +259,7 @@ import {
   canLowerCNullishCoalescingExpression,
   canLowerCScalarNullishCoalescingExpression,
   clearNullableScalarNarrowing,
+  emitNullableRuntimeValueVariableDeclaration,
   isNarrowedNullableScalarReference,
   isNullableRuntimeExpression,
   isNullableScalarRuntimeExpression,
@@ -385,6 +386,10 @@ import type {
 export type { CModuleOutputFile } from './types.ts'
 
 const nullableLoweringDependencies: NullableLoweringDependencies = {
+  emitCObjectLiteralValueExpression,
+  emitCValueExpression,
+  emitNullableFunctionValueExpression,
+  emitNullableScalarValueExpression,
   inferExpressionType,
   isNumberConversionCall,
   resolveRuntimeCallbackCalleeType
@@ -440,7 +445,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     emitNetSocketVariableDeclaration(statement, context, netLoweringDependencies),
   emitNullableScalarValueExpression,
   emitNullableRuntimeValueAssignment,
-  emitNullableRuntimeValueVariableDeclaration,
   emitObjectVariableDeclaration: (statement, context) =>
     emitObjectVariableDeclaration(statement, context, objectVariableDeclarationDependencies),
   emitOptionalRuntimeCallbackCallExpression,
@@ -2337,51 +2341,6 @@ function inferRejectedValueType(expression, context, localErrorObjectNames = con
   }
 
   return 'unknown'
-}
-
-function emitNullableRuntimeValueVariableDeclaration(statement, context) {
-  const valueType = statement.valueType
-  const expectedTag = cRuntimeValueTag(valueType)
-
-  registerOwnedValue(context, statement.name)
-  context.variables.set(statement.name, valueType)
-  context.nullableVariables.add(statement.name)
-
-  if (valueType === 'object') {
-    registerObjectShape(context, statement.name, statement.shape)
-  } else if (valueType === 'array') {
-    context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType ?? 'unknown')
-  } else if (valueType === 'map') {
-    context.mapTypes.set(statement.name, {
-      key: statement.mapKeyType ?? 'unknown',
-      value: statement.mapValueType ?? 'unknown'
-    })
-  } else if (valueType === 'set') {
-    context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
-  } else if (valueType === 'function') {
-    context.functionTypes.set(statement.name, normalizeFunctionType(statement.functionType))
-    context.runtimeCallbacks.add(statement.name)
-  }
-
-  if (statement.init == null || statement.init.type === 'NullLiteral') {
-    return [...emitPrepareOwnedValueWrite(statement.name), `${statement.name} = ccjs_null_value();`]
-  }
-
-  const value = isNullableScalarType(valueType)
-    ? emitNullableScalarValueExpression(statement.init, context)
-    : valueType === 'function'
-      ? emitNullableFunctionValueExpression(statement.init, statement.functionType, context)
-      : statement.init.type === 'ObjectLiteral'
-        ? emitCObjectLiteralValueExpression(statement.init, context, statement.shape)
-        : emitCValueExpression(statement.init, context)
-
-  return [
-    ...value.lines,
-    ...emitPrepareOwnedValueWrite(statement.name),
-    `${statement.name} = ${value.expression};`,
-    ...emitRuntimeNullableValueCheck(statement.name, expectedTag, context),
-    `ccjs_retain(${statement.name});`
-  ]
 }
 
 function emitScalarVariableDeclaration(statement, context) {
