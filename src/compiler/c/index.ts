@@ -64,7 +64,6 @@ import {
 import { formatGeneratedC } from './format.ts'
 import {
   arrayRuntimeMethodName,
-  collectionConstructorNameFromPath,
   isStringPredicateMethod,
   isStringRuntimeMethod
 } from '../stdlib/descriptors/collections.ts'
@@ -337,8 +336,13 @@ import {
   type ObjectVariableDeclarationDependencies
 } from './values/objects.ts'
 import {
+  collectionConstructorName,
+  emitPreparedCollectionCallExpression,
   emitPreparedCollectionReceiver,
   emitPreparedCollectionSizeExpression,
+  emitPreparedMapIndexAssignment,
+  emitPreparedMapIndexGetExpression,
+  isCollectionConstructorExpression,
   resolveRuntimeForOfMap,
   resolveRuntimeForOfSet,
   resolveRuntimeMapType,
@@ -670,10 +674,10 @@ const promiseLoweringDependencies: PromiseLoweringDependencies = {
 
 const collectionLoweringDependencies: CollectionLoweringDependencies = {
   emitCValueExpression,
-  emitPreparedCollectionCallExpression,
   inferExpressionType,
   isIndexAccessExpression,
   isMemberAccessExpression,
+  reportCCollectionHashability,
   resolveKnownObjectIndex,
   resolveKnownObjectMember
 }
@@ -7564,266 +7568,6 @@ function isNumericCastCall(expression, context) {
   }
 
   return inferExpressionType(expression.args[0], context) === 'number'
-}
-
-function isCollectionConstructorExpression(expression) {
-  return collectionConstructorName(expression) != null
-}
-
-function collectionConstructorName(expression) {
-  if (
-    expression?.type !== 'NewExpression' ||
-    expression.callee.type !== 'Reference' ||
-    expression.callee.path.length !== 1
-  ) {
-    return null
-  }
-
-  return collectionConstructorNameFromPath(expression.callee.path)
-}
-
-function emitPreparedCollectionCallExpression(expression, context) {
-  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
-    return null
-  }
-
-  const receiver = emitPreparedCollectionReceiver(expression.callee.object, context)
-
-  if (receiver == null) {
-    return null
-  }
-
-  const call =
-    receiver.type === 'map'
-      ? emitPreparedMapMethodCall(receiver.expression, expression, context)
-      : emitPreparedSetMethodCall(receiver.expression, expression, context)
-
-  return {
-    lines: [...receiver.lines, ...call.lines],
-    expression: call.expression
-  }
-}
-
-function emitPreparedMapMethodCall(name, expression, context) {
-  const method = expression.callee.property
-
-  if (method === 'clear') {
-    return {
-      lines: [emitStatusCheck(`ccjs_map_clear(${name})`, context)],
-      expression: ''
-    }
-  }
-
-  if (method === 'set') {
-    reportCCollectionHashability(
-      inferExpressionType(expression.args[0], context),
-      'Map keys',
-      expression.args[0]?.loc ?? expression.loc,
-      context
-    )
-    const key = emitCValueExpression(expression.args[0], context)
-    const value = emitCValueExpression(expression.args[1], context)
-
-    return {
-      lines: [
-        ...key.lines,
-        ...value.lines,
-        emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context)
-      ],
-      expression: name
-    }
-  }
-
-  if (method === 'get') {
-    reportCCollectionHashability(
-      inferExpressionType(expression.args[0], context),
-      'Map keys',
-      expression.args[0]?.loc ?? expression.loc,
-      context
-    )
-    const key = emitCValueExpression(expression.args[0], context)
-    const valueType = inferExpressionType(expression, context)
-    const expectedTag = cRuntimeValueTag(valueType)
-    const out = nextCName(context, 'ccjs_map_value')
-    registerOwnedValue(context, out)
-
-    const lines = [
-      ...key.lines,
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_map_get(${name}, ${key.expression}, &${out})`, context),
-      ...emitRuntimeNullableValueCheck(out, expectedTag, context)
-    ]
-
-    return {
-      lines,
-      expression: out
-    }
-  }
-
-  if (method === 'has' || method === 'delete') {
-    reportCCollectionHashability(
-      inferExpressionType(expression.args[0], context),
-      'Map keys',
-      expression.args[0]?.loc ?? expression.loc,
-      context
-    )
-    const key = emitCValueExpression(expression.args[0], context)
-    const out = nextCName(context, `ccjs_map_${method}`)
-    const helper = method === 'has' ? 'ccjs_map_has' : 'ccjs_map_delete'
-
-    return {
-      lines: [
-        ...key.lines,
-        `bool ${out} = false;`,
-        emitStatusCheck(`${helper}(${name}, ${key.expression}, &${out})`, context)
-      ],
-      expression: `(${out} ? 1 : 0)`
-    }
-  }
-
-  context.diagnostics.push(
-    diagnostic('CCJS_C_COLLECTION', `Map.${method} is not supported by the current C backend slice`, expression.loc)
-  )
-
-  return {
-    lines: [],
-    expression: '0'
-  }
-}
-
-function emitPreparedMapIndexGetExpression(expression, context) {
-  const mapIndex = emitPreparedMapIndexReceiver(expression, context)
-
-  if (mapIndex == null) {
-    return null
-  }
-
-  reportCCollectionHashability(
-    inferExpressionType(mapIndex.key, context),
-    'Map keys',
-    mapIndex.key.loc ?? expression.loc,
-    context
-  )
-  const key = emitCValueExpression(mapIndex.key, context)
-  const valueType = inferExpressionType(expression, context)
-  const expectedTag = cRuntimeValueTag(valueType)
-  const out = nextCName(context, 'ccjs_map_value')
-  registerOwnedValue(context, out)
-
-  return {
-    lines: [
-      ...mapIndex.receiver.lines,
-      ...key.lines,
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_map_get(${mapIndex.receiver.expression}, ${key.expression}, &${out})`, context),
-      ...emitRuntimeNullableValueCheck(out, expectedTag, context)
-    ],
-    expression: out
-  }
-}
-
-function emitPreparedMapIndexAssignment(expression, context) {
-  if (expression?.type !== 'AssignmentExpression') {
-    return null
-  }
-
-  const mapIndex = emitPreparedMapIndexReceiver(expression.target, context)
-
-  if (mapIndex == null) {
-    return null
-  }
-
-  reportCCollectionHashability(
-    inferExpressionType(mapIndex.key, context),
-    'Map keys',
-    mapIndex.key.loc ?? expression.target.loc,
-    context
-  )
-  const key = emitCValueExpression(mapIndex.key, context)
-  const value = emitCValueExpression(expression.value, context)
-
-  return {
-    lines: [
-      ...mapIndex.receiver.lines,
-      ...key.lines,
-      ...value.lines,
-      emitStatusCheck(`ccjs_map_set(${mapIndex.receiver.expression}, ${key.expression}, ${value.expression})`, context)
-    ],
-    expression: ''
-  }
-}
-
-function emitPreparedMapIndexReceiver(expression, context) {
-  if (expression?.type !== 'IndexExpression' || expression.collectionKind !== 'map') {
-    return null
-  }
-
-  const receiver = emitPreparedCollectionReceiver(expression.object, context)
-
-  if (receiver == null || receiver.type !== 'map') {
-    return null
-  }
-
-  return {
-    receiver,
-    key: expression.index
-  }
-}
-
-function emitPreparedSetMethodCall(name, expression, context) {
-  const method = expression.callee.property
-
-  if (method === 'clear') {
-    return {
-      lines: [emitStatusCheck(`ccjs_set_clear(${name})`, context)],
-      expression: ''
-    }
-  }
-
-  if (method === 'add') {
-    reportCCollectionHashability(
-      inferExpressionType(expression.args[0], context),
-      'Set values',
-      expression.args[0]?.loc ?? expression.loc,
-      context
-    )
-    const value = emitCValueExpression(expression.args[0], context)
-
-    return {
-      lines: [...value.lines, emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context)],
-      expression: name
-    }
-  }
-
-  if (method === 'has' || method === 'delete') {
-    reportCCollectionHashability(
-      inferExpressionType(expression.args[0], context),
-      'Set values',
-      expression.args[0]?.loc ?? expression.loc,
-      context
-    )
-    const value = emitCValueExpression(expression.args[0], context)
-    const out = nextCName(context, `ccjs_set_${method}`)
-    const helper = method === 'has' ? 'ccjs_set_has' : 'ccjs_set_delete'
-
-    return {
-      lines: [
-        ...value.lines,
-        `bool ${out} = false;`,
-        emitStatusCheck(`${helper}(${name}, ${value.expression}, &${out})`, context)
-      ],
-      expression: `(${out} ? 1 : 0)`
-    }
-  }
-
-  context.diagnostics.push(
-    diagnostic('CCJS_C_COLLECTION', `Set.${method} is not supported by the current C backend slice`, expression.loc)
-  )
-
-  return {
-    lines: [],
-    expression: '0'
-  }
 }
 
 function isBytesSliceCall(expression, context) {
