@@ -226,12 +226,9 @@ import {
 } from './stdlib/process.ts'
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import {
-  cTimerClearCallName,
+  emitPreparedTimerCallExpression,
   emitTimerVariableDeclaration,
-  cTimerRuntimeCallName,
-  cTimerStartCallName,
-  timerCallbackFunctionType,
-  type TimerDeclarationDependencies
+  type TimerLoweringDependencies
 } from './stdlib/timers.ts'
 import { cUrlRuntimeMethodName } from './stdlib/url.ts'
 import {
@@ -486,7 +483,8 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedPromiseMethodExpression,
   emitPreparedPromiseReturningCallExpression,
   emitPreparedPromiseStaticExpression,
-  emitPreparedTimerCallExpression,
+  emitPreparedTimerCallExpression: (expression, context, options) =>
+    emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitPreparedUpdateExpression,
   emitPreparedUrlObjectExpression,
   emitPreparedUrlSearchParamsObjectExpression,
@@ -548,9 +546,10 @@ const jsonDeclarationDependencies: JsonDeclarationDependencies = {
   registerObjectShape
 }
 
-const timerDeclarationDependencies: TimerDeclarationDependencies = {
-  emitPreparedTimerCallExpression,
-  emitPreparedTimerHandleExpression
+const timerLoweringDependencies: TimerLoweringDependencies = {
+  emitPreparedNumberExpression,
+  emitReference,
+  emitRuntimeCallbackValue
 }
 
 const fetchDeclarationDependencies: FetchDeclarationDependencies = {
@@ -2367,7 +2366,7 @@ function emitScalarVariableDeclaration(statement, context) {
     return emitErrorObjectVariableDeclaration(statement, context)
   }
 
-  const timerDeclaration = emitTimerVariableDeclaration(statement, context, timerDeclarationDependencies)
+  const timerDeclaration = emitTimerVariableDeclaration(statement, context, timerLoweringDependencies)
 
   if (timerDeclaration != null) {
     return timerDeclaration
@@ -2414,7 +2413,7 @@ function emitScalarVariableDeclaration(statement, context) {
   const timerHandleDeclaration = emitTimerVariableDeclaration(
     statement,
     context,
-    timerDeclarationDependencies,
+    timerLoweringDependencies,
     inferred
   )
 
@@ -5854,7 +5853,7 @@ function emitPreparedCallExpression(expression, context) {
     return jsonCall
   }
 
-  const timerCall = emitPreparedTimerCallExpression(expression, context, {
+  const timerCall = emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, {
     asValue: true
   })
 
@@ -7637,131 +7636,6 @@ function emitPreparedDebugMemoryCallExpression(expression, context, options: { d
   return {
     lines,
     expression: out
-  }
-}
-
-function emitPreparedTimerCallExpression(expression, context, options: { out?: string; asValue?: boolean } = {}) {
-  const method = expression?.timerRuntimeMethod ?? cTimerRuntimeCallName(expression?.callee)
-
-  if (method == null) {
-    return null
-  }
-
-  const clearMethod = method.startsWith('clear') ? method : cTimerClearCallName(expression.callee)
-
-  if (clearMethod != null) {
-    const handle = emitPreparedTimerHandleExpression(expression.args[0], context)
-
-    return {
-      lines: [...handle.lines, `ccjs_loop_clear_timer(${handle.expression});`],
-      expression: ''
-    }
-  }
-
-  if (context.statusReturn && !context.externalEventLoop) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_TIMER_CALLBACK',
-        'timer calls inside runtime callbacks need callback loop capture and are not supported by the current C backend slice',
-        expression.loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: ''
-    }
-  }
-
-  if (method === 'setInterval' && options.out == null && options.asValue !== true) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_TIMER_HANDLE',
-        'setInterval requires a timer handle so it can be cleared by the current C backend slice',
-        expression.loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: ''
-    }
-  }
-
-  registerEventLoop(context)
-
-  const out = options.out ?? (options.asValue === true ? nextCName(context, 'ccjs_timer_handle') : null)
-  const callback = emitRuntimeCallbackValue(expression.args[0], timerCallbackFunctionType(), context)
-  const callbackContext = nextCName(context, 'ccjs_timer_ctx')
-  const lines = [
-    ...(out != null && options.out == null ? [`ccjs_timer_handle* ${out} = 0;`] : []),
-    ...callback.lines,
-    `ccjs_value* ${callbackContext} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`,
-    `if (${callbackContext} == 0) ${emitFailureStatement(context)}`,
-    `*${callbackContext} = ${callback.expression};`,
-    `ccjs_retain(*${callbackContext});`
-  ]
-  const outArgument = out == null ? '0' : `&${out}`
-
-  if (method === 'setImmediate') {
-    lines.push(
-      `if (ccjs_loop_queue_immediate(${emitEventLoopReference(context)}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
-    )
-    lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
-    lines.push(`  ${emitFailureStatement(context)}`)
-    lines.push('}')
-
-    return {
-      lines,
-      expression: out ?? ''
-    }
-  }
-
-  const delay = emitPreparedNumberExpression(expression.args[1], context)
-  const runtimeCall = method === 'setInterval' ? 'ccjs_loop_set_interval' : 'ccjs_loop_set_timeout'
-
-  lines.push(...delay.lines)
-  lines.push(
-    `if (${runtimeCall}(${emitEventLoopReference(context)}, ${delay.expression}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
-  )
-  lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
-  lines.push(`  ${emitFailureStatement(context)}`)
-  lines.push('}')
-
-  return {
-    lines,
-    expression: out ?? ''
-  }
-}
-
-function emitPreparedTimerHandleExpression(expression, context) {
-  if (
-    expression?.type === 'Reference' &&
-    expression.path.length === 1 &&
-    context.variables.get(expression.path[0]) === 'timer'
-  ) {
-    return {
-      lines: [],
-      expression: emitReference(expression, context)
-    }
-  }
-
-  if (
-    expression?.type === 'CallExpression' &&
-    (cTimerStartCallName(expression.callee) != null || expression.timerRuntimeMethod?.startsWith('set'))
-  ) {
-    return emitPreparedTimerCallExpression(expression, context, {
-      asValue: true
-    })
-  }
-
-  context.diagnostics.push(
-    diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls require a timer handle value', expression?.loc)
-  )
-
-  return {
-    lines: [],
-    expression: '0'
   }
 }
 
