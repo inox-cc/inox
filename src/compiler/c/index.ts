@@ -49,6 +49,7 @@ import {
   registerOwnedValue,
   shouldEmitCleanupLabel,
   type CEmitContext,
+  type CFunctionContext,
   withVariableScope
 } from './context.ts'
 import {
@@ -1229,21 +1230,21 @@ function createBaseContext(
   }
 }
 
-function resolveFunctionReturnType(name, fallback, context) {
+function resolveFunctionReturnType(name: string, fallback: any, context: CEmitContext): any {
   return context.functionReturnTypes.get(name) ?? fallback
 }
 
-function resolveFunctionReturnNullable(name, fallback, context) {
+function resolveFunctionReturnNullable(name: string, fallback: any, context: CEmitContext): boolean {
   return context.functionReturnNullables.has(name)
     ? context.functionReturnNullables.get(name) === true
     : fallback === true
 }
 
-function resolveFunctionDeclarationParams(name, fallback, context) {
+function resolveFunctionDeclarationParams(name: string, fallback: any[], context: CEmitContext): any[] {
   return context.functionParams.get(name) ?? fallback
 }
 
-function isBoxedFunctionParam(param, index, statement, context) {
+function isBoxedFunctionParam(param: any, index: number, statement: AnyNode, context: CEmitContext): boolean {
   return context.boxedMutableCaptureDeclarations.has(statement.params[index] ?? param)
 }
 
@@ -1300,7 +1301,7 @@ function staticObjectBooleanPropertyValue(expression, key) {
   return null
 }
 
-function emitFunctionDeclaration(statement, baseContext) {
+function emitFunctionDeclaration(statement: AnyNode, baseContext: CEmitContext): string[] {
   const returnInfo = resolveCFunctionReturnInfo(statement, baseContext)
   const returnType = returnInfo.returnType
   const returnNullable = returnInfo.returnNullable
@@ -1361,7 +1362,7 @@ function emitFunctionDeclaration(statement, baseContext) {
   return lines
 }
 
-function registerFunctionParamsInContext(statement, params, context) {
+function registerFunctionParamsInContext(statement: AnyNode, params: any[], context: CFunctionContext): void {
   for (const [index, param] of params.entries()) {
     if (isNullableScalarParam(param)) {
       context.variables.set(param.name, param.valueType)
@@ -1417,7 +1418,7 @@ function registerFunctionParamsInContext(statement, params, context) {
   }
 }
 
-function emitFunctionHead(statement, context) {
+function emitFunctionHead(statement: AnyNode, context: CEmitContext): string {
   const name = context.functionNames.get(statement.name) ?? emitCFunctionName(statement.name)
   const returnInfo = resolveCFunctionReturnInfo(statement, context)
   const returnType = context.returnType ?? returnInfo.returnType
@@ -1476,7 +1477,7 @@ function emitFunctionHead(statement, context) {
   return `${emitCReturnType(returnType, returnNullable)} ${name}(${params.length === 0 ? 'void' : params.join(', ')})`
 }
 
-function emitClassMethodDeclaration(info, method, baseContext) {
+function emitClassMethodDeclaration(info: any, method: AnyNode, baseContext: CEmitContext): string[] {
   const context = createFunctionContext(baseContext, method.returnType, method.returnNullable)
   const params = method.params
 
@@ -1521,7 +1522,7 @@ function emitClassMethodDeclaration(info, method, baseContext) {
   return lines
 }
 
-function emitClassMethodHead(info, method, context) {
+function emitClassMethodHead(info: any, method: AnyNode, context: CEmitContext): string {
   const params = [
     'ccjs_value this',
     ...method.params.map((param, index) => emitClassMethodParam(param, index, method, context))
@@ -1530,7 +1531,7 @@ function emitClassMethodHead(info, method, context) {
   return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${emitCClassMethodName(info.name, method.name)}(${params.join(', ')})`
 }
 
-function emitClassMethodParam(param, index, method, context) {
+function emitClassMethodParam(param: any, index: number, method: AnyNode, context: CEmitContext): string {
   if (isNullableScalarParam(param)) {
     return `ccjs_value ${emitCScalarParamName(param.name)}`
   }
@@ -1566,7 +1567,10 @@ function emitClassMethodParam(param, index, method, context) {
   return `${emitCType(param.valueType)} ${param.name}`
 }
 
-function resolveCFunctionReturnInfo(statement, context) {
+function resolveCFunctionReturnInfo(
+  statement: AnyNode,
+  context: CEmitContext
+): { returnType: any; returnNullable: boolean } {
   const returnType = resolveFunctionReturnType(statement.name, statement.returnType, context)
   const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
 
@@ -1584,7 +1588,7 @@ function resolveCFunctionReturnInfo(statement, context) {
   }
 }
 
-function emitFunctionParameter(name, functionType, context, loc) {
+function emitFunctionParameter(name: string, functionType: any, context: CEmitContext, loc: any): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
 
   if (isRuntimeFunctionType(functionType)) {
@@ -1598,13 +1602,20 @@ function emitFunctionPointerParameter(name, functionType) {
   return `${emitFunctionPointerReturnType(functionType)} (*${name})(${emitFunctionPointerParams(functionType)})`
 }
 
-function emitFunctionPointerVariable(name, init, context, isConst, functionType, loc) {
+function emitFunctionPointerVariable(
+  name: string,
+  init: any,
+  context: CFunctionContext,
+  isConst: boolean,
+  functionType: any,
+  loc: any
+): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
 
   return `${emitFunctionPointerReturnType(functionType)} (*${isConst ? 'const ' : ''}${name})(${emitFunctionPointerParams(functionType)}) = ${emitFunctionValueExpression(init, context)}`
 }
 
-function reportUnsupportedCFunctionType(functionType, context, loc) {
+function reportUnsupportedCFunctionType(functionType: any, context: CEmitContext, loc: any): void {
   if (functionType == null) {
     return
   }
@@ -1622,7 +1633,7 @@ function reportUnsupportedCFunctionType(functionType, context, loc) {
   )
 }
 
-function emitMainWrapper(irPrograms, baseContext) {
+function emitMainWrapper(irPrograms: IrProgram[], baseContext: CEmitContext): string[] {
   const context = createFunctionContext(baseContext, 'number')
   const body = collectIrTopLevelNodesFromPrograms(irPrograms, 'statement')
   const bodyLines: string[] = []
@@ -1659,7 +1670,7 @@ function emitMainWrapper(irPrograms, baseContext) {
   return lines
 }
 
-function emitMainReturnExpression(context) {
+function emitMainReturnExpression(context: CFunctionContext): string {
   const successReturn = context.processRuntime
     ? 'ccjs_process_get_exit_code()'
     : context.returnType === 'number'
@@ -1671,13 +1682,13 @@ function emitMainReturnExpression(context) {
     : `${context.unhandledRejectionFlag} == 0 ? ${successReturn} : 1`
 }
 
-function emitRuntimeParamPrelude(statement, context) {
+function emitRuntimeParamPrelude(statement: AnyNode, context: CFunctionContext): string[] {
   const params = resolveFunctionDeclarationParams(statement.name, statement.params, context)
 
   return emitRuntimeParamPreludeForParams(statement, params, context)
 }
 
-function emitRuntimeParamPreludeForParams(statement, params, context) {
+function emitRuntimeParamPreludeForParams(statement: AnyNode, params: any[], context: CFunctionContext): string[] {
   return params.flatMap((param, index) => {
     if (isNullableScalarParam(param)) {
       const paramName = emitCScalarParamName(param.name)
@@ -1745,7 +1756,7 @@ function emitRuntimeParamPreludeForParams(statement, params, context) {
   })
 }
 
-function emitThrowingFunctionPrelude(context) {
+function emitThrowingFunctionPrelude(context: CFunctionContext): string[] {
   if (!context.throwingFunction) {
     return []
   }
