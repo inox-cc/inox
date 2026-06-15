@@ -1,15 +1,37 @@
-export const binaryStaticMethods = ['alloc', 'from'] as const
+export const binaryStaticMethods = ['alloc', 'from', 'isBuffer'] as const
 export const binaryInstanceMethods = ['slice', 'toString'] as const
 export const binaryConstructors = ['Uint8Array'] as const
+export const bufferRuntimeConstants = ['MAX_LENGTH'] as const
+export const unsupportedBufferRuntimeExports = [
+  'Blob',
+  'File',
+  'atob',
+  'btoa',
+  'constants.MAX_STRING_LENGTH',
+  'isAscii',
+  'isUtf8',
+  'kMaxLength',
+  'kStringMaxLength',
+  'resolveObjectURL',
+  'transcode'
+] as const
 
 export type BinaryStaticMethod = (typeof binaryStaticMethods)[number]
 export type BinaryInstanceMethod = (typeof binaryInstanceMethods)[number]
 export type BinaryRuntimeMethod = BinaryStaticMethod | BinaryInstanceMethod
 export type BinaryConstructorName = (typeof binaryConstructors)[number]
+export type BufferRuntimeConstant = (typeof bufferRuntimeConstants)[number]
 
+const nodeBufferImportSources = new Set(['node:buffer'])
 const binaryStaticMethodSet = new Set<string>(binaryStaticMethods)
 const binaryInstanceMethodSet = new Set<string>(binaryInstanceMethods)
 const binaryConstructorSet = new Set<string>(binaryConstructors)
+const bufferRuntimeConstantSet = new Set<string>(bufferRuntimeConstants)
+const unsupportedBufferRuntimeExportSet = new Set<string>(unsupportedBufferRuntimeExports)
+
+export function isNodeBufferImportSource(source: string | null | undefined): boolean {
+  return source != null && nodeBufferImportSources.has(source)
+}
 
 export function binaryStaticRuntimeMethodNameFromPath(
   path: readonly string[] | null | undefined
@@ -45,7 +67,19 @@ export function isBinaryConstructorName(name: string): name is BinaryConstructor
   return binaryConstructorSet.has(name)
 }
 
+export function isBufferRuntimeConstant(name: string): name is BufferRuntimeConstant {
+  return bufferRuntimeConstantSet.has(name)
+}
+
+export function isUnsupportedBufferRuntimeExport(name: string): boolean {
+  return unsupportedBufferRuntimeExportSet.has(name)
+}
+
 export function binaryRuntimeReturnType(method: string): 'bytes' | 'string' | null {
+  if (method === 'isBuffer') {
+    return null
+  }
+
   if (method === 'toString') {
     return 'string'
   }

@@ -55,7 +55,11 @@ import {
 import {
   binaryConstructorNameFromPath,
   binaryInstanceRuntimeMethodName,
-  binaryStaticRuntimeMethodNameFromPath
+  binaryStaticRuntimeMethodNameFromPath,
+  isBinaryStaticMethod,
+  isBufferRuntimeConstant,
+  isNodeBufferImportSource,
+  isUnsupportedBufferRuntimeExport
 } from './stdlib/descriptors/binary.ts'
 import {
   collectionConstructorNameFromPath,
@@ -1111,6 +1115,12 @@ class Checker {
       return pathConstantType
     }
 
+    const bufferConstantType = this.checkBufferConstantMemberExpression(expression)
+
+    if (bufferConstantType != null) {
+      return bufferConstantType
+    }
+
     const fsConstantType = this.checkFsConstantMemberExpression(expression)
 
     if (fsConstantType != null) {
@@ -1589,6 +1599,12 @@ class Checker {
       return binaryType
     }
 
+    const bufferUnsupportedType = this.checkBufferUnsupportedCall(expression)
+
+    if (bufferUnsupportedType != null) {
+      return bufferUnsupportedType
+    }
+
     const stringConversionType = this.checkStringConversionCall(expression)
 
     if (stringConversionType != null) {
@@ -1819,13 +1835,9 @@ class Checker {
       return null
     }
 
-    const staticMethod = binaryStaticRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+    const staticMethod = this.resolveBinaryStaticRuntimeMethod(expression.callee)
 
     if (staticMethod != null) {
-      if (this.scope.resolve('Buffer') != null) {
-        return null
-      }
-
       if (staticMethod === 'from') {
         if (expression.args.length < 1 || expression.args.length > 2) {
           this.report(
@@ -1850,6 +1862,25 @@ class Checker {
         expression.valueType = 'bytes'
 
         return 'bytes'
+      }
+
+      if (staticMethod === 'isBuffer') {
+        if (expression.args.length !== 1) {
+          this.report(
+            'CCJS_ARG_COUNT',
+            `function Buffer.isBuffer expects 1 argument(s), got ${expression.args.length}`,
+            expression.loc
+          )
+        }
+
+        if (expression.args[0] != null) {
+          this.checkExpression(expression.args[0])
+        }
+
+        expression.binaryRuntimeMethod = staticMethod
+        expression.valueType = 'boolean'
+
+        return 'boolean'
       }
 
       if (staticMethod === 'alloc') {
@@ -1913,6 +1944,99 @@ class Checker {
       expression.valueType = 'string'
 
       return 'string'
+    }
+
+    return null
+  }
+
+  resolveBinaryStaticRuntimeMethod(callee: AnyNode): string | null {
+    const path = memberExpressionPath(callee)
+
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 2 && path[0] === 'Buffer') {
+      const symbol = this.scope.resolve('Buffer')
+
+      if (symbol == null) {
+        return binaryStaticRuntimeMethodNameFromPath(path)
+      }
+
+      if (symbol.kind === 'import' && isNodeBufferImportSource(symbol.importSource) && symbol.importedName === 'Buffer') {
+        return isBinaryStaticMethod(path[1]) ? path[1] : null
+      }
+
+      return null
+    }
+
+    if (path.length === 3 && path[1] === 'Buffer') {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeBufferImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'buffer')
+      ) {
+        return isBinaryStaticMethod(path[2]) ? path[2] : null
+      }
+    }
+
+    return null
+  }
+
+  checkBufferUnsupportedCall(expression: AnyNode): ValueType | null {
+    const path = memberExpressionPath(expression.callee)
+    const unsupported = this.resolveUnsupportedBufferRuntimeExport(path)
+
+    if (unsupported == null) {
+      return null
+    }
+
+    for (const arg of expression.args) {
+      this.checkExpression(arg)
+    }
+
+    this.report(
+      'CCJS_NOT_IMPLEMENTED',
+      `node:buffer ${unsupported} is not implemented by the current C backend`,
+      expression.loc
+    )
+    expression.valueType = 'unknown'
+
+    return 'unknown'
+  }
+
+  resolveUnsupportedBufferRuntimeExport(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeBufferImportSource(symbol.importSource) &&
+        importedName != null &&
+        isUnsupportedBufferRuntimeExport(importedName)
+      ) {
+        return importedName
+      }
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeBufferImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'buffer') &&
+        isUnsupportedBufferRuntimeExport(path[1])
+      ) {
+        return path[1]
+      }
     }
 
     return null
@@ -3075,6 +3199,53 @@ class Checker {
     return null
   }
 
+  checkBufferConstantMemberExpression(expression: AnyNode): ValueType | null {
+    const constant = this.resolveBufferRuntimeConstant(memberExpressionPath(expression))
+
+    if (constant == null) {
+      return null
+    }
+
+    expression.bufferRuntimeConstant = constant
+    expression.valueType = 'number'
+
+    return 'number'
+  }
+
+  resolveBufferRuntimeConstant(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeBufferImportSource(symbol.importSource) &&
+        symbol.importedName === 'constants' &&
+        isBufferRuntimeConstant(path[1])
+      ) {
+        return path[1]
+      }
+    }
+
+    if (path.length === 3 && path[1] === 'constants') {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeBufferImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'buffer') &&
+        isBufferRuntimeConstant(path[2])
+      ) {
+        return path[2]
+      }
+    }
+
+    return null
+  }
+
   checkDebugMemoryCall(expression: AnyNode): ValueType | null {
     const method = debugRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
 
@@ -3455,6 +3626,20 @@ class Checker {
 
       if (importedName === 'default' || importedName === 'childProcess') {
         return 'object'
+      }
+    }
+
+    if (isNodeBufferImportSource(source)) {
+      if (importedName === 'Buffer' || importedName === 'default' || importedName === 'buffer') {
+        return 'object'
+      }
+
+      if (importedName === 'constants') {
+        return 'object'
+      }
+
+      if (isUnsupportedBufferRuntimeExport(importedName)) {
+        return 'function'
       }
     }
 

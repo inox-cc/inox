@@ -14075,6 +14075,15 @@ function emitCBytesToStringValueExpression(expression, context) {
 }
 
 function emitPreparedBinaryNumberCallExpression(expression, context) {
+  if (expression?.type === 'CallExpression' && expression.binaryRuntimeMethod === 'isBuffer') {
+    const value = emitCValueExpression(expression.args[0], context)
+
+    return {
+      lines: value.lines,
+      expression: `(${value.expression}.tag == CCJS_TAG_BYTES ? 1 : 0)`
+    }
+  }
+
   return null
 }
 
@@ -14941,6 +14950,13 @@ function emitPreparedNumberExpression(expression, context) {
     return {
       lines: [],
       expression: fsConstant
+    }
+  }
+
+  if (expression?.bufferRuntimeConstant === 'MAX_LENGTH') {
+    return {
+      lines: [],
+      expression: '((double)((size_t)-1))'
     }
   }
 

@@ -18,11 +18,7 @@ export function binaryRuntimeMethodName(callee: any): string | null {
 }
 
 export function isBinaryRuntimeCall(expression: any): boolean {
-  return (
-    expression?.type === 'CallExpression' &&
-    typeof expression.binaryRuntimeMethod === 'string' &&
-    binaryRuntimeMethodName(expression.callee) === expression.binaryRuntimeMethod
-  )
+  return expression?.type === 'CallExpression' && typeof expression.binaryRuntimeMethod === 'string'
 }
 
 export function isBufferFromCall(expression: any): boolean {

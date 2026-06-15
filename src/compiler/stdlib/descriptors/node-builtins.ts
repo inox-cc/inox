@@ -4,6 +4,7 @@ export const implementedRuntimeBuiltinImportSources = [
   'http',
   'net',
   'node:path',
+  'node:buffer',
   'node:crypto',
   'node:child_process',
   'node:dgram',
@@ -17,7 +18,6 @@ export const implementedRuntimeBuiltinImportSources = [
 ] as const
 
 export const unsupportedRuntimeBuiltinImportSources = [
-  'node:buffer',
   'node:dns',
   'node:events',
   'node:https',
