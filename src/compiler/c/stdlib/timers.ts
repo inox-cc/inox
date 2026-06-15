@@ -28,6 +28,30 @@ type TimerCallOptions = {
   asValue?: boolean
 }
 
+type TimerStartCallDescriptor = {
+  callName: string
+  delay: boolean
+  requiresHandle: boolean
+}
+
+const timerStartCallDescriptors: Record<string, TimerStartCallDescriptor> = {
+  setImmediate: {
+    callName: 'ccjs_loop_queue_immediate',
+    delay: false,
+    requiresHandle: false
+  },
+  setInterval: {
+    callName: 'ccjs_loop_set_interval',
+    delay: true,
+    requiresHandle: true
+  },
+  setTimeout: {
+    callName: 'ccjs_loop_set_timeout',
+    delay: true,
+    requiresHandle: false
+  }
+}
+
 export function cTimerRuntimeCallName(callee: any): string | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
@@ -134,6 +158,12 @@ export function emitPreparedTimerCallExpression(
     }
   }
 
+  const descriptor = timerStartCallDescriptors[method]
+
+  if (descriptor == null) {
+    return null
+  }
+
   if (context.statusReturn && !context.externalEventLoop) {
     context.diagnostics.push(
       diagnostic(
@@ -149,7 +179,7 @@ export function emitPreparedTimerCallExpression(
     }
   }
 
-  if (method === 'setInterval' && options.out == null && options.asValue !== true) {
+  if (descriptor.requiresHandle && options.out == null && options.asValue !== true) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_TIMER_HANDLE',
@@ -179,9 +209,9 @@ export function emitPreparedTimerCallExpression(
   ]
   const outArgument = out == null ? '0' : `&${out}`
 
-  if (method === 'setImmediate') {
+  if (!descriptor.delay) {
     lines.push(
-      `if (ccjs_loop_queue_immediate(${emitEventLoopReference(context)}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
+      `if (${descriptor.callName}(${emitEventLoopReference(context)}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
     )
     lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
     lines.push(`  ${emitFailureStatement(context)}`)
@@ -194,11 +224,10 @@ export function emitPreparedTimerCallExpression(
   }
 
   const delay = dependencies.emitPreparedNumberExpression(expression.args[1], context)
-  const runtimeCall = method === 'setInterval' ? 'ccjs_loop_set_interval' : 'ccjs_loop_set_timeout'
 
   lines.push(...delay.lines)
   lines.push(
-    `if (${runtimeCall}(${emitEventLoopReference(context)}, ${delay.expression}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
+    `if (${descriptor.callName}(${emitEventLoopReference(context)}, ${delay.expression}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
   )
   lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
   lines.push(`  ${emitFailureStatement(context)}`)

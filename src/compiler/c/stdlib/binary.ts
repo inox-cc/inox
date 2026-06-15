@@ -35,6 +35,16 @@ export type BinaryLoweringDependencies = {
   inferExpressionType: (expression: any, context: any) => string
 }
 
+const binaryRuntimeCallDescriptors = {
+  fromData: { callName: 'ccjs_bytes_from_data', tempPrefix: 'ccjs_bytes', expectedTag: 'CCJS_TAG_BYTES' },
+  get: { callName: 'ccjs_bytes_get', tempPrefix: 'ccjs_byte' },
+  length: { callName: 'ccjs_bytes_len', tempPrefix: 'ccjs_bytes_len' },
+  newBytes: { callName: 'ccjs_bytes_new', tempPrefix: 'ccjs_bytes' },
+  set: { callName: 'ccjs_bytes_set' },
+  slice: { callName: 'ccjs_bytes_slice', tempPrefix: 'ccjs_bytes_slice', expectedTag: 'CCJS_TAG_BYTES' },
+  bytesToString: { callName: 'ccjs_bytes_to_string', tempPrefix: 'ccjs_bytes_string', expectedTag: 'CCJS_TAG_STRING' }
+} as const
+
 export function binaryRuntimeMethodName(callee: any): string | null {
   if (callee?.type !== 'MemberExpression') {
     return null
@@ -103,8 +113,9 @@ function emitCBufferFromValueExpression(
   context: any,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
+  const descriptor = binaryRuntimeCallDescriptors.fromData
   const value = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_buffer_from')
-  const temp = nextCName(context, 'ccjs_bytes')
+  const temp = nextCName(context, descriptor.tempPrefix)
   registerOwnedValue(context, temp)
 
   return {
@@ -112,10 +123,10 @@ function emitCBufferFromValueExpression(
       ...value.lines,
       ...emitPrepareOwnedValueWrite(temp),
       emitStatusCheck(
-        `ccjs_bytes_from_data(&ccjs_default_allocator, (const uint8_t*)${value.bytes}, ${value.length}, &${temp})`,
+        `${descriptor.callName}(&ccjs_default_allocator, (const uint8_t*)${value.bytes}, ${value.length}, &${temp})`,
         context
       ),
-      emitRuntimeValueCheck(temp, 'CCJS_TAG_BYTES', context)
+      emitRuntimeValueCheck(temp, descriptor.expectedTag, context)
     ],
     expression: temp
   }
@@ -126,21 +137,27 @@ function emitCBytesAllocValueExpression(
   context: any,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
-  const temp = nextCName(context, 'ccjs_bytes')
+  const descriptor = binaryRuntimeCallDescriptors.newBytes
+  const temp = nextCName(context, descriptor.tempPrefix)
   registerOwnedValue(context, temp)
 
   if (isBinaryConstructorExpression(expression) && expression.args[0]?.type === 'ArrayLiteral') {
     const elements = expression.args[0].elements
     const lines = [
       ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(`ccjs_bytes_new(&ccjs_default_allocator, ${elements.length}, &${temp})`, context)
+      emitStatusCheck(`${descriptor.callName}(&ccjs_default_allocator, ${elements.length}, &${temp})`, context)
     ]
 
     for (const [index, element] of elements.entries()) {
       const value = dependencies.emitPreparedNumberExpression(element, context)
 
       lines.push(...value.lines)
-      lines.push(emitStatusCheck(`ccjs_bytes_set(${temp}, ${index}, (uint8_t)(${value.expression}))`, context))
+      lines.push(
+        emitStatusCheck(
+          `${binaryRuntimeCallDescriptors.set.callName}(${temp}, ${index}, (uint8_t)(${value.expression}))`,
+          context
+        )
+      )
     }
 
     return {
@@ -170,7 +187,10 @@ function emitCBytesAllocValueExpression(
     lines: [
       ...size.lines,
       ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(`ccjs_bytes_new(&ccjs_default_allocator, (size_t)(${size.expression}), &${temp})`, context)
+      emitStatusCheck(
+        `${descriptor.callName}(&ccjs_default_allocator, (size_t)(${size.expression}), &${temp})`,
+        context
+      )
     ],
     expression: temp
   }
@@ -181,6 +201,7 @@ function emitCBytesSliceValueExpression(
   context: any,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
+  const descriptor = binaryRuntimeCallDescriptors.slice
   const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
   const start = dependencies.emitPreparedNumberExpression(expression.args[0], context)
   const end = expression.args[1] == null ? null : dependencies.emitPreparedNumberExpression(expression.args[1], context)
@@ -189,7 +210,7 @@ function emitCBytesSliceValueExpression(
   const startIndex = nextCName(context, 'ccjs_bytes_start')
   const endRaw = nextCName(context, 'ccjs_bytes_end_raw')
   const endIndex = nextCName(context, 'ccjs_bytes_end')
-  const temp = nextCName(context, 'ccjs_bytes_slice')
+  const temp = nextCName(context, descriptor.tempPrefix)
   registerOwnedValue(context, temp)
 
   return {
@@ -198,15 +219,15 @@ function emitCBytesSliceValueExpression(
       ...start.lines,
       ...(end == null ? [] : end.lines),
       `size_t ${lengthName} = 0;`,
-      emitStatusCheck(`ccjs_bytes_len(${receiver.expression}, &${lengthName})`, context),
+      emitStatusCheck(`${binaryRuntimeCallDescriptors.length.callName}(${receiver.expression}, &${lengthName})`, context),
       `double ${startRaw} = ${start.expression};`,
       `double ${endRaw} = ${end == null ? `((double)${lengthName})` : end.expression};`,
       ...emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_bytes_start'),
       ...emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'ccjs_bytes_end'),
       `if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`,
       ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(`ccjs_bytes_slice(${receiver.expression}, ${startIndex}, ${endIndex}, &${temp})`, context),
-      emitRuntimeValueCheck(temp, 'CCJS_TAG_BYTES', context)
+      emitStatusCheck(`${descriptor.callName}(${receiver.expression}, ${startIndex}, ${endIndex}, &${temp})`, context),
+      emitRuntimeValueCheck(temp, descriptor.expectedTag, context)
     ],
     expression: temp
   }
@@ -217,16 +238,17 @@ function emitCBytesToStringValueExpression(
   context: any,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
+  const descriptor = binaryRuntimeCallDescriptors.bytesToString
   const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
-  const temp = nextCName(context, 'ccjs_bytes_string')
+  const temp = nextCName(context, descriptor.tempPrefix)
   registerOwnedValue(context, temp)
 
   return {
     lines: [
       ...receiver.lines,
       ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(`ccjs_bytes_to_string(&ccjs_default_allocator, ${receiver.expression}, &${temp})`, context),
-      emitRuntimeValueCheck(temp, 'CCJS_TAG_STRING', context)
+      emitStatusCheck(`${descriptor.callName}(&ccjs_default_allocator, ${receiver.expression}, &${temp})`, context),
+      emitRuntimeValueCheck(temp, descriptor.expectedTag, context)
     ],
     expression: temp
   }
@@ -263,13 +285,14 @@ export function emitPreparedBytesLengthExpression(
   }
 
   const value = dependencies.emitCValueExpression(expression.object, context)
-  const temp = nextCName(context, 'ccjs_bytes_len')
+  const descriptor = binaryRuntimeCallDescriptors.length
+  const temp = nextCName(context, descriptor.tempPrefix)
 
   return {
     lines: [
       ...value.lines,
       `size_t ${temp} = 0;`,
-      emitStatusCheck(`ccjs_bytes_len(${value.expression}, &${temp})`, context)
+      emitStatusCheck(`${descriptor.callName}(${value.expression}, &${temp})`, context)
     ],
     expression: `((double)${temp})`
   }
@@ -286,14 +309,15 @@ export function emitPreparedBytesIndexExpression(
 
   const value = dependencies.emitCValueExpression(expression.object, context)
   const index = dependencies.emitPreparedNumberExpression(expression.index, context)
-  const byte = nextCName(context, 'ccjs_byte')
+  const descriptor = binaryRuntimeCallDescriptors.get
+  const byte = nextCName(context, descriptor.tempPrefix)
 
   return {
     lines: [
       ...value.lines,
       ...index.lines,
       `uint8_t ${byte} = 0;`,
-      emitStatusCheck(`ccjs_bytes_get(${value.expression}, (size_t)(${index.expression}), &${byte})`, context)
+      emitStatusCheck(`${descriptor.callName}(${value.expression}, (size_t)(${index.expression}), &${byte})`, context)
     ],
     expression: `((double)${byte})`
   }
@@ -314,6 +338,7 @@ export function emitPreparedBytesIndexAssignment(
   const value = dependencies.emitCValueExpression(expression.target.object, context)
   const index = dependencies.emitPreparedNumberExpression(expression.target.index, context)
   const byte = dependencies.emitPreparedNumberExpression(expression.value, context)
+  const descriptor = binaryRuntimeCallDescriptors.set
 
   return {
     lines: [
@@ -321,7 +346,7 @@ export function emitPreparedBytesIndexAssignment(
       ...index.lines,
       ...byte.lines,
       emitStatusCheck(
-        `ccjs_bytes_set(${value.expression}, (size_t)(${index.expression}), (uint8_t)(${byte.expression}))`,
+        `${descriptor.callName}(${value.expression}, (size_t)(${index.expression}), (uint8_t)(${byte.expression}))`,
         context
       )
     ]
