@@ -1514,7 +1514,12 @@ function emitAsyncTaskVisibleLocalRead(name, valueType, fieldName) {
   return [`${emitCType(valueType)} ${name} = frame->${fieldName};`]
 }
 
-function createAsyncTaskEmitContext(baseContext, wrapper, returnType, visibleAwaitCount) {
+function createAsyncTaskEmitContext(
+  baseContext: CEmitContext,
+  wrapper: CAsyncTaskWrapper,
+  returnType: string,
+  visibleAwaitCount: number
+): CFunctionContext {
   const context = createFunctionContext(baseContext, returnType)
   context.statusReturn = true
   context.externalEventLoop = true
@@ -2114,7 +2119,11 @@ function emitPreparedAsyncTaskAwaitedValueExpression(item, context) {
   return emitPreparedAsyncTaskValueExpression(item.awaitedExpression.args[0], item.type, context)
 }
 
-function emitPreparedAsyncTaskValueExpression(expression, valueType, context) {
+function emitPreparedAsyncTaskValueExpression(
+  expression,
+  valueType: string,
+  context: CFunctionContext
+): PreparedExpression {
   if (valueType === 'void') {
     return {
       lines: [],
@@ -2149,7 +2158,7 @@ function emitPreparedAsyncTaskValueExpression(expression, valueType, context) {
   }
 }
 
-function emitAsyncTaskResumeDeclaration(wrapper, baseContext) {
+function emitAsyncTaskResumeDeclaration(wrapper: CAsyncTaskWrapper, baseContext: CEmitContext): string[] {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, wrapper.awaits.length)
   const returnValue = hasAsyncTaskStatementLocalDeclarations(collectAsyncTaskSuccessPhaseStatements(wrapper, ['body']))
     ? null
@@ -2173,7 +2182,13 @@ function emitAsyncTaskResumeDeclaration(wrapper, baseContext) {
   ]
 }
 
-function emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue, returnValueOwnedValues) {
+function emitAsyncTaskResumeCase(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  baseContext: CEmitContext,
+  returnValue: PreparedExpression | null,
+  returnValueOwnedValues: string[]
+): string[] {
   const nextItem = wrapper.awaits[item.index + 1] ?? null
   const valueCheck = emitAsyncTaskFulfilledValueCheck(wrapper, item)
   const lines = [
@@ -2245,7 +2260,10 @@ function hasAsyncTaskStatementLocalDeclarations(statements) {
   )
 }
 
-function collectAsyncTaskSuccessPhaseStatements(wrapper, kinds: string[] | null = null) {
+function collectAsyncTaskSuccessPhaseStatements(
+  wrapper: CAsyncTaskWrapper,
+  kinds: AsyncTaskSuccessPhaseKind[] | null = null
+): any[] {
   const allowedKinds = kinds == null ? null : new Set(kinds)
 
   return (wrapper.successPhases ?? [])
@@ -2253,11 +2271,11 @@ function collectAsyncTaskSuccessPhaseStatements(wrapper, kinds: string[] | null 
     .flatMap((phase) => phase.statements)
 }
 
-function collectAsyncTaskTryPhaseStatements(wrapper, kind) {
+function collectAsyncTaskTryPhaseStatements(wrapper: CAsyncTaskWrapper, kind: AsyncTaskTryPhaseKind): any[] {
   return (wrapper.tryPhases ?? []).filter((phase) => phase.kind === kind).flatMap((phase) => phase.statements)
 }
 
-function emitAsyncTaskFulfilledValueCheck(wrapper, item) {
+function emitAsyncTaskFulfilledValueCheck(wrapper: CAsyncTaskWrapper, item: CAsyncTaskAwaitStep): string[] {
   const expectedTag = cRuntimeValueTag(item.type)
 
   if (expectedTag == null) {
@@ -2275,7 +2293,7 @@ function emitAsyncTaskFulfilledValueCheck(wrapper, item) {
   ]
 }
 
-function emitAsyncTaskStoreFulfilledValueLines(item) {
+function emitAsyncTaskStoreFulfilledValueLines(item: CAsyncTaskAwaitStep): string[] {
   if (item.fieldName == null || item.type === 'void') {
     return []
   }
@@ -2295,7 +2313,11 @@ function emitAsyncTaskStoreFulfilledValueLines(item) {
   return []
 }
 
-function emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, errorExpression) {
+function emitAsyncTaskRejectAndMaybeFinalizeLines(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  errorExpression: string
+): string[] {
   return [
     `ccjs_status reject_status = ccjs_promise_reject(frame->promise, ${errorExpression});`,
     ...(item.index < wrapper.awaits.length - 1 ? [`${wrapper.finalizerName}(frame);`] : []),
@@ -2303,7 +2325,11 @@ function emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, errorExpression
   ]
 }
 
-function emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitCount) {
+function emitAsyncTaskTrySuccessFinallyLines(
+  wrapper: CAsyncTaskWrapper,
+  baseContext: CEmitContext,
+  visibleAwaitCount: number
+): string[] {
   if (!wrapper.hasTryRegion) {
     return []
   }
@@ -2316,7 +2342,11 @@ function emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitC
   )
 }
 
-function emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, visibleAwaitCount) {
+function emitAsyncTaskTrySuccessPreludeLines(
+  wrapper: CAsyncTaskWrapper,
+  baseContext: CEmitContext,
+  visibleAwaitCount: number
+): string[] {
   return emitAsyncTaskTryStatementList(
     collectAsyncTaskSuccessPhaseStatements(wrapper),
     wrapper,
@@ -2325,7 +2355,11 @@ function emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, visibleAwaitC
   )
 }
 
-function emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext) {
+function emitAsyncTaskTrySuccessPreludeAndReturnLines(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  baseContext: CEmitContext
+): string[] {
   const visibleAwaitCount = item.index + 1
   const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, visibleAwaitCount)
   const result = withVariableScope(context, () => {
@@ -2349,7 +2383,11 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext
   ]
 }
 
-function emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, visibleAwaitCount) {
+function emitAsyncTaskTryRejectFinallyLines(
+  wrapper: CAsyncTaskWrapper,
+  baseContext: CEmitContext,
+  visibleAwaitCount: number
+): string[] {
   if (!wrapper.hasTryRegion) {
     return []
   }
@@ -2362,7 +2400,11 @@ function emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, visibleAwaitCo
   )
 }
 
-function emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, visibleAwaitCount) {
+function emitAsyncTaskTryHandlerPreludeLines(
+  wrapper: CAsyncTaskWrapper,
+  baseContext: CEmitContext,
+  visibleAwaitCount: number
+): string[] {
   if (!wrapper.hasTryRegion) {
     return []
   }
@@ -2375,7 +2417,11 @@ function emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, visibleAwaitC
   )
 }
 
-function emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount) {
+function emitAsyncTaskTryFinallyLines(
+  wrapper: CAsyncTaskWrapper,
+  baseContext: CEmitContext,
+  visibleAwaitCount: number
+): string[] {
   if (!wrapper.hasTryRegion) {
     return []
   }
@@ -2388,7 +2434,12 @@ function emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount) {
   )
 }
 
-function emitAsyncTaskTryStatementList(statements, wrapper, baseContext, visibleAwaitCount) {
+function emitAsyncTaskTryStatementList(
+  statements: any[],
+  wrapper: CAsyncTaskWrapper,
+  baseContext: CEmitContext,
+  visibleAwaitCount: number
+): string[] {
   if (statements.length === 0) {
     return []
   }
@@ -2399,7 +2450,11 @@ function emitAsyncTaskTryStatementList(statements, wrapper, baseContext, visible
   return [...emitOwnedValueDeclarations(context), ...lines, ...emitOwnedValueCleanup(context)]
 }
 
-function emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, call) {
+function emitAsyncTaskSettleAndMaybeFinalizeLines(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  call: string
+): string[] {
   return [
     `status = ${call};`,
     ...(item.index < wrapper.awaits.length - 1 ? [`${wrapper.finalizerName}(frame);`] : []),
@@ -2407,7 +2462,7 @@ function emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, call) {
   ]
 }
 
-function emitAsyncTaskRejectDeclaration(wrapper, baseContext) {
+function emitAsyncTaskRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext: CEmitContext): string[] {
   if (wrapper.hasTryRegion) {
     return emitAsyncTaskTryRejectDeclaration(wrapper, baseContext)
   }
@@ -2425,7 +2480,7 @@ function emitAsyncTaskRejectDeclaration(wrapper, baseContext) {
   ]
 }
 
-function emitAsyncTaskTryRejectDeclaration(wrapper, baseContext) {
+function emitAsyncTaskTryRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext: CEmitContext): string[] {
   const cases = wrapper.awaits.flatMap((item) => emitAsyncTaskTryRejectCase(wrapper, item, baseContext))
 
   return [
@@ -2443,7 +2498,11 @@ function emitAsyncTaskTryRejectDeclaration(wrapper, baseContext) {
   ]
 }
 
-function emitAsyncTaskTryRejectCase(wrapper, item, baseContext) {
+function emitAsyncTaskTryRejectCase(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  baseContext: CEmitContext
+): string[] {
   const handler = wrapper.tryHandler ?? null
   const lines = [`case ${item.index}: {`]
 
@@ -2487,7 +2546,12 @@ function emitAsyncTaskTryRejectCase(wrapper, item, baseContext) {
   return lines
 }
 
-function emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler) {
+function emitAsyncTaskTryHandlerBodyAndReturnLines(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  baseContext: CEmitContext,
+  handler: AsyncTaskTryHandlerPlan
+): string[] {
   const visibleAwaitCount = item.index
   const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, visibleAwaitCount)
 
@@ -2518,7 +2582,7 @@ function emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, h
   ]
 }
 
-function emitAsyncTaskFinalizerDeclaration(wrapper) {
+function emitAsyncTaskFinalizerDeclaration(wrapper: CAsyncTaskWrapper): string[] {
   return [
     `static void ${wrapper.finalizerName}(void* context) {`,
     `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`,
