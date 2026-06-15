@@ -294,7 +294,8 @@ import type {
   CModulePlan,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedCallArgs as PreparedCallArgs,
-  CPreparedExpression as PreparedExpression
+  CPreparedExpression as PreparedExpression,
+  CRuntimeArrowCapture
 } from './types.ts'
 import {
   cRuntimeValueTag,
@@ -4123,7 +4124,7 @@ function emitRuntimeArrowCallbackValueInto(wrapper: any, out: string, context: C
 }
 
 function emitRuntimeArrowCaptureStoreLines(
-  capture: any,
+  capture: CRuntimeArrowCapture,
   contextName: string,
   context: CFunctionContext
 ): string[] {

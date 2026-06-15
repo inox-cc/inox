@@ -115,6 +115,18 @@ export type CFunctionType = {
   returnType: string
 }
 
+export type CRuntimeArrowCapture = {
+  declaration?: AnyNode | null
+  functionType?: CFunctionType | null
+  loc?: AnyNode['loc']
+  mutable?: boolean
+  name: string
+  promiseSettlementKind?: string | null
+  runtimeManaged?: boolean
+  shape?: any
+  valueType: string
+}
+
 export type CModuleOutputFile = {
   kind: 'header' | 'source'
   path: string

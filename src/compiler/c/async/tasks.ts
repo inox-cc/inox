@@ -28,7 +28,8 @@ import type {
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
-  CRuntimeArrayElement
+  CRuntimeArrayElement,
+  CRuntimeArrowCapture
 } from '../types.ts'
 import type { IrFunctionNodeEntry } from '../../ir.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
@@ -53,7 +54,11 @@ export type AsyncTaskLoweringDependencies = {
     bytes: string
     length: string
   }
-  emitRuntimeArrowCaptureStoreLines: (capture: any, contextName: string, context: CFunctionContext) => string[]
+  emitRuntimeArrowCaptureStoreLines: (
+    capture: CRuntimeArrowCapture,
+    contextName: string,
+    context: CFunctionContext
+  ) => string[]
   emitStatementList: (statements: any[], context: CFunctionContext) => string[]
   inferExpressionType: (expression: any, context: CFunctionContext) => string
   isIndexAccessExpression: (expression: any) => boolean

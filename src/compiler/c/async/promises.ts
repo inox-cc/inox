@@ -1,7 +1,8 @@
 import type { CEmitContext, CFunctionContext } from '../context.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression
+  CPreparedExpression as PreparedExpression,
+  CRuntimeArrowCapture
 } from '../types.ts'
 export function cPromiseRuntimeCallName(callee: any): string | null {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
@@ -137,7 +138,7 @@ export type PromiseChainLoweringDependencies = {
     outerScopes: Map<string, any>[],
     context: CEmitContext,
     deps: CallbackLoweringDependencies
-  ) => any[]
+  ) => CRuntimeArrowCapture[]
   emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitRuntimeArrowCallbackContextFinalizerDeclaration: (wrapper: any) => string[]
   emitRuntimeArrowCallbackContextLocals: (
@@ -169,7 +170,11 @@ export type PromiseLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ) => PreparedExpression | null
-  emitRuntimeArrowCaptureStoreLines: (capture: any, contextName: string, context: CFunctionContext) => string[]
+  emitRuntimeArrowCaptureStoreLines: (
+    capture: CRuntimeArrowCapture,
+    contextName: string,
+    context: CFunctionContext
+  ) => string[]
   emitStatementList: (statements: any[], context: CFunctionContext) => string[]
   inferExpressionType: (expression: any, context: CFunctionContext) => string
   inferRejectedValueType: (expression: any, context: CFunctionContext) => string

@@ -18,7 +18,7 @@ import {
   type CEmitContext,
   type CFunctionContext
 } from '../context.ts'
-import type { CFunctionParam, CFunctionType } from '../types.ts'
+import type { CFunctionParam, CFunctionType, CRuntimeArrowCapture } from '../types.ts'
 import type { IrProgram } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
@@ -741,8 +741,8 @@ export function collectArrowCaptures(
   outerScopes: Map<string, any>[],
   context: CEmitContext,
   deps: CallbackLoweringDependencies
-): any[] {
-  const captures = new Map()
+): CRuntimeArrowCapture[] {
+  const captures = new Map<string, CRuntimeArrowCapture>()
   const localScope = new Map()
   const localScopes = [localScope]
 
@@ -1353,7 +1353,7 @@ function emitRuntimeArrowCallbackParamPrelude(
   return lines
 }
 
-export function emitRuntimeArrowCaptureCType(capture: any): string {
+export function emitRuntimeArrowCaptureCType(capture: CRuntimeArrowCapture): string {
   if (capture.mutable) {
     if (['number', 'boolean'].includes(capture.valueType)) {
       return 'double*'
@@ -1383,19 +1383,22 @@ export function emitRuntimeArrowCaptureCType(capture: any): string {
   return 'double'
 }
 
-export function emitRuntimeArrowCaptureField(capture: any): string {
+export function emitRuntimeArrowCaptureField(capture: CRuntimeArrowCapture): string {
   return emitCIdentifier(capture.name)
 }
 
-export function isRetainedRuntimeArrowCapture(capture: any): boolean {
+export function isRetainedRuntimeArrowCapture(capture: CRuntimeArrowCapture): boolean {
   return capture.runtimeManaged === true && ['string', 'object'].includes(capture.valueType) && !capture.mutable
 }
 
-export function isPromiseSettlementRuntimeArrowCapture(capture: any): boolean {
+export function isPromiseSettlementRuntimeArrowCapture(capture: CRuntimeArrowCapture): boolean {
   return capture.valueType === 'promise-settlement'
 }
 
-export function isSupportedMutableRuntimeArrowCapture(capture: any, context: CFunctionContext): boolean {
+export function isSupportedMutableRuntimeArrowCapture(
+  capture: CRuntimeArrowCapture,
+  context: CFunctionContext
+): boolean {
   return (
     capture.mutable &&
     ['number', 'boolean', 'string', 'object'].includes(capture.valueType) &&
