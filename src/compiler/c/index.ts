@@ -3355,7 +3355,16 @@ function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CF
   ]
 }
 
-function emitPreparedDebugMemoryCallExpression(expression, context, options: { discard?: boolean } = {}) {
+type PromiseCallOptions = {
+  out?: string
+  owned?: boolean
+}
+
+function emitPreparedDebugMemoryCallExpression(
+  expression: AnyNode,
+  context: CFunctionContext,
+  options: { discard?: boolean } = {}
+): PreparedExpression | null {
   if (cDebugRuntimeMethodName(expression) !== 'memory') {
     return null
   }
@@ -3405,10 +3414,10 @@ function emitPreparedDebugMemoryCallExpression(expression, context, options: { d
 }
 
 function emitPreparedAsyncFunctionPromiseCallExpression(
-  expression,
-  context,
-  options: { out?: string; owned?: boolean } = {}
-) {
+  expression: AnyNode,
+  context: CFunctionContext,
+  options: PromiseCallOptions = {}
+): PreparedExpression | null {
   if (
     expression?.type !== 'CallExpression' ||
     !isAsyncFunctionCallee(expression.callee, context) ||
@@ -3492,11 +3501,11 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
 }
 
 function emitPreparedAsyncTaskPromiseCallExpression(
-  expression,
-  valueType,
-  context,
-  options: { out?: string; owned?: boolean } = {}
-) {
+  expression: AnyNode,
+  valueType: string,
+  context: CFunctionContext,
+  options: PromiseCallOptions = {}
+): PreparedExpression | null {
   if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
     return null
   }
@@ -3526,11 +3535,11 @@ function emitPreparedAsyncTaskPromiseCallExpression(
 }
 
 function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
-  expression,
-  valueType,
-  context,
-  options: { out?: string; owned?: boolean } = {}
-) {
+  expression: AnyNode,
+  valueType: string,
+  context: CFunctionContext,
+  options: PromiseCallOptions = {}
+): PreparedExpression | null {
   if (!isSupportedAsyncFunctionPromiseValueType(valueType)) {
     context.diagnostics.push(
       diagnostic(
@@ -3624,13 +3633,13 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   }
 }
 
-function isSupportedAsyncFunctionPromiseValueType(valueType) {
+function isSupportedAsyncFunctionPromiseValueType(valueType: string): boolean {
   return (
     valueType === 'void' || valueType === 'number' || valueType === 'boolean' || isManagedRuntimeReturnType(valueType)
   )
 }
 
-function resolveCFunctionRejectionValueType(callee, context) {
+function resolveCFunctionRejectionValueType(callee: AnyNode, context: CFunctionContext): string {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return 'unknown'
   }
@@ -3648,7 +3657,7 @@ function resolveCFunctionRejectionValueType(callee, context) {
   return 'unknown'
 }
 
-function emitPreparedAwaitPromiseExpression(expression, context) {
+function emitPreparedAwaitPromiseExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
   const promiseExpression = emitPreparedPromiseExpression(expression, context, promiseLoweringDependencies)
 
   if (promiseExpression != null) {
