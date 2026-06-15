@@ -1247,11 +1247,11 @@ function isBoxedFunctionParam(param, index, statement, context) {
   return context.boxedMutableCaptureDeclarations.has(statement.params[index] ?? param)
 }
 
-function collectExternalEventLoopFunctions(functions) {
+function collectExternalEventLoopFunctions(functions: AnyNode[]): Set<string> {
   const functionsByName = new Map(
     functions.flatMap((item) => (typeof item.name === 'string' ? [[item.name, item]] : []))
   )
-  const names = new Set()
+  const names = new Set<string>()
   let changed = true
 
   while (changed) {

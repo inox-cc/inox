@@ -50,7 +50,9 @@ import {
   emitOwnedValueDeclarations,
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
-  shouldEmitCleanupLabel
+  shouldEmitCleanupLabel,
+  type CEmitContext,
+  type CFunctionContext
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCFunctionName } from './identifiers.ts'
@@ -94,14 +96,14 @@ export type CModuleEmissionDependencies = {
     functionDeclarations: IrFunctionDeclaration[],
     functionEffects: IrFunctionEffect[],
     jsGlobalRoots: Set<string>
-  ) => any
+  ) => CEmitContext
   dgramLoweringDependencies: DgramLoweringDependencies
-  emitClassMethodDeclaration: (info: any, method: any, baseContext: any) => string[]
-  emitClassMethodHead: (info: any, method: any, context: any) => string
-  emitFunctionDeclaration: (statement: AnyNode, baseContext: any) => string[]
-  emitFunctionHead: (statement: AnyNode, context: any) => string
-  emitMainReturnExpression: (context: any) => string
-  emitStatementList: (body: AnyNode[], context: any) => string[]
+  emitClassMethodDeclaration: (info: any, method: any, baseContext: CEmitContext) => string[]
+  emitClassMethodHead: (info: any, method: any, context: CEmitContext) => string
+  emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) => string[]
+  emitFunctionHead: (statement: AnyNode, context: CEmitContext) => string
+  emitMainReturnExpression: (context: CFunctionContext) => string
+  emitStatementList: (body: AnyNode[], context: CFunctionContext) => string[]
   httpLoweringDependencies: HttpLoweringDependencies
   netLoweringDependencies: NetLoweringDependencies
   promiseChainLoweringDependencies: PromiseChainLoweringDependencies
@@ -295,7 +297,7 @@ function emitCModuleDeclarations(
   lines: string[],
   functions: AnyNode[],
   classMethods: any[],
-  context: any,
+  context: CEmitContext,
   deps: CModuleEmissionDependencies
 ): void {
   const arrowCallbackWrappers = [...context.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
@@ -387,7 +389,7 @@ function createCModuleBaseContext(
   plans: CModulePlan[],
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies
-) {
+): CEmitContext {
   const irPrograms = [plan.ir]
   const importedDeclarations = collectCModuleImportedFunctionDeclarations(plan)
   const functionEntries = collectIrFunctionNodeEntries(irPrograms)
@@ -445,7 +447,7 @@ function createCModuleBaseContext(
   return context
 }
 
-function collectCModuleContextRuntimeTypes(context: any): Set<string> {
+function collectCModuleContextRuntimeTypes(context: CEmitContext): Set<string> {
   const types = new Set<string>()
 
   for (const type of context.functionReturnTypes.values()) {
@@ -467,7 +469,7 @@ function collectCModuleContextRuntimeTypes(context: any): Set<string> {
 
 function emitCModuleInitFunction(
   plan: CModulePlan,
-  baseContext: any,
+  baseContext: CEmitContext,
   deps: CModuleEmissionDependencies
 ): string[] {
   const context = createFunctionContext(baseContext, 'void')
@@ -510,7 +512,7 @@ function emitCModuleInitFunction(
 
 function emitCModuleMainFunction(
   plan: CModulePlan,
-  baseContext: any,
+  baseContext: CEmitContext,
   deps: CModuleEmissionDependencies
 ): string[] {
   const context = createFunctionContext(baseContext, 'number')

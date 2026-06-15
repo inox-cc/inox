@@ -1,6 +1,7 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import {
+  createFunctionContext,
   emitEventLoopReference,
   emitStatusCheck,
   nextCName,
@@ -42,9 +43,10 @@ export function emitHttpHandlerHead(wrapper: any): string {
 
 export function emitHttpHandlerDeclaration(
   wrapper: any,
-  baseContext: CFunctionContext,
+  baseContext: CEmitContext,
   deps: HttpLoweringDependencies
 ): string[] {
+  const context = createFunctionContext(baseContext, 'void')
   const expression = wrapper.expression
   const requestName = expression.params[0]?.name ?? null
   const responseName = expression.params[1]?.name ?? null
@@ -53,6 +55,16 @@ export function emitHttpHandlerDeclaration(
     responseName,
     stringLocals: new Map()
   }
+  context.statusReturn = true
+
+  if (requestName != null) {
+    context.variables.set(requestName, 'http-request')
+  }
+
+  if (responseName != null) {
+    context.variables.set(responseName, 'http-response')
+  }
+
   const body = expression.expressionBody
     ? [
         {
@@ -70,7 +82,7 @@ export function emitHttpHandlerDeclaration(
   ]
 
   for (const statement of body) {
-    lines.push(...emitHttpHandlerStatement(statement, httpContext, baseContext, deps).map((line) => `  ${line}`))
+    lines.push(...emitHttpHandlerStatement(statement, httpContext, context, deps).map((line) => `  ${line}`))
   }
 
   lines.push('  return CCJS_OK;')

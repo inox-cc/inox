@@ -9,7 +9,7 @@ import {
   collectIrSyntaxFeatureUsages,
   collectIrTopLevelNodesFromPrograms
 } from '../ir.ts'
-import type { Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrProgram } from '../types.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrProgram } from '../types.ts'
 import {
   collectCallbackWrappers,
   emitPlainArrowCallbackWrapperDeclaration,
@@ -19,19 +19,23 @@ import {
   emitRuntimeCallbackWrapperHead,
   isPromiseChainCallbackWrapperWithContext,
   isRuntimeArrowCallbackWrapperWithContext,
-  isRuntimeCallbackWrapper
+  isRuntimeCallbackWrapper,
+  type CallbackLoweringDependencies
 } from './async/callbacks.ts'
 import {
   collectPromiseChainWrappers,
   emitPromiseChainCallbackWrapperDeclaration,
-  emitPromiseChainCallbackWrapperHead
+  emitPromiseChainCallbackWrapperHead,
+  type PromiseChainLoweringDependencies
 } from './async/promises.ts'
 import {
   collectAsyncTaskWrappers,
   emitAsyncTaskFrameType,
   emitAsyncTaskWrapperDeclaration,
-  emitAsyncTaskWrapperPrototypes
+  emitAsyncTaskWrapperPrototypes,
+  type AsyncTaskLoweringDependencies
 } from './async/tasks.ts'
+import type { CEmitContext } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCPrelude } from './prelude.ts'
 import {
@@ -44,32 +48,43 @@ import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
   collectDgramMessageHandlers,
   emitDgramMessageHandlerDeclaration,
-  emitDgramMessageHandlerHead
+  emitDgramMessageHandlerHead,
+  type DgramLoweringDependencies
 } from './stdlib/dgram.ts'
-import { collectHttpHandlers, emitHttpHandlerDeclaration, emitHttpHandlerHead } from './stdlib/http.ts'
-import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
+import {
+  collectHttpHandlers,
+  emitHttpHandlerDeclaration,
+  emitHttpHandlerHead,
+  type HttpLoweringDependencies
+} from './stdlib/http.ts'
+import {
+  collectNetHandlers,
+  emitNetHandlerDeclaration,
+  emitNetHandlerHead,
+  type NetLoweringDependencies
+} from './stdlib/net.ts'
 import type { CEmitOptions } from './types.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
 
 export type CUnitDependencies = {
-  asyncTaskLoweringDependencies: any
-  callbackLoweringDependencies: any
-  collectExternalEventLoopFunctions: (functions: any[]) => Set<any>
+  asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
+  callbackLoweringDependencies: CallbackLoweringDependencies
+  collectExternalEventLoopFunctions: (functions: AnyNode[]) => Set<string>
   createBaseContext: (
     diagnostics: Diagnostic[],
     functionDeclarations: IrFunctionDeclaration[],
     functionEffects: IrFunctionEffect[],
     jsGlobalRoots: Set<string>
-  ) => any
-  dgramLoweringDependencies: any
-  emitClassMethodDeclaration: (info: any, method: any, baseContext: any) => string[]
-  emitClassMethodHead: (info: any, method: any, context: any) => string
-  emitFunctionDeclaration: (statement: any, baseContext: any) => string[]
-  emitFunctionHead: (statement: any, context: any) => string
-  emitMainWrapper: (irPrograms: IrProgram[], baseContext: any) => string[]
-  httpLoweringDependencies: any
-  netLoweringDependencies: any
-  promiseChainLoweringDependencies: any
+  ) => CEmitContext
+  dgramLoweringDependencies: DgramLoweringDependencies
+  emitClassMethodDeclaration: (info: any, method: any, baseContext: CEmitContext) => string[]
+  emitClassMethodHead: (info: any, method: any, context: CEmitContext) => string
+  emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) => string[]
+  emitFunctionHead: (statement: AnyNode, context: CEmitContext) => string
+  emitMainWrapper: (irPrograms: IrProgram[], baseContext: CEmitContext) => string[]
+  httpLoweringDependencies: HttpLoweringDependencies
+  netLoweringDependencies: NetLoweringDependencies
+  promiseChainLoweringDependencies: PromiseChainLoweringDependencies
 }
 
 export function emitCUnit(

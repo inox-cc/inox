@@ -1,6 +1,7 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import {
+  createFunctionContext,
   emitEventLoopReference,
   emitStatusCheck,
   nextCName,
@@ -38,9 +39,10 @@ export function emitDgramMessageHandlerHead(wrapper: any): string {
 
 export function emitDgramMessageHandlerDeclaration(
   wrapper: any,
-  baseContext: CFunctionContext,
+  baseContext: CEmitContext,
   deps: DgramLoweringDependencies
 ): string[] {
+  const context = createFunctionContext(baseContext, 'void')
   const expression = wrapper.expression
   const messageName = expression.params[0]?.name ?? null
   const rinfoName = expression.params[1]?.name ?? null
@@ -49,6 +51,16 @@ export function emitDgramMessageHandlerDeclaration(
     rinfoName,
     stringLocals: new Map()
   }
+  context.statusReturn = true
+
+  if (messageName != null) {
+    context.variables.set(messageName, 'string')
+  }
+
+  if (rinfoName != null) {
+    context.variables.set(rinfoName, 'dgram-address')
+  }
+
   const body = expression.expressionBody
     ? [
         {
@@ -66,7 +78,7 @@ export function emitDgramMessageHandlerDeclaration(
   ]
 
   for (const statement of body) {
-    lines.push(...emitDgramMessageHandlerStatement(statement, dgramContext, baseContext, deps).map((line) => `  ${line}`))
+    lines.push(...emitDgramMessageHandlerStatement(statement, dgramContext, context, deps).map((line) => `  ${line}`))
   }
 
   lines.push('  return CCJS_OK;')
