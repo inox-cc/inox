@@ -1671,6 +1671,7 @@ function cRuntimeSources(): string[] {
     'runtime/c/src/json/json.c',
     'runtime/c/src/objects/object.c',
     'runtime/c/src/path/path.c',
+    'runtime/c/src/process/process.c',
     'runtime/c/src/strings/string.c',
     'runtime/c/src/time/time.c',
     'runtime/c/src/url/url.c'

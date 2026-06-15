@@ -44,6 +44,7 @@ export function compileRuntimeProgram(
     'runtime/c/src/fs/fs.c',
     'runtime/c/src/json/json.c',
     'runtime/c/src/path/path.c',
+    'runtime/c/src/process/process.c',
     'runtime/c/src/time/time.c',
     'runtime/c/src/url/url.c',
     '-o',
@@ -134,10 +135,15 @@ export function isLocalListenUnavailable(error: unknown): boolean {
   )
 }
 
-export function runCommand(command: string, args: string[]): Promise<CommandResult> {
+export function runCommand(
+  command: string,
+  args: string[],
+  options: { env?: Record<string, string | undefined> } = {}
+): Promise<CommandResult> {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: repoRoot,
+      env: options.env,
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let stdout = ''

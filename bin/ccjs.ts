@@ -54,6 +54,7 @@ const cRuntimeSourceGroups = {
   json: ['runtime/c/src/json/json.c'],
   net: ['runtime/c/src/network/net.c'],
   path: ['runtime/c/src/path/path.c'],
+  process: ['runtime/c/src/process/process.c'],
   url: ['runtime/c/src/url/url.c'],
   managed: [
     'runtime/c/src/core/value.c',
@@ -339,6 +340,11 @@ function cRuntimeSourcesForCode(
   if (usesCHeader(code, 'path')) {
     groups.add('managed')
     groups.add('path')
+  }
+
+  if (usesCHeader(code, 'process')) {
+    groups.add('managed')
+    groups.add('process')
   }
 
   if (usesCHeader(code, 'url')) {

@@ -117,6 +117,7 @@ import {
 } from './stdlib/fs.ts'
 import { cJsonRuntimeCallName } from './stdlib/json.ts'
 import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from './stdlib/path.ts'
+import { cProcessRuntimeEnvName, cProcessRuntimeMethodName, cProcessRuntimePropertyName } from './stdlib/process.ts'
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import {
   cTimerClearCallName,
@@ -263,6 +264,7 @@ function emitCModuleSource(
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsPathRuntime = runtimeRequirements.has('path')
   const needsUrlRuntime = runtimeRequirements.has('url')
+  const needsProcessRuntime = runtimeRequirements.has('process')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
@@ -301,6 +303,7 @@ function emitCModuleSource(
     needsCollectionRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
+    needsProcessRuntime ||
     needsObjectRuntime ||
     needsClassRuntime ||
     needsJsonRuntime ||
@@ -322,12 +325,14 @@ function emitCModuleSource(
     needsFsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
+    needsProcessRuntime ||
     needsDgramRuntime ||
     needsFetchRuntime ||
     needsNetRuntime ||
     signatureRuntimeTypes.has('string')
   const classMethods = collectClassMethods(context)
 
+  context.processRuntime = needsProcessRuntime
   context.unhandledRejectionFlag = needsAsyncRuntime ? `${plan.symbolPrefix}_unhandled_rejection` : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, context)
@@ -356,6 +361,7 @@ function emitCModuleSource(
       needsFsRuntime,
       needsPathRuntime,
       needsUrlRuntime,
+      needsProcessRuntime,
       needsJsonRuntime,
       needsTimerRuntime,
       needsConsoleRuntime,
@@ -656,8 +662,11 @@ function emitCModuleMainFunction(plan: CModulePlan, baseContext): string[] {
   const body = collectIrTopLevelNodes(plan.ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
   const bodyLines = emitStatementList(body, context)
-  const lines = ['int main(void) {']
+  const lines = [context.processRuntime ? 'int main(int argc, char** argv) {' : 'int main(void) {']
 
+  if (context.processRuntime) {
+    lines.push('  ccjs_process_init(argc, argv);')
+  }
   lines.push(...emitLoopFlowDeclarations(context).map((line) => `  ${line}`))
   lines.push(...emitReturnValueDeclarations(context).map((line) => `  ${line}`))
   lines.push(...emitReturnFlowDeclarations(context).map((line) => `  ${line}`))
@@ -814,6 +823,7 @@ function emitCUnit(
   const needsFsRuntime = runtimeRequirements.has('fs')
   const needsPathRuntime = runtimeRequirements.has('path')
   const needsUrlRuntime = runtimeRequirements.has('url')
+  const needsProcessRuntime = runtimeRequirements.has('process')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
@@ -839,6 +849,7 @@ function emitCUnit(
     needsCollectionRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
+    needsProcessRuntime ||
     needsObjectRuntime ||
     needsClassRuntime ||
     needsJsonRuntime ||
@@ -859,9 +870,11 @@ function emitCUnit(
     needsFsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
+    needsProcessRuntime ||
     needsDgramRuntime ||
     needsFetchRuntime ||
     needsNetRuntime
+  baseContext.processRuntime = needsProcessRuntime
   baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, baseContext)
@@ -880,6 +893,7 @@ function emitCUnit(
     needsFsRuntime,
     needsPathRuntime,
     needsUrlRuntime,
+    needsProcessRuntime,
     needsJsonRuntime,
     needsTimerRuntime,
     needsConsoleRuntime,
@@ -1280,6 +1294,7 @@ function createBaseContext(
     jsGlobalRoots,
     promiseChainArrowWrappers: new Map(),
     promiseChainWrappers: new Map(),
+    processRuntime: false,
     httpCreateServerNames: new Set(),
     httpHandlers: new Map(),
     httpImportNames: new Set(),
@@ -9089,10 +9104,13 @@ function emitMainWrapper(irPrograms, baseContext) {
   const context = createFunctionContext(baseContext, 'number')
   const body = collectIrTopLevelNodesFromPrograms(irPrograms, 'statement')
   const bodyLines: string[] = []
-  const lines = ['int main(void) {']
+  const lines = [context.processRuntime ? 'int main(int argc, char** argv) {' : 'int main(void) {']
 
   bodyLines.push(...emitStatementList(body, context).map((line) => `  ${line}`))
 
+  if (context.processRuntime) {
+    lines.push('  ccjs_process_init(argc, argv);')
+  }
   lines.push(...emitLoopFlowDeclarations(context).map((line) => `  ${line}`))
   lines.push(...emitReturnValueDeclarations(context).map((line) => `  ${line}`))
   lines.push(...emitReturnFlowDeclarations(context).map((line) => `  ${line}`))
@@ -9120,7 +9138,11 @@ function emitMainWrapper(irPrograms, baseContext) {
 }
 
 function emitMainReturnExpression(context) {
-  const successReturn = context.returnType === 'number' ? '(int)ccjs_return' : '0'
+  const successReturn = context.processRuntime
+    ? 'ccjs_process_get_exit_code()'
+    : context.returnType === 'number'
+      ? '(int)ccjs_return'
+      : '0'
 
   return context.unhandledRejectionFlag == null
     ? successReturn
@@ -9591,6 +9613,12 @@ function emitStatement(statement, context) {
       return []
     }
 
+    const processExit = emitProcessExitStatement(statement.expression, context)
+
+    if (processExit != null) {
+      return processExit
+    }
+
     const collectionCall = emitPreparedCollectionCallExpression(statement.expression, context)
 
     if (collectionCall != null) {
@@ -9661,6 +9689,12 @@ function emitStatement(statement, context) {
   }
 
   if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
+    const processExitCodeAssignment = emitProcessExitCodeAssignment(statement.expression, context)
+
+    if (processExitCodeAssignment != null) {
+      return processExitCodeAssignment
+    }
+
     const mapIndexAssignment = emitPreparedMapIndexAssignment(statement.expression, context)
 
     if (mapIndexAssignment != null) {
@@ -12500,6 +12534,12 @@ function emitCValueExpression(expression, context) {
     return emitCAwaitValueExpression(expression, context)
   }
 
+  const processString = emitPreparedProcessStringExpression(expression, context)
+
+  if (processString != null) {
+    return processString
+  }
+
   const urlStringCall = emitPreparedUrlStringCallExpression(expression, context)
 
   if (urlStringCall != null) {
@@ -14811,6 +14851,12 @@ function emitPreparedNumberExpression(expression, context) {
     return pathBooleanCall
   }
 
+  const processNumber = emitPreparedProcessNumberExpression(expression, context)
+
+  if (processNumber != null) {
+    return processNumber
+  }
+
   if (expression?.type === 'NumberLiteral') {
     return {
       lines: [],
@@ -15845,6 +15891,84 @@ function emitPreparedCallArgs(expression, params, context) {
     lines,
     args
   }
+}
+
+function emitPreparedProcessStringExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const method = cProcessRuntimeMethodName(expression)
+  const property = cProcessRuntimePropertyName(expression)
+  const envName = cProcessRuntimeEnvName(expression)
+
+  if (method !== 'cwd' && !(property === 'argv' && expression?.type === 'IndexExpression') && envName == null) {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_process_string')
+  const lines: string[] = []
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  lines.push(...emitPrepareOwnedValueWrite(out))
+
+  if (method === 'cwd') {
+    lines.push(emitStatusCheck(`ccjs_process_cwd(&ccjs_default_allocator, &${out})`, context))
+  } else if (property === 'argv') {
+    const index = emitPreparedNumberExpression(expression.index, context)
+
+    lines.unshift(...index.lines)
+    lines.push(
+      emitStatusCheck(`ccjs_process_argv(&ccjs_default_allocator, (int)(${index.expression}), &${out})`, context)
+    )
+  } else {
+    const name = envName ?? ''
+
+    lines.push(
+      emitStatusCheck(
+        `ccjs_process_env(&ccjs_default_allocator, ${cStringLiteral(name)}, ${utf8ByteLength(name)}, &${out})`,
+        context
+      )
+    )
+  }
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
+function emitPreparedProcessNumberExpression(expression, context) {
+  if (cProcessRuntimePropertyName(expression) !== 'exitCode') {
+    return null
+  }
+
+  return {
+    lines: [],
+    expression: 'ccjs_process_get_exit_code()'
+  }
+}
+
+function emitProcessExitStatement(expression, context): string[] | null {
+  if (cProcessRuntimeMethodName(expression) !== 'exit') {
+    return null
+  }
+
+  const code =
+    expression.args[0] == null
+      ? { lines: [] as string[], expression: '0' }
+      : emitPreparedNumberExpression(expression.args[0], context)
+
+  return [...code.lines, `ccjs_process_exit((int)(${code.expression}));`]
+}
+
+function emitProcessExitCodeAssignment(expression, context): string[] | null {
+  if (expression?.type !== 'AssignmentExpression' || cProcessRuntimePropertyName(expression) !== 'exitCode') {
+    return null
+  }
+
+  const value = emitPreparedNumberExpression(expression.value, context)
+
+  return [...value.lines, `ccjs_process_set_exit_code((int)(${value.expression}));`]
 }
 
 function emitPreparedUrlStringCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
@@ -18661,6 +18785,26 @@ function resolveFunctionParams(callee, context) {
 }
 
 function inferExpressionType(expression, context) {
+  const processMethod = cProcessRuntimeMethodName(expression)
+
+  if (processMethod != null) {
+    return processMethod === 'cwd' ? 'string' : 'void'
+  }
+
+  const processProperty = cProcessRuntimePropertyName(expression)
+
+  if (processProperty === 'exitCode') {
+    return 'number'
+  }
+
+  if (processProperty === 'argv' && expression?.type === 'IndexExpression') {
+    return 'string'
+  }
+
+  if (cProcessRuntimeEnvName(expression) != null) {
+    return 'string'
+  }
+
   const urlMethod = cUrlRuntimeMethodName(expression)
 
   if (urlMethod != null) {
@@ -19071,6 +19215,8 @@ function isRuntimeProducedStringExpression(expression, context) {
   return (
     (expression?.type === 'CallExpression' && inferExpressionType(expression, context) === 'string') ||
     cPathRuntimeConstantName(expression) != null ||
+    cProcessRuntimeEnvName(expression) != null ||
+    (cProcessRuntimePropertyName(expression) === 'argv' && expression?.type === 'IndexExpression') ||
     (expression?.type === 'AwaitExpression' && inferExpressionType(expression, context) === 'string') ||
     isStringConcatExpression(expression, context) ||
     (expression?.type === 'TemplateLiteral' && expression.raw.includes('${')) ||

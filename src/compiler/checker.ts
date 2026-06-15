@@ -78,6 +78,12 @@ import {
   isUnsupportedPathRuntimeMethod
 } from './stdlib/descriptors/path.ts'
 import {
+  isNodeProcessImportSource,
+  isProcessRuntimeMethod,
+  isProcessRuntimeProperty,
+  isUnsupportedProcessRuntimeMethod
+} from './stdlib/descriptors/process.ts'
+import {
   isNodeUrlImportSource,
   isUnsupportedUrlRuntimeMethod,
   isUrlRuntimeConstructor,
@@ -1050,6 +1056,12 @@ class Checker {
   }
 
   checkMemberExpression(expression: AnyNode): ValueType {
+    const processMemberType = this.checkProcessMemberExpression(expression)
+
+    if (processMemberType != null) {
+      return processMemberType
+    }
+
     const pathConstantType = this.checkPathConstantMemberExpression(expression)
 
     if (pathConstantType != null) {
@@ -1157,6 +1169,12 @@ class Checker {
   }
 
   checkMemberAssignment(expression: AnyNode): ValueType {
+    const processAssignmentType = this.checkProcessMemberAssignment(expression)
+
+    if (processAssignmentType != null) {
+      return processAssignmentType
+    }
+
     const targetType = this.checkExpression(expression.target.object)
     const shape = this.resolveExpressionShape(expression.target.object)
     const valueType = this.checkExpression(expression.value)
@@ -1249,6 +1267,12 @@ class Checker {
   }
 
   checkIndexExpression(expression: AnyNode): ValueType {
+    const processIndexType = this.checkProcessIndexExpression(expression)
+
+    if (processIndexType != null) {
+      return processIndexType
+    }
+
     const objectType = this.checkExpression(expression.object)
     const indexType = this.checkExpression(expression.index)
 
@@ -1623,6 +1647,12 @@ class Checker {
       return cryptoType
     }
 
+    const processType = this.checkProcessCall(expression)
+
+    if (processType != null) {
+      return processType
+    }
+
     const urlType = this.checkUrlCall(expression)
 
     if (urlType != null) {
@@ -1943,6 +1973,184 @@ class Checker {
         expression.loc
       )
     }
+
+    return 'string'
+  }
+
+  checkProcessCall(expression: AnyNode): ValueType | null {
+    const call = this.resolveProcessRuntimeCall(expression)
+
+    if (call == null) {
+      return null
+    }
+
+    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+
+    if (call.unsupported) {
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        `node:process ${call.method} is not implemented by the current C backend`,
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    expression.processRuntimeMethod = call.method
+
+    if (call.method === 'cwd') {
+      if (expression.args.length !== 0) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      expression.valueType = 'string'
+      return 'string'
+    }
+
+    if (expression.args.length > 1) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function ${call.label} expects 0 or 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (argTypes[0] != null) {
+      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc)
+    }
+
+    expression.valueType = 'void'
+    return 'void'
+  }
+
+  resolveProcessRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+    const path = memberExpressionPath(expression.callee)
+    const method = this.resolveProcessRuntimeMethod(path)
+
+    if (method == null) {
+      return null
+    }
+
+    return {
+      method,
+      label: path == null ? method : path.join('.'),
+      unsupported: !isProcessRuntimeMethod(method)
+    }
+  }
+
+  resolveProcessRuntimeMethod(path: readonly string[] | null | undefined): string | null {
+    if (path == null) {
+      return null
+    }
+
+    if (path.length === 1) {
+      const symbol = this.scope.resolve(path[0])
+      const importedName = symbol?.importedName
+
+      if (symbol?.kind === 'import' && isNodeProcessImportSource(symbol.importSource) && importedName != null) {
+        return isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)
+          ? importedName
+          : null
+      }
+    }
+
+    if (path.length === 2) {
+      const symbol = this.scope.resolve(path[0])
+
+      if (
+        symbol?.kind === 'import' &&
+        isNodeProcessImportSource(symbol.importSource) &&
+        (symbol.importedName === 'default' || symbol.importedName === 'process')
+      ) {
+        return isProcessRuntimeMethod(path[1]) || isUnsupportedProcessRuntimeMethod(path[1]) ? path[1] : null
+      }
+    }
+
+    return null
+  }
+
+  checkProcessMemberExpression(expression: AnyNode): ValueType | null {
+    const path = memberExpressionPath(expression)
+
+    if (path == null || path.length < 2) {
+      return null
+    }
+
+    const root = this.scope.resolve(path[0])
+
+    if (
+      root?.kind !== 'import' ||
+      !isNodeProcessImportSource(root.importSource) ||
+      (root.importedName !== 'default' && root.importedName !== 'process')
+    ) {
+      return null
+    }
+
+    if (path.length === 2 && isProcessRuntimeProperty(path[1])) {
+      expression.processRuntimeProperty = path[1]
+      expression.valueType = path[1] === 'exitCode' ? 'number' : 'object'
+      return expression.valueType
+    }
+
+    if (path.length === 3 && path[1] === 'env') {
+      expression.processRuntimeEnvName = path[2]
+      expression.valueType = 'string'
+      return 'string'
+    }
+
+    return null
+  }
+
+  checkProcessMemberAssignment(expression: AnyNode): ValueType | null {
+    const path = memberExpressionPath(expression.target)
+
+    if (path == null || path.length !== 2 || path[1] !== 'exitCode') {
+      return null
+    }
+
+    const root = this.scope.resolve(path[0])
+
+    if (
+      root?.kind !== 'import' ||
+      !isNodeProcessImportSource(root.importSource) ||
+      (root.importedName !== 'default' && root.importedName !== 'process')
+    ) {
+      return null
+    }
+
+    const valueType = this.checkExpression(expression.value)
+    this.checkAssignableType(valueType, 'number', expression.value.loc)
+    expression.processRuntimeProperty = 'exitCode'
+    expression.valueType = 'number'
+
+    return 'number'
+  }
+
+  checkProcessIndexExpression(expression: AnyNode): ValueType | null {
+    const path = memberExpressionPath(expression.object)
+
+    if (path == null || path.length !== 2 || path[1] !== 'argv') {
+      return null
+    }
+
+    const root = this.scope.resolve(path[0])
+
+    if (
+      root?.kind !== 'import' ||
+      !isNodeProcessImportSource(root.importSource) ||
+      (root.importedName !== 'default' && root.importedName !== 'process')
+    ) {
+      return null
+    }
+
+    const indexType = this.checkExpression(expression.index)
+    this.checkAssignableType(indexType, 'number', expression.index.loc)
+    expression.processRuntimeProperty = 'argv'
+    expression.valueType = 'string'
 
     return 'string'
   }
@@ -2622,6 +2830,16 @@ class Checker {
       }
 
       if (importedName === 'default' || importedName === 'url') {
+        return 'object'
+      }
+    }
+
+    if (isNodeProcessImportSource(source)) {
+      if (isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)) {
+        return 'function'
+      }
+
+      if (importedName === 'default' || importedName === 'process') {
         return 'object'
       }
     }

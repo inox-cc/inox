@@ -223,6 +223,7 @@ function compileRuntimeProgram(source: string, output: string): Promise<CommandR
     'runtime/c/src/fs/fs.c',
     'runtime/c/src/json/json.c',
     'runtime/c/src/path/path.c',
+    'runtime/c/src/process/process.c',
     'runtime/c/src/time/time.c',
     'runtime/c/src/url/url.c',
     '-o',
