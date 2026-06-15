@@ -9,6 +9,7 @@ import {
 } from '../context.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
+import type { AnyNode } from '../../types.ts'
 import type {
   CObjectFieldInfo,
   CObjectIndexFieldInfo,
@@ -18,13 +19,34 @@ import type {
 type PreparedCollectionCall = PreparedExpression
 
 export type CollectionLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
-  isIndexAccessExpression: (expression: any) => boolean
-  isMemberAccessExpression: (expression: any) => boolean
-  reportCCollectionHashability: (valueType: string, subject: string, loc: any, context: CFunctionContext) => void
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CObjectIndexFieldInfo | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CObjectFieldInfo | null
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
+  isIndexAccessExpression: (expression: AnyNode) => boolean
+  isMemberAccessExpression: (expression: AnyNode) => boolean
+  reportCCollectionHashability: (
+    valueType: string,
+    subject: string,
+    loc: AnyNode['loc'] | undefined,
+    context: CFunctionContext
+  ) => void
+  resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CObjectIndexFieldInfo | null
+  resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CObjectFieldInfo | null
+}
+
+type PreparedCollectionReceiver = {
+  type: 'map' | 'set'
+  lines: string[]
+  expression: string
+}
+
+type PreparedMapIndexReceiver = {
+  receiver: PreparedCollectionReceiver
+  key: AnyNode
+}
+
+type RuntimeMapType = {
+  key: string
+  value: string
 }
 
 const mapMethodDescriptors = {
@@ -51,7 +73,10 @@ function collectionDeps(context: CFunctionContext): CollectionLoweringDependenci
   return context.collectionLoweringDependencies
 }
 
-export function emitPreparedCollectionReceiver(expression: any, context: CFunctionContext) {
+export function emitPreparedCollectionReceiver(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedCollectionReceiver | null {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
     const type = context.variables.get(name)
@@ -110,11 +135,11 @@ export function emitPreparedCollectionReceiver(expression: any, context: CFuncti
   return null
 }
 
-export function isCollectionConstructorExpression(expression: any): boolean {
+export function isCollectionConstructorExpression(expression: AnyNode): boolean {
   return collectionConstructorName(expression) != null
 }
 
-export function collectionConstructorName(expression: any): string | null {
+export function collectionConstructorName(expression: AnyNode): string | null {
   if (
     expression?.type !== 'NewExpression' ||
     expression.callee.type !== 'Reference' ||
@@ -127,7 +152,7 @@ export function collectionConstructorName(expression: any): string | null {
 }
 
 export function emitPreparedCollectionCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext
 ): PreparedCollectionCall | null {
   if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
@@ -151,7 +176,7 @@ export function emitPreparedCollectionCallExpression(
   }
 }
 
-function emitPreparedMapMethodCall(name: string, expression: any, context: CFunctionContext): PreparedExpression {
+function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const method = expression.callee.property
   const descriptor = mapMethodDescriptors[method]
 
@@ -246,7 +271,7 @@ function emitPreparedMapMethodCall(name: string, expression: any, context: CFunc
 }
 
 export function emitPreparedMapIndexGetExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression | null {
   const mapIndex = emitPreparedMapIndexReceiver(expression, context)
@@ -279,7 +304,7 @@ export function emitPreparedMapIndexGetExpression(
   }
 }
 
-export function emitPreparedMapIndexAssignment(expression: any, context: CFunctionContext): PreparedExpression | null {
+export function emitPreparedMapIndexAssignment(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
   if (expression?.type !== 'AssignmentExpression') {
     return null
   }
@@ -310,7 +335,7 @@ export function emitPreparedMapIndexAssignment(expression: any, context: CFuncti
   }
 }
 
-function emitPreparedMapIndexReceiver(expression: any, context: CFunctionContext) {
+function emitPreparedMapIndexReceiver(expression: AnyNode, context: CFunctionContext): PreparedMapIndexReceiver | null {
   if (expression?.type !== 'IndexExpression' || expression.collectionKind !== 'map') {
     return null
   }
@@ -327,7 +352,7 @@ function emitPreparedMapIndexReceiver(expression: any, context: CFunctionContext
   }
 }
 
-function emitPreparedSetMethodCall(name: string, expression: any, context: CFunctionContext): PreparedExpression {
+function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const method = expression.callee.property
   const descriptor = setMethodDescriptors[method]
 
@@ -390,7 +415,10 @@ function emitPreparedSetMethodCall(name: string, expression: any, context: CFunc
   }
 }
 
-export function emitPreparedCollectionSizeExpression(expression: any, context: CFunctionContext) {
+export function emitPreparedCollectionSizeExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
   if (expression?.type !== 'MemberExpression' || expression.property !== 'size') {
     return null
   }
@@ -414,7 +442,7 @@ export function emitPreparedCollectionSizeExpression(expression: any, context: C
   }
 }
 
-export function resolveRuntimeSetElementType(expression: any, context: CFunctionContext) {
+export function resolveRuntimeSetElementType(expression: AnyNode, context: CFunctionContext): string | null {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return context.setElementTypes.get(expression.path[0]) ?? null
   }
@@ -444,9 +472,16 @@ export function resolveRuntimeSetElementType(expression: any, context: CFunction
   return null
 }
 
-export function resolveRuntimeMapType(expression: any, context: CFunctionContext) {
+export function resolveRuntimeMapType(expression: AnyNode, context: CFunctionContext): RuntimeMapType | null {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return context.mapTypes.get(expression.path[0]) ?? null
+    const mapType = context.mapTypes.get(expression.path[0]) ?? null
+
+    return mapType == null
+      ? null
+      : {
+          key: mapType.key ?? 'unknown',
+          value: mapType.value ?? 'unknown'
+        }
   }
 
   if (expression?.type === 'CallExpression' || expression?.type === 'NewExpression') {
@@ -487,7 +522,7 @@ export function resolveRuntimeMapType(expression: any, context: CFunctionContext
   return null
 }
 
-function resolveFunctionReturnNameFromCall(expression) {
+function resolveFunctionReturnNameFromCall(expression: AnyNode): string | null {
   return expression?.type === 'CallExpression' &&
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1
@@ -495,7 +530,7 @@ function resolveFunctionReturnNameFromCall(expression) {
     : null
 }
 
-export function resolveRuntimeForOfSet(expression: any, context: CFunctionContext) {
+export function resolveRuntimeForOfSet(expression: AnyNode, context: CFunctionContext) {
   const elementType = resolveRuntimeSetElementType(expression, context)
 
   if (elementType == null) {
@@ -515,7 +550,7 @@ export function resolveRuntimeForOfSet(expression: any, context: CFunctionContex
   }
 }
 
-export function resolveRuntimeForOfMap(expression: any, context: CFunctionContext) {
+export function resolveRuntimeForOfMap(expression: AnyNode, context: CFunctionContext) {
   const mapType = resolveRuntimeMapType(expression, context)
 
   if (mapType == null) {

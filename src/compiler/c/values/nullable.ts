@@ -21,37 +21,51 @@ import {
   resolveObjectExpressionIndex,
   resolveObjectExpressionMember
 } from './objects.ts'
-import type { CFunctionType, CPreparedExpression as PreparedExpression, CRuntimeArrayElement } from '../types.ts'
+import type { AnyNode } from '../../types.ts'
+import type {
+  CFunctionType,
+  CObjectShape,
+  CPreparedExpression as PreparedExpression,
+  CRuntimeArrayElement
+} from '../types.ts'
 
 export type NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
-    shape?: any | null
+    shape?: CObjectShape | null
   ) => PreparedExpression
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitNullableFunctionValueExpression: (
-    expression: any,
+    expression: AnyNode,
     functionType: CFunctionType | null | undefined,
     context: CFunctionContext
   ) => PreparedExpression
-  emitNullableScalarValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
-  isNumberConversionCall: (expression: any, context: CFunctionContext) => boolean
-  resolveRuntimeCallbackCalleeType: (callee: any, context: CFunctionContext) => any | null
+  emitNullableScalarValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
+  isNumberConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  resolveRuntimeCallbackCalleeType: (callee: AnyNode, context: CFunctionContext) => CFunctionType | null
+}
+
+type NullableScalarNarrowing = {
+  trueNames: string[]
+  falseNames: string[]
 }
 
 function nullableDeps(context: CFunctionContext): NullableLoweringDependencies {
   return context.nullableLoweringDependencies
 }
 
-export function isNullableScalarRuntimeExpression(expression: any, context: CFunctionContext) {
+export function isNullableScalarRuntimeExpression(expression: AnyNode, context: CFunctionContext): boolean {
   return (
     isNullableScalarType(nullableDeps(context).inferExpressionType(expression, context)) && isNullableRuntimeExpression(expression, context)
   )
 }
 
-export function resolveNullableScalarConditionNarrowing(expression: any, context: CFunctionContext) {
+export function resolveNullableScalarConditionNarrowing(
+  expression: AnyNode,
+  context: CFunctionContext
+): NullableScalarNarrowing {
   if (expression?.type !== 'BinaryExpression') {
     return emptyNullableScalarNarrowing()
   }
@@ -83,7 +97,10 @@ export function resolveNullableScalarConditionNarrowing(expression: any, context
   return resolveNullableScalarNullCheckNarrowing(expression, context)
 }
 
-function resolveNullableScalarNullCheckNarrowing(expression: any, context: CFunctionContext) {
+function resolveNullableScalarNullCheckNarrowing(
+  expression: AnyNode,
+  context: CFunctionContext
+): NullableScalarNarrowing {
   if (expression?.type !== 'BinaryExpression' || !['===', '!==', '==', '!='].includes(expression.operator)) {
     return emptyNullableScalarNarrowing()
   }
@@ -114,24 +131,24 @@ function resolveNullableScalarNullCheckNarrowing(expression: any, context: CFunc
   }
 }
 
-function emptyNullableScalarNarrowing() {
+function emptyNullableScalarNarrowing(): NullableScalarNarrowing {
   return {
     trueNames: [],
     falseNames: []
   }
 }
 
-function uniqueNames(names) {
+function uniqueNames(names: string[]): string[] {
   return [...new Set(names)]
 }
 
-function intersectNames(left, right) {
+function intersectNames(left: string[], right: string[]): string[] {
   const rightNames = new Set(right)
 
   return uniqueNames(left.filter((name) => rightNames.has(name)))
 }
 
-export function isNarrowedNullableScalarReference(expression: any, context: CFunctionContext) {
+export function isNarrowedNullableScalarReference(expression: AnyNode, context: CFunctionContext): boolean {
   return (
     expression?.type === 'Reference' &&
     expression.path.length === 1 &&
@@ -141,13 +158,13 @@ export function isNarrowedNullableScalarReference(expression: any, context: CFun
   )
 }
 
-export function clearNullableScalarNarrowing(name: string, context: CFunctionContext) {
+export function clearNullableScalarNarrowing(name: string, context: CFunctionContext): string[] {
   context.narrowedNullableScalars.delete(name)
 
   return []
 }
 
-export function canLowerCNullishCoalescingExpression(expression: any, context: CFunctionContext) {
+export function canLowerCNullishCoalescingExpression(expression: AnyNode, context: CFunctionContext): boolean {
   if (!isNullishCoalescingExpression(expression)) {
     return false
   }
@@ -160,7 +177,7 @@ export function canLowerCNullishCoalescingExpression(expression: any, context: C
   )
 }
 
-export function canLowerCScalarNullishCoalescingExpression(expression: any, context: CFunctionContext) {
+export function canLowerCScalarNullishCoalescingExpression(expression: AnyNode, context: CFunctionContext): boolean {
   if (!isNullishCoalescingExpression(expression)) {
     return false
   }
@@ -173,7 +190,7 @@ export function canLowerCScalarNullishCoalescingExpression(expression: any, cont
   )
 }
 
-export function isNullableRuntimeExpression(expression: any, context: CFunctionContext) {
+export function isNullableRuntimeExpression(expression: AnyNode, context: CFunctionContext): boolean {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return context.nullableVariables.has(expression.path[0])
   }
@@ -203,7 +220,7 @@ export function isNullableRuntimeExpression(expression: any, context: CFunctionC
   return expression?.nullable === true && isRuntimeNullableType(nullableDeps(context).inferExpressionType(expression, context))
 }
 
-export function emitNullableRuntimeValueVariableDeclaration(statement: any, context: CFunctionContext) {
+export function emitNullableRuntimeValueVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
   const valueType = statement.valueType
   const expectedTag = cRuntimeValueTag(valueType)
 
@@ -249,12 +266,12 @@ export function emitNullableRuntimeValueVariableDeclaration(statement: any, cont
   ]
 }
 
-export function emitCOptionalMemberValueExpression(expression: any, context: CFunctionContext) {
+export function emitCOptionalMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const member = resolveKnownObjectMember(expression, context) ?? resolveObjectExpressionMember(expression)
 
   if (member != null && isRuntimeNullableType(member.valueType)) {
     const objectExpression = expression.object
-    const objectName = (member as any).objectName
+    const objectName = member.objectName
 
     return emitCOptionalObjectReadValueExpression(objectExpression, member.valueType, context, (object) =>
       objectName == null
@@ -277,7 +294,7 @@ export function emitCOptionalMemberValueExpression(expression: any, context: CFu
   }
 }
 
-export function emitCOptionalIndexValueExpression(expression: any, context: CFunctionContext) {
+export function emitCOptionalIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const field = resolveKnownObjectIndex(expression, context) ?? resolveObjectExpressionIndex(expression)
 
   if (field != null) {
@@ -297,7 +314,7 @@ export function emitCOptionalIndexValueExpression(expression: any, context: CFun
     }
 
     const objectExpression = expression.object
-    const objectName = (field as any).objectName
+    const objectName = field.objectName
 
     return emitCOptionalObjectReadValueExpression(objectExpression, field.valueType, context, (object) =>
       objectName == null
@@ -342,11 +359,11 @@ export function emitCOptionalIndexValueExpression(expression: any, context: CFun
 }
 
 function emitCOptionalObjectReadValueExpression(
-  objectExpression: any,
+  objectExpression: AnyNode,
   valueType: string,
   context: CFunctionContext,
   emitGetPrefix: (object: string) => string
-) {
+): PreparedExpression {
   const object = nullableDeps(context).emitCValueExpression(objectExpression, context)
   const temp = nextCName(context, 'ccjs_optional_value')
   const expectedTag = cRuntimeValueTag(valueType)
@@ -369,10 +386,10 @@ function emitCOptionalObjectReadValueExpression(
 }
 
 function emitCOptionalArrayIndexValueExpression(
-  arrayExpression: any,
+  arrayExpression: AnyNode,
   element: CRuntimeArrayElement,
   context: CFunctionContext
-) {
+): PreparedExpression {
   const array = nullableDeps(context).emitCValueExpression(arrayExpression, context)
   const temp = nextCName(context, 'ccjs_optional_value')
   const expectedTag = cRuntimeValueTag(element.valueType)
@@ -394,10 +411,10 @@ function emitCOptionalArrayIndexValueExpression(
   }
 }
 
-function normalizeNullableFunctionType(functionType) {
+function normalizeNullableFunctionType(functionType: CFunctionType | null | undefined): CFunctionType {
   return functionType ?? {
     kind: 'function',
-    params: functionType?.params ?? [],
-    returnType: functionType?.returnType ?? 'void'
+    params: [],
+    returnType: 'void'
   }
 }
