@@ -1297,7 +1297,7 @@ function collectExternalEventLoopFunctions(functions: AnyNode[]): Set<string> {
 }
 
 function findObjectLiteralPropertyValue(expression: AnyNode, key: string): AnyNode | null {
-  return expression?.properties?.find((property) => property.key === key)?.value ?? null
+  return expression?.properties?.find((property: AnyNode) => property.key === key)?.value ?? null
 }
 
 function staticObjectStringPropertyValue(expression: AnyNode, key: string): string | null {
@@ -2159,12 +2159,14 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   const fieldsName = `${shapeName}_fields`
   const fields =
     statement.shape?.fields ??
-    statement.init.properties.map((property) => ({
+    statement.init.properties.map((property: AnyNode) => ({
       name: property.key,
       readonly: false,
       valueType: inferExpressionType(property.value, context)
     }))
-  const properties = new Map<string, AnyNode>(statement.init.properties.map((property) => [property.key, property]))
+  const properties = new Map<string, AnyNode>(
+    statement.init.properties.map((property: AnyNode) => [property.key, property])
+  )
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
@@ -2181,7 +2183,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   context.variables.set(statement.name, 'object')
   context.objectShapes.set(
     statement.name,
-    fields.map((field) => ({
+    fields.map((field: any) => ({
       name: field.name,
       ownership: field.ownership ?? 'strong',
       valueType: field.valueType,
@@ -2217,7 +2219,7 @@ function emitKnownObjectMemberVariableDeclaration(statement: AnyNode, member: an
     statement,
     member,
     context,
-    (temp) =>
+    (temp: string) =>
       `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`
   )
 }
@@ -2231,7 +2233,7 @@ function emitDynamicObjectMemberVariableDeclaration(
     statement,
     member,
     context,
-    (temp) =>
+    (temp: string) =>
       `ccjs_object_get(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, &${temp})`
   )
 }
@@ -2504,7 +2506,7 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
   context.variables.set(statement.name, 'array')
   context.arrayShapes.set(
     statement.name,
-    statement.init.elements.map((element) => ({
+    statement.init.elements.map((element: AnyNode) => ({
       valueType: inferExpressionType(element, context)
     }))
   )
@@ -2689,12 +2691,14 @@ function emitCObjectLiteralValueExpression(
   const fieldsName = `${shapeName}_fields`
   const fields =
     shape?.fields ??
-    expression.properties.map((property) => ({
+    expression.properties.map((property: AnyNode) => ({
       name: property.key,
       readonly: false,
       valueType: inferExpressionType(property.value, context)
     }))
-  const properties = new Map<string, AnyNode>(expression.properties.map((property) => [property.key, property]))
+  const properties = new Map<string, AnyNode>(
+    expression.properties.map((property: AnyNode) => [property.key, property])
+  )
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
