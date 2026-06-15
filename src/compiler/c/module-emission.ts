@@ -83,14 +83,14 @@ import {
   emitNetHandlerHead,
   type NetLoweringDependencies
 } from './stdlib/net.ts'
-import type { CModuleEmitOptions, CModulePlan } from './types.ts'
+import type { CClassInfo, CClassMethod, CModuleEmitOptions, CModulePlan } from './types.ts'
 import { isManagedRuntimeReturnType } from './value-types.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
 
 export type CModuleEmissionDependencies = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
-  collectExternalEventLoopFunctions: (functions: AnyNode[]) => Set<any>
+  collectExternalEventLoopFunctions: (functions: AnyNode[]) => Set<string>
   createBaseContext: (
     diagnostics: Diagnostic[],
     functionDeclarations: IrFunctionDeclaration[],
@@ -98,8 +98,8 @@ export type CModuleEmissionDependencies = {
     jsGlobalRoots: Set<string>
   ) => CEmitContext
   dgramLoweringDependencies: DgramLoweringDependencies
-  emitClassMethodDeclaration: (info: any, method: any, baseContext: CEmitContext) => string[]
-  emitClassMethodHead: (info: any, method: any, context: CEmitContext) => string
+  emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) => string[]
+  emitClassMethodHead: (info: CClassInfo, method: AnyNode, context: CEmitContext) => string
   emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) => string[]
   emitFunctionHead: (statement: AnyNode, context: CEmitContext) => string
   emitMainReturnExpression: (context: CFunctionContext) => string
@@ -296,7 +296,7 @@ export function emitCModuleHeader(
 function emitCModuleDeclarations(
   lines: string[],
   functions: AnyNode[],
-  classMethods: any[],
+  classMethods: CClassMethod[],
   context: CEmitContext,
   deps: CModuleEmissionDependencies
 ): void {

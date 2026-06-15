@@ -63,7 +63,7 @@ import {
   emitNetHandlerHead,
   type NetLoweringDependencies
 } from './stdlib/net.ts'
-import type { CEmitOptions } from './types.ts'
+import type { CClassInfo, CClassMethod, CEmitOptions } from './types.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
 
 export type CUnitDependencies = {
@@ -77,8 +77,8 @@ export type CUnitDependencies = {
     jsGlobalRoots: Set<string>
   ) => CEmitContext
   dgramLoweringDependencies: DgramLoweringDependencies
-  emitClassMethodDeclaration: (info: any, method: any, baseContext: CEmitContext) => string[]
-  emitClassMethodHead: (info: any, method: any, context: CEmitContext) => string
+  emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) => string[]
+  emitClassMethodHead: (info: CClassInfo, method: AnyNode, context: CEmitContext) => string
   emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) => string[]
   emitFunctionHead: (statement: AnyNode, context: CEmitContext) => string
   emitMainWrapper: (irPrograms: IrProgram[], baseContext: CEmitContext) => string[]

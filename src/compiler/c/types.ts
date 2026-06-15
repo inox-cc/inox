@@ -141,6 +141,11 @@ export type CClassInfo = {
   methods: Map<string, AnyNode>
 }
 
+export type CClassMethod = {
+  info: CClassInfo
+  method: AnyNode
+}
+
 export type CNamedCallbackWrapper = {
   kind: 'named'
   key: string

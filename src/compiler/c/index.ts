@@ -1523,7 +1523,7 @@ function emitFunctionHead(statement: AnyNode, context: CEmitContext): string {
   return `${emitCReturnType(returnType, returnNullable)} ${name}(${params.length === 0 ? 'void' : params.join(', ')})`
 }
 
-function emitClassMethodDeclaration(info: any, method: AnyNode, baseContext: CEmitContext): string[] {
+function emitClassMethodDeclaration(info: CClassInfo, method: AnyNode, baseContext: CEmitContext): string[] {
   const context = createFunctionContext(baseContext, method.returnType, method.returnNullable)
   const params = method.params
 
@@ -1568,7 +1568,7 @@ function emitClassMethodDeclaration(info: any, method: AnyNode, baseContext: CEm
   return lines
 }
 
-function emitClassMethodHead(info: any, method: AnyNode, context: CEmitContext): string {
+function emitClassMethodHead(info: CClassInfo, method: AnyNode, context: CEmitContext): string {
   const params = [
     'ccjs_value this',
     ...method.params.map((param: CFunctionParam, index: number) => emitClassMethodParam(param, index, method, context))

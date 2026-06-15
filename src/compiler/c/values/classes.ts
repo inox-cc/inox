@@ -14,6 +14,7 @@ import { emitObjectValueReference, resolveCObjectExpressionName } from './object
 import type { AnyNode, Diagnostic } from '../../types.ts'
 import type {
   CClassInfo,
+  CClassMethod,
   CFunctionParam,
   CPreparedExpression as PreparedExpression,
   CPreparedCallArgs as PreparedCallArgs
@@ -57,7 +58,7 @@ export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]):
   return infos
 }
 
-export function collectClassMethods(context: CEmitContext) {
+export function collectClassMethods(context: CEmitContext): CClassMethod[] {
   return [...context.classInfos.values()].flatMap((info) =>
     [...info.methods.values()].map((method) => ({
       info,
