@@ -386,6 +386,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitArrayMapVariableDeclaration,
   emitArraySortVariableDeclaration,
   emitBoxedObjectVariableDeclaration,
+  emitBoxedRuntimeValueVariableDeclaration,
   emitCAwaitValueExpression,
   emitClassObjectVariableDeclaration,
   emitCExpression,
@@ -406,6 +407,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitFailureStatement,
   emitFetchAbortControllerVariableDeclaration,
   emitFetchAbortControllerAbortStatement,
+  emitFunctionPointerVariable,
   emitHttpServerVariableDeclaration,
   emitHttpServerCallStatement: (expression, context) =>
     emitHttpServerCallStatement(expression, context, httpLoweringDependencies),
@@ -452,8 +454,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedDebugMemoryCallExpression,
   emitPreparedFetchCallExpression,
   emitPreparedFetchHeadersCallExpression,
-  emitPreparedForExpressionClause,
-  emitPreparedForInitializer,
   emitPreparedFsCallExpression,
   emitPreparedFsSyncStatementExpression,
   emitPreparedMapIndexAssignment,
@@ -472,10 +472,12 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitProcessExitStatement,
   emitPromiseConstructorSettlementCall,
   emitReference,
+  emitRuntimeCallbackVariableDeclaration,
   emitRuntimeStringVariableDeclaration,
   emitRuntimeValueVariableDeclaration,
   emitScalarVariableDeclaration,
   emitStatement,
+  emitStringExpression,
   emitUrlObjectFieldAssignment,
   inferCatchBindingValueType,
   inferExpressionType,
@@ -489,7 +491,9 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   isIndexAccessExpression,
   isMemberAccessExpression,
   isNullableRuntimeValueAssignment,
+  isRuntimeFunctionType,
   isRuntimeNullableType,
+  isRuntimeProducedStringExpression,
   isRuntimeValueLocalExpression,
   registerErrorObjectShape,
   resolveForOfElementType,
@@ -501,6 +505,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   resolveRuntimeArrayIndex,
   resolveRuntimeForOfArray,
   resolveRuntimeForOfMap,
+  resolveRuntimeStringReference,
   resolveRuntimeForOfSet,
   emitBoxedRuntimeValueAssignment,
   emitConsoleLogStatement
@@ -2311,292 +2316,6 @@ function inferRejectedValueType(expression, context, localErrorObjectNames = con
   }
 
   return 'unknown'
-}
-
-function emitForInitializer(init, context) {
-  if (init == null) {
-    return ''
-  }
-
-  if (init.type === 'VariableDeclaration') {
-    return emitVariableDeclaration(init, context)
-  }
-
-  return emitCExpression(init, context)
-}
-
-function emitPreparedForInitializer(init, context) {
-  if (init == null) {
-    return {
-      lines: [],
-      expression: ''
-    }
-  }
-
-  if (init.type === 'VariableDeclaration') {
-    return emitPreparedForVariableDeclaration(init, context)
-  }
-
-  return emitPreparedForExpressionClause(init, context)
-}
-
-function emitPreparedForVariableDeclaration(statement, context) {
-  const fetchCall = emitPreparedFetchCallExpression(statement.init, context, {
-    out: statement.name
-  })
-
-  if (fetchCall != null) {
-    return {
-      lines: fetchCall.lines,
-      expression: ''
-    }
-  }
-
-  const fsCall = emitPreparedFsCallExpression(statement.init, context, {
-    out: statement.name
-  })
-
-  if (fsCall != null) {
-    return {
-      lines: fsCall.lines,
-      expression: ''
-    }
-  }
-
-  const promiseConstructor = emitPreparedPromiseConstructorExpression(statement.init, context, {
-    out: statement.name
-  })
-
-  if (promiseConstructor != null) {
-    return {
-      lines: promiseConstructor.lines,
-      expression: ''
-    }
-  }
-
-  const promise = emitPreparedPromiseStaticExpression(statement.init, context, {
-    out: statement.name
-  })
-
-  if (promise != null) {
-    return {
-      lines: promise.lines,
-      expression: ''
-    }
-  }
-
-  const promiseCall = emitPreparedPromiseReturningCallExpression(statement.init, context, {
-    out: statement.name
-  })
-
-  if (promiseCall != null) {
-    return {
-      lines: promiseCall.lines,
-      expression: ''
-    }
-  }
-
-  if (isCollectionConstructorExpression(statement.init)) {
-    return {
-      lines: emitCollectionVariableDeclaration(statement, context),
-      expression: ''
-    }
-  }
-
-  const arrayMapCall = emitPreparedArrayMapCallExpression(statement.init, context)
-
-  if (arrayMapCall != null) {
-    return {
-      lines: emitArrayMapVariableDeclaration(statement, arrayMapCall, context),
-      expression: ''
-    }
-  }
-
-  const arrayFilterCall = emitPreparedArrayFilterCallExpression(statement.init, context)
-
-  if (arrayFilterCall != null) {
-    return {
-      lines: emitArrayFilterVariableDeclaration(statement, arrayFilterCall, context),
-      expression: ''
-    }
-  }
-
-  const arraySortCall = emitPreparedArraySortCallExpression(statement.init, context)
-
-  if (arraySortCall != null) {
-    return {
-      lines: emitArraySortVariableDeclaration(statement, arraySortCall, context),
-      expression: ''
-    }
-  }
-
-  if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
-    return {
-      lines: emitNullableRuntimeValueVariableDeclaration(statement, context),
-      expression: ''
-    }
-  }
-
-  if (isErrorConstructorExpression(statement.init)) {
-    return {
-      lines: emitErrorObjectVariableDeclaration(statement, context),
-      expression: ''
-    }
-  }
-
-  if (isClassConstructorExpression(statement.init, context)) {
-    return {
-      lines: emitClassObjectVariableDeclaration(statement, context),
-      expression: ''
-    }
-  }
-
-  if (statement.init?.type === 'ObjectLiteral') {
-    return {
-      lines: emitObjectVariableDeclaration(statement, context),
-      expression: ''
-    }
-  }
-
-  if (statement.init?.type === 'ArrayLiteral') {
-    return {
-      lines: emitArrayVariableDeclaration(statement, context),
-      expression: ''
-    }
-  }
-
-  if (isMemberAccessExpression(statement.init)) {
-    const member = resolveKnownObjectMember(statement.init, context)
-
-    if (member != null) {
-      return {
-        lines: emitKnownObjectMemberVariableDeclaration(statement, member, context),
-        expression: ''
-      }
-    }
-  }
-
-  if (isIndexAccessExpression(statement.init)) {
-    const element = resolveKnownArrayIndex(statement.init, context)
-
-    if (element != null) {
-      return {
-        lines: emitKnownArrayIndexVariableDeclaration(statement, element, context),
-        expression: ''
-      }
-    }
-
-    const field = resolveKnownObjectIndex(statement.init, context)
-
-    if (field != null) {
-      return {
-        lines: emitDynamicObjectMemberVariableDeclaration(statement, field, context),
-        expression: ''
-      }
-    }
-  }
-
-  if (isRuntimeProducedStringExpression(statement.init, context)) {
-    return {
-      lines: emitRuntimeStringVariableDeclaration(statement, statement.init, context),
-      expression: ''
-    }
-  }
-
-  if (isRuntimeValueLocalExpression(statement.init, context)) {
-    return {
-      lines: emitRuntimeValueVariableDeclaration(statement, statement.init, context),
-      expression: ''
-    }
-  }
-
-  const inferred = inferExpressionType(statement.init, context)
-  context.variables.set(statement.name, inferred)
-
-  if (inferred === 'string') {
-    if (context.boxedMutableCaptureDeclarations.has(statement)) {
-      return emitBoxedRuntimeValueVariableDeclaration(statement, statement.init, context)
-    }
-
-    const runtimeString = resolveRuntimeStringReference(statement.init, context)
-
-    if (runtimeString != null) {
-      context.runtimeStrings.add(statement.name)
-      return {
-        lines: [],
-        expression: `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString}`
-      }
-    }
-
-    if (isRuntimeProducedStringExpression(statement.init, context)) {
-      return {
-        lines: emitRuntimeStringVariableDeclaration(statement, statement.init, context),
-        expression: ''
-      }
-    }
-
-    return {
-      lines: [],
-      expression: `${statement.kind === 'const' ? 'const ' : ''}char* ${statement.name} = ${emitStringExpression(statement.init, context)}`
-    }
-  }
-
-  if (inferred === 'function') {
-    context.variables.set(statement.name, 'function')
-    context.functionTypes.set(statement.name, statement.functionType)
-
-    if (isRuntimeFunctionType(statement.functionType)) {
-      return {
-        lines: emitRuntimeCallbackVariableDeclaration(statement, context),
-        expression: ''
-      }
-    }
-
-    return {
-      lines: [],
-      expression: emitFunctionPointerVariable(
-        statement.name,
-        statement.init,
-        context,
-        statement.kind === 'const',
-        statement.functionType,
-        statement.loc
-      )
-    }
-  }
-
-  if (!['number', 'boolean'].includes(inferred)) {
-    context.diagnostics.push(
-      diagnostic(
-        cUnsupportedVariableDeclarationCode(statement, inferred),
-        'this expression is not supported by the current C backend slice',
-        statement.loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: `double ${statement.name} = 0`
-    }
-  }
-
-  const value = emitPreparedNumberExpression(statement.init, context)
-
-  return {
-    lines: value.lines,
-    expression: `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${value.expression}`
-  }
-}
-
-function emitPreparedForExpressionClause(expression, context) {
-  if (expression == null) {
-    return {
-      lines: [],
-      expression: ''
-    }
-  }
-
-  return emitPreparedNumberExpression(expression, context)
 }
 
 function emitDirentArrayIndexVariableDeclaration(statement, context) {

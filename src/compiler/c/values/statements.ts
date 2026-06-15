@@ -10,6 +10,7 @@ import {
 } from '../context.ts'
 import { diagnostic } from '../../diagnostics.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
+import { cUnsupportedVariableDeclarationCode } from '../syntax.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType } from '../value-types.ts'
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
 
@@ -29,6 +30,7 @@ export type StatementLoweringDependencies = {
   emitArrayMapVariableDeclaration: (statement: any, mapped: any, context: any) => string[]
   emitArraySortVariableDeclaration: (statement: any, sorted: any, context: any) => string[]
   emitBoxedObjectVariableDeclaration: (statement: any, context: any) => string[]
+  emitBoxedRuntimeValueVariableDeclaration: (statement: any, expression: any, context: any) => string[]
   emitCAwaitValueExpression: (expression: any, context: any) => PreparedExpression
   emitCExpression: (expression: any, context: any) => string
   emitClassObjectVariableDeclaration: (statement: any, context: any) => string[]
@@ -46,6 +48,14 @@ export type StatementLoweringDependencies = {
   emitFailureStatement: (context: any) => string
   emitFetchAbortControllerVariableDeclaration: (statement: any, context: any) => string[] | null
   emitFetchAbortControllerAbortStatement: (expression: any, context: any) => string[] | null
+  emitFunctionPointerVariable: (
+    name: string,
+    init: any,
+    context: any,
+    isConst: boolean,
+    functionType: any,
+    loc: any
+  ) => string
   emitHttpServerVariableDeclaration: (statement: any, context: any) => string[] | null
   emitHttpServerCallStatement: (expression: any, context: any) => string[] | null
   emitJsonParseVariableDeclaration: (statement: any, context: any) => string[] | null
@@ -83,8 +93,6 @@ export type StatementLoweringDependencies = {
   emitPreparedDebugMemoryCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
   emitPreparedFetchCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
   emitPreparedFetchHeadersCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
-  emitPreparedForExpressionClause: (expression: any, context: any) => PreparedExpression
-  emitPreparedForInitializer: (init: any, context: any) => PreparedExpression
   emitPreparedFsCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
   emitPreparedFsSyncStatementExpression: (expression: any, context: any) => PreparedStatement | null
   emitPreparedMapIndexAssignment: (expression: any, context: any) => PreparedExpression | null
@@ -103,10 +111,12 @@ export type StatementLoweringDependencies = {
   emitProcessExitStatement: (expression: any, context: any) => string[] | null
   emitPromiseConstructorSettlementCall: (expression: any, context: any) => string[] | null
   emitReference: (expression: any, context: any) => string
+  emitRuntimeCallbackVariableDeclaration: (statement: any, context: any) => string[]
   emitRuntimeStringVariableDeclaration: (statement: any, expression: any, context: any) => string[]
   emitRuntimeValueVariableDeclaration: (statement: any, expression: any, context: any) => string[]
   emitScalarVariableDeclaration: (statement: any, context: any) => string[]
   emitStatement: (statement: any, context: any) => string[]
+  emitStringExpression: (expression: any, context: any) => string
   emitUrlObjectFieldAssignment: (expression: any, context: any) => string[] | null
   inferCatchBindingValueType: (statement: any, context: any) => string
   inferExpressionType: (expression: any, context: any) => string
@@ -121,6 +131,8 @@ export type StatementLoweringDependencies = {
   isMemberAccessExpression: (expression: any) => boolean
   isNullableRuntimeValueAssignment: (expression: any, context: any) => boolean
   isRuntimeNullableType: (valueType: any) => boolean
+  isRuntimeFunctionType: (functionType: any) => boolean
+  isRuntimeProducedStringExpression: (expression: any, context: any) => boolean
   isRuntimeValueLocalExpression: (expression: any, context: any) => boolean
   registerErrorObjectShape: (context: any, name: string) => void
   resolveForOfElementType: (elements: any[]) => string
@@ -132,6 +144,7 @@ export type StatementLoweringDependencies = {
     trueNames: string[]
     falseNames: string[]
   }
+  resolveRuntimeStringReference: (expression: any, context: any) => string | null
   resolveRuntimeArrayIndex: (expression: any, context: any) => any | null
   resolveRuntimeForOfArray: (expression: any, context: any) => any | null
   resolveRuntimeForOfMap: (expression: any, context: any) => any | null
@@ -255,9 +268,9 @@ export function emitWhileStatement(statement, context) {
 
 export function emitForStatement(statement, context) {
   return withVariableScope(context, () => {
-    const init = statementDeps(context).emitPreparedForInitializer(statement.init, context)
-    const test = statementDeps(context).emitPreparedForExpressionClause(statement.test, context)
-    const update = statementDeps(context).emitPreparedForExpressionClause(statement.update, context)
+    const init = emitPreparedForInitializer(statement.init, context)
+    const test = emitPreparedForExpressionClause(statement.test, context)
+    const update = emitPreparedForExpressionClause(statement.update, context)
     const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.test, context)
     const breakLabel = nextCName(context, 'ccjs_break')
     const continueLabel = nextCName(context, 'ccjs_continue')
@@ -309,6 +322,287 @@ export function emitForStatement(statement, context) {
 
     return lines
   })
+}
+
+function emitPreparedForInitializer(init, context) {
+  if (init == null) {
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
+  if (init.type === 'VariableDeclaration') {
+    return emitPreparedForVariableDeclaration(init, context)
+  }
+
+  return emitPreparedForExpressionClause(init, context)
+}
+
+function emitPreparedForVariableDeclaration(statement, context) {
+  const deps = statementDeps(context)
+  const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (fetchCall != null) {
+    return {
+      lines: fetchCall.lines,
+      expression: ''
+    }
+  }
+
+  const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (fsCall != null) {
+    return {
+      lines: fsCall.lines,
+      expression: ''
+    }
+  }
+
+  const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (promiseConstructor != null) {
+    return {
+      lines: promiseConstructor.lines,
+      expression: ''
+    }
+  }
+
+  const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (promise != null) {
+    return {
+      lines: promise.lines,
+      expression: ''
+    }
+  }
+
+  const promiseCall = deps.emitPreparedPromiseReturningCallExpression(statement.init, context, {
+    out: statement.name
+  })
+
+  if (promiseCall != null) {
+    return {
+      lines: promiseCall.lines,
+      expression: ''
+    }
+  }
+
+  if (deps.isCollectionConstructorExpression(statement.init)) {
+    return {
+      lines: deps.emitCollectionVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  const arrayMapCall = deps.emitPreparedArrayMapCallExpression(statement.init, context)
+
+  if (arrayMapCall != null) {
+    return {
+      lines: deps.emitArrayMapVariableDeclaration(statement, arrayMapCall, context),
+      expression: ''
+    }
+  }
+
+  const arrayFilterCall = deps.emitPreparedArrayFilterCallExpression(statement.init, context)
+
+  if (arrayFilterCall != null) {
+    return {
+      lines: deps.emitArrayFilterVariableDeclaration(statement, arrayFilterCall, context),
+      expression: ''
+    }
+  }
+
+  const arraySortCall = deps.emitPreparedArraySortCallExpression(statement.init, context)
+
+  if (arraySortCall != null) {
+    return {
+      lines: deps.emitArraySortVariableDeclaration(statement, arraySortCall, context),
+      expression: ''
+    }
+  }
+
+  if (statement.nullable === true && deps.isRuntimeNullableType(statement.valueType)) {
+    return {
+      lines: deps.emitNullableRuntimeValueVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  if (deps.isErrorConstructorExpression(statement.init)) {
+    return {
+      lines: deps.emitErrorObjectVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  if (deps.isClassConstructorExpression(statement.init, context)) {
+    return {
+      lines: deps.emitClassObjectVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  if (statement.init?.type === 'ObjectLiteral') {
+    return {
+      lines: deps.emitObjectVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  if (statement.init?.type === 'ArrayLiteral') {
+    return {
+      lines: deps.emitArrayVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  if (deps.isMemberAccessExpression(statement.init)) {
+    const member = deps.resolveKnownObjectMember(statement.init, context)
+
+    if (member != null) {
+      return {
+        lines: deps.emitKnownObjectMemberVariableDeclaration(statement, member, context),
+        expression: ''
+      }
+    }
+  }
+
+  if (deps.isIndexAccessExpression(statement.init)) {
+    const element = deps.resolveKnownArrayIndex(statement.init, context)
+
+    if (element != null) {
+      return {
+        lines: deps.emitKnownArrayIndexVariableDeclaration(statement, element, context),
+        expression: ''
+      }
+    }
+
+    const field = deps.resolveKnownObjectIndex(statement.init, context)
+
+    if (field != null) {
+      return {
+        lines: deps.emitDynamicObjectMemberVariableDeclaration(statement, field, context),
+        expression: ''
+      }
+    }
+  }
+
+  if (deps.isRuntimeProducedStringExpression(statement.init, context)) {
+    return {
+      lines: deps.emitRuntimeStringVariableDeclaration(statement, statement.init, context),
+      expression: ''
+    }
+  }
+
+  if (deps.isRuntimeValueLocalExpression(statement.init, context)) {
+    return {
+      lines: deps.emitRuntimeValueVariableDeclaration(statement, statement.init, context),
+      expression: ''
+    }
+  }
+
+  const inferred = deps.inferExpressionType(statement.init, context)
+  context.variables.set(statement.name, inferred)
+
+  if (inferred === 'string') {
+    if (context.boxedMutableCaptureDeclarations.has(statement)) {
+      return {
+        lines: deps.emitBoxedRuntimeValueVariableDeclaration(statement, statement.init, context),
+        expression: ''
+      }
+    }
+
+    const runtimeString = deps.resolveRuntimeStringReference(statement.init, context)
+
+    if (runtimeString != null) {
+      context.runtimeStrings.add(statement.name)
+      return {
+        lines: [],
+        expression: `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString}`
+      }
+    }
+
+    if (deps.isRuntimeProducedStringExpression(statement.init, context)) {
+      return {
+        lines: deps.emitRuntimeStringVariableDeclaration(statement, statement.init, context),
+        expression: ''
+      }
+    }
+
+    return {
+      lines: [],
+      expression: `${statement.kind === 'const' ? 'const ' : ''}char* ${statement.name} = ${deps.emitStringExpression(
+        statement.init,
+        context
+      )}`
+    }
+  }
+
+  if (inferred === 'function') {
+    context.variables.set(statement.name, 'function')
+    context.functionTypes.set(statement.name, statement.functionType)
+
+    if (deps.isRuntimeFunctionType(statement.functionType)) {
+      return {
+        lines: deps.emitRuntimeCallbackVariableDeclaration(statement, context),
+        expression: ''
+      }
+    }
+
+    return {
+      lines: [],
+      expression: deps.emitFunctionPointerVariable(
+        statement.name,
+        statement.init,
+        context,
+        statement.kind === 'const',
+        statement.functionType,
+        statement.loc
+      )
+    }
+  }
+
+  if (!['number', 'boolean'].includes(inferred)) {
+    context.diagnostics.push(
+      diagnostic(
+        cUnsupportedVariableDeclarationCode(statement, inferred),
+        'this expression is not supported by the current C backend slice',
+        statement.loc
+      )
+    )
+
+    return {
+      lines: [],
+      expression: `double ${statement.name} = 0`
+    }
+  }
+
+  const value = deps.emitPreparedNumberExpression(statement.init, context)
+
+  return {
+    lines: value.lines,
+    expression: `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${value.expression}`
+  }
+}
+
+function emitPreparedForExpressionClause(expression, context) {
+  if (expression == null) {
+    return {
+      lines: [],
+      expression: ''
+    }
+  }
+
+  return statementDeps(context).emitPreparedNumberExpression(expression, context)
 }
 
 export function emitForOfStatement(statement, context) {
