@@ -707,9 +707,9 @@ const promiseLoweringDependencies: PromiseLoweringDependencies = {
   emitCValueExpression,
   emitPreparedAsyncFunctionPromiseCallExpression,
   emitPreparedCallExpression,
-  emitPreparedFetchCallExpression: (expression, context, options) =>
+  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PromiseCallOptions) =>
     emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFsCallExpression: (expression, context, options) =>
+  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PromiseCallOptions) =>
     emitPreparedFsCallExpression(expression, context, fsLoweringDependencies, options),
   emitRuntimeArrowCaptureStoreLines,
   emitStatementList,
@@ -804,9 +804,9 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitFsBooleanFlag,
   emitPreparedCallArgs,
   emitPreparedCallExpression,
-  emitPreparedFetchInitOperand: (expression, context) =>
+  emitPreparedFetchInitOperand: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchInitOperand(expression, context, fetchLoweringDependencies),
-  emitPreparedFsAccessModeExpression: (expression, context) =>
+  emitPreparedFsAccessModeExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFsAccessModeExpression(expression, context, fsLoweringDependencies),
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
