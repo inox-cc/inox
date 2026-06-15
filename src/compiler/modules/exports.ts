@@ -1,5 +1,5 @@
-import { pathToFileURL } from 'node:url'
 import type { AnyNode, ProgramNode } from '../types.ts'
+import type { CompilerHost } from '../host.ts'
 
 export function collectExports(ast: ProgramNode): Map<string, AnyNode> {
   const exports = new Map<string, AnyNode>()
@@ -18,6 +18,6 @@ export function collectExports(ast: ProgramNode): Map<string, AnyNode> {
   return exports
 }
 
-export function moduleId(path: string): string {
-  return pathToFileURL(path).href
+export function moduleId(path: string, host: CompilerHost): string {
+  return host.pathToFileUrl(path)
 }

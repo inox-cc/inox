@@ -2,18 +2,25 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 
-import { collectExports as collectExportsFromFacade } from '../src/compiler/module-graph.ts'
+import {
+  collectExports as collectExportsFromFacade,
+  createNodeCompilerHost
+} from '../src/compiler/module-graph.ts'
 import { collectExports, moduleId } from '../src/compiler/modules/exports.ts'
 import { buildModuleGraph } from '../src/compiler/modules/graph.ts'
 import { resolveExistingSource, resolveImport } from '../src/compiler/modules/resolve.ts'
+import { compileFileToCModules } from '../src/compiler/index.ts'
 import {
   createImportAliasDeclaration,
   insertImportSyntheticDeclarations
 } from '../src/compiler/modules/synthetic-imports.ts'
 import { isRuntimeBuiltinImportSource } from '../src/compiler/runtime-builtins.ts'
 import type { AnyNode, ProgramNode } from '../src/compiler/types.ts'
+import type { CompilerHost } from '../src/compiler/module-graph.ts'
+
+const nodeCompilerHost = createNodeCompilerHost()
 
 test('classifies runtime builtin import sources from a shared helper', () => {
   assert.equal(isRuntimeBuiltinImportSource('node:fs'), true)
@@ -37,7 +44,7 @@ test('collects module exports through split module helpers and facade', () => {
 
   assert.deepEqual([...collectExports(ast).keys()], ['value', 'main', 'Shape'])
   assert.deepEqual([...collectExportsFromFacade(ast).keys()], ['value', 'main', 'Shape'])
-  assert.equal(moduleId('/tmp/example.ts'), 'file:///tmp/example.ts')
+  assert.equal(moduleId('/tmp/example.ts', nodeCompilerHost), 'file:///tmp/example.ts')
 })
 
 test('inserts synthetic import declarations after matching imports', () => {
@@ -96,10 +103,10 @@ export function main(): void {
 `
     )
 
-    assert.equal(await resolveExistingSource(join(dir, 'dep')), dep)
-    assert.equal(await resolveImport(entry, './dep'), dep)
+    assert.equal(await resolveExistingSource(join(dir, 'dep'), nodeCompilerHost), dep)
+    assert.equal(await resolveImport(entry, './dep', nodeCompilerHost), dep)
 
-    const graph = await buildModuleGraph(entry, { target: 'c' })
+    const graph = await buildModuleGraph(entry, { target: 'c', host: nodeCompilerHost })
 
     assert.equal(graph.entry, entry)
     assert.deepEqual(
@@ -111,3 +118,115 @@ export function main(): void {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('builds module graphs through an in-memory compiler host', async () => {
+  const host = createMemoryCompilerHost(
+    new Map([
+      [
+        '/project/dep.ts',
+        `export function answer(): number {
+  return 42
+}
+`
+      ],
+      [
+        '/project/index.ts',
+        `import { answer } from './dep'
+
+export function main(): void {
+  console.log(answer())
+}
+`
+      ]
+    ])
+  )
+
+  const graph = await buildModuleGraph('/project/index.ts', {
+    target: 'c',
+    host
+  })
+
+  assert.equal(graph.entry, '/project/index.ts')
+  assert.deepEqual(
+    graph.modules.map((module) => module.path),
+    ['/project/dep.ts', '/project/index.ts']
+  )
+  assert.ok(graph.modules.every((module) => module.hir != null && module.ir != null))
+})
+
+test('emits C module files through an in-memory compiler host', async () => {
+  const host = createMemoryCompilerHost(
+    new Map([
+      [
+        '/project/lib.ts',
+        `export function greet(): void {
+  console.log('hello')
+}
+`
+      ],
+      [
+        '/project/index.ts',
+        `import { greet } from './lib'
+
+export function main(): void {
+  greet()
+}
+`
+      ]
+    ])
+  )
+
+  const result = await compileFileToCModules('/project/index.ts', {
+    host,
+    sourceRoot: '/project',
+    target: 'c'
+  })
+
+  assert.deepEqual(
+    result.files.map((file) => file.path),
+    ['lib.c', 'lib.h', 'index.c', 'index.h']
+  )
+  assert.match(result.files.find((file) => file.path === 'index.c')?.code ?? '', /#include "lib\.h"/)
+})
+
+function createMemoryCompilerHost(files: Map<string, string>): CompilerHost {
+  return {
+    pathSeparator: '/',
+    posixPath: {
+      basename: posix.basename,
+      dirname: posix.dirname,
+      extname: posix.extname,
+      relative: posix.relative
+    },
+    dirname: posix.dirname,
+    extname: posix.extname,
+    isAbsolutePath: posix.isAbsolute,
+    joinPath: posix.join,
+    normalizePath: posix.normalize,
+    pathToFileUrl(path: string): string {
+      return `file://${path}`
+    },
+    async readFile(path: string): Promise<string> {
+      const source = files.get(posix.normalize(path))
+
+      if (source == null) {
+        throw new Error(`missing memory file ${path}`)
+      }
+
+      return source
+    },
+    relativePath: posix.relative,
+    resolvePath(path: string): string {
+      return posix.normalize(posix.isAbsolute(path) ? path : posix.resolve('/project', path))
+    },
+    shortHash(value: string): string {
+      let hash = 0
+
+      for (let index = 0; index < value.length; index += 1) {
+        hash = (hash * 31 + value.charCodeAt(index)) >>> 0
+      }
+
+      return hash.toString(16).padStart(8, '0').slice(0, 8)
+    }
+  }
+}

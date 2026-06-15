@@ -1,4 +1,5 @@
 import type { AnyNode, IrProgram, ModuleRecord, RandomOptions } from '../types.ts'
+import type { CompilerHost } from '../host.ts'
 
 export type CEmitOptions = {
   random?: RandomOptions
@@ -12,6 +13,7 @@ export type CModuleOutputFile = {
 }
 
 export type CModuleEmitOptions = CEmitOptions & {
+  host: CompilerHost
   sourceRoot?: string
 }
 

@@ -6,6 +6,7 @@ import { collectIrModuleRecords, collectIrRuntimeRequirements, lowerHirToIr } fr
 import { tokenize } from './lexer.ts'
 import { lowerProgram } from './lower.ts'
 import { buildModuleGraph } from './module-graph.ts'
+import { createNodeCompilerHost } from './node-host.ts'
 import { parse } from './parser.ts'
 import type { CompileOptions, CompileTarget, FileCompileResult, IrProgram, SourceCompileResult } from './types.ts'
 import type { CModuleOutputFile } from './codegen-c.ts'
@@ -95,8 +96,10 @@ export async function compileFileToCModules(
   entry: string,
   options: CModuleCompileOptions = {}
 ): Promise<CModuleCompileResult> {
+  const host = options.host ?? createNodeCompilerHost()
   const compiled = await compileGraphToIrModules(entry, {
     ...options,
+    host,
     target: 'c'
   })
 
@@ -109,6 +112,7 @@ export async function compileFileToCModules(
     target: 'c',
     graph: compiled.graph,
     files: emitCModuleFilesFromGraph(compiled.graph, {
+      host,
       random: options.random,
       sourceRoot: options.sourceRoot
     })
@@ -120,8 +124,10 @@ export async function compileGraphToIrModules(
   options: CompileOptions = {}
 ): Promise<GraphIrCompileResult> {
   const target = resolveCompileTarget(options)
+  const host = options.host ?? createNodeCompilerHost()
   const graph = await buildModuleGraph(entry, {
     ...options,
+    host,
     target
   })
 

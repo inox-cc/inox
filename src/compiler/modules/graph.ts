@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
 import { checkProgram } from '../checker.ts'
 import { CompileError, diagnostic } from '../diagnostics.ts'
+import { requireCompilerHost } from '../host.ts'
 import { lowerHirToIr } from '../ir.ts'
 import { tokenize } from '../lexer.ts'
 import { lowerProgram } from '../lower.ts'
@@ -17,7 +16,8 @@ import {
 } from './synthetic-imports.ts'
 
 export async function buildModuleGraph(entry: string, options: CompileOptions = {}): Promise<ModuleGraph> {
-  const entryPath = resolve(entry)
+  const host = requireCompilerHost(options.host, 'buildModuleGraph')
+  const entryPath = host.resolvePath(entry)
   const modules = new Map<string, ModuleRecord>()
   const order: ModuleRecord[] = []
   const visiting = new Set<string>()
@@ -35,7 +35,7 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
   }
 
   async function visit(file: string): Promise<ModuleRecord | null> {
-    const path = await resolveExistingSource(file)
+    const path = await resolveExistingSource(file, host)
 
     if (visiting.has(path)) {
       diagnostics.push(diagnostic('CCJS_CIRCULAR_IMPORT', `circular import involving ${path}`))
@@ -48,7 +48,7 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
 
     visiting.add(path)
 
-    const source = await readFile(path, 'utf8')
+    const source = await host.readFile(path)
     const ast = parse(
       tokenize(source, {
         file: path
@@ -166,7 +166,7 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
 
   async function resolveImport(from: string, specifier: string, loc: SourceLocation): Promise<string | null> {
     try {
-      return await resolveImportSpecifier(from, specifier)
+      return await resolveImportSpecifier(from, specifier, host)
     } catch {
       diagnostics.push(diagnostic('CCJS_MODULE_NOT_FOUND', `cannot resolve import ${specifier}`, loc))
       return null

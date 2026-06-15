@@ -248,7 +248,7 @@ export function emitCBundleFromIrModules(
   return formatGeneratedC(emitCUnit(irPrograms, entryIr, options, entryIrPrograms), 'ccjs.bundle.c')
 }
 
-export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEmitOptions = {}): CModuleOutputFile[] {
+export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEmitOptions): CModuleOutputFile[] {
   return emitCModuleFilesFromGraphWithEmitters(graph, options, {
     emitHeader: emitCModuleHeader,
     emitSource: emitCModuleSource
@@ -357,10 +357,10 @@ function emitCModuleSource(
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, context)
 
   const lines = [
-    `#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath)}"`,
+    `#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`,
     ...uniqueCModuleImports(plan.imports)
       .filter((item) => item.module.headerPath !== plan.headerPath)
-      .map((item) => `#include "${relativeCIncludePath(plan.sourcePath, item.module.headerPath)}"`),
+      .map((item) => `#include "${relativeCIncludePath(plan.sourcePath, item.module.headerPath, options.host)}"`),
     ''
   ]
 

@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-import { dirname, extname, isAbsolute, join, normalize, posix as pathPosix, relative, resolve, sep } from 'node:path'
 import { CompileError, diagnostic } from '../diagnostics.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
 import { formatGeneratedC } from './format.ts'
@@ -37,16 +35,19 @@ export function emitCModuleFilesFromGraph(
 
 function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, diagnostics: Diagnostic[]): CModulePlan[] {
   const modulePaths = new Set(graph.modules.map((module) => module.path))
-  const sourceRoot = resolve(options.sourceRoot ?? commonDirectory(graph.modules.map((module) => module.path)))
+  const host = options.host
+  const sourceRoot = host.resolvePath(
+    options.sourceRoot ?? commonDirectory(graph.modules.map((module) => module.path), host)
+  )
   const plans: CModulePlan[] = graph.modules.flatMap((record) => {
     if (record.ir == null) {
       return []
     }
 
-    const relativeSourcePath = relativeCModuleSourcePath(sourceRoot, record.path)
-    const sourcePath = replaceCModuleExtension(relativeSourcePath, '.c')
-    const headerPath = replaceCModuleExtension(relativeSourcePath, '.h')
-    const symbolPrefix = cModuleSymbolPrefix(relativeSourcePath, record.path)
+    const relativeSourcePath = relativeCModuleSourcePath(sourceRoot, record.path, host)
+    const sourcePath = replaceCModuleExtension(relativeSourcePath, '.c', host)
+    const headerPath = replaceCModuleExtension(relativeSourcePath, '.h', host)
+    const symbolPrefix = cModuleSymbolPrefix(relativeSourcePath, record.path, host)
 
     return [
       {
@@ -71,7 +72,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
         return []
       }
 
-      const importedPath = resolveKnownCModuleImport(plan.record.path, declaration.source, modulePaths)
+      const importedPath = resolveKnownCModuleImport(plan.record.path, declaration.source, modulePaths, host)
       const importedModule = importedPath == null ? null : plansByPath.get(importedPath)
 
       if (importedModule == null) {
@@ -160,66 +161,82 @@ export function uniqueCModuleImports(imports: CModuleImportPlan[]): CModuleImpor
   return unique
 }
 
-function resolveKnownCModuleImport(from: string, specifier: string, modulePaths: Set<string>): string | null {
-  const normalized = normalize(resolve(dirname(from), specifier))
+function resolveKnownCModuleImport(
+  from: string,
+  specifier: string,
+  modulePaths: Set<string>,
+  host: CModuleEmitOptions['host']
+): string | null {
+  const normalized = host.normalizePath(host.resolvePath(host.joinPath(host.dirname(from), specifier)))
   const candidates =
-    extname(normalized) === ''
+    host.extname(normalized) === ''
       ? [
           ...cModuleSourceExtensions.map((extension) => `${normalized}${extension}`),
-          ...cModuleSourceExtensions.map((extension) => join(normalized, `index${extension}`))
+          ...cModuleSourceExtensions.map((extension) => host.joinPath(normalized, `index${extension}`))
         ]
       : [normalized]
 
   return candidates.find((candidate) => modulePaths.has(candidate)) ?? null
 }
 
-function relativeCModuleSourcePath(sourceRoot: string, file: string): string {
-  const relativePath = normalize(relative(sourceRoot, file))
+function relativeCModuleSourcePath(sourceRoot: string, file: string, host: CModuleEmitOptions['host']): string {
+  const relativePath = host.normalizePath(host.relativePath(sourceRoot, file))
 
-  if (relativePath !== '' && !relativePath.startsWith('..') && !isAbsolute(relativePath)) {
-    return toCPath(relativePath)
+  if (relativePath !== '' && !relativePath.startsWith('..') && !host.isAbsolutePath(relativePath)) {
+    return toCPath(relativePath, host)
   }
 
-  return toCPath(join('external', `${shortCModuleHash(file)}_${emitCIdentifier(file)}`))
+  return toCPath(host.joinPath('external', `${shortCModuleHash(file, host)}_${emitCIdentifier(file)}`), host)
 }
 
-function replaceCModuleExtension(path: string, extension: '.c' | '.h'): string {
-  const currentExtension = pathPosix.extname(path)
+function replaceCModuleExtension(path: string, extension: '.c' | '.h', host: CModuleEmitOptions['host']): string {
+  const currentExtension = host.posixPath.extname(path)
 
   return currentExtension === '' ? `${path}${extension}` : `${path.slice(0, -currentExtension.length)}${extension}`
 }
 
-function cModuleSymbolPrefix(relativeSourcePath: string, sourcePath: string): string {
-  return `ccjs_mod_${emitCIdentifier(relativeSourcePath)}_${shortCModuleHash(sourcePath)}`
+function cModuleSymbolPrefix(
+  relativeSourcePath: string,
+  sourcePath: string,
+  host: CModuleEmitOptions['host']
+): string {
+  return `ccjs_mod_${emitCIdentifier(relativeSourcePath)}_${shortCModuleHash(sourcePath, host)}`
 }
 
-function shortCModuleHash(value: string): string {
-  return createHash('sha256').update(value).digest('hex').slice(0, 8)
+function shortCModuleHash(value: string, host: CModuleEmitOptions['host']): string {
+  return host.shortHash(value)
 }
 
-export function relativeCIncludePath(fromSourcePath: string, toHeaderPath: string): string {
-  const includePath = pathPosix.relative(pathPosix.dirname(fromSourcePath), toHeaderPath)
+export function relativeCIncludePath(
+  fromSourcePath: string,
+  toHeaderPath: string,
+  host: CModuleEmitOptions['host']
+): string {
+  const includePath = host.posixPath.relative(host.posixPath.dirname(fromSourcePath), toHeaderPath)
 
-  return includePath === '' ? pathPosix.basename(toHeaderPath) : includePath
+  return includePath === '' ? host.posixPath.basename(toHeaderPath) : includePath
 }
 
-function toCPath(path: string): string {
-  return sep === '/' ? path : path.split(sep).join('/')
+function toCPath(path: string, host: CModuleEmitOptions['host']): string {
+  return host.pathSeparator === '/' ? path : path.split(host.pathSeparator).join('/')
 }
 
-function commonDirectory(paths: string[]): string {
+function commonDirectory(paths: string[], host: CModuleEmitOptions['host']): string {
   if (paths.length === 0) {
     return '.'
   }
 
-  const [first, ...rest] = paths.map((item) => resolve(item).split(sep))
+  const [first, ...rest] = paths.map((item) => host.resolvePath(item).split(host.pathSeparator))
   let length = first.length
 
   for (const path of rest) {
-    while (length > 0 && first.slice(0, length).join(sep) !== path.slice(0, length).join(sep)) {
+    while (
+      length > 0 &&
+      first.slice(0, length).join(host.pathSeparator) !== path.slice(0, length).join(host.pathSeparator)
+    ) {
       length -= 1
     }
   }
 
-  return first.slice(0, length).join(sep) || sep
+  return first.slice(0, length).join(host.pathSeparator) || host.pathSeparator
 }

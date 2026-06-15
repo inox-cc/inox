@@ -1,3 +1,5 @@
+import type { CompilerHost } from './host.ts'
+
 export type SourceLocation = {
   file?: string
   line: number
@@ -242,6 +244,7 @@ export type CompileOptions = {
   callMain?: boolean
   budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
+  host?: CompilerHost
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   random?: RandomOptions
