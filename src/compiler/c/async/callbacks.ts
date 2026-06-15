@@ -23,6 +23,7 @@ import type {
   CCallbackWrapper,
   CFunctionParam,
   CFunctionType,
+  CObjectShape,
   CPlainArrowCallbackWrapper,
   CPromiseChainWrapper,
   CRuntimeArrowCallbackWrapper,
@@ -38,7 +39,7 @@ export type CallbackLoweringDependencies = {
   emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitRuntimeCallbackRuntimeValueReturnLines: (argument: AnyNode, context: CFunctionContext) => string[]
   emitStatementList: (statements: AnyNode[], context: CFunctionContext) => string[]
-  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
+  registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
 }
 
 export type CallbackScopeBinding = {
@@ -51,7 +52,7 @@ export type CallbackScopeBinding = {
   promiseSettlementKind?: 'reject' | 'resolve' | null
   runtimeCallback?: boolean
   runtimeManaged?: boolean
-  shape?: any
+  shape?: CObjectShape | null
   valueType: string
 }
 

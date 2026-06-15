@@ -37,6 +37,7 @@ import {
   isNullableScalarRuntimeExpression,
   resolveNullableScalarConditionNarrowing
 } from './nullable.ts'
+import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type {
   CKnownArrayElement,
   CKnownObjectField,
@@ -51,106 +52,106 @@ import type {
 
 
 export type CScalarExpressionDependencies = {
-  cFsRuntimeConstantExpression: (expression: any) => string | null
-  emitCAwaitValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  cFsRuntimeConstantExpression: (expression: AnyNode) => string | null
+  emitCAwaitValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitObjectValueReference: (name: string, context: CFunctionContext) => string
-  emitPreparedArrayLengthExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedBinaryNumberCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedBytesIndexExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedBytesLengthExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedClassMethodCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCollectionCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCollectionSizeExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoNumberCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedDgramAddressPortExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedJsonScalarParseExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedNetAddressPortExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathBooleanCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedProcessNumberExpression: (expression: any) => PreparedExpression | null
+  emitPreparedArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedBinaryNumberCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedBytesIndexExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedBytesLengthExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCollectionCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCollectionSizeExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCryptoNumberCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedDgramAddressPortExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedJsonScalarParseExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedNetAddressPortExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedProcessNumberExpression: (expression: AnyNode) => PreparedExpression | null
   emitPreparedRuntimeArrayIndexValue: (
-    expression: any,
+    expression: AnyNode,
     element: CRuntimeArrayElement,
     context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedExpression
-  emitPreparedStringCompareExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringLengthExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedStringPredicateCall: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedUrlSearchParamsCallExpression: (expression: any, context: CFunctionContext) => (PreparedExpression & { valueType?: string }) | null
-  emitReference: (expression: any, context: CFunctionContext) => string
-  emitStringExpression: (expression: any, context: CFunctionContext) => string
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
-  isIndexAccessExpression: (expression: any) => boolean
-  isMemberAccessExpression: (expression: any) => boolean
-  isStringPredicateCall: (expression: any, context: CFunctionContext) => boolean
-  reportCJsGlobalDiagnostic: (diagnostics: any, loc: any) => void
-  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => CKnownArrayElement | null
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CKnownObjectIndexField | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CKnownObjectField | null
-  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => CRuntimeArrayElement | null
+  emitPreparedStringCompareExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedStringLengthExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedStringPredicateCall: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) => (PreparedExpression & { valueType?: string }) | null
+  emitReference: (expression: AnyNode, context: CFunctionContext) => string
+  emitStringExpression: (expression: AnyNode, context: CFunctionContext) => string
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
+  isIndexAccessExpression: (expression: AnyNode) => boolean
+  isMemberAccessExpression: (expression: AnyNode) => boolean
+  isStringPredicateCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  reportCJsGlobalDiagnostic: (diagnostics: Diagnostic[], loc: SourceLocation | undefined) => void
+  resolveKnownArrayIndex: (expression: AnyNode, context: CFunctionContext) => CKnownArrayElement | null
+  resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CKnownObjectIndexField | null
+  resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CKnownObjectField | null
+  resolveRuntimeArrayIndex: (expression: AnyNode, context: CFunctionContext) => CRuntimeArrayElement | null
 }
 
 
 export type CCallExpressionDependencies = {
   currentErrorTarget: (context: CFunctionContext) => string | null
-  emitCExpression: (expression: any, context: CFunctionContext) => string
-  emitCNumberConversionValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitFunctionValueExpression: (expression: any, context: CFunctionContext) => string
+  emitCExpression: (expression: AnyNode, context: CFunctionContext) => string
+  emitCNumberConversionValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitFunctionValueExpression: (expression: AnyNode, context: CFunctionContext) => string
   emitNullableFunctionValueExpression: (
-    expression: any,
+    expression: AnyNode,
     functionType: CFunctionType | null | undefined,
     context: CFunctionContext
   ) => PreparedExpression
-  emitNullableScalarValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedArrayFilterCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedArrayMapCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedArrayPopCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedArraySortCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedClassMethodCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCollectionCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoHashCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoHmacCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFsCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFsStatsMethodExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedJsonCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedPathBooleanCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathStringCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPromiseMethodExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPromiseStaticExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedTimerCallExpression: (expression: any, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedUrlSearchParamsCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitRuntimeCallbackCall: (expression: any, callbackType: any, context: CFunctionContext) => PreparedExpression
+  emitNullableScalarValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedArrayFilterCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedArrayMapCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedArrayPopCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedArraySortCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCollectionCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCryptoHashCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCryptoHmacCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedFsStatsMethodExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitRuntimeCallbackCall: (expression: AnyNode, callbackType: CFunctionType, context: CFunctionContext) => PreparedExpression
   emitRuntimeCallbackValue: (
-    expression: any,
+    expression: AnyNode,
     functionType: CFunctionType | null | undefined,
     context: CFunctionContext
   ) => PreparedExpression
-  isExternalEventLoopFunctionCallee: (callee: any, context: CFunctionContext) => boolean
-  isNullableFunctionType: (valueType: any, nullable: any) => boolean
-  isPromiseReturningFunctionCallee: (callee: any, context: CFunctionContext) => boolean
+  isExternalEventLoopFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
+  isNullableFunctionType: (valueType: string | null | undefined, nullable: boolean | null | undefined) => boolean
+  isPromiseReturningFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
   registerErrorChannel: (context: CFunctionContext) => void
-  resolveFunctionParams: (callee: any, context: CFunctionContext) => CFunctionParam[] | null
-  resolveRuntimeCallbackCalleeType: (callee: any, context: CFunctionContext) => any | null
+  resolveFunctionParams: (callee: AnyNode, context: CFunctionContext) => CFunctionParam[] | null
+  resolveRuntimeCallbackCalleeType: (callee: AnyNode, context: CFunctionContext) => CFunctionType | null
   resolveRuntimeFunctionArgumentType: (
-    callee: any,
+    callee: AnyNode,
     index: number,
     param: CFunctionParam,
     context: CFunctionContext
   ) => CFunctionType | null
 }
 
-export function emitCallExpression(expression: any, context: CFunctionContext, deps: CCallExpressionDependencies): string {
+export function emitCallExpression(expression: AnyNode, context: CFunctionContext, deps: CCallExpressionDependencies): string {
   return `${emitCallee(expression.callee, context)}(${expression.args.map((arg) => deps.emitCExpression(arg, context)).join(', ')})`
 }
 
 export function emitPreparedCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CCallExpressionDependencies
 ): PreparedExpression {
@@ -329,7 +330,7 @@ export function emitPreparedCallExpression(
 }
 
 function emitPreparedMathCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CCallExpressionDependencies
 ): PreparedExpression | null {
@@ -348,7 +349,7 @@ function emitPreparedMathCallExpression(
 }
 
 export function emitPreparedCallArgs(
-  expression: any,
+  expression: AnyNode,
   params: CFunctionParam[],
   context: CFunctionContext,
   deps: CCallExpressionDependencies
@@ -410,7 +411,7 @@ export function emitPreparedCallArgs(
 }
 
 function emitPreparedThrowingCallExpression(
-  expression: any,
+  expression: AnyNode,
   args: string[],
   preparedLines: string[],
   context: CFunctionContext,
@@ -497,7 +498,7 @@ function emitThrowingCallStatusCheck(status: string, context: CFunctionContext, 
   return lines
 }
 
-export function isThrowingFunctionCallee(callee: any, context: CEmitContext): boolean {
+export function isThrowingFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
   return callee?.type === 'Reference' && callee.path.length === 1 && isThrowingFunctionName(callee.path[0], context)
 }
 
@@ -505,7 +506,7 @@ export function isThrowingFunctionName(name: string, context: CEmitContext): boo
   return context.throwingFunctions?.has(name) === true
 }
 
-export function emitCallee(callee: any, context: CFunctionContext): string {
+export function emitCallee(callee: AnyNode, context: CFunctionContext): string {
   const timeRuntimeCall = cTimeRuntimeCallName(callee)
 
   if (timeRuntimeCall != null) {
@@ -532,7 +533,7 @@ export function emitCallee(callee: any, context: CFunctionContext): string {
   return '_'
 }
 
-export function emitCExpression(expression: any, context: CFunctionContext, deps: CScalarExpressionDependencies): string {
+export function emitCExpression(expression: AnyNode, context: CFunctionContext, deps: CScalarExpressionDependencies): string {
   if (isNullishCoalescingExpression(expression)) {
     context.diagnostics.push(
       diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
@@ -610,7 +611,7 @@ export function emitCExpression(expression: any, context: CFunctionContext, deps
 }
 
 export function emitPreparedNumberExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
@@ -950,7 +951,7 @@ export function emitPreparedNumberExpression(
 }
 
 function emitPreparedLogicalExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
@@ -992,7 +993,7 @@ function emitPreparedLogicalExpression(
 }
 
 function emitPreparedScalarNullishCoalescingExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression | null {
@@ -1024,7 +1025,7 @@ function emitPreparedScalarNullishCoalescingExpression(
 }
 
 function emitPreparedNullableNullCompareExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression | null {
@@ -1049,7 +1050,7 @@ function emitPreparedNullableNullCompareExpression(
 }
 
 function emitPreparedNumericCastExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression | null {
@@ -1097,7 +1098,7 @@ function emitPreparedNumericCastExpression(
   }
 }
 
-function isNumericCastCall(expression: any, context: CFunctionContext, deps: CScalarExpressionDependencies): boolean {
+function isNumericCastCall(expression: AnyNode, context: CFunctionContext, deps: CScalarExpressionDependencies): boolean {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
@@ -1143,7 +1144,7 @@ function numericIntegerCastLimits(cast: string): { preMin: string; preMax: strin
 }
 
 export function emitPreparedUpdateExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
@@ -1180,66 +1181,66 @@ function emitPreparedRuntimeNumberValue(
 }
 
 export type CValueExpressionDependencies = {
-  emitCArrayLiteralValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCAwaitValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCClassObjectValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCErrorObjectValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCNullishCoalescingValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCNumberConversionValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitCObjectLiteralValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCOptionalIndexValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCOptionalMemberValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCStringConcatValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCStringConversionValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCStringSliceValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCStringSplitValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCStringTrimValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCTemplateLiteralValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitOptionalRuntimeCallbackCallValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedArrayPopCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedBinaryValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedChildProcessCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedClassMethodCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCollectionCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedDebugMemoryCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFsSyncValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedJsonCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedKnownArrayIndexValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedKnownObjectIndexValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedKnownObjectMemberValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedMapIndexGetExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedNullableScalarRuntimeValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedOsConstantExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedOsStringCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathConstantExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathObjectCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathStringCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedProcessStringExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedRuntimeArrayIndexValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedUrlObjectExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedUrlSearchParamsCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedUrlSearchParamsObjectExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedUrlStringCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
+  emitCArrayLiteralValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCAwaitValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCClassObjectValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCErrorObjectValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCNullishCoalescingValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCNumberConversionValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitCObjectLiteralValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCOptionalIndexValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCOptionalMemberValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCStringConcatValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCStringConversionValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCStringSliceValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCStringSplitValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCStringTrimValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCTemplateLiteralValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitOptionalRuntimeCallbackCallValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedArrayPopCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedBinaryValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedChildProcessCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCollectionCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedDebugMemoryCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedFsSyncValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedKnownArrayIndexValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedKnownObjectIndexValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedKnownObjectMemberValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedMapIndexGetExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedNullableScalarRuntimeValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedOsConstantExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedOsStringCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedPathConstantExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedProcessStringExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedRuntimeArrayIndexValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedUrlSearchParamsObjectExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedUrlStringCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
   isBoxedRuntimeValueName: (name: string, context: CFunctionContext) => boolean
-  isClassConstructorExpression: (expression: any, context: CFunctionContext) => boolean
-  isErrorConstructorExpression: (expression: any) => boolean
-  isIndexAccessExpression: (expression: any) => boolean
-  isMemberAccessExpression: (expression: any) => boolean
-  isNullableRuntimeExpression: (expression: any, context: CFunctionContext) => boolean
-  isNullableScalarRuntimeExpression: (expression: any, context: CFunctionContext) => boolean
-  isStringConcatExpression: (expression: any, context: CFunctionContext) => boolean
-  isStringConversionCall: (expression: any, context: CFunctionContext) => boolean
-  isStringSliceCall: (expression: any, context: CFunctionContext) => boolean
-  isStringSplitCall: (expression: any, context: CFunctionContext) => boolean
-  isStringTrimCall: (expression: any, context: CFunctionContext) => boolean
+  isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
+  isErrorConstructorExpression: (expression: AnyNode) => boolean
+  isIndexAccessExpression: (expression: AnyNode) => boolean
+  isMemberAccessExpression: (expression: AnyNode) => boolean
+  isNullableRuntimeExpression: (expression: AnyNode, context: CFunctionContext) => boolean
+  isNullableScalarRuntimeExpression: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringConcatExpression: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringSliceCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringSplitCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringTrimCall: (expression: AnyNode, context: CFunctionContext) => boolean
 }
 
 export function emitCValueExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CValueExpressionDependencies
 ): PreparedExpression {
