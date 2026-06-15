@@ -20,15 +20,9 @@ import { emitCConditionClause, emitCNegatedConditionClause } from './expressions
 import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedStatement as PreparedStatement } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
-type PreparedStatement = {
-  lines: string[]
-}
 
 export type StatementLoweringDependencies = {
   emitArrayVariableDeclaration: (statement: any, context: any) => string[]

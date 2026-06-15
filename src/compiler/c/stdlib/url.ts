@@ -7,19 +7,9 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { cStringLiteral } from '../identifiers.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-  valueType?: string
-  nullable?: boolean
-}
 
-type PreparedStringBytesOperand = {
-  lines: string[]
-  bytes: string
-  length: string
-}
 
 type PreparedCallOptions = {
   out?: string

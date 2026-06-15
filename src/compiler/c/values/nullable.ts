@@ -20,11 +20,8 @@ import {
   resolveObjectExpressionIndex,
   resolveObjectExpressionMember
 } from './objects.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 export type NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression: (expression: any, context: any, shape?: any | null) => PreparedExpression

@@ -17,11 +17,8 @@ import {
   shouldEmitCleanupLabel
 } from '../context.ts'
 import type { IrProgram } from '../../types.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 export type CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions: (expression: any) => any[]

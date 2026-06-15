@@ -16,11 +16,8 @@ import { cUnsupportedExpressionCode, isNullishCoalescingExpression, isOptionalCh
 import { isStringPredicateMethod, isStringRuntimeMethod } from '../../stdlib/descriptors/collections.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
 import type { Diagnostic, SourceLocation } from '../../types.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 export type StringLoweringDependencies = {
   canLowerCNullishCoalescingExpression: (expression: any, context: any) => boolean

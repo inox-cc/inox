@@ -35,11 +35,8 @@ import {
   isNullableScalarRuntimeExpression,
   resolveNullableScalarConditionNarrowing
 } from './nullable.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedCallArgs as PreparedCallArgs } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 export type CScalarExpressionDependencies = {
   cFsRuntimeConstantExpression: (expression: any) => string | null
@@ -83,10 +80,6 @@ export type CScalarExpressionDependencies = {
   resolveRuntimeArrayIndex: (expression: any, context: any) => any | null
 }
 
-type PreparedCallArgs = {
-  lines: string[]
-  args: string[]
-}
 
 export type CCallExpressionDependencies = {
   currentErrorTarget: (context: any) => string | null

@@ -4,17 +4,9 @@ import { emitEventLoopReference, emitStatusCheck, nextCName, registerEventLoop }
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { isConsoleLog } from './console.ts'
 import type { IrProgram } from '../../types.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
-type PreparedStringBytesOperand = {
-  lines: string[]
-  bytes: string
-  length: string
-}
 
 type NetHandlerContext = {
   kind: string

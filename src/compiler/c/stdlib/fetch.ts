@@ -11,20 +11,9 @@ import {
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-  nullable?: boolean
-  rejectionValueType?: string
-  valueType?: string
-}
 
-type PreparedStringBytesOperand = {
-  lines: string[]
-  bytes: string
-  length: string
-}
 
 export type FetchLoweringDependencies = {
   emitCValueExpression: (expression: any, context: any) => PreparedExpression

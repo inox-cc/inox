@@ -11,22 +11,10 @@ import {
 } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedStatement as PreparedStatement, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-  rejectionValueType?: string
-}
 
-type PreparedStatement = {
-  lines: string[]
-}
 
-type PreparedStringBytesOperand = {
-  lines: string[]
-  bytes: string
-  length: string
-}
 
 export type FsLoweringDependencies = {
   emitCValueExpression: (expression: any, context: any) => PreparedExpression

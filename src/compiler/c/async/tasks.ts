@@ -22,11 +22,8 @@ import {
 import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
 import type { IrFunctionDeclaration } from '../../types.ts'
 import type { IrFunctionNodeEntry } from '../../ir.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 export type AsyncTaskLoweringDependencies = {
   emitCallee: (callee: any, context: any) => string

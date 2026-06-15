@@ -1,3 +1,4 @@
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 export function cPromiseRuntimeCallName(callee: any): string | null {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
     return null
@@ -124,13 +125,6 @@ import { isManagedRuntimeReturnType } from '../value-types.ts'
 import type { CallbackLoweringDependencies } from './callbacks.ts'
 import type { IrProgram } from '../../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-  valueType?: string
-  rejectionValueType?: string
-  nullable?: boolean
-}
 
 type PreparedCallOptions = {
   out?: string

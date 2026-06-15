@@ -8,17 +8,9 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
-type PreparedStringBytesOperand = {
-  lines: string[]
-  bytes: string
-  length: string
-}
 
 export type CryptoLoweringDependencies = {
   cStringLiteralNode: (value: string, loc?: any) => any

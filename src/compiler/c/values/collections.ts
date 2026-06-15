@@ -3,11 +3,8 @@ import { collectionConstructorNameFromPath } from '../../stdlib/descriptors/coll
 import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 type PreparedCollectionCall = PreparedExpression
 

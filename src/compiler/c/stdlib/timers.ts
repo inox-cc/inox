@@ -11,11 +11,8 @@ import {
   nextCName,
   registerEventLoop
 } from '../context.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 export type TimerLoweringDependencies = {
   emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression

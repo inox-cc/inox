@@ -3,11 +3,8 @@ import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 export type ObjectVariableDeclarationDependencies = {
   emitCFieldFlags: (field: any) => string

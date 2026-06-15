@@ -9,12 +9,8 @@ import {
 import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-  elementType?: string
-}
 
 export type ArrayLoweringDependencies = {
   emitCArrayLiteralValueExpression: (expression: any, context: any) => PreparedExpression

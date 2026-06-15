@@ -5,6 +5,29 @@ export type CEmitOptions = {
   random?: RandomOptions
 }
 
+export type CPreparedExpression = {
+  lines: string[]
+  expression: string
+  nullable?: boolean
+  rejectionValueType?: string
+  valueType?: string
+}
+
+export type CPreparedStatement = {
+  lines: string[]
+}
+
+export type CPreparedStringBytesOperand = {
+  lines: string[]
+  bytes: string
+  length: string
+}
+
+export type CPreparedCallArgs = {
+  lines: string[]
+  args: string[]
+}
+
 export type CModuleOutputFile = {
   kind: 'header' | 'source'
   path: string

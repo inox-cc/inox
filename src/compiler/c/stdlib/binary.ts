@@ -8,21 +8,10 @@ import { diagnostic } from '../../diagnostics.ts'
 import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { emitSliceIndexNormalizationLines } from '../values/slices.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedStatement as PreparedStatement, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
-type PreparedStatement = {
-  lines: string[]
-}
 
-type PreparedStringBytesOperand = {
-  lines: string[]
-  bytes: string
-  length: string
-}
 
 export type BinaryLoweringDependencies = {
   emitCValueExpression: (expression: any, context: any) => PreparedExpression

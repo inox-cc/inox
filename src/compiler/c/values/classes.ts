@@ -5,16 +5,9 @@ import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedCallArgs as PreparedCallArgs } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
-type PreparedCallArgs = {
-  lines: string[]
-  args: string[]
-}
 
 export type ClassLoweringDependencies = {
   emitCFieldFlags: (field: any) => string

@@ -8,6 +8,7 @@ import {
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
+import type { CPreparedExpression as PreparedExpression, CPreparedStringBytesOperand as PreparedStringBytesOperand } from '../types.ts'
 
 export function cJsonRuntimeCallName(callee: any): string | null {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
@@ -17,16 +18,7 @@ export function cJsonRuntimeCallName(callee: any): string | null {
   return jsonRuntimeMethodNameFromPath([callee.object.path[0], callee.property])
 }
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
-type PreparedStringBytesOperand = {
-  lines: string[]
-  bytes: string
-  length: string
-}
 
 export type JsonDeclarationDependencies = {
   emitCFieldFlags: (field: any) => string

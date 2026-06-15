@@ -5,11 +5,8 @@ import {
 } from '../../stdlib/descriptors/process.ts'
 import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 type PreparedCallOptions = {
   out?: string

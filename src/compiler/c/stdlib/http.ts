@@ -4,11 +4,8 @@ import { emitEventLoopReference, emitStatusCheck, nextCName, registerEventLoop }
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { cJsonRuntimeCallName } from './json.ts'
 import type { IrProgram } from '../../types.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
-type PreparedExpression = {
-  lines: string[]
-  expression: string
-}
 
 type HttpStringBytesOperand = {
   lines: string[]
