@@ -821,6 +821,57 @@ exit 0
   }
 })
 
+test('ccjs build --target c passes OpenSSL crypto flags for node:crypto createHash', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-crypto-openssl-select-test-'))
+  const out = join(dir, 'hash')
+  const wrapper = join(dir, 'cc-wrapper.sh')
+  const log = join(dir, 'cc.log')
+
+  try {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `import { createHash } from 'node:crypto'
+
+console.log(createHash('sha256').update('hello').digest('hex'))
+`
+    )
+    await writeFile(
+      wrapper,
+      `#!/bin/sh
+printf '<%s>\\n' "$0" "$@" > "$CCJS_CC_LOG"
+exit 0
+`
+    )
+    await chmod(wrapper, 0o755)
+
+    const result = await runCli(
+      ['build', 'main.ts', '--target', 'c', '--loop-backend', 'libuv', '--tls-backend', 'openssl', '-o', out],
+      {
+        cwd: dir,
+        env: {
+          CC: wrapper,
+          CCJS_CC_LOG: log
+        }
+      }
+    )
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const invocation = await readFile(log, 'utf8')
+
+    assert.match(invocation, /-DCCJS_TLS_BACKEND_OPENSSL=1/)
+    assert.match(invocation, /runtime\/c\/src\/crypto\/crypto\.c/)
+    assert.match(invocation, /-lcrypto/)
+    assert.doesNotMatch(invocation, /runtime\/c\/src\/network\/tls-openssl\.c/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs build --target c reads ccjs.config.json toolchain settings', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

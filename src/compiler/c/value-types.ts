@@ -34,6 +34,10 @@ export function emitCType(type: any): string {
     return 'ccjs_timer_handle*'
   }
 
+  if (type === 'crypto-hash') {
+    return 'ccjs_crypto_hash*'
+  }
+
   return 'double'
 }
 

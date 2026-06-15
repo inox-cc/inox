@@ -5,6 +5,13 @@
 #include "ccjs/binary.h"
 #include "ccjs/string.h"
 
+#if defined(CCJS_TLS_BACKEND_BORINGSSL) || defined(CCJS_TLS_BACKEND_OPENSSL)
+#include <openssl/evp.h>
+#define CCJS_CRYPTO_HASH_HAS_EVP 1
+#else
+#define CCJS_CRYPTO_HASH_HAS_EVP 0
+#endif
+
 #if defined(CCJS_LOOP_BACKEND_LIBUV)
 #include <uv.h>
 #elif defined(_WIN32)
@@ -20,7 +27,18 @@
 static ccjs_status ccjs_crypto_random_bytes_raw(uint8_t* out, size_t len);
 static int ccjs_crypto_number_to_size(ccjs_number value, size_t* out);
 static int ccjs_crypto_number_is_integer(ccjs_number value);
+static int ccjs_crypto_hash_algorithm_is_sha256(const char* algorithm, size_t algorithm_len);
+static ccjs_status ccjs_crypto_hash_data(ccjs_value data, const uint8_t** bytes, size_t* len);
+static ccjs_status ccjs_crypto_hash_digest_raw(ccjs_crypto_hash* hash, uint8_t* digest, size_t* len);
 static char ccjs_crypto_hex_digit(uint8_t value);
+
+struct ccjs_crypto_hash {
+  ccjs_allocator* allocator;
+#if CCJS_CRYPTO_HASH_HAS_EVP
+  EVP_MD_CTX* ctx;
+#endif
+  int finalized;
+};
 
 ccjs_status ccjs_crypto_get_random_values(ccjs_value value) {
   if (value.tag != CCJS_TAG_BYTES || value.as.ref == 0) {
@@ -152,6 +170,145 @@ ccjs_status ccjs_crypto_random_uuid(ccjs_allocator* allocator, ccjs_value* out) 
   return ccjs_string_from_literal(allocator, uuid, sizeof(uuid), out);
 }
 
+ccjs_status ccjs_crypto_hash_create(
+  ccjs_allocator* allocator,
+  const char* algorithm,
+  size_t algorithm_len,
+  ccjs_crypto_hash** out
+) {
+  if (allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || algorithm == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = 0;
+
+  if (!ccjs_crypto_hash_algorithm_is_sha256(algorithm, algorithm_len)) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+#if CCJS_CRYPTO_HASH_HAS_EVP
+  ccjs_crypto_hash* hash = allocator->alloc(allocator->user, sizeof(ccjs_crypto_hash), _Alignof(ccjs_crypto_hash));
+
+  if (hash == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  hash->allocator = allocator;
+  hash->ctx = EVP_MD_CTX_new();
+  hash->finalized = 0;
+
+  if (hash->ctx == 0) {
+    allocator->free(allocator->user, hash, sizeof(ccjs_crypto_hash), _Alignof(ccjs_crypto_hash));
+    return CCJS_ERR_OOM;
+  }
+
+  if (EVP_DigestInit_ex(hash->ctx, EVP_sha256(), 0) != 1) {
+    ccjs_crypto_hash_free(hash);
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  *out = hash;
+
+  return CCJS_OK;
+#else
+  (void)allocator;
+
+  return CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
+ccjs_status ccjs_crypto_hash_update(ccjs_crypto_hash* hash, ccjs_value data) {
+  if (hash == 0 || hash->finalized) {
+    return CCJS_ERR_FIELD;
+  }
+
+#if CCJS_CRYPTO_HASH_HAS_EVP
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+  ccjs_status status = ccjs_crypto_hash_data(data, &bytes, &len);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  return EVP_DigestUpdate(hash->ctx, bytes, len) == 1 ? CCJS_OK : CCJS_ERR_UNSUPPORTED;
+#else
+  (void)data;
+
+  return CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
+ccjs_status ccjs_crypto_hash_digest_bytes(ccjs_allocator* allocator, ccjs_crypto_hash* hash, ccjs_value* out) {
+  if (allocator == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = ccjs_undefined_value();
+
+#if CCJS_CRYPTO_HASH_HAS_EVP
+  uint8_t digest[EVP_MAX_MD_SIZE];
+  size_t len = 0;
+  ccjs_status status = ccjs_crypto_hash_digest_raw(hash, digest, &len);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  return ccjs_bytes_from_data(allocator, digest, len, out);
+#else
+  (void)hash;
+
+  return CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
+ccjs_status ccjs_crypto_hash_digest_hex(ccjs_allocator* allocator, ccjs_crypto_hash* hash, ccjs_value* out) {
+  if (allocator == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  *out = ccjs_undefined_value();
+
+#if CCJS_CRYPTO_HASH_HAS_EVP
+  uint8_t digest[EVP_MAX_MD_SIZE];
+  char hex[EVP_MAX_MD_SIZE * 2];
+  size_t len = 0;
+  ccjs_status status = ccjs_crypto_hash_digest_raw(hash, digest, &len);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  for (size_t index = 0; index < len; index += 1) {
+    hex[index * 2] = ccjs_crypto_hex_digit((uint8_t)(digest[index] >> 4));
+    hex[index * 2 + 1] = ccjs_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
+  }
+
+  return ccjs_string_from_literal(allocator, hex, len * 2, out);
+#else
+  (void)hash;
+
+  return CCJS_ERR_UNSUPPORTED;
+#endif
+}
+
+void ccjs_crypto_hash_free(ccjs_crypto_hash* hash) {
+  if (hash == 0) {
+    return;
+  }
+
+#if CCJS_CRYPTO_HASH_HAS_EVP
+  if (hash->ctx != 0) {
+    EVP_MD_CTX_free(hash->ctx);
+  }
+#endif
+
+  if (hash->allocator != 0 && hash->allocator->free != 0) {
+    hash->allocator->free(hash->allocator->user, hash, sizeof(ccjs_crypto_hash), _Alignof(ccjs_crypto_hash));
+  }
+}
+
 static ccjs_status ccjs_crypto_random_bytes_raw(uint8_t* out, size_t len) {
   if (out == 0 && len != 0) {
     return CCJS_ERR_TYPE;
@@ -219,6 +376,81 @@ static int ccjs_crypto_number_is_integer(ccjs_number value) {
   int64_t converted = (int64_t)value;
 
   return (ccjs_number)converted == value;
+}
+
+static int ccjs_crypto_hash_algorithm_is_sha256(const char* algorithm, size_t algorithm_len) {
+  return algorithm_len == 6 &&
+         algorithm[0] == 's' &&
+         algorithm[1] == 'h' &&
+         algorithm[2] == 'a' &&
+         algorithm[3] == '2' &&
+         algorithm[4] == '5' &&
+         algorithm[5] == '6';
+}
+
+static ccjs_status ccjs_crypto_hash_data(ccjs_value data, const uint8_t** bytes, size_t* len) {
+  if (bytes == 0 || len == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (data.tag == CCJS_TAG_STRING) {
+    if (data.as.ref == 0) {
+      return CCJS_ERR_TYPE;
+    }
+
+    ccjs_string* string = (ccjs_string*)data.as.ref;
+
+    *bytes = (const uint8_t*)string->bytes;
+    *len = string->len;
+
+    return CCJS_OK;
+  }
+
+  if (data.tag == CCJS_TAG_BYTES) {
+    if (data.as.ref == 0) {
+      return CCJS_ERR_TYPE;
+    }
+
+    ccjs_bytes* buffer = (ccjs_bytes*)data.as.ref;
+
+    *bytes = buffer->bytes;
+    *len = buffer->len;
+
+    return CCJS_OK;
+  }
+
+  return CCJS_ERR_TYPE;
+}
+
+static ccjs_status ccjs_crypto_hash_digest_raw(ccjs_crypto_hash* hash, uint8_t* digest, size_t* len) {
+  if (hash == 0 || hash->finalized || digest == 0 || len == 0) {
+    return CCJS_ERR_FIELD;
+  }
+
+#if CCJS_CRYPTO_HASH_HAS_EVP
+  unsigned int digest_len = 0;
+
+  if (EVP_DigestFinal_ex(hash->ctx, digest, &digest_len) != 1) {
+    return CCJS_ERR_UNSUPPORTED;
+  }
+
+  hash->finalized = 1;
+
+  if (hash->ctx != 0) {
+    EVP_MD_CTX_free(hash->ctx);
+    hash->ctx = 0;
+  }
+
+  *len = (size_t)digest_len;
+
+  return CCJS_OK;
+#else
+  (void)hash;
+  (void)digest;
+  (void)len;
+
+  return CCJS_ERR_UNSUPPORTED;
+#endif
 }
 
 static char ccjs_crypto_hex_digit(uint8_t value) {

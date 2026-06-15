@@ -236,20 +236,18 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
   try {
     const compiler = cCompilerCommand(config)
     const runtimeRequirements = result.irRuntimeRequirements
-    const runtimeSources = cRuntimeSourcesForCode(
-      result.code,
-      runtimeRequirements,
-      options.tlsBackend ?? config.c?.tlsBackend ?? 'none'
-    )
+    const tlsBackend = options.tlsBackend ?? config.c?.tlsBackend ?? 'none'
+    const runtimeSources = cRuntimeSourcesForCode(result.code, runtimeRequirements, tlsBackend)
 
     return await spawnAndWait(compiler.command, [
       ...compiler.args,
       ...configCFlags(config),
       ...splitCommandWords(process.env.CFLAGS),
-      ...cRuntimeCFlagsForRequirements(runtimeRequirements),
+      ...cRuntimeCFlagsForRequirements(runtimeRequirements, tlsBackend),
       `-I${join(repoRoot, 'runtime/c/include')}`,
       source,
       ...runtimeSources,
+      ...cRuntimeLdFlagsForTlsBackend(tlsBackend),
       ...configLdFlags(config),
       ...splitCommandWords(process.env.LDFLAGS),
       '-o',
@@ -398,8 +396,13 @@ function cRuntimeSourcesForCode(
   return sources
 }
 
-function cRuntimeCFlagsForRequirements(runtimeRequirements: readonly IrRuntimeRequirement[]): string[] {
+function cRuntimeCFlagsForRequirements(
+  runtimeRequirements: readonly IrRuntimeRequirement[],
+  tlsBackend: TlsBackend = 'none'
+): string[] {
   const flags: string[] = []
+
+  flags.push(...cRuntimeCFlagsForTlsBackend(tlsBackend))
 
   if (runtimeRequirements.includes('weak-references')) {
     flags.push('-DCCJS_ENABLE_WEAK=1')
@@ -410,6 +413,22 @@ function cRuntimeCFlagsForRequirements(runtimeRequirements: readonly IrRuntimeRe
   }
 
   return flags
+}
+
+function cRuntimeCFlagsForTlsBackend(tlsBackend: TlsBackend): string[] {
+  if (tlsBackend === 'boringssl') {
+    return ['-DCCJS_TLS_BACKEND_BORINGSSL=1', `-I${join(repoRoot, 'third_party/boringssl/include')}`]
+  }
+
+  if (tlsBackend === 'openssl') {
+    return ['-DCCJS_TLS_BACKEND_OPENSSL=1']
+  }
+
+  return ['-DCCJS_TLS_BACKEND_NONE=1']
+}
+
+function cRuntimeLdFlagsForTlsBackend(tlsBackend: TlsBackend): string[] {
+  return tlsBackend === 'openssl' ? ['-lssl', '-lcrypto'] : []
 }
 
 function cRuntimeTlsSource(tlsBackend: TlsBackend): string {

@@ -136,6 +136,7 @@
                     "sum"
                   ],
                   "valueType": "unknown",
+                  "nullable": false,
                   "loc": {
                     "line": 11,
                     "column": 5
@@ -151,7 +152,7 @@
                     "path": [
                       "sum"
                     ],
-                    "valueType": "unknown",
+                    "valueType": "number",
                     "nullable": false,
                     "loc": {
                       "line": 11,
@@ -163,7 +164,7 @@
                     "path": [
                       "score"
                     ],
-                    "valueType": "unknown",
+                    "valueType": "number",
                     "nullable": false,
                     "loc": {
                       "line": 11,
@@ -185,7 +186,7 @@
           "iterable": {
             "type": "MemberExpression",
             "property": "scores",
-            "valueType": "unknown",
+            "valueType": "array",
             "nullable": false,
             "arrayElementType": "number",
             "arrayElementDeclaredType": "number",
@@ -194,8 +195,44 @@
               "path": [
                 "user"
               ],
-              "valueType": "unknown",
+              "valueType": "object",
               "nullable": false,
+              "fields": [
+                {
+                  "name": "id",
+                  "readonly": true,
+                  "declaredType": "number",
+                  "valueType": "number",
+                  "nullable": false,
+                  "loc": {
+                    "line": 2,
+                    "column": 12
+                  }
+                },
+                {
+                  "name": "name",
+                  "readonly": false,
+                  "declaredType": "string",
+                  "valueType": "string",
+                  "nullable": false,
+                  "loc": {
+                    "line": 3,
+                    "column": 3
+                  }
+                },
+                {
+                  "name": "scores",
+                  "readonly": false,
+                  "declaredType": "array<number>",
+                  "valueType": "array",
+                  "nullable": false,
+                  "arrayElementType": "number",
+                  "loc": {
+                    "line": 4,
+                    "column": 3
+                  }
+                }
+              ],
               "loc": {
                 "line": 10,
                 "column": 23
@@ -218,7 +255,7 @@
             "path": [
               "sum"
             ],
-            "valueType": "unknown",
+            "valueType": "number",
             "nullable": false,
             "loc": {
               "line": 14,
@@ -389,7 +426,7 @@
           "path": [
             "total"
           ],
-          "valueType": "unknown",
+          "valueType": "function",
           "nullable": false,
           "loc": {
             "line": 18,
@@ -402,8 +439,44 @@
             "path": [
               "user"
             ],
-            "valueType": "unknown",
+            "valueType": "object",
             "nullable": false,
+            "fields": [
+              {
+                "name": "id",
+                "readonly": true,
+                "declaredType": "number",
+                "valueType": "number",
+                "nullable": false,
+                "loc": {
+                  "line": 2,
+                  "column": 12
+                }
+              },
+              {
+                "name": "name",
+                "readonly": false,
+                "declaredType": "string",
+                "valueType": "string",
+                "nullable": false,
+                "loc": {
+                  "line": 3,
+                  "column": 3
+                }
+              },
+              {
+                "name": "scores",
+                "readonly": false,
+                "declaredType": "array<number>",
+                "valueType": "array",
+                "nullable": false,
+                "arrayElementType": "number",
+                "loc": {
+                  "line": 4,
+                  "column": 3
+                }
+              }
+            ],
             "loc": {
               "line": 18,
               "column": 21
@@ -429,12 +502,13 @@
           "type": "MemberExpression",
           "property": "log",
           "valueType": "unknown",
+          "nullable": false,
           "object": {
             "type": "Reference",
             "path": [
               "console"
             ],
-            "valueType": "unknown",
+            "valueType": "object",
             "nullable": false,
             "loc": {
               "line": 20,

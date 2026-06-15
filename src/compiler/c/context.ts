@@ -30,6 +30,7 @@ export function createFunctionContext(baseContext: any, returnType: any, returnN
     nullableVariables: new Set(),
     objectShapes: new Map(),
     ownedPromises: [],
+    ownedCryptoHashes: [],
     ownedValues: [],
     promiseRejectionValueTypes: new Map(),
     promiseConstructorHandlers: new Map(),
@@ -101,6 +102,14 @@ export function registerOwnedPromise(
   context.promiseRejectionValueTypes.set(name, rejectionValueType)
 }
 
+export function registerOwnedCryptoHash(context: any, name: string): void {
+  if (!context.ownedCryptoHashes.includes(name)) {
+    context.ownedCryptoHashes.push(name)
+  }
+
+  context.variables.set(name, 'crypto-hash')
+}
+
 export function registerEventLoop(context: any): void {
   context.eventLoopUsed = true
   context.usedCleanupGoto = true
@@ -125,6 +134,7 @@ export function shouldEmitCleanupLabel(context: any): boolean {
     (context.returnType === 'void' &&
       (context.ownedValues.length > 0 ||
         context.ownedPromises.length > 0 ||
+        context.ownedCryptoHashes.length > 0 ||
         context.boxedValues.length > 0 ||
         context.eventLoopUsed ||
         context.usedCleanupGoto))
@@ -167,7 +177,10 @@ export function emitReturnFlowDeclarations(context: any): string[] {
 }
 
 export function emitOwnedValueDeclarations(context: any): string[] {
-  return context.ownedValues.map((name: string) => `ccjs_value ${name} = ccjs_undefined_value();`)
+  return [
+    ...context.ownedValues.map((name: string) => `ccjs_value ${name} = ccjs_undefined_value();`),
+    ...context.ownedCryptoHashes.map((name: string) => `ccjs_crypto_hash* ${name} = 0;`)
+  ]
 }
 
 export function emitOwnedPromiseDeclarations(context: any): string[] {
@@ -191,7 +204,10 @@ export function emitBoxedValueDeclarations(context: any): string[] {
 }
 
 export function emitOwnedValueCleanup(context: any): string[] {
-  return context.ownedValues.toReversed().map((name: string) => `ccjs_release(${name});`)
+  return [
+    ...context.ownedCryptoHashes.toReversed().map((name: string) => `ccjs_crypto_hash_free(${name});`),
+    ...context.ownedValues.toReversed().map((name: string) => `ccjs_release(${name});`)
+  ]
 }
 
 export function emitOwnedPromiseCleanup(context: any): string[] {

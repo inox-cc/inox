@@ -48,6 +48,7 @@ import {
   nextCName,
   registerBoxedValue,
   registerEventLoop,
+  registerOwnedCryptoHash,
   registerOwnedPromise,
   registerOwnedValue,
   shouldEmitCleanupLabel,
@@ -9722,6 +9723,12 @@ function emitStatement(statement, context) {
       return timerCall.lines
     }
 
+    const cryptoHashCall = emitPreparedCryptoHashCallExpression(statement.expression, context)
+
+    if (cryptoHashCall != null) {
+      return cryptoHashCall.lines
+    }
+
     const promise = emitPreparedPromiseStaticExpression(statement.expression, context)
 
     if (promise != null) {
@@ -11941,6 +11948,12 @@ function emitVariableDeclaration(statement, context) {
     return emitErrorObjectVariableDeclaration(statement, context).join('\n')
   }
 
+  const cryptoHashDeclaration = emitCryptoHashVariableDeclaration(statement, context)
+
+  if (cryptoHashDeclaration != null) {
+    return cryptoHashDeclaration.join('\n')
+  }
+
   if (
     isRuntimeValueLocalExpression(statement.init, context) &&
     statement.init?.type !== 'ObjectLiteral' &&
@@ -12047,6 +12060,12 @@ function emitScalarVariableDeclaration(statement, context) {
     return [`ccjs_timer_handle* ${statement.name} = 0;`]
   }
 
+  const cryptoHashDeclaration = emitCryptoHashVariableDeclaration(statement, context)
+
+  if (cryptoHashDeclaration != null) {
+    return cryptoHashDeclaration
+  }
+
   const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(statement.init, context, {
     out: statement.name
   })
@@ -12116,6 +12135,14 @@ function emitScalarVariableDeclaration(statement, context) {
     context.variables.set(statement.name, 'timer')
 
     return [...handle.lines, `ccjs_timer_handle* ${statement.name} = ${handle.expression};`]
+  }
+
+  if (inferred === 'crypto-hash') {
+    const handle = emitPreparedCryptoHashHandleExpression(statement.init, context)
+
+    context.variables.set(statement.name, 'crypto-hash')
+
+    return [...handle.lines, `ccjs_crypto_hash* ${statement.name} = ${handle.expression};`]
   }
 
   if ((inferred === 'number' || inferred === 'boolean') && context.boxedMutableCaptureDeclarations.has(statement)) {
@@ -15741,6 +15768,17 @@ function emitCExpression(expression, context) {
     return '0'
   }
 
+  if (type === 'crypto-hash') {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_CRYPTO_HASH',
+        'crypto hash handles can only be stored or used through Hash.update() and Hash.digest() in the current C backend slice',
+        expression?.loc
+      )
+    )
+    return '0'
+  }
+
   if (type === 'optional') {
     context.diagnostics.push(
       diagnostic(
@@ -15850,6 +15888,12 @@ function emitPreparedCallExpression(expression, context) {
 
   if (collectionCall != null) {
     return collectionCall
+  }
+
+  const cryptoHashCall = emitPreparedCryptoHashCallExpression(expression, context)
+
+  if (cryptoHashCall != null) {
+    return cryptoHashCall
   }
 
   const cryptoCall = emitPreparedCryptoCallExpression(expression, context)
@@ -16055,7 +16099,9 @@ function emitPreparedChildProcessCallExpression(expression, context, options: { 
   const argArray = second?.type === 'ObjectLiteral' ? null : second
   const optionsArg = second?.type === 'ObjectLiteral' ? second : expression.args[2]
   const childOptions =
-    optionsArg == null ? { lines: [] as string[], expression: 'ccjs_undefined_value()' } : emitCValueExpression(optionsArg, context)
+    optionsArg == null
+      ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
+      : emitCValueExpression(optionsArg, context)
   const args =
     argArray?.type === 'ArrayLiteral' ? argArray.elements.map((arg) => emitCValueExpression(arg, context)) : []
 
@@ -16362,7 +16408,11 @@ function emitPreparedUrlObjectExpression(expression, context, options: { out?: s
   }
 }
 
-function emitPreparedUrlSearchParamsObjectExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+function emitPreparedUrlSearchParamsObjectExpression(
+  expression,
+  context,
+  options: { out?: string; owned?: boolean } = {}
+) {
   if (cUrlRuntimeMethodName(expression) !== 'URLSearchParams') {
     return null
   }
@@ -16394,7 +16444,11 @@ function emitPreparedUrlSearchParamsObjectExpression(expression, context, option
   }
 }
 
-function emitPreparedUrlSearchParamsCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+function emitPreparedUrlSearchParamsCallExpression(
+  expression,
+  context,
+  options: { out?: string; owned?: boolean } = {}
+) {
   const method = cUrlRuntimeMethodName(expression)
 
   if (method == null || !method.startsWith('URLSearchParams.')) {
@@ -16402,7 +16456,10 @@ function emitPreparedUrlSearchParamsCallExpression(expression, context, options:
   }
 
   const receiver = emitCValueExpression(expression.callee.object, context)
-  const name = expression.args[0] == null ? null : emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_url_param_name')
+  const name =
+    expression.args[0] == null
+      ? null
+      : emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_url_param_name')
   const lines = [
     ...receiver.lines,
     emitRuntimeTypeCheck(`${receiver.expression}.tag != CCJS_TAG_OBJECT || ${receiver.expression}.as.ref == 0`, context)
@@ -16443,7 +16500,10 @@ function emitPreparedUrlSearchParamsCallExpression(expression, context, options:
             `ccjs_url_search_params_get(&ccjs_default_allocator, ${receiver.expression}, ${name?.bytes ?? '""'}, ${name?.length ?? '0'}, &${out})`,
             context
           )
-        : emitStatusCheck(`ccjs_url_search_params_to_string(&ccjs_default_allocator, ${receiver.expression}, &${out})`, context)
+        : emitStatusCheck(
+            `ccjs_url_search_params_to_string(&ccjs_default_allocator, ${receiver.expression}, &${out})`,
+            context
+          )
     )
 
     return {
@@ -16547,7 +16607,10 @@ function emitUrlObjectFieldAssignment(expression, context): string[] | null {
   return [
     ...object.lines,
     ...value.lines,
-    emitStatusCheck(`ccjs_url_set_field(&ccjs_default_allocator, ${object.expression}, ${fieldIndex}, ${value.expression})`, context)
+    emitStatusCheck(
+      `ccjs_url_set_field(&ccjs_default_allocator, ${object.expression}, ${fieldIndex}, ${value.expression})`,
+      context
+    )
   ]
 }
 
@@ -16592,7 +16655,10 @@ function emitPreparedPathObjectCallExpression(expression, context, options: { ou
   registerObjectShape(context, out, expression.shape)
 
   lines.push(
-    emitStatusCheck(`ccjs_path_parse(&ccjs_default_allocator, ${input.expression}, ${shape.expression}, &${out})`, context)
+    emitStatusCheck(
+      `ccjs_path_parse(&ccjs_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
+      context
+    )
   )
 
   return {
@@ -17710,11 +17776,144 @@ function emitPreparedDebugMemoryCallExpression(expression, context, options: { d
   }
 }
 
+function emitCryptoHashVariableDeclaration(statement, context): string[] | null {
+  if (statement.init?.type !== 'CallExpression') {
+    return null
+  }
+
+  if (cryptoRuntimeMethodName(statement.init) === 'createHash') {
+    return (
+      emitPreparedCryptoHashCallExpression(statement.init, context, {
+        out: statement.name
+      })?.lines ?? null
+    )
+  }
+
+  if (inferExpressionType(statement.init, context) !== 'crypto-hash') {
+    return null
+  }
+
+  const handle = emitPreparedCryptoHashHandleExpression(statement.init, context)
+
+  context.variables.set(statement.name, 'crypto-hash')
+
+  return [...handle.lines, `ccjs_crypto_hash* ${statement.name} = ${handle.expression};`]
+}
+
+function emitPreparedCryptoHashCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
+  const method = cryptoRuntimeMethodName(expression)
+
+  if (method === 'createHash') {
+    const algorithm = emitPreparedStringBytesOperand(
+      expression.args[0] ?? cStringLiteralNode('', expression.loc),
+      context,
+      'ccjs_crypto_algorithm'
+    )
+    const out = options.out ?? nextCName(context, 'ccjs_crypto_hash')
+
+    if (options.owned !== false) {
+      registerOwnedCryptoHash(context, out)
+    } else {
+      context.variables.set(out, 'crypto-hash')
+    }
+
+    return {
+      lines: [
+        ...algorithm.lines,
+        `ccjs_crypto_hash_free(${out});`,
+        `${out} = 0;`,
+        emitStatusCheck(
+          `ccjs_crypto_hash_create(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, &${out})`,
+          context
+        )
+      ],
+      expression: out
+    }
+  }
+
+  if (method !== 'Hash.update') {
+    return null
+  }
+
+  const handle = emitPreparedCryptoHashHandleExpression(expression.callee.object, context)
+  const data = emitCValueExpression(expression.args[0] ?? cStringLiteralNode('', expression.loc), context)
+
+  return {
+    lines: [
+      ...handle.lines,
+      ...data.lines,
+      emitStatusCheck(`ccjs_crypto_hash_update(${handle.expression}, ${data.expression})`, context)
+    ],
+    expression: handle.expression
+  }
+}
+
+function emitPreparedCryptoHashHandleExpression(expression, context) {
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+
+    if (context.variables.get(name) === 'crypto-hash') {
+      return {
+        lines: [],
+        expression: name
+      }
+    }
+  }
+
+  if (expression?.type === 'CallExpression') {
+    const call = emitPreparedCryptoHashCallExpression(expression, context)
+
+    if (call != null) {
+      return call
+    }
+  }
+
+  context.diagnostics.push(
+    diagnostic(
+      'CCJS_C_CRYPTO_HASH',
+      'this crypto hash expression is not supported by the current C backend slice',
+      expression?.loc
+    )
+  )
+
+  return {
+    lines: [],
+    expression: '0'
+  }
+}
+
 function emitPreparedCryptoCallExpression(expression, context, options: { discard?: boolean } = {}) {
   const method = cryptoRuntimeMethodName(expression)
 
   if (method == null || method === 'randomInt') {
     return null
+  }
+
+  if (method === 'createHash' || method === 'Hash.update') {
+    return null
+  }
+
+  if (method === 'Hash.digest') {
+    const handle = emitPreparedCryptoHashHandleExpression(expression.callee.object, context)
+    const out = nextCName(context, 'ccjs_crypto_digest')
+    const encoding = expression.cryptoHashDigestEncoding === 'hex' ? 'hex' : 'bytes'
+    const digestCall =
+      encoding === 'hex'
+        ? `ccjs_crypto_hash_digest_hex(&ccjs_default_allocator, ${handle.expression}, &${out})`
+        : `ccjs_crypto_hash_digest_bytes(&ccjs_default_allocator, ${handle.expression}, &${out})`
+    const expectedTag = encoding === 'hex' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_BYTES'
+
+    registerOwnedValue(context, out)
+
+    return {
+      lines: [
+        ...handle.lines,
+        ...emitPrepareOwnedValueWrite(out),
+        emitStatusCheck(digestCall, context),
+        emitRuntimeValueCheck(out, expectedTag, context)
+      ],
+      expression: options.discard === true ? '' : out
+    }
   }
 
   if (method === 'getRandomValues' || method === 'randomFillSync') {
@@ -19429,6 +19628,14 @@ function inferExpressionType(expression, context) {
   }
 
   const cryptoMethod = cryptoRuntimeMethodName(expression)
+
+  if (cryptoMethod === 'createHash' || cryptoMethod === 'Hash.update') {
+    return 'crypto-hash'
+  }
+
+  if (cryptoMethod === 'Hash.digest') {
+    return expression.valueType ?? 'unknown'
+  }
 
   if (cryptoMethod === 'getRandomValues' || cryptoMethod === 'randomBytes' || cryptoMethod === 'randomFillSync') {
     return 'bytes'

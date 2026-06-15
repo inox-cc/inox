@@ -1717,6 +1717,12 @@ class Checker {
       return urlSearchParamsMethodType
     }
 
+    const cryptoHashMethodType = this.checkCryptoHashMethodCall(expression)
+
+    if (cryptoHashMethodType != null) {
+      return cryptoHashMethodType
+    }
+
     const fsType = this.checkFsCall(expression)
 
     if (fsType != null) {
@@ -1979,7 +1985,11 @@ class Checker {
         return binaryStaticRuntimeMethodNameFromPath(path)
       }
 
-      if (symbol.kind === 'import' && isNodeBufferImportSource(symbol.importSource) && symbol.importedName === 'Buffer') {
+      if (
+        symbol.kind === 'import' &&
+        isNodeBufferImportSource(symbol.importSource) &&
+        symbol.importedName === 'Buffer'
+      ) {
         return isBinaryStaticMethod(path[1]) ? path[1] : null
       }
 
@@ -2221,6 +2231,47 @@ class Checker {
     const method = call.method
     const argTypes = expression.args.map((arg) => this.checkExpression(arg))
 
+    if (method === 'createHash') {
+      expression.valueType = 'crypto-hash'
+      expression.cryptoRuntimeMethod = method
+
+      if (expression.args.length !== 1) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+        return 'crypto-hash'
+      }
+
+      this.checkAssignableType(
+        argTypes[0],
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+
+      if (!this.supportsCryptoHash()) {
+        this.report(
+          'CCJS_NOT_IMPLEMENTED',
+          "node:crypto createHash requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
+          expression.loc
+        )
+        return 'crypto-hash'
+      }
+
+      if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'sha256') {
+        this.report(
+          'CCJS_NOT_IMPLEMENTED',
+          "node:crypto createHash only supports the 'sha256' algorithm in the current C backend",
+          expression.args[0].loc
+        )
+      }
+
+      return 'crypto-hash'
+    }
+
     expression.valueType = method === 'randomInt' ? 'number' : method === 'randomUUID' ? 'string' : 'bytes'
     expression.cryptoRuntimeMethod = method
 
@@ -2310,6 +2361,106 @@ class Checker {
         expression.loc
       )
     }
+
+    return 'string'
+  }
+
+  checkCryptoHashMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression') {
+      return null
+    }
+
+    const method = expression.callee.property
+
+    if (method !== 'update' && method !== 'digest') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+
+    if (objectType !== 'crypto-hash') {
+      return null
+    }
+
+    expression.cryptoRuntimeMethod = `Hash.${method}`
+
+    if (method === 'update') {
+      if (expression.args.length < 1 || expression.args.length > 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `function Hash.update expects 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (expression.args[0] != null) {
+        const dataType = this.checkExpression(expression.args[0])
+
+        if (dataType !== 'string' && dataType !== 'bytes') {
+          this.report(
+            'CCJS_TYPE_MISMATCH',
+            'Hash.update data must be a string or Buffer in the current C backend',
+            expression.args[0].loc
+          )
+        }
+      }
+
+      if (expression.args[1] != null) {
+        const encodingType = this.checkExpression(expression.args[1])
+        this.checkAssignableType(
+          encodingType,
+          'string',
+          expression.args[1].loc,
+          false,
+          this.expressionCanBeNull(expression.args[1])
+        )
+
+        if (expression.args[1].type !== 'StringLiteral' || expression.args[1].value !== 'utf8') {
+          this.report(
+            'CCJS_NOT_IMPLEMENTED',
+            "Hash.update only supports the 'utf8' input encoding in the current C backend",
+            expression.args[1].loc
+          )
+        }
+      }
+
+      expression.valueType = 'crypto-hash'
+      return 'crypto-hash'
+    }
+
+    if (expression.args.length > 1) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function Hash.digest expects 0 or 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (expression.args[0] == null) {
+      expression.cryptoHashDigestEncoding = 'bytes'
+      expression.valueType = 'bytes'
+      return 'bytes'
+    }
+
+    const encodingType = this.checkExpression(expression.args[0])
+    this.checkAssignableType(
+      encodingType,
+      'string',
+      expression.args[0].loc,
+      false,
+      this.expressionCanBeNull(expression.args[0])
+    )
+
+    if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'hex') {
+      this.report(
+        'CCJS_NOT_IMPLEMENTED',
+        "Hash.digest only supports the 'hex' encoding in the current C backend",
+        expression.args[0].loc
+      )
+    }
+
+    expression.cryptoHashDigestEncoding = 'hex'
+    expression.valueType = 'string'
 
     return 'string'
   }
@@ -2880,7 +3031,9 @@ class Checker {
     }
 
     const isArgv =
-      ((root.importedName === 'default' || root.importedName === 'process') && path.length === 2 && path[1] === 'argv') ||
+      ((root.importedName === 'default' || root.importedName === 'process') &&
+        path.length === 2 &&
+        path[1] === 'argv') ||
       (root.importedName === 'argv' && path.length === 1)
 
     if (!isArgv) {
@@ -2981,13 +3134,7 @@ class Checker {
     }
 
     for (const arg of expression.args) {
-      this.checkAssignableType(
-        this.checkExpression(arg),
-        'string',
-        arg.loc,
-        false,
-        this.expressionCanBeNull(arg)
-      )
+      this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
     }
 
     expression.urlRuntimeMethod = `URLSearchParams.${method}`
@@ -3696,6 +3843,10 @@ class Checker {
   }
 
   supportsFetchHttps(): boolean {
+    return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
+  }
+
+  supportsCryptoHash(): boolean {
     return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
   }
 
@@ -5920,7 +6071,11 @@ class Checker {
     }
 
     for (const [index, argType] of argTypes.entries()) {
-      if (index === 1 && argType === 'object' && this.resolveExpressionShape(expression.args[index])?.builtin === 'url.URL') {
+      if (
+        index === 1 &&
+        argType === 'object' &&
+        this.resolveExpressionShape(expression.args[index])?.builtin === 'url.URL'
+      ) {
         continue
       }
 

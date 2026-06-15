@@ -1,4 +1,5 @@
 export const cryptoRuntimeMethods = [
+  'createHash',
   'getRandomValues',
   'randomBytes',
   'randomFillSync',
@@ -22,7 +23,6 @@ export const unsupportedNodeCryptoMethods = [
   'createDiffieHellman',
   'createDiffieHellmanGroup',
   'createECDH',
-  'createHash',
   'createHmac',
   'createPrivateKey',
   'createPublicKey',
