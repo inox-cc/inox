@@ -233,6 +233,23 @@ export type CAsyncTaskAwaitFrameLocal = CAsyncTaskAwaitStep & {
 
 export type CAsyncTaskFrameLocal = CAsyncTaskAwaitFrameLocal | CAsyncTaskPrefixFrameLocal
 
+export type CAsyncTaskSuccessPhaseKind = 'pre-finalizer' | 'prefix-finalizer' | 'body'
+
+export type CAsyncTaskTryPhaseKind = 'success-finalizer' | 'reject-finalizer' | 'handler-prelude' | 'handler-finalizer'
+
+export type CAsyncTaskPhaseKind = CAsyncTaskSuccessPhaseKind | CAsyncTaskTryPhaseKind
+
+export type CAsyncTaskPhase = {
+  kind: CAsyncTaskPhaseKind
+  statements: AnyNode[]
+}
+
+export type CAsyncTaskTryHandlerPlan = {
+  param: string | null
+  statements: AnyNode[]
+  returnExpression: AnyNode | null
+}
+
 export type CAsyncTaskWrapper = {
   key: string
   functionName: string
@@ -245,12 +262,12 @@ export type CAsyncTaskWrapper = {
   awaits: CAsyncTaskAwaitStep[]
   frameLocals: CAsyncTaskFrameLocal[]
   hasTryRegion: boolean
-  prefixStatements: any[]
-  returnExpression: any
+  prefixStatements: AnyNode[]
+  returnExpression: AnyNode | null
   returnType: string
-  successPhases: any[]
-  tryHandler: any
-  tryPhases: any[]
+  successPhases: CAsyncTaskPhase[]
+  tryHandler: CAsyncTaskTryHandlerPlan | null
+  tryPhases: CAsyncTaskPhase[]
 }
 
 export type CDgramMessageHandler = {
