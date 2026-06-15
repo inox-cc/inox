@@ -37,6 +37,7 @@ import type {
   CAsyncTaskTryPhaseKind,
   CAsyncTaskWrapper,
   CFunctionParam,
+  CObjectShape,
   CPromiseChainWrapper,
   CKnownArrayElement,
   CKnownObjectField,
@@ -83,10 +84,10 @@ export type AsyncTaskLoweringDependencies = {
   isRuntimeProducedStringExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isThrowingFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
   isThrowingFunctionName: (name: string, context: CEmitContext) => boolean
-  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
+  registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
   registerRuntimeValueMetadata: (
     name: string,
-    valueType: any,
+    valueType: string,
     declaration: AnyNode,
     expression: AnyNode,
     context: CFunctionContext
