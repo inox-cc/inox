@@ -221,10 +221,11 @@ import {
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import {
   cTimerClearCallName,
+  emitTimerVariableDeclaration,
   cTimerRuntimeCallName,
   cTimerStartCallName,
-  isTimerStartCallExpression,
-  timerCallbackFunctionType
+  timerCallbackFunctionType,
+  type TimerDeclarationDependencies
 } from './stdlib/timers.ts'
 import { cUrlRuntimeMethodName } from './stdlib/url.ts'
 import {
@@ -541,6 +542,11 @@ const jsonDeclarationDependencies: JsonDeclarationDependencies = {
   emitCFieldFlags,
   emitPreparedJsonCallExpression,
   registerObjectShape
+}
+
+const timerDeclarationDependencies: TimerDeclarationDependencies = {
+  emitPreparedTimerCallExpression,
+  emitPreparedTimerHandleExpression
 }
 
 const collectionLoweringDependencies: CollectionLoweringDependencies = {
@@ -2353,25 +2359,10 @@ function emitScalarVariableDeclaration(statement, context) {
     return emitErrorObjectVariableDeclaration(statement, context)
   }
 
-  if (statement.init?.type === 'CallExpression' && isTimerStartCallExpression(statement.init)) {
-    const timerCall = emitPreparedTimerCallExpression(statement.init, context, {
-      out: statement.name
-    })
+  const timerDeclaration = emitTimerVariableDeclaration(statement, context, timerDeclarationDependencies)
 
-    if (timerCall != null) {
-      context.variables.set(statement.name, 'timer')
-
-      return [`ccjs_timer_handle* ${statement.name} = 0;`, ...timerCall.lines]
-    }
-  }
-
-  if (statement.init?.type === 'CallExpression' && cTimerClearCallName(statement.init.callee) != null) {
-    context.diagnostics.push(
-      diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls return void and cannot initialize a value', statement.loc)
-    )
-    context.variables.set(statement.name, 'timer')
-
-    return [`ccjs_timer_handle* ${statement.name} = 0;`]
+  if (timerDeclaration != null) {
+    return timerDeclaration
   }
 
   const cryptoHashDeclaration = emitCryptoHashVariableDeclaration(statement, context, cryptoLoweringDependencies)
@@ -2443,12 +2434,15 @@ function emitScalarVariableDeclaration(statement, context) {
     return [`double ${statement.name} = 0;`]
   }
 
-  if (inferred === 'timer') {
-    const handle = emitPreparedTimerHandleExpression(statement.init, context)
+  const timerHandleDeclaration = emitTimerVariableDeclaration(
+    statement,
+    context,
+    timerDeclarationDependencies,
+    inferred
+  )
 
-    context.variables.set(statement.name, 'timer')
-
-    return [...handle.lines, `ccjs_timer_handle* ${statement.name} = ${handle.expression};`]
+  if (timerHandleDeclaration != null) {
+    return timerHandleDeclaration
   }
 
   if (inferred === 'crypto-hash') {
