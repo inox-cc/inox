@@ -33,6 +33,7 @@ import type {
   CAsyncTaskPrefixLocal,
   CAsyncTaskWrapper,
   CFunctionParam,
+  CPromiseChainWrapper,
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
@@ -145,6 +146,22 @@ type AsyncTaskBodyPlan = {
 }
 
 type AsyncTaskPlannerContext = CFunctionContext
+
+type AsyncTaskScheduleOptions = {
+  cleanup: 'resume' | 'start'
+  final: boolean
+  cleanupLines?: string[]
+}
+
+type PreparedAsyncTaskPromise = {
+  lines: string[]
+}
+
+type AsyncTaskPromiseChainCallbackContext = {
+  lines: string[]
+  expression: string
+  finalizer: string
+}
 
 function asAsyncTaskPlannerContext(context: CEmitContext): AsyncTaskPlannerContext {
   return context as AsyncTaskPlannerContext
@@ -1531,7 +1548,12 @@ function createAsyncTaskEmitContext(
   return context
 }
 
-function emitAsyncTaskScheduleAwaitLines(wrapper, item, context, options) {
+function emitAsyncTaskScheduleAwaitLines(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): string[] {
   const awaitedPromise = emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, options)
   const awaited = awaitedPromise == null ? emitPreparedAsyncTaskAwaitedValueExpression(item, context) : null
   const finalizer = options.final ? wrapper.finalizerName : '0'
@@ -1556,7 +1578,11 @@ function emitAsyncTaskScheduleAwaitLines(wrapper, item, context, options) {
   ]
 }
 
-function emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines: string[] = []) {
+function emitAsyncTaskScheduleStatusCheck(
+  wrapper: CAsyncTaskWrapper,
+  options: AsyncTaskScheduleOptions,
+  cleanupLines: string[] = []
+): string[] {
   if (options.cleanup === 'start') {
     return [
       'if (status != CCJS_OK) {',
@@ -1579,7 +1605,11 @@ function emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines: string
   ]
 }
 
-function emitAsyncTaskResolveStatusCheck(wrapper, options, cleanupLines: string[] = []) {
+function emitAsyncTaskResolveStatusCheck(
+  wrapper: CAsyncTaskWrapper,
+  options: AsyncTaskScheduleOptions,
+  cleanupLines: string[] = []
+): string[] {
   if (options.cleanup === 'start') {
     return [
       'if (status != CCJS_OK) {',
@@ -1599,7 +1629,12 @@ function emitAsyncTaskResolveStatusCheck(wrapper, options, cleanupLines: string[
   return emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines)
 }
 
-function emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, options) {
+function emitPreparedAsyncTaskAwaitedPromiseExpression(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): PreparedAsyncTaskPromise | null {
   if (item.awaitedPromiseExpression == null) {
     return null
   }
@@ -1644,7 +1679,12 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, o
   }
 }
 
-function emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, options) {
+function emitPreparedAsyncTaskPromiseSourceExpression(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): PreparedAsyncTaskPromise | null {
   const expression = item.awaitedPromiseExpression
 
   if (expression?.type !== 'CallExpression') {
@@ -1690,7 +1730,12 @@ function emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, op
   return null
 }
 
-function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, options) {
+function emitPreparedAsyncTaskFsSourceExpression(
+  expression,
+  wrapper: CAsyncTaskWrapper,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): PreparedAsyncTaskPromise | null {
   if (!isAsyncFsRuntimeCallExpression(expression)) {
     return null
   }
@@ -1790,7 +1835,12 @@ function emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, o
   }
 }
 
-function emitPreparedAsyncTaskFetchSourceExpression(expression, wrapper, context, options) {
+function emitPreparedAsyncTaskFetchSourceExpression(
+  expression,
+  wrapper: CAsyncTaskWrapper,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): PreparedAsyncTaskPromise | null {
   if (!isAsyncFetchRuntimeCallExpression(expression)) {
     return null
   }
@@ -1827,7 +1877,12 @@ function emitPreparedAsyncTaskFetchSourceExpression(expression, wrapper, context
   }
 }
 
-function emitPreparedAsyncTaskRejectedPromiseSourceExpression(expression, wrapper, context, options) {
+function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
+  expression,
+  wrapper: CAsyncTaskWrapper,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): PreparedAsyncTaskPromise | null {
   if (cPromiseRuntimeCallName(expression.callee) !== 'reject') {
     return null
   }
@@ -1885,7 +1940,12 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(expression, wrappe
   }
 }
 
-function emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context, options) {
+function emitPreparedAsyncTaskSourceCallExpression(
+  expression,
+  wrapper: CAsyncTaskWrapper,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): PreparedAsyncTaskPromise | null {
   if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
     return null
   }
@@ -1908,7 +1968,12 @@ function emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context,
   }
 }
 
-function emitPreparedAsyncFunctionSourceCallExpression(expression, wrapper, context, options) {
+function emitPreparedAsyncFunctionSourceCallExpression(
+  expression,
+  wrapper: CAsyncTaskWrapper,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): PreparedAsyncTaskPromise | null {
   if (!isAsyncFunctionCallee(expression.callee, context) || asyncTaskDeps(context).isThrowingFunctionCallee(expression.callee, context)) {
     return null
   }
@@ -1961,7 +2026,12 @@ function emitPreparedAsyncFunctionSourceCallExpression(expression, wrapper, cont
   }
 }
 
-function emitPreparedPlainPromiseSourceCallExpression(expression, wrapper, context, options) {
+function emitPreparedPlainPromiseSourceCallExpression(
+  expression,
+  wrapper: CAsyncTaskWrapper,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): PreparedAsyncTaskPromise | null {
   if (!isPromiseReturningFunctionCallee(expression.callee, context)) {
     return null
   }
@@ -1984,7 +2054,12 @@ function emitPreparedPlainPromiseSourceCallExpression(expression, wrapper, conte
   }
 }
 
-function emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, item, context, options) {
+function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): PreparedAsyncTaskPromise | null {
   const expression = item.awaitedPromiseExpression
 
   if (
@@ -2039,7 +2114,12 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, item, conte
   }
 }
 
-function emitAsyncTaskPromiseChainCallbackContext(asyncWrapper, chainWrapper, context, options) {
+function emitAsyncTaskPromiseChainCallbackContext(
+  asyncWrapper: CAsyncTaskWrapper,
+  chainWrapper: CPromiseChainWrapper | null | undefined,
+  context: CFunctionContext,
+  options: AsyncTaskScheduleOptions
+): AsyncTaskPromiseChainCallbackContext {
   if (!isPromiseChainCallbackWrapperWithContext(chainWrapper)) {
     return {
       lines: [],
@@ -2097,7 +2177,10 @@ function emitAsyncTaskPromiseChainCallbackContext(asyncWrapper, chainWrapper, co
   }
 }
 
-function emitPreparedAsyncTaskAwaitedValueExpression(item, context) {
+function emitPreparedAsyncTaskAwaitedValueExpression(
+  item: CAsyncTaskAwaitStep,
+  context: CFunctionContext
+): PreparedExpression {
   if (
     item.awaitedExpression?.type !== 'CallExpression' ||
     cPromiseRuntimeCallName(item.awaitedExpression.callee) !== 'resolve'
