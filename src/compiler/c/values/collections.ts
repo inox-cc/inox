@@ -21,6 +21,26 @@ export type CollectionLoweringDependencies = {
   resolveKnownObjectMember: (expression: any, context: any) => any | null
 }
 
+const mapMethodDescriptors = {
+  clear: { kind: 'clear', callName: 'ccjs_map_clear' },
+  delete: { kind: 'boolean', callName: 'ccjs_map_delete', tempPrefix: 'ccjs_map_delete', hashSubject: 'Map keys' },
+  get: { kind: 'get', callName: 'ccjs_map_get', tempPrefix: 'ccjs_map_value', hashSubject: 'Map keys' },
+  has: { kind: 'boolean', callName: 'ccjs_map_has', tempPrefix: 'ccjs_map_has', hashSubject: 'Map keys' },
+  set: { kind: 'set', callName: 'ccjs_map_set', hashSubject: 'Map keys' }
+} as const
+
+const setMethodDescriptors = {
+  add: { kind: 'add', callName: 'ccjs_set_add', hashSubject: 'Set values' },
+  clear: { kind: 'clear', callName: 'ccjs_set_clear' },
+  delete: { kind: 'boolean', callName: 'ccjs_set_delete', tempPrefix: 'ccjs_set_delete', hashSubject: 'Set values' },
+  has: { kind: 'boolean', callName: 'ccjs_set_has', tempPrefix: 'ccjs_set_has', hashSubject: 'Set values' }
+} as const
+
+const collectionSizeDescriptors = {
+  map: { callName: 'ccjs_map_size', tempPrefix: 'ccjs_map_size' },
+  set: { callName: 'ccjs_set_size', tempPrefix: 'ccjs_set_size' }
+} as const
+
 function collectionDeps(context: any): CollectionLoweringDependencies {
   return context.collectionLoweringDependencies
 }
@@ -124,18 +144,30 @@ export function emitPreparedCollectionCallExpression(expression, context): Prepa
 
 function emitPreparedMapMethodCall(name, expression, context): PreparedExpression {
   const method = expression.callee.property
+  const descriptor = mapMethodDescriptors[method]
 
-  if (method === 'clear') {
+  if (descriptor == null) {
+    context.diagnostics.push(
+      diagnostic('CCJS_C_COLLECTION', `Map.${method} is not supported by the current C backend slice`, expression.loc)
+    )
+
     return {
-      lines: [emitStatusCheck(`ccjs_map_clear(${name})`, context)],
+      lines: [],
+      expression: '0'
+    }
+  }
+
+  if (descriptor.kind === 'clear') {
+    return {
+      lines: [emitStatusCheck(`${descriptor.callName}(${name})`, context)],
       expression: ''
     }
   }
 
-  if (method === 'set') {
+  if (descriptor.kind === 'set') {
     collectionDeps(context).reportCCollectionHashability(
       collectionDeps(context).inferExpressionType(expression.args[0], context),
-      'Map keys',
+      descriptor.hashSubject,
       expression.args[0]?.loc ?? expression.loc,
       context
     )
@@ -146,29 +178,29 @@ function emitPreparedMapMethodCall(name, expression, context): PreparedExpressio
       lines: [
         ...key.lines,
         ...value.lines,
-        emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context)
+        emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, ${value.expression})`, context)
       ],
       expression: name
     }
   }
 
-  if (method === 'get') {
+  if (descriptor.kind === 'get') {
     collectionDeps(context).reportCCollectionHashability(
       collectionDeps(context).inferExpressionType(expression.args[0], context),
-      'Map keys',
+      descriptor.hashSubject,
       expression.args[0]?.loc ?? expression.loc,
       context
     )
     const key = collectionDeps(context).emitCValueExpression(expression.args[0], context)
     const valueType = collectionDeps(context).inferExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
-    const out = nextCName(context, 'ccjs_map_value')
+    const out = nextCName(context, descriptor.tempPrefix)
     registerOwnedValue(context, out)
 
     const lines = [
       ...key.lines,
       ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_map_get(${name}, ${key.expression}, &${out})`, context),
+      emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, &${out})`, context),
       ...emitRuntimeNullableValueCheck(out, expectedTag, context)
     ]
 
@@ -178,30 +210,25 @@ function emitPreparedMapMethodCall(name, expression, context): PreparedExpressio
     }
   }
 
-  if (method === 'has' || method === 'delete') {
+  if (descriptor.kind === 'boolean') {
     collectionDeps(context).reportCCollectionHashability(
       collectionDeps(context).inferExpressionType(expression.args[0], context),
-      'Map keys',
+      descriptor.hashSubject,
       expression.args[0]?.loc ?? expression.loc,
       context
     )
     const key = collectionDeps(context).emitCValueExpression(expression.args[0], context)
-    const out = nextCName(context, `ccjs_map_${method}`)
-    const helper = method === 'has' ? 'ccjs_map_has' : 'ccjs_map_delete'
+    const out = nextCName(context, descriptor.tempPrefix)
 
     return {
       lines: [
         ...key.lines,
         `bool ${out} = false;`,
-        emitStatusCheck(`${helper}(${name}, ${key.expression}, &${out})`, context)
+        emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, &${out})`, context)
       ],
       expression: `(${out} ? 1 : 0)`
     }
   }
-
-  context.diagnostics.push(
-    diagnostic('CCJS_C_COLLECTION', `Map.${method} is not supported by the current C backend slice`, expression.loc)
-  )
 
   return {
     lines: [],
@@ -290,53 +317,60 @@ function emitPreparedMapIndexReceiver(expression, context) {
 
 function emitPreparedSetMethodCall(name, expression, context): PreparedExpression {
   const method = expression.callee.property
+  const descriptor = setMethodDescriptors[method]
 
-  if (method === 'clear') {
+  if (descriptor == null) {
+    context.diagnostics.push(
+      diagnostic('CCJS_C_COLLECTION', `Set.${method} is not supported by the current C backend slice`, expression.loc)
+    )
+
     return {
-      lines: [emitStatusCheck(`ccjs_set_clear(${name})`, context)],
+      lines: [],
+      expression: '0'
+    }
+  }
+
+  if (descriptor.kind === 'clear') {
+    return {
+      lines: [emitStatusCheck(`${descriptor.callName}(${name})`, context)],
       expression: ''
     }
   }
 
-  if (method === 'add') {
+  if (descriptor.kind === 'add') {
     collectionDeps(context).reportCCollectionHashability(
       collectionDeps(context).inferExpressionType(expression.args[0], context),
-      'Set values',
+      descriptor.hashSubject,
       expression.args[0]?.loc ?? expression.loc,
       context
     )
     const value = collectionDeps(context).emitCValueExpression(expression.args[0], context)
 
     return {
-      lines: [...value.lines, emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context)],
+      lines: [...value.lines, emitStatusCheck(`${descriptor.callName}(${name}, ${value.expression})`, context)],
       expression: name
     }
   }
 
-  if (method === 'has' || method === 'delete') {
+  if (descriptor.kind === 'boolean') {
     collectionDeps(context).reportCCollectionHashability(
       collectionDeps(context).inferExpressionType(expression.args[0], context),
-      'Set values',
+      descriptor.hashSubject,
       expression.args[0]?.loc ?? expression.loc,
       context
     )
     const value = collectionDeps(context).emitCValueExpression(expression.args[0], context)
-    const out = nextCName(context, `ccjs_set_${method}`)
-    const helper = method === 'has' ? 'ccjs_set_has' : 'ccjs_set_delete'
+    const out = nextCName(context, descriptor.tempPrefix)
 
     return {
       lines: [
         ...value.lines,
         `bool ${out} = false;`,
-        emitStatusCheck(`${helper}(${name}, ${value.expression}, &${out})`, context)
+        emitStatusCheck(`${descriptor.callName}(${name}, ${value.expression}, &${out})`, context)
       ],
       expression: `(${out} ? 1 : 0)`
     }
   }
-
-  context.diagnostics.push(
-    diagnostic('CCJS_C_COLLECTION', `Set.${method} is not supported by the current C backend slice`, expression.loc)
-  )
 
   return {
     lines: [],
@@ -355,14 +389,14 @@ export function emitPreparedCollectionSizeExpression(expression, context) {
     return null
   }
 
-  const out = nextCName(context, `ccjs_${receiver.type}_size`)
-  const helper = receiver.type === 'map' ? 'ccjs_map_size' : 'ccjs_set_size'
+  const descriptor = collectionSizeDescriptors[receiver.type]
+  const out = nextCName(context, descriptor.tempPrefix)
 
   return {
     lines: [
       ...receiver.lines,
       `size_t ${out} = 0;`,
-      emitStatusCheck(`${helper}(${receiver.expression}, &${out})`, context)
+      emitStatusCheck(`${descriptor.callName}(${receiver.expression}, &${out})`, context)
     ],
     expression: out
   }
