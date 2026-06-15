@@ -1,10 +1,14 @@
 import {
+  emitPrepareOwnedValueWrite,
+  emitRuntimeTypeCheck,
+  emitStatusCheck,
   narrowNullableScalars,
   nextCName,
   registerOwnedValue,
   withNullableScalarNarrowing,
   withVariableScope
 } from '../context.ts'
+import { diagnostic } from '../../diagnostics.ts'
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
 
 type PreparedExpression = {
@@ -13,14 +17,20 @@ type PreparedExpression = {
 }
 
 export type StatementLoweringDependencies = {
+  emitArrayVariableDeclaration: (statement: any, context: any) => string[]
   emitPreparedForExpressionClause: (expression: any, context: any) => PreparedExpression
   emitPreparedForInitializer: (init: any, context: any) => PreparedExpression
   emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
   emitStatement: (statement: any, context: any) => string[]
+  resolveForOfElementType: (elements: any[]) => string
+  resolveKnownForOfArray: (expression: any, context: any) => any | null
   resolveNullableScalarConditionNarrowing: (expression: any, context: any) => {
     trueNames: string[]
     falseNames: string[]
   }
+  resolveRuntimeForOfArray: (expression: any, context: any) => any | null
+  resolveRuntimeForOfMap: (expression: any, context: any) => any | null
+  resolveRuntimeForOfSet: (expression: any, context: any) => any | null
 }
 
 function statementDeps(context: any): StatementLoweringDependencies {
@@ -191,6 +201,258 @@ export function emitForStatement(statement, context) {
     lines.push('}')
 
     return lines
+  })
+}
+
+export function emitForOfStatement(statement, context) {
+  const setup: string[] = []
+  let array: any = statementDeps(context).resolveKnownForOfArray(statement.iterable, context)
+  let runtimeArray: any = null
+  let runtimeMap: any = null
+  let runtimeSet: any = null
+
+  if (array == null && statement.iterable?.type === 'ArrayLiteral') {
+    const name = nextCName(context, 'ccjs_for_array')
+
+    setup.push(
+      ...statementDeps(context).emitArrayVariableDeclaration(
+        {
+          kind: 'const',
+          name,
+          init: statement.iterable
+        },
+        context
+      )
+    )
+    array = statementDeps(context).resolveKnownForOfArray(
+      {
+        type: 'Reference',
+        path: [name]
+      },
+      context
+    )
+  }
+
+  if (array == null) {
+    runtimeArray = statementDeps(context).resolveRuntimeForOfArray(statement.iterable, context)
+  }
+
+  if (array == null && runtimeArray == null) {
+    runtimeMap = statementDeps(context).resolveRuntimeForOfMap(statement.iterable, context)
+  }
+
+  if (runtimeMap != null) {
+    return emitRuntimeMapForOfStatement(statement, runtimeMap, context)
+  }
+
+  if (array == null && runtimeArray == null) {
+    runtimeSet = statementDeps(context).resolveRuntimeForOfSet(statement.iterable, context)
+  }
+
+  if (runtimeSet != null) {
+    return emitRuntimeSetForOfStatement(statement, runtimeSet, context)
+  }
+
+  if (array == null && runtimeArray == null) {
+    context.diagnostics.push(
+      diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports arrays, Map values and Set values', statement.loc)
+    )
+    return []
+  }
+
+  const elementType = runtimeArray?.elementType ?? statementDeps(context).resolveForOfElementType(array.elements)
+
+  if (!['number', 'boolean', 'string'].includes(elementType)) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_FOR_OF',
+        'C for...of currently supports only uniform number/boolean/string arrays',
+        statement.loc
+      )
+    )
+    return []
+  }
+
+  const index = nextCName(context, 'ccjs_for_index')
+  const value = nextCName(context, 'ccjs_for_value')
+  const length = runtimeArray == null ? `${array.elements.length}` : nextCName(context, 'ccjs_for_length')
+  const arrayName = runtimeArray?.name ?? array.name
+  const breakLabel = nextCName(context, 'ccjs_break')
+  const continueLabel = nextCName(context, 'ccjs_continue')
+  const loopValue = elementType === 'boolean' ? `((double)(${value}.as.boolean ? 1 : 0))` : `${value}.as.number`
+
+  registerOwnedValue(context, value)
+
+  return withVariableScope(context, () => {
+    context.variables.set(statement.name, elementType)
+    if (elementType === 'string') {
+      context.runtimeStrings.add(statement.name)
+    }
+    const body = withBreakTarget(context, breakLabel, false, () =>
+      withContinueTarget(context, continueLabel, false, () =>
+        withVariableScope(context, () => emitStatementBody(statement.body, context))
+      )
+    )
+    const declaration =
+      elementType === 'string'
+        ? `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
+        : `double ${statement.name} = ${loopValue};`
+    const checks =
+      elementType === 'string'
+        ? [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context)]
+        : []
+
+    return [
+      ...setup,
+      ...(runtimeArray?.lines ?? []),
+      ...(runtimeArray == null
+        ? []
+        : [`size_t ${length} = 0;`, emitStatusCheck(`ccjs_array_len(${arrayName}, &${length})`, context)]),
+      `for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`,
+      ...emitPrepareOwnedValueWrite(value).map((line) => `  ${line}`),
+      `  ${emitStatusCheck(`ccjs_array_get(${arrayName}, ${index}, &${value})`, context)}`,
+      ...checks.map((line) => `  ${line}`),
+      `  ${declaration}`,
+      ...body.map((line) => `  ${line}`),
+      ...emitContinueTargetLabel(continueLabel, context),
+      '}',
+      ...emitBreakTargetLabel(breakLabel, context),
+      ...emitPrepareOwnedValueWrite(value)
+    ]
+  })
+}
+
+function emitRuntimeMapForOfStatement(statement, runtimeMap, context) {
+  const keyType = runtimeMap.keyType ?? 'unknown'
+  const valueType = runtimeMap.valueType ?? 'unknown'
+
+  if (!['number', 'boolean', 'string'].includes(keyType) || !['number', 'boolean', 'string'].includes(valueType)) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_FOR_OF',
+        'C for...of currently supports only Map entries with number/boolean/string keys and values',
+        statement.loc
+      )
+    )
+    return []
+  }
+
+  const index = nextCName(context, 'ccjs_for_map_index')
+  const map = nextCName(context, 'ccjs_for_map')
+  const shapeName = nextCName(context, 'ccjs_shape_map_entry')
+  const fieldsName = `${shapeName}_fields`
+  const breakLabel = nextCName(context, 'ccjs_break')
+  const continueLabel = nextCName(context, 'ccjs_continue')
+  const fields = [
+    {
+      name: 'key',
+      readonly: true,
+      valueType: keyType
+    },
+    {
+      name: 'value',
+      readonly: true,
+      valueType
+    }
+  ]
+
+  registerOwnedValue(context, statement.name)
+
+  return withVariableScope(context, () => {
+    context.variables.set(statement.name, 'object')
+    context.objectShapes.set(statement.name, fields)
+    const body = withBreakTarget(context, breakLabel, false, () =>
+      withContinueTarget(context, continueLabel, false, () =>
+        withVariableScope(context, () => emitStatementBody(statement.body, context))
+      )
+    )
+
+    return [
+      `static const ccjs_field_info ${fieldsName}[] = {`,
+      '  { "key", CCJS_FIELD_READONLY },',
+      '  { "value", CCJS_FIELD_READONLY },',
+      '};',
+      `static const ccjs_shape ${shapeName} = {`,
+      '  2,',
+      `  ${fieldsName}`,
+      '};',
+      ...runtimeMap.lines,
+      `ccjs_map* ${map} = (ccjs_map*)${runtimeMap.name}.as.ref;`,
+      `for (size_t ${index} = 0; ${index} < ${map}->cap; ${index} += 1) {`,
+      `  if (${map}->entries[${index}].state != CCJS_MAP_SLOT_OCCUPIED) continue;`,
+      ...emitPrepareOwnedValueWrite(statement.name).map((line) => `  ${line}`),
+      `  ${emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`, context)}`,
+      `  ${emitStatusCheck(`ccjs_object_init_known(${statement.name}, 0, ${map}->entries[${index}].key)`, context)}`,
+      `  ${emitStatusCheck(`ccjs_object_init_known(${statement.name}, 1, ${map}->entries[${index}].value)`, context)}`,
+      ...body.map((line) => `  ${line}`),
+      ...emitContinueTargetLabel(continueLabel, context),
+      '}',
+      ...emitBreakTargetLabel(breakLabel, context),
+      ...emitPrepareOwnedValueWrite(statement.name)
+    ]
+  })
+}
+
+function emitRuntimeSetForOfStatement(statement, runtimeSet, context) {
+  const elementType = runtimeSet.elementType
+
+  if (!['number', 'boolean', 'string'].includes(elementType)) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_FOR_OF',
+        'C for...of currently supports only uniform number/boolean/string Set values',
+        statement.loc
+      )
+    )
+    return []
+  }
+
+  const index = nextCName(context, 'ccjs_for_set_index')
+  const set = nextCName(context, 'ccjs_for_set')
+  const value = nextCName(context, 'ccjs_for_value')
+  const breakLabel = nextCName(context, 'ccjs_break')
+  const continueLabel = nextCName(context, 'ccjs_continue')
+  const loopValue = elementType === 'boolean' ? `((double)(${value}.as.boolean ? 1 : 0))` : `${value}.as.number`
+
+  registerOwnedValue(context, value)
+
+  return withVariableScope(context, () => {
+    context.variables.set(statement.name, elementType)
+    if (elementType === 'string') {
+      context.runtimeStrings.add(statement.name)
+    }
+    const body = withBreakTarget(context, breakLabel, false, () =>
+      withContinueTarget(context, continueLabel, false, () =>
+        withVariableScope(context, () => emitStatementBody(statement.body, context))
+      )
+    )
+    const declaration =
+      elementType === 'string'
+        ? `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
+        : `double ${statement.name} = ${loopValue};`
+    const checks =
+      elementType === 'string'
+        ? [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context)]
+        : elementType === 'boolean'
+          ? [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context)]
+          : [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context)]
+
+    return [
+      ...runtimeSet.lines,
+      `ccjs_set* ${set} = (ccjs_set*)${runtimeSet.name}.as.ref;`,
+      `for (size_t ${index} = 0; ${index} < ${set}->cap; ${index} += 1) {`,
+      `  if (${set}->entries[${index}].state != CCJS_SET_SLOT_OCCUPIED) continue;`,
+      ...emitPrepareOwnedValueWrite(value).map((line) => `  ${line}`),
+      `  ${value} = ${set}->entries[${index}].value;`,
+      `  ccjs_retain(${value});`,
+      ...checks.map((line) => `  ${line}`),
+      `  ${declaration}`,
+      ...body.map((line) => `  ${line}`),
+      ...emitContinueTargetLabel(continueLabel, context),
+      '}',
+      ...emitBreakTargetLabel(breakLabel, context),
+      ...emitPrepareOwnedValueWrite(value)
+    ]
   })
 }
 
