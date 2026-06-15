@@ -339,6 +339,7 @@ import {
   emitCatchBindingTypeCheck,
   emitContinueJump,
   emitContinueTargetLabel,
+  emitExpressionStatement,
   emitForOfStatement,
   emitForStatement,
   emitIfStatement,
@@ -396,35 +397,66 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     emitDgramNumberVariableDeclaration(statement, context, dgramLoweringDependencies),
   emitDgramSocketVariableDeclaration: (statement, context) =>
     emitDgramSocketVariableDeclaration(statement, context, dgramLoweringDependencies),
+  emitDgramSocketCallStatement: (expression, context) =>
+    emitDgramSocketCallStatement(expression, context, dgramLoweringDependencies),
   emitDirentArrayIndexVariableDeclaration,
   emitDynamicObjectMemberVariableDeclaration,
+  emitDynamicObjectMemberAssignment,
   emitErrorObjectVariableDeclaration,
   emitFailureStatement,
   emitFetchAbortControllerVariableDeclaration,
+  emitFetchAbortControllerAbortStatement,
   emitHttpServerVariableDeclaration,
+  emitHttpServerCallStatement: (expression, context) =>
+    emitHttpServerCallStatement(expression, context, httpLoweringDependencies),
   emitJsonParseVariableDeclaration,
+  emitKnownArrayIndexAssignment,
   emitKnownArrayIndexVariableDeclaration,
+  emitKnownObjectMemberAssignment,
   emitKnownObjectMemberVariableDeclaration,
   emitNetAddressMemberVariableDeclaration,
   emitNetAddressVariableDeclaration,
   emitNetNumberVariableDeclaration,
+  emitNetServerCallStatement: (expression, context) =>
+    emitNetServerCallStatement(expression, context, netLoweringDependencies),
   emitNetServerVariableDeclaration: (statement, context) =>
     emitNetServerVariableDeclaration(statement, context, netLoweringDependencies),
+  emitNetSocketCallStatement: (expression, context) =>
+    emitNetSocketCallStatement(expression, context, netLoweringDependencies),
   emitNetSocketVariableDeclaration: (statement, context) =>
     emitNetSocketVariableDeclaration(statement, context, netLoweringDependencies),
   emitNullableScalarValueExpression,
+  emitNullableRuntimeValueAssignment,
   emitNullableRuntimeValueVariableDeclaration,
   emitObjectVariableDeclaration,
+  emitOptionalRuntimeCallbackCallExpression,
   emitPreparedArrayFilterCallExpression,
   emitPreparedArrayMapCallExpression,
+  emitPreparedArrayPopCallExpression,
+  emitPreparedArrayPushCallExpression,
   emitPreparedArraySortCallExpression,
   emitPreparedAsyncFunctionPromiseCallExpression,
+  emitPreparedBytesIndexAssignment,
+  emitPreparedCallExpression,
   emitPreparedChildProcessCallExpression,
+  emitPreparedClassMethodCallExpression,
+  emitPreparedCollectionCallExpression,
+  emitPreparedCryptoCallExpression: (expression, context, options) =>
+    emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies, options),
+  emitPreparedCryptoHashCallExpression: (expression, context) =>
+    emitPreparedCryptoHashCallExpression(expression, context, cryptoLoweringDependencies),
+  emitPreparedCryptoHmacCallExpression: (expression, context) =>
+    emitPreparedCryptoHmacCallExpression(expression, context, cryptoLoweringDependencies),
+  emitPreparedCryptoNumberCallExpression: (expression, context) =>
+    emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies),
+  emitPreparedDebugMemoryCallExpression,
   emitPreparedFetchCallExpression,
   emitPreparedFetchHeadersCallExpression,
   emitPreparedForExpressionClause,
   emitPreparedForInitializer,
   emitPreparedFsCallExpression,
+  emitPreparedFsSyncStatementExpression,
+  emitPreparedMapIndexAssignment,
   emitPreparedNumberExpression,
   emitPreparedPathObjectCallExpression,
   emitPreparedPromiseConstructorExpression,
@@ -432,20 +464,31 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedPromiseMethodExpression,
   emitPreparedPromiseReturningCallExpression,
   emitPreparedPromiseStaticExpression,
+  emitPreparedTimerCallExpression,
+  emitPreparedUpdateExpression,
   emitPreparedUrlObjectExpression,
   emitPreparedUrlSearchParamsObjectExpression,
+  emitProcessExitCodeAssignment,
+  emitProcessExitStatement,
+  emitPromiseConstructorSettlementCall,
+  emitReference,
   emitRuntimeStringVariableDeclaration,
   emitRuntimeValueVariableDeclaration,
   emitScalarVariableDeclaration,
   emitStatement,
+  emitUrlObjectFieldAssignment,
   inferCatchBindingValueType,
   inferExpressionType,
+  isArrayMethodCall,
+  isBoxedRuntimeValueAssignment,
   isClassConstructorExpression,
+  isConsoleLog,
   isCollectionConstructorExpression,
   isErrorConstructorExpression,
   isErrorValueExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
+  isNullableRuntimeValueAssignment,
   isRuntimeNullableType,
   isRuntimeValueLocalExpression,
   registerErrorObjectShape,
@@ -458,7 +501,9 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   resolveRuntimeArrayIndex,
   resolveRuntimeForOfArray,
   resolveRuntimeForOfMap,
-  resolveRuntimeForOfSet
+  resolveRuntimeForOfSet,
+  emitBoxedRuntimeValueAssignment,
+  emitConsoleLogStatement
 }
 
 const classLoweringDependencies: ClassLoweringDependencies = {
@@ -2121,279 +2166,12 @@ function emitStatement(statement, context) {
     return emitVariableDeclarationStatement(statement, context)
   }
 
-  if (statement.type === 'ExpressionStatement' && isConsoleLog(statement.expression)) {
-    return emitConsoleLogStatement(statement.expression.callee.property, statement.expression.args, context)
-  }
-
   if (statement.type === 'ExpressionStatement') {
-    const promiseSettlement = emitPromiseConstructorSettlementCall(statement.expression, context)
-
-    if (promiseSettlement != null) {
-      return promiseSettlement
-    }
-  }
-
-  if (statement.type === 'ExpressionStatement' && statement.expression.type === 'CallExpression') {
-    const dgramSocketCall = emitDgramSocketCallStatement(statement.expression, context, dgramLoweringDependencies)
-
-    if (dgramSocketCall != null) {
-      return dgramSocketCall
-    }
-
-    const httpServerCall = emitHttpServerCallStatement(statement.expression, context, httpLoweringDependencies)
-
-    if (httpServerCall != null) {
-      return httpServerCall
-    }
-
-    const netServerCall = emitNetServerCallStatement(statement.expression, context, netLoweringDependencies)
-
-    if (netServerCall != null) {
-      return netServerCall
-    }
-
-    const netSocketCall = emitNetSocketCallStatement(statement.expression, context, netLoweringDependencies)
-
-    if (netSocketCall != null) {
-      return netSocketCall
-    }
-
-    const arrayPopCall = emitPreparedArrayPopCallExpression(statement.expression, context, {
-      discard: true
-    })
-
-    if (arrayPopCall != null) {
-      return arrayPopCall.lines
-    }
-
-    const arrayPushCall = emitPreparedArrayPushCallExpression(statement.expression, context)
-
-    if (arrayPushCall != null) {
-      return arrayPushCall.lines
-    }
-
-    const arrayMapCall = emitPreparedArrayMapCallExpression(statement.expression, context)
-
-    if (arrayMapCall != null) {
-      return arrayMapCall.lines
-    }
-
-    const arrayFilterCall = emitPreparedArrayFilterCallExpression(statement.expression, context)
-
-    if (arrayFilterCall != null) {
-      return arrayFilterCall.lines
-    }
-
-    const arraySortCall = emitPreparedArraySortCallExpression(statement.expression, context)
-
-    if (arraySortCall != null) {
-      return arraySortCall.lines
-    }
-
-    const classMethodCall = emitPreparedClassMethodCallExpression(statement.expression, context)
-
-    if (classMethodCall != null) {
-      return classMethodCall.expression === ''
-        ? classMethodCall.lines
-        : [...classMethodCall.lines, `${classMethodCall.expression};`]
-    }
-
-    const fetchAbortCall = emitFetchAbortControllerAbortStatement(statement.expression, context)
-
-    if (fetchAbortCall != null) {
-      return fetchAbortCall
-    }
-
-    if (isArrayMethodCall(statement.expression)) {
-      context.diagnostics.push(
-        diagnostic(
-          'CCJS_C_ARRAY_METHOD',
-          'array methods are not supported by the current C backend slice',
-          statement.loc
-        )
-      )
-      return []
-    }
-
-    const processExit = emitProcessExitStatement(statement.expression, context)
-
-    if (processExit != null) {
-      return processExit
-    }
-
-    const collectionCall = emitPreparedCollectionCallExpression(statement.expression, context)
-
-    if (collectionCall != null) {
-      return collectionCall.lines
-    }
-
-    const debugMemoryCall = emitPreparedDebugMemoryCallExpression(statement.expression, context, {
-      discard: true
-    })
-
-    if (debugMemoryCall != null) {
-      return debugMemoryCall.lines
-    }
-
-    const cryptoCall = emitPreparedCryptoCallExpression(statement.expression, context, cryptoLoweringDependencies, {
-      discard: true
-    })
-
-    if (cryptoCall != null) {
-      return cryptoCall.lines
-    }
-
-    const cryptoNumberCall = emitPreparedCryptoNumberCallExpression(
-      statement.expression,
-      context,
-      cryptoLoweringDependencies
-    )
-
-    if (cryptoNumberCall != null) {
-      return cryptoNumberCall.lines
-    }
-
-    const fetchCall = emitPreparedFetchCallExpression(statement.expression, context)
-
-    if (fetchCall != null) {
-      return fetchCall.lines
-    }
-
-    const fsCall = emitPreparedFsCallExpression(statement.expression, context)
-
-    if (fsCall != null) {
-      return fsCall.lines
-    }
-
-    const fsSyncCall = emitPreparedFsSyncStatementExpression(statement.expression, context)
-
-    if (fsSyncCall != null) {
-      return fsSyncCall.lines
-    }
-
-    const timerCall = emitPreparedTimerCallExpression(statement.expression, context)
-
-    if (timerCall != null) {
-      return timerCall.lines
-    }
-
-    const cryptoHashCall = emitPreparedCryptoHashCallExpression(
-      statement.expression,
-      context,
-      cryptoLoweringDependencies
-    )
-
-    if (cryptoHashCall != null) {
-      return cryptoHashCall.lines
-    }
-
-    const cryptoHmacCall = emitPreparedCryptoHmacCallExpression(
-      statement.expression,
-      context,
-      cryptoLoweringDependencies
-    )
-
-    if (cryptoHmacCall != null) {
-      return cryptoHmacCall.lines
-    }
-
-    const promise = emitPreparedPromiseStaticExpression(statement.expression, context)
-
-    if (promise != null) {
-      return promise.lines
-    }
-
-    const call = emitPreparedCallExpression(statement.expression, context)
-
-    return call.expression === '' ? call.lines : [...call.lines, `${call.expression};`]
-  }
-
-  if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AwaitExpression') {
-    const value = emitCAwaitValueExpression(statement.expression, context)
-
-    return value.lines
-  }
-
-  if (statement.type === 'ExpressionStatement' && statement.expression.type === 'UpdateExpression') {
-    const value = emitPreparedUpdateExpression(statement.expression, context)
-
-    return [...value.lines, `${value.expression};`]
-  }
-
-  if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
-    const processExitCodeAssignment = emitProcessExitCodeAssignment(statement.expression, context)
-
-    if (processExitCodeAssignment != null) {
-      return processExitCodeAssignment
-    }
-
-    const mapIndexAssignment = emitPreparedMapIndexAssignment(statement.expression, context)
-
-    if (mapIndexAssignment != null) {
-      return mapIndexAssignment.lines
-    }
-
-    const urlFieldAssignment = emitUrlObjectFieldAssignment(statement.expression, context)
-
-    if (urlFieldAssignment != null) {
-      return urlFieldAssignment
-    }
-
-    if (statement.expression.target.type === 'MemberExpression') {
-      const member = resolveKnownObjectMember(statement.expression.target, context)
-
-      if (member != null) {
-        return emitKnownObjectMemberAssignment(statement.expression, member, context)
-      }
-    }
-
-    if (statement.expression.target.type === 'IndexExpression') {
-      const bytesIndexAssignment = emitPreparedBytesIndexAssignment(statement.expression, context)
-
-      if (bytesIndexAssignment != null) {
-        return bytesIndexAssignment.lines
-      }
-
-      const element = resolveKnownArrayIndex(statement.expression.target, context)
-
-      if (element != null) {
-        return emitKnownArrayIndexAssignment(statement.expression, element, context)
-      }
-
-      const field = resolveKnownObjectIndex(statement.expression.target, context)
-
-      if (field != null) {
-        return emitDynamicObjectMemberAssignment(statement.expression, field, context)
-      }
-    }
-
-    const valueType = inferExpressionType(statement.expression.value, context)
-
-    if (isNullableRuntimeValueAssignment(statement.expression, context)) {
-      return emitNullableRuntimeValueAssignment(statement.expression, context)
-    }
-
-    if (isBoxedRuntimeValueAssignment(statement.expression, context)) {
-      return emitBoxedRuntimeValueAssignment(statement.expression, context)
-    }
-
-    if (valueType === 'number' || valueType === 'boolean') {
-      const value = emitPreparedNumberExpression(statement.expression.value, context)
-
-      return [...value.lines, `${emitReference(statement.expression.target, context)} = ${value.expression};`]
-    }
-
-    return [
-      `${emitReference(statement.expression.target, context)} = ${emitCExpression(statement.expression.value, context)};`
-    ]
+    return emitExpressionStatement(statement, context)
   }
 
   if (statement.type === 'ReturnStatement') {
     return emitReturnStatement(statement, context)
-  }
-
-  if (statement.type === 'ExpressionStatement' && statement.expression.type === 'OptionalCallExpression') {
-    return emitOptionalRuntimeCallbackCallExpression(statement.expression, context)
   }
 
   return []
