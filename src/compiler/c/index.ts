@@ -305,6 +305,8 @@ import {
   canLowerCNullishCoalescingExpression,
   canLowerCScalarNullishCoalescingExpression,
   clearNullableScalarNarrowing,
+  emitCOptionalIndexValueExpression,
+  emitCOptionalMemberValueExpression,
   emitNullableRuntimeValueVariableDeclaration,
   isNarrowedNullableScalarReference,
   isNullableRuntimeExpression,
@@ -326,6 +328,8 @@ import {
 import {
   emitObjectVariableDeclaration,
   emitObjectValueReference,
+  emitPreparedKnownObjectIndexValueExpression,
+  emitPreparedKnownObjectMemberValueExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
   registerObjectShape,
@@ -355,11 +359,13 @@ import {
   emitArrayFilterVariableDeclaration,
   emitArrayMapVariableDeclaration,
   emitArraySortVariableDeclaration,
+  emitPreparedKnownArrayIndexValueExpression,
   emitPreparedArrayFilterCallExpression,
   emitPreparedArrayLengthExpression,
   emitPreparedArrayMapCallExpression,
   emitPreparedArrayPopCallExpression,
   emitPreparedArrayPushCallExpression,
+  emitPreparedRuntimeArrayIndexValueExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedArraySortCallExpression,
   isArrayLengthExpression,
@@ -3269,170 +3275,30 @@ function emitCValueExpression(expression, context) {
   }
 
   if (isMemberAccessExpression(expression)) {
-    const member = resolveKnownObjectMember(expression, context)
+    const memberValue = emitPreparedKnownObjectMemberValueExpression(expression, context)
 
-    if (
-      member?.valueType === 'bytes' ||
-      member?.valueType === 'array' ||
-      member?.valueType === 'map' ||
-      member?.valueType === 'set'
-    ) {
-      const temp = nextCName(context, 'ccjs_value')
-      const tag = cRuntimeValueTag(member.valueType)
-      registerOwnedValue(context, temp)
-
-      return {
-        lines: [
-          ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(
-            `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
-            context
-          ),
-          ...emitRuntimeFieldValueCheck(temp, tag, expression, context)
-        ],
-        expression: temp
-      }
-    }
-
-    if (member?.valueType === 'object') {
-      const temp = nextCName(context, 'ccjs_value')
-      registerOwnedValue(context, temp)
-
-      return {
-        lines: [
-          ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(
-            `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
-            context
-          ),
-          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_OBJECT', expression, context)
-        ],
-        expression: temp
-      }
-    }
-
-    if (member?.valueType === 'string') {
-      const temp = nextCName(context, 'ccjs_value')
-      registerOwnedValue(context, temp)
-
-      return {
-        lines: [
-          ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(
-            `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
-            context
-          ),
-          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_STRING', expression, context)
-        ],
-        expression: temp
-      }
+    if (memberValue != null) {
+      return memberValue
     }
   }
 
   if (isIndexAccessExpression(expression)) {
-    const element = resolveKnownArrayIndex(expression, context)
+    const arrayValue = emitPreparedKnownArrayIndexValueExpression(expression, context)
 
-    if (element?.valueType === 'array') {
-      const temp = nextCName(context, 'ccjs_value')
-      registerOwnedValue(context, temp)
-
-      return {
-        lines: [
-          ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context),
-          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_ARRAY', expression, context)
-        ],
-        expression: temp
-      }
+    if (arrayValue != null) {
+      return arrayValue
     }
 
-    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+    const runtimeArrayValue = emitPreparedRuntimeArrayIndexValueExpression(expression, context)
 
-    if (runtimeElement != null && ['boolean', 'number', 'string'].includes(runtimeElement.valueType)) {
-      const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_value')
-
-      return runtimeElement.valueType === 'string'
-        ? {
-            lines: [
-              ...value.lines,
-              ...emitRuntimeFieldValueCheck(value.expression, 'CCJS_TAG_STRING', expression, context)
-            ],
-            expression: value.expression
-          }
-        : value
+    if (runtimeArrayValue != null) {
+      return runtimeArrayValue
     }
 
-    if (element?.valueType === 'string') {
-      const temp = nextCName(context, 'ccjs_value')
-      registerOwnedValue(context, temp)
+    const objectValue = emitPreparedKnownObjectIndexValueExpression(expression, context)
 
-      return {
-        lines: [
-          ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context),
-          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_STRING', expression, context)
-        ],
-        expression: temp
-      }
-    }
-
-    const field = resolveKnownObjectIndex(expression, context)
-
-    if (
-      field?.valueType === 'bytes' ||
-      field?.valueType === 'array' ||
-      field?.valueType === 'map' ||
-      field?.valueType === 'set'
-    ) {
-      const temp = nextCName(context, 'ccjs_value')
-      const tag = cRuntimeValueTag(field.valueType)
-      registerOwnedValue(context, temp)
-
-      return {
-        lines: [
-          ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(
-            `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
-            context
-          ),
-          ...emitRuntimeFieldValueCheck(temp, tag, expression, context)
-        ],
-        expression: temp
-      }
-    }
-
-    if (field?.valueType === 'object') {
-      const temp = nextCName(context, 'ccjs_value')
-      registerOwnedValue(context, temp)
-
-      return {
-        lines: [
-          ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(
-            `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
-            context
-          ),
-          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_OBJECT', expression, context)
-        ],
-        expression: temp
-      }
-    }
-
-    if (field?.valueType === 'string') {
-      const temp = nextCName(context, 'ccjs_value')
-      registerOwnedValue(context, temp)
-
-      return {
-        lines: [
-          ...emitPrepareOwnedValueWrite(temp),
-          emitStatusCheck(
-            `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
-            context
-          ),
-          ...emitRuntimeFieldValueCheck(temp, 'CCJS_TAG_STRING', expression, context)
-        ],
-        expression: temp
-      }
+    if (objectValue != null) {
+      return objectValue
     }
   }
 
@@ -3837,144 +3703,6 @@ function cNullLiteralNode(loc = null) {
   return {
     type: 'NullLiteral',
     loc
-  }
-}
-
-function emitRuntimeFieldValueCheck(value, expectedTag, expression, context) {
-  if (expression?.nullable === true) {
-    return emitRuntimeNullableValueCheck(value, expectedTag, context)
-  }
-
-  return [emitRuntimeValueCheck(value, expectedTag, context)].filter(Boolean)
-}
-
-function emitCOptionalMemberValueExpression(expression, context) {
-  const member = resolveKnownObjectMember(expression, context) ?? resolveObjectExpressionMember(expression)
-
-  if (member == null || !isRuntimeNullableType(member.valueType)) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_OPTIONAL_CHAINING',
-        'optional member access for this field is not supported by the current C backend slice',
-        expression.loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: 'ccjs_undefined_value()'
-    }
-  }
-
-  return emitCOptionalObjectReadValueExpression(expression.object, member.valueType, context, (temp) =>
-    member.key == null
-      ? `ccjs_object_get_known(${temp}, ${member.index}, &`
-      : `ccjs_object_get(${temp}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, &`
-  )
-}
-
-function emitCOptionalIndexValueExpression(expression, context) {
-  const field = resolveKnownObjectIndex(expression, context) ?? resolveObjectExpressionIndex(expression)
-
-  if (field != null) {
-    if (!isRuntimeNullableType(field.valueType)) {
-      context.diagnostics.push(
-        diagnostic(
-          'CCJS_C_OPTIONAL_CHAINING',
-          'optional object index access for this field is not supported by the current C backend slice',
-          expression.loc
-        )
-      )
-
-      return {
-        lines: [],
-        expression: 'ccjs_undefined_value()'
-      }
-    }
-
-    return emitCOptionalObjectReadValueExpression(expression.object, field.valueType, context, (temp) =>
-      field.key == null
-        ? `ccjs_object_get_known(${temp}, ${field.index}, &`
-        : `ccjs_object_get(${temp}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &`
-    )
-  }
-
-  const element = resolveOptionalRuntimeArrayIndex(expression, context)
-
-  if (element != null) {
-    if (!isRuntimeNullableType(element.valueType)) {
-      context.diagnostics.push(
-        diagnostic(
-          'CCJS_C_OPTIONAL_CHAINING',
-          'optional array index access for this element type is not supported by the current C backend slice',
-          expression.loc
-        )
-      )
-
-      return {
-        lines: [],
-        expression: 'ccjs_undefined_value()'
-      }
-    }
-
-    return emitCOptionalArrayIndexValueExpression(expression.object, element, context)
-  }
-
-  context.diagnostics.push(
-    diagnostic(
-      'CCJS_C_OPTIONAL_CHAINING',
-      'optional index access is not supported by the current C backend slice',
-      expression.loc
-    )
-  )
-
-  return {
-    lines: [],
-    expression: 'ccjs_undefined_value()'
-  }
-}
-
-function emitCOptionalObjectReadValueExpression(objectExpression, valueType, context, emitGetPrefix) {
-  const object = emitCValueExpression(objectExpression, context)
-  const temp = nextCName(context, 'ccjs_optional_value')
-  const expectedTag = cRuntimeValueTag(valueType)
-  registerOwnedValue(context, temp)
-
-  return {
-    lines: [
-      ...object.lines,
-      ...emitPrepareOwnedValueWrite(temp),
-      `if (${object.expression}.tag == CCJS_TAG_NULL) {`,
-      `  ${temp} = ccjs_null_value();`,
-      '} else {',
-      `  ${emitRuntimeTypeCheck(`${object.expression}.tag != CCJS_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)}`,
-      `  ${emitStatusCheck(`${emitGetPrefix(object.expression)}${temp})`, context)}`,
-      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line) => `  ${line}`),
-      '}'
-    ],
-    expression: temp
-  }
-}
-
-function emitCOptionalArrayIndexValueExpression(arrayExpression, element, context) {
-  const array = emitCValueExpression(arrayExpression, context)
-  const temp = nextCName(context, 'ccjs_optional_value')
-  const expectedTag = cRuntimeValueTag(element.valueType)
-  registerOwnedValue(context, temp)
-
-  return {
-    lines: [
-      ...array.lines,
-      ...emitPrepareOwnedValueWrite(temp),
-      `if (${array.expression}.tag == CCJS_TAG_NULL) {`,
-      `  ${temp} = ccjs_null_value();`,
-      '} else {',
-      `  ${emitRuntimeTypeCheck(`${array.expression}.tag != CCJS_TAG_ARRAY || ${array.expression}.as.ref == 0`, context)}`,
-      `  ${emitStatusCheck(`ccjs_array_get(${array.expression}, ${element.index}, &${temp})`, context)}`,
-      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line) => `  ${line}`),
-      '}'
-    ],
-    expression: temp
   }
 }
 

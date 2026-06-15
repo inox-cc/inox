@@ -1,12 +1,25 @@
 import {
   emitPrepareOwnedValueWrite,
+  emitRuntimeTypeCheck,
+  emitStatusCheck,
+  nextCName,
   registerOwnedValue,
   withNullableScalarNarrowing
 } from '../context.ts'
+import { diagnostic } from '../../diagnostics.ts'
+import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { isNullishCoalescingExpression } from '../syntax.ts'
 import { cRuntimeValueTag, isNullableScalarType, isRuntimeNullableType } from '../value-types.ts'
-import { registerObjectShape } from './objects.ts'
+import { resolveOptionalRuntimeArrayIndex } from './arrays.ts'
+import {
+  emitObjectValueReference,
+  registerObjectShape,
+  resolveKnownObjectIndex,
+  resolveKnownObjectMember,
+  resolveObjectExpressionIndex,
+  resolveObjectExpressionMember
+} from './objects.ts'
 
 type PreparedExpression = {
   lines: string[]
@@ -229,6 +242,142 @@ export function emitNullableRuntimeValueVariableDeclaration(statement, context) 
     ...emitRuntimeNullableValueCheck(statement.name, expectedTag, context),
     `ccjs_retain(${statement.name});`
   ]
+}
+
+export function emitCOptionalMemberValueExpression(expression, context) {
+  const member = resolveKnownObjectMember(expression, context) ?? resolveObjectExpressionMember(expression)
+
+  if (member != null && isRuntimeNullableType(member.valueType)) {
+    const objectExpression = expression.object
+    const objectName = (member as any).objectName
+
+    return emitCOptionalObjectReadValueExpression(objectExpression, member.valueType, context, (object) =>
+      objectName == null
+        ? `ccjs_object_get_known(${object}, ${member.index}, &`
+        : `ccjs_object_get_known(${emitObjectValueReference(objectName, context)}, ${member.index}, &`
+    )
+  }
+
+  context.diagnostics.push(
+    diagnostic(
+      'CCJS_C_OPTIONAL_CHAINING',
+      'optional member access for this field is not supported by the current C backend slice',
+      expression.loc
+    )
+  )
+
+  return {
+    lines: [],
+    expression: 'ccjs_undefined_value()'
+  }
+}
+
+export function emitCOptionalIndexValueExpression(expression, context) {
+  const field = resolveKnownObjectIndex(expression, context) ?? resolveObjectExpressionIndex(expression)
+
+  if (field != null) {
+    if (!isRuntimeNullableType(field.valueType)) {
+      context.diagnostics.push(
+        diagnostic(
+          'CCJS_C_OPTIONAL_CHAINING',
+          'optional object index access for this field is not supported by the current C backend slice',
+          expression.loc
+        )
+      )
+
+      return {
+        lines: [],
+        expression: 'ccjs_undefined_value()'
+      }
+    }
+
+    const objectExpression = expression.object
+    const objectName = (field as any).objectName
+
+    return emitCOptionalObjectReadValueExpression(objectExpression, field.valueType, context, (object) =>
+      objectName == null
+        ? `ccjs_object_get(${object}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &`
+        : `ccjs_object_get(${emitObjectValueReference(objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &`
+    )
+  }
+
+  const element = resolveOptionalRuntimeArrayIndex(expression, context)
+
+  if (element != null) {
+    if (!isRuntimeNullableType(element.valueType)) {
+      context.diagnostics.push(
+        diagnostic(
+          'CCJS_C_OPTIONAL_CHAINING',
+          'optional array index access for this element type is not supported by the current C backend slice',
+          expression.loc
+        )
+      )
+
+      return {
+        lines: [],
+        expression: 'ccjs_undefined_value()'
+      }
+    }
+
+    return emitCOptionalArrayIndexValueExpression(expression.object, element, context)
+  }
+
+  context.diagnostics.push(
+    diagnostic(
+      'CCJS_C_OPTIONAL_CHAINING',
+      'optional index access is not supported by the current C backend slice',
+      expression.loc
+    )
+  )
+
+  return {
+    lines: [],
+    expression: 'ccjs_undefined_value()'
+  }
+}
+
+function emitCOptionalObjectReadValueExpression(objectExpression, valueType, context, emitGetPrefix) {
+  const object = nullableDeps(context).emitCValueExpression(objectExpression, context)
+  const temp = nextCName(context, 'ccjs_optional_value')
+  const expectedTag = cRuntimeValueTag(valueType)
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...object.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      `if (${object.expression}.tag == CCJS_TAG_NULL) {`,
+      `  ${temp} = ccjs_null_value();`,
+      '} else {',
+      `  ${emitRuntimeTypeCheck(`${object.expression}.tag != CCJS_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)}`,
+      `  ${emitStatusCheck(`${emitGetPrefix(object.expression)}${temp})`, context)}`,
+      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line) => `  ${line}`),
+      '}'
+    ],
+    expression: temp
+  }
+}
+
+function emitCOptionalArrayIndexValueExpression(arrayExpression, element, context) {
+  const array = nullableDeps(context).emitCValueExpression(arrayExpression, context)
+  const temp = nextCName(context, 'ccjs_optional_value')
+  const expectedTag = cRuntimeValueTag(element.valueType)
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...array.lines,
+      ...emitPrepareOwnedValueWrite(temp),
+      `if (${array.expression}.tag == CCJS_TAG_NULL) {`,
+      `  ${temp} = ccjs_null_value();`,
+      '} else {',
+      `  ${emitRuntimeTypeCheck(`${array.expression}.tag != CCJS_TAG_ARRAY || ${array.expression}.as.ref == 0`, context)}`,
+      `  ${emitStatusCheck(`ccjs_array_get(${array.expression}, ${element.index}, &${temp})`, context)}`,
+      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line) => `  ${line}`),
+      '}'
+    ],
+    expression: temp
+  }
 }
 
 function normalizeNullableFunctionType(functionType) {

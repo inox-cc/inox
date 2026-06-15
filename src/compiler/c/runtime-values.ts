@@ -28,3 +28,16 @@ export function emitRuntimeValueCheck(name: string, expectedTag: string | null, 
 
   return emitRuntimeTypeCheck(`${name}.tag != ${expectedTag} || ${name}.as.ref == 0`, context)
 }
+
+export function emitRuntimeFieldValueCheck(
+  value: string,
+  expectedTag: string | null,
+  expression: any,
+  context: any
+): string[] {
+  if (expression?.nullable === true) {
+    return emitRuntimeNullableValueCheck(value, expectedTag, context)
+  }
+
+  return [emitRuntimeValueCheck(value, expectedTag, context)].filter(Boolean)
+}

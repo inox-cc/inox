@@ -8,6 +8,7 @@ import {
 } from '../context.ts'
 import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
 import { emitCConditionClause } from './expressions.ts'
+import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 
 type PreparedExpression = {
   lines: string[]
@@ -168,6 +169,47 @@ export function emitPreparedRuntimeArrayIndexValue(expression, element, context,
     ],
     expression: value
   }
+}
+
+export function emitPreparedKnownArrayIndexValueExpression(expression, context) {
+  const element = resolveKnownArrayIndex(expression, context)
+
+  if (element?.valueType !== 'array' && element?.valueType !== 'string') {
+    return null
+  }
+
+  const temp = nextCName(context, 'ccjs_value')
+  const tag = element.valueType === 'array' ? 'CCJS_TAG_ARRAY' : 'CCJS_TAG_STRING'
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context),
+      ...emitRuntimeFieldValueCheck(temp, tag, expression, context)
+    ],
+    expression: temp
+  }
+}
+
+export function emitPreparedRuntimeArrayIndexValueExpression(expression, context) {
+  const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+
+  if (runtimeElement == null || !['boolean', 'number', 'string'].includes(runtimeElement.valueType)) {
+    return null
+  }
+
+  const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_value')
+
+  return runtimeElement.valueType === 'string'
+    ? {
+        lines: [
+          ...value.lines,
+          ...emitRuntimeFieldValueCheck(value.expression, 'CCJS_TAG_STRING', expression, context)
+        ],
+        expression: value.expression
+      }
+    : value
 }
 
 export function resolveKnownArrayLength(expression, context) {

@@ -1,6 +1,8 @@
 import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { diagnostic } from '../../diagnostics.ts'
-import { cStringLiteral } from '../identifiers.ts'
+import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
+import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
+import { cRuntimeValueTag } from '../value-types.ts'
 
 type PreparedExpression = {
   lines: string[]
@@ -161,6 +163,49 @@ export function updateKnownObjectMemberValueType(member, valueType, context) {
   fields[member.index] = {
     ...fields[member.index],
     valueType
+  }
+}
+
+export function emitPreparedKnownObjectMemberValueExpression(expression, context) {
+  const member = resolveKnownObjectMember(expression, context)
+
+  if (member == null) {
+    return null
+  }
+
+  return emitPreparedKnownObjectFieldValueExpression(member, expression, context, (temp) =>
+    `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`
+  )
+}
+
+export function emitPreparedKnownObjectIndexValueExpression(expression, context) {
+  const field = resolveKnownObjectIndex(expression, context)
+
+  if (field == null) {
+    return null
+  }
+
+  return emitPreparedKnownObjectFieldValueExpression(field, expression, context, (temp) =>
+    `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`
+  )
+}
+
+function emitPreparedKnownObjectFieldValueExpression(field, expression, context, emitGetCall) {
+  if (!['bytes', 'array', 'map', 'set', 'object', 'string'].includes(field.valueType)) {
+    return null
+  }
+
+  const temp = nextCName(context, 'ccjs_value')
+  const tag = cRuntimeValueTag(field.valueType)
+  registerOwnedValue(context, temp)
+
+  return {
+    lines: [
+      ...emitPrepareOwnedValueWrite(temp),
+      emitStatusCheck(emitGetCall(temp), context),
+      ...emitRuntimeFieldValueCheck(temp, tag, expression, context)
+    ],
+    expression: temp
   }
 }
 
