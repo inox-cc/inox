@@ -358,6 +358,7 @@ import {
   emitWhileStatement,
   isRuntimeValueLocalExpression,
   registerRuntimeValueMetadata,
+  reportCCollectionHashability,
   registerErrorChannel,
   withBreakTarget,
   withContinueTarget,
@@ -384,6 +385,7 @@ const nullableLoweringDependencies: NullableLoweringDependencies = {
 }
 
 const statementLoweringDependencies: StatementLoweringDependencies = {
+  collectionConstructorName,
   containsAwaitExpression,
   emitArrayVariableDeclaration,
   emitArrayFilterVariableDeclaration,
@@ -396,7 +398,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitCExpression,
   emitCObjectLiteralValueExpression,
   emitCValueExpression,
-  emitCollectionVariableDeclaration,
   emitDgramAddressVariableDeclaration,
   emitDgramNumberVariableDeclaration: (statement, context) =>
     emitDgramNumberVariableDeclaration(statement, context, dgramLoweringDependencies),
@@ -2316,154 +2317,6 @@ function inferRejectedValueType(expression, context, localErrorObjectNames = con
   }
 
   return 'unknown'
-}
-
-function reportCCollectionHashability(valueType, subject, loc, context) {
-  if (valueType == null || valueType === 'unknown' || isCCollectionHashableType(valueType)) {
-    return
-  }
-
-  context.diagnostics.push(
-    diagnostic('CCJS_C_COLLECTION', `${subject} must be hashable in the current C backend slice`, loc)
-  )
-}
-
-function isCCollectionHashableType(valueType) {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
-}
-
-function emitCollectionVariableDeclaration(statement, context) {
-  const constructor = collectionConstructorName(statement.init)
-
-  if (constructor == null) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_COLLECTION',
-        'this collection constructor is not supported by the current C backend slice',
-        statement.loc
-      )
-    )
-    return [`double ${statement.name} = 0;`]
-  }
-
-  if (statement.init.args.length > 1) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_COLLECTION',
-        'C collection constructors currently support at most one array literal iterable',
-        statement.init.loc
-      )
-    )
-  }
-
-  registerOwnedValue(context, statement.name)
-
-  if (constructor === 'Map') {
-    context.variables.set(statement.name, 'map')
-    context.mapTypes.set(statement.name, {
-      key: statement.mapKeyType ?? 'unknown',
-      value: statement.mapValueType ?? 'unknown'
-    })
-    reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
-
-    const lines = [
-      ...emitPrepareOwnedValueWrite(statement.name),
-      emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context)
-    ]
-
-    lines.push(...emitMapConstructorEntries(statement.name, statement.init.args[0], context, statement.init.loc))
-
-    return lines
-  }
-
-  context.variables.set(statement.name, 'set')
-  context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
-  reportCCollectionHashability(statement.setElementType, 'Set values', statement.loc, context)
-
-  const lines = [
-    ...emitPrepareOwnedValueWrite(statement.name),
-    emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context)
-  ]
-
-  lines.push(...emitSetConstructorValues(statement.name, statement.init.args[0], context, statement.init.loc))
-
-  return lines
-}
-
-function emitMapConstructorEntries(name, expression, context, loc) {
-  if (expression == null) {
-    return []
-  }
-
-  if (expression.type !== 'ArrayLiteral') {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_COLLECTION',
-        'C Map constructor currently supports only array literal entries',
-        expression.loc ?? loc
-      )
-    )
-    return []
-  }
-
-  const lines: string[] = []
-
-  for (const entry of expression.elements) {
-    if (entry.type !== 'ArrayLiteral' || entry.elements.length !== 2) {
-      context.diagnostics.push(
-        diagnostic(
-          'CCJS_C_COLLECTION',
-          'C Map constructor entries must be [key, value] array literals',
-          entry.loc ?? loc
-        )
-      )
-      continue
-    }
-
-    const key = emitCValueExpression(entry.elements[0], context)
-    const value = emitCValueExpression(entry.elements[1], context)
-    reportCCollectionHashability(
-      inferExpressionType(entry.elements[0], context),
-      'Map keys',
-      entry.elements[0].loc ?? entry.loc ?? loc,
-      context
-    )
-
-    lines.push(...key.lines)
-    lines.push(...value.lines)
-    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
-  }
-
-  return lines
-}
-
-function emitSetConstructorValues(name, expression, context, loc) {
-  if (expression == null) {
-    return []
-  }
-
-  if (expression.type !== 'ArrayLiteral') {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_COLLECTION',
-        'C Set constructor currently supports only array literal values',
-        expression.loc ?? loc
-      )
-    )
-    return []
-  }
-
-  const lines: string[] = []
-
-  for (const element of expression.elements) {
-    const value = emitCValueExpression(element, context)
-    reportCCollectionHashability(inferExpressionType(element, context), 'Set values', element.loc ?? loc, context)
-
-    lines.push(...value.lines)
-    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
-  }
-
-  return lines
 }
 
 function emitObjectVariableDeclaration(statement, context) {

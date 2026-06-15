@@ -39,7 +39,7 @@ export type StatementLoweringDependencies = {
   emitClassObjectVariableDeclaration: (statement: any, context: any) => string[]
   emitCObjectLiteralValueExpression: (expression: any, context: any, shape?: any | null) => PreparedExpression
   emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  emitCollectionVariableDeclaration: (statement: any, context: any) => string[]
+  collectionConstructorName: (expression: any) => string | null
   emitDgramAddressVariableDeclaration: (statement: any, context: any) => string[] | null
   emitDgramNumberVariableDeclaration: (statement: any, context: any) => string[] | null
   emitDgramSocketVariableDeclaration: (statement: any, context: any) => string[] | null
@@ -402,6 +402,159 @@ export function isRuntimeValueLocalExpression(expression, context) {
   )
 }
 
+export function reportCCollectionHashability(valueType, subject, loc, context) {
+  if (valueType == null || valueType === 'unknown' || isCCollectionHashableType(valueType)) {
+    return
+  }
+
+  context.diagnostics.push(
+    diagnostic('CCJS_C_COLLECTION', `${subject} must be hashable in the current C backend slice`, loc)
+  )
+}
+
+function isCCollectionHashableType(valueType) {
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
+}
+
+function emitCollectionVariableDeclaration(statement, context) {
+  const deps = statementDeps(context)
+  const constructor = deps.collectionConstructorName(statement.init)
+
+  if (constructor == null) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_COLLECTION',
+        'this collection constructor is not supported by the current C backend slice',
+        statement.loc
+      )
+    )
+    return [`double ${statement.name} = 0;`]
+  }
+
+  if (statement.init.args.length > 1) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_COLLECTION',
+        'C collection constructors currently support at most one array literal iterable',
+        statement.init.loc
+      )
+    )
+  }
+
+  registerOwnedValue(context, statement.name)
+
+  if (constructor === 'Map') {
+    context.variables.set(statement.name, 'map')
+    context.mapTypes.set(statement.name, {
+      key: statement.mapKeyType ?? 'unknown',
+      value: statement.mapValueType ?? 'unknown'
+    })
+    reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
+
+    const lines = [
+      ...emitPrepareOwnedValueWrite(statement.name),
+      emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context)
+    ]
+
+    lines.push(...emitMapConstructorEntries(statement.name, statement.init.args[0], context, statement.init.loc))
+
+    return lines
+  }
+
+  context.variables.set(statement.name, 'set')
+  context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
+  reportCCollectionHashability(statement.setElementType, 'Set values', statement.loc, context)
+
+  const lines = [
+    ...emitPrepareOwnedValueWrite(statement.name),
+    emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context)
+  ]
+
+  lines.push(...emitSetConstructorValues(statement.name, statement.init.args[0], context, statement.init.loc))
+
+  return lines
+}
+
+function emitMapConstructorEntries(name, expression, context, loc) {
+  const deps = statementDeps(context)
+
+  if (expression == null) {
+    return []
+  }
+
+  if (expression.type !== 'ArrayLiteral') {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_COLLECTION',
+        'C Map constructor currently supports only array literal entries',
+        expression.loc ?? loc
+      )
+    )
+    return []
+  }
+
+  const lines: string[] = []
+
+  for (const entry of expression.elements) {
+    if (entry.type !== 'ArrayLiteral' || entry.elements.length !== 2) {
+      context.diagnostics.push(
+        diagnostic(
+          'CCJS_C_COLLECTION',
+          'C Map constructor entries must be [key, value] array literals',
+          entry.loc ?? loc
+        )
+      )
+      continue
+    }
+
+    const key = deps.emitCValueExpression(entry.elements[0], context)
+    const value = deps.emitCValueExpression(entry.elements[1], context)
+    reportCCollectionHashability(
+      deps.inferExpressionType(entry.elements[0], context),
+      'Map keys',
+      entry.elements[0].loc ?? entry.loc ?? loc,
+      context
+    )
+
+    lines.push(...key.lines)
+    lines.push(...value.lines)
+    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+  }
+
+  return lines
+}
+
+function emitSetConstructorValues(name, expression, context, loc) {
+  const deps = statementDeps(context)
+
+  if (expression == null) {
+    return []
+  }
+
+  if (expression.type !== 'ArrayLiteral') {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_COLLECTION',
+        'C Set constructor currently supports only array literal values',
+        expression.loc ?? loc
+      )
+    )
+    return []
+  }
+
+  const lines: string[] = []
+
+  for (const element of expression.elements) {
+    const value = deps.emitCValueExpression(element, context)
+    reportCCollectionHashability(deps.inferExpressionType(element, context), 'Set values', element.loc ?? loc, context)
+
+    lines.push(...value.lines)
+    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
+  }
+
+  return lines
+}
+
 function emitDirentArrayIndexVariableDeclaration(statement, context) {
   const expression = statement.init
 
@@ -508,7 +661,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
 
   if (deps.isCollectionConstructorExpression(statement.init)) {
     return {
-      lines: deps.emitCollectionVariableDeclaration(statement, context),
+      lines: emitCollectionVariableDeclaration(statement, context),
       expression: ''
     }
   }
@@ -1381,7 +1534,7 @@ export function emitVariableDeclarationStatement(statement, context) {
   }
 
   if (deps.isCollectionConstructorExpression(statement.init)) {
-    return deps.emitCollectionVariableDeclaration(statement, context)
+    return emitCollectionVariableDeclaration(statement, context)
   }
 
   const arrayMapCall = deps.emitPreparedArrayMapCallExpression(statement.init, context)
