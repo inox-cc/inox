@@ -22,10 +22,27 @@ type PreparedExpression = {
   expression: string
 }
 
+type PreparedStringBytesOperand = {
+  lines: string[]
+  bytes: string
+  length: string
+}
+
 export type JsonDeclarationDependencies = {
   emitCFieldFlags: (field: any) => string
-  emitPreparedJsonCallExpression: (expression: any, context: any, options?: any) => PreparedExpression | null
+  emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  emitPreparedStringBytesOperand: (
+    expression: any,
+    context: any,
+    tempPrefix?: string
+  ) => PreparedStringBytesOperand
+  inferExpressionType: (expression: any, context: any) => string
   registerObjectShape: (context: any, name: string, shape: any) => void
+}
+
+type JsonCallOptions = {
+  out?: string
+  owned?: boolean
 }
 
 export function emitJsonParseVariableDeclaration(statement, context, dependencies: JsonDeclarationDependencies) {
@@ -41,7 +58,7 @@ export function emitJsonParseVariableDeclaration(statement, context, dependencie
   const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
   const fieldsName = `${shapeName}_fields`
   const parsed = nextCName(context, 'ccjs_json_object')
-  const parseCall = dependencies.emitPreparedJsonCallExpression(statement.init, context, {
+  const parseCall = emitPreparedJsonCallExpression(statement.init, context, dependencies, {
     out: parsed
   })
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
@@ -89,4 +106,77 @@ export function emitJsonParseVariableDeclaration(statement, context, dependencie
   }
 
   return lines
+}
+
+export function emitPreparedJsonCallExpression(
+  expression: any,
+  context: any,
+  dependencies: JsonDeclarationDependencies,
+  options: JsonCallOptions = {}
+): PreparedExpression | null {
+  const method = cJsonRuntimeCallName(expression?.callee)
+
+  if (method == null) {
+    return null
+  }
+
+  const out = options.out ?? nextCName(context, 'ccjs_json_value')
+
+  if (options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  if (method === 'parse') {
+    const text = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_json_text')
+    const expectedTag = cRuntimeValueTag(dependencies.inferExpressionType(expression, context))
+
+    return {
+      lines: [
+        ...text.lines,
+        ...emitPrepareOwnedValueWrite(out),
+        emitStatusCheck(`ccjs_json_parse(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out})`, context),
+        ...(expectedTag == null ? [] : [emitRuntimeValueCheck(out, expectedTag, context)])
+      ],
+      expression: out
+    }
+  }
+
+  const value = dependencies.emitCValueExpression(expression.args[0], context)
+
+  return {
+    lines: [
+      ...value.lines,
+      ...emitPrepareOwnedValueWrite(out),
+      emitStatusCheck(`ccjs_json_stringify(&ccjs_default_allocator, ${value.expression}, &${out})`, context),
+      emitRuntimeValueCheck(out, 'CCJS_TAG_STRING', context)
+    ],
+    expression: out
+  }
+}
+
+export function emitPreparedJsonScalarParseExpression(
+  expression: any,
+  context: any,
+  dependencies: JsonDeclarationDependencies
+): PreparedExpression | null {
+  if (expression?.type !== 'CallExpression' || cJsonRuntimeCallName(expression.callee) !== 'parse') {
+    return null
+  }
+
+  const valueType = dependencies.inferExpressionType(expression, context)
+
+  if (valueType !== 'number' && valueType !== 'boolean') {
+    return null
+  }
+
+  const value = emitPreparedJsonCallExpression(expression, context, dependencies)
+
+  if (value == null) {
+    return null
+  }
+
+  return {
+    lines: value.lines,
+    expression: valueType === 'boolean' ? `(${value.expression}.as.boolean ? 1 : 0)` : `${value.expression}.as.number`
+  }
 }

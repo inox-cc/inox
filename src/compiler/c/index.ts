@@ -209,6 +209,8 @@ import {
 import {
   cJsonRuntimeCallName,
   emitJsonParseVariableDeclaration,
+  emitPreparedJsonCallExpression,
+  emitPreparedJsonScalarParseExpression,
   type JsonDeclarationDependencies
 } from './stdlib/json.ts'
 import { cOsRuntimeConstantName, cOsRuntimeConstantValue, cOsRuntimeMethodName } from './stdlib/os.ts'
@@ -540,7 +542,9 @@ const objectVariableDeclarationDependencies: ObjectVariableDeclarationDependenci
 
 const jsonDeclarationDependencies: JsonDeclarationDependencies = {
   emitCFieldFlags,
-  emitPreparedJsonCallExpression,
+  emitCValueExpression,
+  emitPreparedStringBytesOperand,
+  inferExpressionType,
   registerObjectShape
 }
 
@@ -2926,7 +2930,7 @@ function emitCValueExpression(expression, context) {
     return urlSearchParamsCall
   }
 
-  const jsonCall = emitPreparedJsonCallExpression(expression, context)
+  const jsonCall = emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies)
 
   if (jsonCall != null) {
     return jsonCall
@@ -5283,7 +5287,7 @@ function emitPreparedNumberExpression(expression, context) {
   }
 
   if (expression?.type === 'CallExpression') {
-    const jsonScalarParse = emitPreparedJsonScalarParseExpression(expression, context)
+    const jsonScalarParse = emitPreparedJsonScalarParseExpression(expression, context, jsonDeclarationDependencies)
 
     if (jsonScalarParse != null) {
       return jsonScalarParse
@@ -5844,7 +5848,7 @@ function emitPreparedCallExpression(expression, context) {
     return urlSearchParamsCall
   }
 
-  const jsonCall = emitPreparedJsonCallExpression(expression, context)
+  const jsonCall = emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies)
 
   if (jsonCall != null) {
     return jsonCall
@@ -7584,70 +7588,6 @@ function emitPreparedFsStatsMethodExpression(expression, context) {
   return {
     lines: receiver.lines,
     expression: `(${helper}(${receiver.expression}) ? 1 : 0)`
-  }
-}
-
-function emitPreparedJsonCallExpression(expression, context, options: { out?: string; owned?: boolean } = {}) {
-  const method = cJsonRuntimeCallName(expression?.callee)
-
-  if (method == null) {
-    return null
-  }
-
-  const out = options.out ?? nextCName(context, 'ccjs_json_value')
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  if (method === 'parse') {
-    const text = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_json_text')
-    const expectedTag = cRuntimeValueTag(inferExpressionType(expression, context))
-
-    return {
-      lines: [
-        ...text.lines,
-        ...emitPrepareOwnedValueWrite(out),
-        emitStatusCheck(`ccjs_json_parse(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out})`, context),
-        ...(expectedTag == null ? [] : [emitRuntimeValueCheck(out, expectedTag, context)])
-      ],
-      expression: out
-    }
-  }
-
-  const value = emitCValueExpression(expression.args[0], context)
-
-  return {
-    lines: [
-      ...value.lines,
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_json_stringify(&ccjs_default_allocator, ${value.expression}, &${out})`, context),
-      emitRuntimeValueCheck(out, 'CCJS_TAG_STRING', context)
-    ],
-    expression: out
-  }
-}
-
-function emitPreparedJsonScalarParseExpression(expression, context) {
-  if (expression?.type !== 'CallExpression' || cJsonRuntimeCallName(expression.callee) !== 'parse') {
-    return null
-  }
-
-  const valueType = inferExpressionType(expression, context)
-
-  if (valueType !== 'number' && valueType !== 'boolean') {
-    return null
-  }
-
-  const value = emitPreparedJsonCallExpression(expression, context)
-
-  if (value == null) {
-    return null
-  }
-
-  return {
-    lines: value.lines,
-    expression: valueType === 'boolean' ? `(${value.expression}.as.boolean ? 1 : 0)` : `${value.expression}.as.number`
   }
 }
 
