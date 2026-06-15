@@ -282,7 +282,13 @@ import {
   isOptionalChainExpression
 } from './syntax.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
-import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile, CModulePlan } from './types.ts'
+import type {
+  CEmitOptions,
+  CModuleEmitOptions,
+  CModuleOutputFile,
+  CModulePlan,
+  CPreparedExpression as PreparedExpression
+} from './types.ts'
 import {
   cRuntimeValueTag,
   emitCObjectParamName,
@@ -2493,11 +2499,11 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
   return lines
 }
 
-function emitCValueExpression(expression, context) {
+function emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   return emitCValueExpressionWithDependencies(expression, context, cValueExpressionDependencies)
 }
 
-function emitNullableScalarValueExpression(expression, context) {
+function emitNullableScalarValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   if (expression?.type === 'NullLiteral') {
     return {
       lines: [],
@@ -2535,7 +2541,10 @@ function emitNullableScalarValueExpression(expression, context) {
   }
 }
 
-function emitPreparedNullableScalarRuntimeValueExpression(expression, context) {
+function emitPreparedNullableScalarRuntimeValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression {
   if (
     expression?.type === 'Reference' &&
     expression.path.length === 1 &&
@@ -2604,7 +2613,11 @@ function emitPreparedNullableScalarRuntimeValueExpression(expression, context) {
   }
 }
 
-function emitNullableFunctionValueExpression(expression, functionType, context) {
+function emitNullableFunctionValueExpression(
+  expression: AnyNode,
+  functionType: any,
+  context: CFunctionContext
+): PreparedExpression {
   if (expression?.type === 'NullLiteral') {
     return {
       lines: [],
@@ -2627,7 +2640,7 @@ function emitNullableFunctionValueExpression(expression, functionType, context) 
   return emitRuntimeCallbackValue(expression, normalizeFunctionType(functionType), context)
 }
 
-function emitCArrayLiteralValueExpression(expression, context) {
+function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const temp = nextCName(context, 'ccjs_array')
   registerOwnedValue(context, temp)
   const lines = [
