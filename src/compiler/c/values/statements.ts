@@ -112,7 +112,6 @@ export type StatementLoweringDependencies = {
   emitPromiseConstructorSettlementCall: (expression: any, context: any) => string[] | null
   emitReference: (expression: any, context: any) => string
   emitRuntimeCallbackVariableDeclaration: (statement: any, context: any) => string[]
-  emitRuntimeStringVariableDeclaration: (statement: any, expression: any, context: any) => string[]
   emitRuntimeValueVariableDeclaration: (statement: any, expression: any, context: any) => string[]
   emitScalarVariableDeclaration: (statement: any, context: any) => string[]
   emitStatement: (statement: any, context: any) => string[]
@@ -324,6 +323,19 @@ export function emitForStatement(statement, context) {
   })
 }
 
+export function emitRuntimeStringVariableDeclaration(statement, expression, context) {
+  const value = statementDeps(context).emitCValueExpression(expression, context)
+  const lines = [
+    ...value.lines,
+    `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = (ccjs_string*)${value.expression}.as.ref;`
+  ]
+
+  context.variables.set(statement.name, 'string')
+  context.runtimeStrings.add(statement.name)
+
+  return lines
+}
+
 function emitPreparedForInitializer(init, context) {
   if (init == null) {
     return {
@@ -498,7 +510,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
 
   if (deps.isRuntimeProducedStringExpression(statement.init, context)) {
     return {
-      lines: deps.emitRuntimeStringVariableDeclaration(statement, statement.init, context),
+      lines: emitRuntimeStringVariableDeclaration(statement, statement.init, context),
       expression: ''
     }
   }
@@ -533,7 +545,7 @@ function emitPreparedForVariableDeclaration(statement, context) {
 
     if (deps.isRuntimeProducedStringExpression(statement.init, context)) {
       return {
-        lines: deps.emitRuntimeStringVariableDeclaration(statement, statement.init, context),
+        lines: emitRuntimeStringVariableDeclaration(statement, statement.init, context),
         expression: ''
       }
     }
@@ -1376,7 +1388,7 @@ export function emitVariableDeclarationStatement(statement, context) {
     statement.nullable !== true &&
     deps.inferExpressionType(statement.init, context) === 'string'
   ) {
-    return deps.emitRuntimeStringVariableDeclaration(statement, statement.init, context)
+    return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
   }
 
   return deps.emitScalarVariableDeclaration(statement, context)

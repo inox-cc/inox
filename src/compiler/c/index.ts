@@ -347,6 +347,7 @@ import {
   emitReturnCleanupStatement,
   emitReturnJump,
   emitRuntimeCallbackRuntimeValueReturnLines,
+  emitRuntimeStringVariableDeclaration,
   emitStatementBody,
   emitStatementList,
   emitSwitchStatement,
@@ -473,7 +474,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPromiseConstructorSettlementCall,
   emitReference,
   emitRuntimeCallbackVariableDeclaration,
-  emitRuntimeStringVariableDeclaration,
   emitRuntimeValueVariableDeclaration,
   emitScalarVariableDeclaration,
   emitStatement,
@@ -2348,19 +2348,6 @@ function emitDirentArrayIndexVariableDeclaration(statement, context) {
     emitRuntimeValueCheck(statement.name, 'CCJS_TAG_OBJECT', context),
     `ccjs_retain(${statement.name});`
   ]
-}
-
-function emitRuntimeStringVariableDeclaration(statement, expression, context) {
-  const value = emitCValueExpression(expression, context)
-  const lines = [
-    ...value.lines,
-    `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = (ccjs_string*)${value.expression}.as.ref;`
-  ]
-
-  context.variables.set(statement.name, 'string')
-  context.runtimeStrings.add(statement.name)
-
-  return lines
 }
 
 function emitRuntimeValueVariableDeclaration(statement, expression, context) {
