@@ -1,57 +1,64 @@
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { isOptionalChainExpression } from '../syntax.ts'
 import type { CFunctionContext } from '../context.ts'
-import type { CKnownArrayElement, CKnownObjectField, CKnownObjectIndexField, CRuntimeArrayElement } from '../types.ts'
+import type { AnyNode } from '../../types.ts'
+import type {
+  CKnownArrayElement,
+  CKnownObjectField,
+  CKnownObjectIndexField,
+  CPreparedExpression,
+  CRuntimeArrayElement
+} from '../types.ts'
 
 export type CExpressionTypeDependencies = {
-  binaryRuntimeExpressionReturnType: (expression: any) => string | null
-  cChildProcessRuntimeMethodName: (expression: any) => string | null
-  cDebugRuntimeMethodName: (expression: any) => string | null
-  cFetchRuntimeExpressionMethod: (expression: any) => string | null
-  cFsRuntimeExpressionMethod: (expression: any) => string | null
-  cJsonRuntimeCallName: (callee: any) => string | null
-  cOsRuntimeConstantName: (expression: any) => string | null
-  cOsRuntimeMethodName: (expression: any) => string | null
-  cPathRuntimeConstantName: (expression: any) => string | null
-  cPathRuntimeMethodName: (expression: any) => string | null
-  cProcessRuntimeEnvName: (expression: any) => string | null
-  cProcessRuntimeMethodName: (expression: any) => string | null
-  cProcessRuntimePropertyName: (expression: any) => string | null
-  cProcessRuntimePropertyValueType: (expression: any) => string | null
-  cPromiseRuntimeCallName: (callee: any) => string | null
-  cTimeRuntimeCallName: (callee: any) => string | null
-  cUrlRuntimeMethodName: (expression: any) => string | null
-  collectionConstructorName: (expression: any) => string | null
-  cryptoRuntimeMethodName: (expression: any) => string | null
-  emitPreparedNetAddressPortExpression: (expression: any, context: CFunctionContext) => any | null
-  isArrayLengthExpression: (expression: any, context: CFunctionContext) => boolean
-  isBinaryConstructorExpression: (expression: any) => boolean
-  isBinaryRuntimeCall: (expression: any) => boolean
-  isClassConstructorExpression: (expression: any, context: CFunctionContext) => boolean
-  isErrorConstructorExpression: (expression: any) => boolean
-  isFetchAbortControllerConstructorExpression: (expression: any) => boolean
-  isIndexAccessExpression: (expression: any) => boolean
-  isMemberAccessExpression: (expression: any) => boolean
-  isNumberConversionCall: (expression: any, context: CFunctionContext) => boolean
-  isPromiseConstructorExpression: (expression: any) => boolean
-  isStringConversionCall: (expression: any, context: CFunctionContext) => boolean
-  isStringPredicateCall: (expression: any, context: CFunctionContext) => boolean
-  isStringSliceCall: (expression: any, context: CFunctionContext) => boolean
-  isStringSplitCall: (expression: any, context: CFunctionContext) => boolean
-  isStringTrimCall: (expression: any, context: CFunctionContext) => boolean
-  knownValueType: (valueType: any) => string | null
-  mathRuntimeMethodName: (callee: any) => string | null
-  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => CKnownArrayElement | null
-  resolveKnownArrayLength: (expression: any, context: CFunctionContext) => any | null
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CKnownObjectIndexField | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CKnownObjectField | null
-  resolveNetAddressStringMember: (expression: any, context: CFunctionContext) => string | null
-  resolvePromiseExpressionValueType: (expression: any, context: CFunctionContext) => string | null
-  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => CRuntimeArrayElement | null
+  binaryRuntimeExpressionReturnType: (expression: AnyNode) => string | null
+  cChildProcessRuntimeMethodName: (expression: AnyNode) => string | null
+  cDebugRuntimeMethodName: (expression: AnyNode) => string | null
+  cFetchRuntimeExpressionMethod: (expression: AnyNode) => string | null
+  cFsRuntimeExpressionMethod: (expression: AnyNode) => string | null
+  cJsonRuntimeCallName: (callee: AnyNode) => string | null
+  cOsRuntimeConstantName: (expression: AnyNode) => string | null
+  cOsRuntimeMethodName: (expression: AnyNode) => string | null
+  cPathRuntimeConstantName: (expression: AnyNode) => string | null
+  cPathRuntimeMethodName: (expression: AnyNode) => string | null
+  cProcessRuntimeEnvName: (expression: AnyNode) => string | null
+  cProcessRuntimeMethodName: (expression: AnyNode) => string | null
+  cProcessRuntimePropertyName: (expression: AnyNode) => string | null
+  cProcessRuntimePropertyValueType: (expression: AnyNode) => string | null
+  cPromiseRuntimeCallName: (callee: AnyNode) => string | null
+  cTimeRuntimeCallName: (callee: AnyNode) => string | null
+  cUrlRuntimeMethodName: (expression: AnyNode) => string | null
+  collectionConstructorName: (expression: AnyNode) => string | null
+  cryptoRuntimeMethodName: (expression: AnyNode) => string | null
+  emitPreparedNetAddressPortExpression: (expression: AnyNode, context: CFunctionContext) => CPreparedExpression | null
+  isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
+  isBinaryConstructorExpression: (expression: AnyNode) => boolean
+  isBinaryRuntimeCall: (expression: AnyNode) => boolean
+  isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
+  isErrorConstructorExpression: (expression: AnyNode) => boolean
+  isFetchAbortControllerConstructorExpression: (expression: AnyNode) => boolean
+  isIndexAccessExpression: (expression: AnyNode) => boolean
+  isMemberAccessExpression: (expression: AnyNode) => boolean
+  isNumberConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isPromiseConstructorExpression: (expression: AnyNode) => boolean
+  isStringConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringPredicateCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringSliceCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringSplitCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringTrimCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  knownValueType: (valueType: string | null | undefined) => string | null
+  mathRuntimeMethodName: (callee: AnyNode) => string | null
+  resolveKnownArrayIndex: (expression: AnyNode, context: CFunctionContext) => CKnownArrayElement | null
+  resolveKnownArrayLength: (expression: AnyNode, context: CFunctionContext) => string | null
+  resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CKnownObjectIndexField | null
+  resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CKnownObjectField | null
+  resolveNetAddressStringMember: (expression: AnyNode, context: CFunctionContext) => string | null
+  resolvePromiseExpressionValueType: (expression: AnyNode, context: CFunctionContext) => string | null
+  resolveRuntimeArrayIndex: (expression: AnyNode, context: CFunctionContext) => CRuntimeArrayElement | null
 }
 
 export function inferExpressionType(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   deps: CExpressionTypeDependencies
 ): string {
