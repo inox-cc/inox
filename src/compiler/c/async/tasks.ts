@@ -6,7 +6,9 @@ import {
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   nextCName,
-  withVariableScope
+  withVariableScope,
+  type CEmitContext,
+  type CFunctionContext
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
@@ -26,43 +28,53 @@ import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
 
 export type AsyncTaskLoweringDependencies = {
-  emitCallee: (callee: any, context: any) => string
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
-  emitFunctionHead: (statement: any, context: any) => string
+  emitCallee: (callee: any, context: CFunctionContext) => string
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitFunctionHead: (statement: any, context: CFunctionContext) => string
   emitFsBooleanFlag: (expression: any, field: string) => string
-  emitPreparedCallArgs: (expression: any, params: any[], context: any) => { lines: string[]; args: string[] }
-  emitPreparedCallExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedFetchInitOperand: (expression: any, context: any) => PreparedExpression
-  emitPreparedFsAccessModeExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
-  emitPreparedStringBytesOperand: (expression: any, context: any, prefix: string) => {
+  emitPreparedCallArgs: (
+    expression: any,
+    params: any[],
+    context: CFunctionContext
+  ) => { lines: string[]; args: string[] }
+  emitPreparedCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedFetchInitOperand: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedFsAccessModeExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitPreparedStringBytesOperand: (expression: any, context: CFunctionContext, prefix: string) => {
     lines: string[]
     bytes: string
     length: string
   }
-  emitRuntimeArrowCaptureStoreLines: (capture: any, contextName: string, context: any) => string[]
-  emitStatementList: (statements: any[], context: any) => string[]
-  inferExpressionType: (expression: any, context: any) => string
+  emitRuntimeArrowCaptureStoreLines: (capture: any, contextName: string, context: CFunctionContext) => string[]
+  emitStatementList: (statements: any[], context: CFunctionContext) => string[]
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
   isIndexAccessExpression: (expression: any) => boolean
   isMemberAccessExpression: (expression: any) => boolean
-  isRuntimeProducedStringExpression: (expression: any, context: any) => boolean
-  isThrowingFunctionCallee: (callee: any, context: any) => boolean
-  isThrowingFunctionName: (name: string, context: any) => boolean
-  registerObjectShape: (context: any, name: string, shape: any) => void
-  registerRuntimeValueMetadata: (name: string, valueType: any, declaration: any, expression: any, context: any) => void
-  resolveFunctionDeclarationParams: (name: string, fallback: any[], context: any) => any[]
-  resolveFunctionParams: (callee: any, context: any) => any[] | null
-  resolveKnownArrayIndex: (expression: any, context: any) => any | null
-  resolveKnownObjectIndex: (expression: any, context: any) => any | null
-  resolveKnownObjectMember: (expression: any, context: any) => any | null
-  resolveRuntimeArrayElementType: (expression: any, context: any) => string | null
-  resolveRuntimeArrayIndex: (expression: any, context: any) => any | null
-  resolveRuntimeMapType: (expression: any, context: any) => { key: string; value: string } | null
-  resolveRuntimeSetElementType: (expression: any, context: any) => string | null
-  resolveRuntimeStringReference: (expression: any, context: any) => string | null
+  isRuntimeProducedStringExpression: (expression: any, context: CFunctionContext) => boolean
+  isThrowingFunctionCallee: (callee: any, context: CFunctionContext) => boolean
+  isThrowingFunctionName: (name: string, context: CEmitContext) => boolean
+  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
+  registerRuntimeValueMetadata: (
+    name: string,
+    valueType: any,
+    declaration: any,
+    expression: any,
+    context: CFunctionContext
+  ) => void
+  resolveFunctionDeclarationParams: (name: string, fallback: any[], context: CEmitContext) => any[]
+  resolveFunctionParams: (callee: any, context: CFunctionContext) => any[] | null
+  resolveKnownArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => any | null
+  resolveRuntimeArrayElementType: (expression: any, context: CFunctionContext) => string | null
+  resolveRuntimeArrayIndex: (expression: any, context: CFunctionContext) => any | null
+  resolveRuntimeMapType: (expression: any, context: CFunctionContext) => { key: string; value: string } | null
+  resolveRuntimeSetElementType: (expression: any, context: CFunctionContext) => string | null
+  resolveRuntimeStringReference: (expression: any, context: CFunctionContext) => string | null
 }
 
-function asyncTaskDeps(context: any): AsyncTaskLoweringDependencies {
+function asyncTaskDeps(context: CEmitContext): AsyncTaskLoweringDependencies {
   return context.asyncTaskLoweringDependencies
 }
 
@@ -125,7 +137,7 @@ type AsyncTaskBodyPlan = {
 
 export function collectAsyncTaskWrappers(
   functions: IrFunctionNodeEntry[],
-  context: any,
+  context: CEmitContext,
   dependencies: AsyncTaskLoweringDependencies
 ) {
   context.asyncTaskLoweringDependencies = dependencies
@@ -1250,7 +1262,7 @@ export function emitAsyncTaskWrapperPrototypes(wrapper) {
 
 export function emitAsyncTaskWrapperDeclaration(
   wrapper,
-  baseContext: any,
+  baseContext: CEmitContext,
   dependencies: AsyncTaskLoweringDependencies
 ) {
   baseContext.asyncTaskLoweringDependencies = dependencies
@@ -2455,7 +2467,7 @@ function emitAsyncTaskFinalizerDeclaration(wrapper) {
 
 export function emitAsyncTaskFunctionStubDeclaration(
   statement,
-  context: any,
+  context: CFunctionContext,
   dependencies: AsyncTaskLoweringDependencies
 ) {
   context.asyncTaskLoweringDependencies = dependencies
