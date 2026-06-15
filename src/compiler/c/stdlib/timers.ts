@@ -4,6 +4,7 @@ import {
   timerRuntimeMethodNameFromPath
 } from '../../stdlib/descriptors/timers.ts'
 import { diagnostic } from '../../diagnostics.ts'
+import type { AnyNode } from '../../types.ts'
 import {
   emitEventLoopReference,
   emitFailureStatement,
@@ -19,10 +20,10 @@ import type {
 } from '../types.ts'
 
 export type TimerLoweringDependencies = {
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitReference: (expression: any, context: CFunctionContext) => string
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitReference: (expression: AnyNode, context: CFunctionContext) => string
   emitRuntimeCallbackValue: (
-    expression: any,
+    expression: AnyNode,
     functionType: CFunctionType | null | undefined,
     context: CFunctionContext
   ) => PreparedExpression
@@ -52,7 +53,7 @@ const timerStartCallDescriptors: Record<string, TimerStartCallDescriptor> = {
   }
 }
 
-export function cTimerRuntimeCallName(callee: any): string | null {
+export function cTimerRuntimeCallName(callee: AnyNode): string | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
@@ -60,7 +61,7 @@ export function cTimerRuntimeCallName(callee: any): string | null {
   return timerRuntimeMethodNameFromPath(callee.path)
 }
 
-export function cTimerStartCallName(callee: any): string | null {
+export function cTimerStartCallName(callee: AnyNode): string | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
@@ -68,7 +69,7 @@ export function cTimerStartCallName(callee: any): string | null {
   return isTimerStartMethod(callee.path[0]) ? callee.path[0] : null
 }
 
-export function cTimerClearCallName(callee: any): string | null {
+export function cTimerClearCallName(callee: AnyNode): string | null {
   if (callee?.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
@@ -76,7 +77,7 @@ export function cTimerClearCallName(callee: any): string | null {
   return isTimerClearMethod(callee.path[0]) ? callee.path[0] : null
 }
 
-export function isTimerStartCallExpression(expression: any): boolean {
+export function isTimerStartCallExpression(expression: AnyNode): boolean {
   if (expression?.type !== 'CallExpression') {
     return false
   }
@@ -84,7 +85,7 @@ export function isTimerStartCallExpression(expression: any): boolean {
   return cTimerStartCallName(expression.callee) != null || expression.timerRuntimeMethod?.startsWith('set') === true
 }
 
-export function timerCallbackFunctionType(): any {
+export function timerCallbackFunctionType(): CFunctionType {
   return {
     kind: 'function',
     params: [],
@@ -94,7 +95,7 @@ export function timerCallbackFunctionType(): any {
 }
 
 export function emitTimerVariableDeclaration(
-  statement: any,
+  statement: AnyNode,
   context: CFunctionContext,
   dependencies: TimerLoweringDependencies,
   inferred?: string
@@ -136,7 +137,7 @@ export function emitTimerVariableDeclaration(
 }
 
 export function emitPreparedTimerCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: TimerLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -240,7 +241,7 @@ export function emitPreparedTimerCallExpression(
 }
 
 export function emitPreparedTimerHandleExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: TimerLoweringDependencies
 ): PreparedExpression {

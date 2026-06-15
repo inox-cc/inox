@@ -9,13 +9,16 @@ import {
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
+import type { AnyNode } from '../../types.ts'
 import type {
+  CObjectShape,
+  CObjectShapeField,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
 
-export function cJsonRuntimeCallName(callee: any): string | null {
+export function cJsonRuntimeCallName(callee: AnyNode): string | null {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
     return null
   }
@@ -23,25 +26,23 @@ export function cJsonRuntimeCallName(callee: any): string | null {
   return jsonRuntimeMethodNameFromPath([callee.object.path[0], callee.property])
 }
 
-
-
 export type JsonDeclarationDependencies = {
-  emitCFieldFlags: (field: any) => string
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
+  emitCFieldFlags: (field: CObjectShapeField) => string
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (
-    expression: any,
+    expression: AnyNode,
     context: CFunctionContext,
     tempPrefix?: string
   ) => PreparedStringBytesOperand
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
-  registerObjectShape: (context: CFunctionContext, name: string, shape: any) => void
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
+  registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
 }
 
 export function emitJsonParseVariableDeclaration(
-  statement: any,
+  statement: AnyNode,
   context: CFunctionContext,
   dependencies: JsonDeclarationDependencies
-) {
+): string[] | null {
   if (statement.init?.type !== 'CallExpression' || cJsonRuntimeCallName(statement.init.callee) !== 'parse') {
     return null
   }
@@ -50,7 +51,7 @@ export function emitJsonParseVariableDeclaration(
     return null
   }
 
-  const fields = statement.shape.fields
+  const fields = statement.shape.fields as CObjectShapeField[]
   const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
   const fieldsName = `${shapeName}_fields`
   const parsed = nextCName(context, 'ccjs_json_object')
@@ -105,7 +106,7 @@ export function emitJsonParseVariableDeclaration(
 }
 
 export function emitPreparedJsonCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: JsonDeclarationDependencies,
   options: PreparedCallOptions = {}
@@ -151,7 +152,7 @@ export function emitPreparedJsonCallExpression(
 }
 
 export function emitPreparedJsonScalarParseExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   dependencies: JsonDeclarationDependencies
 ): PreparedExpression | null {

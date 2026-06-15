@@ -39,6 +39,7 @@ export type CShapeValueMetadata = {
   arrayElementType?: string | null
   mapKeyType?: string | null
   mapValueType?: string | null
+  nullable?: boolean
   setElementType?: string | null
   valueType: string
 }
