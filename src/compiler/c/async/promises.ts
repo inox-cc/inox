@@ -1,3 +1,4 @@
+import type { CEmitContext, CFunctionContext } from '../context.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 export function cPromiseRuntimeCallName(callee: any): string | null {
   if (callee?.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
@@ -28,15 +29,15 @@ export function isPromiseMethodAst(expression: any): boolean {
   )
 }
 
-export function isPlainPromiseReturningFunctionName(name: string, context: any): boolean {
+export function isPlainPromiseReturningFunctionName(name: string, context: CEmitContext): boolean {
   return context.functionReturnTypes.get(name) === 'promise' && context.functionAsyncFlags.get(name) !== true
 }
 
-export function functionTakesEventLoopParam(name: string, context: any): boolean {
+export function functionTakesEventLoopParam(name: string, context: CEmitContext): boolean {
   return isPlainPromiseReturningFunctionName(name, context) || context.externalEventLoopFunctions.has(name)
 }
 
-export function isPromiseReturningFunctionCallee(callee: any, context: any): boolean {
+export function isPromiseReturningFunctionCallee(callee: any, context: CEmitContext): boolean {
   return (
     callee?.type === 'Reference' &&
     callee.path.length === 1 &&
@@ -44,13 +45,13 @@ export function isPromiseReturningFunctionCallee(callee: any, context: any): boo
   )
 }
 
-export function isExternalEventLoopFunctionCallee(callee: any, context: any): boolean {
+export function isExternalEventLoopFunctionCallee(callee: any, context: CEmitContext): boolean {
   return (
     callee?.type === 'Reference' && callee.path.length === 1 && context.externalEventLoopFunctions.has(callee.path[0])
   )
 }
 
-export function resolvePromiseReturningFunctionValueType(callee: any, context: any): string {
+export function resolvePromiseReturningFunctionValueType(callee: any, context: CEmitContext): string {
   if (!isPromiseReturningFunctionCallee(callee, context)) {
     return 'unknown'
   }
@@ -58,7 +59,7 @@ export function resolvePromiseReturningFunctionValueType(callee: any, context: a
   return context.functionReturnPromiseValueTypes.get(callee.path[0]) ?? 'unknown'
 }
 
-export function resolvePromiseExpressionValueType(expression: any, context: any): string | null {
+export function resolvePromiseExpressionValueType(expression: any, context: CEmitContext): string | null {
   const directType = knownValueType(expression?.promiseValueType)
 
   if (directType != null) {
@@ -86,13 +87,13 @@ export function knownValueType(valueType: any): string | null {
   return valueType == null || valueType === 'unknown' ? null : valueType
 }
 
-export function isAsyncFunctionCallee(callee: any, context: any): boolean {
+export function isAsyncFunctionCallee(callee: any, context: CEmitContext): boolean {
   return (
     callee?.type === 'Reference' && callee.path.length === 1 && context.functionAsyncFlags.get(callee.path[0]) === true
   )
 }
 
-export function resolveCAsyncFunctionAwaitValueType(callee: any, context: any): string | null {
+export function resolveCAsyncFunctionAwaitValueType(callee: any, context: CEmitContext): string | null {
   if (!isAsyncFunctionCallee(callee, context)) {
     return null
   }
@@ -133,44 +134,53 @@ type PreparedCallOptions = {
 
 export type PromiseChainLoweringDependencies = {
   callbackLoweringDependencies: CallbackLoweringDependencies
-  collectArrowCaptures: (expression: any, outerScopes: Map<string, any>[], context: any, deps: CallbackLoweringDependencies) => any[]
-  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
+  collectArrowCaptures: (
+    expression: any,
+    outerScopes: Map<string, any>[],
+    context: CEmitContext,
+    deps: CallbackLoweringDependencies
+  ) => any[]
+  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitRuntimeArrowCallbackContextFinalizerDeclaration: (wrapper: any) => string[]
-  emitRuntimeArrowCallbackContextLocals: (wrapper: any, context: any, deps: CallbackLoweringDependencies) => string[]
-  emitRuntimeCallbackRuntimeValueReturnLines: (argument: any, context: any) => string[]
-  emitStatementList: (statements: any[], context: any) => string[]
+  emitRuntimeArrowCallbackContextLocals: (
+    wrapper: any,
+    context: CFunctionContext,
+    deps: CallbackLoweringDependencies
+  ) => string[]
+  emitRuntimeCallbackRuntimeValueReturnLines: (argument: any, context: CFunctionContext) => string[]
+  emitStatementList: (statements: any[], context: CFunctionContext) => string[]
   functionUsesExternalEventLoop: (node: any, externalNames: Set<any>) => boolean
   isPromiseChainCallbackWrapperWithContext: (wrapper: any) => boolean
 }
 
 export type PromiseLoweringDependencies = {
-  emitCValueExpression: (expression: any, context: any) => PreparedExpression
+  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitPreparedAsyncFunctionPromiseCallExpression: (
     expression: any,
-    context: any,
+    context: CFunctionContext,
     options?: PreparedCallOptions
   ) => PreparedExpression | null
-  emitPreparedCallExpression: (expression: any, context: any) => PreparedExpression
+  emitPreparedCallExpression: (expression: any, context: CFunctionContext) => PreparedExpression
   emitPreparedFetchCallExpression: (
     expression: any,
-    context: any,
+    context: CFunctionContext,
     options?: PreparedCallOptions
   ) => PreparedExpression | null
   emitPreparedFsCallExpression: (
     expression: any,
-    context: any,
+    context: CFunctionContext,
     options?: PreparedCallOptions
   ) => PreparedExpression | null
-  emitRuntimeArrowCaptureStoreLines: (capture: any, contextName: string, context: any) => string[]
-  emitStatementList: (statements: any[], context: any) => string[]
-  inferExpressionType: (expression: any, context: any) => string
-  inferRejectedValueType: (expression: any, context: any) => string
+  emitRuntimeArrowCaptureStoreLines: (capture: any, contextName: string, context: CFunctionContext) => string[]
+  emitStatementList: (statements: any[], context: CFunctionContext) => string[]
+  inferExpressionType: (expression: any, context: CFunctionContext) => string
+  inferRejectedValueType: (expression: any, context: CFunctionContext) => string
   isPromiseChainCallbackWrapperWithContext: (wrapper: any) => boolean
 }
 
 export function emitPreparedPromiseStaticExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -209,7 +219,7 @@ export function emitPreparedPromiseStaticExpression(
 
 export function emitPreparedPromiseConstructorExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -275,7 +285,7 @@ export function emitPreparedPromiseConstructorExpression(
 
 export function emitPromiseConstructorSettlementCall(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): string[] | null {
   if (
@@ -316,7 +326,7 @@ export function emitPromiseConstructorSettlementCall(
 
 export function emitPreparedPromiseMethodExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -396,7 +406,7 @@ export function emitPreparedPromiseMethodExpression(
 
 export function emitPreparedPromiseExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -478,7 +488,7 @@ export function emitPreparedPromiseExpression(
 
 export function emitPreparedPromiseReturningCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -503,7 +513,7 @@ export function emitPreparedPromiseReturningCallExpression(
 }
 
 function withPromiseConstructorHandlers(
-  context: any,
+  context: CFunctionContext,
   resolveName: string | null,
   rejectName: string | null,
   promise: string,
@@ -535,7 +545,7 @@ function withPromiseConstructorHandlers(
 
 function promiseConstructorRejectionValueType(
   executor: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): string {
   if (executor?.type !== 'ArrowFunctionExpression') {
@@ -598,7 +608,7 @@ function uniqueValueTypes(types: string[]): string {
 
 function emitPromiseChainCallbackContext(
   wrapper: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): {
   lines: string[]
@@ -662,7 +672,7 @@ function emitPromiseChainCallbackContext(
 
 function isPromiseMethodCallExpression(
   expression: any,
-  context: any,
+  context: CFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): boolean {
   return (
@@ -673,7 +683,11 @@ function isPromiseMethodCallExpression(
   )
 }
 
-export function collectPromiseChainWrappers(irPrograms: IrProgram[], context: any, deps: PromiseChainLoweringDependencies): Map<any, any> {
+export function collectPromiseChainWrappers(
+  irPrograms: IrProgram[],
+  context: CEmitContext,
+  deps: PromiseChainLoweringDependencies
+): Map<any, any> {
   const wrappers = new Map()
   const declare = (scope, name, info) => {
     scope.set(name, info)
@@ -953,7 +967,11 @@ export function emitPromiseChainCallbackWrapperHead(wrapper: any): string {
   return `static ccjs_status ${wrapper.name}(void* context, ccjs_value ccjs_value_input, ccjs_value* out)`
 }
 
-export function emitPromiseChainCallbackWrapperDeclaration(wrapper: any, baseContext: any, deps: PromiseChainLoweringDependencies): string[] {
+export function emitPromiseChainCallbackWrapperDeclaration(
+  wrapper: any,
+  baseContext: CEmitContext,
+  deps: PromiseChainLoweringDependencies
+): string[] {
   const lines: string[] = []
 
   if (deps.isPromiseChainCallbackWrapperWithContext(wrapper)) {
@@ -998,7 +1016,7 @@ export function emitPromiseChainCallbackWrapperDeclaration(wrapper: any, baseCon
   return lines
 }
 
-function emitPromiseChainCallbackParamPrelude(wrapper: any, context: any): string[] {
+function emitPromiseChainCallbackParamPrelude(wrapper: any, context: CFunctionContext): string[] {
   const param = wrapper.expression.params[0]
 
   if (param == null) {
@@ -1041,7 +1059,11 @@ function emitPromiseChainCallbackParamPrelude(wrapper: any, context: any): strin
   return [`ccjs_value ${param.name} = ccjs_value_input;`]
 }
 
-function emitPromiseChainCallbackStatementLines(wrapper: any, context: any, deps: PromiseChainLoweringDependencies): string[] {
+function emitPromiseChainCallbackStatementLines(
+  wrapper: any,
+  context: CFunctionContext,
+  deps: PromiseChainLoweringDependencies
+): string[] {
   const body = resolvePromiseChainArrowBody(wrapper.expression)
 
   if (body == null) {
@@ -1057,7 +1079,12 @@ function emitPromiseChainCallbackStatementLines(wrapper: any, context: any, deps
   return [...prefixLines, ...emitPromiseChainCallbackReturnLines(body.returnExpression, wrapper, context, deps)]
 }
 
-function emitPromiseChainCallbackReturnLines(returnExpression: any, wrapper: any, context: any, deps: PromiseChainLoweringDependencies): string[] {
+function emitPromiseChainCallbackReturnLines(
+  returnExpression: any,
+  wrapper: any,
+  context: CFunctionContext,
+  deps: PromiseChainLoweringDependencies
+): string[] {
   if (wrapper.returnType === 'number' || wrapper.returnType === 'boolean') {
     const value = deps.emitPreparedNumberExpression(returnExpression, context)
     const expression =
