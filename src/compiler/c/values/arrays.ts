@@ -10,7 +10,9 @@ import {
 import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
+import type { AnyNode } from '../../types.ts'
 import type {
+  CArrayElementInfo,
   CKnownArrayElement,
   CObjectFieldInfo,
   CPreparedCallOptions as PreparedCallOptions,
@@ -19,20 +21,40 @@ import type {
 } from '../types.ts'
 
 export type ArrayLoweringDependencies = {
-  emitCArrayLiteralValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitCStringSplitValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression | null
-  emitCValueExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  emitPreparedNumberExpression: (expression: any, context: CFunctionContext) => PreparedExpression
-  inferExpressionType: (expression: any, context: CFunctionContext) => string
-  resolveKnownObjectIndex: (expression: any, context: CFunctionContext) => CObjectFieldInfo | null
-  resolveKnownObjectMember: (expression: any, context: CFunctionContext) => CObjectFieldInfo | null
+  emitCArrayLiteralValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitCStringSplitValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedArrayExpression | null
+  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
+  resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CObjectFieldInfo | null
+  resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CObjectFieldInfo | null
 }
+
+export type PreparedArrayExpression = PreparedExpression & {
+  elementType: string
+}
+
+type PreparedArrayReceiver = {
+  lines: string[]
+  expression: string
+  elementType: string
+}
+
+type ArrayCallbackBody =
+  | {
+      kind: 'prepared-return'
+      returnExpression: AnyNode
+    }
+  | {
+      kind: 'statement-list'
+      statements: AnyNode[]
+    }
 
 function arrayDeps(context: CFunctionContext): ArrayLoweringDependencies {
   return context.arrayLoweringDependencies
 }
 
-export function isArrayMethodCall(expression) {
+export function isArrayMethodCall(expression: AnyNode): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee.type === 'MemberExpression' &&
@@ -40,7 +62,7 @@ export function isArrayMethodCall(expression) {
   )
 }
 
-export function isArrayLengthExpression(expression: any, context: CFunctionContext) {
+export function isArrayLengthExpression(expression: AnyNode, context: CFunctionContext): boolean {
   return (
     expression?.type === 'MemberExpression' &&
     expression.property === 'length' &&
@@ -48,7 +70,7 @@ export function isArrayLengthExpression(expression: any, context: CFunctionConte
   )
 }
 
-export function resolveKnownArrayIndex(expression: any, context: CFunctionContext): CKnownArrayElement | null {
+export function resolveKnownArrayIndex(expression: AnyNode, context: CFunctionContext): CKnownArrayElement | null {
   if (
     expression?.type !== 'IndexExpression' ||
     expression.object.type !== 'Reference' ||
@@ -78,7 +100,7 @@ export function resolveKnownArrayIndex(expression: any, context: CFunctionContex
   }
 }
 
-export function resolveRuntimeArrayIndex(expression: any, context: CFunctionContext): CRuntimeArrayElement | null {
+export function resolveRuntimeArrayIndex(expression: AnyNode, context: CFunctionContext): CRuntimeArrayElement | null {
   if (expression?.type !== 'IndexExpression' || expression.index.type !== 'NumberLiteral') {
     return null
   }
@@ -99,7 +121,10 @@ export function resolveRuntimeArrayIndex(expression: any, context: CFunctionCont
       }
 }
 
-export function resolveOptionalRuntimeArrayIndex(expression: any, context: CFunctionContext): CRuntimeArrayElement | null {
+export function resolveOptionalRuntimeArrayIndex(
+  expression: AnyNode,
+  context: CFunctionContext
+): CRuntimeArrayElement | null {
   if (expression?.type !== 'OptionalIndexExpression' || expression.index.type !== 'NumberLiteral') {
     return null
   }
@@ -120,7 +145,7 @@ export function resolveOptionalRuntimeArrayIndex(expression: any, context: CFunc
       }
 }
 
-export function resolveRuntimeArrayElementType(expression: any, context: CFunctionContext) {
+export function resolveRuntimeArrayElementType(expression: AnyNode, context: CFunctionContext): string | null {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return context.runtimeArrayElementTypes.get(expression.path[0]) ?? null
   }
@@ -150,7 +175,7 @@ export function resolveRuntimeArrayElementType(expression: any, context: CFuncti
   return null
 }
 
-function resolveFunctionReturnNameFromCall(expression) {
+function resolveFunctionReturnNameFromCall(expression: AnyNode): string | null {
   return expression?.type === 'CallExpression' &&
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1
@@ -159,11 +184,11 @@ function resolveFunctionReturnNameFromCall(expression) {
 }
 
 export function emitPreparedRuntimeArrayIndexValue(
-  expression: any,
+  expression: AnyNode,
   element: CRuntimeArrayElement,
   context: CFunctionContext,
   prefix = 'ccjs_array_item'
-) {
+): PreparedExpression {
   const array = arrayDeps(context).emitCValueExpression(expression.object, context)
   const value = nextCName(context, prefix)
   registerOwnedValue(context, value)
@@ -178,7 +203,10 @@ export function emitPreparedRuntimeArrayIndexValue(
   }
 }
 
-export function emitPreparedKnownArrayIndexValueExpression(expression: any, context: CFunctionContext) {
+export function emitPreparedKnownArrayIndexValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
   const element = resolveKnownArrayIndex(expression, context)
 
   if (element?.valueType !== 'array' && element?.valueType !== 'string') {
@@ -199,7 +227,10 @@ export function emitPreparedKnownArrayIndexValueExpression(expression: any, cont
   }
 }
 
-export function emitPreparedRuntimeArrayIndexValueExpression(expression: any, context: CFunctionContext) {
+export function emitPreparedRuntimeArrayIndexValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
   const runtimeElement = resolveRuntimeArrayIndex(expression, context)
 
   if (runtimeElement == null || !['boolean', 'number', 'string'].includes(runtimeElement.valueType)) {
@@ -219,7 +250,7 @@ export function emitPreparedRuntimeArrayIndexValueExpression(expression: any, co
     : value
 }
 
-export function resolveKnownArrayLength(expression: any, context: CFunctionContext) {
+export function resolveKnownArrayLength(expression: AnyNode, context: CFunctionContext): string | null {
   if (expression?.type !== 'MemberExpression' || expression.property !== 'length') {
     return null
   }
@@ -237,7 +268,10 @@ export function resolveKnownArrayLength(expression: any, context: CFunctionConte
   return elements == null ? null : `${elements.length}`
 }
 
-export function emitPreparedArrayLengthExpression(expression: any, context: CFunctionContext) {
+export function emitPreparedArrayLengthExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
   if (expression?.type !== 'MemberExpression' || expression.property !== 'length') {
     return null
   }
@@ -268,7 +302,10 @@ export function emitPreparedArrayLengthExpression(expression: any, context: CFun
   }
 }
 
-export function resolveKnownForOfArray(expression: any, context: CFunctionContext) {
+export function resolveKnownForOfArray(
+  expression: AnyNode,
+  context: CFunctionContext
+): { name: string; elements: CArrayElementInfo[] } | null {
   if (expression?.type !== 'Reference' || expression.path.length !== 1) {
     return null
   }
@@ -284,7 +321,10 @@ export function resolveKnownForOfArray(expression: any, context: CFunctionContex
       }
 }
 
-export function resolveRuntimeForOfArray(expression: any, context: CFunctionContext) {
+export function resolveRuntimeForOfArray(
+  expression: AnyNode,
+  context: CFunctionContext
+): { name: string; elementType: string; lines: string[] } | null {
   const elementType = resolveRuntimeArrayElementType(expression, context)
 
   if (elementType == null) {
@@ -308,7 +348,7 @@ export function resolveRuntimeForOfArray(expression: any, context: CFunctionCont
   }
 }
 
-export function resolveForOfElementType(elements) {
+export function resolveForOfElementType(elements: CArrayElementInfo[]): string {
   if (elements.length === 0) {
     return 'unknown'
   }
@@ -343,7 +383,11 @@ export function updateKnownArrayElementValueType(
   }
 }
 
-export function emitArraySortVariableDeclaration(statement: any, sorted: any, context: CFunctionContext) {
+export function emitArraySortVariableDeclaration(
+  statement: AnyNode,
+  sorted: PreparedArrayExpression,
+  context: CFunctionContext
+): string[] {
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'array')
 
@@ -366,7 +410,11 @@ export function emitArraySortVariableDeclaration(statement: any, sorted: any, co
   ]
 }
 
-export function emitArrayFilterVariableDeclaration(statement: any, filtered: any, context: CFunctionContext) {
+export function emitArrayFilterVariableDeclaration(
+  statement: AnyNode,
+  filtered: PreparedArrayExpression,
+  context: CFunctionContext
+): string[] {
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'array')
   context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType ?? filtered.elementType ?? 'unknown')
@@ -379,7 +427,11 @@ export function emitArrayFilterVariableDeclaration(statement: any, filtered: any
   ]
 }
 
-export function emitArrayMapVariableDeclaration(statement: any, mapped: any, context: CFunctionContext) {
+export function emitArrayMapVariableDeclaration(
+  statement: AnyNode,
+  mapped: PreparedArrayExpression,
+  context: CFunctionContext
+): string[] {
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'array')
   context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType ?? mapped.elementType ?? 'unknown')
@@ -392,7 +444,10 @@ export function emitArrayMapVariableDeclaration(statement: any, mapped: any, con
   ]
 }
 
-export function emitPreparedArraySortCallExpression(expression: any, context: CFunctionContext) {
+export function emitPreparedArraySortCallExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedArrayExpression | null {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
@@ -419,7 +474,10 @@ export function emitPreparedArraySortCallExpression(expression: any, context: CF
   }
 }
 
-export function emitPreparedArrayPushCallExpression(expression: any, context: CFunctionContext) {
+export function emitPreparedArrayPushCallExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedArrayExpression | null {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
@@ -451,10 +509,10 @@ export function emitPreparedArrayPushCallExpression(expression: any, context: CF
 }
 
 export function emitPreparedArrayPopCallExpression(
-  expression: any,
+  expression: AnyNode,
   context: CFunctionContext,
   options: PreparedCallOptions = {}
-) {
+): PreparedArrayExpression | null {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
@@ -493,10 +551,10 @@ export function emitPreparedArrayPopCallExpression(
 }
 
 function emitPreparedArrayComparatorSortCallExpression(
-  expression: any,
-  receiver: any,
+  expression: AnyNode,
+  receiver: PreparedArrayReceiver,
   context: CFunctionContext
-) {
+): PreparedArrayExpression | null {
   const callback = expression.args[0]
   const returnExpression = resolveArrowReturnExpression(callback)
 
@@ -555,7 +613,10 @@ function emitPreparedArrayComparatorSortCallExpression(
   }
 }
 
-export function emitPreparedArrayMapCallExpression(expression: any, context: CFunctionContext) {
+export function emitPreparedArrayMapCallExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedArrayExpression | null {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
@@ -623,7 +684,10 @@ export function emitPreparedArrayMapCallExpression(expression: any, context: CFu
   }
 }
 
-export function emitPreparedArrayFilterCallExpression(expression: any, context: CFunctionContext) {
+export function emitPreparedArrayFilterCallExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedArrayExpression | null {
   if (
     expression?.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
@@ -679,7 +743,7 @@ export function emitPreparedArrayFilterCallExpression(expression: any, context: 
   }
 }
 
-function resolveArrowReturnExpression(callback) {
+function resolveArrowReturnExpression(callback: AnyNode): AnyNode | null {
   if (callback?.type !== 'ArrowFunctionExpression') {
     return null
   }
@@ -703,7 +767,7 @@ function resolveArrowReturnExpression(callback) {
   return statement?.type === 'ReturnStatement' ? (statement.argument ?? null) : null
 }
 
-function resolveArrayCallbackBody(callback) {
+function resolveArrayCallbackBody(callback: AnyNode): ArrayCallbackBody | null {
   const returnExpression = resolveArrowReturnExpression(callback)
 
   if (returnExpression != null) {
@@ -733,12 +797,12 @@ function resolveArrayCallbackBody(callback) {
   }
 }
 
-function canLowerArrayCallbackStatementList(statements) {
+function canLowerArrayCallbackStatementList(statements: AnyNode[] | null | undefined): boolean {
   if (statements == null || statements.length === 0) {
     return false
   }
 
-  return statements.every((statement, index) => {
+  return statements.every((statement: AnyNode, index: number) => {
     if (index === statements.length - 1) {
       return canLowerArrayCallbackTerminalStatement(statement)
     }
@@ -747,7 +811,7 @@ function canLowerArrayCallbackStatementList(statements) {
   })
 }
 
-function canLowerArrayCallbackTerminalStatement(statement) {
+function canLowerArrayCallbackTerminalStatement(statement: AnyNode | null | undefined): boolean {
   if (statement?.type === 'ReturnStatement') {
     return statement.argument != null
   }
@@ -766,7 +830,7 @@ function canLowerArrayCallbackTerminalStatement(statement) {
   )
 }
 
-function canLowerArrayCallbackReturnStatement(statement) {
+function canLowerArrayCallbackReturnStatement(statement: AnyNode | null | undefined): boolean {
   if (statement?.type === 'ReturnStatement') {
     return statement.argument != null
   }
@@ -774,7 +838,7 @@ function canLowerArrayCallbackReturnStatement(statement) {
   return false
 }
 
-function canLowerArrayCallbackEarlyReturnStatement(statement) {
+function canLowerArrayCallbackEarlyReturnStatement(statement: AnyNode | null | undefined): boolean {
   if (statement?.type === 'BlockStatement') {
     return canLowerArrayCallbackStatementList(statement.body)
   }
@@ -789,7 +853,7 @@ function canLowerArrayCallbackEarlyReturnStatement(statement) {
   )
 }
 
-function canLowerArrayCallbackBranch(statement) {
+function canLowerArrayCallbackBranch(statement: AnyNode | null | undefined): boolean {
   if (canLowerArrayCallbackReturnStatement(statement)) {
     return true
   }
@@ -801,7 +865,7 @@ function canLowerArrayCallbackBranch(statement) {
   return canLowerArrayCallbackEarlyReturnStatement(statement)
 }
 
-function resolveArrayCallbackReturnType(body: any, context: CFunctionContext) {
+function resolveArrayCallbackReturnType(body: ArrayCallbackBody, context: CFunctionContext): string {
   const expressions = collectArrayCallbackReturnExpressions(body)
   const firstType = expressions.length === 0 ? 'unknown' : arrayDeps(context).inferExpressionType(expressions[0], context)
 
@@ -814,13 +878,13 @@ function resolveArrayCallbackReturnType(body: any, context: CFunctionContext) {
     : 'unknown'
 }
 
-function collectArrayCallbackReturnExpressions(body) {
+function collectArrayCallbackReturnExpressions(body: ArrayCallbackBody): AnyNode[] {
   if (body.kind === 'prepared-return') {
     return [body.returnExpression]
   }
 
-  const expressions: any[] = []
-  const visitStatement = (statement) => {
+  const expressions: AnyNode[] = []
+  const visitStatement = (statement: AnyNode | null | undefined): void => {
     if (statement == null) {
       return
     }
@@ -846,23 +910,33 @@ function collectArrayCallbackReturnExpressions(body) {
   return expressions.filter(Boolean)
 }
 
-function emitArrayMapCallbackBodyLines(body: any, elementType: string, out: string, context: CFunctionContext) {
-  const emitReturn = (expression) => emitArrayMapReturnLines(expression, elementType, out, context)
+function emitArrayMapCallbackBodyLines(
+  body: ArrayCallbackBody,
+  elementType: string,
+  out: string,
+  context: CFunctionContext
+): string[] {
+  const emitReturn = (expression: AnyNode) => emitArrayMapReturnLines(expression, elementType, out, context)
 
   return emitArrayCallbackBodyLines(body, emitReturn, context)
 }
 
-function emitArrayFilterCallbackBodyLines(body: any, out: string, value: string, context: CFunctionContext) {
-  const emitReturn = (expression) => emitArrayFilterReturnLines(expression, out, value, context)
+function emitArrayFilterCallbackBodyLines(
+  body: ArrayCallbackBody,
+  out: string,
+  value: string,
+  context: CFunctionContext
+): string[] {
+  const emitReturn = (expression: AnyNode) => emitArrayFilterReturnLines(expression, out, value, context)
 
   return emitArrayCallbackBodyLines(body, emitReturn, context)
 }
 
 function emitArrayCallbackBodyLines(
-  body: any,
-  emitReturn: (expression: any) => string[],
+  body: ArrayCallbackBody,
+  emitReturn: (expression: AnyNode) => string[],
   context: CFunctionContext
-) {
+): string[] {
   if (body.kind === 'prepared-return') {
     return emitReturn(body.returnExpression)
   }
@@ -873,20 +947,20 @@ function emitArrayCallbackBodyLines(
 }
 
 function emitArrayCallbackStatementListLines(
-  statements: any[],
+  statements: AnyNode[],
   doneLabel: string,
-  emitReturn: (expression: any) => string[],
+  emitReturn: (expression: AnyNode) => string[],
   context: CFunctionContext
-) {
+): string[] {
   return statements.flatMap((statement) => emitArrayCallbackStatementLines(statement, doneLabel, emitReturn, context))
 }
 
 function emitArrayCallbackStatementLines(
-  statement: any,
+  statement: AnyNode,
   doneLabel: string,
-  emitReturn: (expression: any) => string[],
+  emitReturn: (expression: AnyNode) => string[],
   context: CFunctionContext
-) {
+): string[] {
   if (statement?.type === 'ReturnStatement') {
     return [...emitReturn(statement.argument), `goto ${doneLabel};`]
   }
@@ -923,13 +997,18 @@ function emitArrayCallbackStatementLines(
   return lines
 }
 
-function emitArrayMapReturnLines(expression: any, elementType: string, out: string, context: CFunctionContext) {
+function emitArrayMapReturnLines(
+  expression: AnyNode,
+  elementType: string,
+  out: string,
+  context: CFunctionContext
+): string[] {
   const mappedValue = emitPreparedArrayMapValue(expression, elementType, context)
 
   return [...mappedValue.lines, emitStatusCheck(`ccjs_array_push(${out}, ${mappedValue.expression})`, context)]
 }
 
-function emitArrayFilterReturnLines(expression: any, out: string, value: string, context: CFunctionContext) {
+function emitArrayFilterReturnLines(expression: AnyNode, out: string, value: string, context: CFunctionContext): string[] {
   const predicate = arrayDeps(context).emitPreparedNumberExpression(expression, context)
 
   return [
@@ -941,12 +1020,12 @@ function emitArrayFilterReturnLines(expression: any, out: string, value: string,
 }
 
 function emitPreparedArrayCallbackInput(
-  callback: any,
-  receiver: any,
+  callback: AnyNode,
+  receiver: PreparedArrayReceiver,
   value: string,
   index: string,
   context: CFunctionContext
-) {
+): string[] {
   const lines: string[] = []
   const valueParam = callback.params[0]
   const indexParam = callback.params[1]
@@ -975,7 +1054,7 @@ function emitPreparedArrayCallbackInput(
   return lines
 }
 
-function updatePushedArrayMetadata(receiver: any, valueType: string, context: CFunctionContext) {
+function updatePushedArrayMetadata(receiver: AnyNode, valueType: string, context: CFunctionContext): void {
   if (receiver?.type !== 'Reference' || receiver.path.length !== 1 || valueType === 'unknown') {
     return
   }
@@ -1003,7 +1082,7 @@ function updatePushedArrayMetadata(receiver: any, valueType: string, context: CF
   context.arrayShapes.set(name, nextElements)
 }
 
-function updatePoppedArrayMetadata(receiver: any, context: CFunctionContext) {
+function updatePoppedArrayMetadata(receiver: AnyNode, context: CFunctionContext): void {
   if (receiver?.type !== 'Reference' || receiver.path.length !== 1) {
     return
   }
@@ -1018,7 +1097,7 @@ function updatePoppedArrayMetadata(receiver: any, context: CFunctionContext) {
   context.arrayShapes.set(name, elements.slice(0, -1))
 }
 
-function emitPreparedArrayMapValue(expression: any, valueType: string, context: CFunctionContext) {
+function emitPreparedArrayMapValue(expression: AnyNode, valueType: string, context: CFunctionContext): PreparedExpression {
   if (valueType === 'string') {
     return arrayDeps(context).emitCValueExpression(expression, context)
   }
@@ -1033,12 +1112,12 @@ function emitPreparedArrayMapValue(expression: any, valueType: string, context: 
 }
 
 function emitPreparedArraySortComparatorInput(
-  callback: any,
-  receiver: any,
+  callback: AnyNode,
+  receiver: PreparedArrayReceiver,
   left: string,
   right: string,
   context: CFunctionContext
-) {
+): string[] {
   const lines: string[] = []
   const leftParam = callback.params[0]
   const rightParam = callback.params[1]
@@ -1059,7 +1138,7 @@ function emitPreparedArraySortComparatorParam(
   elementType: string,
   value: string,
   context: CFunctionContext
-) {
+): string[] {
   context.variables.set(name, elementType)
 
   if (elementType === 'string') {
@@ -1080,7 +1159,7 @@ function emitPreparedArraySortComparatorParam(
   return [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context), `double ${name} = ${value}.as.number;`]
 }
 
-function emitPreparedArrayReceiver(expression: any, context: CFunctionContext) {
+function emitPreparedArrayReceiver(expression: AnyNode, context: CFunctionContext): PreparedArrayReceiver | null {
   if (expression?.type === 'ArrayLiteral') {
     const value = arrayDeps(context).emitCArrayLiteralValueExpression(expression, context)
 
