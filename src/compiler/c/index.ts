@@ -1950,7 +1950,11 @@ function inferPromiseRejectionValueType(
   return 'unknown'
 }
 
-function inferRejectedValueType(expression, context, localErrorObjectNames = context.errorObjectNames) {
+function inferRejectedValueType(
+  expression: AnyNode,
+  context: CFunctionContext,
+  localErrorObjectNames: Set<string> = context.errorObjectNames
+): string {
   if (isKnownErrorValueExpression(expression, context, localErrorObjectNames)) {
     return 'error'
   }
@@ -1966,7 +1970,7 @@ function inferRejectedValueType(expression, context, localErrorObjectNames = con
   return 'unknown'
 }
 
-function emitScalarVariableDeclaration(statement, context) {
+function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
   if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
     return emitNullableRuntimeValueVariableDeclaration(statement, context)
   }
@@ -2044,7 +2048,7 @@ function emitScalarVariableDeclaration(statement, context) {
   return emitNumberBooleanScalarVariableDeclaration(statement, context, inferred)
 }
 
-function isBoxedRuntimeValueAssignment(expression, context) {
+function isBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): boolean {
   return (
     expression.target?.type === 'Reference' &&
     expression.target.path.length === 1 &&
@@ -2052,7 +2056,7 @@ function isBoxedRuntimeValueAssignment(expression, context) {
   )
 }
 
-function isNullableRuntimeValueAssignment(expression, context) {
+function isNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): boolean {
   return (
     expression.target?.type === 'Reference' &&
     expression.target.path.length === 1 &&
@@ -2060,7 +2064,7 @@ function isNullableRuntimeValueAssignment(expression, context) {
   )
 }
 
-function emitNullableRuntimeValueAssignment(expression, context) {
+function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
   const name = expression.target.path[0]
   const expectedTag = cRuntimeValueTag(context.variables.get(name))
   const targetType = context.variables.get(name)
@@ -2092,7 +2096,7 @@ function emitNullableRuntimeValueAssignment(expression, context) {
   ]
 }
 
-function emitBoxedRuntimeValueAssignment(expression, context) {
+function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
   const name = expression.target.path[0]
   const expected = context.variables.get(name)
   const value = emitCValueExpression(expression.value, context)
@@ -2109,15 +2113,15 @@ function emitBoxedRuntimeValueAssignment(expression, context) {
   ]
 }
 
-function isBoxedRuntimeValueName(name, context) {
+function isBoxedRuntimeValueName(name: string, context: CFunctionContext): boolean {
   return context.boxedVariables.has(name) && isRuntimeBoxedValueType(context.variables.get(name))
 }
 
-function isBoxedRuntimeStringName(name, context) {
+function isBoxedRuntimeStringName(name: string, context: CFunctionContext): boolean {
   return context.boxedVariables.has(name) && context.variables.get(name) === 'string'
 }
 
-function isBoxedRuntimeStringReference(expression, context) {
+function isBoxedRuntimeStringReference(expression: AnyNode, context: CFunctionContext): boolean {
   return (
     expression?.type === 'Reference' &&
     expression.path.length === 1 &&
