@@ -1108,9 +1108,14 @@ export function emitCBundleFromIrModules(
 
 export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEmitOptions): CModuleOutputFile[] {
   return emitCModuleFilesFromGraphWithEmitters(graph, options, {
-    emitHeader: (plan, plans, diagnostics) =>
+    emitHeader: (plan: CModulePlan, plans: CModulePlan[], diagnostics: Diagnostic[]) =>
       emitCModuleHeaderWithDependencies(plan, plans, diagnostics, cModuleEmissionDependencies),
-    emitSource: (plan, plans, emitOptions, diagnostics) =>
+    emitSource: (
+      plan: CModulePlan,
+      plans: CModulePlan[],
+      emitOptions: CModuleEmitOptions,
+      diagnostics: Diagnostic[]
+    ) =>
       emitCModuleSourceWithDependencies(plan, plans, emitOptions, diagnostics, cModuleEmissionDependencies)
   })
 }
@@ -1190,16 +1195,21 @@ function createBaseContext(
     dgramImportNames: new Set(),
     dgramMessageHandlers: new Map(),
     functionThrowValueTypes: throwing.functionThrowValueTypes,
-    functionNames: new Map(functionDeclarations.map((item) => [item.name, emitCFunctionName(item.name)])),
-    functionParams: new Map(functionDeclarations.map((item) => [item.name, item.params])),
+    functionNames: new Map(
+      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, emitCFunctionName(item.name)])
+    ),
+    functionParams: new Map(functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.params])),
     functionReturnArrayElementTypes: new Map(
-      functionDeclarations.map((item) => [item.name, item.returnArrayElementType ?? null])
+      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnArrayElementType ?? null])
     ),
     functionReturnArrayElementDeclaredTypes: new Map(
-      functionDeclarations.map((item) => [item.name, item.returnArrayElementDeclaredType ?? null])
+      functionDeclarations.map((item: IrFunctionDeclaration) => [
+        item.name,
+        item.returnArrayElementDeclaredType ?? null
+      ])
     ),
     functionReturnMapTypes: new Map(
-      functionDeclarations.map((item) => [
+      functionDeclarations.map((item: IrFunctionDeclaration) => [
         item.name,
         {
           key: item.returnMapKeyType ?? null,
@@ -1207,16 +1217,22 @@ function createBaseContext(
         }
       ])
     ),
-    functionReturnNullables: new Map(functionDeclarations.map((item) => [item.name, item.returnNullable === true])),
+    functionReturnNullables: new Map(
+      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnNullable === true])
+    ),
     functionReturnPromiseValueTypes: new Map(
-      functionDeclarations.map((item) => [item.name, item.returnPromiseValueType ?? null])
+      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnPromiseValueType ?? null])
     ),
-    functionReturnShapes: new Map(functionDeclarations.map((item) => [item.name, item.returnShape ?? null])),
+    functionReturnShapes: new Map(
+      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnShape ?? null])
+    ),
     functionReturnSetElementTypes: new Map(
-      functionDeclarations.map((item) => [item.name, item.returnSetElementType ?? null])
+      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnSetElementType ?? null])
     ),
-    functionReturnTypes: new Map(functionDeclarations.map((item) => [item.name, item.returnType])),
-    functionAsyncFlags: new Map(functionDeclarations.map((item) => [item.name, item.async === true])),
+    functionReturnTypes: new Map(functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnType])),
+    functionAsyncFlags: new Map(
+      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.async === true])
+    ),
     asyncTaskWrappers: new Map(),
     jsGlobalRoots,
     promiseChainArrowWrappers: new Map(),
