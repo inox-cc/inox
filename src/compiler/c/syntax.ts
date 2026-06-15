@@ -1,3 +1,5 @@
+import type { AnyNode } from '../types.ts'
+
 export function emitCOperator(operator: string): string {
   if (operator === '===' || operator === '==') {
     return '=='
@@ -38,7 +40,7 @@ export function cUnsupportedExpressionCode(type: string): string {
   return 'CCJS_C_UNSUPPORTED_EXPR'
 }
 
-export function cUnsupportedVariableDeclarationCode(statement: any, type: string): string {
+export function cUnsupportedVariableDeclarationCode(statement: AnyNode, type: string): string {
   if (statement?.init?.type === 'AwaitExpression') {
     return 'CCJS_C_ASYNC'
   }
@@ -46,7 +48,7 @@ export function cUnsupportedVariableDeclarationCode(statement: any, type: string
   return cUnsupportedExpressionCode(type)
 }
 
-export function containsAwaitExpression(node: any): boolean {
+export function containsAwaitExpression(node: unknown): boolean {
   if (node == null) {
     return false
   }
@@ -59,14 +61,16 @@ export function containsAwaitExpression(node: any): boolean {
     return false
   }
 
-  if (node.type === 'AwaitExpression') {
+  const current = node as AnyNode
+
+  if (current.type === 'AwaitExpression') {
     return true
   }
 
-  return Object.values(node).some((value) => containsAwaitExpression(value))
+  return Object.values(current).some((value) => containsAwaitExpression(value))
 }
 
-export function isOptionalChainExpression(expression: any): boolean {
+export function isOptionalChainExpression(expression: AnyNode): boolean {
   return (
     expression?.type === 'OptionalMemberExpression' ||
     expression?.type === 'OptionalIndexExpression' ||
@@ -74,6 +78,6 @@ export function isOptionalChainExpression(expression: any): boolean {
   )
 }
 
-export function isNullishCoalescingExpression(expression: any): boolean {
+export function isNullishCoalescingExpression(expression: AnyNode): boolean {
   return expression?.type === 'BinaryExpression' && expression.operator === '??'
 }

@@ -1,6 +1,6 @@
 import type { CFunctionContext } from './context.ts'
 
-export function isManagedRuntimeReturnType(valueType: any): boolean {
+export function isManagedRuntimeReturnType(valueType: string | null | undefined): boolean {
   return (
     valueType === 'bytes' ||
     valueType === 'string' ||
@@ -11,11 +11,11 @@ export function isManagedRuntimeReturnType(valueType: any): boolean {
   )
 }
 
-export function isNullableScalarType(valueType: any): boolean {
+export function isNullableScalarType(valueType: string | null | undefined): boolean {
   return valueType === 'number' || valueType === 'boolean'
 }
 
-export function emitCType(type: any): string {
+export function emitCType(type: string | null | undefined): string {
   if (type === 'void') {
     return 'void'
   }
@@ -47,7 +47,7 @@ export function emitCType(type: any): string {
   return 'double'
 }
 
-export function emitCReturnType(type: any, nullable = false): string {
+export function emitCReturnType(type: string | null | undefined, nullable = false): string {
   if (nullable && isNullableScalarType(type)) {
     return 'ccjs_value'
   }
@@ -59,7 +59,7 @@ export function emitCReturnType(type: any, nullable = false): string {
   return emitCType(type)
 }
 
-export function emitThrowingFunctionOutType(type: any, nullable = false): string {
+export function emitThrowingFunctionOutType(type: string | null | undefined, nullable = false): string {
   if (nullable && isNullableScalarType(type)) {
     return 'ccjs_value'
   }
@@ -78,7 +78,7 @@ export function isThrowingFunctionRuntimeOut(context: CFunctionContext): boolean
   )
 }
 
-export function cRuntimeValueTag(valueType: any): string | null {
+export function cRuntimeValueTag(valueType: string | null | undefined): string | null {
   if (valueType === 'boolean') {
     return 'CCJS_TAG_BOOL'
   }
@@ -118,7 +118,7 @@ export function cRuntimeValueTag(valueType: any): string | null {
   return null
 }
 
-export function isRuntimeNullableType(valueType: any): boolean {
+export function isRuntimeNullableType(valueType: string | null | undefined): boolean {
   return cRuntimeValueTag(valueType) != null
 }
 
