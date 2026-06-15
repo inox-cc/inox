@@ -1,6 +1,21 @@
-import { narrowNullableScalars, registerOwnedValue } from '../context.ts'
+import {
+  narrowNullableScalars,
+  nextCName,
+  registerOwnedValue,
+  withNullableScalarNarrowing,
+  withVariableScope
+} from '../context.ts'
+import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
+
+type PreparedExpression = {
+  lines: string[]
+  expression: string
+}
 
 export type StatementLoweringDependencies = {
+  emitPreparedForExpressionClause: (expression: any, context: any) => PreparedExpression
+  emitPreparedForInitializer: (init: any, context: any) => PreparedExpression
+  emitPreparedNumberExpression: (expression: any, context: any) => PreparedExpression
   emitStatement: (statement: any, context: any) => string[]
   resolveNullableScalarConditionNarrowing: (expression: any, context: any) => {
     trueNames: string[]
@@ -58,6 +73,125 @@ function statementDefinitelyReturns(statement) {
   }
 
   return false
+}
+
+export function emitIfStatement(statement, context) {
+  const condition = statementDeps(context).emitPreparedNumberExpression(statement.condition, context)
+  const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
+  const lines = [
+    ...condition.lines,
+    `if ${emitCConditionClause(condition.expression)} {`,
+    ...withVariableScope(context, () =>
+      withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.consequent, context))
+    ).map((line) => `  ${line}`)
+  ]
+
+  if (statement.alternate == null) {
+    lines.push('}')
+    return lines
+  }
+
+  lines.push('} else {')
+  lines.push(
+    ...withVariableScope(context, () =>
+      withNullableScalarNarrowing(context, narrowing.falseNames, () => emitStatementBody(statement.alternate, context))
+    ).map((line) => `  ${line}`)
+  )
+  lines.push('}')
+
+  return lines
+}
+
+export function emitWhileStatement(statement, context) {
+  const condition = statementDeps(context).emitPreparedNumberExpression(statement.condition, context)
+  const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
+  const breakLabel = nextCName(context, 'ccjs_break')
+  const continueLabel = nextCName(context, 'ccjs_continue')
+  const body = withBreakTarget(context, breakLabel, false, () =>
+    withContinueTarget(context, continueLabel, false, () =>
+      withVariableScope(context, () =>
+        withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context))
+      )
+    )
+  )
+
+  if (condition.lines.length === 0) {
+    return [
+      `while ${emitCConditionClause(condition.expression)} {`,
+      ...body.map((line) => `  ${line}`),
+      ...emitContinueTargetLabel(continueLabel, context),
+      '}',
+      ...emitBreakTargetLabel(breakLabel, context)
+    ]
+  }
+
+  return [
+    'while (1) {',
+    ...condition.lines.map((line) => `  ${line}`),
+    `  if ${emitCNegatedConditionClause(condition.expression)} break;`,
+    ...body.map((line) => `  ${line}`),
+    ...emitContinueTargetLabel(continueLabel, context),
+    '}',
+    ...emitBreakTargetLabel(breakLabel, context)
+  ]
+}
+
+export function emitForStatement(statement, context) {
+  return withVariableScope(context, () => {
+    const init = statementDeps(context).emitPreparedForInitializer(statement.init, context)
+    const test = statementDeps(context).emitPreparedForExpressionClause(statement.test, context)
+    const update = statementDeps(context).emitPreparedForExpressionClause(statement.update, context)
+    const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.test, context)
+    const breakLabel = nextCName(context, 'ccjs_break')
+    const continueLabel = nextCName(context, 'ccjs_continue')
+    const body = withBreakTarget(context, breakLabel, false, () =>
+      withContinueTarget(context, continueLabel, false, () =>
+        withVariableScope(context, () =>
+          withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context))
+        )
+      )
+    )
+    const needsPreparedLowering = init.lines.length > 0 || test.lines.length > 0 || update.lines.length > 0
+
+    if (!needsPreparedLowering) {
+      return [
+        `for (${init.expression}; ${test.expression}; ${update.expression}) {`,
+        ...body.map((line) => `  ${line}`),
+        ...emitContinueTargetLabel(continueLabel, context),
+        '}',
+        ...emitBreakTargetLabel(breakLabel, context)
+      ]
+    }
+
+    const lines = ['{']
+
+    lines.push(...init.lines.map((line) => `  ${line}`))
+
+    if (init.expression !== '') {
+      lines.push(`  ${init.expression};`)
+    }
+
+    lines.push('  for (;;) {')
+    lines.push(...test.lines.map((line) => `    ${line}`))
+
+    if (test.expression !== '') {
+      lines.push(`    if ${emitCNegatedConditionClause(test.expression)} break;`)
+    }
+
+    lines.push(...body.map((line) => `    ${line}`))
+    lines.push(...emitContinueTargetLabel(continueLabel, context).map((line) => `  ${line}`))
+    lines.push(...update.lines.map((line) => `    ${line}`))
+
+    if (update.expression !== '') {
+      lines.push(`    ${update.expression};`)
+    }
+
+    lines.push('  }')
+    lines.push(...emitBreakTargetLabel(breakLabel, context).map((line) => `  ${line}`))
+    lines.push('}')
+
+    return lines
+  })
 }
 
 export function emitCatchBindingTypeCheck(valueType) {

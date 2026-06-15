@@ -339,10 +339,13 @@ import {
   emitCatchBindingTypeCheck,
   emitContinueJump,
   emitContinueTargetLabel,
+  emitForStatement,
+  emitIfStatement,
   emitReturnCleanupStatement,
   emitReturnJump,
   emitStatementBody,
   emitStatementList,
+  emitWhileStatement,
   registerErrorChannel,
   withBreakTarget,
   withContinueTarget,
@@ -369,6 +372,9 @@ const nullableLoweringDependencies: NullableLoweringDependencies = {
 }
 
 const statementLoweringDependencies: StatementLoweringDependencies = {
+  emitPreparedForExpressionClause,
+  emitPreparedForInitializer,
+  emitPreparedNumberExpression,
   emitStatement,
   resolveNullableScalarConditionNarrowing
 }
@@ -2651,125 +2657,6 @@ function emitPromiseReturnStatement(statement, context) {
   }
 
   return [...promise.lines, ...emitReturnJump(context)]
-}
-
-function emitIfStatement(statement, context) {
-  const condition = emitPreparedNumberExpression(statement.condition, context)
-  const narrowing = resolveNullableScalarConditionNarrowing(statement.condition, context)
-  const lines = [
-    ...condition.lines,
-    `if ${emitCConditionClause(condition.expression)} {`,
-    ...withVariableScope(context, () =>
-      withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.consequent, context))
-    ).map((line) => `  ${line}`)
-  ]
-
-  if (statement.alternate == null) {
-    lines.push('}')
-    return lines
-  }
-
-  lines.push('} else {')
-  lines.push(
-    ...withVariableScope(context, () =>
-      withNullableScalarNarrowing(context, narrowing.falseNames, () => emitStatementBody(statement.alternate, context))
-    ).map((line) => `  ${line}`)
-  )
-  lines.push('}')
-
-  return lines
-}
-
-function emitWhileStatement(statement, context) {
-  const condition = emitPreparedNumberExpression(statement.condition, context)
-  const narrowing = resolveNullableScalarConditionNarrowing(statement.condition, context)
-  const breakLabel = nextCName(context, 'ccjs_break')
-  const continueLabel = nextCName(context, 'ccjs_continue')
-  const body = withBreakTarget(context, breakLabel, false, () =>
-    withContinueTarget(context, continueLabel, false, () =>
-      withVariableScope(context, () =>
-        withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context))
-      )
-    )
-  )
-
-  if (condition.lines.length === 0) {
-    return [
-      `while ${emitCConditionClause(condition.expression)} {`,
-      ...body.map((line) => `  ${line}`),
-      ...emitContinueTargetLabel(continueLabel, context),
-      '}',
-      ...emitBreakTargetLabel(breakLabel, context)
-    ]
-  }
-
-  return [
-    'while (1) {',
-    ...condition.lines.map((line) => `  ${line}`),
-    `  if ${emitCNegatedConditionClause(condition.expression)} break;`,
-    ...body.map((line) => `  ${line}`),
-    ...emitContinueTargetLabel(continueLabel, context),
-    '}',
-    ...emitBreakTargetLabel(breakLabel, context)
-  ]
-}
-
-function emitForStatement(statement, context) {
-  return withVariableScope(context, () => {
-    const init = emitPreparedForInitializer(statement.init, context)
-    const test = emitPreparedForExpressionClause(statement.test, context)
-    const update = emitPreparedForExpressionClause(statement.update, context)
-    const narrowing = resolveNullableScalarConditionNarrowing(statement.test, context)
-    const breakLabel = nextCName(context, 'ccjs_break')
-    const continueLabel = nextCName(context, 'ccjs_continue')
-    const body = withBreakTarget(context, breakLabel, false, () =>
-      withContinueTarget(context, continueLabel, false, () =>
-        withVariableScope(context, () =>
-          withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context))
-        )
-      )
-    )
-    const needsPreparedLowering = init.lines.length > 0 || test.lines.length > 0 || update.lines.length > 0
-
-    if (!needsPreparedLowering) {
-      return [
-        `for (${init.expression}; ${test.expression}; ${update.expression}) {`,
-        ...body.map((line) => `  ${line}`),
-        ...emitContinueTargetLabel(continueLabel, context),
-        '}',
-        ...emitBreakTargetLabel(breakLabel, context)
-      ]
-    }
-
-    const lines = ['{']
-
-    lines.push(...init.lines.map((line) => `  ${line}`))
-
-    if (init.expression !== '') {
-      lines.push(`  ${init.expression};`)
-    }
-
-    lines.push('  for (;;) {')
-    lines.push(...test.lines.map((line) => `    ${line}`))
-
-    if (test.expression !== '') {
-      lines.push(`    if ${emitCNegatedConditionClause(test.expression)} break;`)
-    }
-
-    lines.push(...body.map((line) => `    ${line}`))
-    lines.push(...emitContinueTargetLabel(continueLabel, context).map((line) => `  ${line}`))
-    lines.push(...update.lines.map((line) => `    ${line}`))
-
-    if (update.expression !== '') {
-      lines.push(`    ${update.expression};`)
-    }
-
-    lines.push('  }')
-    lines.push(...emitBreakTargetLabel(breakLabel, context).map((line) => `  ${line}`))
-    lines.push('}')
-
-    return lines
-  })
 }
 
 function emitForOfStatement(statement, context) {
