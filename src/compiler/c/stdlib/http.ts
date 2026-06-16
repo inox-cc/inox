@@ -5,13 +5,12 @@ import {
   emitEventLoopReference,
   emitStatusCheck,
   nextCName,
-  registerEventLoop,
-  type CEmitContext,
-  type CFunctionContext
+  registerEventLoop
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { cJsonRuntimeCallName } from './json.ts'
-import type { AnyNode, IrProgram } from '../../types.ts'
+import type { CEmitContext, CFunctionContext } from '../context.ts'
+import type { AnyNode, IrProgram, SourceLocation } from '../../types.ts'
 import type { CHttpHandler, CPreparedExpression as PreparedExpression } from '../types.ts'
 
 type HttpStringBytesOperand = {
@@ -32,9 +31,43 @@ type HttpHandlerContext = {
   stringLocals: Map<string, string>
 }
 
+type HttpStaticStringContext = {
+  stringLocals: Map<string, string>
+}
+
+type HttpServerCreateOptions = {
+  declare: boolean | undefined
+}
+
 export type HttpLoweringDependencies = {
   emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitStatementList: (body: AnyNode[], context: CFunctionContext) => string[]
+}
+
+function httpNodeLoc(node: AnyNode | null | undefined): SourceLocation | null {
+  if (node == null) {
+    return null
+  }
+
+  return node.loc
+}
+
+function pushHttpLines(target: string[], lines: string[]): void {
+  for (const line of lines) {
+    target.push(line)
+  }
+}
+
+function pushHttpNodes(target: AnyNode[], nodes: AnyNode[]): void {
+  for (const node of nodes) {
+    target.push(node)
+  }
+}
+
+function pushIndentedHttpLines(target: string[], lines: string[]): void {
+  for (const line of lines) {
+    target.push('  ' + line)
+  }
 }
 
 export function emitHttpHandlerHead(wrapper: CHttpHandler): string {
@@ -48,12 +81,23 @@ export function emitHttpHandlerDeclaration(
 ): string[] {
   const context = createFunctionContext(baseContext, 'void', false)
   const expression = wrapper.expression
-  const requestName = expression.params[0]?.name ?? null
-  const responseName = expression.params[1]?.name ?? null
+  const firstParam = expression.params[0]
+  const secondParam = expression.params[1]
+  let requestName: string | null = null
+  let responseName: string | null = null
+
+  if (firstParam != null) {
+    requestName = firstParam.name
+  }
+
+  if (secondParam != null) {
+    responseName = secondParam.name
+  }
+
   const httpContext: HttpHandlerContext = {
-    requestName,
-    responseName,
-    stringLocals: new Map<string, string>()
+    requestName: requestName,
+    responseName: responseName,
+    stringLocals: new Map()
   }
   context.statusReturn = true
 
@@ -65,24 +109,34 @@ export function emitHttpHandlerDeclaration(
     context.variables.set(responseName, 'http-response')
   }
 
-  const body = expression.expressionBody
-    ? [
-        {
-          type: 'ExpressionStatement',
-          expression: expression.body,
-          loc: expression.loc
-        }
-      ]
-    : expression.body
-  const lines = [
-    `${emitHttpHandlerHead(wrapper)} {`,
-    '  (void)user;',
-    requestName == null ? '  (void)ccjs_request;' : `  const ccjs_http_request* ${requestName} = ccjs_request;`,
-    responseName == null ? '  (void)ccjs_response;' : `  ccjs_http_response* ${responseName} = ccjs_response;`
-  ]
+  const body: AnyNode[] = []
+
+  if (expression.expressionBody) {
+    body.push({
+      type: 'ExpressionStatement',
+      expression: expression.body,
+      loc: expression.loc
+    })
+  } else {
+    pushHttpNodes(body, expression.body)
+  }
+
+  const lines = [`${emitHttpHandlerHead(wrapper)} {`, '  (void)user;']
+
+  if (requestName == null) {
+    lines.push('  (void)ccjs_request;')
+  } else {
+    lines.push(`  const ccjs_http_request* ${requestName} = ccjs_request;`)
+  }
+
+  if (responseName == null) {
+    lines.push('  (void)ccjs_response;')
+  } else {
+    lines.push(`  ccjs_http_response* ${responseName} = ccjs_response;`)
+  }
 
   for (const statement of body) {
-    lines.push(...emitHttpHandlerStatement(statement, httpContext, context, deps).map((line) => `  ${line}`))
+    pushIndentedHttpLines(lines, emitHttpHandlerStatement(statement, httpContext, context, deps))
   }
 
   lines.push('  return CCJS_OK;')
@@ -102,19 +156,22 @@ function emitHttpHandlerStatement(
   }
 
   if (statement.type === 'BlockStatement') {
-    return [
-      '{',
-      ...statement.body
-        .flatMap((item) => emitHttpHandlerStatement(item, httpContext, context, deps))
-        .map((line) => `  ${line}`),
-      '}'
-    ]
+    const lines = ['{']
+
+    for (const item of statement.body) {
+      pushIndentedHttpLines(lines, emitHttpHandlerStatement(item, httpContext, context, deps))
+    }
+
+    lines.push('}')
+    return lines
   }
 
   if (statement.type === 'IfStatement') {
     const condition = emitHttpConditionExpression(statement.condition, httpContext, context)
     const consequent = emitHttpHandlerStatement(statement.consequent, httpContext, context, deps)
-    const lines = [`if (${condition}) {`, ...consequent.map((line) => `  ${line}`)]
+    const lines = [`if (${condition}) {`]
+
+    pushIndentedHttpLines(lines, consequent)
 
     if (statement.alternate == null) {
       lines.push('}')
@@ -122,7 +179,7 @@ function emitHttpHandlerStatement(
     }
 
     lines.push('} else {')
-    lines.push(...emitHttpHandlerStatement(statement.alternate, httpContext, context, deps).map((line) => `  ${line}`))
+    pushIndentedHttpLines(lines, emitHttpHandlerStatement(statement.alternate, httpContext, context, deps))
     lines.push('}')
     return lines
   }
@@ -130,23 +187,23 @@ function emitHttpHandlerStatement(
   if (statement.type === 'VariableDeclaration') {
     const stringValue = emitHttpStaticStringValue(statement.init, httpContext, context)
 
-    if (stringValue == null) {
-      context.diagnostics.push(
-        diagnostic(
-          'CCJS_HTTP_HANDLER',
-          'HTTP request listeners in the C backend currently support only static string local declarations',
-          statement.loc
-        )
-      )
+    if (stringValue != null) {
+      httpContext.stringLocals.set(statement.name, stringValue)
       return []
     }
 
-    httpContext.stringLocals.set(statement.name, stringValue)
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_HTTP_HANDLER',
+        'HTTP request listeners in the C backend currently support only static string local declarations',
+        statement.loc
+      )
+    )
     return []
   }
 
   if (statement.type === 'ExpressionStatement') {
-    if (statement.expression?.type === 'CallExpression') {
+    if (statement.expression != null && statement.expression.type === 'CallExpression') {
       const responseCall = emitHttpResponseCallStatement(statement.expression, httpContext, context)
 
       if (responseCall != null) {
@@ -154,7 +211,7 @@ function emitHttpHandlerStatement(
       }
     }
 
-    if (statement.expression?.type === 'AssignmentExpression') {
+    if (statement.expression != null && statement.expression.type === 'AssignmentExpression') {
       const statusAssignment = emitHttpResponseStatusAssignment(statement.expression, httpContext, context)
 
       if (statusAssignment != null) {
@@ -173,11 +230,16 @@ function emitHttpHandlerStatement(
   }
 
   if (statement.type === 'ReturnStatement') {
-    if (statement.argument?.type === 'CallExpression') {
+    if (statement.argument != null && statement.argument.type === 'CallExpression') {
       const responseCall = emitHttpResponseCallStatement(statement.argument, httpContext, context)
 
       if (responseCall != null) {
-        return [...responseCall, 'return CCJS_OK;']
+        const lines: string[] = []
+
+        pushHttpLines(lines, responseCall)
+        lines.push('return CCJS_OK;')
+
+        return lines
       }
     }
 
@@ -200,7 +262,8 @@ function emitHttpResponseStatusAssignment(
   context: CFunctionContext
 ): string[] | null {
   if (
-    expression.target?.type !== 'MemberExpression' ||
+    expression.target == null ||
+    expression.target.type !== 'MemberExpression' ||
     expression.target.property !== 'statusCode' ||
     !isHttpResponseReference(expression.target.object, httpContext)
   ) {
@@ -218,7 +281,8 @@ function emitHttpResponseCallStatement(
   context: CFunctionContext
 ): string[] | null {
   if (
-    expression.callee?.type !== 'MemberExpression' ||
+    expression.callee == null ||
+    expression.callee.type !== 'MemberExpression' ||
     !isHttpResponseReference(expression.callee.object, httpContext)
   ) {
     return null
@@ -229,38 +293,51 @@ function emitHttpResponseCallStatement(
   if (method === 'setHeader') {
     const name = emitHttpStringBytesOperand(expression.args[0], httpContext, context)
     const value = emitHttpStringBytesOperand(expression.args[1], httpContext, context)
+    const lines: string[] = []
 
-    return [
-      ...name.lines,
-      ...value.lines,
-      ...emitHttpStatusCheck(
+    pushHttpLines(lines, name.lines)
+    pushHttpLines(lines, value.lines)
+    pushHttpLines(
+      lines,
+      emitHttpStatusCheck(
         `ccjs_http_response_set_header(${httpContext.responseName}, ${name.bytes}, ${name.length}, ${value.bytes}, ${value.length})`,
         context
       )
-    ]
+    )
+
+    return lines
   }
 
   if (method === 'writeHead') {
     const status = emitHttpStatusCodeExpression(expression.args[0], context)
     const headers = emitHttpHeaderArray(expression.args[1], context)
+    const lines: string[] = []
 
-    return [
-      ...headers.lines,
-      ...emitHttpStatusCheck(
+    pushHttpLines(lines, headers.lines)
+    pushHttpLines(
+      lines,
+      emitHttpStatusCheck(
         `ccjs_http_response_write_head(${httpContext.responseName}, ${status}, ${headers.name}, ${headers.count})`,
         context
       )
-    ]
+    )
+
+    return lines
   }
 
   if (method === 'write' || method === 'end') {
     const body = emitHttpStringBytesOperand(expression.args[0], httpContext, context)
-    const runtime = method === 'write' ? 'ccjs_http_response_write' : 'ccjs_http_response_end'
+    let runtime = 'ccjs_http_response_end'
+    const lines: string[] = []
 
-    return [
-      ...body.lines,
-      ...emitHttpStatusCheck(`${runtime}(${httpContext.responseName}, ${body.bytes}, ${body.length})`, context)
-    ]
+    if (method === 'write') {
+      runtime = 'ccjs_http_response_write'
+    }
+
+    pushHttpLines(lines, body.lines)
+    pushHttpLines(lines, emitHttpStatusCheck(`${runtime}(${httpContext.responseName}, ${body.bytes}, ${body.length})`, context))
+
+    return lines
   }
 
   return null
@@ -301,9 +378,12 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
 
   const name = nextCName(context, 'ccjs_http_headers')
   const lines = [`ccjs_http_header ${name}[] = {`]
+  const staticContext: HttpStaticStringContext = {
+    stringLocals: new Map()
+  }
 
   for (const property of expression.properties) {
-    const value = emitHttpStaticStringValue(property.value, { stringLocals: new Map<string, string>() }, context)
+    const value = emitHttpStaticStringValue(property.value, staticContext, context)
 
     if (value == null) {
       context.diagnostics.push(
@@ -324,8 +404,8 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
   lines.push('};')
 
   return {
-    lines,
-    name,
+    lines: lines,
+    name: name,
     count: `${expression.properties.length}`
   }
 }
@@ -335,15 +415,30 @@ function emitHttpConditionExpression(
   httpContext: HttpHandlerContext,
   context: CFunctionContext
 ): string {
-  if (expression?.type === 'BooleanLiteral') {
-    return expression.value ? '1' : '0'
+  if (expression == null) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_HTTP_HANDLER',
+        'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
+        null
+      )
+    )
+    return '0'
   }
 
-  if (expression?.type === 'UnaryExpression' && expression.operator === '!') {
+  if (expression.type === 'BooleanLiteral') {
+    if (expression.value) {
+      return '1'
+    }
+
+    return '0'
+  }
+
+  if (expression.type === 'UnaryExpression' && expression.operator === '!') {
     return `!(${emitHttpConditionExpression(expression.argument, httpContext, context)})`
   }
 
-  if (expression?.type === 'BinaryExpression') {
+  if (expression.type === 'BinaryExpression') {
     if (expression.operator === '&&' || expression.operator === '||') {
       return `(${emitHttpConditionExpression(expression.left, httpContext, context)} ${expression.operator} ${emitHttpConditionExpression(expression.right, httpContext, context)})`
     }
@@ -359,10 +454,18 @@ function emitHttpConditionExpression(
     diagnostic(
       'CCJS_HTTP_HANDLER',
       'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
-      expression?.loc
+      expression.loc
     )
   )
   return '0'
+}
+
+function isHttpEqualityOperator(operator: string): boolean {
+  return operator === '===' || operator === '==' || operator === '!==' || operator === '!='
+}
+
+function isHttpNegativeEqualityOperator(operator: string): boolean {
+  return operator === '!==' || operator === '!='
 }
 
 function emitHttpRequestStringCompareExpression(
@@ -370,25 +473,37 @@ function emitHttpRequestStringCompareExpression(
   httpContext: HttpHandlerContext,
   context: CFunctionContext
 ): string | null {
-  if (!['===', '==', '!==', '!='].includes(expression.operator)) {
+  if (!isHttpEqualityOperator(expression.operator)) {
     return null
   }
 
   const left = resolveHttpRequestStringMember(expression.left, httpContext)
   const right = resolveHttpRequestStringMember(expression.right, httpContext)
-  const literal = emitHttpStaticStringValue(left == null ? expression.left : expression.right, httpContext, context)
-  const member = left ?? right
+  let literalExpression = expression.left
+  let member = right
+
+  if (left != null) {
+    literalExpression = expression.right
+    member = left
+  }
+
+  const literal = emitHttpStaticStringValue(literalExpression, httpContext, context)
 
   if (member == null || literal == null) {
     return null
   }
 
-  const runtime =
-    member === 'method'
-      ? `ccjs_http_request_method_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
-      : `ccjs_http_request_url_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
+  let runtime = `ccjs_http_request_url_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
 
-  return ['!==', '!='].includes(expression.operator) ? `!(${runtime})` : runtime
+  if (member === 'method') {
+    runtime = `ccjs_http_request_method_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
+  }
+
+  if (isHttpNegativeEqualityOperator(expression.operator)) {
+    return `!(${runtime})`
+  }
+
+  return runtime
 }
 
 function emitHttpStringBytesOperand(
@@ -449,30 +564,48 @@ function emitHttpStringBytesOperand(
 
 function emitHttpStaticStringValue(
   expression: AnyNode | null | undefined,
-  httpContext: Partial<HttpHandlerContext>,
+  httpContext: HttpStaticStringContext,
   context: CFunctionContext
 ): string | null {
-  if (expression?.type === 'StringLiteral') {
+  if (expression == null) {
+    return null
+  }
+
+  if (expression.type === 'StringLiteral') {
     return expression.value
   }
 
-  if (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
+  if (expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
     return expression.raw.slice(1, -1)
   }
 
-  if (expression?.type === 'NumberLiteral') {
+  if (expression.type === 'NumberLiteral') {
     return expression.value
   }
 
-  if (expression?.type === 'BooleanLiteral') {
-    return expression.value ? 'true' : 'false'
+  if (expression.type === 'BooleanLiteral') {
+    if (expression.value) {
+      return 'true'
+    }
+
+    return 'false'
   }
 
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return httpContext.stringLocals?.get(expression.path[0]) ?? null
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    return emitHttpStaticStringLocalValue(expression, httpContext)
   }
 
   return emitHttpStaticJsonStringifyValue(expression, context)
+}
+
+function emitHttpStaticStringLocalValue(expression: AnyNode, httpContext: HttpStaticStringContext): string | null {
+  const value = httpContext.stringLocals.get(expression.path[0])
+
+  if (value != null) {
+    return value
+  }
+
+  return null
 }
 
 function emitHttpStaticJsonStringifyValue(
@@ -480,7 +613,8 @@ function emitHttpStaticJsonStringifyValue(
   context: CFunctionContext
 ): string | null {
   if (
-    expression?.type !== 'CallExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
     cJsonRuntimeCallName(expression.callee) !== 'stringify' ||
     expression.args.length !== 1
   ) {
@@ -491,37 +625,51 @@ function emitHttpStaticJsonStringifyValue(
 }
 
 function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context: CFunctionContext): string | null {
-  if (expression?.type === 'StringLiteral') {
+  if (expression == null) {
+    return null
+  }
+
+  if (expression.type === 'StringLiteral') {
     return JSON.stringify(expression.value)
   }
 
-  if (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
+  if (expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
     return JSON.stringify(expression.raw.slice(1, -1))
   }
 
-  if (expression?.type === 'NumberLiteral') {
+  if (expression.type === 'NumberLiteral') {
     return expression.value
   }
 
-  if (expression?.type === 'BooleanLiteral') {
-    return expression.value ? 'true' : 'false'
+  if (expression.type === 'BooleanLiteral') {
+    if (expression.value) {
+      return 'true'
+    }
+
+    return 'false'
   }
 
-  if (expression?.type === 'NullLiteral') {
+  if (expression.type === 'NullLiteral') {
     return 'null'
   }
 
-  if (expression?.type === 'ArrayLiteral') {
-    const items = expression.elements.map((item) => emitHttpStaticJsonValue(item, context))
+  if (expression.type === 'ArrayLiteral') {
+    const items: string[] = []
 
-    if (items.some((item) => item == null)) {
-      return null
+    for (const item of expression.elements) {
+      const value = emitHttpStaticJsonValue(item, context)
+
+      if (value == null) {
+        return null
+      }
+
+      items.push(value)
     }
 
     return `[${items.join(',')}]`
   }
 
-  if (expression?.type === 'ObjectLiteral') {
+  if (expression.type === 'ObjectLiteral') {
     const fields: string[] = []
 
     for (const property of expression.properties) {
@@ -541,7 +689,7 @@ function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context
 }
 
 function emitHttpStatusCodeExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {
-  if (expression?.type === 'NumberLiteral') {
+  if (expression != null && expression.type === 'NumberLiteral') {
     return `(int)(${expression.value})`
   }
 
@@ -549,7 +697,7 @@ function emitHttpStatusCodeExpression(expression: AnyNode | null | undefined, co
     diagnostic(
       'CCJS_HTTP_HANDLER',
       'HTTP status values in the C backend currently must be numeric literals',
-      expression?.loc
+      httpNodeLoc(expression)
     )
   )
   return '200'
@@ -562,26 +710,34 @@ function emitHttpStatusCheck(call: string, context: CFunctionContext): string[] 
 }
 
 function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
-  return (
-    httpContext.responseName != null &&
-    expression?.type === 'Reference' &&
-    expression.path.length === 1 &&
-    expression.path[0] === httpContext.responseName
-  )
+  if (httpContext.responseName == null) {
+    return false
+  }
+
+  if (expression.type !== 'Reference') {
+    return false
+  }
+
+  return expression.path.length === 1 && expression.path[0] === httpContext.responseName
 }
 
 function resolveHttpRequestStringMember(expression: AnyNode, httpContext: HttpHandlerContext): string | null {
   if (
     httpContext.requestName == null ||
-    expression?.type !== 'MemberExpression' ||
-    expression.object?.type !== 'Reference' ||
+    expression.type !== 'MemberExpression' ||
+    expression.object == null ||
+    expression.object.type !== 'Reference' ||
     expression.object.path.length !== 1 ||
     expression.object.path[0] !== httpContext.requestName
   ) {
     return null
   }
 
-  return expression.property === 'method' || expression.property === 'url' ? expression.property : null
+  if (expression.property === 'method' || expression.property === 'url') {
+    return expression.property
+  }
+
+  return null
 }
 
 export function emitHttpServerVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
@@ -592,7 +748,7 @@ export function emitHttpServerVariableDeclaration(statement: AnyNode, context: C
   context.variables.set(statement.name, 'http-server')
   registerEventLoop(context)
 
-  return emitHttpServerCreateLines(statement.init, statement.name, context)
+  return emitHttpServerCreateLines(statement.init, statement.name, context, null)
 }
 
 export function emitHttpServerCallStatement(
@@ -600,21 +756,27 @@ export function emitHttpServerCallStatement(
   context: CFunctionContext,
   deps: HttpLoweringDependencies
 ): string[] | null {
+  const callee = expression.callee
+
   if (
-    expression.callee?.type === 'MemberExpression' &&
-    expression.callee.property === 'listen' &&
-    isHttpCreateServerCall(expression.callee.object, context)
+    callee != null &&
+    callee.type === 'MemberExpression' &&
+    callee.property === 'listen' &&
+    isHttpCreateServerCall(callee.object, context)
   ) {
     const serverName = nextCName(context, 'ccjs_http_server')
+    const lines = [`ccjs_http_server* ${serverName} = 0;`]
     registerEventLoop(context)
 
-    return [
-      `ccjs_http_server* ${serverName} = 0;`,
-      ...emitHttpServerCreateLines(expression.callee.object, serverName, context, {
+    pushHttpLines(
+      lines,
+      emitHttpServerCreateLines(callee.object, serverName, context, {
         declare: false
-      }),
-      ...emitHttpServerListenLines(serverName, expression.args, context, deps)
-    ]
+      })
+    )
+    pushHttpLines(lines, emitHttpServerListenLines(serverName, expression.args, context, deps))
+
+    return lines
   }
 
   if (isHttpServerMethodCall(expression, 'listen', context)) {
@@ -639,10 +801,18 @@ function emitHttpServerCreateLines(
   expression: AnyNode,
   serverName: string,
   context: CFunctionContext,
-  options: { declare?: boolean } = {}
+  options: HttpServerCreateOptions | null
 ): string[] {
   const listener = expression.args[0]
-  const wrapper = context.httpHandlers.get(listener)
+  let wrapper: CHttpHandler | null = null
+
+  if (context.httpHandlers.has(listener)) {
+    const registeredWrapper = context.httpHandlers.get(listener)
+
+    if (registeredWrapper != null) {
+      wrapper = registeredWrapper
+    }
+  }
 
   if (listener != null && (listener.type !== 'ArrowFunctionExpression' || wrapper == null)) {
     context.diagnostics.push(
@@ -654,11 +824,21 @@ function emitHttpServerCreateLines(
     )
   }
 
-  const lines = options.declare === false ? [] : [`ccjs_http_server* ${serverName} = 0;`]
+  const lines: string[] = []
+
+  if (options == null || options.declare !== false) {
+    lines.push(`ccjs_http_server* ${serverName} = 0;`)
+  }
+
+  let wrapperName = '0'
+
+  if (wrapper != null) {
+    wrapperName = wrapper.name
+  }
 
   lines.push(
     emitStatusCheck(
-      `ccjs_http_server_new(${emitEventLoopReference(context)}, ${wrapper?.name ?? '0'}, 0, &${serverName})`,
+      `ccjs_http_server_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${serverName})`,
       context
     )
   )
@@ -680,50 +860,80 @@ function emitHttpServerListenLines(
     return []
   }
 
-  const hostArg = args[1]?.type === 'ArrowFunctionExpression' ? null : args[1]
-  const callback = args[1]?.type === 'ArrowFunctionExpression' ? args[1] : args[2]
+  let secondArg: AnyNode | null = null
+
+  if (args.length > 1) {
+    secondArg = args[1]
+  }
+
+  let hostArg: AnyNode | null | undefined = secondArg
+  let callback: AnyNode | null | undefined = args[2]
+
+  if (secondArg != null && secondArg.type === 'ArrowFunctionExpression') {
+    hostArg = null
+    callback = secondArg
+  }
 
   if (args.length > 3) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_HTTP_SERVER',
         'server.listen in the C backend currently supports port, optional host and optional callback',
-        args[3]?.loc
+        httpNodeLoc(args[3])
       )
     )
   }
 
   const port = deps.emitPreparedNumberExpression(args[0], context)
   const host = emitHttpListenHostExpression(hostArg, context)
+  const lines: string[] = []
 
-  return [
-    ...port.lines,
-    emitStatusCheck(`ccjs_http_server_listen(${serverName}, ${host}, (int)(${port.expression}), 128)`, context),
-    ...emitHttpZeroArgCallbackLines(callback, context, deps)
-  ]
+  pushHttpLines(lines, port.lines)
+  lines.push(emitStatusCheck(`ccjs_http_server_listen(${serverName}, ${host}, (int)(${port.expression}), 128)`, context))
+  pushHttpLines(lines, emitHttpZeroArgCallbackLines(callback, context, deps))
+
+  return lines
 }
 
 function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], context: CFunctionContext): string[] {
-  if (args[0]?.type !== 'StringLiteral' || args[0].value !== 'request') {
+  let eventArg: AnyNode | null = null
+
+  if (args.length > 0) {
+    eventArg = args[0]
+  }
+
+  if (eventArg == null || eventArg.type !== 'StringLiteral' || eventArg.value !== 'request') {
     context.diagnostics.push(
       diagnostic(
         'CCJS_HTTP_SERVER',
         "server.on in the C backend currently supports only the 'request' event",
-        args[0]?.loc
+        httpNodeLoc(eventArg)
       )
     )
     return []
   }
 
-  const listener = args[1]
-  const wrapper = context.httpHandlers.get(listener)
+  let listener: AnyNode | null = null
+  let wrapper: CHttpHandler | null = null
 
-  if (listener?.type !== 'ArrowFunctionExpression' || wrapper == null) {
+  if (args.length > 1) {
+    listener = args[1]
+  }
+
+  if (listener != null && context.httpHandlers.has(listener)) {
+    const registeredWrapper = context.httpHandlers.get(listener)
+
+    if (registeredWrapper != null) {
+      wrapper = registeredWrapper
+    }
+  }
+
+  if (listener == null || listener.type !== 'ArrowFunctionExpression' || wrapper == null) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_HTTP_SERVER',
         "server.on('request') in the C backend currently requires an inline request listener",
-        listener?.loc
+        httpNodeLoc(listener)
       )
     )
     return []
@@ -740,11 +950,19 @@ function emitHttpServerCloseLines(
 ): string[] {
   if (args.length > 1) {
     context.diagnostics.push(
-      diagnostic('CCJS_HTTP_SERVER', 'server.close in the C backend supports only an optional callback', args[1]?.loc)
+      diagnostic(
+        'CCJS_HTTP_SERVER',
+        'server.close in the C backend supports only an optional callback',
+        httpNodeLoc(args[1])
+      )
     )
   }
 
-  return [`ccjs_http_server_close(${serverName});`, ...emitHttpZeroArgCallbackLines(args[0], context, deps)]
+  const lines = [`ccjs_http_server_close(${serverName});`]
+
+  pushHttpLines(lines, emitHttpZeroArgCallbackLines(args[0], context, deps))
+
+  return lines
 }
 
 function emitHttpZeroArgCallbackLines(
@@ -767,15 +985,17 @@ function emitHttpZeroArgCallbackLines(
     return []
   }
 
-  const body = callback.expressionBody
-    ? [
-        {
-          type: 'ExpressionStatement',
-          expression: callback.body,
-          loc: callback.loc
-        }
-      ]
-    : callback.body
+  const body: AnyNode[] = []
+
+  if (callback.expressionBody) {
+    body.push({
+      type: 'ExpressionStatement',
+      expression: callback.body,
+      loc: callback.loc
+    })
+  } else {
+    pushHttpNodes(body, callback.body)
+  }
 
   return deps.emitStatementList(body, context)
 }
@@ -804,23 +1024,36 @@ function emitHttpListenHostExpression(expression: AnyNode | null | undefined, co
 }
 
 function isHttpServerMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
+  if (expression.type !== 'CallExpression') {
+    return false
+  }
+
+  if (expression.callee == null || expression.callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  if (expression.callee.property !== method) {
+    return false
+  }
+
+  if (expression.callee.object == null || expression.callee.object.type !== 'Reference') {
+    return false
+  }
+
   return (
-    expression?.type === 'CallExpression' &&
-    expression.callee?.type === 'MemberExpression' &&
-    expression.callee.property === method &&
-    expression.callee.object?.type === 'Reference' &&
     expression.callee.object.path.length === 1 &&
     context.variables.get(expression.callee.object.path[0]) === 'http-server'
   )
 }
 
 function isHttpCreateServerCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
-  if (expression?.type !== 'CallExpression') {
+  if (expression == null || expression.type !== 'CallExpression') {
     return false
   }
 
   if (
-    expression.callee?.type === 'Reference' &&
+    expression.callee != null &&
+    expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1 &&
     context.httpCreateServerNames.has(expression.callee.path[0])
   ) {
@@ -828,198 +1061,240 @@ function isHttpCreateServerCall(expression: AnyNode | null | undefined, context:
   }
 
   return (
-    expression.callee?.type === 'MemberExpression' &&
+    expression.callee != null &&
+    expression.callee.type === 'MemberExpression' &&
     expression.callee.property === 'createServer' &&
-    expression.callee.object?.type === 'Reference' &&
+    expression.callee.object != null &&
+    expression.callee.object.type === 'Reference' &&
     expression.callee.object.path.length === 1 &&
     context.httpImportNames.has(expression.callee.object.path[0])
   )
 }
 
 function isHttpRequestEventCall(expression: AnyNode): boolean {
-  return (
-    expression?.type === 'CallExpression' &&
-    expression.callee?.type === 'MemberExpression' &&
-    expression.callee.property === 'on' &&
-    expression.args[0]?.type === 'StringLiteral' &&
-    expression.args[0].value === 'request'
-  )
+  if (expression.type !== 'CallExpression') {
+    return false
+  }
+
+  if (expression.callee == null || expression.callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  if (expression.callee.property !== 'on') {
+    return false
+  }
+
+  if (expression.args.length === 0 || expression.args[0].type !== 'StringLiteral') {
+    return false
+  }
+
+  return expression.args[0].value === 'request'
 }
 
 export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<AnyNode, CHttpHandler> {
-  const handlers = new Map<AnyNode, CHttpHandler>()
-  const register = (expression: AnyNode | null | undefined) => {
-    if (expression?.type !== 'ArrowFunctionExpression') {
-      return
-    }
-
-    if (handlers.has(expression)) {
-      return
-    }
-
-    handlers.set(expression, {
-      name: `ccjs_http_handler_${handlers.size}`,
-      expression
-    })
-  }
-  const visitStatement = (statement: AnyNode | null | undefined) => {
-    if (statement == null) {
-      return
-    }
-
-    if (statement.type === 'VariableDeclaration') {
-      visitExpression(statement.init)
-      return
-    }
-
-    if (statement.type === 'ExpressionStatement') {
-      visitExpression(statement.expression)
-      return
-    }
-
-    if (statement.type === 'ReturnStatement' || statement.type === 'ThrowStatement') {
-      visitExpression(statement.argument)
-      return
-    }
-
-    if (statement.type === 'BlockStatement') {
-      statement.body.forEach(visitStatement)
-      return
-    }
-
-    if (statement.type === 'IfStatement') {
-      visitExpression(statement.condition)
-      visitStatement(statement.consequent)
-      visitStatement(statement.alternate)
-      return
-    }
-
-    if (statement.type === 'WhileStatement') {
-      visitExpression(statement.condition)
-      visitStatement(statement.body)
-      return
-    }
-
-    if (statement.type === 'ForStatement') {
-      if (statement.init?.type === 'VariableDeclaration') {
-        visitStatement(statement.init)
-      } else {
-        visitExpression(statement.init)
-      }
-
-      visitExpression(statement.test)
-      visitExpression(statement.update)
-      visitStatement(statement.body)
-      return
-    }
-
-    if (statement.type === 'ForOfStatement') {
-      visitExpression(statement.iterable)
-      visitStatement(statement.body)
-      return
-    }
-
-    if (statement.type === 'SwitchStatement') {
-      visitExpression(statement.discriminant)
-      statement.cases.forEach((item: AnyNode) => {
-        visitExpression(item.test)
-        item.consequent.forEach(visitStatement)
-      })
-      return
-    }
-
-    if (statement.type === 'TryStatement') {
-      visitStatement(statement.block)
-      visitStatement(statement.handler?.body)
-      visitStatement(statement.finalizer)
-    }
-  }
-  const visitExpression = (expression: AnyNode | null | undefined) => {
-    if (expression == null) {
-      return
-    }
-
-    if (expression.type === 'CallExpression') {
-      if (isHttpCreateServerCall(expression, context)) {
-        register(expression.args[0])
-      }
-
-      if (isHttpRequestEventCall(expression) && expression.args[0]?.type === 'StringLiteral') {
-        register(expression.args[1])
-      }
-
-      visitExpression(expression.callee)
-      expression.args.forEach(visitExpression)
-      return
-    }
-
-    if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
-      visitExpression(expression.callee)
-      expression.args.forEach(visitExpression)
-      return
-    }
-
-    if (expression.type === 'ArrowFunctionExpression') {
-      if (expression.expressionBody) {
-        visitExpression(expression.body)
-      } else {
-        expression.body.forEach(visitStatement)
-      }
-
-      return
-    }
-
-    if (expression.type === 'AssignmentExpression') {
-      visitExpression(expression.target)
-      visitExpression(expression.value)
-      return
-    }
-
-    if (expression.type === 'BinaryExpression') {
-      visitExpression(expression.left)
-      visitExpression(expression.right)
-      return
-    }
-
-    if (
-      expression.type === 'UnaryExpression' ||
-      expression.type === 'UpdateExpression' ||
-      expression.type === 'AwaitExpression'
-    ) {
-      visitExpression(expression.argument)
-      return
-    }
-
-    if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
-      visitExpression(expression.object)
-      return
-    }
-
-    if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
-      visitExpression(expression.object)
-      visitExpression(expression.index)
-      return
-    }
-
-    if (expression.type === 'ArrayLiteral') {
-      expression.elements.forEach(visitExpression)
-      return
-    }
-
-    if (expression.type === 'ObjectLiteral') {
-      expression.properties.forEach((property) => visitExpression(property.value))
-    }
-  }
+  const handlers: Map<AnyNode, CHttpHandler> = new Map()
 
   for (const ir of irPrograms) {
     for (const item of collectIrTopLevelNodeEntries(ir)) {
       if (item.kind === 'function') {
-        item.node.body.forEach(visitStatement)
+        for (const statement of item.node.body) {
+          visitHttpHandlerStatement(handlers, context, statement)
+        }
       } else if (item.kind === 'statement') {
-        visitStatement(item.node)
+        visitHttpHandlerStatement(handlers, context, item.node)
       }
     }
   }
 
   return handlers
+}
+
+function registerHttpHandler(handlers: Map<AnyNode, CHttpHandler>, expression: AnyNode | null | undefined): void {
+  if (expression == null || expression.type !== 'ArrowFunctionExpression') {
+    return
+  }
+
+  if (handlers.has(expression)) {
+    return
+  }
+
+  handlers.set(expression, {
+    name: `ccjs_http_handler_${handlers.size}`,
+    expression: expression
+  })
+}
+
+function visitHttpHandlerStatement(
+  handlers: Map<AnyNode, CHttpHandler>,
+  context: CEmitContext,
+  statement: AnyNode | null | undefined
+): void {
+  if (statement == null) {
+    return
+  }
+
+  if (statement.type === 'VariableDeclaration') {
+    visitHttpHandlerExpression(handlers, context, statement.init)
+    return
+  }
+
+  if (statement.type === 'ExpressionStatement') {
+    visitHttpHandlerExpression(handlers, context, statement.expression)
+    return
+  }
+
+  if (statement.type === 'ReturnStatement' || statement.type === 'ThrowStatement') {
+    visitHttpHandlerExpression(handlers, context, statement.argument)
+    return
+  }
+
+  if (statement.type === 'BlockStatement') {
+    for (const item of statement.body) {
+      visitHttpHandlerStatement(handlers, context, item)
+    }
+    return
+  }
+
+  if (statement.type === 'IfStatement') {
+    visitHttpHandlerExpression(handlers, context, statement.condition)
+    visitHttpHandlerStatement(handlers, context, statement.consequent)
+    visitHttpHandlerStatement(handlers, context, statement.alternate)
+    return
+  }
+
+  if (statement.type === 'WhileStatement') {
+    visitHttpHandlerExpression(handlers, context, statement.condition)
+    visitHttpHandlerStatement(handlers, context, statement.body)
+    return
+  }
+
+  if (statement.type === 'ForStatement') {
+    if (statement.init != null && statement.init.type === 'VariableDeclaration') {
+      visitHttpHandlerStatement(handlers, context, statement.init)
+    } else {
+      visitHttpHandlerExpression(handlers, context, statement.init)
+    }
+
+    visitHttpHandlerExpression(handlers, context, statement.test)
+    visitHttpHandlerExpression(handlers, context, statement.update)
+    visitHttpHandlerStatement(handlers, context, statement.body)
+    return
+  }
+
+  if (statement.type === 'ForOfStatement') {
+    visitHttpHandlerExpression(handlers, context, statement.iterable)
+    visitHttpHandlerStatement(handlers, context, statement.body)
+    return
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    visitHttpHandlerExpression(handlers, context, statement.discriminant)
+    for (const item of statement.cases) {
+      visitHttpHandlerExpression(handlers, context, item.test)
+      for (const consequent of item.consequent) {
+        visitHttpHandlerStatement(handlers, context, consequent)
+      }
+    }
+    return
+  }
+
+  if (statement.type === 'TryStatement') {
+    const handler = statement.handler
+    visitHttpHandlerStatement(handlers, context, statement.block)
+    if (handler != null) {
+      visitHttpHandlerStatement(handlers, context, handler.body)
+    }
+    visitHttpHandlerStatement(handlers, context, statement.finalizer)
+  }
+}
+
+function visitHttpHandlerExpression(
+  handlers: Map<AnyNode, CHttpHandler>,
+  context: CEmitContext,
+  expression: AnyNode | null | undefined
+): void {
+  if (expression == null) {
+    return
+  }
+
+  if (expression.type === 'CallExpression') {
+    if (isHttpCreateServerCall(expression, context)) {
+      registerHttpHandler(handlers, expression.args[0])
+    }
+
+    if (isHttpRequestEventCall(expression)) {
+      registerHttpHandler(handlers, expression.args[1])
+    }
+
+    visitHttpHandlerExpression(handlers, context, expression.callee)
+    for (const arg of expression.args) {
+      visitHttpHandlerExpression(handlers, context, arg)
+    }
+    return
+  }
+
+  if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+    visitHttpHandlerExpression(handlers, context, expression.callee)
+    for (const arg of expression.args) {
+      visitHttpHandlerExpression(handlers, context, arg)
+    }
+    return
+  }
+
+  if (expression.type === 'ArrowFunctionExpression') {
+    if (expression.expressionBody) {
+      visitHttpHandlerExpression(handlers, context, expression.body)
+    } else {
+      for (const statement of expression.body) {
+        visitHttpHandlerStatement(handlers, context, statement)
+      }
+    }
+
+    return
+  }
+
+  if (expression.type === 'AssignmentExpression') {
+    visitHttpHandlerExpression(handlers, context, expression.target)
+    visitHttpHandlerExpression(handlers, context, expression.value)
+    return
+  }
+
+  if (expression.type === 'BinaryExpression') {
+    visitHttpHandlerExpression(handlers, context, expression.left)
+    visitHttpHandlerExpression(handlers, context, expression.right)
+    return
+  }
+
+  if (
+    expression.type === 'UnaryExpression' ||
+    expression.type === 'UpdateExpression' ||
+    expression.type === 'AwaitExpression'
+  ) {
+    visitHttpHandlerExpression(handlers, context, expression.argument)
+    return
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    visitHttpHandlerExpression(handlers, context, expression.object)
+    return
+  }
+
+  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
+    visitHttpHandlerExpression(handlers, context, expression.object)
+    visitHttpHandlerExpression(handlers, context, expression.index)
+    return
+  }
+
+  if (expression.type === 'ArrayLiteral') {
+    for (const element of expression.elements) {
+      visitHttpHandlerExpression(handlers, context, element)
+    }
+    return
+  }
+
+  if (expression.type === 'ObjectLiteral') {
+    for (const property of expression.properties) {
+      visitHttpHandlerExpression(handlers, context, property.value)
+    }
+  }
 }
