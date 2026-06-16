@@ -164,7 +164,12 @@ export type ObjectShapeInfo = {
   [key: string]: any
 }
 
-export type TypeAliasInfo = FunctionTypeInfo | ObjectShapeInfo
+export type AliasTypeInfo = {
+  kind: 'alias'
+  valueType: ValueType
+}
+
+export type TypeAliasInfo = AliasTypeInfo | FunctionTypeInfo | ObjectShapeInfo
 
 export type SymbolInfo = {
   kind: string

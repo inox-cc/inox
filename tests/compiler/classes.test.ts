@@ -433,8 +433,9 @@ type Tagged = {
 
 export function main(): void {
   const token: Token = { line: 1, column: 2, type: 'identifier', extra: 3 }
+  const kind: TokenKind = 'identifier'
   const tagged: Tagged = { type: 'Tagged', version: 1 }
-  console.log(token.line, token.type, tagged.version)
+  console.log(token.line, token.type, kind, tagged.version)
 }
 `,
     {
@@ -453,6 +454,9 @@ export function main(): void {
   )
   const tagged = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'tagged')
   assert.ok(tagged)
+  const kind = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'kind')
+  assert.ok(kind)
+  assert.equal(kind.valueType, 'string')
   assert.deepEqual(
     tagged.shape.fields.map((field) => ({ name: field.name, valueType: field.valueType })),
     [

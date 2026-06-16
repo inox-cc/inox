@@ -127,6 +127,10 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     }
   }
 
+  if (type?.kind === 'alias') {
+    return resolveDeclaredType(type.valueType, context)
+  }
+
   if (type?.kind === 'function') {
     const returnType = resolveDeclaredType(type.returnType, context)
 
@@ -405,6 +409,11 @@ function collectTypes(ast: ProgramNode): Map<string, AnyNode> {
           loc: param.loc
         })),
         returnType: item.valueType.returnType
+      })
+    } else if (item.type === 'TypeAliasDeclaration' && item.valueType.kind === 'alias') {
+      types.set(item.name, {
+        kind: 'alias',
+        valueType: item.valueType.valueType
       })
     }
   }

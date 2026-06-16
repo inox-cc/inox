@@ -7245,7 +7245,7 @@ class Checker {
       return
     }
 
-    if (item.valueType.kind === 'object' || item.valueType.kind === 'function') {
+    if (item.valueType.kind === 'alias' || item.valueType.kind === 'object' || item.valueType.kind === 'function') {
       this.types.set(item.name, item.valueType)
     }
   }
@@ -7549,6 +7549,10 @@ class Checker {
     const shape = this.types.get(name)
 
     if (shape != null) {
+      if (shape.kind === 'alias') {
+        return this.resolveDeclaredType(shape.valueType, loc)
+      }
+
       if (shape.kind === 'function') {
         const returnInfo = this.resolveDeclaredType(shape.returnType, loc)
 

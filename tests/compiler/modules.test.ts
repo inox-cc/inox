@@ -377,18 +377,26 @@ test('compiles static ESM type imports before checking modules', async () => {
   try {
     await writeFile(
       join(dir, 'types.ts'),
-      `export type User = {
+      `export type UserKind = 'admin' | 'guest'
+
+type Profile = {
+  kind: UserKind
+}
+
+export type User = {
   readonly name: string
+  profile: Profile
 }
 `
     )
     await writeFile(
       join(dir, 'main.ts'),
-      `import type { User as Person } from './types.ts'
+      `import type { User as Person, UserKind } from './types.ts'
 
 export function main(): void {
-  const user: Person = { name: 'Ada' }
-  console.log(user.name)
+  const user: Person = { name: 'Ada', profile: { kind: 'admin' } }
+  const kind: UserKind = 'admin'
+  console.log(user.name, kind)
 }
 `
     )

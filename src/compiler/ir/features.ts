@@ -15,15 +15,7 @@ import { memberExpressionPath } from '../member-paths.ts'
 import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
 
 type ChildNode = {
-  [key: string]: unknown
-}
-
-type FeatureCollector = {
-  add(feature: IrFeature): void
-}
-
-type RuntimeRequirementCollector = {
-  add(requirement: IrRuntimeRequirement): void
+  [key: string]: any
 }
 
 const NODE_CHILD_KEYS = [
@@ -224,66 +216,62 @@ function createRuntimeRequirementSet(): Set<IrRuntimeRequirement> {
   return new Set()
 }
 
-function visitSyntaxFeatureUsage(node: unknown, usages: IrSyntaxFeatureUsage[]): void {
-  if (node == null) {
-    return
-  }
-
-  if (Array.isArray(node)) {
-    for (const item of node) {
-      visitSyntaxFeatureUsage(item, usages)
+function visitSyntaxFeatureUsage(node: AnyNode | null, usages: IrSyntaxFeatureUsage[]): void {
+  if (node != null) {
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        visitSyntaxFeatureUsage(item, usages)
+      }
+      return
     }
-    return
+
+    const item = node
+
+    if (item.type === 'ClassDeclaration') {
+      usages.push({
+        feature: 'class',
+        loc: item.loc
+      })
+    } else if (item.type === 'FunctionDeclaration' && item.async === true) {
+      usages.push({
+        feature: 'async-function',
+        loc: item.loc
+      })
+    }
+
+    visitSyntaxFeatureChildren(item, usages)
   }
-
-  const item = node as AnyNode
-
-  if (item.type === 'ClassDeclaration') {
-    usages.push({
-      feature: 'class',
-      loc: item.loc
-    })
-  } else if (item.type === 'FunctionDeclaration' && item.async === true) {
-    usages.push({
-      feature: 'async-function',
-      loc: item.loc
-    })
-  }
-
-  visitSyntaxFeatureChildren(item, usages)
 }
 
-function visitNode(node: unknown, features: FeatureCollector): void {
-  if (node == null) {
-    return
-  }
-
-  if (Array.isArray(node)) {
-    for (const item of node) {
-      visitNode(item, features)
-    }
-    return
-  }
-
-  const item = node as AnyNode
-
-  recordNodeFeatures(item, features)
-
-  if (isBinaryArrayLiteralConstructor(item)) {
-    visitNode(item.callee, features)
-
-    for (const element of item.args[0].elements) {
-      visitNode(element, features)
+function visitNode(node: AnyNode | null, features: Set<IrFeature>): void {
+  if (node != null) {
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        visitNode(item, features)
+      }
+      return
     }
 
-    for (const arg of item.args.slice(1)) {
-      visitNode(arg, features)
+    const item = node
+
+    recordNodeFeatures(item, features)
+
+    if (isBinaryArrayLiteralConstructor(item)) {
+      visitNode(item.callee, features)
+
+      for (const element of item.args[0].elements) {
+        visitNode(element, features)
+      }
+
+      for (const arg of item.args.slice(1)) {
+        visitNode(arg, features)
+      }
+
+      return
     }
 
-    return
+    visitFeatureChildren(item, features)
   }
-
-  visitFeatureChildren(item, features)
 }
 
 function visitSyntaxFeatureChildren(item: ChildNode, usages: IrSyntaxFeatureUsage[]): void {
@@ -296,7 +284,7 @@ function visitSyntaxFeatureChildren(item: ChildNode, usages: IrSyntaxFeatureUsag
   }
 }
 
-function visitFeatureChildren(item: ChildNode, features: FeatureCollector): void {
+function visitFeatureChildren(item: ChildNode, features: Set<IrFeature>): void {
   for (const key of NODE_CHILD_KEYS) {
     const value = item[key]
 
@@ -306,7 +294,7 @@ function visitFeatureChildren(item: ChildNode, features: FeatureCollector): void
   }
 }
 
-function recordNodeFeatures(node: AnyNode, features: FeatureCollector): void {
+function recordNodeFeatures(node: AnyNode, features: Set<IrFeature>): void {
   if (node.nullable === true) {
     features.add('runtime-values')
   }
@@ -452,7 +440,7 @@ function recordNodeFeatures(node: AnyNode, features: FeatureCollector): void {
   }
 }
 
-function recordCallableSignatureFeatures(node: AnyNode, features: FeatureCollector): void {
+function recordCallableSignatureFeatures(node: AnyNode, features: Set<IrFeature>): void {
   if (['bytes', 'string'].includes(node.returnType) || node.returnNullable === true) {
     features.add('runtime-values')
   }
@@ -472,7 +460,7 @@ function recordCallableSignatureFeatures(node: AnyNode, features: FeatureCollect
   }
 }
 
-function recordCallFeatures(expression: AnyNode, features: FeatureCollector): void {
+function recordCallFeatures(expression: AnyNode, features: Set<IrFeature>): void {
   if (timeRuntimeCallName(expression.callee) != null) {
     features.add('clocks')
   }

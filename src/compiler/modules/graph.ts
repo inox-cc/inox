@@ -11,7 +11,7 @@ import { collectExports } from './exports.ts'
 import { isRelativeSpecifier, resolveExistingSource, resolveImport as resolveImportSpecifier } from './resolve.ts'
 import {
   createImportAliasDeclaration,
-  createTypeImportDeclaration,
+  createTypeImportDeclarations,
   insertImportSyntheticDeclarations
 } from './synthetic-imports.ts'
 
@@ -100,6 +100,7 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
 
       const aliases: AnyNode[] = []
       const types: AnyNode[] = []
+      const typeNames = new Set<string>()
 
       for (const specifier of item.specifiers) {
         const exported = importedModule.exports.get(specifier.imported)
@@ -123,7 +124,12 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
             continue
           }
 
-          types.push(createTypeImportDeclaration(specifier, exported))
+          for (const declaration of createTypeImportDeclarations(specifier, importedModule.ast)) {
+            if (!typeNames.has(declaration.name)) {
+              typeNames.add(declaration.name)
+              types.push(declaration)
+            }
+          }
           continue
         }
 

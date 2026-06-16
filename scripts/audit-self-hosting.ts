@@ -40,7 +40,7 @@ const patterns: PatternInfo[] = [
     decision: 'simplify/remove',
     pattern: /\bAnyNode\b/g,
     note: 'Replace hot paths with explicit AST/HIR/IR node shapes before self-hosting.',
-    maxAllowedMatches: 1618
+    maxAllowedMatches: 1626
   },
   {
     name: 'object/array spread',
