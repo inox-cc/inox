@@ -1314,6 +1314,42 @@ test('lowers C Array.find declarations to nullable loop results', () => {
 })
 
 
+test('lowers C Array.find expression contexts to nullable temps', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const values = [1, 2, 3]
+  const score = values.find((value, index) => value > index + 1) ?? 0
+  console.log(values.find(value => value > 2) ?? 0, score)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+
+  const findTemps = main.body.filter(
+    (item) => item.type === 'VariableDeclaration' && /^__ccjs_find_expr_\d+$/.test(item.name)
+  )
+  const score = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'score')
+
+  assert.equal(findTemps.length, 2)
+  assert.equal(findTemps.every((item) => item.kind === 'let'), true)
+  assert.equal(findTemps.every((item) => item.nullable === true), true)
+  assert.equal(findTemps.every((item) => item.valueType === 'number'), true)
+  assert.equal(findTemps.every((item) => item.init.type === 'NullLiteral'), true)
+  assert.ok(score)
+  assert.equal(score.init.type, 'BinaryExpression')
+  assert.equal(score.init.operator, '??')
+  assert.match(score.init.left.path[0], /^__ccjs_find_expr_\d+$/)
+  assert.match(result.code, /__ccjs_find_expr_\d+ = ccjs_null_value\(\);/)
+  assert.match(result.code, /if \(__ccjs_find_expr_\d+\.tag == CCJS_TAG_NULL\) \{/)
+  assert.doesNotMatch(result.code, /CCJS_C_ARRAY_METHOD/)
+})
+
+
 test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   const result = compileSource(
     `export function main(): void {

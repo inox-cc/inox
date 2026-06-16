@@ -369,6 +369,14 @@ function lowerArrayMethodVariableDeclaration(
 }
 
 function lowerArrayMethodExpressionToTemp(expression: LowerNode, context: LowerContext): ArrayExpressionHoist | null {
+  if (isArrayFindMethodExpansionCall(expression)) {
+    return lowerArrayFindMethodExpressionToTemp(expression, context)
+  }
+
+  return lowerArrayOutputMethodExpressionToTemp(expression, context)
+}
+
+function lowerArrayOutputMethodExpressionToTemp(expression: LowerNode, context: LowerContext): ArrayExpressionHoist | null {
   if (!isArrayOutputMethodExpansionCall(expression)) {
     return null
   }
@@ -393,6 +401,31 @@ function lowerArrayMethodExpressionToTemp(expression: LowerNode, context: LowerC
   }
 }
 
+function lowerArrayFindMethodExpressionToTemp(expression: LowerNode, context: LowerContext): ArrayExpressionHoist | null {
+  if (!isArrayFindMethodExpansionCall(expression)) {
+    return null
+  }
+
+  const name = nextLowerName(context, 'ccjs_find_expr')
+  const target = createFindTempDeclaration(name, expression, expression.loc)
+  const statements = lowerArrayMethodVariableDeclaration(target, expression, context)
+
+  if (statements == null) {
+    return null
+  }
+
+  const output = findVariableDeclaration(statements, name)
+
+  if (output == null) {
+    return null
+  }
+
+  return {
+    statements,
+    expression: createValueReferenceFromDeclaration(output, expression.loc)
+  }
+}
+
 function lowerArrayMethodReceiver(receiver: LowerNode, context: LowerContext): ArrayMethodReceiverExpansion | null {
   if (isStableArrayReceiver(receiver)) {
     return {
@@ -401,8 +434,8 @@ function lowerArrayMethodReceiver(receiver: LowerNode, context: LowerContext): A
     }
   }
 
-  if (isArrayMethodExpansionCall(receiver)) {
-    const hoisted = lowerArrayMethodExpressionToTemp(receiver, context)
+  if (isArrayOutputMethodExpansionCall(receiver)) {
+    const hoisted = lowerArrayOutputMethodExpressionToTemp(receiver, context)
 
     if (hoisted == null) {
       return null
@@ -663,6 +696,14 @@ function isArrayOutputMethodExpansionCall(expression: LowerNode): boolean {
   }
 
   return expression.callee.property === 'filter' || expression.callee.property === 'map'
+}
+
+function isArrayFindMethodExpansionCall(expression: LowerNode): boolean {
+  if (!isArrayMethodExpansionCall(expression)) {
+    return false
+  }
+
+  return expression.callee.property === 'find'
 }
 
 function lowerArrayFilterVariableDeclaration(
@@ -1092,6 +1133,28 @@ function createArrayTempDeclaration(name: string, init: LowerNode, loc: LowerNod
   }
 }
 
+function createFindTempDeclaration(name: string, init: LowerNode, loc: LowerNode['loc']): LowerNode {
+  return {
+    type: 'VariableDeclaration',
+    kind: 'let',
+    exported: false,
+    name,
+    loc,
+    declaredType: null,
+    nullable: true,
+    shape: init.shape ?? null,
+    functionType: init.functionType ?? null,
+    arrayElementType: init.arrayElementType ?? null,
+    arrayElementDeclaredType: init.arrayElementDeclaredType ?? null,
+    mapKeyType: init.mapKeyType ?? null,
+    mapValueType: init.mapValueType ?? null,
+    promiseValueType: init.promiseValueType ?? null,
+    setElementType: init.setElementType ?? null,
+    valueType: init.valueType ?? 'unknown',
+    init
+  }
+}
+
 function createLoopItemDeclaration(
   name: string,
   init: LowerNode,
@@ -1203,6 +1266,24 @@ function createArrayReferenceFromDeclaration(declaration: LowerNode, loc: LowerN
     setElementType: null,
     functionType: null,
     shape: null,
+    loc
+  }
+}
+
+function createValueReferenceFromDeclaration(declaration: LowerNode, loc: LowerNode['loc']): LowerNode {
+  return {
+    type: 'Reference',
+    path: [declaration.name],
+    valueType: declaration.valueType ?? 'unknown',
+    nullable: declaration.nullable === true,
+    arrayElementType: declaration.arrayElementType ?? null,
+    arrayElementDeclaredType: declaration.arrayElementDeclaredType ?? null,
+    mapKeyType: declaration.mapKeyType ?? null,
+    mapValueType: declaration.mapValueType ?? null,
+    promiseValueType: declaration.promiseValueType ?? null,
+    setElementType: declaration.setElementType ?? null,
+    functionType: declaration.functionType ?? null,
+    shape: declaration.shape ?? null,
     loc
   }
 }
