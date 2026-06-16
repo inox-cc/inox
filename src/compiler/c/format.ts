@@ -7,69 +7,100 @@ export function formatGeneratedC(code: string, _assumeFilename: string): string 
 }
 
 function wrapGeneratedCFunctionHeads(code: string): string {
-  return mapGeneratedCLines(code, (line) => {
+  const source = splitGeneratedCLines(code)
+  const mapped: string[] = []
+
+  for (let index = 0; index < source.lines.length; index = index + 1) {
+    const line = source.lines[index]
+
     if (line.length <= generatedCColumnLimit) {
-      return [line]
+      mapped.push(line)
+      continue
     }
 
     const head = parseGeneratedCFunctionHead(line)
 
-    if (head == null || head.params.length <= 1) {
-      return [line]
-    }
+    if (head != null) {
+      if (head.params.length > 1) {
+        mapped.push(`${head.indent}${head.prefix}(`)
 
-    return [
-      `${head.indent}${head.prefix}(`,
-      ...head.params.map((param, index) => `${head.indent}  ${param}${index === head.params.length - 1 ? '' : ','}`),
-      `${head.indent})${head.suffix}`
-    ]
-  })
+        for (let paramIndex = 0; paramIndex < head.params.length; paramIndex = paramIndex + 1) {
+          let suffix = ','
+
+          if (paramIndex === head.params.length - 1) {
+            suffix = ''
+          }
+
+          mapped.push(`${head.indent}  ${head.params[paramIndex]}${suffix}`)
+        }
+
+        mapped.push(`${head.indent})${head.suffix}`)
+      } else {
+        mapped.push(line)
+      }
+    } else {
+      mapped.push(line)
+    }
+  }
+
+  return joinGeneratedCLines(mapped, source.hasTrailingNewline)
 }
 
 function braceGeneratedCSingleLineControls(code: string): string {
-  return mapGeneratedCLines(code, (line) => {
+  const source = splitGeneratedCLines(code)
+  const mapped: string[] = []
+
+  for (let index = 0; index < source.lines.length; index = index + 1) {
+    const line = source.lines[index]
     const control = parseGeneratedCSingleLineControl(line)
 
     if (control == null) {
-      return [line]
+      mapped.push(line)
+      continue
     }
 
-    return [`${control.indent}${control.keyword} ${control.condition} {`, `${control.indent}  ${control.statement}`, `${control.indent}}`]
-  })
+    mapped.push(`${control.indent}${control.keyword} ${control.condition} {`)
+    mapped.push(`${control.indent}  ${control.statement}`)
+    mapped.push(`${control.indent}}`)
+  }
+
+  return joinGeneratedCLines(mapped, source.hasTrailingNewline)
 }
 
 function wrapGeneratedCLongControlConditions(code: string): string {
-  return mapGeneratedCLines(code, (line) => {
+  const source = splitGeneratedCLines(code)
+  const mapped: string[] = []
+
+  for (let index = 0; index < source.lines.length; index = index + 1) {
+    const line = source.lines[index]
+
     if (line.length <= generatedCColumnLimit) {
-      return [line]
+      mapped.push(line)
+      continue
     }
 
     const control = parseGeneratedCControlBlockStart(line)
 
-    if (control == null) {
-      return [line]
+    if (control != null) {
+      mapped.push(`${control.indent}${control.keyword} (`)
+      pushGeneratedCLines(mapped, wrapGeneratedCCondition(control.condition, control.indent))
+      mapped.push(`${control.indent}) {`)
+    } else {
+      mapped.push(line)
     }
+  }
 
-    return [
-      `${control.indent}${control.keyword} (`,
-      ...wrapGeneratedCCondition(control.condition, control.indent),
-      `${control.indent}) {`
-    ]
-  })
+  return joinGeneratedCLines(mapped, source.hasTrailingNewline)
 }
 
 function spaceGeneratedCControlFlow(code: string): string {
-  const lines = code.split('\n')
-  const hasTrailingNewline = lines.at(-1) === ''
+  const source = splitGeneratedCLines(code)
+  const lines = source.lines
 
-  if (hasTrailingNewline) {
-    lines.pop()
-  }
+  const blankBefore: Set<number> = new Set()
+  const blankAfter: Set<number> = new Set()
 
-  const blankBefore = new Set<number>()
-  const blankAfter = new Set<number>()
-
-  for (let index = 0; index < lines.length; index += 1) {
+  for (let index = 0; index < lines.length; index = index + 1) {
     if (isGeneratedCGotoLabel(lines[index])) {
       markBlankBefore(lines, index, blankBefore)
     }
@@ -89,7 +120,7 @@ function spaceGeneratedCControlFlow(code: string): string {
 
   const spaced: string[] = []
 
-  for (let index = 0; index < lines.length; index += 1) {
+  for (let index = 0; index < lines.length; index = index + 1) {
     if (blankBefore.has(index)) {
       pushGeneratedCBlankLine(spaced)
     }
@@ -101,20 +132,190 @@ function spaceGeneratedCControlFlow(code: string): string {
     }
   }
 
-  return `${spaced.join('\n')}${hasTrailingNewline ? '\n' : ''}`
+  return joinGeneratedCLines(spaced, source.hasTrailingNewline)
 }
 
-function mapGeneratedCLines(code: string, callback: (line: string) => string[]): string {
+type GeneratedCLineSet = {
+  lines: string[]
+  hasTrailingNewline: boolean
+}
+
+function splitGeneratedCLines(code: string): GeneratedCLineSet {
   const lines = code.split('\n')
-  const hasTrailingNewline = lines.at(-1) === ''
+  const hasTrailingNewline = lines.length > 0 && lines[lines.length - 1] === ''
 
   if (hasTrailingNewline) {
     lines.pop()
   }
 
-  const mapped = lines.flatMap(callback)
+  return {
+    lines,
+    hasTrailingNewline
+  }
+}
 
-  return `${mapped.join('\n')}${hasTrailingNewline ? '\n' : ''}`
+function joinGeneratedCLines(lines: string[], hasTrailingNewline: boolean): string {
+  if (hasTrailingNewline) {
+    return `${lines.join('\n')}\n`
+  }
+
+  return lines.join('\n')
+}
+
+function pushGeneratedCLines(target: string[], source: string[]): void {
+  for (let index = 0; index < source.length; index = index + 1) {
+    target.push(source[index])
+  }
+}
+
+function generatedCLeadingWhitespace(value: string): string {
+  let end = 0
+
+  while (end < value.length && isGeneratedCWhitespace(value[end])) {
+    end = end + 1
+  }
+
+  return value.slice(0, end)
+}
+
+function trimGeneratedCEnd(value: string): string {
+  let end = value.length
+
+  while (end > 0 && isGeneratedCWhitespace(value[end - 1])) {
+    end = end - 1
+  }
+
+  return value.slice(0, end)
+}
+
+function isGeneratedCWhitespace(char: string): boolean {
+  return char === ' ' || char === '\t' || char === '\r' || char === '\n'
+}
+
+function isGeneratedCIdentifierStart(char: string): boolean {
+  return (
+    char === '_' ||
+    (char >= 'A' && char <= 'Z') ||
+    (char >= 'a' && char <= 'z')
+  )
+}
+
+function isGeneratedCIdentifierPart(char: string): boolean {
+  return isGeneratedCIdentifierStart(char) || (char >= '0' && char <= '9')
+}
+
+function generatedCStringStartsWithAt(value: string, search: string, start: number): boolean {
+  if (start < 0 || start + search.length > value.length) {
+    return false
+  }
+
+  for (let index = 0; index < search.length; index = index + 1) {
+    if (value[start + index] !== search[index]) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function hasGeneratedCFunctionNamePrefix(prefix: string): boolean {
+  if (prefix.length === 0) {
+    return false
+  }
+
+  let start = prefix.length - 1
+
+  while (start >= 0 && isGeneratedCIdentifierPart(prefix[start])) {
+    start = start - 1
+  }
+
+  const nameStart = start + 1
+
+  if (nameStart >= prefix.length || !isGeneratedCIdentifierStart(prefix[nameStart])) {
+    return false
+  }
+
+  return start >= 0 && isGeneratedCWhitespace(prefix[start])
+}
+
+function isGeneratedCCallCallee(callee: string): boolean {
+  let start = 0
+
+  if (callee.startsWith('!')) {
+    start = 1
+  }
+
+  if (start >= callee.length || !isGeneratedCIdentifierStart(callee[start])) {
+    return false
+  }
+
+  for (let index = start + 1; index < callee.length; index = index + 1) {
+    if (!isGeneratedCIdentifierPart(callee[index])) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function startsWithGeneratedCControlKeyword(value: string): boolean {
+  return (
+    startsWithGeneratedCKeyword(value, 'if') ||
+    startsWithGeneratedCKeyword(value, 'for') ||
+    startsWithGeneratedCKeyword(value, 'while')
+  )
+}
+
+function startsWithGeneratedCKeyword(value: string, keyword: string): boolean {
+  if (!value.startsWith(keyword)) {
+    return false
+  }
+
+  if (value.length === keyword.length) {
+    return true
+  }
+
+  return !isGeneratedCIdentifierPart(value[keyword.length])
+}
+
+type GeneratedCControlPrefix = {
+  indent: string
+  keyword: string
+  conditionSearchStart: number
+}
+
+function parseGeneratedCControlPrefix(line: string): GeneratedCControlPrefix | null {
+  const indent = generatedCLeadingWhitespace(line)
+  let cursor = indent.length
+  let keyword: string | null = null
+
+  if (generatedCStringStartsWithAt(line, 'if', cursor)) {
+    keyword = 'if'
+  } else if (generatedCStringStartsWithAt(line, 'for', cursor)) {
+    keyword = 'for'
+  } else if (generatedCStringStartsWithAt(line, 'while', cursor)) {
+    keyword = 'while'
+  }
+
+  if (keyword != null) {
+    cursor = cursor + keyword.length
+
+    if (cursor >= line.length || !isGeneratedCWhitespace(line[cursor])) {
+      return null
+    }
+
+    while (cursor < line.length && isGeneratedCWhitespace(line[cursor])) {
+      cursor = cursor + 1
+    }
+
+    return {
+      indent,
+      keyword,
+      conditionSearchStart: cursor
+    }
+  }
+
+  return null
 }
 
 type GeneratedCFunctionHead = {
@@ -124,9 +325,18 @@ type GeneratedCFunctionHead = {
   suffix: string
 }
 
+type GeneratedCLineComment = {
+  statement: string
+  comment: string | null
+}
+
+type GeneratedCBraceScanResult = {
+  open: number
+  close: number
+}
+
 function parseGeneratedCFunctionHead(line: string): GeneratedCFunctionHead | null {
-  const indentMatch = /^(\s*)/.exec(line)
-  const indent = indentMatch?.[1] ?? ''
+  const indent = generatedCLeadingWhitespace(line)
   const trimmed = line.trim()
 
   if (
@@ -138,7 +348,13 @@ function parseGeneratedCFunctionHead(line: string): GeneratedCFunctionHead | nul
     return null
   }
 
-  const suffix = trimmed.endsWith(';') ? ';' : trimmed.endsWith('{') ? ' {' : null
+  let suffix: string | null = null
+
+  if (trimmed.endsWith(';')) {
+    suffix = ';'
+  } else if (trimmed.endsWith('{')) {
+    suffix = ' {'
+  }
 
   if (suffix == null) {
     return null
@@ -158,7 +374,7 @@ function parseGeneratedCFunctionHead(line: string): GeneratedCFunctionHead | nul
 
   const prefix = trimmed.slice(0, openParen)
 
-  if (!/\s[A-Za-z_][A-Za-z0-9_]*$/.test(prefix) || prefix.includes('=')) {
+  if (!hasGeneratedCFunctionNamePrefix(prefix) || prefix.includes('=')) {
     return null
   }
 
@@ -183,7 +399,7 @@ function splitGeneratedCParameters(source: string): string[] | null {
   let quote: '"' | "'" | null = null
   let escaped = false
 
-  for (let index = 0; index < source.length; index += 1) {
+  for (let index = 0; index < source.length; index = index + 1) {
     const char = source[index]
 
     if (quote != null) {
@@ -204,9 +420,9 @@ function splitGeneratedCParameters(source: string): string[] | null {
     }
 
     if (char === '(' || char === '[' || char === '{') {
-      depth += 1
+      depth = depth + 1
     } else if (char === ')' || char === ']' || char === '}') {
-      depth -= 1
+      depth = depth - 1
     } else if (char === ',' && depth === 0) {
       params.push(source.slice(start, index).trim())
       start = index + 1
@@ -219,7 +435,13 @@ function splitGeneratedCParameters(source: string): string[] | null {
 
   params.push(source.slice(start).trim())
 
-  return params.some((param) => param === '') ? null : params
+  for (let index = 0; index < params.length; index = index + 1) {
+    if (params[index] === '') {
+      return null
+    }
+  }
+
+  return params
 }
 
 type GeneratedCSingleLineControl = {
@@ -242,87 +464,107 @@ type GeneratedCCallCondition = {
 }
 
 function parseGeneratedCSingleLineControl(line: string): GeneratedCSingleLineControl | null {
-  const match = /^(\s*)(if|for|while)\s+/.exec(line)
+  const control = parseGeneratedCControlPrefix(line)
 
-  if (match == null) {
-    return null
+  if (control != null) {
+    const indent = control.indent
+    const keyword = control.keyword
+    const conditionStart = line.indexOf('(', control.conditionSearchStart)
+
+    if (conditionStart < 0) {
+      return null
+    }
+
+    const conditionEnd = findGeneratedCMatchingParen(line, conditionStart)
+
+    if (conditionEnd == null) {
+      return null
+    }
+
+    const condition = line.slice(conditionStart, conditionEnd + 1)
+    const rest = line.slice(conditionEnd + 1).trim()
+
+    if (rest === '' || rest.startsWith('{') || rest.startsWith(';') || rest.startsWith('/*')) {
+      return null
+    }
+
+    const lineComment = splitGeneratedCLineComment(rest)
+    const statement = lineComment.statement
+    const comment = lineComment.comment
+
+    if (!statement.endsWith(';')) {
+      return null
+    }
+
+    let nextStatement = statement
+
+    if (comment != null) {
+      nextStatement = `${statement} ${comment}`
+    }
+
+    return {
+      indent,
+      keyword,
+      condition,
+      statement: nextStatement
+    }
   }
 
-  const indent = match[1]
-  const keyword = match[2]
-  const conditionStart = line.indexOf('(', match[0].length - 1)
-
-  if (conditionStart < 0) {
-    return null
-  }
-
-  const conditionEnd = findGeneratedCMatchingParen(line, conditionStart)
-
-  if (conditionEnd == null) {
-    return null
-  }
-
-  const condition = line.slice(conditionStart, conditionEnd + 1)
-  const rest = line.slice(conditionEnd + 1).trim()
-
-  if (rest === '' || rest.startsWith('{') || rest.startsWith(';') || rest.startsWith('/*')) {
-    return null
-  }
-
-  const { statement, comment } = splitGeneratedCLineComment(rest)
-
-  if (!statement.endsWith(';')) {
-    return null
-  }
-
-  return {
-    indent,
-    keyword,
-    condition,
-    statement: comment == null ? statement : `${statement} ${comment}`
-  }
+  return null
 }
 
 function parseGeneratedCControlBlockStart(line: string): GeneratedCControlBlockStart | null {
-  const match = /^(\s*)(if|for|while)\s+/.exec(line)
+  const control = parseGeneratedCControlPrefix(line)
 
-  if (match == null) {
-    return null
+  if (control != null) {
+    const indent = control.indent
+    const keyword = control.keyword
+    const conditionStart = line.indexOf('(', control.conditionSearchStart)
+
+    if (conditionStart < 0) {
+      return null
+    }
+
+    const conditionEnd = findGeneratedCMatchingParen(line, conditionStart)
+
+    if (conditionEnd == null || line.slice(conditionEnd + 1).trim() !== '{') {
+      return null
+    }
+
+    return {
+      indent,
+      keyword,
+      condition: line.slice(conditionStart + 1, conditionEnd)
+    }
   }
 
-  const indent = match[1]
-  const keyword = match[2]
-  const conditionStart = line.indexOf('(', match[0].length - 1)
-
-  if (conditionStart < 0) {
-    return null
-  }
-
-  const conditionEnd = findGeneratedCMatchingParen(line, conditionStart)
-
-  if (conditionEnd == null || line.slice(conditionEnd + 1).trim() !== '{') {
-    return null
-  }
-
-  return {
-    indent,
-    keyword,
-    condition: line.slice(conditionStart + 1, conditionEnd)
-  }
+  return null
 }
 
 function wrapGeneratedCCondition(condition: string, indent: string): string[] {
   const call = parseGeneratedCCallCondition(condition)
 
-  if (call == null || call.args.length <= 1) {
-    return [`${indent}  ${condition}`]
+  if (call != null) {
+    if (call.args.length > 1) {
+      const lines: string[] = []
+      lines.push(`${indent}  ${call.callee}(`)
+
+      for (let index = 0; index < call.args.length; index = index + 1) {
+        let suffix = ','
+
+        if (index === call.args.length - 1) {
+          suffix = ''
+        }
+
+        lines.push(`${indent}    ${call.args[index]}${suffix}`)
+      }
+
+      lines.push(`${indent}  )${call.suffix}`)
+      return lines
+    }
   }
 
-  return [
-    `${indent}  ${call.callee}(`,
-    ...call.args.map((arg, index) => `${indent}    ${arg}${index === call.args.length - 1 ? '' : ','}`),
-    `${indent}  )${call.suffix}`
-  ]
+  return [`${indent}  ${condition}`]
 }
 
 function parseGeneratedCCallCondition(condition: string): GeneratedCCallCondition | null {
@@ -334,7 +576,7 @@ function parseGeneratedCCallCondition(condition: string): GeneratedCCallConditio
 
   const callee = condition.slice(0, openParen).trim()
 
-  if (!/^!?[A-Za-z_][A-Za-z0-9_]*$/.test(callee)) {
+  if (!isGeneratedCCallCallee(callee)) {
     return null
   }
 
@@ -364,7 +606,7 @@ function findGeneratedCMatchingParen(line: string, start: number): number | null
   let quote: '"' | "'" | null = null
   let escaped = false
 
-  for (let index = start; index < line.length; index += 1) {
+  for (let index = start; index < line.length; index = index + 1) {
     const char = line[index]
 
     if (quote != null) {
@@ -385,9 +627,9 @@ function findGeneratedCMatchingParen(line: string, start: number): number | null
     }
 
     if (char === '(') {
-      depth += 1
+      depth = depth + 1
     } else if (char === ')') {
-      depth -= 1
+      depth = depth - 1
 
       if (depth === 0) {
         return index
@@ -398,11 +640,11 @@ function findGeneratedCMatchingParen(line: string, start: number): number | null
   return null
 }
 
-function splitGeneratedCLineComment(line: string): { statement: string; comment: string | null } {
+function splitGeneratedCLineComment(line: string): GeneratedCLineComment {
   let quote: '"' | "'" | null = null
   let escaped = false
 
-  for (let index = 0; index < line.length - 1; index += 1) {
+  for (let index = 0; index < line.length - 1; index = index + 1) {
     const char = line[index]
 
     if (quote != null) {
@@ -424,7 +666,7 @@ function splitGeneratedCLineComment(line: string): { statement: string; comment:
 
     if (char === '/' && line[index + 1] === '/') {
       return {
-        statement: line.slice(0, index).trimEnd(),
+        statement: trimGeneratedCEnd(line.slice(0, index)),
         comment: line.slice(index)
       }
     }
@@ -480,7 +722,7 @@ function markBlankAfter(lines: string[], index: number, blankAfter: Set<number>)
 }
 
 function pushGeneratedCBlankLine(lines: string[]): void {
-  if (lines.length > 0 && lines.at(-1) !== '') {
+  if (lines.length > 0 && lines[lines.length - 1] !== '') {
     lines.push('')
   }
 }
@@ -488,7 +730,7 @@ function pushGeneratedCBlankLine(lines: string[]): void {
 function generatedCLeadingCommentGroupStart(lines: string[], index: number): number {
   let start = index
 
-  for (let cursor = index - 1; cursor >= 0 && isGeneratedCCommentOnlyLine(lines[cursor]); cursor -= 1) {
+  for (let cursor = index - 1; cursor >= 0 && isGeneratedCCommentOnlyLine(lines[cursor]); cursor = cursor - 1) {
     start = cursor
   }
 
@@ -496,7 +738,7 @@ function generatedCLeadingCommentGroupStart(lines: string[], index: number): num
 }
 
 function previousGeneratedCNonBlankLine(lines: string[], index: number): number | null {
-  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+  for (let cursor = index - 1; cursor >= 0; cursor = cursor - 1) {
     if (lines[cursor].trim() !== '') {
       return cursor
     }
@@ -506,7 +748,7 @@ function previousGeneratedCNonBlankLine(lines: string[], index: number): number 
 }
 
 function nextGeneratedCNonBlankLine(lines: string[], index: number): number | null {
-  for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+  for (let cursor = index + 1; cursor < lines.length; cursor = cursor + 1) {
     if (lines[cursor].trim() !== '') {
       return cursor
     }
@@ -516,15 +758,37 @@ function nextGeneratedCNonBlankLine(lines: string[], index: number): number | nu
 }
 
 function isGeneratedCControlStart(line: string): boolean {
-  return /^(if|for|while)\b/.test(line.trimStart())
+  return startsWithGeneratedCControlKeyword(line.trimStart())
 }
 
 function isGeneratedCGotoLabel(line: string): boolean {
-  return /^\s*ccjs_[A-Za-z0-9_]+:\s*;?\s*$/.test(line)
+  const trimmed = line.trim()
+
+  if (!trimmed.startsWith('ccjs_')) {
+    return false
+  }
+
+  const colon = trimmed.indexOf(':')
+
+  if (colon <= 5) {
+    return false
+  }
+
+  for (let index = 5; index < colon; index = index + 1) {
+    if (!isGeneratedCIdentifierPart(trimmed[index])) {
+      return false
+    }
+  }
+
+  const rest = trimmed.slice(colon + 1).trim()
+
+  return rest === '' || rest === ';'
 }
 
 function isGeneratedCCommentOnlyLine(line: string): boolean {
-  return /^\s*(\/\/|\/\*|\*|\*\/)/.test(line)
+  const trimmed = line.trimStart()
+
+  return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')
 }
 
 function findGeneratedCControlEnd(lines: string[], start: number): number | null {
@@ -534,7 +798,7 @@ function findGeneratedCControlEnd(lines: string[], start: number): number | null
   let depth = 0
   let started = false
 
-  for (let index = start; index < lines.length; index += 1) {
+  for (let index = start; index < lines.length; index = index + 1) {
     const braces = scanGeneratedCBraces(lines[index], state)
 
     if (braces.open > 0) {
@@ -542,7 +806,7 @@ function findGeneratedCControlEnd(lines: string[], start: number): number | null
     }
 
     if (started) {
-      depth += braces.open - braces.close
+      depth = depth + braces.open - braces.close
 
       if (depth <= 0) {
         return index
@@ -557,20 +821,20 @@ type GeneratedCBraceScanState = {
   inBlockComment: boolean
 }
 
-function scanGeneratedCBraces(line: string, state: GeneratedCBraceScanState): { open: number; close: number } {
+function scanGeneratedCBraces(line: string, state: GeneratedCBraceScanState): GeneratedCBraceScanResult {
   let open = 0
   let close = 0
   let quote: '"' | "'" | null = null
   let escaped = false
 
-  for (let index = 0; index < line.length; index += 1) {
+  for (let index = 0; index < line.length; index = index + 1) {
     const char = line[index]
     const next = line[index + 1]
 
     if (state.inBlockComment) {
       if (char === '*' && next === '/') {
         state.inBlockComment = false
-        index += 1
+        index = index + 1
       }
 
       continue
@@ -594,7 +858,7 @@ function scanGeneratedCBraces(line: string, state: GeneratedCBraceScanState): { 
 
     if (char === '/' && next === '*') {
       state.inBlockComment = true
-      index += 1
+      index = index + 1
       continue
     }
 
@@ -604,9 +868,9 @@ function scanGeneratedCBraces(line: string, state: GeneratedCBraceScanState): { 
     }
 
     if (char === '{') {
-      open += 1
+      open = open + 1
     } else if (char === '}') {
-      close += 1
+      close = close + 1
     }
   }
 
