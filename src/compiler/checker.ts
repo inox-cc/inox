@@ -5733,6 +5733,40 @@ class Checker {
       return 'array'
     }
 
+    if (expression.callee.property === 'find') {
+      expression.valueType = elementType
+      expression.nullable = true
+
+      const foundInfo = this.resolveDeclaredType(elementDeclaredType, expression.loc)
+      expression.shape = foundInfo.shape ?? null
+      expression.arrayElementType = foundInfo.arrayElementType ?? null
+      expression.arrayElementDeclaredType = foundInfo.arrayElementDeclaredType ?? null
+      expression.mapKeyType = foundInfo.mapKeyType ?? null
+      expression.mapValueType = foundInfo.mapValueType ?? null
+      expression.promiseValueType = foundInfo.promiseValueType ?? null
+      expression.setElementType = foundInfo.setElementType ?? null
+      expression.functionType = foundInfo.functionType ?? null
+
+      if (expression.args[0] != null) {
+        if (!this.isBooleanReference(expression.args[0])) {
+          this.checkArrayCallback(
+            expression.args[0],
+            [
+              { name: 'value', valueType: elementType },
+              { name: 'index', valueType: 'number' }
+            ],
+            'boolean'
+          )
+        }
+      }
+
+      for (const arg of expression.args.slice(1)) {
+        this.checkExpression(arg)
+      }
+
+      return elementType
+    }
+
     const mappedType =
       expression.args[0] == null
         ? 'unknown'

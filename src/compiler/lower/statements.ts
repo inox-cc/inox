@@ -355,6 +355,8 @@ function lowerArrayMethodVariableDeclaration(
 
   if (init.callee.property === 'filter') {
     expanded = lowerArrayFilterVariableDeclaration(statement, expandedInit, context)
+  } else if (init.callee.property === 'find') {
+    expanded = lowerArrayFindVariableDeclaration(statement, expandedInit, context)
   } else {
     expanded = lowerArrayMapVariableDeclaration(statement, expandedInit, context)
   }
@@ -367,7 +369,7 @@ function lowerArrayMethodVariableDeclaration(
 }
 
 function lowerArrayMethodExpressionToTemp(expression: LowerNode, context: LowerContext): ArrayExpressionHoist | null {
-  if (!isArrayMethodExpansionCall(expression)) {
+  if (!isArrayOutputMethodExpansionCall(expression)) {
     return null
   }
 
@@ -648,6 +650,18 @@ function isArrayMethodExpansionCall(expression: LowerNode): boolean {
     return false
   }
 
+  return (
+    expression.callee.property === 'filter' ||
+    expression.callee.property === 'find' ||
+    expression.callee.property === 'map'
+  )
+}
+
+function isArrayOutputMethodExpansionCall(expression: LowerNode): boolean {
+  if (!isArrayMethodExpansionCall(expression)) {
+    return false
+  }
+
   return expression.callee.property === 'filter' || expression.callee.property === 'map'
 }
 
@@ -708,6 +722,67 @@ function lowerArrayFilterVariableDeclaration(
       consequent: {
         type: 'BlockStatement',
         body: [createArrayPushStatement(statement.name, statement, pushValue, init.loc)],
+        loc: init.loc
+      },
+      alternate: null,
+      loc: init.loc
+    }
+  ])
+}
+
+function lowerArrayFindVariableDeclaration(
+  statement: LowerNode,
+  init: LowerNode,
+  context: LowerContext
+): LowerNode[] | null {
+  const callback = init.args[0]
+  const receiver = init.callee.object
+  const receiverElement = resolveReceiverElementInfo(receiver, callback, context)
+
+  if (receiverElement.valueType === 'unknown' || receiverElement.valueType === 'void') {
+    return null
+  }
+
+  const indexName = nextLowerName(context, 'ccjs_find_index')
+  const valueParam = callback?.type === 'ArrowFunctionExpression' ? callback.params[0] : null
+  const indexParam = callback?.type === 'ArrowFunctionExpression' ? callback.params[1] : null
+  const itemName =
+    valueParam != null && valueParam.name !== statement.name ? valueParam.name : nextLowerName(context, 'ccjs_find_item')
+  const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
+  let predicate: LowerNode | null = null
+
+  if (isBooleanFilterCallback(callback)) {
+    predicate = createTruthyCondition(createReference(itemName, receiverElement, receiver.loc), receiverElement.valueType)
+  } else if (callback?.type === 'ArrowFunctionExpression' && callback.params.length <= 2) {
+    const returned = resolveSimpleArrowReturnExpression(callback)
+
+    if (returned == null) {
+      return null
+    }
+
+    predicate = replaceExpressionReferences(returned, replacements)
+  }
+
+  if (predicate == null) {
+    return null
+  }
+
+  const output = createArrayFindOutputDeclaration(statement, receiverElement)
+  const foundValue = createReference(itemName, receiverElement, receiver.loc)
+
+  return createArrayFindLoopStatements(output, receiver, receiverElement, indexName, itemName, [
+    {
+      type: 'IfStatement',
+      condition: lowerStatementExpression(predicate, context),
+      consequent: {
+        type: 'BlockStatement',
+        body: [
+          createAssignmentStatement(createNullableReference(statement.name, receiverElement, init.loc), foundValue, init.loc),
+          {
+            type: 'BreakStatement',
+            loc: init.loc
+          }
+        ],
         loc: init.loc
       },
       alternate: null,
@@ -837,6 +912,77 @@ function createArrayLoopStatements(
   ]
 }
 
+function createArrayFindLoopStatements(
+  statement: LowerNode,
+  receiver: LowerNode,
+  receiverElement: ArrayElementInfo,
+  indexName: string,
+  itemName: string,
+  loopBody: LowerNode[]
+): LowerNode[] {
+  const indexReference = createNumberReference(indexName, statement.loc)
+  const itemIndex = createArrayIndexExpression(receiver, indexReference, receiverElement, receiver.loc)
+  const itemDeclaration = createLoopItemDeclaration(itemName, itemIndex, receiverElement, receiver.loc)
+  const body: LowerNode[] = [itemDeclaration]
+
+  for (const statement of loopBody) {
+    body.push(statement)
+  }
+
+  return [
+    statement,
+    {
+      type: 'ForStatement',
+      init: {
+        type: 'VariableDeclaration',
+        kind: 'let',
+        exported: false,
+        name: indexName,
+        loc: statement.loc,
+        declaredType: null,
+        nullable: false,
+        shape: null,
+        functionType: null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null,
+        valueType: 'number',
+        init: {
+          type: 'NumberLiteral',
+          value: '0',
+          valueType: 'number',
+          loc: statement.loc
+        }
+      },
+      test: {
+        type: 'BinaryExpression',
+        operator: '<',
+        left: createNumberReference(indexName, statement.loc),
+        right: createArrayLengthExpression(receiver, receiver.loc),
+        valueType: 'boolean',
+        loc: statement.loc
+      },
+      update: {
+        type: 'UpdateExpression',
+        operator: '++',
+        argument: createNumberReference(indexName, statement.loc),
+        prefix: false,
+        valueType: 'number',
+        loc: statement.loc
+      },
+      body: {
+        type: 'BlockStatement',
+        body,
+        loc: statement.loc
+      },
+      loc: statement.loc
+    }
+  ]
+}
+
 type ArrayElementInfo = {
   valueType: string
   declaredType: string | null
@@ -893,6 +1039,29 @@ function createArrayOutputDeclaration(statement: LowerNode): LowerNode {
       valueType: 'array',
       arrayElementType: elementType,
       arrayElementDeclaredType: elementDeclaredType,
+      loc: statement.loc
+    }
+  }
+}
+
+function createArrayFindOutputDeclaration(statement: LowerNode, element: ArrayElementInfo): LowerNode {
+  return {
+    ...statement,
+    kind: 'let',
+    nullable: true,
+    valueType: element.valueType,
+    shape: element.shape,
+    functionType: element.functionType,
+    arrayElementType: element.arrayElementType,
+    arrayElementDeclaredType: element.arrayElementDeclaredType,
+    mapKeyType: element.mapKeyType,
+    mapValueType: element.mapValueType,
+    promiseValueType: element.promiseValueType,
+    setElementType: element.setElementType,
+    init: {
+      type: 'NullLiteral',
+      value: null,
+      valueType: 'null',
       loc: statement.loc
     }
   }
@@ -1102,6 +1271,39 @@ function createReference(name: string, info: ArrayElementInfo, loc: LowerNode['l
     setElementType: info.setElementType,
     functionType: info.functionType,
     shape: info.shape,
+    loc
+  }
+}
+
+function createNullableReference(name: string, info: ArrayElementInfo, loc: LowerNode['loc']): LowerNode {
+  return {
+    type: 'Reference',
+    path: [name],
+    valueType: info.valueType,
+    nullable: true,
+    arrayElementType: info.arrayElementType,
+    arrayElementDeclaredType: info.arrayElementDeclaredType,
+    mapKeyType: info.mapKeyType,
+    mapValueType: info.mapValueType,
+    promiseValueType: info.promiseValueType,
+    setElementType: info.setElementType,
+    functionType: info.functionType,
+    shape: info.shape,
+    loc
+  }
+}
+
+function createAssignmentStatement(target: LowerNode, value: LowerNode, loc: LowerNode['loc']): LowerNode {
+  return {
+    type: 'ExpressionStatement',
+    expression: {
+      type: 'AssignmentExpression',
+      target,
+      value,
+      valueType: target.valueType,
+      nullable: target.nullable === true,
+      loc
+    },
     loc
   }
 }

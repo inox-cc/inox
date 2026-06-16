@@ -1,4 +1,4 @@
-export const arrayMethods: string[] = ['filter', 'map', 'pop', 'push', 'sort']
+export const arrayMethods: string[] = ['filter', 'find', 'map', 'pop', 'push', 'sort']
 export const collectionConstructors: string[] = ['Map', 'Set']
 export const mapMethods: string[] = ['clear', 'delete', 'get', 'has', 'set']
 export const setMethods: string[] = ['add', 'clear', 'delete', 'has']

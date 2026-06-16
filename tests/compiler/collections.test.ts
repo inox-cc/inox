@@ -1266,6 +1266,54 @@ test('checks Array sort filter map as typed chain calls', () => {
 })
 
 
+test('lowers C Array.find declarations to nullable loop results', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const values = [1, 2, 3]
+  const found = values.find((value, index) => value > index + 1)
+
+  if (found != null) {
+    console.log(found)
+  }
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+
+  const found = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'found')
+  const loop = main.body.find(
+    (item) => item.type === 'ForStatement' && /^__ccjs_find_index_\d+$/.test(item.init.name)
+  )
+
+  assert.ok(found)
+  assert.ok(loop)
+  assert.equal(found.kind, 'let')
+  assert.equal(found.valueType, 'number')
+  assert.equal(found.nullable, true)
+  assert.equal(found.init.type, 'NullLiteral')
+  assert.match(result.code, /found = ccjs_null_value\(\);/)
+  assert.match(result.code, /for \(;;\) \{/)
+  assert.match(result.code, /if \(value > \(__ccjs_find_index_\d+ \+ 1\)\) \{/)
+  assert.match(result.code, /found = ccjs_nullable_value_\d+;/)
+  assert.match(result.code, /goto ccjs_break_\d+;/)
+  assert.doesNotMatch(result.code, /CCJS_C_ARRAY_METHOD/)
+
+  assertDiagnostic(
+    `export function main(): void {
+  const values = [1]
+  values.find(value => value + 1)
+}
+`,
+    'CCJS_TYPE_MISMATCH'
+  )
+})
+
+
 test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   const result = compileSource(
     `export function main(): void {
