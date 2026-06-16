@@ -1,5 +1,3 @@
-export type DebugRuntimeMethod = 'memory'
-
 export const debugMemoryStatsFields = [
   {
     name: 'allocCount',
@@ -49,12 +47,16 @@ export const debugMemoryStatsFields = [
     name: 'oomFailureCount',
     cField: 'oom_failure_count'
   }
-] as const
+]
 
-export function debugRuntimeMethodNameFromPath(path: readonly string[] | null | undefined): DebugRuntimeMethod | null {
+export function debugRuntimeMethodNameFromPath(path: string[] | null | undefined): string | null {
   if (path == null || path.length !== 3 || path[0] !== 'ccjs' || path[1] !== '__debug') {
     return null
   }
 
-  return path[2] === 'memory' ? 'memory' : null
+  if (path[2] === 'memory') {
+    return 'memory'
+  }
+
+  return null
 }
