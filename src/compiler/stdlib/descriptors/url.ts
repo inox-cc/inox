@@ -1,8 +1,8 @@
-export const urlRuntimeMethods = ['fileURLToPath', 'pathToFileURL'] as const
+export const urlRuntimeMethods = ['fileURLToPath', 'pathToFileURL']
 
-export const urlRuntimeConstructors = ['URL', 'URLSearchParams'] as const
+export const urlRuntimeConstructors = ['URL', 'URLSearchParams']
 
-export const urlSearchParamsRuntimeMethods = ['append', 'delete', 'get', 'has', 'set', 'toString'] as const
+export const urlSearchParamsRuntimeMethods = ['append', 'delete', 'get', 'has', 'set', 'toString']
 
 export const unsupportedUrlRuntimeMethods = [
   'domainToASCII',
@@ -11,43 +11,52 @@ export const unsupportedUrlRuntimeMethods = [
   'parse',
   'resolve',
   'urlToHttpOptions'
-] as const
+]
 
-export const urlObjectFields = ['href', 'protocol', 'hostname', 'port', 'pathname', 'search', 'hash'] as const
-export const urlMutableObjectFields = ['pathname', 'search', 'hash'] as const
-export const urlSearchParamsObjectFields = ['query'] as const
+export const urlObjectFields = ['href', 'protocol', 'hostname', 'port', 'pathname', 'search', 'hash']
+export const urlMutableObjectFields = ['pathname', 'search', 'hash']
+export const urlSearchParamsObjectFields = ['query']
 
-export type UrlRuntimeMethod = (typeof urlRuntimeMethods)[number]
-export type UrlRuntimeConstructor = (typeof urlRuntimeConstructors)[number]
-export type UrlSearchParamsRuntimeMethod = (typeof urlSearchParamsRuntimeMethods)[number]
+export type UrlRuntimeMethod = string
+export type UrlRuntimeConstructor = string
+export type UrlSearchParamsRuntimeMethod = string
 
-const nodeUrlImportSources = new Set(['node:url'])
-const urlRuntimeMethodSet = new Set<string>(urlRuntimeMethods)
-const urlRuntimeConstructorSet = new Set<string>(urlRuntimeConstructors)
-const urlMutableObjectFieldSet = new Set<string>(urlMutableObjectFields)
-const urlSearchParamsRuntimeMethodSet = new Set<string>(urlSearchParamsRuntimeMethods)
-const unsupportedUrlRuntimeMethodSet = new Set<string>(unsupportedUrlRuntimeMethods)
+const nodeUrlImportSources = ['node:url']
+
+function urlStringListHas(list: string[], value: string): boolean {
+  for (const item of list) {
+    if (item === value) {
+      return true
+    }
+  }
+
+  return false
+}
 
 export function isNodeUrlImportSource(source: string | null | undefined): boolean {
-  return source != null && nodeUrlImportSources.has(source)
+  if (source == null) {
+    return false
+  }
+
+  return urlStringListHas(nodeUrlImportSources, source)
 }
 
-export function isUrlRuntimeMethod(method: string): method is UrlRuntimeMethod {
-  return urlRuntimeMethodSet.has(method)
+export function isUrlRuntimeMethod(method: string): boolean {
+  return urlStringListHas(urlRuntimeMethods, method)
 }
 
-export function isUrlRuntimeConstructor(method: string): method is UrlRuntimeConstructor {
-  return urlRuntimeConstructorSet.has(method)
+export function isUrlRuntimeConstructor(method: string): boolean {
+  return urlStringListHas(urlRuntimeConstructors, method)
 }
 
 export function isUrlMutableObjectField(field: string): boolean {
-  return urlMutableObjectFieldSet.has(field)
+  return urlStringListHas(urlMutableObjectFields, field)
 }
 
-export function isUrlSearchParamsRuntimeMethod(method: string): method is UrlSearchParamsRuntimeMethod {
-  return urlSearchParamsRuntimeMethodSet.has(method)
+export function isUrlSearchParamsRuntimeMethod(method: string): boolean {
+  return urlStringListHas(urlSearchParamsRuntimeMethods, method)
 }
 
 export function isUnsupportedUrlRuntimeMethod(method: string): boolean {
-  return unsupportedUrlRuntimeMethodSet.has(method)
+  return urlStringListHas(unsupportedUrlRuntimeMethods, method)
 }
