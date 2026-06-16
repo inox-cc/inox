@@ -181,18 +181,22 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
 
 function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
   const bases = resolveObjectShapeBases(shape, context)
+  const fields = bases.fields.concat(shape.fields)
 
   return {
     ...shape,
     dynamic: shape.dynamic === true || bases.dynamic,
-    fields: bases.fields.concat(shape.fields).map((field) => {
-      const declared = resolveFieldDeclaredType(field, context)
+    fields: fields.map((field) => {
+      const weakField = field.ownership === 'weak' || hasWeakOwnershipMarker(fields, field.name)
+      const declared = weakField
+        ? resolveWeakTargetShapeFieldType(field, context)
+        : resolveFieldDeclaredType(field, context)
 
       return {
         ...field,
         declaredType: field.valueType,
         valueType: declared.valueType ?? field.valueType,
-        nullable: declared.nullable || field.optional === true,
+        nullable: declared.nullable || weakField || field.optional === true,
         arrayElementType: declared.arrayElementType,
         arrayElementDeclaredType: declared.arrayElementDeclaredType,
         mapKeyType: declared.mapKeyType,
@@ -204,6 +208,18 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
       }
     })
   }
+}
+
+function hasWeakOwnershipMarker(fields: AnyNode[], fieldName: string): boolean {
+  const markerName = `${fieldName}Ownership`
+
+  for (const field of fields) {
+    if (field.name === markerName && field.optional === true && field.valueType === 'string') {
+      return true
+    }
+  }
+
+  return false
 }
 
 function resolveObjectShapeBases(shape: AnyNode, context: LowerContext) {

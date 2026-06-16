@@ -153,7 +153,7 @@ export function main(): void {}
 })
 
 test('allows TypeScript-compatible weak ownership markers on type fields', () => {
-  compileSource(`type Param = {
+  const compiled = compileSourceToIr(`type Param = {
   functionTypeOwnership?: 'weak'
   functionType?: Fn | null
 }
@@ -162,8 +162,20 @@ type Fn = {
   params: Param[]
 }
 
-export function main(): void {}
+export function main(): void {
+  const fn: Fn = { params: [] }
+  const param: Param = { functionType: fn }
+  const maybe = param.functionType
+
+  if (maybe != null) {
+    console.log(maybe.params.length)
+  }
+}
 `)
+  const main = compiled.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const maybe = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'maybe')
+
+  assert.equal(maybe?.init.nullable, true)
 })
 
 test('rejects direct weak dereference without a null check', () => {

@@ -10,8 +10,7 @@ import {
   emitFailureStatement,
   emitStatusCheck,
   nextCName,
-  registerEventLoop,
-  type CFunctionContext
+  registerEventLoop
 } from '../context.ts'
 import type {
   CFunctionType,
@@ -19,70 +18,193 @@ import type {
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 
+type TimerFunctionContext = {
+  cleanupEnabled: boolean
+  diagnostics: AnyNode[]
+  eventLoopUsed: boolean
+  externalEventLoop: boolean
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  nextId: number
+  returnType?: string
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  variables: Map<string, string>
+}
+
 export type TimerLoweringDependencies = {
-  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitReference: (expression: AnyNode, context: CFunctionContext) => string
-  emitRuntimeCallbackValue: (
+  emitPreparedNumberExpression(expression: AnyNode, context: TimerFunctionContext): PreparedExpression
+  emitReference(expression: AnyNode, context: TimerFunctionContext): string
+  emitRuntimeCallbackValue(
     expression: AnyNode,
     functionType: CFunctionType | null | undefined,
-    context: CFunctionContext
-  ) => PreparedExpression
+    context: TimerFunctionContext
+  ): PreparedExpression
 }
 
 type TimerStartCallDescriptor = {
   callName: string
   delay: boolean
+  method: string
   requiresHandle: boolean
 }
 
-const timerStartCallDescriptors: Record<string, TimerStartCallDescriptor> = {
-  setImmediate: {
+const timerStartCallDescriptors: TimerStartCallDescriptor[] = [
+  {
+    method: 'setImmediate',
     callName: 'ccjs_loop_queue_immediate',
     delay: false,
     requiresHandle: false
   },
-  setInterval: {
+  {
+    method: 'setInterval',
     callName: 'ccjs_loop_set_interval',
     delay: true,
     requiresHandle: true
   },
-  setTimeout: {
+  {
+    method: 'setTimeout',
     callName: 'ccjs_loop_set_timeout',
     delay: true,
     requiresHandle: false
   }
-}
+]
 
-export function cTimerRuntimeCallName(callee: AnyNode): string | null {
-  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+export function cTimerRuntimeCallName(callee: AnyNode | null | undefined): string | null {
+  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 
   return timerRuntimeMethodNameFromPath(callee.path)
 }
 
-export function cTimerStartCallName(callee: AnyNode): string | null {
-  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+export function cTimerStartCallName(callee: AnyNode | null | undefined): string | null {
+  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 
-  return isTimerStartMethod(callee.path[0]) ? callee.path[0] : null
+  if (isTimerStartMethod(callee.path[0])) {
+    return callee.path[0]
+  }
+
+  return null
 }
 
-export function cTimerClearCallName(callee: AnyNode): string | null {
-  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+export function cTimerClearCallName(callee: AnyNode | null | undefined): string | null {
+  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 
-  return isTimerClearMethod(callee.path[0]) ? callee.path[0] : null
+  if (isTimerClearMethod(callee.path[0])) {
+    return callee.path[0]
+  }
+
+  return null
 }
 
-export function isTimerStartCallExpression(expression: AnyNode): boolean {
-  if (expression?.type !== 'CallExpression') {
+export function isTimerStartCallExpression(expression: AnyNode | null | undefined): boolean {
+  if (expression == null || expression.type !== 'CallExpression') {
     return false
   }
 
-  return cTimerStartCallName(expression.callee) != null || expression.timerRuntimeMethod?.startsWith('set') === true
+  return cTimerStartCallName(expression.callee) != null || timerRuntimeMethodStartsWithSet(expression)
+}
+
+function timerStartCallDescriptorFor(method: string | null): TimerStartCallDescriptor | null {
+  if (method == null) {
+    return null
+  }
+
+  for (const descriptor of timerStartCallDescriptors) {
+    if (descriptor.method === method) {
+      return descriptor
+    }
+  }
+
+  return null
+}
+
+function timerStartCallNameFor(method: string | null): string | null {
+  const descriptor = timerStartCallDescriptorFor(method)
+
+  if (descriptor != null) {
+    return descriptor.callName
+  }
+
+  return null
+}
+
+function timerStartCallHasDelay(method: string | null): boolean {
+  const descriptor = timerStartCallDescriptorFor(method)
+
+  if (descriptor != null) {
+    return descriptor.delay
+  }
+
+  return false
+}
+
+function timerStartCallRequiresHandle(method: string | null): boolean {
+  const descriptor = timerStartCallDescriptorFor(method)
+
+  if (descriptor != null) {
+    return descriptor.requiresHandle
+  }
+
+  return false
+}
+
+function timerRuntimeMethodForExpression(expression: AnyNode): string | null {
+  if (expression.timerRuntimeMethod != null) {
+    return expression.timerRuntimeMethod
+  }
+
+  return cTimerRuntimeCallName(expression.callee)
+}
+
+function timerRuntimeMethodStartsWithSet(expression: AnyNode): boolean {
+  if (expression.timerRuntimeMethod == null) {
+    return false
+  }
+
+  return expression.timerRuntimeMethod.startsWith('set')
+}
+
+function appendTimerLines(target: string[], lines: string[]): void {
+  for (const line of lines) {
+    target.push(line)
+  }
+}
+
+function timerOutName(options: PreparedCallOptions, context: TimerFunctionContext): string | null {
+  if (options.out != null) {
+    return options.out
+  }
+
+  if (options.asValue === true) {
+    return nextCName(context, 'ccjs_timer_handle')
+  }
+
+  return null
+}
+
+function timerOutArgument(out: string | null): string {
+  if (out == null) {
+    return '0'
+  }
+
+  return `&${out}`
+}
+
+function timerOutExpression(out: string | null): string {
+  let expression = ''
+
+  if (out != null) {
+    expression = out
+  }
+
+  return expression
 }
 
 export function timerCallbackFunctionType(): CFunctionType {
@@ -96,24 +218,28 @@ export function timerCallbackFunctionType(): CFunctionType {
 
 export function emitTimerVariableDeclaration(
   statement: AnyNode,
-  context: CFunctionContext,
+  context: TimerFunctionContext,
   dependencies: TimerLoweringDependencies,
-  inferred?: string
+  inferred: string | null = null
 ): string[] | null {
   if (inferred == null) {
-    if (statement.init?.type === 'CallExpression' && isTimerStartCallExpression(statement.init)) {
-      const timerCall = emitPreparedTimerCallExpression(statement.init, context, dependencies, {
+    const init = statement.init
+
+    if (init != null && init.type === 'CallExpression' && isTimerStartCallExpression(init)) {
+      const timerCall = emitPreparedTimerCallExpression(init, context, dependencies, {
         out: statement.name
       })
 
       if (timerCall != null) {
+        const lines = [`ccjs_timer_handle* ${statement.name} = 0;`]
+        appendTimerLines(lines, timerCall.lines)
         context.variables.set(statement.name, 'timer')
 
-        return [`ccjs_timer_handle* ${statement.name} = 0;`, ...timerCall.lines]
+        return lines
       }
     }
 
-    if (statement.init?.type === 'CallExpression' && cTimerClearCallName(statement.init.callee) != null) {
+    if (init != null && init.type === 'CallExpression' && cTimerClearCallName(init.callee) != null) {
       context.diagnostics.push(
         diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls return void and cannot initialize a value', statement.loc)
       )
@@ -130,38 +256,52 @@ export function emitTimerVariableDeclaration(
   }
 
   const handle = emitPreparedTimerHandleExpression(statement.init, context, dependencies)
+  const lines: string[] = []
+
+  appendTimerLines(lines, handle.lines)
+  lines.push(`ccjs_timer_handle* ${statement.name} = ${handle.expression};`)
 
   context.variables.set(statement.name, 'timer')
 
-  return [...handle.lines, `ccjs_timer_handle* ${statement.name} = ${handle.expression};`]
+  return lines
 }
 
 export function emitPreparedTimerCallExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: TimerFunctionContext,
   dependencies: TimerLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  const method = expression?.timerRuntimeMethod ?? cTimerRuntimeCallName(expression?.callee)
+  const method = timerRuntimeMethodForExpression(expression)
 
   if (method == null) {
     return null
   }
 
-  const clearMethod = method.startsWith('clear') ? method : cTimerClearCallName(expression.callee)
+  let clearMethod: string | null = null
+
+  if (method.startsWith('clear')) {
+    clearMethod = method
+  } else {
+    clearMethod = cTimerClearCallName(expression.callee)
+  }
 
   if (clearMethod != null) {
     const handle = emitPreparedTimerHandleExpression(expression.args[0], context, dependencies)
+    const lines: string[] = []
+
+    appendTimerLines(lines, handle.lines)
+    lines.push(`ccjs_loop_clear_timer(${handle.expression});`)
 
     return {
-      lines: [...handle.lines, `ccjs_loop_clear_timer(${handle.expression});`],
+      lines: lines,
       expression: ''
     }
   }
 
-  const descriptor = timerStartCallDescriptors[method]
+  const callName = timerStartCallNameFor(method)
 
-  if (descriptor == null) {
+  if (callName == null) {
     return null
   }
 
@@ -180,7 +320,7 @@ export function emitPreparedTimerCallExpression(
     }
   }
 
-  if (descriptor.requiresHandle && options.out == null && options.asValue !== true) {
+  if (timerStartCallRequiresHandle(method) && options.out == null && options.asValue !== true) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_TIMER_HANDLE',
@@ -197,56 +337,60 @@ export function emitPreparedTimerCallExpression(
 
   registerEventLoop(context)
 
-  const out = options.out ?? (options.asValue === true ? nextCName(context, 'ccjs_timer_handle') : null)
+  const out = timerOutName(options, context)
   const callback = dependencies.emitRuntimeCallbackValue(expression.args[0], timerCallbackFunctionType(), context)
   const callbackContext = nextCName(context, 'ccjs_timer_ctx')
-  const lines = [
-    ...(out != null && options.out == null ? [`ccjs_timer_handle* ${out} = 0;`] : []),
-    ...callback.lines,
-    `ccjs_value* ${callbackContext} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`,
-    `if (${callbackContext} == 0) ${emitFailureStatement(context)}`,
-    `*${callbackContext} = ${callback.expression};`,
-    `ccjs_retain(*${callbackContext});`
-  ]
-  const outArgument = out == null ? '0' : `&${out}`
+  const lines: string[] = []
 
-  if (!descriptor.delay) {
+  if (out != null && options.out == null) {
+    lines.push(`ccjs_timer_handle* ${out} = 0;`)
+  }
+
+  appendTimerLines(lines, callback.lines)
+  lines.push(`ccjs_value* ${callbackContext} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`)
+  lines.push(`if (${callbackContext} == 0) ${emitFailureStatement(context)}`)
+  lines.push(`*${callbackContext} = ${callback.expression};`)
+  lines.push(`ccjs_retain(*${callbackContext});`)
+  const outArgument = timerOutArgument(out)
+
+  if (!timerStartCallHasDelay(method)) {
     lines.push(
-      `if (${descriptor.callName}(${emitEventLoopReference(context)}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
+      `if (${callName}(${emitEventLoopReference(context)}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
     )
     lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
     lines.push(`  ${emitFailureStatement(context)}`)
     lines.push('}')
 
     return {
-      lines,
-      expression: out ?? ''
+      lines: lines,
+      expression: timerOutExpression(out)
     }
   }
 
   const delay = dependencies.emitPreparedNumberExpression(expression.args[1], context)
 
-  lines.push(...delay.lines)
+  appendTimerLines(lines, delay.lines)
   lines.push(
-    `if (${descriptor.callName}(${emitEventLoopReference(context)}, ${delay.expression}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
+    `if (${callName}(${emitEventLoopReference(context)}, ${delay.expression}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
   )
   lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
   lines.push(`  ${emitFailureStatement(context)}`)
   lines.push('}')
 
   return {
-    lines,
-    expression: out ?? ''
+    lines: lines,
+    expression: timerOutExpression(out)
   }
 }
 
 export function emitPreparedTimerHandleExpression(
-  expression: AnyNode,
-  context: CFunctionContext,
+  expression: AnyNode | null | undefined,
+  context: TimerFunctionContext,
   dependencies: TimerLoweringDependencies
 ): PreparedExpression {
   if (
-    expression?.type === 'Reference' &&
+    expression != null &&
+    expression.type === 'Reference' &&
     expression.path.length === 1 &&
     context.variables.get(expression.path[0]) === 'timer'
   ) {
@@ -257,8 +401,9 @@ export function emitPreparedTimerHandleExpression(
   }
 
   if (
-    expression?.type === 'CallExpression' &&
-    (cTimerStartCallName(expression.callee) != null || expression.timerRuntimeMethod?.startsWith('set'))
+    expression != null &&
+    expression.type === 'CallExpression' &&
+    (cTimerStartCallName(expression.callee) != null || timerRuntimeMethodStartsWithSet(expression))
   ) {
     const call = emitPreparedTimerCallExpression(expression, context, dependencies, {
       asValue: true
@@ -269,9 +414,15 @@ export function emitPreparedTimerHandleExpression(
     }
   }
 
-  context.diagnostics.push(
-    diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls require a timer handle value', expression?.loc)
-  )
+  if (expression != null) {
+    context.diagnostics.push(
+      diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls require a timer handle value', expression.loc)
+    )
+  } else {
+    context.diagnostics.push(
+      diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls require a timer handle value')
+    )
+  }
 
   return {
     lines: [],

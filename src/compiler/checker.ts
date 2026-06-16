@@ -7662,18 +7662,20 @@ class Checker {
 
   resolveObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
     const bases = this.resolveObjectShapeBases(shape)
+    const fields = bases.fields.concat(shape.fields)
 
     return {
       ...shape,
       dynamic: shape.dynamic === true || bases.dynamic,
-      fields: bases.fields.concat(shape.fields).map((field) => {
-        const fieldInfo = this.resolveFieldDeclaredType(field)
+      fields: fields.map((field) => {
+        const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
+        const fieldInfo = weakField ? this.resolveWeakTargetShapeFieldType(field) : this.resolveFieldDeclaredType(field)
 
         return {
           ...field,
           declaredType: field.valueType,
           valueType: fieldInfo.valueType,
-          nullable: fieldInfo.nullable || field.optional === true,
+          nullable: fieldInfo.nullable || weakField || field.optional === true,
           arrayElementType: fieldInfo.arrayElementType,
           arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
           mapKeyType: fieldInfo.mapKeyType,

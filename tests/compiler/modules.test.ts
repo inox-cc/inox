@@ -1,5 +1,9 @@
 import test from 'node:test'
-import { createTypeImportDeclarations } from '../../src/compiler/modules/synthetic-imports.ts'
+import {
+  createTypeImportDeclarations,
+  insertImportSyntheticDeclarations
+} from '../../src/compiler/modules/synthetic-imports.ts'
+import type { AnyNode } from '../../src/compiler/types.ts'
 import {
   assert,
   assertDiagnostic,
@@ -518,6 +522,52 @@ test('does not recurse forever on cyclic transitive type-only imports', () => {
   assert.deepEqual(
     declarations.map((item) => item.name),
     ['Child', 'Parent', 'LocalOptions']
+  )
+})
+
+
+test('deduplicates synthetic type declarations inserted by multiple type imports', () => {
+  const loc = {
+    file: 'main.ts',
+    line: 1,
+    column: 1
+  }
+  const program = {
+    type: 'Program',
+    body: [
+      {
+        type: 'ImportDeclaration',
+        specifiers: [],
+        loc
+      },
+      {
+        type: 'ImportDeclaration',
+        specifiers: [],
+        loc
+      }
+    ]
+  }
+  const importedAnyNode = {
+    type: 'TypeAliasDeclaration',
+    exported: false,
+    name: 'AnyNode',
+    loc,
+    valueType: {
+      kind: 'object',
+      baseTypes: [],
+      fields: []
+    }
+  }
+  const declarationsByImport = new Map<number, AnyNode[]>()
+
+  declarationsByImport.set(0, [importedAnyNode])
+  declarationsByImport.set(1, [importedAnyNode])
+
+  const updated = insertImportSyntheticDeclarations(program, declarationsByImport)
+
+  assert.deepEqual(
+    updated.body.filter((item) => item.type === 'TypeAliasDeclaration').map((item) => item.name),
+    ['AnyNode']
   )
 })
 

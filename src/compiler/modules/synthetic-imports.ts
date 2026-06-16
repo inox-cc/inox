@@ -9,13 +9,29 @@ export function insertImportSyntheticDeclarations(
   }
 
   const body: AnyNode[] = []
+  const declaredTypes = collectProgramTypeDeclarationNames(program)
   let importIndex = 0
 
   for (const item of program.body) {
     body.push(item)
 
     if (item.type === 'ImportDeclaration') {
-      body.push(...(declarationsByImport.get(importIndex) ?? []))
+      const declarations = declarationsByImport.get(importIndex)
+
+      if (declarations != null) {
+        for (const declaration of declarations) {
+          if (declaration.type === 'TypeAliasDeclaration') {
+            if (declaredTypes.has(declaration.name)) {
+              continue
+            }
+
+            declaredTypes.add(declaration.name)
+          }
+
+          body.push(declaration)
+        }
+      }
+
       importIndex += 1
     }
   }
@@ -24,6 +40,18 @@ export function insertImportSyntheticDeclarations(
     ...program,
     body
   }
+}
+
+function collectProgramTypeDeclarationNames(program: ProgramNode): Set<string> {
+  const names = new Set<string>()
+
+  for (const item of program.body) {
+    if (item.type === 'TypeAliasDeclaration') {
+      names.add(item.name)
+    }
+  }
+
+  return names
 }
 
 export function createImportAliasDeclaration(specifier: AnyNode, importedProgram: ProgramNode): AnyNode | null {
