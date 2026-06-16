@@ -10,7 +10,14 @@ type SourceFile = {
 
 type PatternInfo = {
   name: string
-  decision: 'supported now' | 'simplify/remove' | 'implement support' | 'host-adapter boundary'
+  decision:
+    | 'supported now'
+    | 'simplify/remove'
+    | 'implement support'
+    | 'host-adapter boundary'
+    | 'required/core-simplify'
+    | 'required/lower-core-simplify'
+    | 'lower/core-simplify'
   pattern: RegExp
   note: string
   maxAllowedMatches?: number
@@ -51,23 +58,30 @@ const patterns: PatternInfo[] = [
   },
   {
     name: 'Object.entries / Object.keys / Object.values',
-    decision: 'simplify/remove',
+    decision: 'required/core-simplify',
     pattern: /\bObject\.(entries|keys|values)\s*\(/g,
-    note: 'Required language features; prefer explicit loops over known arrays of records in compiler-core until lowering lands.',
+    note: 'Required language features; compiler-core may rewrite them only when explicit loops or records stay compact.',
     maxAllowedMatches: 16
   },
   {
     name: 'Array.from',
-    decision: 'simplify/remove',
+    decision: 'required/core-simplify',
     pattern: /\bArray\.from\s*\(/g,
-    note: 'Required language feature; compiler-core can usually use direct array accumulation until lowering lands.',
+    note: 'Required language feature; compiler-core can use direct array accumulation when the replacement stays compact.',
     maxAllowedMatches: 0
   },
   {
-    name: 'flatMap / map / filter / reduce / sort',
-    decision: 'simplify/remove',
-    pattern: /\.(flatMap|map|filter|reduce|sort)\s*\(/g,
-    note: 'Compact Array.filter/find/map lowering is supported for known slices; Array.reduce is required and should lower to explicit loops, but compiler-core should avoid reduce.',
+    name: 'Array.reduce',
+    decision: 'required/lower-core-simplify',
+    pattern: /\.reduce\s*\(/g,
+    note: 'Required language feature; lower supported reducer shapes to explicit loops while keeping compiler-core source reduce-free.',
+    maxAllowedMatches: 0
+  },
+  {
+    name: 'flatMap / map / filter / sort',
+    decision: 'lower/core-simplify',
+    pattern: /\.(flatMap|map|filter|sort)\s*\(/g,
+    note: 'Compact Array.filter/find/map lowering is supported for known slices; broad callback-heavy chains in compiler-core should become explicit loops.',
     maxAllowedMatches: 444
   },
   {
