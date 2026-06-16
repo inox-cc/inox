@@ -75,9 +75,14 @@ export function createTypeImportDeclarations(specifier: AnyNode, importedProgram
 
   const declarations: AnyNode[] = []
   const added = new Set<string>()
+  const visiting = new Set<string>()
 
   const addDependency = (name: string): void => {
     if (name === specifier.imported || added.has(name)) {
+      return
+    }
+
+    if (visiting.has(name)) {
       return
     }
 
@@ -87,8 +92,16 @@ export function createTypeImportDeclarations(specifier: AnyNode, importedProgram
       return
     }
 
+    visiting.add(name)
+
     for (const child of typeAliasDependencyNames(dependency)) {
       addDependency(child)
+    }
+
+    visiting.delete(name)
+
+    if (added.has(name)) {
+      return
     }
 
     declarations.push(cloneTypeAliasDeclaration(dependency, dependency.name, dependency.loc, dependency.name))

@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { createTypeImportDeclarations } from '../../src/compiler/modules/synthetic-imports.ts'
 import {
   assert,
   assertDiagnostic,
@@ -458,6 +459,66 @@ export function main(): void {
       force: true
     })
   }
+})
+
+test('does not recurse forever on cyclic transitive type-only imports', () => {
+  const loc = {
+    file: 'types.ts',
+    line: 1,
+    column: 1
+  }
+  const importedProgram = {
+    type: 'Program',
+    body: [
+      {
+        type: 'TypeAliasDeclaration',
+        exported: true,
+        name: 'Parent',
+        loc,
+        valueType: {
+          kind: 'object',
+          baseTypes: [],
+          fields: [{ name: 'child', valueType: 'Child' }]
+        }
+      },
+      {
+        type: 'TypeAliasDeclaration',
+        exported: true,
+        name: 'Child',
+        loc,
+        valueType: {
+          kind: 'object',
+          baseTypes: [],
+          fields: [{ name: 'parent', valueType: 'Parent' }]
+        }
+      },
+      {
+        type: 'TypeAliasDeclaration',
+        exported: true,
+        name: 'Options',
+        loc,
+        valueType: {
+          kind: 'object',
+          baseTypes: [],
+          fields: [{ name: 'root', valueType: 'Parent' }]
+        }
+      }
+    ]
+  }
+
+  const declarations = createTypeImportDeclarations(
+    {
+      imported: 'Options',
+      local: 'LocalOptions',
+      loc
+    },
+    importedProgram
+  )
+
+  assert.deepEqual(
+    declarations.map((item) => item.name),
+    ['Child', 'Parent', 'LocalOptions']
+  )
 })
 
 
