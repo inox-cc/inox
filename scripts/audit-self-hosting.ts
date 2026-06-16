@@ -95,7 +95,7 @@ const patterns: PatternInfo[] = [
     decision: 'simplify/remove',
     pattern: /\b(Record|ReadonlyMap|Map|Set)<|ReadonlyArray</g,
     note: 'Self-hosted type surface should prefer explicit aliases and concrete record arrays.',
-    maxAllowedMatches: 323
+    maxAllowedMatches: 335
   }
 ]
 

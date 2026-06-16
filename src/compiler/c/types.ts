@@ -220,11 +220,11 @@ export type CAsyncTaskPrefixLocal = {
   name: string
   type: string
   fieldName: string
-  arrayElementType?: string
+  arrayElementType?: string | null
   forceRuntimeStringDeclaration?: boolean
-  mapKeyType?: string
-  mapValueType?: string
-  setElementType?: string
+  mapKeyType?: string | null
+  mapValueType?: string | null
+  setElementType?: string | null
   shape?: CObjectShape | null
 }
 
@@ -237,12 +237,12 @@ export type CAsyncTaskAwaitStep = {
   name: string | null
   type: string
   fieldName: string | null
-  arrayElementType?: string
+  arrayElementType?: string | null
   awaitedExpression: AnyNode | null
   awaitedPromiseExpression: AnyNode | null
-  mapKeyType?: string
-  mapValueType?: string
-  setElementType?: string
+  mapKeyType?: string | null
+  mapValueType?: string | null
+  setElementType?: string | null
   shape?: CObjectShape | null
 }
 

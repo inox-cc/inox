@@ -839,10 +839,13 @@ const promiseChainLoweringDependencies: PromiseChainLoweringDependencies = {
 }
 
 const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
+  createFunctionContext,
   emitCallee,
   emitCValueExpression,
-  emitFunctionHead,
+  emitFunctionHead: (statement, context) => emitFunctionHead(statement, context as CFunctionContext),
   emitFsBooleanFlag,
+  emitOwnedValueCleanup,
+  emitOwnedValueDeclarations,
   emitPreparedCallArgs,
   emitPreparedCallExpression,
   emitPreparedFetchInitOperand: (expression: AnyNode, context: CFunctionContext) =>
@@ -857,12 +860,13 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   isIndexAccessExpression,
   isMemberAccessExpression,
   isRuntimeProducedStringExpression,
-  isThrowingFunctionCallee,
+  isThrowingFunctionCallee: (callee, context) => isThrowingFunctionCallee(callee, context as CFunctionContext),
   isThrowingFunctionName,
+  pushVariableScope,
   registerObjectShape,
   registerRuntimeValueMetadata,
   resolveFunctionDeclarationParams,
-  resolveFunctionParams,
+  resolveFunctionParams: (callee, context) => resolveFunctionParams(callee, context as CFunctionContext),
   resolveKnownArrayIndex,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
@@ -870,7 +874,8 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   resolveRuntimeArrayIndex,
   resolveRuntimeMapType,
   resolveRuntimeSetElementType,
-  resolveRuntimeStringReference
+  resolveRuntimeStringReference,
+  restoreVariableScope
 }
 
 const declarationEmissionDependencies: CDeclarationEmissionDependencies = {
