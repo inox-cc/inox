@@ -16,7 +16,7 @@ test('reads type annotations through nested generics until a stop token', () => 
   const tokens = tokenize('let users: Map<string, Array<User | null>> = source', {})
   const start = tokens.findIndex((token) => token.value === 'Map')
 
-  const result = readTypeAnnotation(tokens, start, ['='])
+  const result = readTypeAnnotation(tokens, start, ['='], null)
 
   assert.equal(result.typeName, 'map<string,array<nullable<User>>>')
   assert.equal(tokens[result.position].value, '=')

@@ -15,28 +15,36 @@ export function readTypeAnnotation(
   tokens: Token[],
   startPosition: number,
   stopValues: string[],
-  options: TypeAnnotationReadOptions = {}
+  options: TypeAnnotationReadOptions | null
 ): TypeAnnotationReadResult {
   const parts: string[] = []
   let genericDepth = 0
   let position = startPosition
-  let lastTokenLine = tokens[position]?.line ?? 0
+  let lastTokenLine = 0
+  const startToken = tokenAt(tokens, position)
+  const actualOptions = typeAnnotationReadOptionsOrEmpty(options)
 
-  while (tokens[position]?.type !== 'eof') {
-    const token = tokens[position]
+  if (startToken != null) {
+    lastTokenLine = startToken.line
+  }
 
-    if (genericDepth === 0 && stopValues.includes(token.value) && !isArrayTypeSuffixClose(parts, token.value)) {
+  let currentToken = tokenAt(tokens, position)
+
+  while (currentToken != null && currentToken.type !== 'eof') {
+    const token = currentToken
+
+    if (genericDepth === 0 && stringArrayIncludes(stopValues, token.value) && !isArrayTypeSuffixClose(parts, token.value)) {
       break
     }
 
-    if (genericDepth === 0 && parts.length > 0 && options.stopAtLineBreak === true && token.line > lastTokenLine) {
+    if (genericDepth === 0 && parts.length > 0 && actualOptions.stopAtLineBreak === true && token.line > lastTokenLine) {
       break
     }
 
     if (
       genericDepth === 0 &&
       parts.length > 0 &&
-      options.stopAtStatementBoundary === true &&
+      actualOptions.stopAtStatementBoundary === true &&
       token.line > lastTokenLine &&
       isStatementBoundaryToken(token)
     ) {
@@ -44,9 +52,9 @@ export function readTypeAnnotation(
     }
 
     if (token.value === '<') {
-      genericDepth += 1
+      genericDepth = genericDepth + 1
     } else if (token.value === '>' && genericDepth > 0) {
-      genericDepth -= 1
+      genericDepth = genericDepth - 1
     }
 
     if (token.type === 'string') {
@@ -57,13 +65,44 @@ export function readTypeAnnotation(
       parts.push(token.value)
     }
     lastTokenLine = token.line
-    position += 1
+    position = position + 1
+    currentToken = tokenAt(tokens, position)
   }
 
   return {
     typeName: normalizeTypeName(parts.join('')),
     position
   }
+}
+
+function typeAnnotationReadOptionsOrEmpty(options: TypeAnnotationReadOptions | null): TypeAnnotationReadOptions {
+  if (options == null) {
+    return {}
+  }
+
+  return options
+}
+
+function tokenAt(tokens: Token[], position: number): Token | null {
+  if (position < 0) {
+    return null
+  }
+
+  if (position >= tokens.length) {
+    return null
+  }
+
+  return tokens[position]
+}
+
+function stringArrayIncludes(values: string[], value: string): boolean {
+  for (const item of values) {
+    if (item === value) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function isArrayTypeSuffixClose(parts: string[], value: string): boolean {
@@ -74,52 +113,76 @@ export function normalizeTypeName(name: string): string {
   const unionArgs = splitUnionArgs(name)
 
   if (unionArgs.length > 1) {
-    const normalized = unionArgs.map((arg) => normalizeTypeName(arg))
-    const withoutNull = normalized.filter((arg) => arg !== 'null')
-    const unique = new Set(normalized)
+    const normalized: string[] = []
+    const withoutNull: string[] = []
 
-    if (unique.size === 1) {
+    for (const arg of unionArgs) {
+      const normalizedArg = normalizeTypeName(arg)
+      normalized.push(normalizedArg)
+
+      if (normalizedArg !== 'null') {
+        withoutNull.push(normalizedArg)
+      }
+    }
+
+    if (allStringsSame(normalized)) {
       return normalized[0]
     }
 
-    return normalized.length === 2 && withoutNull.length === 1 ? `nullable<${withoutNull[0]}>` : 'unknown'
+    if (normalized.length === 2 && withoutNull.length === 1) {
+      return `nullable<${withoutNull[0]}>`
+    }
+
+    return 'unknown'
   }
 
   if (name.endsWith('[]')) {
     return `array<${normalizeTypeName(name.slice(0, -2))}>`
   }
 
-  const arrayMatch = /^Array<(.+)>$/.exec(name)
+  const arrayInner = genericTypeInner(name, 'Array')
 
-  if (arrayMatch != null) {
-    return `array<${normalizeTypeName(arrayMatch[1])}>`
+  if (arrayInner != null) {
+    return `array<${normalizeTypeName(arrayInner)}>`
   }
 
-  const mapMatch = /^Map<(.+)>$/.exec(name)
+  const mapInner = genericTypeInner(name, 'Map')
 
-  if (mapMatch != null) {
-    const args = splitGenericArgs(mapMatch[1])
+  if (mapInner != null) {
+    const args = splitGenericArgs(mapInner)
 
-    return args.length === 2 ? `map<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>` : 'map'
+    if (args.length === 2) {
+      return `map<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
+    }
+
+    return 'map'
   }
 
-  const setMatch = /^Set<(.+)>$/.exec(name)
+  const setInner = genericTypeInner(name, 'Set')
 
-  if (setMatch != null) {
-    const args = splitGenericArgs(setMatch[1])
+  if (setInner != null) {
+    const args = splitGenericArgs(setInner)
 
-    return args.length === 1 ? `set<${normalizeTypeName(args[0])}>` : 'set'
+    if (args.length === 1) {
+      return `set<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'set'
   }
 
-  const promiseMatch = /^Promise<(.+)>$/.exec(name)
+  const promiseInner = genericTypeInner(name, 'Promise')
 
-  if (promiseMatch != null) {
-    const args = splitGenericArgs(promiseMatch[1])
+  if (promiseInner != null) {
+    const args = splitGenericArgs(promiseInner)
 
-    return args.length === 1 ? `promise<${normalizeTypeName(args[0])}>` : 'promise'
+    if (args.length === 1) {
+      return `promise<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'promise'
   }
 
-  if (['number', 'string', 'boolean', 'void', 'null', 'unknown'].includes(name)) {
+  if (isSimpleTypeName(name)) {
     return name
   }
 
@@ -147,12 +210,163 @@ export function normalizeTypeName(name: string): string {
     return 'unknown'
   }
 
-  return /^[A-Za-z_$][\w$]*$/.test(name) ? name : 'unknown'
+  if (isIdentifierTypeName(name)) {
+    return name
+  }
+
+  return 'unknown'
+}
+
+function allStringsSame(values: string[]): boolean {
+  if (values.length === 0) {
+    return false
+  }
+
+  const first = values[0]
+
+  for (const value of values) {
+    if (value !== first) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function genericTypeInner(name: string, wrapper: string): string | null {
+  const prefix = `${wrapper}<`
+
+  if (!name.startsWith(prefix)) {
+    return null
+  }
+
+  if (!name.endsWith('>')) {
+    return null
+  }
+
+  const inner = name.slice(prefix.length, name.length - 1)
+
+  if (inner.length === 0) {
+    return null
+  }
+
+  return inner
+}
+
+function isSimpleTypeName(name: string): boolean {
+  if (name === 'number') {
+    return true
+  }
+
+  if (name === 'string') {
+    return true
+  }
+
+  if (name === 'boolean') {
+    return true
+  }
+
+  if (name === 'void') {
+    return true
+  }
+
+  if (name === 'null') {
+    return true
+  }
+
+  if (name === 'unknown') {
+    return true
+  }
+
+  return false
+}
+
+function isIdentifierTypeName(name: string): boolean {
+  if (name.length === 0) {
+    return false
+  }
+
+  if (!isIdentifierStartChar(name[0])) {
+    return false
+  }
+
+  let index = 1
+
+  while (index < name.length) {
+    if (!isIdentifierPartChar(name[index])) {
+      return false
+    }
+
+    index = index + 1
+  }
+
+  return true
+}
+
+function isIdentifierStartChar(char: string): boolean {
+  if (char === '_' || char === '$') {
+    return true
+  }
+
+  if (char >= 'A' && char <= 'Z') {
+    return true
+  }
+
+  if (char >= 'a' && char <= 'z') {
+    return true
+  }
+
+  return false
+}
+
+function isIdentifierPartChar(char: string): boolean {
+  if (isIdentifierStartChar(char)) {
+    return true
+  }
+
+  if (char >= '0' && char <= '9') {
+    return true
+  }
+
+  return false
 }
 
 function isStatementBoundaryToken(token: Token): boolean {
-  return (
-    token.type === 'keyword' &&
-    ['async', 'class', 'const', 'export', 'function', 'import', 'let', 'type'].includes(token.value)
-  )
+  if (token.type !== 'keyword') {
+    return false
+  }
+
+  if (token.value === 'async') {
+    return true
+  }
+
+  if (token.value === 'class') {
+    return true
+  }
+
+  if (token.value === 'const') {
+    return true
+  }
+
+  if (token.value === 'export') {
+    return true
+  }
+
+  if (token.value === 'function') {
+    return true
+  }
+
+  if (token.value === 'import') {
+    return true
+  }
+
+  if (token.value === 'let') {
+    return true
+  }
+
+  if (token.value === 'type') {
+    return true
+  }
+
+  return false
 }
