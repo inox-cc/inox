@@ -9,6 +9,7 @@ import {
   collectIrTopLevelNodes
 } from '../ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect } from '../types.ts'
+import type { CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
 import {
   collectCallbackWrappers,
   emitPlainArrowCallbackWrapperDeclaration,
@@ -300,10 +301,20 @@ function emitCModuleDeclarations(
   context: CEmitContext,
   deps: CModuleEmissionDependencies
 ): void {
-  const arrowCallbackWrappers = [...context.callbackWrappers.values()].filter(isRuntimeArrowCallbackWrapperWithContext)
-  const promiseChainCallbackWrappers = [...context.promiseChainWrappers.values()].filter(
-    isPromiseChainCallbackWrapperWithContext
-  )
+  const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
+  const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
+
+  for (const wrapper of context.callbackWrappers.values()) {
+    if (wrapper.kind === 'arrow' && isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+      arrowCallbackWrappers.push(wrapper)
+    }
+  }
+
+  for (const wrapper of context.promiseChainWrappers.values()) {
+    if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
+      promiseChainCallbackWrappers.push(wrapper)
+    }
+  }
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
     lines.push(...emitAsyncTaskFrameType(wrapper))
@@ -343,7 +354,7 @@ function emitCModuleDeclarations(
       continue
     }
 
-    if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+    if (wrapper.kind === 'arrow' && isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
       lines.push(`static void ${wrapper.finalizerName}(void* context);`)
     }
 

@@ -4,19 +4,6 @@ import { emitCFunctionName, emitCIdentifier } from '../identifiers.ts'
 import { isManagedRuntimeReturnType, emitCType } from '../value-types.ts'
 import { isPromiseConstructorExpression, functionTakesEventLoopParam } from './promises.ts'
 import { isTimerStartCallExpression, timerCallbackFunctionType } from '../stdlib/timers.ts'
-import {
-  createFunctionContext,
-  emitBoxedValueCleanup,
-  emitBoxedValueDeclarations,
-  emitCleanupReturn,
-  emitErrorChannelDeclarations,
-  emitLoopFlowDeclarations,
-  emitOwnedValueCleanup,
-  emitOwnedValueDeclarations,
-  emitReturnFlowDeclarations,
-  shouldEmitCleanupLabel
-} from '../context.ts'
-import type { CEmitContext, CFunctionContext } from '../context.ts'
 import type {
   CCallbackContextWrapper,
   CCallbackWrapper,
@@ -33,12 +20,69 @@ import type { AnyNode, IrProgram } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
 
+type CallbackArrowWrapperMap = Map<AnyNode, CCallbackWrapper>
+type CallbackBooleanMap = Map<string, boolean>
+type CallbackFunctionParamMap = Map<string, CFunctionParam[]>
+type CallbackFunctionTypeMap = Map<string, CFunctionType>
+type CallbackMutableDeclarationSet = Set<AnyNode | null | undefined>
+type CallbackPromiseConstructorHandlerMap = Map<string, {
+  kind: 'reject' | 'resolve'
+  promise: string
+}>
+type CallbackStringMap = Map<string, string>
+type CallbackStringSet = Set<string>
+type CallbackWrapperMap = Map<string, CCallbackWrapper>
+type RuntimeArrowCaptureMap = Map<string, CRuntimeArrowCapture>
+
+type CallbackEmitContext = {
+  boxedMutableCaptureDeclarations: CallbackMutableDeclarationSet
+  callbackArrowWrappers: CallbackArrowWrapperMap
+  callbackWrappers: CallbackWrapperMap
+  externalEventLoopFunctions: CallbackStringSet
+  functionAsyncFlags: CallbackBooleanMap
+  functionNames: CallbackStringMap
+  functionParams: CallbackFunctionParamMap
+  functionReturnTypes: CallbackStringMap
+  jsGlobalRoots: CallbackStringSet
+  runtimeFunctionParams: CallbackFunctionTypeMap
+}
+
+type CallbackFunctionContext = CallbackEmitContext & {
+  boxedVariables: CallbackStringSet
+  cleanupEnabled: boolean
+  eventLoopUsed: boolean
+  externalEventLoop: boolean
+  promiseConstructorHandlers: CallbackPromiseConstructorHandlerMap
+  runtimeCallbackCleanupLabel?: string
+  runtimeCallbackReturnOut?: string
+  runtimeCallbackReturnShape?: CObjectShape | null
+  runtimeCallbackReturnType?: string
+  runtimeStrings: CallbackStringSet
+  statusReturn: boolean
+  usedRuntimeCallbackCleanupGoto?: boolean
+  variables: CallbackStringMap
+}
+
 export type CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions(expression: AnyNode): AnyNode[]
-  emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
-  emitRuntimeCallbackRuntimeValueReturnLines(argument: AnyNode, context: CFunctionContext): string[]
-  emitStatementList(statements: AnyNode[], context: CFunctionContext): string[]
-  registerObjectShape(context: CFunctionContext, name: string, shape: CObjectShape | null | undefined): void
+  createFunctionContext(
+    baseContext: CallbackEmitContext,
+    returnType: string,
+    returnNullable: boolean
+  ): CallbackFunctionContext
+  emitBoxedValueCleanup(context: CallbackFunctionContext): string[]
+  emitBoxedValueDeclarations(context: CallbackFunctionContext): string[]
+  emitCleanupReturn(context: CallbackFunctionContext): string[]
+  emitErrorChannelDeclarations(context: CallbackFunctionContext): string[]
+  emitLoopFlowDeclarations(context: CallbackFunctionContext): string[]
+  emitOwnedValueCleanup(context: CallbackFunctionContext): string[]
+  emitOwnedValueDeclarations(context: CallbackFunctionContext): string[]
+  emitPreparedNumberExpression(expression: AnyNode, context: CallbackFunctionContext): PreparedExpression
+  emitReturnFlowDeclarations(context: CallbackFunctionContext): string[]
+  emitRuntimeCallbackRuntimeValueReturnLines(argument: AnyNode, context: CallbackFunctionContext): string[]
+  emitStatementList(statements: AnyNode[], context: CallbackFunctionContext): string[]
+  registerObjectShape(context: CallbackFunctionContext, name: string, shape: CObjectShape | null | undefined): void
+  shouldEmitCleanupLabel(context: CallbackFunctionContext): boolean
 }
 
 export type CallbackScopeBinding = {
@@ -71,8 +115,8 @@ type ExternalEventLoopScanState = {
 }
 
 type RuntimeArrowCaptureScanState = {
-  captures: Map<string, CRuntimeArrowCapture>
-  context: CEmitContext
+  captures: RuntimeArrowCaptureMap
+  context: CallbackEmitContext
   deps: CallbackLoweringDependencies
   localScopes: CallbackScope[]
   outerScopes: CallbackScope[]
@@ -370,10 +414,10 @@ function runtimeFunctionParamKey(functionName: string, index: number): string {
 }
 
 export function markRuntimeFunctionParam(
-  callee: AnyNode,
+  callee: AnyNode | null | undefined,
   index: number,
   functionType: CFunctionType | null | undefined,
-  context: CEmitContext
+  context: CallbackEmitContext
 ): void {
   if (callee == null || callee.type !== 'Reference') {
     return
@@ -396,7 +440,7 @@ export function resolveFunctionParameterRuntimeType(
   functionName: string,
   index: number,
   param: CFunctionParam,
-  context: CEmitContext
+  context: CallbackEmitContext
 ): CFunctionType | null {
   const promoted = context.runtimeFunctionParams.get(runtimeFunctionParamKey(functionName, index))
 
@@ -416,10 +460,10 @@ export function resolveFunctionParameterRuntimeType(
 }
 
 export function resolveRuntimeFunctionArgumentType(
-  callee: AnyNode,
+  callee: AnyNode | null | undefined,
   index: number,
-  param: CFunctionParam,
-  context: CEmitContext
+  param: CFunctionParam | null | undefined,
+  context: CallbackEmitContext
 ): CFunctionType | null {
   if (param == null || param.valueType !== 'function') {
     return null
@@ -446,10 +490,10 @@ export function resolveRuntimeFunctionArgumentType(
 
 export function collectCallbackWrappers(
   irPrograms: IrProgram[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
-): Map<string, CCallbackWrapper> {
-  const wrappers: Map<string, CCallbackWrapper> = new Map()
+): CallbackWrapperMap {
+  const wrappers: CallbackWrapperMap = new Map()
   const pendingPlainFunctionArgs: PendingPlainFunctionArg[] = []
 
   for (const ir of irPrograms) {
@@ -505,11 +549,11 @@ function appendCallbackScope(scopes: CallbackScope[], scope: CallbackScope): Cal
 }
 
 function registerCallbackExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   functionType: CFunctionType | null | undefined,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
-  context: CEmitContext,
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   const arrowNeedsEventLoop =
@@ -545,11 +589,11 @@ function registerCallbackExpression(
 }
 
 function registerRuntimeCallbackExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   functionType: CFunctionType | null | undefined,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
-  context: CEmitContext,
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   const normalized = normalizeFunctionType(functionType)
@@ -567,11 +611,11 @@ function registerRuntimeCallbackExpression(
 }
 
 function registerPlainCallbackExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   functionType: CFunctionType | null | undefined,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
-  context: CEmitContext,
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   if (expression != null && expression.type === 'ArrowFunctionExpression') {
@@ -580,9 +624,9 @@ function registerPlainCallbackExpression(
 }
 
 function callbackExpressionHasCaptures(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   scopes: CallbackScope[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): boolean {
   if (expression == null || expression.type !== 'ArrowFunctionExpression') {
@@ -596,7 +640,7 @@ function shouldPromotePlainFunctionExpression(
   expression: AnyNode,
   functionType: CFunctionType | null | undefined,
   scopes: CallbackScope[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): boolean {
   return (
@@ -607,10 +651,10 @@ function shouldPromotePlainFunctionExpression(
 }
 
 function registerNamedCallbackWrapper(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   functionType: CFunctionType,
-  wrappers: Map<string, CCallbackWrapper>,
-  context: CEmitContext
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext
 ): void {
   if (expression == null || expression.type !== 'Reference') {
     return
@@ -647,8 +691,8 @@ function registerArrowCallbackWrapper(
   expression: AnyNode,
   functionType: CFunctionType,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
-  context: CEmitContext,
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   if (context.callbackArrowWrappers.has(expression)) {
@@ -689,8 +733,8 @@ function registerPlainArrowCallbackWrapper(
   expression: AnyNode,
   functionType: CFunctionType,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
-  context: CEmitContext,
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   if (context.callbackArrowWrappers.has(expression)) {
@@ -752,7 +796,7 @@ function declareCallbackVariable(
   scope: CallbackScope,
   statement: AnyNode,
   scopes: CallbackScope[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   let valueType = statement.valueType
@@ -778,7 +822,7 @@ function callbackVariableIsRuntimeCallback(
   statement: AnyNode,
   valueType: string,
   scopes: CallbackScope[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): boolean {
   if (isNullableFunctionType(valueType, statement.nullable)) {
@@ -822,7 +866,7 @@ function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScop
   return true
 }
 
-function inferCapturedExpressionValueType(expression: AnyNode, scopes: CallbackScope[]): string {
+function inferCapturedExpressionValueType(expression: AnyNode | null | undefined, scopes: CallbackScope[]): string {
   if (expression != null && expression.valueType != null && expression.valueType !== 'unknown') {
     return expression.valueType
   }
@@ -850,7 +894,7 @@ function inferCapturedExpressionValueType(expression: AnyNode, scopes: CallbackS
   return 'unknown'
 }
 
-function inferCapturedExpressionInfo(expression: AnyNode, scopes: CallbackScope[]): CallbackScopeBinding {
+function inferCapturedExpressionInfo(expression: AnyNode | null | undefined, scopes: CallbackScope[]): CallbackScopeBinding {
   if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
     const entry = lookupCallbackBinding(expression.path[0], scopes)
 
@@ -883,9 +927,9 @@ function objectShapeFieldValueType(shape: CObjectShape | null | undefined, name:
 function visitCallbackStatement(
   statement: AnyNode | null | undefined,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
+  wrappers: CallbackWrapperMap,
   pendingPlainFunctionArgs: PendingPlainFunctionArg[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   if (statement == null) {
@@ -1003,9 +1047,9 @@ function visitCallbackStatement(
 function visitCallbackExpression(
   expression: AnyNode | null | undefined,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
+  wrappers: CallbackWrapperMap,
   pendingPlainFunctionArgs: PendingPlainFunctionArg[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   if (expression == null) {
@@ -1091,9 +1135,9 @@ function visitCallbackExpression(
 function visitCallbackCallExpression(
   expression: AnyNode,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
+  wrappers: CallbackWrapperMap,
   pendingPlainFunctionArgs: PendingPlainFunctionArg[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   if (isTimerStartCallExpression(expression)) {
@@ -1126,9 +1170,9 @@ function visitCallbackFunctionArg(
   index: number,
   param: CFunctionParam,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
+  wrappers: CallbackWrapperMap,
   pendingPlainFunctionArgs: PendingPlainFunctionArg[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   if (isNullableFunctionType(param.valueType, param.nullable)) {
@@ -1164,7 +1208,7 @@ function callbackArgumentInfo(arg: AnyNode, scopes: CallbackScope[]): CallbackSc
   return null
 }
 
-function callbackAssignmentTargetInfo(target: AnyNode, scopes: CallbackScope[]): CallbackScopeBinding | null {
+function callbackAssignmentTargetInfo(target: AnyNode | null | undefined, scopes: CallbackScope[]): CallbackScopeBinding | null {
   if (target != null && target.type === 'Reference' && target.path.length === 1) {
     return lookupCallbackBinding(target.path[0], scopes)
   }
@@ -1175,9 +1219,9 @@ function callbackAssignmentTargetInfo(target: AnyNode, scopes: CallbackScope[]):
 function visitPromiseConstructorCallbackExpression(
   expression: AnyNode,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
+  wrappers: CallbackWrapperMap,
   pendingPlainFunctionArgs: PendingPlainFunctionArg[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   visitCallbackExpression(expression.callee, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
@@ -1226,9 +1270,9 @@ function promiseSettlementKindForParamIndex(index: number): 'reject' | 'resolve'
 function visitNestedCallbackArrowExpression(
   expression: AnyNode,
   scopes: CallbackScope[],
-  wrappers: Map<string, CCallbackWrapper>,
+  wrappers: CallbackWrapperMap,
   pendingPlainFunctionArgs: PendingPlainFunctionArg[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
   const scope: CallbackScope = new Map()
@@ -1260,10 +1304,10 @@ function visitNestedCallbackArrowExpression(
 export function collectArrowCaptures(
   expression: AnyNode,
   outerScopes: CallbackScope[],
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): CRuntimeArrowCapture[] {
-  const captures: Map<string, CRuntimeArrowCapture> = new Map()
+  const captures: RuntimeArrowCaptureMap = new Map()
   const localScope: CallbackScope = new Map()
   const localScopes: CallbackScope[] = [localScope]
 
@@ -1546,7 +1590,7 @@ function visitRuntimeArrowCaptureExpression(
   }
 }
 
-function resolveStaticFunctionParams(callee: AnyNode, context: CEmitContext): CFunctionParam[] | null {
+function resolveStaticFunctionParams(callee: AnyNode | null | undefined, context: CallbackEmitContext): CFunctionParam[] | null {
   if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
@@ -1573,7 +1617,7 @@ function runtimeCallbackWrapperKey(target: string, functionType: CFunctionType):
 export function runtimeCallbackWrapperFor(
   target: string,
   functionType: CFunctionType,
-  context: CEmitContext
+  context: CallbackEmitContext
 ): CCallbackWrapper | null {
   const wrapper = context.callbackWrappers.get(runtimeCallbackWrapperKey(target, functionType))
 
@@ -1588,7 +1632,7 @@ export function emitRuntimeCallbackWrapperHead(wrapper: CRuntimeCallbackWrapper)
   return `static ccjs_status ${wrapper.name}(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out)`
 }
 
-export function isRuntimeCallbackWrapper(wrapper: CCallbackWrapper): wrapper is CRuntimeCallbackWrapper {
+export function isRuntimeCallbackWrapper(wrapper: CCallbackWrapper): boolean {
   return wrapper.kind !== 'plain-arrow'
 }
 
@@ -1597,11 +1641,7 @@ export function emitPlainArrowCallbackWrapperHead(wrapper: CPlainArrowCallbackWr
 }
 
 function emitPlainArrowCallbackParams(wrapper: CPlainArrowCallbackWrapper): string {
-  let params: CFunctionParam[] = []
-
-  if (wrapper.functionType != null) {
-    params = wrapper.functionType.params
-  }
+  const params = wrapper.functionType.params
 
   if (params.length === 0) {
     return 'void'
@@ -1620,18 +1660,13 @@ function emitPlainArrowCallbackParams(wrapper: CPlainArrowCallbackWrapper): stri
 
 export function emitPlainArrowCallbackWrapperDeclaration(
   wrapper: CPlainArrowCallbackWrapper,
-  baseContext: CEmitContext,
+  baseContext: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
-  let returnType = 'void'
-  let params: CFunctionParam[] = []
+  const returnType = wrapper.functionType.returnType
+  const params = wrapper.functionType.params
 
-  if (wrapper.functionType != null) {
-    returnType = wrapper.functionType.returnType
-    params = wrapper.functionType.params
-  }
-
-  const context = createFunctionContext(baseContext, returnType, false)
+  const context = deps.createFunctionContext(baseContext, returnType, false)
   context.cleanupEnabled = false
 
   let paramIndex = 0
@@ -1657,15 +1692,15 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   const statementLines = deps.emitStatementList(statements, context)
   const lines: string[] = [`${emitPlainArrowCallbackWrapperHead(wrapper)} {`]
 
-  pushIndentedLines(lines, emitOwnedValueDeclarations(context))
-  pushIndentedLines(lines, emitBoxedValueDeclarations(context))
+  pushIndentedLines(lines, deps.emitOwnedValueDeclarations(context))
+  pushIndentedLines(lines, deps.emitBoxedValueDeclarations(context))
   pushIndentedLines(lines, statementLines)
 
-  if (shouldEmitCleanupLabel(context)) {
+  if (deps.shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
-    pushIndentedLines(lines, emitOwnedValueCleanup(context))
-    pushIndentedLines(lines, emitBoxedValueCleanup(context))
-    lines.push(`  ${emitCleanupReturn(context)}`)
+    pushIndentedLines(lines, deps.emitOwnedValueCleanup(context))
+    pushIndentedLines(lines, deps.emitBoxedValueCleanup(context))
+    lines.push(`  ${deps.emitCleanupReturn(context)}`)
   }
 
   lines.push('}')
@@ -1707,7 +1742,7 @@ function emitIndentedRuntimeArgCountCheck(paramCount: number): string {
 
 export function emitRuntimeCallbackWrapperDeclaration(
   wrapper: CRuntimeCallbackWrapper,
-  context: CEmitContext,
+  context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
   if (wrapper.kind === 'arrow') {
@@ -1770,13 +1805,13 @@ export function emitRuntimeCallbackWrapperDeclaration(
 
 export function isRuntimeArrowCallbackWrapperWithContext(
   wrapper: CCallbackWrapper | null | undefined
-): wrapper is CRuntimeArrowCallbackWrapper {
+): boolean {
   return wrapper != null && wrapper.kind === 'arrow' && hasRuntimeArrowCallbackContext(wrapper)
 }
 
 export function isPromiseChainCallbackWrapperWithContext(
   wrapper: CPromiseChainWrapper | null | undefined
-): wrapper is CPromiseChainWrapper {
+): boolean {
   return wrapper != null && wrapper.kind === 'promise-chain-arrow' && hasRuntimeArrowCallbackContext(wrapper)
 }
 
@@ -1831,7 +1866,7 @@ export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: CCa
 
 function emitRuntimeArrowCallbackWrapperDeclaration(
   wrapper: CRuntimeArrowCallbackWrapper,
-  baseContext: CEmitContext,
+  baseContext: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
   const lines: string[] = []
@@ -1841,7 +1876,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
     lines.push('')
   }
 
-  const context = createFunctionContext(baseContext, 'void', false)
+  const context = deps.createFunctionContext(baseContext, 'void', false)
   context.cleanupEnabled = false
   context.statusReturn = true
   context.runtimeCallbackReturnType = wrapper.functionType.returnType
@@ -1869,17 +1904,17 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
   lines.push(emitIndentedRuntimeArgCountCheck(wrapper.functionType.params.length))
   lines.push('  *out = ccjs_undefined_value();')
   pushIndentedLines(lines, bodyLines)
-  pushIndentedLines(lines, emitLoopFlowDeclarations(context))
-  pushIndentedLines(lines, emitReturnFlowDeclarations(context))
-  pushIndentedLines(lines, emitOwnedValueDeclarations(context))
-  pushIndentedLines(lines, emitErrorChannelDeclarations(context))
-  pushIndentedLines(lines, emitBoxedValueDeclarations(context))
+  pushIndentedLines(lines, deps.emitLoopFlowDeclarations(context))
+  pushIndentedLines(lines, deps.emitReturnFlowDeclarations(context))
+  pushIndentedLines(lines, deps.emitOwnedValueDeclarations(context))
+  pushIndentedLines(lines, deps.emitErrorChannelDeclarations(context))
+  pushIndentedLines(lines, deps.emitBoxedValueDeclarations(context))
   pushIndentedLines(lines, statementLines)
   if (context.usedRuntimeCallbackCleanupGoto === true) {
     lines.push(`${context.runtimeCallbackCleanupLabel}:`)
   }
-  pushIndentedLines(lines, emitOwnedValueCleanup(context))
-  pushIndentedLines(lines, emitBoxedValueCleanup(context))
+  pushIndentedLines(lines, deps.emitOwnedValueCleanup(context))
+  pushIndentedLines(lines, deps.emitBoxedValueCleanup(context))
   lines.push('  return CCJS_OK;')
   lines.push('}')
 
@@ -1888,7 +1923,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
 
 function emitRuntimeArrowCallbackStatementLines(
   wrapper: CRuntimeArrowCallbackWrapper,
-  context: CFunctionContext,
+  context: CallbackFunctionContext,
   deps: CallbackLoweringDependencies
 ): string[] {
   if (wrapper.functionType.returnType === 'number' || wrapper.functionType.returnType === 'boolean') {
@@ -1934,7 +1969,7 @@ function emitRuntimeArrowCallbackStatementLines(
 
 export function emitRuntimeArrowCallbackContextLocals(
   wrapper: CCallbackContextWrapper,
-  context: CFunctionContext,
+  context: CallbackFunctionContext,
   deps: CallbackLoweringDependencies
 ): string[] {
   if (!hasRuntimeArrowCallbackContext(wrapper)) {
@@ -2008,7 +2043,7 @@ export function emitRuntimeArrowCallbackContextLocals(
 
 function emitRuntimeArrowCallbackParamPrelude(
   wrapper: CRuntimeArrowCallbackWrapper,
-  context: CFunctionContext,
+  context: CallbackFunctionContext,
   deps: CallbackLoweringDependencies
 ): string[] {
   const lines: string[] = []
@@ -2101,14 +2136,23 @@ export function isPromiseSettlementRuntimeArrowCapture(capture: CRuntimeArrowCap
 
 export function isSupportedMutableRuntimeArrowCapture(
   capture: CRuntimeArrowCapture,
-  context: CFunctionContext
+  context: CallbackFunctionContext
 ): boolean {
-  return (
-    capture.mutable === true &&
-    ['number', 'boolean', 'string', 'object'].includes(capture.valueType) &&
-    capture.declaration != null &&
-    context.boxedMutableCaptureDeclarations.has(capture.declaration)
-  )
+  if (capture.mutable !== true) {
+    return false
+  }
+
+  if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
+    return false
+  }
+
+  const declaration = capture.declaration
+
+  if (declaration == null) {
+    return false
+  }
+
+  return context.boxedMutableCaptureDeclarations.has(declaration)
 }
 
 function emitRuntimeCallbackWrapperArgChecks(param: CFunctionParam, index: number): string[] {

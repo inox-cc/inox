@@ -15,12 +15,20 @@ import {
 } from '../ir.ts'
 import {
   createFunctionContext,
+  emitBoxedValueCleanup,
+  emitBoxedValueDeclarations,
+  emitCleanupReturn,
+  emitErrorChannelDeclarations,
   emitEventLoopCurrentTimeExpression,
   emitEventLoopNextTimeExpression,
   emitEventLoopReference,
   emitEventLoopSleepUntilNextTimerLines,
   emitFailureStatement,
+  emitLoopFlowDeclarations,
+  emitOwnedValueCleanup,
+  emitOwnedValueDeclarations,
   emitPrepareOwnedValueWrite,
+  emitReturnFlowDeclarations,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   isRuntimeBoxedValueType,
@@ -30,7 +38,8 @@ import {
   registerOwnedPromise,
   registerOwnedValue,
   pushVariableScope,
-  restoreVariableScope
+  restoreVariableScope,
+  shouldEmitCleanupLabel
 } from './context.ts'
 import type { CEmitContext, CFunctionContext } from './context.ts'
 import {
@@ -792,10 +801,20 @@ const httpLoweringDependencies: HttpLoweringDependencies = {
 
 const callbackLoweringDependencies: CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions,
+  createFunctionContext,
+  emitBoxedValueCleanup,
+  emitBoxedValueDeclarations,
+  emitCleanupReturn,
+  emitErrorChannelDeclarations,
+  emitLoopFlowDeclarations,
+  emitOwnedValueCleanup,
+  emitOwnedValueDeclarations,
   emitPreparedNumberExpression,
+  emitReturnFlowDeclarations,
   emitRuntimeCallbackRuntimeValueReturnLines,
   emitStatementList,
-  registerObjectShape
+  registerObjectShape,
+  shouldEmitCleanupLabel
 }
 
 

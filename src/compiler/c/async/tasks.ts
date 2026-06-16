@@ -2988,7 +2988,7 @@ function emitAsyncTaskPromiseChainCallbackContext(
   context: CFunctionContext,
   options: AsyncTaskScheduleOptions
 ): AsyncTaskPromiseChainCallbackContext {
-  if (!isPromiseChainCallbackWrapperWithContext(chainWrapper)) {
+  if (chainWrapper == null || !isPromiseChainCallbackWrapperWithContext(chainWrapper)) {
     return {
       lines: [],
       expression: '0',

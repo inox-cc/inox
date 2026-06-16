@@ -63,11 +63,17 @@ export function isPromiseMethodAst(expression: AnyNode): boolean {
   return expression.callee.property === 'catch' || expression.callee.property === 'then'
 }
 
-export function isPlainPromiseReturningFunctionName(name: string, context: CEmitContext): boolean {
+type PromiseEventLoopFunctionContext = {
+  externalEventLoopFunctions: Set<string>
+  functionAsyncFlags: Map<string, boolean>
+  functionReturnTypes: Map<string, string>
+}
+
+export function isPlainPromiseReturningFunctionName(name: string, context: PromiseEventLoopFunctionContext): boolean {
   return context.functionReturnTypes.get(name) === 'promise' && context.functionAsyncFlags.get(name) !== true
 }
 
-export function functionTakesEventLoopParam(name: string, context: CEmitContext): boolean {
+export function functionTakesEventLoopParam(name: string, context: PromiseEventLoopFunctionContext): boolean {
   return isPlainPromiseReturningFunctionName(name, context) || context.externalEventLoopFunctions.has(name)
 }
 

@@ -10,6 +10,7 @@ import {
   collectIrTopLevelNodesFromPrograms
 } from '../ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrProgram } from '../types.ts'
+import type { CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
 import {
   collectCallbackWrappers,
   emitPlainArrowCallbackWrapperDeclaration,
@@ -219,12 +220,20 @@ export function emitCUnit(
     needsNetRuntime,
     options
   )
-  const arrowCallbackWrappers = [...baseContext.callbackWrappers.values()].filter(
-    isRuntimeArrowCallbackWrapperWithContext
-  )
-  const promiseChainCallbackWrappers = [...baseContext.promiseChainWrappers.values()].filter(
-    isPromiseChainCallbackWrapperWithContext
-  )
+  const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
+  const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
+
+  for (const wrapper of baseContext.callbackWrappers.values()) {
+    if (wrapper.kind === 'arrow' && isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+      arrowCallbackWrappers.push(wrapper)
+    }
+  }
+
+  for (const wrapper of baseContext.promiseChainWrappers.values()) {
+    if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
+      promiseChainCallbackWrappers.push(wrapper)
+    }
+  }
 
   for (const wrapper of baseContext.asyncTaskWrappers.values()) {
     lines.push(...emitAsyncTaskFrameType(wrapper))
@@ -264,7 +273,7 @@ export function emitCUnit(
       continue
     }
 
-    if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+    if (wrapper.kind === 'arrow' && isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
       lines.push(`static void ${wrapper.finalizerName}(void* context);`)
     }
 
