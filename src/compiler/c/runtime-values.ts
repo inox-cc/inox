@@ -1,10 +1,19 @@
-import { emitRuntimeTypeCheck, type CFunctionContext } from './context.ts'
+import { emitRuntimeTypeCheck } from './context.ts'
 import type { AnyNode } from '../types.ts'
+
+type RuntimeValueCheckContext = {
+  cleanupEnabled: boolean
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+}
 
 export function emitRuntimeNullableValueCheck(
   name: string,
   expectedTag: string | null,
-  context: CFunctionContext
+  context: RuntimeValueCheckContext
 ): string[] {
   if (expectedTag == null) {
     return []
@@ -22,7 +31,7 @@ export function emitRuntimeNullableValueCheck(
   ]
 }
 
-export function emitRuntimeValueCheck(name: string, expectedTag: string | null, context: CFunctionContext): string {
+export function emitRuntimeValueCheck(name: string, expectedTag: string | null, context: RuntimeValueCheckContext): string {
   if (expectedTag == null) {
     return ''
   }
@@ -38,11 +47,16 @@ export function emitRuntimeFieldValueCheck(
   value: string,
   expectedTag: string | null,
   expression: AnyNode,
-  context: CFunctionContext
+  context: RuntimeValueCheckContext
 ): string[] {
   if (expression?.nullable === true) {
     return emitRuntimeNullableValueCheck(value, expectedTag, context)
   }
 
-  return [emitRuntimeValueCheck(value, expectedTag, context)].filter(Boolean)
+  const check = emitRuntimeValueCheck(value, expectedTag, context)
+  if (check === '') {
+    return []
+  }
+
+  return [check]
 }

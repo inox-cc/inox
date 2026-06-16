@@ -78,6 +78,16 @@ export type CEmitContext = {
   unhandledRejectionFlag: string | null
 }
 
+export type CFailureContext = {
+  cleanupEnabled: boolean
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  returnType?: string
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+}
+
 export type CFunctionContext = CEmitContext & {
   arrayShapes: Map<string, CArrayElementInfo[]>
   breakFlowUsed: boolean
@@ -259,15 +269,15 @@ export function createFunctionContext(
   }
 }
 
-export function emitStatusCheck(call: string, context: CFunctionContext): string {
+export function emitStatusCheck(call: string, context: CFailureContext): string {
   return `if (${call} != CCJS_OK) ${emitFailureStatement(context)}`
 }
 
-export function emitRuntimeTypeCheck(condition: string, context: CFunctionContext): string {
+export function emitRuntimeTypeCheck(condition: string, context: CFailureContext): string {
   return `if (${condition}) ${emitFailureStatement(context)}`
 }
 
-export function emitFailureStatement(context: CFunctionContext): string {
+export function emitFailureStatement(context: CFailureContext): string {
   if (context.failureStatement != null) {
     context.failureStatementUsed = true
     return context.failureStatement
