@@ -4024,10 +4024,10 @@ function emitCallee(callee: AnyNode, context: CFunctionContext): string {
 }
 
 function emitFunctionValueExpression(expression: AnyNode, context: CFunctionContext): string {
-  if (expression?.type === 'ArrowFunctionExpression') {
+  if (expression != null && expression.type === 'ArrowFunctionExpression') {
     const wrapper = context.callbackArrowWrappers.get(expression)
 
-    if (wrapper?.kind === 'plain-arrow') {
+    if (wrapper != null && wrapper.kind === 'plain-arrow') {
       return wrapper.name
     }
 
@@ -4042,7 +4042,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
     return '0'
   }
 
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
+  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 
     if (context.variables.get(name) === 'function') {
@@ -4050,15 +4050,25 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
     }
 
     if (context.functionNames.has(name)) {
-      return context.functionNames.get(name)!
+      const functionName = context.functionNames.get(name)
+
+      if (functionName != null) {
+        return functionName
+      }
     }
+  }
+
+  let loc = null
+
+  if (expression != null) {
+    loc = expression.loc
   }
 
   context.diagnostics.push(
     diagnostic(
       'CCJS_C_FUNCTION_VALUE',
       'this function value is not supported by the current C backend slice',
-      expression?.loc
+      loc
     )
   )
 
@@ -4066,7 +4076,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
 }
 
 function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionContext): CFunctionType | null {
-  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 
@@ -4078,7 +4088,11 @@ function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionCon
 
   const functionType = context.functionTypes.get(name)
 
-  return isSupportedRuntimeCallbackType(functionType) ? normalizeFunctionType(functionType) : null
+  if (isSupportedRuntimeCallbackType(functionType)) {
+    return normalizeFunctionType(functionType)
+  }
+
+  return null
 }
 
 function emitRuntimeCallbackVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
@@ -4098,7 +4112,8 @@ function emitRuntimeCallbackValue(
   context: CFunctionContext
 ): PreparedExpression {
   if (
-    expression?.type === 'Reference' &&
+    expression != null &&
+    expression.type === 'Reference' &&
     expression.path.length === 1 &&
     context.runtimeCallbacks.has(expression.path[0])
   ) {
@@ -4124,14 +4139,21 @@ function emitRuntimeCallbackValueInto(
   context: CFunctionContext
 ): string[] {
   if (
-    expression?.type === 'Reference' &&
+    expression != null &&
+    expression.type === 'Reference' &&
     expression.path.length === 1 &&
     context.runtimeCallbacks.has(expression.path[0])
   ) {
-    return [...emitPrepareOwnedValueWrite(out), `${out} = ${expression.path[0]};`, `ccjs_retain(${out});`]
+    const lines: string[] = []
+
+    pushAll(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(`${out} = ${expression.path[0]};`)
+    lines.push(`ccjs_retain(${out});`)
+
+    return lines
   }
 
-  if (expression?.type === 'ArrowFunctionExpression') {
+  if (expression != null && expression.type === 'ArrowFunctionExpression') {
     const wrapper = context.callbackArrowWrappers.get(expression)
 
     if (wrapper == null || wrapper.kind !== 'arrow') {
@@ -4142,25 +4164,32 @@ function emitRuntimeCallbackValueInto(
           expression.loc
         )
       )
-      return [...emitPrepareOwnedValueWrite(out), `${out} = ccjs_undefined_value();`]
+      return emitUndefinedRuntimeCallbackValueInto(out)
     }
 
     return emitRuntimeArrowCallbackValueInto(wrapper, out, context)
   }
 
   if (
-    expression?.type !== 'Reference' ||
+    expression == null ||
+    expression.type !== 'Reference' ||
     expression.path.length !== 1 ||
     !context.functionNames.has(expression.path[0])
   ) {
+    let loc = null
+
+    if (expression != null) {
+      loc = expression.loc
+    }
+
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FUNCTION_VALUE',
         'runtime C callbacks currently require a named non-capturing function',
-        expression?.loc
+        loc
       )
     )
-    return [...emitPrepareOwnedValueWrite(out), `${out} = ccjs_undefined_value();`]
+    return emitUndefinedRuntimeCallbackValueInto(out)
   }
 
   const wrapper = runtimeCallbackWrapperFor(expression.path[0], normalizeFunctionType(functionType), context)
@@ -4173,24 +4202,39 @@ function emitRuntimeCallbackValueInto(
         expression.loc
       )
     )
-    return [...emitPrepareOwnedValueWrite(out), `${out} = ccjs_undefined_value();`]
+    return emitUndefinedRuntimeCallbackValueInto(out)
   }
 
-  const callbackContext = functionTakesEventLoopParam(expression.path[0], context)
-    ? emitEventLoopReference(context)
-    : '0'
+  let callbackContext = '0'
+
+  if (functionTakesEventLoopParam(expression.path[0], context)) {
+    callbackContext = emitEventLoopReference(context)
+  }
 
   if (callbackContext !== '0') {
     registerEventLoop(context)
   }
 
-  return [
-    ...emitPrepareOwnedValueWrite(out),
+  const lines: string[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(
     emitStatusCheck(
       `ccjs_callback_new(&ccjs_default_allocator, ${wrapper.name}, ${callbackContext}, 0, &${out})`,
       context
     )
-  ]
+  )
+
+  return lines
+}
+
+function emitUndefinedRuntimeCallbackValueInto(out: string): string[] {
+  const lines: string[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(`${out} = ccjs_undefined_value();`)
+
+  return lines
 }
 
 function emitRuntimeArrowCallbackValueInto(
@@ -4198,7 +4242,9 @@ function emitRuntimeArrowCallbackValueInto(
   out: string,
   context: CFunctionContext
 ): string[] {
-  const lines = [...emitPrepareOwnedValueWrite(out)]
+  const lines: string[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(out))
 
   for (const capture of wrapper.captures) {
     if (capture.mutable && !isSupportedMutableRuntimeArrowCapture(capture, context)) {
@@ -4240,7 +4286,7 @@ function emitRuntimeArrowCallbackValueInto(
   }
 
   for (const capture of wrapper.captures) {
-    lines.push(...emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
+    pushAll(lines, emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
   }
 
   lines.push(
@@ -4259,21 +4305,24 @@ function emitRuntimeArrowCaptureStoreLines(
   context: CFunctionContext
 ): string[] {
   const field = `${contextName}->${emitRuntimeArrowCaptureField(capture)}`
+  const lines: string[] = []
 
   if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
-    return [`${field} = ${capture.name};`]
+    lines.push(`${field} = ${capture.name};`)
+    return lines
   }
 
   if (isRetainedRuntimeArrowCapture(capture)) {
     if (capture.valueType === 'string') {
-      return [
-        `${field}.tag = CCJS_TAG_STRING;`,
-        `${field}.as.ref = (ccjs_ref*)&${capture.name}->header;`,
-        `ccjs_retain(${field});`
-      ]
+      lines.push(`${field}.tag = CCJS_TAG_STRING;`)
+      lines.push(`${field}.as.ref = (ccjs_ref*)&${capture.name}->header;`)
+      lines.push(`ccjs_retain(${field});`)
+      return lines
     }
 
-    return [`${field} = ${capture.name};`, `ccjs_retain(${field});`]
+    lines.push(`${field} = ${capture.name};`)
+    lines.push(`ccjs_retain(${field});`)
+    return lines
   }
 
   if (capture.valueType === 'promise-settlement') {
@@ -4288,13 +4337,17 @@ function emitRuntimeArrowCaptureStoreLines(
         )
       )
 
-      return [`${field} = 0;`]
+      lines.push(`${field} = 0;`)
+      return lines
     }
 
-    return [`${field} = ${handler.promise};`, `if (${field} != 0) ccjs_promise_retain(${field});`]
+    lines.push(`${field} = ${handler.promise};`)
+    lines.push(`if (${field} != 0) ccjs_promise_retain(${field});`)
+    return lines
   }
 
-  return [`${field} = ${capture.name};`]
+  lines.push(`${field} = ${capture.name};`)
+  return lines
 }
 
 function emitRuntimeCallbackCall(
@@ -4308,13 +4361,13 @@ function emitRuntimeCallbackCall(
   for (const arg of expression.args) {
     const value = emitCValueExpression(arg, context)
 
-    lines.push(...value.lines)
+    pushAll(lines, value.lines)
     args.push(value.expression)
   }
 
   const out = nextCName(context, 'ccjs_callback_out')
   registerOwnedValue(context, out)
-  lines.push(...emitPrepareOwnedValueWrite(out))
+  pushAll(lines, emitPrepareOwnedValueWrite(out))
 
   if (args.length === 0) {
     lines.push(
@@ -4354,22 +4407,22 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
 
   const callee = emitReference(expression.callee, context)
   const calleeTypeCheck = `${callee}.tag != CCJS_TAG_FUNCTION || ${callee}.as.ref == 0`
-  const lines: string[] = [
-    `if (${callee}.tag != CCJS_TAG_NULL) {`,
-    `  ${emitRuntimeTypeCheck(calleeTypeCheck, context)}`
-  ]
+  const lines: string[] = []
   const args: string[] = []
+
+  lines.push(`if (${callee}.tag != CCJS_TAG_NULL) {`)
+  lines.push(`  ${emitRuntimeTypeCheck(calleeTypeCheck, context)}`)
 
   for (const arg of expression.args) {
     const value = emitCValueExpression(arg, context)
 
-    lines.push(...value.lines.map((line: string) => `  ${line}`))
+    pushIndented(lines, value.lines, '  ')
     args.push(value.expression)
   }
 
   const out = nextCName(context, 'ccjs_callback_out')
   registerOwnedValue(context, out)
-  lines.push(...emitPrepareOwnedValueWrite(out).map((line: string) => `  ${line}`))
+  pushIndented(lines, emitPrepareOwnedValueWrite(out), '  ')
 
   if (args.length === 0) {
     const call = `ccjs_callback_call(${callee}, 0, 0, &${out})`
@@ -4413,24 +4466,23 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   const callee = emitReference(expression.callee, context)
   const out = nextCName(context, 'ccjs_optional_call')
   const calleeTypeCheck = `${callee}.tag != CCJS_TAG_FUNCTION || ${callee}.as.ref == 0`
-  const lines: string[] = [
-    ...emitPrepareOwnedValueWrite(out),
-    `${out} = ccjs_null_value();`,
-    `if (${callee}.tag != CCJS_TAG_NULL) {`,
-    `  ${emitRuntimeTypeCheck(calleeTypeCheck, context)}`
-  ]
+  const lines: string[] = []
   const args: string[] = []
 
   registerOwnedValue(context, out)
+  pushAll(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(`${out} = ccjs_null_value();`)
+  lines.push(`if (${callee}.tag != CCJS_TAG_NULL) {`)
+  lines.push(`  ${emitRuntimeTypeCheck(calleeTypeCheck, context)}`)
 
   for (const arg of expression.args) {
     const value = emitCValueExpression(arg, context)
 
-    lines.push(...value.lines.map((line: string) => `  ${line}`))
+    pushIndented(lines, value.lines, '  ')
     args.push(value.expression)
   }
 
-  lines.push(...emitPrepareOwnedValueWrite(out).map((line: string) => `  ${line}`))
+  pushIndented(lines, emitPrepareOwnedValueWrite(out), '  ')
 
   if (args.length === 0) {
     const call = `ccjs_callback_call(${callee}, 0, 0, &${out})`
