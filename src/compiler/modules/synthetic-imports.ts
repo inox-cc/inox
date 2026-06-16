@@ -32,18 +32,19 @@ export function insertImportSyntheticDeclarations(
         }
       }
 
-      importIndex += 1
+      importIndex = importIndex + 1
     }
   }
 
   return {
-    ...program,
+    type: program.type,
+    loc: program.loc,
     body
   }
 }
 
 function collectProgramTypeDeclarationNames(program: ProgramNode): Set<string> {
-  const names = new Set<string>()
+  const names: Set<string> = new Set()
 
   for (const item of program.body) {
     if (item.type === 'TypeAliasDeclaration') {
@@ -55,7 +56,7 @@ function collectProgramTypeDeclarationNames(program: ProgramNode): Set<string> {
 }
 
 export function createImportAliasDeclaration(specifier: AnyNode, importedProgram: ProgramNode): AnyNode | null {
-  const exported = importedProgram.body.find((item) => item.exported && item.name === specifier.imported)
+  const exported = findExportedDeclaration(importedProgram, specifier.imported)
 
   if (exported == null) {
     return null
@@ -71,13 +72,13 @@ export function createImportAliasDeclaration(specifier: AnyNode, importedProgram
     exported: false,
     name: specifier.local,
     loc: specifier.loc,
-    declaredType: exported.declaredType ?? null,
-    valueType: exported.valueType ?? 'unknown',
+    declaredType: nullableNodeValue(exported.declaredType),
+    valueType: fallbackString(exported.valueType, 'unknown'),
     init: {
       type: 'Reference',
       path: [specifier.imported],
       loc: specifier.loc,
-      valueType: exported.valueType ?? 'unknown'
+      valueType: fallbackString(exported.valueType, 'unknown')
     }
   }
 }
@@ -87,13 +88,13 @@ export function createTypeImportDeclaration(specifier: AnyNode, exported: AnyNod
 }
 
 export function createTypeImportDeclarations(specifier: AnyNode, importedProgram: ProgramNode): AnyNode[] {
-  const exported = importedProgram.body.find((item) => item.exported && item.name === specifier.imported)
+  const exported = findExportedDeclaration(importedProgram, specifier.imported)
 
   if (exported == null) {
     return []
   }
 
-  const aliases = new Map<string, AnyNode>()
+  const aliases: Map<string, AnyNode> = new Map()
 
   for (const item of importedProgram.body) {
     if (item.type === 'TypeAliasDeclaration') {
@@ -102,51 +103,68 @@ export function createTypeImportDeclarations(specifier: AnyNode, importedProgram
   }
 
   const declarations: AnyNode[] = []
-  const added = new Set<string>()
-  const visiting = new Set<string>()
-
-  const addDependency = (name: string): void => {
-    if (name === specifier.imported || added.has(name)) {
-      return
-    }
-
-    if (visiting.has(name)) {
-      return
-    }
-
-    const dependency = aliases.get(name)
-
-    if (dependency == null) {
-      return
-    }
-
-    visiting.add(name)
-
-    for (const child of typeAliasDependencyNames(dependency)) {
-      addDependency(child)
-    }
-
-    visiting.delete(name)
-
-    if (added.has(name)) {
-      return
-    }
-
-    declarations.push(cloneTypeAliasDeclaration(dependency, dependency.name, dependency.loc, dependency.name))
-    added.add(name)
-  }
+  const added: Set<string> = new Set()
+  const visiting: Set<string> = new Set()
 
   for (const name of typeAliasDependencyNames(exported)) {
-    addDependency(name)
+    addTypeImportDependency(name, specifier.imported, aliases, added, visiting, declarations)
   }
 
   declarations.push(createTypeImportDeclaration(specifier, exported))
   return declarations
 }
 
+function findExportedDeclaration(program: ProgramNode, name: string): AnyNode | null {
+  for (const item of program.body) {
+    if (item.exported && item.name === name) {
+      return item
+    }
+  }
+
+  return null
+}
+
+function addTypeImportDependency(
+  name: string,
+  importedName: string,
+  aliases: Map<string, AnyNode>,
+  added: Set<string>,
+  visiting: Set<string>,
+  declarations: AnyNode[]
+): void {
+  if (name === importedName || added.has(name)) {
+    return
+  }
+
+  if (visiting.has(name)) {
+    return
+  }
+
+  const dependency = aliases.get(name)
+
+  if (dependency == null) {
+    return
+  }
+
+  visiting.add(name)
+
+  for (const child of typeAliasDependencyNames(dependency)) {
+    addTypeImportDependency(child, importedName, aliases, added, visiting, declarations)
+  }
+
+  visiting.delete(name)
+
+  if (added.has(name)) {
+    return
+  }
+
+  declarations.push(cloneTypeAliasDeclaration(dependency, dependency.name, dependency.loc, dependency.name))
+  added.add(name)
+}
+
 function cloneTypeAliasDeclaration(exported: AnyNode, name: string, loc: SourceLocation, importedName: string): AnyNode {
   return {
-    ...exported,
+    type: 'TypeAliasDeclaration',
     exported: false,
     name,
     loc,
@@ -164,12 +182,12 @@ function typeAliasDependencyNames(alias: AnyNode): string[] {
 }
 
 function collectTypeAliasDependencyNames(valueType: AnyNode, names: string[]): void {
-  if (valueType?.kind === 'alias') {
+  if (valueType.kind === 'alias') {
     collectTypeNameDependencyNames(valueType.valueType, names)
     return
   }
 
-  if (valueType?.kind === 'function') {
+  if (valueType.kind === 'function') {
     for (const param of valueType.params) {
       collectTypeNameDependencyNames(param.valueType, names)
     }
@@ -178,8 +196,10 @@ function collectTypeAliasDependencyNames(valueType: AnyNode, names: string[]): v
     return
   }
 
-  if (valueType?.kind === 'object') {
-    for (const base of valueType.baseTypes ?? []) {
+  if (valueType.kind === 'object') {
+    const baseTypes = stringArray(valueType.baseTypes)
+
+    for (const base of baseTypes) {
       collectTypeNameDependencyNames(base, names)
     }
 
@@ -200,15 +220,19 @@ function collectTypeNameDependencyNames(typeName: string | null | undefined, nam
 
   let current = ''
 
-  for (let index = 0; index < typeName.length; index += 1) {
+  let index = 0
+
+  while (index < typeName.length) {
     const char = typeName[index]
 
     if (isTypeNameIdentifierChar(char)) {
-      current += char
+      current = current + char
     } else {
       pushTypeNameDependency(current, names)
       current = ''
     }
+
+    index = index + 1
   }
 
   pushTypeNameDependency(current, names)
@@ -223,7 +247,7 @@ function pushTypeNameDependency(name: string, names: string[]): void {
 }
 
 function uniqueTypeNames(names: string[]): string[] {
-  const seen = new Set<string>()
+  const seen: Set<string> = new Set()
   const result: string[] = []
 
   for (const name of names) {
@@ -271,33 +295,42 @@ function isBuiltinTypeName(name: string): boolean {
 }
 
 function cloneTypeAliasValue(valueType: AnyNode): AnyNode {
-  if (valueType?.kind === 'object') {
+  if (valueType.kind === 'object') {
     return {
-      ...valueType,
-      fields: valueType.fields.map((field) => ({
-        ...field
-      }))
+      kind: 'object',
+      baseTypes: cloneStringArray(stringArray(valueType.baseTypes)),
+      dynamic: valueType.dynamic === true,
+      fields: cloneTypeAliasFields(valueType.fields)
     }
   }
 
-  if (valueType?.kind === 'function') {
+  if (valueType.kind === 'function') {
     return {
-      ...valueType,
-      params: valueType.params.map((param) => ({
-        ...param
-      }))
+      kind: 'function',
+      params: cloneParams(valueType.params),
+      returnType: valueType.returnType
     }
   }
 
   return {
-    ...valueType
+    kind: valueType.kind,
+    valueType: valueType.valueType
   }
 }
 
 function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: SourceLocation): AnyNode {
-  const params = target.params.map((param) => ({
-    ...param
-  }))
+  const params = cloneParams(target.params)
+  const args: AnyNode[] = []
+
+  for (const param of params) {
+    args.push({
+      type: 'Reference',
+      path: [param.name],
+      loc: param.loc,
+      valueType: param.valueType
+    })
+  }
+
   const call = {
     type: 'CallExpression',
     callee: {
@@ -306,14 +339,26 @@ function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: Sour
       loc,
       valueType: 'function'
     },
-    args: params.map((param) => ({
-      type: 'Reference',
-      path: [param.name],
-      loc: param.loc,
-      valueType: param.valueType
-    })),
+    args,
     loc,
     valueType: target.returnType
+  }
+  let body: AnyNode[] = [
+    {
+      type: 'ReturnStatement',
+      argument: call,
+      loc
+    }
+  ]
+
+  if (target.returnType === 'void') {
+    body = [
+      {
+        type: 'ExpressionStatement',
+        expression: call,
+        loc
+      }
+    ]
   }
 
   return {
@@ -324,21 +369,111 @@ function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: Sour
     loc,
     params,
     returnType: target.returnType,
-    body:
-      target.returnType === 'void'
-        ? [
-            {
-              type: 'ExpressionStatement',
-              expression: call,
-              loc
-            }
-          ]
-        : [
-            {
-              type: 'ReturnStatement',
-              argument: call,
-              loc
-            }
-          ]
+    body
   }
+}
+
+function cloneTypeAliasFields(fields: AnyNode[]): AnyNode[] {
+  const cloned: AnyNode[] = []
+
+  for (const field of fields) {
+    cloned.push(cloneTypeAliasField(field))
+  }
+
+  return cloned
+}
+
+function cloneTypeAliasField(field: AnyNode): AnyNode {
+  return {
+    name: field.name,
+    loc: field.loc,
+    optional: field.optional === true,
+    readonly: field.readonly === true,
+    ownership: nullableNodeValue(field.ownership),
+    weakLoc: nullableNodeValue(field.weakLoc),
+    valueType: field.valueType,
+    declaredType: nullableNodeValue(field.declaredType),
+    nullable: field.nullable === true,
+    arrayElementType: nullableNodeValue(field.arrayElementType),
+    arrayElementDeclaredType: nullableNodeValue(field.arrayElementDeclaredType),
+    mapKeyType: nullableNodeValue(field.mapKeyType),
+    mapValueType: nullableNodeValue(field.mapValueType),
+    promiseValueType: nullableNodeValue(field.promiseValueType),
+    setElementType: nullableNodeValue(field.setElementType),
+    shape: nullableNodeValue(field.shape),
+    functionType: nullableNodeValue(field.functionType),
+    className: nullableNodeValue(field.className)
+  }
+}
+
+function cloneParams(params: AnyNode[]): AnyNode[] {
+  const cloned: AnyNode[] = []
+
+  for (const param of params) {
+    cloned.push(cloneParam(param))
+  }
+
+  return cloned
+}
+
+function cloneParam(param: AnyNode): AnyNode {
+  return {
+    name: param.name,
+    optional: param.optional === true,
+    valueType: param.valueType,
+    loc: param.loc,
+    declaredType: nullableNodeValue(param.declaredType),
+    nullable: param.nullable === true,
+    arrayElementType: nullableNodeValue(param.arrayElementType),
+    arrayElementDeclaredType: nullableNodeValue(param.arrayElementDeclaredType),
+    mapKeyType: nullableNodeValue(param.mapKeyType),
+    mapValueType: nullableNodeValue(param.mapValueType),
+    promiseValueType: nullableNodeValue(param.promiseValueType),
+    setElementType: nullableNodeValue(param.setElementType),
+    shape: nullableNodeValue(param.shape),
+    functionType: nullableNodeValue(param.functionType),
+    className: nullableNodeValue(param.className)
+  }
+}
+
+function cloneStringArray(values: string[]): string[] {
+  const cloned: string[] = []
+
+  for (const value of values) {
+    cloned.push(value)
+  }
+
+  return cloned
+}
+
+function nodeArray(value: AnyNode[] | null | undefined): AnyNode[] {
+  if (value == null) {
+    return []
+  }
+
+  return value
+}
+
+function stringArray(value: string[] | null | undefined): string[] {
+  if (value == null) {
+    return []
+  }
+
+  return value
+}
+
+function fallbackString(value: string | null | undefined, fallback: string): string {
+  if (value == null) {
+    return fallback
+  }
+
+  return value
+}
+
+function nullableNodeValue(value: any): any {
+  if (value == null) {
+    return null
+  }
+
+  return value
 }
