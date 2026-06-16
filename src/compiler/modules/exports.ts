@@ -1,8 +1,10 @@
 import type { AnyNode, ProgramNode } from '../types.ts'
 import type { CompilerHost } from '../host.ts'
 
-export function collectExports(ast: ProgramNode): Map<string, AnyNode> {
-  const exports = new Map<string, AnyNode>()
+type ExportNode = AnyNode
+
+export function collectExports(ast: ProgramNode): Map<string, ExportNode> {
+  const exports: Map<string, ExportNode> = new Map()
 
   for (const item of ast.body) {
     if (
