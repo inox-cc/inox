@@ -124,24 +124,27 @@ export function main(): void {
 })
 
 test('builds module graphs through an in-memory compiler host', async () => {
-  const host = createMemoryCompilerHost([
-    {
-      path: '/project/dep.ts',
-      source: `export function answer(): number {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/project/dep.ts',
+        source: `export function answer(): number {
   return 42
 }
 `
-    },
-    {
-      path: '/project/index.ts',
-      source: `import { answer } from './dep'
+      },
+      {
+        path: '/project/index.ts',
+        source: `import { answer } from './dep'
 
 export function main(): void {
   console.log(answer())
 }
 `
-    }
-  ])
+      }
+    ],
+    {}
+  )
 
   const graph = await buildModuleGraph('/project/index.ts', {
     target: 'c',
@@ -157,24 +160,27 @@ export function main(): void {
 })
 
 test('emits C module files through an in-memory compiler host', async () => {
-  const host = createMemoryCompilerHost([
-    {
-      path: '/project/lib.ts',
-      source: `export function greet(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/project/lib.ts',
+        source: `export function greet(): void {
   console.log('hello')
 }
 `
-    },
-    {
-      path: '/project/index.ts',
-      source: `import { greet } from './lib'
+      },
+      {
+        path: '/project/index.ts',
+        source: `import { greet } from './lib'
 
 export function main(): void {
   greet()
 }
 `
-    }
-  ])
+      }
+    ],
+    {}
+  )
 
   const result = await compileFileToCModules('/project/index.ts', {
     host,

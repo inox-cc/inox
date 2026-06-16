@@ -1,4 +1,4 @@
-import type { CompilerHost } from './host.ts'
+import type { CompilerHost, CompilerHostPosixPath } from './host.ts'
 
 export type MemoryCompilerSourceFile = {
   path: string
@@ -11,51 +11,94 @@ export type MemoryCompilerHostOptions = {
 
 export function createMemoryCompilerHost(
   files: MemoryCompilerSourceFile[],
-  options: MemoryCompilerHostOptions = {}
+  options: MemoryCompilerHostOptions
 ): CompilerHost {
-  const root = normalizePosixPath(options.root ?? '/')
-  const sources: MemoryCompilerSourceFile[] = []
+  return new MemoryCompilerHost(files, options)
+}
 
-  for (const file of files) {
-    sources.push({
-      path: resolvePosixPath(file.path, root),
-      source: file.source
-    })
-  }
+class MemoryCompilerHost {
+  pathSeparator: string
+  posixPath: CompilerHostPosixPath
+  root: string
+  sources: MemoryCompilerSourceFile[]
 
-  return {
-    pathSeparator: '/',
-    posixPath: {
+  constructor(files: MemoryCompilerSourceFile[], options: MemoryCompilerHostOptions) {
+    this.pathSeparator = '/'
+    this.posixPath = {
       basename: basenamePosixPath,
       dirname: dirnamePosixPath,
       extname: extnamePosixPath,
       relative: relativePosixPath
-    },
-    dirname: dirnamePosixPath,
-    extname: extnamePosixPath,
-    isAbsolutePath: isAbsolutePosixPath,
-    joinPath: joinPosixPath,
-    normalizePath: normalizePosixPath,
-    pathToFileUrl(path: string): string {
-      return `file://${resolvePosixPath(path, root)}`
-    },
-    async readFile(path: string): Promise<string> {
-      const resolved = resolvePosixPath(path, root)
+    }
+    this.root = memoryCompilerHostRoot(options)
+    this.sources = []
 
-      for (const file of sources) {
-        if (file.path === resolved) {
-          return file.source
-        }
-      }
-
-      throw new Error(`memory source not found: ${path}`)
-    },
-    relativePath: relativePosixPath,
-    resolvePath(path: string): string {
-      return resolvePosixPath(path, root)
-    },
-    shortHash: shortStableHash
+    for (const file of files) {
+      this.sources.push({
+        path: resolvePosixPath(file.path, this.root),
+        source: file.source
+      })
+    }
   }
+
+  dirname(path: string): string {
+    return dirnamePosixPath(path)
+  }
+
+  extname(path: string): string {
+    return extnamePosixPath(path)
+  }
+
+  isAbsolutePath(path: string): boolean {
+    return isAbsolutePosixPath(path)
+  }
+
+  joinPath(left: string, right: string): string {
+    return joinPosixPath(left, right)
+  }
+
+  normalizePath(path: string): string {
+    return normalizePosixPath(path)
+  }
+
+  pathToFileUrl(path: string): string {
+    return `file://${resolvePosixPath(path, this.root)}`
+  }
+
+  readFile(path: string): Promise<string> {
+    const resolved = resolvePosixPath(path, this.root)
+
+    for (const file of this.sources) {
+      if (file.path === resolved) {
+        return Promise.resolve(file.source)
+      }
+    }
+
+    return Promise.reject(new Error(`memory source not found: ${path}`))
+  }
+
+  relativePath(fromPath: string, toPath: string): string {
+    return relativePosixPath(fromPath, toPath)
+  }
+
+  resolvePath(path: string): string {
+    return resolvePosixPath(path, this.root)
+  }
+
+  shortHash(value: string): string {
+    return shortStableHash(value)
+  }
+}
+
+function memoryCompilerHostRoot(options: MemoryCompilerHostOptions): string {
+  let root = '/'
+  const configuredRoot = options.root
+
+  if (configuredRoot != null) {
+    root = configuredRoot
+  }
+
+  return normalizePosixPath(root)
 }
 
 function isAbsolutePosixPath(path: string): boolean {
@@ -63,7 +106,13 @@ function isAbsolutePosixPath(path: string): boolean {
 }
 
 function resolvePosixPath(path: string, root: string): string {
-  return normalizePosixPath(isAbsolutePosixPath(path) ? path : joinPosixPath(root, path))
+  let resolved = path
+
+  if (!isAbsolutePosixPath(path)) {
+    resolved = joinPosixPath(root, path)
+  }
+
+  return normalizePosixPath(resolved)
 }
 
 function joinPosixPath(left: string, right: string): string {
@@ -75,7 +124,13 @@ function joinPosixPath(left: string, right: string): string {
     return normalizePosixPath(right)
   }
 
-  return normalizePosixPath(left === '' || left.endsWith('/') ? `${left}${right}` : `${left}/${right}`)
+  let joined = `${left}/${right}`
+
+  if (left === '' || left.endsWith('/')) {
+    joined = `${left}${right}`
+  }
+
+  return normalizePosixPath(joined)
 }
 
 function normalizePosixPath(path: string): string {
@@ -93,11 +148,16 @@ function normalizePosixPath(path: string): string {
     }
 
     if (part === '..') {
-      const last = normalized[normalized.length - 1]
+      if (normalized.length > 0) {
+        const last = normalized[normalized.length - 1]
 
-      if (last != null && last !== '..') {
-        normalized.pop()
-      } else if (!absolute) {
+        if (last !== '..') {
+          normalized.pop()
+          continue
+        }
+      }
+
+      if (!absolute) {
         normalized.push(part)
       }
 
@@ -110,10 +170,18 @@ function normalizePosixPath(path: string): string {
   const joined = normalized.join('/')
 
   if (absolute) {
-    return joined === '' ? '/' : `/${joined}`
+    if (joined === '') {
+      return '/'
+    }
+
+    return `/${joined}`
   }
 
-  return joined === '' ? '.' : joined
+  if (joined === '') {
+    return '.'
+  }
+
+  return joined
 }
 
 function dirnamePosixPath(path: string): string {
@@ -145,7 +213,11 @@ function basenamePosixPath(path: string): string {
 
   const index = normalized.lastIndexOf('/')
 
-  return index < 0 ? normalized : normalized.slice(index + 1)
+  if (index < 0) {
+    return normalized
+  }
+
+  return normalized.slice(index + 1)
 }
 
 function extnamePosixPath(path: string): string {
@@ -159,22 +231,22 @@ function extnamePosixPath(path: string): string {
   return base.slice(index)
 }
 
-function relativePosixPath(from: string, to: string): string {
-  const fromParts = splitNormalizedPosixPath(from)
-  const toParts = splitNormalizedPosixPath(to)
+function relativePosixPath(fromPath: string, toPath: string): string {
+  const fromParts = splitNormalizedPosixPath(fromPath)
+  const toParts = splitNormalizedPosixPath(toPath)
   let shared = 0
 
   while (shared < fromParts.length && shared < toParts.length && fromParts[shared] === toParts[shared]) {
-    shared += 1
+    shared = shared + 1
   }
 
   const parts: string[] = []
 
-  for (let index = shared; index < fromParts.length; index += 1) {
+  for (let index = shared; index < fromParts.length; index = index + 1) {
     parts.push('..')
   }
 
-  for (let index = shared; index < toParts.length; index += 1) {
+  for (let index = shared; index < toParts.length; index = index + 1) {
     parts.push(toParts[index])
   }
 
@@ -188,16 +260,35 @@ function splitNormalizedPosixPath(path: string): string[] {
     return []
   }
 
-  return normalized.startsWith('/') ? normalized.slice(1).split('/') : normalized.split('/')
+  if (normalized.startsWith('/')) {
+    return normalized.slice(1).split('/')
+  }
+
+  return normalized.split('/')
 }
 
 function shortStableHash(value: string): string {
   let hash = 2166136261
+  const modulus = 4294967291
+  const multiplier = 65599
 
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index)
-    hash = (hash * 16777619) >>> 0
+  for (let index = 0; index < value.length; index = index + 1) {
+    hash = (hash * multiplier + value.charCodeAt(index)) % modulus
   }
 
-  return hash.toString(16).padStart(8, '0').slice(0, 8)
+  return shortHashHex(hash)
+}
+
+function shortHashHex(value: number): string {
+  let hex = value.toString(16)
+
+  while (hex.length < 8) {
+    hex = `0${hex}`
+  }
+
+  if (hex.length > 8) {
+    return hex.slice(0, 8)
+  }
+
+  return hex
 }
