@@ -6,9 +6,20 @@ import {
   nextCName,
   registerOwnedValue
 } from '../context.ts'
-import type { CFunctionContext } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+
+type OsCContext = {
+  cleanupEnabled: boolean
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  nextId: number
+  ownedValues: string[]
+  returnType?: string
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+}
 
 export function cOsRuntimeMethodName(expression: AnyNode): string | null {
   if (expression.type !== 'CallExpression') {
@@ -44,7 +55,7 @@ export function cOsRuntimeConstantValue(name: string): string | null {
 
 export function emitPreparedOsConstantExpression(
   expression: AnyNode,
-  context: CFunctionContext
+  context: OsCContext
 ): PreparedExpression | null {
   const constant = cOsRuntimeConstantName(expression)
   let value: string | null = null
@@ -76,7 +87,7 @@ export function emitPreparedOsConstantExpression(
 
 export function emitPreparedOsStringCallExpression(
   expression: AnyNode,
-  context: CFunctionContext
+  context: OsCContext
 ): PreparedExpression | null {
   const method = cOsRuntimeMethodName(expression)
 

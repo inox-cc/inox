@@ -1,4 +1,15 @@
-export const osRuntimeMethods = [
+export type OsRuntimeMethod =
+  | 'arch'
+  | 'homedir'
+  | 'hostname'
+  | 'platform'
+  | 'release'
+  | 'tmpdir'
+  | 'type'
+
+export type OsRuntimeConstant = 'EOL'
+
+export const osRuntimeMethods: OsRuntimeMethod[] = [
   'arch',
   'homedir',
   'hostname',
@@ -6,11 +17,11 @@ export const osRuntimeMethods = [
   'release',
   'tmpdir',
   'type'
-] as const
+]
 
-export const osRuntimeConstants = ['EOL'] as const
+export const osRuntimeConstants: OsRuntimeConstant[] = ['EOL']
 
-export const unsupportedOsRuntimeMethods = [
+export const unsupportedOsRuntimeMethods: string[] = [
   'availableParallelism',
   'cpus',
   'freemem',
@@ -23,32 +34,38 @@ export const unsupportedOsRuntimeMethods = [
   'uptime',
   'userInfo',
   'version'
-] as const
-
-export type OsRuntimeMethod = (typeof osRuntimeMethods)[number]
-export type OsRuntimeConstant = (typeof osRuntimeConstants)[number]
-
-const nodeOsImportSources = new Set(['node:os'])
-const osRuntimeMethodSet = new Set<string>(osRuntimeMethods)
-const osRuntimeConstantSet = new Set<string>(osRuntimeConstants)
-const unsupportedOsRuntimeMethodSet = new Set<string>(unsupportedOsRuntimeMethods)
+]
 
 export function isNodeOsImportSource(source: string | null | undefined): boolean {
-  return source != null && nodeOsImportSources.has(source)
+  return source === 'node:os'
 }
 
-export function isOsRuntimeMethod(method: string): method is OsRuntimeMethod {
-  return osRuntimeMethodSet.has(method)
+export function isOsRuntimeMethod(method: string): boolean {
+  return stringListHas(osRuntimeMethods, method)
 }
 
-export function isOsRuntimeConstant(value: string): value is OsRuntimeConstant {
-  return osRuntimeConstantSet.has(value)
+export function isOsRuntimeConstant(value: string): boolean {
+  return stringListHas(osRuntimeConstants, value)
 }
 
 export function isUnsupportedOsRuntimeMethod(method: string): boolean {
-  return unsupportedOsRuntimeMethodSet.has(method)
+  return stringListHas(unsupportedOsRuntimeMethods, method)
 }
 
-export function osRuntimeConstantValue(name: OsRuntimeConstant): string {
-  return name === 'EOL' ? '\n' : ''
+export function osRuntimeConstantValue(name: string): string {
+  if (name === 'EOL') {
+    return '\n'
+  }
+
+  return ''
+}
+
+function stringListHas(values: string[], value: string): boolean {
+  for (const current of values) {
+    if (current === value) {
+      return true
+    }
+  }
+
+  return false
 }
