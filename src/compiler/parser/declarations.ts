@@ -1,13 +1,69 @@
-import type { AnyNode, Token } from '../types.ts'
+import type { AnyNode, SourceLocation, Token } from '../types.ts'
 import { locFromToken } from './locations.ts'
 
-export function createImportSpecifier(imported: string, local: string, token: Token, isDefault = false): AnyNode {
-  return {
+type FunctionDeclarationOptions = {
+  exported: boolean
+  isAsync: boolean
+  name: Token
+  params: AnyNode[]
+  returnType: string
+  body: AnyNode[]
+}
+
+type ClassDeclarationOptions = {
+  exported: boolean
+  name: Token
+  extendsName: string | null
+  extendsToken: Token | null
+  fields: AnyNode[]
+  methods: AnyNode[]
+}
+
+type FieldDefinitionOptions = {
+  name: Token
+  staticToken: Token | null
+  readOnly: boolean
+  ownership: string
+  weakToken: Token | null
+  valueType: string
+}
+
+type MethodDefinitionOptions = {
+  name: Token
+  staticToken: Token | null
+  params: AnyNode[]
+  returnType: string
+  body: AnyNode[]
+}
+
+type VariableDeclarationOptions = {
+  kind: string
+  exported: boolean
+  name: Token
+  declaredType: string | null
+  init: AnyNode | null
+}
+
+function nullableTokenLocation(token: Token | null): SourceLocation | null {
+  if (token == null) {
+    return null
+  }
+
+  return locFromToken(token)
+}
+
+export function createImportSpecifier(imported: string, local: string, token: Token, isDefault: boolean): AnyNode {
+  const specifier: AnyNode = {
     imported,
     local,
-    ...(isDefault ? { default: true } : {}),
     loc: locFromToken(token)
   }
+
+  if (isDefault) {
+    specifier.default = true
+  }
+
+  return specifier
 }
 
 export function createImportDeclaration(typeOnly: boolean, specifiers: AnyNode[], source: Token): AnyNode {
@@ -30,7 +86,7 @@ export function createExportDeclaration(typeOnly: boolean, specifiers: AnyNode[]
   }
 }
 
-export function createParam(token: Token, valueType = 'unknown', optional = false): AnyNode {
+export function createParam(token: Token, valueType: string, optional: boolean): AnyNode {
   return {
     name: token.value,
     optional,
@@ -39,18 +95,11 @@ export function createParam(token: Token, valueType = 'unknown', optional = fals
   }
 }
 
-export function createFunctionDeclaration(options: {
-  exported: boolean
-  async: boolean
-  name: Token
-  params: AnyNode[]
-  returnType: string
-  body: AnyNode[]
-}): AnyNode {
+export function createFunctionDeclaration(options: FunctionDeclarationOptions): AnyNode {
   return {
     type: 'FunctionDeclaration',
     exported: options.exported,
-    async: options.async,
+    async: options.isAsync,
     name: options.name.value,
     loc: locFromToken(options.name),
     params: options.params,
@@ -84,7 +133,7 @@ export function createAliasType(valueType: string): AnyNode {
   }
 }
 
-export function createObjectType(fields: AnyNode[], baseTypes: string[] = [], dynamic = false): AnyNode {
+export function createObjectType(fields: AnyNode[], baseTypes: string[], dynamic: boolean): AnyNode {
   return {
     kind: 'object',
     baseTypes,
@@ -95,76 +144,56 @@ export function createObjectType(fields: AnyNode[], baseTypes: string[] = [], dy
 
 export function createObjectTypeField(
   name: Token,
-  readonly: boolean,
+  readOnly: boolean,
   optional: boolean,
   valueType: string,
-  ownership = 'strong',
-  weakToken: Token | null = null
+  ownership: string,
+  weakToken: Token | null
 ): AnyNode {
   return {
     name: name.value,
     optional,
-    readonly,
+    readonly: readOnly,
     ownership,
-    weakLoc: weakToken == null ? null : locFromToken(weakToken),
+    weakLoc: nullableTokenLocation(weakToken),
     valueType,
     loc: locFromToken(name)
   }
 }
 
-export function createClassDeclaration(options: {
-  exported: boolean
-  name: Token
-  extendsName: string | null
-  extendsToken: Token | null
-  fields: AnyNode[]
-  methods: AnyNode[]
-}): AnyNode {
+export function createClassDeclaration(options: ClassDeclarationOptions): AnyNode {
   return {
     type: 'ClassDeclaration',
     exported: options.exported,
     name: options.name.value,
     loc: locFromToken(options.name),
     extendsName: options.extendsName,
-    extendsLoc: options.extendsToken == null ? null : locFromToken(options.extendsToken),
+    extendsLoc: nullableTokenLocation(options.extendsToken),
     fields: options.fields,
     methods: options.methods
   }
 }
 
-export function createFieldDefinition(options: {
-  name: Token
-  staticToken: Token | null
-  readonly: boolean
-  ownership?: string
-  weakToken?: Token | null
-  valueType: string
-}): AnyNode {
+export function createFieldDefinition(options: FieldDefinitionOptions): AnyNode {
   return {
     type: 'FieldDefinition',
     name: options.name.value,
     static: options.staticToken != null,
-    staticLoc: options.staticToken == null ? null : locFromToken(options.staticToken),
-    readonly: options.readonly,
-    ownership: options.ownership ?? 'strong',
-    weakLoc: options.weakToken == null ? null : locFromToken(options.weakToken),
+    staticLoc: nullableTokenLocation(options.staticToken),
+    readonly: options.readOnly,
+    ownership: options.ownership,
+    weakLoc: nullableTokenLocation(options.weakToken),
     valueType: options.valueType,
     loc: locFromToken(options.name)
   }
 }
 
-export function createMethodDefinition(options: {
-  name: Token
-  staticToken: Token | null
-  params: AnyNode[]
-  returnType: string
-  body: AnyNode[]
-}): AnyNode {
+export function createMethodDefinition(options: MethodDefinitionOptions): AnyNode {
   return {
     type: 'MethodDefinition',
     name: options.name.value,
     static: options.staticToken != null,
-    staticLoc: options.staticToken == null ? null : locFromToken(options.staticToken),
+    staticLoc: nullableTokenLocation(options.staticToken),
     loc: locFromToken(options.name),
     params: options.params,
     returnType: options.returnType,
@@ -172,13 +201,7 @@ export function createMethodDefinition(options: {
   }
 }
 
-export function createVariableDeclaration(options: {
-  kind: string
-  exported: boolean
-  name: Token
-  declaredType: string | null
-  init: AnyNode | null
-}): AnyNode {
+export function createVariableDeclaration(options: VariableDeclarationOptions): AnyNode {
   return {
     type: 'VariableDeclaration',
     kind: options.kind,

@@ -36,10 +36,10 @@ function token(type: string, value: string, line = 1, column = 1): Token {
 
 test('builds parser declaration nodes with normalized source locations', () => {
   const name = token('identifier', 'main')
-  const param = createParam(token('identifier', 'value'), 'number')
+  const param = createParam(token('identifier', 'value'), 'number', false)
   const body = [{ type: 'ReturnStatement', argument: null }]
 
-  assert.deepEqual(createFunctionDeclaration({ exported: true, async: false, name, params: [param], returnType: 'void', body }), {
+  assert.deepEqual(createFunctionDeclaration({ exported: true, isAsync: false, name, params: [param], returnType: 'void', body }), {
     type: 'FunctionDeclaration',
     exported: true,
     async: false,
@@ -51,7 +51,7 @@ test('builds parser declaration nodes with normalized source locations', () => {
   })
   assert.equal(createTypeAliasDeclaration(false, token('identifier', 'User'), { kind: 'object', fields: [] }).name, 'User')
   assert.equal(
-    createImportDeclaration(false, [createImportSpecifier('readFile', 'readFile', token('identifier', 'readFile'))], token('string', 'node:fs')).source,
+    createImportDeclaration(false, [createImportSpecifier('readFile', 'readFile', token('identifier', 'readFile'), false)], token('string', 'node:fs')).source,
     'node:fs'
   )
   assert.equal(createVariableDeclaration({ kind: 'const', exported: true, name, declaredType: 'number', init: null }).exported, true)

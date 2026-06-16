@@ -251,7 +251,7 @@ class Parser {
         local = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected local import name').value
       }
 
-      specifiers.push(createImportSpecifier(imported.value, local, imported))
+      specifiers.push(createImportSpecifier(imported.value, local, imported, false))
 
       if (!this.matchValue(',')) {
         break
@@ -302,7 +302,7 @@ class Parser {
 
     return createFunctionDeclaration({
       exported,
-      async: isAsync,
+      isAsync,
       name,
       params,
       returnType,
@@ -560,7 +560,7 @@ class Parser {
     return createFieldDefinition({
       name,
       staticToken,
-      readonly: modifiers.readOnly,
+      readOnly: modifiers.readOnly,
       ownership: ownershipFromWeakToken(modifiers.weakToken),
       weakToken: modifiers.weakToken,
       valueType
@@ -1120,7 +1120,7 @@ class Parser {
     if (this.is('identifier') && this.peek(1).value === '=>') {
       const token = this.advance()
 
-      return [createParam(token)]
+      return [createParam(token, 'unknown', false)]
     }
 
     const params: AnyNode[] = []
