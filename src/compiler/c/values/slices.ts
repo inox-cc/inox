@@ -1,6 +1,16 @@
 import { nextCName } from '../context.ts'
 
-export function emitSliceIndexNormalizationLines(rawName, lengthName, outName, context, prefix) {
+type SliceCNameContext = {
+  nextId: number
+}
+
+export function emitSliceIndexNormalizationLines(
+  rawName: string,
+  lengthName: string,
+  outName: string,
+  context: SliceCNameContext,
+  prefix: string
+): string[] {
   const integerName = nextCName(context, `${prefix}_integer`)
   const fromEndName = nextCName(context, `${prefix}_from_end`)
 
