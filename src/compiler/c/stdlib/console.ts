@@ -1,5 +1,39 @@
 import type { IrProgram, AnyNode } from '../../types.ts'
 
+const CONSOLE_RUNTIME_CHILD_KEYS = [
+  'body',
+  'params',
+  'fields',
+  'methods',
+  'init',
+  'condition',
+  'consequent',
+  'alternate',
+  'test',
+  'update',
+  'iterable',
+  'discriminant',
+  'cases',
+  'block',
+  'handler',
+  'finalizer',
+  'argument',
+  'args',
+  'callee',
+  'object',
+  'index',
+  'target',
+  'value',
+  'valueType',
+  'functionType',
+  'returnShape',
+  'left',
+  'right',
+  'elements',
+  'properties',
+  'expression'
+]
+
 export function isConsoleLog(expression: AnyNode): boolean {
   return (
     expression?.type === 'CallExpression' &&
@@ -12,28 +46,45 @@ export function isConsoleLog(expression: AnyNode): boolean {
 }
 
 export function irProgramsUseConsoleRuntime(programs: IrProgram[]): boolean {
-  return programs.some((program) => containsConsoleRuntimeCall(program.body))
+  for (const program of programs) {
+    if (containsConsoleRuntimeCallList(program.body)) {
+      return true
+    }
+  }
+
+  return false
 }
 
-function containsConsoleRuntimeCall(node: unknown): boolean {
+function containsConsoleRuntimeCallList(nodes: AnyNode[]): boolean {
+  for (const node of nodes) {
+    if (containsConsoleRuntimeCall(node)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function containsConsoleRuntimeCall(node: AnyNode | null | undefined): boolean {
   if (node == null) {
     return false
   }
 
-  if (Array.isArray(node)) {
-    return node.some(containsConsoleRuntimeCall)
-  }
-
-  if (typeof node !== 'object') {
-    return false
-  }
-
-  if (isConsoleLog(node as AnyNode)) {
+  if (isConsoleLog(node)) {
     return true
   }
 
-  for (const [key, value] of Object.entries(node)) {
-    if (key === 'loc' || key === 'shape') {
+  for (const key of CONSOLE_RUNTIME_CHILD_KEYS) {
+    const value = node[key]
+
+    if (value == null) {
+      continue
+    }
+
+    if (Array.isArray(value)) {
+      if (containsConsoleRuntimeCallList(value)) {
+        return true
+      }
       continue
     }
 
