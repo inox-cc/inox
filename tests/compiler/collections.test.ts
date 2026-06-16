@@ -1264,7 +1264,7 @@ test('checks Array sort filter map as typed chain calls', () => {
 })
 
 
-test('lowers C Array.filter Boolean callback to runtime array loop', () => {
+test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   const result = compileSource(
     `export function main(): void {
   const names = ['', 'Ada', 'Grace']
@@ -1295,13 +1295,19 @@ test('lowers C Array.filter Boolean callback to runtime array loop', () => {
   assert.equal(presentNames.arrayElementType, 'string')
   assert.equal(presentNumbers.arrayElementType, 'number')
   assert.equal(presentFlags.arrayElementType, 'boolean')
-  assert.match(result.code, /if \(\(\(ccjs_string\*\)ccjs_filter_value_\d+\.as\.ref\)->len > 0\) \{/)
+  assert.equal(presentNames.loweredArrayMethod, true)
+  assert.doesNotMatch(result.code, /ccjs_filter_array_\d+/)
+  assert.match(result.code, /for \(;;\) \{/)
+  assert.match(result.code, /ccjs_array_get\(names, \(size_t\)\(__ccjs_filter_index_\d+\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_code_point_length_parts\(__ccjs_filter_item_\d+->bytes, __ccjs_filter_item_\d+->len\)/)
   assert.match(
     result.code,
-    /if \(ccjs_filter_value_\d+\.as\.number == ccjs_filter_value_\d+\.as\.number && ccjs_filter_value_\d+\.as\.number != 0\) \{/
+    /if \(__ccjs_filter_item_\d+ == __ccjs_filter_item_\d+\) \{\s*ccjs_logical_\d+ = \(__ccjs_filter_item_\d+ != 0\);/s
   )
-  assert.match(result.code, /if \(ccjs_filter_value_\d+\.as\.boolean\) \{/)
-  assert.match(result.code, /ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
+  assert.match(result.code, /if \(__ccjs_filter_item_\d+\) \{/)
+  assert.match(result.code, /ccjs_array_push\(presentNames, ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_push\(presentNumbers, ccjs_number_value\(__ccjs_filter_item_\d+\)\)/)
+  assert.match(result.code, /ccjs_array_push\(presentFlags, ccjs_bool_value\(\(?__ccjs_filter_item_\d+\)?(?: != 0)?\)\)/)
 })
 
 

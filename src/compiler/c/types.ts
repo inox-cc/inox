@@ -100,6 +100,7 @@ export type CKnownArrayElement = CArrayElementInfo & {
 
 export type CRuntimeArrayElement = CArrayElementInfo & {
   index: number
+  indexExpression?: AnyNode | null
 }
 
 export type CFunctionParam = {

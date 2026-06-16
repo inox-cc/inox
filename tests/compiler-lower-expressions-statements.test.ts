@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { lowerExpression } from '../src/compiler/lower/expressions.ts'
-import { lowerStatement } from '../src/compiler/lower/statements.ts'
+import { lowerStatement, lowerStatementList } from '../src/compiler/lower/statements.ts'
 import { createLowerContext } from '../src/compiler/lower/type-resolution.ts'
 import type { AnyNode, ProgramNode } from '../src/compiler/types.ts'
 
@@ -90,4 +90,126 @@ test('lowers block-bodied arrow expressions through statement context', () => {
   assert.equal(lowered.init.valueType, 'function')
   assert.equal(lowered.init.body[0].type, 'ReturnStatement')
   assert.equal(lowered.init.body[0].argument.valueType, 'number')
+})
+
+test('lowers simple Array.filter variable declarations to for plus push', () => {
+  const statement: AnyNode = {
+    type: 'VariableDeclaration',
+    kind: 'const',
+    exported: false,
+    name: 'selected',
+    valueType: 'array',
+    arrayElementType: 'number',
+    arrayElementDeclaredType: 'number',
+    init: {
+      type: 'CallExpression',
+      valueType: 'array',
+      arrayElementType: 'number',
+      arrayElementDeclaredType: 'number',
+      callee: {
+        type: 'MemberExpression',
+        property: 'filter',
+        object: {
+          type: 'Reference',
+          path: ['values'],
+          valueType: 'array',
+          arrayElementType: 'number',
+          arrayElementDeclaredType: 'number'
+        }
+      },
+      args: [
+        {
+          type: 'ArrowFunctionExpression',
+          expressionBody: true,
+          params: [
+            { type: 'Param', name: 'value', valueType: 'number', declaredType: 'number' },
+            { type: 'Param', name: 'index', valueType: 'number', declaredType: 'number' }
+          ],
+          body: {
+            type: 'BinaryExpression',
+            operator: '>',
+            left: { type: 'Reference', path: ['value'], valueType: 'number' },
+            right: { type: 'Reference', path: ['index'], valueType: 'number' },
+            valueType: 'boolean'
+          }
+        }
+      ]
+    }
+  }
+
+  const lowered = lowerStatementList([statement], createLowerContext({ type: 'Program', body: [] }))
+
+  assert.equal(lowered.length, 2)
+  assert.equal(lowered[0].type, 'VariableDeclaration')
+  assert.equal(lowered[0].name, 'selected')
+  assert.equal(lowered[0].init.type, 'ArrayLiteral')
+  assert.equal(lowered[1].type, 'ForStatement')
+  assert.equal(lowered[1].body.body[0].type, 'VariableDeclaration')
+  assert.equal(lowered[1].body.body[1].type, 'IfStatement')
+  assert.equal(lowered[1].body.body[1].consequent.body[0].expression.callee.property, 'push')
+})
+
+test('lowers simple Array.map variable declarations to for plus push', () => {
+  const statement: AnyNode = {
+    type: 'VariableDeclaration',
+    kind: 'const',
+    exported: false,
+    name: 'mapped',
+    valueType: 'array',
+    arrayElementType: 'number',
+    arrayElementDeclaredType: 'number',
+    init: {
+      type: 'CallExpression',
+      valueType: 'array',
+      arrayElementType: 'number',
+      arrayElementDeclaredType: 'number',
+      callee: {
+        type: 'MemberExpression',
+        property: 'map',
+        object: {
+          type: 'Reference',
+          path: ['values'],
+          valueType: 'array',
+          arrayElementType: 'number',
+          arrayElementDeclaredType: 'number'
+        }
+      },
+      args: [
+        {
+          type: 'ArrowFunctionExpression',
+          expressionBody: true,
+          params: [
+            { type: 'Param', name: 'value', valueType: 'number', declaredType: 'number' },
+            { type: 'Param', name: 'index', valueType: 'number', declaredType: 'number' }
+          ],
+          body: {
+            type: 'BinaryExpression',
+            operator: '+',
+            left: {
+              type: 'BinaryExpression',
+              operator: '*',
+              left: { type: 'Reference', path: ['value'], valueType: 'number' },
+              right: { type: 'NumberLiteral', value: '2', valueType: 'number' },
+              valueType: 'number'
+            },
+            right: { type: 'Reference', path: ['index'], valueType: 'number' },
+            valueType: 'number'
+          }
+        }
+      ]
+    }
+  }
+
+  const lowered = lowerStatementList([statement], createLowerContext({ type: 'Program', body: [] }))
+
+  assert.equal(lowered.length, 2)
+  assert.equal(lowered[0].type, 'VariableDeclaration')
+  assert.equal(lowered[0].name, 'mapped')
+  assert.equal(lowered[0].init.type, 'ArrayLiteral')
+  assert.equal(lowered[1].type, 'ForStatement')
+  assert.equal(lowered[1].body.body[0].type, 'VariableDeclaration')
+  assert.equal(lowered[1].body.body[1].type, 'ExpressionStatement')
+  assert.equal(lowered[1].body.body[1].expression.callee.property, 'push')
+  assert.equal(lowered[1].body.body[1].expression.args[0].type, 'BinaryExpression')
+  assert.notEqual(lowered[1].body.body[1].expression.args[0].right.path[0], 'index')
 })

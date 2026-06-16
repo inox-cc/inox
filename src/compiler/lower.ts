@@ -1,18 +1,36 @@
 import type { AnyNode, ProgramNode } from './types.ts'
-import { lowerParam, lowerStatement } from './lower/statements.ts'
+import { lowerParam, lowerStatementList } from './lower/statements.ts'
 import { createLowerContext, resolveDeclaredType } from './lower/type-resolution.ts'
 import type { LowerContext } from './lower/type-resolution.ts'
 
 export function lowerProgram(ast: ProgramNode): ProgramNode {
   const context = createLowerContext(ast)
+  const body: AnyNode[] = []
+
+  for (const item of ast.body) {
+    appendLoweredTopLevelItem(body, lowerTopLevelItem(item, context))
+  }
 
   return {
     type: 'HirProgram',
-    body: ast.body.map((item) => lowerTopLevelItem(item, context))
+    body
   }
 }
 
-function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
+type LoweredTopLevelItem = AnyNode | AnyNode[]
+
+function appendLoweredTopLevelItem(out: AnyNode[], item: LoweredTopLevelItem): void {
+  if (Array.isArray(item)) {
+    for (const child of item) {
+      out.push(child)
+    }
+    return
+  }
+
+  out.push(item)
+}
+
+function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLevelItem {
   if (item.type === 'ImportDeclaration') {
     return {
       type: 'ImportDeclaration',
@@ -53,7 +71,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       returnPromiseValueType: returnType.promiseValueType ?? null,
       returnSetElementType: returnType.setElementType,
       returnShape: returnType.shape,
-      body: item.body.map((statement) => lowerStatement(statement, context))
+      body: lowerStatementList(item.body, context)
     }
   }
 
@@ -95,11 +113,11 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
           returnMapValueType: returnType.mapValueType,
           returnPromiseValueType: returnType.promiseValueType ?? null,
           returnSetElementType: returnType.setElementType,
-          body: method.body.map((statement) => lowerStatement(statement, context))
+          body: lowerStatementList(method.body, context)
         }
       })
     }
   }
 
-  return lowerStatement(item, context)
+  return lowerStatementList([item], context)
 }

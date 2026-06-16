@@ -9,7 +9,7 @@ export type LowerExpressionContext = LowerContext & {
 
 export function lowerExpression(
   expression: AnyNode,
-  context: LowerExpressionContext = { types: new Map(), classNames: new Set() }
+  context: LowerExpressionContext = { types: new Map(), classNames: new Set(), nextId: 0, variables: new Map() }
 ): AnyNode {
   if (expression.type === 'StringLiteral') {
     return {
@@ -59,27 +59,32 @@ export function lowerExpression(
   }
 
   if (expression.type === 'Reference') {
+    const variable =
+      expression.path.length === 1 && context.variables != null ? context.variables.get(expression.path[0]) : null
+
     return {
       ...expression,
-      valueType: expression.valueType ?? 'unknown',
-      nullable: expression.nullable === true,
-      arrayElementType: expression.arrayElementType ?? null,
-      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
-      mapKeyType: expression.mapKeyType ?? null,
-      mapValueType: expression.mapValueType ?? null,
-      promiseValueType: expression.promiseValueType ?? null,
-      setElementType: expression.setElementType ?? null,
-      functionType: expression.functionType ?? null,
-      shape: expression.shape ?? null,
-      className: expression.className ?? null
+      valueType: knownValueType(expression.valueType) ?? variable?.valueType ?? 'unknown',
+      nullable: expression.nullable === true || variable?.nullable === true,
+      arrayElementType: expression.arrayElementType ?? variable?.arrayElementType ?? null,
+      arrayElementDeclaredType: expression.arrayElementDeclaredType ?? variable?.arrayElementDeclaredType ?? null,
+      mapKeyType: expression.mapKeyType ?? variable?.mapKeyType ?? null,
+      mapValueType: expression.mapValueType ?? variable?.mapValueType ?? null,
+      promiseValueType: expression.promiseValueType ?? variable?.promiseValueType ?? null,
+      setElementType: expression.setElementType ?? variable?.setElementType ?? null,
+      functionType: expression.functionType ?? variable?.functionType ?? null,
+      shape: expression.shape ?? variable?.shape ?? null,
+      className: expression.className ?? variable?.className ?? null
     }
   }
 
   if (expression.type === 'MemberExpression') {
+    const object = lowerExpression(expression.object, context)
+
     return {
       ...expression,
-      object: lowerExpression(expression.object, context),
-      valueType: expression.valueType ?? 'unknown',
+      object,
+      valueType: knownValueType(expression.valueType) ?? inferMemberExpressionType(expression.property, object),
       nullable: expression.nullable === true,
       arrayElementType: expression.arrayElementType ?? null,
       arrayElementDeclaredType: expression.arrayElementDeclaredType ?? null,
@@ -92,11 +97,13 @@ export function lowerExpression(
   }
 
   if (expression.type === 'IndexExpression') {
+    const object = lowerExpression(expression.object, context)
+
     return {
       ...expression,
-      object: lowerExpression(expression.object, context),
+      object,
       index: lowerExpression(expression.index, context),
-      valueType: expression.valueType ?? 'unknown',
+      valueType: knownValueType(expression.valueType) ?? inferIndexExpressionType(object),
       nullable: expression.nullable === true,
       collectionKind: expression.collectionKind ?? null,
       arrayElementType: expression.arrayElementType ?? null,
@@ -312,4 +319,28 @@ function inferBinaryExpressionType(operator: string, left: AnyNode, right: AnyNo
   }
 
   return 'number'
+}
+
+function inferMemberExpressionType(property: string, object: AnyNode): string {
+  if (property === 'length' && (object.valueType === 'array' || object.valueType === 'string')) {
+    return 'number'
+  }
+
+  return 'unknown'
+}
+
+function inferIndexExpressionType(object: AnyNode): string {
+  if (object.valueType === 'array') {
+    return object.arrayElementType ?? 'unknown'
+  }
+
+  return 'unknown'
+}
+
+function knownValueType(valueType: string | null | undefined): string | null {
+  if (valueType == null || valueType === 'unknown') {
+    return null
+  }
+
+  return valueType
 }

@@ -12,6 +12,8 @@ import {
 export type LowerContext = {
   types: Map<string, AnyNode>
   classNames: Set<string>
+  nextId: number
+  variables: Map<string, AnyNode>
 }
 
 export type LowerResolvedType = {
@@ -31,7 +33,9 @@ export type LowerResolvedType = {
 export function createLowerContext(ast: ProgramNode): LowerContext {
   return {
     types: collectTypes(ast),
-    classNames: collectClassNames(ast)
+    classNames: collectClassNames(ast),
+    nextId: 0,
+    variables: new Map()
   }
 }
 

@@ -2444,7 +2444,15 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
       valueType: inferExpressionType(element, context)
     })
   }
-  context.arrayShapes.set(statement.name, shapes)
+  if (
+    statement.init.elements.length === 0 &&
+    statement.arrayElementType != null &&
+    statement.arrayElementType !== 'unknown'
+  ) {
+    context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType)
+  } else {
+    context.arrayShapes.set(statement.name, shapes)
+  }
 
   for (let index = 0; index < statement.init.elements.length; index++) {
     const element = statement.init.elements[index]

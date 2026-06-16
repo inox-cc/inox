@@ -10,6 +10,7 @@ import {
 import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
+import { cRuntimeValueTag } from '../value-types.ts'
 import type { AnyNode } from '../../types.ts'
 import type { CFunctionContext } from '../context.ts'
 import type {
@@ -144,13 +145,7 @@ export function resolveKnownArrayIndex(expression: AnyNode, context: CFunctionCo
 }
 
 export function resolveRuntimeArrayIndex(expression: AnyNode, context: CFunctionContext): CRuntimeArrayElement | null {
-  if (expression == null || expression.type !== 'IndexExpression' || expression.index.type !== 'NumberLiteral') {
-    return null
-  }
-
-  const index = Number.parseInt(expression.index.value, 10)
-
-  if (!Number.isInteger(index) || index < 0) {
+  if (expression == null || expression.type !== 'IndexExpression') {
     return null
   }
 
@@ -160,8 +155,27 @@ export function resolveRuntimeArrayIndex(expression: AnyNode, context: CFunction
     return null
   }
 
+  if (expression.index.type !== 'NumberLiteral') {
+    if (arrayDeps(context).inferExpressionType(expression.index, context) !== 'number') {
+      return null
+    }
+
+    return {
+      index: 0,
+      indexExpression: expression.index,
+      valueType
+    }
+  }
+
+  const index = Number.parseInt(expression.index.value, 10)
+
+  if (!Number.isInteger(index) || index < 0) {
+    return null
+  }
+
   return {
     index,
+    indexExpression: null,
     valueType
   }
 }
@@ -170,13 +184,7 @@ export function resolveOptionalRuntimeArrayIndex(
   expression: AnyNode,
   context: CFunctionContext
 ): CRuntimeArrayElement | null {
-  if (expression == null || expression.type !== 'OptionalIndexExpression' || expression.index.type !== 'NumberLiteral') {
-    return null
-  }
-
-  const index = Number.parseInt(expression.index.value, 10)
-
-  if (!Number.isInteger(index) || index < 0) {
+  if (expression == null || expression.type !== 'OptionalIndexExpression') {
     return null
   }
 
@@ -186,8 +194,27 @@ export function resolveOptionalRuntimeArrayIndex(
     return null
   }
 
+  if (expression.index.type !== 'NumberLiteral') {
+    if (arrayDeps(context).inferExpressionType(expression.index, context) !== 'number') {
+      return null
+    }
+
+    return {
+      index: 0,
+      indexExpression: expression.index,
+      valueType
+    }
+  }
+
+  const index = Number.parseInt(expression.index.value, 10)
+
+  if (!Number.isInteger(index) || index < 0) {
+    return null
+  }
+
   return {
     index,
+    indexExpression: null,
     valueType
   }
 }
@@ -196,11 +223,17 @@ export function resolveRuntimeArrayElementType(expression: AnyNode, context: CFu
   if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
     const runtimeElementType = context.runtimeArrayElementTypes.get(expression.path[0])
 
-    if (runtimeElementType == null) {
-      return null
+    if (runtimeElementType != null) {
+      return runtimeElementType
     }
 
-    return runtimeElementType
+    const shape = context.arrayShapes.get(expression.path[0])
+
+    if (shape != null) {
+      return resolveForOfElementType(shape)
+    }
+
+    return null
   }
 
   if (expression != null && expression.type === 'CallExpression') {
@@ -276,17 +309,38 @@ export function emitPreparedRuntimeArrayIndexValue(
   prefix: string
 ): PreparedExpression {
   const array = arrayDeps(context).emitCValueExpression(expression.object, context)
+  const index = emitPreparedRuntimeArrayIndexExpression(element, context)
   const value = nextCName(context, prefix)
   registerOwnedValue(context, value)
   const lines: string[] = []
 
   appendLines(lines, array.lines)
+  appendLines(lines, index.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(`ccjs_array_get(${array.expression}, ${element.index}, &${value})`, context))
+  lines.push(emitStatusCheck(`ccjs_array_get(${array.expression}, ${index.expression}, &${value})`, context))
 
   return {
     lines,
     expression: value
+  }
+}
+
+function emitPreparedRuntimeArrayIndexExpression(
+  element: CRuntimeArrayElement,
+  context: CFunctionContext
+): PreparedExpression {
+  if (element.indexExpression == null) {
+    return {
+      lines: [],
+      expression: `${element.index}`
+    }
+  }
+
+  const index = arrayDeps(context).emitPreparedNumberExpression(element.indexExpression, context)
+
+  return {
+    lines: index.lines,
+    expression: `(size_t)(${index.expression})`
   }
 }
 
@@ -326,22 +380,37 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
 ): PreparedExpression | null {
   const runtimeElement = resolveRuntimeArrayIndex(expression, context)
 
-  if (runtimeElement == null || !isSupportedRuntimeArrayElementType(runtimeElement.valueType)) {
+  if (runtimeElement == null) {
     return null
   }
 
   const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_value')
 
-  if (runtimeElement.valueType !== 'string') {
+  if (runtimeElement.valueType === 'string') {
+    const lines: string[] = []
+
+    appendLines(lines, value.lines)
+    appendLines(lines, emitRuntimeFieldValueCheck(value.expression, 'CCJS_TAG_STRING', expression, context))
+
+    return {
+      lines,
+      expression: value.expression
+    }
+  }
+
+  const tag = cRuntimeValueTag(runtimeElement.valueType)
+
+  if (tag == null) {
     return value
   }
-  const lines: string[] = []
 
-  appendLines(lines, value.lines)
-  appendLines(lines, emitRuntimeFieldValueCheck(value.expression, 'CCJS_TAG_STRING', expression, context))
+  const checkedLines: string[] = []
+
+  appendLines(checkedLines, value.lines)
+  appendLines(checkedLines, emitRuntimeFieldValueCheck(value.expression, tag, expression, context))
 
   return {
-    lines,
+    lines: checkedLines,
     expression: value.expression
   }
 }
@@ -631,9 +700,10 @@ export function emitPreparedArrayPushCallExpression(
     return null
   }
 
-  const value = arrayDeps(context).emitCValueExpression(expression.args[0], context)
+  const valueType = arrayDeps(context).inferExpressionType(expression.args[0], context)
+  const value = emitPreparedArrayElementValue(expression.args[0], valueType, context)
 
-  updatePushedArrayMetadata(expression.callee.object, arrayDeps(context).inferExpressionType(expression.args[0], context), context)
+  updatePushedArrayMetadata(expression.callee.object, valueType, context)
 
   const lines: string[] = []
 
@@ -1488,7 +1558,15 @@ function updatePoppedArrayMetadata(receiver: AnyNode, context: CFunctionContext)
 }
 
 function emitPreparedArrayMapValue(expression: AnyNode, valueType: string, context: CFunctionContext): PreparedExpression {
-  if (valueType === 'string') {
+  return emitPreparedArrayElementValue(expression, valueType, context)
+}
+
+function emitPreparedArrayElementValue(
+  expression: AnyNode,
+  valueType: string,
+  context: CFunctionContext
+): PreparedExpression {
+  if (valueType !== 'number' && valueType !== 'boolean') {
     return arrayDeps(context).emitCValueExpression(expression, context)
   }
 
