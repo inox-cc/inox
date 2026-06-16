@@ -76,7 +76,7 @@ export type CScalarExpressionDependencies = {
     expression: AnyNode,
     element: CRuntimeArrayElement,
     context: CFunctionContext,
-    tempPrefix?: string
+    tempPrefix: string
   ) => PreparedExpression
   emitPreparedStringCompareExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedStringLengthExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
@@ -110,7 +110,11 @@ export type CCallExpressionDependencies = {
   emitNullableScalarValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedArrayFilterCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
   emitPreparedArrayMapCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedArrayPopCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedArrayPopCallExpression: (
+    expression: AnyNode,
+    context: CFunctionContext,
+    options: PreparedCallOptions | null
+  ) => PreparedExpression | null
   emitPreparedArraySortCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
   emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
   emitPreparedCollectionCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
@@ -193,7 +197,7 @@ export function emitPreparedCallExpression(
     return classMethodCall
   }
 
-  const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context)
+  const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)
 
   if (arrayPopCall != null) {
     return arrayPopCall
@@ -1225,7 +1229,11 @@ export type CValueExpressionDependencies = {
   emitCStringTrimValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitCTemplateLiteralValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitOptionalRuntimeCallbackCallValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedArrayPopCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
+  emitPreparedArrayPopCallExpression: (
+    expression: AnyNode,
+    context: CFunctionContext,
+    options: PreparedCallOptions | null
+  ) => PreparedExpression | null
   emitPreparedBinaryValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
   emitPreparedCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedChildProcessCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
@@ -1382,7 +1390,7 @@ export function emitCValueExpression(
     return binaryValue
   }
 
-  const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context)
+  const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)
 
   if (arrayPopCall != null) {
     return arrayPopCall

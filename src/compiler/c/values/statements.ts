@@ -136,7 +136,11 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext
   ) => PreparedArrayExpression | null
   emitPreparedArrayMapCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedArrayExpression | null
-  emitPreparedArrayPopCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
+  emitPreparedArrayPopCallExpression: (
+    expression: AnyNode,
+    context: CFunctionContext,
+    options: PreparedCallOptions | null
+  ) => PreparedExpression | null
   emitPreparedArrayPushCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
   emitPreparedArraySortCallExpression: (
     expression: AnyNode,
