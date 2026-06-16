@@ -1,75 +1,89 @@
-export const arrayMethods = ['filter', 'map', 'pop', 'push', 'sort'] as const
-export const collectionConstructors = ['Map', 'Set'] as const
-export const mapMethods = ['clear', 'delete', 'get', 'has', 'set'] as const
-export const setMethods = ['add', 'clear', 'delete', 'has'] as const
-export const stringTransformMethods = ['slice', 'split', 'trim'] as const
-export const stringPredicateMethods = ['endsWith', 'includes', 'startsWith'] as const
-export const stringRuntimeMethods = [...stringTransformMethods, ...stringPredicateMethods] as const
+export const arrayMethods: string[] = ['filter', 'map', 'pop', 'push', 'sort']
+export const collectionConstructors: string[] = ['Map', 'Set']
+export const mapMethods: string[] = ['clear', 'delete', 'get', 'has', 'set']
+export const setMethods: string[] = ['add', 'clear', 'delete', 'has']
+export const stringTransformMethods: string[] = ['slice', 'split', 'trim']
+export const stringPredicateMethods: string[] = ['endsWith', 'includes', 'startsWith']
+export const stringRuntimeMethods: string[] = ['slice', 'split', 'trim', 'endsWith', 'includes', 'startsWith']
 
-export type ArrayRuntimeMethod = (typeof arrayMethods)[number]
-export type CollectionConstructorName = (typeof collectionConstructors)[number]
-export type MapRuntimeMethod = (typeof mapMethods)[number]
-export type SetRuntimeMethod = (typeof setMethods)[number]
-export type StringRuntimeMethod = (typeof stringRuntimeMethods)[number]
+const arrayMethodSet = createStringSet(arrayMethods)
+const collectionConstructorSet = createStringSet(collectionConstructors)
+const mapMethodSet = createStringSet(mapMethods)
+const setMethodSet = createStringSet(setMethods)
+const stringPredicateMethodSet = createStringSet(stringPredicateMethods)
+const stringRuntimeMethodSet = createStringSet(stringRuntimeMethods)
 
-const arrayMethodSet = new Set<string>(arrayMethods)
-const collectionConstructorSet = new Set<string>(collectionConstructors)
-const mapMethodSet = new Set<string>(mapMethods)
-const setMethodSet = new Set<string>(setMethods)
-const stringPredicateMethodSet = new Set<string>(stringPredicateMethods)
-const stringRuntimeMethodSet = new Set<string>(stringRuntimeMethods)
+export function arrayRuntimeMethodName(method: string): string | null {
+  if (isArrayMethod(method)) {
+    return method
+  }
 
-export function arrayRuntimeMethodName(method: string): ArrayRuntimeMethod | null {
-  return isArrayMethod(method) ? method : null
+  return null
 }
 
 export function collectionConstructorNameFromPath(
-  path: readonly string[] | null | undefined
-): CollectionConstructorName | null {
+  path: string[] | null | undefined
+): string | null {
   if (path == null || path.length !== 1) {
     return null
   }
 
-  return isCollectionConstructorName(path[0]) ? path[0] : null
+  if (isCollectionConstructorName(path[0])) {
+    return path[0]
+  }
+
+  return null
 }
 
-export function mapRuntimeMethodName(method: string): MapRuntimeMethod | null {
-  return isMapMethod(method) ? method : null
+export function mapRuntimeMethodName(method: string): string | null {
+  if (isMapMethod(method)) {
+    return method
+  }
+
+  return null
 }
 
-export function setRuntimeMethodName(method: string): SetRuntimeMethod | null {
-  return isSetMethod(method) ? method : null
+export function setRuntimeMethodName(method: string): string | null {
+  if (isSetMethod(method)) {
+    return method
+  }
+
+  return null
 }
 
-export function stringRuntimeMethodName(method: string): StringRuntimeMethod | null {
-  return isStringRuntimeMethod(method) ? method : null
+export function stringRuntimeMethodName(method: string): string | null {
+  if (isStringRuntimeMethod(method)) {
+    return method
+  }
+
+  return null
 }
 
-export function isArrayMethod(method: string): method is ArrayRuntimeMethod {
+export function isArrayMethod(method: string): boolean {
   return arrayMethodSet.has(method)
 }
 
-export function isCollectionConstructorName(name: string): name is CollectionConstructorName {
+export function isCollectionConstructorName(name: string): boolean {
   return collectionConstructorSet.has(name)
 }
 
-export function isCollectionConstructorGlobalUsagePath(path: readonly string[] | null | undefined): boolean {
+export function isCollectionConstructorGlobalUsagePath(path: string[] | null | undefined): boolean {
   return collectionConstructorNameFromPath(path) != null
 }
 
-export function isMapMethod(method: string): method is MapRuntimeMethod {
+export function isMapMethod(method: string): boolean {
   return mapMethodSet.has(method)
 }
 
-export function isSetMethod(method: string): method is SetRuntimeMethod {
+export function isSetMethod(method: string): boolean {
   return setMethodSet.has(method)
 }
 
-export function isStringPredicateMethod(method: string): method is (typeof stringPredicateMethods)[number] {
+export function isStringPredicateMethod(method: string): boolean {
   return stringPredicateMethodSet.has(method)
 }
 
-export function isStringRuntimeMethod(method: string): method is StringRuntimeMethod {
+export function isStringRuntimeMethod(method: string): boolean {
   return stringRuntimeMethodSet.has(method)
 }
 
@@ -82,5 +96,13 @@ export function stringRuntimeReturnType(method: string): 'array' | 'boolean' | '
     return 'boolean'
   }
 
-  return isStringRuntimeMethod(method) ? 'string' : null
+  if (isStringRuntimeMethod(method)) {
+    return 'string'
+  }
+
+  return null
+}
+
+function createStringSet(values: string[]): Set<string> {
+  return new Set(values)
 }
