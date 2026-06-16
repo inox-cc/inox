@@ -10,7 +10,6 @@ import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
-import type { CEmitContext, CFunctionContext } from '../context.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type {
   CClassInfo,
@@ -22,25 +21,89 @@ import type {
 } from '../types.ts'
 
 export type ClassLoweringDependencies = {
-  emitCFieldFlags: (field: CObjectShapeField) => string
-  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedCallArgs: (expression: AnyNode, params: CFunctionParam[], context: CFunctionContext) => PreparedCallArgs
+  emitCFieldFlags(field: CObjectShapeField): string
+  emitCValueExpression(expression: AnyNode, context: ClassFunctionContext): PreparedExpression
+  emitPreparedCallArgs(expression: AnyNode, params: CFunctionParam[], context: ClassFunctionContext): PreparedCallArgs
 }
 
 type ClassMethodCallInfo = {
   info: CClassInfo
-  method: AnyNode | null
+  methodName: string
   objectExpression: string
 }
 
 type CClassInfoMap = Map<string, CClassInfo>
 type CClassMethodMap = Map<string, AnyNode>
 type CConstructorArgMap = Map<string, AnyNode>
+type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
+type CStringMap = Map<string, string>
 type CStringSet = Set<string>
 type ClassMaybeNode = AnyNode | null | undefined
 
-function classDeps(context: CFunctionContext): ClassLoweringDependencies {
-  return context.classLoweringDependencies
+type ClassEmitContext = {
+  classInfos: CClassInfoMap
+}
+
+type ClassFunctionContext = {
+  boxedVariables: CStringSet
+  classInfos?: CClassInfoMap
+  classInstanceTypes?: CStringMap
+  classLoweringDependencies?: ClassLoweringDependencies
+  cleanupEnabled: boolean
+  diagnostics: Diagnostic[]
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  nextId: number
+  objectShapes: CObjectShapeFieldMap
+  ownedValues: string[]
+  returnType?: string
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  variables: CStringMap
+}
+
+function emitFallbackClassFieldFlags(_field: CObjectShapeField): string {
+  return '0'
+}
+
+function emitFallbackClassValueExpression(
+  _expression: AnyNode,
+  _context: ClassFunctionContext
+): PreparedExpression {
+  return {
+    lines: [],
+    expression: 'ccjs_undefined_value()'
+  }
+}
+
+function emitFallbackPreparedClassCallArgs(
+  _expression: AnyNode,
+  _params: CFunctionParam[],
+  _context: ClassFunctionContext
+): PreparedCallArgs {
+  return {
+    lines: [],
+    args: []
+  }
+}
+
+const fallbackClassLoweringDependencies: ClassLoweringDependencies = {
+  emitCFieldFlags: emitFallbackClassFieldFlags,
+  emitCValueExpression: emitFallbackClassValueExpression,
+  emitPreparedCallArgs: emitFallbackPreparedClassCallArgs
+}
+
+function classDeps(context: ClassFunctionContext): ClassLoweringDependencies {
+  const deps = context.classLoweringDependencies
+
+  if (deps != null) {
+    return deps
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'class lowering dependencies are not configured'))
+
+  return fallbackClassLoweringDependencies
 }
 
 function createClassInfoMap(): CClassInfoMap {
@@ -66,8 +129,10 @@ function pushAllLines(target: string[], source: string[]): void {
 }
 
 function classFieldOwnership(field: CObjectShapeField): string {
-  if (field.ownership != null) {
-    return field.ownership
+  const ownership = field.ownership
+
+  if (ownership != null) {
+    return ownership
   }
 
   return 'strong'
@@ -111,10 +176,11 @@ function findClassConstructorMethod(classNode: AnyNode): AnyNode | null {
   return null
 }
 
-export function collectClassMethods(context: CEmitContext): CClassMethod[] {
+export function collectClassMethods(context: ClassEmitContext): CClassMethod[] {
   const methods: CClassMethod[] = []
+  const classInfos = context.classInfos
 
-  for (const info of context.classInfos.values()) {
+  for (const info of classInfos.values()) {
     for (const method of info.methods.values()) {
       methods.push({
         info,
@@ -130,21 +196,26 @@ function collectClassConstructorAssignments(
   classNode: AnyNode,
   constructorMethod: AnyNode | null,
   diagnostics: Diagnostic[]
-) {
-  if (constructorMethod == null) {
-    return []
-  }
-
+): AnyNode[] {
   const assignments: AnyNode[] = []
 
-  for (const statement of constructorMethod.body) {
-    let assignment: AnyNode | null = null
+  if (constructorMethod != null) {
+    for (const statement of constructorMethod.body) {
+      let assignment: AnyNode | null = null
 
-    if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
-      assignment = statement.expression
-    }
+      if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
+        assignment = statement.expression
+      }
 
-    if (assignment == null || !isThisFieldExpression(assignment.target)) {
+      if (assignment != null) {
+        const field = thisFieldName(assignment.target)
+
+        if (field != null) {
+          assignments.push(createClassConstructorAssignment(field, assignment))
+          continue
+        }
+      }
+
       diagnostics.push(
         diagnostic(
           'CCJS_C_CLASS',
@@ -152,17 +223,18 @@ function collectClassConstructorAssignments(
           nodeLocOrFallback(statement, constructorMethod)
         )
       )
-      continue
     }
-
-    assignments.push({
-      field: assignment.target.property,
-      value: assignment.value,
-      loc: assignment.loc
-    })
   }
 
   return assignments
+}
+
+function createClassConstructorAssignment(field: string, assignment: AnyNode): AnyNode {
+  return {
+    field,
+    value: assignment.value,
+    loc: assignment.loc
+  }
 }
 
 function resolveClassFields(
@@ -209,14 +281,11 @@ function resolveClassFields(
 
 function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
   let ownership = 'strong'
-  let valueType = 'unknown'
+  const valueType = field.valueType
+  const fieldOwnership = field.ownership
 
-  if (field.ownership != null) {
-    ownership = field.ownership
-  }
-
-  if (field.valueType != null) {
-    valueType = field.valueType
+  if (fieldOwnership != null) {
+    ownership = fieldOwnership
   }
 
   return {
@@ -286,11 +355,19 @@ function findClassParam(params: AnyNode[], name: string): AnyNode | null {
 }
 
 function isThisFieldExpression(expression: ClassMaybeNode): boolean {
+  return thisFieldName(expression) != null
+}
+
+function thisFieldName(expression: ClassMaybeNode): string | null {
   if (expression == null || expression.type !== 'MemberExpression') {
-    return false
+    return null
   }
 
-  return isThisObjectExpression(expression.object)
+  if (isThisObjectExpression(expression.object)) {
+    return expression.property
+  }
+
+  return null
 }
 
 function isThisObjectExpression(expression: ClassMaybeNode): boolean {
@@ -305,7 +382,7 @@ function isThisObjectExpression(expression: ClassMaybeNode): boolean {
   return expression.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'this'
 }
 
-function nodeLocOrFallback(node: ClassMaybeNode, fallback: ClassMaybeNode): SourceLocation | undefined {
+function nodeLocOrFallback(node: ClassMaybeNode, fallback: ClassMaybeNode): SourceLocation | null {
   if (node != null && node.loc != null) {
     return node.loc
   }
@@ -314,57 +391,74 @@ function nodeLocOrFallback(node: ClassMaybeNode, fallback: ClassMaybeNode): Sour
     return fallback.loc
   }
 
-  return undefined
+  return null
 }
 
-export function emitClassObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
+export function emitClassObjectVariableDeclaration(statement: AnyNode, context: ClassFunctionContext): string[] {
   const info = resolveClassConstructorInfo(statement.init, context)
 
-  if (info == null) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_C_CLASS',
-        'this class constructor is not supported by the current C backend slice',
-        nodeLocOrFallback(statement.init, statement)
-      )
-    )
-    return [`ccjs_value ${statement.name} = ccjs_undefined_value();`]
+  if (info != null) {
+    return emitSupportedClassObjectVariableDeclaration(statement, info, context)
   }
 
+  context.diagnostics.push(
+    diagnostic(
+      'CCJS_C_CLASS',
+      'this class constructor is not supported by the current C backend slice',
+      nodeLocOrFallback(statement.init, statement)
+    )
+  )
+
+  return [`ccjs_value ${statement.name} = ccjs_undefined_value();`]
+}
+
+function emitSupportedClassObjectVariableDeclaration(
+  statement: AnyNode,
+  info: CClassInfo,
+  context: ClassFunctionContext
+): string[] {
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'object')
-  context.classInstanceTypes.set(statement.name, info.name)
+  registerClassInstanceType(context, statement.name, info.name)
   registerClassObjectShape(context, statement.name, info)
 
   return emitCClassObjectInitLines(statement.name, statement.init, info, context)
 }
 
-export function emitCClassObjectValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
+function registerClassInstanceType(context: ClassFunctionContext, name: string, className: string): void {
+  const classInstanceTypes = context.classInstanceTypes
+
+  if (classInstanceTypes != null) {
+    classInstanceTypes.set(name, className)
+  }
+}
+
+export function emitCClassObjectValueExpression(expression: AnyNode, context: ClassFunctionContext): PreparedExpression {
   const info = resolveClassConstructorInfo(expression, context)
   const temp = nextCName(context, 'ccjs_class_object')
   registerOwnedValue(context, temp)
 
-  if (info == null) {
-    context.diagnostics.push(
-        diagnostic(
-          'CCJS_C_CLASS',
-          'this class constructor is not supported by the current C backend slice',
-          nodeLocOrFallback(expression, null)
-        )
-      )
-
-    const lines: string[] = []
-    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(`${temp} = ccjs_undefined_value();`)
-
+  if (info != null) {
     return {
-      lines,
+      lines: emitCClassObjectInitLines(temp, expression, info, context),
       expression: temp
     }
   }
 
+  context.diagnostics.push(
+    diagnostic(
+      'CCJS_C_CLASS',
+      'this class constructor is not supported by the current C backend slice',
+      nodeLocOrFallback(expression, null)
+    )
+  )
+
+  const lines: string[] = []
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(`${temp} = ccjs_undefined_value();`)
+
   return {
-    lines: emitCClassObjectInitLines(temp, expression, info, context),
+    lines,
     expression: temp
   }
 }
@@ -373,7 +467,7 @@ function emitCClassObjectInitLines(
   target: string,
   expression: AnyNode,
   info: CClassInfo,
-  context: CFunctionContext
+  context: ClassFunctionContext
 ): string[] {
   const shapeName = nextCName(context, `ccjs_shape_${info.name}`)
   const fieldsName = `${shapeName}_fields`
@@ -412,7 +506,7 @@ function emitCClassObjectInitLines(
   return lines
 }
 
-export function registerClassObjectShape(context: CFunctionContext, name: string, info: CClassInfo): void {
+export function registerClassObjectShape(context: ClassFunctionContext, name: string, info: CClassInfo): void {
   const fields: CObjectShapeField[] = []
 
   for (const field of info.fields) {
@@ -443,11 +537,7 @@ function findClassFieldIndex(fields: CObjectShapeField[], name: string): number 
 
 function mapClassConstructorArgs(expression: AnyNode, info: CClassInfo): CConstructorArgMap {
   const args = createConstructorArgMap()
-  let params: AnyNode[] = []
-
-  if (info.constructor != null) {
-    params = info.constructor.params
-  }
+  const params = classConstructorParams(info)
 
   for (let index = 0; index < params.length; index++) {
     const param = params[index]
@@ -457,6 +547,16 @@ function mapClassConstructorArgs(expression: AnyNode, info: CClassInfo): CConstr
   }
 
   return args
+}
+
+function classConstructorParams(info: CClassInfo): AnyNode[] {
+  const constructorMethod = info.constructor
+
+  if (constructorMethod != null) {
+    return constructorMethod.params
+  }
+
+  return []
 }
 
 function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstructorArgMap): AnyNode {
@@ -590,7 +690,7 @@ function substituteCallLikeExpression(node: AnyNode, args: CConstructorArgMap): 
   }
 }
 
-function resolveClassConstructorInfo(expression: ClassMaybeNode, context: CFunctionContext): CClassInfo | null {
+function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassFunctionContext): CClassInfo | null {
   if (expression == null || expression.type !== 'NewExpression') {
     return null
   }
@@ -599,7 +699,13 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: CFunct
     return null
   }
 
-  const info = context.classInfos.get(expression.callee.path[0])
+  const classInfos = context.classInfos
+
+  if (classInfos == null) {
+    return null
+  }
+
+  const info = classInfos.get(expression.callee.path[0])
 
   if (info != null) {
     return info
@@ -608,50 +714,70 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: CFunct
   return null
 }
 
-export function isClassConstructorExpression(expression: AnyNode, context: CFunctionContext): boolean {
+export function isClassConstructorExpression(expression: AnyNode, context: ClassFunctionContext): boolean {
   return resolveClassConstructorInfo(expression, context) != null
 }
 
 export function emitPreparedClassMethodCallExpression(
   expression: AnyNode,
-  context: CFunctionContext
+  context: ClassFunctionContext
 ): PreparedExpression | null {
   const call = resolveClassMethodCallInfo(expression, context)
 
-  if (call == null) {
-    return null
+  if (call != null) {
+    return emitPreparedResolvedClassMethodCallExpression(expression, context, call)
   }
 
-  if (call.method == null) {
-    context.diagnostics.push(
-      diagnostic(
-        'CCJS_UNKNOWN_FIELD',
-        `unknown method ${expression.callee.property}`,
-        nodeLocOrFallback(expression.callee, expression)
-      )
+  return null
+}
+
+function emitPreparedResolvedClassMethodCallExpression(
+  expression: AnyNode,
+  context: ClassFunctionContext,
+  call: ClassMethodCallInfo
+): PreparedExpression {
+  const method = resolveClassMethod(call.info, call.methodName)
+
+  if (method != null) {
+    return emitKnownPreparedClassMethodCallExpression(expression, context, call, method)
+  }
+
+  context.diagnostics.push(
+    diagnostic(
+      'CCJS_UNKNOWN_FIELD',
+      `unknown method ${call.methodName}`,
+      nodeLocOrFallback(expression.callee, expression)
     )
-    return {
-      lines: [],
-      expression: ''
-    }
-  }
+  )
 
-  if (call.method.params.length !== expression.args.length) {
+  return {
+    lines: [],
+    expression: ''
+  }
+}
+
+function emitKnownPreparedClassMethodCallExpression(
+  expression: AnyNode,
+  context: ClassFunctionContext,
+  call: ClassMethodCallInfo,
+  method: AnyNode
+): PreparedExpression {
+  if (method.params.length !== expression.args.length) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_ARG_COUNT',
-        `method ${expression.callee.property} expects ${call.method.params.length} argument(s), got ${expression.args.length}`,
+        `method ${expression.callee.property} expects ${method.params.length} argument(s), got ${expression.args.length}`,
         expression.loc
       )
     )
   }
 
-  const prepared = classDeps(context).emitPreparedCallArgs(expression, call.method.params, context)
-  const callExpression = emitClassMethodCallExpression(call, call.method, prepared)
+  const prepared = classDeps(context).emitPreparedCallArgs(expression, method.params, context)
+  const callExpression = emitClassMethodCallExpression(call, method, prepared)
 
-  if (isManagedRuntimeReturnType(call.method.returnType)) {
+  if (isManagedRuntimeReturnType(method.returnType)) {
     const value = nextCName(context, 'ccjs_method_value')
-    const tag = cRuntimeValueTag(call.method.returnType)
+    const tag = cRuntimeValueTag(method.returnType)
     registerOwnedValue(context, value)
     const lines: string[] = []
     pushAllLines(lines, prepared.lines)
@@ -667,7 +793,7 @@ export function emitPreparedClassMethodCallExpression(
 
   let expressionText = callExpression
 
-  if (call.method.returnType === 'void') {
+  if (method.returnType === 'void') {
     expressionText = `${callExpression}`
   }
 
@@ -687,7 +813,7 @@ function emitClassMethodCallExpression(call: ClassMethodCallInfo, method: AnyNod
   return `${emitCClassMethodName(call.info.name, method.name)}(${args.join(', ')})`
 }
 
-function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: CFunctionContext): ClassMethodCallInfo | null {
+function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFunctionContext): ClassMethodCallInfo | null {
   if (expression == null || expression.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
     return null
   }
@@ -698,23 +824,53 @@ function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: CFuncti
     return null
   }
 
-  const className = context.classInstanceTypes.get(objectName)
+  const className = classNameForObject(context, objectName)
 
-  if (className == null) {
+  if (className != null) {
+    const info = classInfoForName(context, className)
+
+    if (info != null) {
+      return {
+        info,
+        methodName: expression.callee.property,
+        objectExpression: emitObjectValueReference(objectName, context)
+      }
+    }
+  }
+
+  return null
+}
+
+function classNameForObject(context: ClassFunctionContext, objectName: string): string | null {
+  const classInstanceTypes = context.classInstanceTypes
+
+  if (classInstanceTypes == null) {
     return null
   }
 
-  const info = context.classInfos.get(className)
+  const className = classInstanceTypes.get(objectName)
 
-  if (info == null) {
+  if (className != null) {
+    return className
+  }
+
+  return null
+}
+
+function classInfoForName(context: ClassFunctionContext, className: string): CClassInfo | null {
+  const classInfos = context.classInfos
+
+  if (classInfos == null) {
     return null
   }
 
-  return {
-    info,
-    method: resolveClassMethod(info, expression.callee.property),
-    objectExpression: emitObjectValueReference(objectName, context)
+  const info = classInfos.get(className)
+
+  if (info != null) {
+    return info
   }
+
+  return null
 }
 
 function resolveClassMethod(info: CClassInfo, name: string): AnyNode | null {
