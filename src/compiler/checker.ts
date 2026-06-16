@@ -181,6 +181,12 @@ type RuntimeCallInfo = {
   unsupported: boolean
 }
 
+type FsBooleanOptions = {
+  recursive?: boolean
+  force?: boolean
+  withFileTypes?: boolean
+}
+
 export function checkProgram(program: ProgramNode, options: CompileOptions = {}): CheckProgramResult {
   const checker = new Checker(program, options)
   checker.check()
@@ -4311,9 +4317,22 @@ class Checker {
     }
 
     const classSymbol = this.scope.resolve(className)
-    const method = classSymbol?.classMethods?.find((item) => item.name === expression.callee.property)
+    let method: AnyNode | null = null
 
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    if (classSymbol != null && classSymbol.classMethods != null) {
+      for (const item of classSymbol.classMethods) {
+        if (item.name === expression.callee.property) {
+          method = item
+          break
+        }
+      }
+    }
+
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
 
     if (method == null) {
       this.report('CCJS_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc)
@@ -4321,7 +4340,12 @@ class Checker {
       return 'unknown'
     }
 
-    const params = method.params.map((param) => this.resolveParam(param))
+    const params: AnyNode[] = []
+
+    for (const param of method.params) {
+      params.push(this.resolveParam(param))
+    }
+
     const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
 
     if (!this.acceptsArgumentCount(params, expression.args.length)) {
@@ -4332,7 +4356,9 @@ class Checker {
       )
     }
 
-    for (const [index, param] of params.entries()) {
+    for (let index = 0; index < params.length; index++) {
+      const param = params[index]
+
       if (index < argTypes.length) {
         this.checkAssignableType(
           argTypes[index],
@@ -4350,7 +4376,12 @@ class Checker {
     expression.arrayElementDeclaredType = returnInfo.arrayElementDeclaredType
     expression.mapKeyType = returnInfo.mapKeyType
     expression.mapValueType = returnInfo.mapValueType
-    expression.promiseValueType = returnInfo.promiseValueType ?? null
+    expression.promiseValueType = null
+
+    if (returnInfo.promiseValueType != null) {
+      expression.promiseValueType = returnInfo.promiseValueType
+    }
+
     expression.setElementType = returnInfo.setElementType
     expression.shape = returnInfo.shape
 
@@ -4363,7 +4394,12 @@ class Checker {
     }
 
     const method = expression.callee.property
-    const expectedArgCount = mathRuntimeArgCount(method) ?? 0
+    let expectedArgCount = 0
+    const runtimeArgCount = mathRuntimeArgCount(method)
+
+    if (runtimeArgCount != null) {
+      expectedArgCount = runtimeArgCount
+    }
 
     expression.mathRuntimeMethod = method
     expression.valueType = 'number'
@@ -4405,7 +4441,8 @@ class Checker {
   checkFsStatsMethodCall(expression: AnyNode): ValueType | null {
     if (
       expression.callee.type !== 'MemberExpression' ||
-      !['isFile', 'isDirectory'].includes(expression.callee.property)
+      expression.callee.property !== 'isFile' &&
+      expression.callee.property !== 'isDirectory'
     ) {
       return null
     }
@@ -4413,22 +4450,36 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || (shape?.builtin !== 'fs.Stats' && shape?.builtin !== 'fs.Dirent')) {
+    if (objectType !== 'object' || shape == null || (shape.builtin !== 'fs.Stats' && shape.builtin !== 'fs.Dirent')) {
       return null
     }
 
     if (expression.args.length !== 0) {
+      let receiverName = 'Stats'
+
+      if (shape.builtin === 'fs.Dirent') {
+        receiverName = 'Dirent'
+      }
+
       this.report(
         'CCJS_ARG_COUNT',
-        `function ${shape.builtin === 'fs.Dirent' ? 'Dirent' : 'Stats'}.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
+        `function ${receiverName}.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
 
     if (shape.builtin === 'fs.Dirent') {
-      expression.fsRuntimeMethod = expression.callee.property === 'isFile' ? 'direntIsFile' : 'direntIsDirectory'
+      if (expression.callee.property === 'isFile') {
+        expression.fsRuntimeMethod = 'direntIsFile'
+      } else {
+        expression.fsRuntimeMethod = 'direntIsDirectory'
+      }
     } else {
-      expression.fsRuntimeMethod = expression.callee.property === 'isFile' ? 'statsIsFile' : 'statsIsDirectory'
+      if (expression.callee.property === 'isFile') {
+        expression.fsRuntimeMethod = 'statsIsFile'
+      } else {
+        expression.fsRuntimeMethod = 'statsIsDirectory'
+      }
     }
     expression.valueType = 'boolean'
 
@@ -4869,22 +4920,51 @@ class Checker {
     }
 
     expression.fetchRuntimeMethod = fetchHeadersRuntimeMethod(expression.callee.property)
-    expression.valueType = expression.callee.property === 'get' ? 'string' : 'boolean'
-    expression.nullable = expression.callee.property === 'get'
+    expression.valueType = 'boolean'
+    expression.nullable = false
+
+    if (expression.callee.property === 'get') {
+      expression.valueType = 'string'
+      expression.nullable = true
+    }
 
     return expression.valueType
   }
 
   resolveClassMethodReceiverClassName(expression: AnyNode): string | null {
     if (this.isThisExpression(expression)) {
-      return this.scope.resolve('this')?.className ?? expression.className ?? null
+      const symbol = this.scope.resolve('this')
+
+      if (symbol != null && symbol.className != null) {
+        return symbol.className
+      }
+
+      if (expression.className != null) {
+        return expression.className
+      }
+
+      return null
     }
 
-    if (expression?.type === 'Reference' && expression.path.length === 1) {
-      return this.scope.resolve(expression.path[0])?.className ?? expression.className ?? null
+    if (expression.type === 'Reference' && expression.path.length === 1) {
+      const symbol = this.scope.resolve(expression.path[0])
+
+      if (symbol != null && symbol.className != null) {
+        return symbol.className
+      }
+
+      if (expression.className != null) {
+        return expression.className
+      }
+
+      return null
     }
 
-    return expression?.className ?? null
+    if (expression.className != null) {
+      return expression.className
+    }
+
+    return null
   }
 
   checkFsCall(expression: AnyNode): ValueType | null {
@@ -5045,10 +5125,18 @@ class Checker {
     }
 
     if (method === 'readDirSync') {
-      if (expression.args.length < 1 || expression.args.length > (info.nodeName === 'readdirSync' ? 2 : 1)) {
+      let maxArgs = 1
+      let expectedArgsLabel = '1'
+
+      if (info.nodeName === 'readdirSync') {
+        maxArgs = 2
+        expectedArgsLabel = '1 or 2'
+      }
+
+      if (expression.args.length < 1 || expression.args.length > maxArgs) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function ${label} expects ${info.nodeName === 'readdirSync' ? '1 or 2' : '1'} argument(s), got ${expression.args.length}`,
+          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
@@ -5056,10 +5144,16 @@ class Checker {
       this.checkFsStringArg(expression, 0)
       const withFileTypes = this.checkFsReaddirOptionsArg(expression, 1, label)
 
-      expression.fsRuntimeMethod = withFileTypes ? 'readDirDirentsSync' : 'readDirSync'
+      expression.fsRuntimeMethod = 'readDirSync'
       expression.valueType = 'array'
-      expression.arrayElementType = withFileTypes ? 'object' : 'string'
-      expression.arrayElementDeclaredType = withFileTypes ? 'fs.Dirent' : 'string'
+      expression.arrayElementType = 'string'
+      expression.arrayElementDeclaredType = 'string'
+
+      if (withFileTypes) {
+        expression.fsRuntimeMethod = 'readDirDirentsSync'
+        expression.arrayElementType = 'object'
+        expression.arrayElementDeclaredType = 'fs.Dirent'
+      }
 
       return 'array'
     }
@@ -5217,16 +5311,29 @@ class Checker {
     }
 
     if (method === 'mkdir') {
-      if (expression.args.length < 1 || expression.args.length > (promisesApi ? 2 : 1)) {
+      let maxArgs = 1
+      let expectedArgsLabel = '1'
+
+      if (promisesApi) {
+        maxArgs = 2
+        expectedArgsLabel = '1 or 2'
+      }
+
+      if (expression.args.length < 1 || expression.args.length > maxArgs) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function ${label} expects ${promisesApi ? '1 or 2' : '1'} argument(s), got ${expression.args.length}`,
+          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
 
       this.checkFsStringArg(expression, 0)
-      const options = promisesApi ? this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive']) : {}
+      let options: FsBooleanOptions = {}
+
+      if (promisesApi) {
+        options = this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive'])
+      }
+
       expression.fsRuntimeMethod = 'mkdir'
       expression.fsRecursive = options.recursive === true
       expression.valueType = 'promise'
@@ -5253,16 +5360,29 @@ class Checker {
     }
 
     if (method === 'rm') {
-      if (expression.args.length < 1 || expression.args.length > (promisesApi ? 2 : 1)) {
+      let maxArgs = 1
+      let expectedArgsLabel = '1'
+
+      if (promisesApi) {
+        maxArgs = 2
+        expectedArgsLabel = '1 or 2'
+      }
+
+      if (expression.args.length < 1 || expression.args.length > maxArgs) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function ${label} expects ${promisesApi ? '1 or 2' : '1'} argument(s), got ${expression.args.length}`,
+          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
 
       this.checkFsStringArg(expression, 0)
-      const options = promisesApi ? this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive', 'force']) : {}
+      let options: FsBooleanOptions = {}
+
+      if (promisesApi) {
+        options = this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive', 'force'])
+      }
+
       expression.fsRuntimeMethod = 'rm'
       expression.fsRecursive = options.recursive === true
       expression.fsForce = options.force === true
@@ -5291,10 +5411,18 @@ class Checker {
     }
 
     if (method === 'readDir') {
-      if (expression.args.length < 1 || expression.args.length > (info.nodeName === 'readdir' ? 2 : 1)) {
+      let maxArgs = 1
+      let expectedArgsLabel = '1'
+
+      if (info.nodeName === 'readdir') {
+        maxArgs = 2
+        expectedArgsLabel = '1 or 2'
+      }
+
+      if (expression.args.length < 1 || expression.args.length > maxArgs) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function ${label} expects ${info.nodeName === 'readdir' ? '1 or 2' : '1'} argument(s), got ${expression.args.length}`,
+          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
@@ -5302,20 +5430,34 @@ class Checker {
       this.checkFsStringArg(expression, 0)
       const withFileTypes = this.checkFsReaddirOptionsArg(expression, 1, label)
 
-      expression.fsRuntimeMethod = withFileTypes ? 'readDirDirents' : 'readDir'
+      expression.fsRuntimeMethod = 'readDir'
       expression.valueType = 'promise'
       expression.promiseValueType = 'array'
-      expression.arrayElementType = withFileTypes ? 'object' : 'string'
-      expression.arrayElementDeclaredType = withFileTypes ? 'fs.Dirent' : 'string'
+      expression.arrayElementType = 'string'
+      expression.arrayElementDeclaredType = 'string'
+
+      if (withFileTypes) {
+        expression.fsRuntimeMethod = 'readDirDirents'
+        expression.arrayElementType = 'object'
+        expression.arrayElementDeclaredType = 'fs.Dirent'
+      }
 
       return 'promise'
     }
 
     if (method === 'appendFile') {
-      if (expression.args.length < 2 || expression.args.length > (promisesApi ? 3 : 2)) {
+      let maxArgs = 2
+      let expectedArgsLabel = '2'
+
+      if (promisesApi) {
+        maxArgs = 3
+        expectedArgsLabel = '2 or 3'
+      }
+
+      if (expression.args.length < 2 || expression.args.length > maxArgs) {
         this.report(
           'CCJS_ARG_COUNT',
-          `function ${label} expects ${promisesApi ? '2 or 3' : '2'} argument(s), got ${expression.args.length}`,
+          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
@@ -5383,10 +5525,18 @@ class Checker {
       return 'promise'
     }
 
-    if (expression.args.length < 2 || expression.args.length > (promisesApi ? 3 : 2)) {
+    let maxArgs = 2
+    let expectedArgsLabel = '2'
+
+    if (promisesApi) {
+      maxArgs = 3
+      expectedArgsLabel = '2 or 3'
+    }
+
+    if (expression.args.length < 2 || expression.args.length > maxArgs) {
       this.report(
         'CCJS_ARG_COUNT',
-        `function ${label} expects ${promisesApi ? '2 or 3' : '2'} argument(s), got ${expression.args.length}`,
+        `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
@@ -5418,11 +5568,22 @@ class Checker {
   isFsPromisesImportRoot(root: string): boolean {
     const symbol = this.scope.resolve(root)
 
-    return (
-      symbol?.kind === 'import' &&
-      (symbol.importSource === 'node:fs/promises' ||
-        ((symbol.importSource === 'fs' || symbol.importSource === 'node:fs') && symbol.importedName === 'promises'))
-    )
+    if (symbol == null || symbol.kind !== 'import') {
+      return false
+    }
+
+    if (symbol.importSource === 'node:fs/promises') {
+      return true
+    }
+
+    if (
+      (symbol.importSource === 'fs' || symbol.importSource === 'node:fs') &&
+      symbol.importedName === 'promises'
+    ) {
+      return true
+    }
+
+    return false
   }
 
   checkFsWriteDataArg(expression: AnyNode, index: number, label: string, textMethod: string): string {
@@ -5432,9 +5593,9 @@ class Checker {
       return textMethod
     }
 
-    const type = this.checkExpression(arg)
+    const argType = this.checkExpression(arg)
 
-    if (type === 'bytes') {
+    if (argType === 'bytes') {
       if (textMethod === 'writeFileSync') {
         return 'writeFileBytesSync'
       }
@@ -5443,10 +5604,14 @@ class Checker {
         return 'appendFileBytesSync'
       }
 
-      return textMethod === 'appendFile' ? 'appendFileBytes' : 'writeFileBytes'
+      if (textMethod === 'appendFile') {
+        return 'appendFileBytes'
+      }
+
+      return 'writeFileBytes'
     }
 
-    this.checkAssignableType(type, 'string', arg.loc, false, this.expressionCanBeNull(arg))
+    this.checkAssignableType(argType, 'string', arg.loc, false, this.expressionCanBeNull(arg))
 
     return textMethod
   }
@@ -5494,9 +5659,9 @@ class Checker {
     index: number,
     label: string,
     allowed: string[]
-  ): Record<string, boolean> {
+  ): FsBooleanOptions {
     const arg = expression.args[index]
-    const result: Record<string, boolean> = {}
+    const result: FsBooleanOptions = {}
 
     if (arg == null) {
       return result
@@ -5513,16 +5678,27 @@ class Checker {
       return result
     }
 
-    const allowedSet = new Set(allowed)
-
     for (const property of arg.properties) {
-      if (!allowedSet.has(property.key)) {
+      let allowedOption = false
+
+      for (const allowedName of allowed) {
+        if (property.key === allowedName) {
+          allowedOption = true
+          break
+        }
+      }
+
+      if (!allowedOption) {
         this.report('CCJS_UNKNOWN_FIELD', `unknown ${label} option ${property.key}`, property.loc)
         this.checkExpression(property.value)
         continue
       }
 
-      const valueType = property.value.valueType ?? this.checkExpression(property.value)
+      let valueType = property.value.valueType
+
+      if (valueType == null) {
+        valueType = this.checkExpression(property.value)
+      }
 
       if (valueType !== 'boolean' || property.value.type !== 'BooleanLiteral') {
         this.report(
@@ -5533,7 +5709,13 @@ class Checker {
         continue
       }
 
-      result[property.key] = property.value.value === true
+      if (property.key === 'recursive') {
+        result.recursive = property.value.value === true
+      } else if (property.key === 'force') {
+        result.force = property.value.value === true
+      } else if (property.key === 'withFileTypes') {
+        result.withFileTypes = property.value.value === true
+      }
     }
 
     return result
@@ -5563,16 +5745,38 @@ class Checker {
     if (method === 'parse') {
       this.checkJsonStringArg(expression, 0)
 
-      const valueType = declared != null && isJsonParseDeclaredType(declared.valueType) ? declared.valueType : 'object'
+      let valueType: ValueType = 'object'
+
+      if (declared != null && isJsonParseDeclaredType(declared.valueType)) {
+        valueType = declared.valueType
+      }
 
       expression.valueType = valueType
-      expression.arrayElementType = declared?.arrayElementType ?? null
-      expression.arrayElementDeclaredType = declared?.arrayElementDeclaredType ?? null
-      expression.mapKeyType = declared?.mapKeyType ?? null
-      expression.mapValueType = declared?.mapValueType ?? null
-      expression.promiseValueType = declared?.promiseValueType ?? null
-      expression.setElementType = declared?.setElementType ?? null
-      expression.shape = valueType === 'object' ? (declared?.shape ?? null) : null
+      expression.arrayElementType = null
+      expression.arrayElementDeclaredType = null
+      expression.mapKeyType = null
+      expression.mapValueType = null
+      expression.promiseValueType = null
+      expression.setElementType = null
+      expression.shape = null
+
+      if (declared != null) {
+        expression.arrayElementType = declared.arrayElementType
+        expression.arrayElementDeclaredType = declared.arrayElementDeclaredType
+        expression.mapKeyType = declared.mapKeyType
+        expression.mapValueType = declared.mapValueType
+        expression.promiseValueType = null
+
+        if (declared.promiseValueType != null) {
+          expression.promiseValueType = declared.promiseValueType
+        }
+
+        expression.setElementType = declared.setElementType
+
+        if (valueType === 'object') {
+          expression.shape = declared.shape
+        }
+      }
 
       return valueType
     }
@@ -5615,10 +5819,22 @@ class Checker {
       )
     }
 
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
 
     expression.valueType = 'promise'
-    expression.promiseValueType = method === 'resolve' ? (argTypes[0] ?? 'void') : 'unknown'
+    expression.promiseValueType = 'unknown'
+
+    if (method === 'resolve') {
+      expression.promiseValueType = 'void'
+
+      if (argTypes[0] != null) {
+        expression.promiseValueType = argTypes[0]
+      }
+    }
 
     return 'promise'
   }
@@ -5635,7 +5851,12 @@ class Checker {
     }
 
     const property = expression.callee.property
-    const promiseValueType = this.resolveExpressionPromiseValueType(expression.callee.object) ?? 'unknown'
+    let promiseValueType: ValueType = 'unknown'
+    const resolvedPromiseValueType = this.resolveExpressionPromiseValueType(expression.callee.object)
+
+    if (resolvedPromiseValueType != null) {
+      promiseValueType = resolvedPromiseValueType
+    }
 
     if (expression.args.length !== 1) {
       this.report(
@@ -5648,18 +5869,14 @@ class Checker {
     const callback = expression.args[0]
 
     if (property === 'then') {
-      const mappedType =
-        callback == null
-          ? 'unknown'
-          : this.checkPromiseCallback(
-              callback,
-              [{ name: 'value', valueType: promiseValueType }],
-              undefined,
-              'promise.then callback'
-            )
+      let mappedType: ValueType = 'unknown'
 
-      for (const arg of expression.args.slice(1)) {
-        this.checkExpression(arg)
+      if (callback != null) {
+        mappedType = this.checkPromiseCallback(callback, [{ name: 'value', valueType: promiseValueType }], null, 'promise.then callback')
+      }
+
+      for (let index = 1; index < expression.args.length; index++) {
+        this.checkExpression(expression.args[index])
       }
 
       expression.valueType = 'promise'
@@ -5669,16 +5886,22 @@ class Checker {
     }
 
     if (callback != null) {
+      let catchReturnType: ValueType | null = promiseValueType
+
+      if (promiseValueType === 'unknown') {
+        catchReturnType = null
+      }
+
       this.checkPromiseCallback(
         callback,
         [{ name: 'error', valueType: 'unknown' }],
-        promiseValueType === 'unknown' ? undefined : promiseValueType,
+        catchReturnType,
         'promise.catch callback'
       )
     }
 
-    for (const arg of expression.args.slice(1)) {
-      this.checkExpression(arg)
+    for (let index = 1; index < expression.args.length; index++) {
+      this.checkExpression(expression.args[index])
     }
 
     expression.valueType = 'promise'
@@ -5690,7 +5913,7 @@ class Checker {
   checkPromiseCallback(
     expression: AnyNode,
     params: Array<{ name: string; valueType: ValueType }>,
-    returnType: ValueType | undefined,
+    returnType: ValueType | null,
     label: string
   ): ValueType {
     if (expression.type !== 'ArrowFunctionExpression') {
@@ -5724,15 +5947,30 @@ class Checker {
     let returnPromiseValueType: ValueType | null = null
 
     this.withScope(() => {
-      for (const [index, param] of expression.params.entries()) {
-        const expected = params[index]?.valueType ?? 'unknown'
-        const actual = param.valueType === 'unknown' ? expected : param.valueType
+      for (let index = 0; index < expression.params.length; index++) {
+        const param = expression.params[index]
+        let expected: ValueType = 'unknown'
+
+        if (params[index] != null) {
+          expected = params[index].valueType
+        }
+
+        let actual = param.valueType
+
+        if (param.valueType === 'unknown') {
+          actual = expected
+        }
 
         if (param.valueType !== 'unknown') {
           this.checkAssignableType(expected, param.valueType, param.loc)
         }
 
-        param.declaredType = param.valueType === 'unknown' ? actual : param.valueType
+        param.declaredType = param.valueType
+
+        if (param.valueType === 'unknown') {
+          param.declaredType = actual
+        }
+
         param.valueType = actual
         param.nullable = false
 
