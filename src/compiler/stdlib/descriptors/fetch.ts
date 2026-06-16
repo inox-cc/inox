@@ -9,11 +9,11 @@ export type FetchRuntimeMethod =
 export type FetchHeaderMethod = 'get' | 'has'
 export type FetchResponseBodyMethod = 'arrayBuffer' | 'blob' | 'bytes' | 'formData' | 'json' | 'text'
 
-export const fetchGlobalRoots = ['AbortController', 'fetch'] as const
-export const fetchInitOptions = ['body', 'headers', 'method', 'redirect', 'signal'] as const
-export const fetchRedirectModes = ['error', 'follow', 'manual'] as const
-export const fetchHeadersMethods: readonly FetchHeaderMethod[] = ['get', 'has']
-export const fetchResponseBodyMethods: readonly FetchResponseBodyMethod[] = [
+export const fetchGlobalRoots: string[] = ['AbortController', 'fetch']
+export const fetchInitOptions: string[] = ['body', 'headers', 'method', 'redirect', 'signal']
+export const fetchRedirectModes: string[] = ['error', 'follow', 'manual']
+export const fetchHeadersMethods: FetchHeaderMethod[] = ['get', 'has']
+export const fetchResponseBodyMethods: FetchResponseBodyMethod[] = [
   'arrayBuffer',
   'blob',
   'bytes',
@@ -21,49 +21,59 @@ export const fetchResponseBodyMethods: readonly FetchResponseBodyMethod[] = [
   'json',
   'text'
 ]
-export const fetchAbortControllerMethods = ['abort'] as const
-export const asyncFetchRuntimeMethods: readonly FetchRuntimeMethod[] = ['fetch', 'text']
+export const fetchAbortControllerMethods: string[] = ['abort']
+export const asyncFetchRuntimeMethods: FetchRuntimeMethod[] = ['fetch', 'text']
 
-const fetchGlobalRootSet = new Set<string>(fetchGlobalRoots)
-const fetchInitOptionSet = new Set<string>(fetchInitOptions)
-const fetchRedirectModeSet = new Set<string>(fetchRedirectModes)
-const fetchHeadersMethodSet = new Set<string>(fetchHeadersMethods)
-const fetchResponseBodyMethodSet = new Set<string>(fetchResponseBodyMethods)
-const fetchAbortControllerMethodSet = new Set<string>(fetchAbortControllerMethods)
-const asyncFetchRuntimeMethodSet = new Set<string>(asyncFetchRuntimeMethods)
+function stringListHas(values: string[], value: string): boolean {
+  for (const current of values) {
+    if (current === value) {
+      return true
+    }
+  }
+
+  return false
+}
 
 export function isFetchGlobalRoot(name: string): boolean {
-  return fetchGlobalRootSet.has(name)
+  return stringListHas(fetchGlobalRoots, name)
 }
 
 export function isFetchInitOption(name: string): boolean {
-  return fetchInitOptionSet.has(name)
+  return stringListHas(fetchInitOptions, name)
 }
 
 export function isFetchRedirectMode(value: string): boolean {
-  return fetchRedirectModeSet.has(value)
+  return stringListHas(fetchRedirectModes, value)
 }
 
-export function isFetchHeadersMethod(method: string): method is FetchHeaderMethod {
-  return fetchHeadersMethodSet.has(method)
+export function isFetchHeadersMethod(method: string): boolean {
+  return stringListHas(fetchHeadersMethods, method)
 }
 
-export function fetchHeadersRuntimeMethod(method: FetchHeaderMethod): FetchRuntimeMethod {
-  return method === 'get' ? 'headersGet' : 'headersHas'
+export function fetchHeadersRuntimeMethod(method: string): FetchRuntimeMethod {
+  if (method === 'get') {
+    return 'headersGet'
+  }
+
+  return 'headersHas'
 }
 
-export function isFetchResponseBodyMethod(method: string): method is FetchResponseBodyMethod {
-  return fetchResponseBodyMethodSet.has(method)
+export function isFetchResponseBodyMethod(method: string): boolean {
+  return stringListHas(fetchResponseBodyMethods, method)
 }
 
-export function isSupportedFetchResponseBodyMethod(method: string): method is 'text' {
+export function isSupportedFetchResponseBodyMethod(method: string): boolean {
   return method === 'text'
 }
 
 export function isFetchAbortControllerMethod(method: string): boolean {
-  return fetchAbortControllerMethodSet.has(method)
+  return stringListHas(fetchAbortControllerMethods, method)
 }
 
 export function isAsyncFetchRuntimeMethod(method: string | null | undefined): boolean {
-  return method != null && asyncFetchRuntimeMethodSet.has(method)
+  if (method == null) {
+    return false
+  }
+
+  return stringListHas(asyncFetchRuntimeMethods, method)
 }
