@@ -9,9 +9,7 @@ import {
   pushNullableScalarNarrowing,
   registerEventLoop,
   registerOwnedValue,
-  restoreNullableScalarNarrowing,
-  type CEmitContext,
-  type CFunctionContext
+  restoreNullableScalarNarrowing
 } from '../context.ts'
 import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
@@ -40,6 +38,7 @@ import {
   resolveNullableScalarConditionNarrowing
 } from './nullable.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
+import type { CEmitContext, CFunctionContext } from '../context.ts'
 import type {
   CKnownArrayElement,
   CKnownObjectField,
@@ -52,108 +51,192 @@ import type {
   CRuntimeArrayElement
 } from '../types.ts'
 
+type PreparedUrlSearchParamsExpression = {
+  lines: string[]
+  expression: string
+  valueType?: string
+}
+
+type CFunctionCallReturnInfo = {
+  returnType: string
+  returnNullable: boolean
+}
+
+type NumericIntegerCastLimits = {
+  preMin: string
+  preMax: string
+  min: string
+  max: string
+}
+
+function appendLines(out: string[], lines: string[]): void {
+  for (const line of lines) {
+    out.push(line)
+  }
+}
+
+function appendPrefixedLines(out: string[], lines: string[], prefix: string): void {
+  for (const line of lines) {
+    out.push(`${prefix}${line}`)
+  }
+}
+
+function isNumberOrBooleanValueType(valueType: string): boolean {
+  return valueType === 'number' || valueType === 'boolean'
+}
+
+function isNumericCastName(name: string): boolean {
+  return name === 'i32' || name === 'u32' || name === 'u64' || name === 'f32' || name === 'f64'
+}
+
+function isEqualityOperator(operator: string): boolean {
+  return operator === '===' || operator === '!==' || operator === '==' || operator === '!='
+}
+
+function isPositiveEqualityOperator(operator: string): boolean {
+  return operator === '===' || operator === '=='
+}
+
+function scalarRuntimeValueExpression(value: string, valueType: string): string {
+  if (valueType === 'boolean') {
+    return `(${value}.as.boolean ? 1 : 0)`
+  }
+
+  return `${value}.as.number`
+}
+
+function runtimeBoolValueExpression(value: boolean): string {
+  if (value) {
+    return 'true'
+  }
+
+  return 'false'
+}
+
+function wrappedCExpression(expression: string): string {
+  if (isWrappedCExpression(expression)) {
+    return expression
+  }
+
+  return `(${expression})`
+}
+
+function expressionLocation(expression: AnyNode): SourceLocation | undefined {
+  if (expression == null) {
+    return undefined
+  }
+
+  return expression.loc
+}
+
 
 export type CScalarExpressionDependencies = {
-  cFsRuntimeConstantExpression: (expression: AnyNode) => string | null
-  emitCAwaitValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitObjectValueReference: (name: string, context: CFunctionContext) => string
-  emitPreparedArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedBinaryNumberCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedBytesIndexExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedBytesLengthExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCollectionCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCollectionSizeExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoNumberCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedDgramAddressPortExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedJsonScalarParseExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedNetAddressPortExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedProcessNumberExpression: (expression: AnyNode) => PreparedExpression | null
-  emitPreparedRuntimeArrayIndexValue: (
+  cFsRuntimeConstantExpression(expression: AnyNode): string | null
+  emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitObjectValueReference(name: string, context: CFunctionContext): string
+  emitPreparedArrayLengthExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedBinaryNumberCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedBytesIndexExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedBytesLengthExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedClassMethodCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCollectionCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCollectionSizeExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCryptoNumberCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedDgramAddressPortExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedJsonScalarParseExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedNetAddressPortExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedPathBooleanCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedProcessNumberExpression(expression: AnyNode): PreparedExpression | null
+  emitPreparedRuntimeArrayIndexValue(
     expression: AnyNode,
     element: CRuntimeArrayElement,
     context: CFunctionContext,
     tempPrefix: string
-  ) => PreparedExpression
-  emitPreparedStringCompareExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringLengthExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedStringPredicateCall: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) => (PreparedExpression & { valueType?: string }) | null
-  emitReference: (expression: AnyNode, context: CFunctionContext) => string
-  emitStringExpression: (expression: AnyNode, context: CFunctionContext) => string
-  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
-  isIndexAccessExpression: (expression: AnyNode) => boolean
-  isMemberAccessExpression: (expression: AnyNode) => boolean
-  isStringPredicateCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  reportCJsGlobalDiagnostic: (diagnostics: Diagnostic[], loc: SourceLocation | undefined) => void
-  resolveKnownArrayIndex: (expression: AnyNode, context: CFunctionContext) => CKnownArrayElement | null
-  resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CKnownObjectIndexField | null
-  resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CKnownObjectField | null
-  resolveRuntimeArrayIndex: (expression: AnyNode, context: CFunctionContext) => CRuntimeArrayElement | null
+  ): PreparedExpression
+  emitPreparedStringCompareExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedStringLengthExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedStringPredicateCall(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedUrlSearchParamsCallExpression(expression: AnyNode, context: CFunctionContext): PreparedUrlSearchParamsExpression | null
+  emitReference(expression: AnyNode, context: CFunctionContext): string
+  emitStringExpression(expression: AnyNode, context: CFunctionContext): string
+  inferExpressionType(expression: AnyNode, context: CFunctionContext): string
+  isIndexAccessExpression(expression: AnyNode): boolean
+  isMemberAccessExpression(expression: AnyNode): boolean
+  isStringPredicateCall(expression: AnyNode, context: CFunctionContext): boolean
+  reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | undefined): void
+  resolveKnownArrayIndex(expression: AnyNode, context: CFunctionContext): CKnownArrayElement | null
+  resolveKnownObjectIndex(expression: AnyNode, context: CFunctionContext): CKnownObjectIndexField | null
+  resolveKnownObjectMember(expression: AnyNode, context: CFunctionContext): CKnownObjectField | null
+  resolveRuntimeArrayIndex(expression: AnyNode, context: CFunctionContext): CRuntimeArrayElement | null
 }
 
 
 export type CCallExpressionDependencies = {
-  currentErrorTarget: (context: CFunctionContext) => string | null
-  emitCExpression: (expression: AnyNode, context: CFunctionContext) => string
-  emitCNumberConversionValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitFunctionValueExpression: (expression: AnyNode, context: CFunctionContext) => string
-  emitNullableFunctionValueExpression: (
+  currentErrorTarget(context: CFunctionContext): string | null
+  emitCExpression(expression: AnyNode, context: CFunctionContext): string
+  emitCNumberConversionValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitFunctionValueExpression(expression: AnyNode, context: CFunctionContext): string
+  emitNullableFunctionValueExpression(
     expression: AnyNode,
     functionType: CFunctionType | null | undefined,
     context: CFunctionContext
-  ) => PreparedExpression
-  emitNullableScalarValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedArrayFilterCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedArrayMapCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedArrayPopCallExpression: (
+  ): PreparedExpression
+  emitNullableScalarValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedArrayFilterCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArrayMapCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArrayPopCallExpression(
     expression: AnyNode,
     context: CFunctionContext,
     options: PreparedCallOptions | null
-  ) => PreparedExpression | null
-  emitPreparedArraySortCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCollectionCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoHashCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoHmacCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFsStatsMethodExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitRuntimeCallbackCall: (expression: AnyNode, callbackType: CFunctionType, context: CFunctionContext) => PreparedExpression
-  emitRuntimeCallbackValue: (
+  ): PreparedExpression | null
+  emitPreparedArraySortCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedClassMethodCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCollectionCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCryptoCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCryptoHashCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCryptoHmacCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedFetchHeadersCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedFsCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedFsStatsMethodExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedJsonCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedPathBooleanCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedPathStringCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedPromiseMethodExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedPromiseStaticExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedTimerCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedUrlSearchParamsCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitRuntimeCallbackCall(expression: AnyNode, callbackType: CFunctionType, context: CFunctionContext): PreparedExpression
+  emitRuntimeCallbackValue(
     expression: AnyNode,
     functionType: CFunctionType | null | undefined,
     context: CFunctionContext
-  ) => PreparedExpression
-  isExternalEventLoopFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
-  isNullableFunctionType: (valueType: string | null | undefined, nullable: boolean | null | undefined) => boolean
-  isPromiseReturningFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
-  registerErrorChannel: (context: CFunctionContext) => void
-  resolveFunctionParams: (callee: AnyNode, context: CFunctionContext) => CFunctionParam[] | null
-  resolveRuntimeCallbackCalleeType: (callee: AnyNode, context: CFunctionContext) => CFunctionType | null
-  resolveRuntimeFunctionArgumentType: (
+  ): PreparedExpression
+  isExternalEventLoopFunctionCallee(callee: AnyNode, context: CFunctionContext): boolean
+  isNullableFunctionType(valueType: string | null | undefined, nullable: boolean | null | undefined): boolean
+  isPromiseReturningFunctionCallee(callee: AnyNode, context: CFunctionContext): boolean
+  registerErrorChannel(context: CFunctionContext): void
+  resolveFunctionParams(callee: AnyNode, context: CFunctionContext): CFunctionParam[] | null
+  resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionContext): CFunctionType | null
+  resolveRuntimeFunctionArgumentType(
     callee: AnyNode,
     index: number,
     param: CFunctionParam,
     context: CFunctionContext
-  ) => CFunctionType | null
+  ): CFunctionType | null
 }
 
 export function emitCallExpression(expression: AnyNode, context: CFunctionContext, deps: CCallExpressionDependencies): string {
-  return `${emitCallee(expression.callee, context)}(${expression.args.map((arg) => deps.emitCExpression(arg, context)).join(', ')})`
+  const args: string[] = []
+
+  for (const arg of expression.args) {
+    args.push(deps.emitCExpression(arg, context))
+  }
+
+  return `${emitCallee(expression.callee, context)}(${args.join(', ')})`
 }
 
 export function emitPreparedCallExpression(
@@ -305,7 +388,8 @@ export function emitPreparedCallExpression(
   }
 
   const prepared = emitPreparedCallArgs(expression, params, context, deps)
-  const { lines, args } = prepared
+  const lines = prepared.lines
+  const args = prepared.args
 
   if (isThrowingFunctionCallee(expression.callee, context)) {
     return emitPreparedThrowingCallExpression(expression, args, lines, context, deps)
@@ -313,19 +397,27 @@ export function emitPreparedCallExpression(
 
   if (deps.isPromiseReturningFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
+    const callArgs: string[] = []
+
+    callArgs.push(emitEventLoopReference(context))
+    appendLines(callArgs, args)
 
     return {
       lines,
-      expression: `${emitCallee(expression.callee, context)}(${[emitEventLoopReference(context), ...args].join(', ')})`
+      expression: `${emitCallee(expression.callee, context)}(${callArgs.join(', ')})`
     }
   }
 
   if (deps.isExternalEventLoopFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
+    const callArgs: string[] = []
+
+    callArgs.push(emitEventLoopReference(context))
+    appendLines(callArgs, args)
 
     return {
       lines,
-      expression: `${emitCallee(expression.callee, context)}(${[emitEventLoopReference(context), ...args].join(', ')})`
+      expression: `${emitCallee(expression.callee, context)}(${callArgs.join(', ')})`
     }
   }
 
@@ -346,11 +438,19 @@ function emitPreparedMathCallExpression(
     return null
   }
 
-  const args = expression.args.map((arg) => deps.emitPreparedNumberExpression(arg, context))
+  const lines: string[] = []
+  const expressions: string[] = []
+
+  for (const arg of expression.args) {
+    const prepared = deps.emitPreparedNumberExpression(arg, context)
+
+    appendLines(lines, prepared.lines)
+    expressions.push(prepared.expression)
+  }
 
   return {
-    lines: args.flatMap((arg) => arg.lines),
-    expression: `ccjs_math_${method}(${args.map((arg) => arg.expression).join(', ')})`
+    lines,
+    expression: `ccjs_math_${method}(${expressions.join(', ')})`
   }
 }
 
@@ -363,44 +463,45 @@ export function emitPreparedCallArgs(
   const lines: string[] = []
   const args: string[] = []
 
-  for (const [index, arg] of expression.args.entries()) {
-    if (isNullableScalarParam(params[index])) {
+  for (let index = 0; index < expression.args.length; index = index + 1) {
+    const arg = expression.args[index]
+    const param = params[index]
+
+    if (isNullableScalarParam(param)) {
       const value = deps.emitNullableScalarValueExpression(arg, context)
 
-      lines.push(...value.lines)
-      args.push(value.expression)
-    } else if (deps.isNullableFunctionType(params[index]?.valueType, params[index]?.nullable)) {
-      const value = deps.emitNullableFunctionValueExpression(arg, params[index]?.functionType, context)
-
-      lines.push(...value.lines)
-      args.push(value.expression)
-    } else if (params[index]?.valueType === 'string') {
-      const value = deps.emitCValueExpression(arg, context)
-
-      lines.push(...value.lines)
-      args.push(value.expression)
-    } else if (params[index]?.valueType === 'object') {
-      const value = deps.emitCValueExpression(arg, context)
-
-      lines.push(...value.lines)
+      appendLines(lines, value.lines)
       args.push(value.expression)
     } else if (
-      params[index]?.valueType === 'bytes' ||
-      params[index]?.valueType === 'array' ||
-      params[index]?.valueType === 'map' ||
-      params[index]?.valueType === 'set'
+      param != null &&
+      deps.isNullableFunctionType(param.valueType, param.nullable)
     ) {
+      const value = deps.emitNullableFunctionValueExpression(arg, param.functionType, context)
+
+      appendLines(lines, value.lines)
+      args.push(value.expression)
+    } else if (param != null && param.valueType === 'string') {
       const value = deps.emitCValueExpression(arg, context)
 
-      lines.push(...value.lines)
+      appendLines(lines, value.lines)
       args.push(value.expression)
-    } else if (params[index]?.valueType === 'function') {
-      const runtimeFunctionType = deps.resolveRuntimeFunctionArgumentType(expression.callee, index, params[index], context)
+    } else if (param != null && param.valueType === 'object') {
+      const value = deps.emitCValueExpression(arg, context)
+
+      appendLines(lines, value.lines)
+      args.push(value.expression)
+    } else if (param != null && isManagedRuntimeReturnType(param.valueType)) {
+      const value = deps.emitCValueExpression(arg, context)
+
+      appendLines(lines, value.lines)
+      args.push(value.expression)
+    } else if (param != null && param.valueType === 'function') {
+      const runtimeFunctionType = deps.resolveRuntimeFunctionArgumentType(expression.callee, index, param, context)
 
       if (runtimeFunctionType != null) {
         const value = deps.emitRuntimeCallbackValue(arg, runtimeFunctionType, context)
 
-        lines.push(...value.lines)
+        appendLines(lines, value.lines)
         args.push(value.expression)
       } else {
         args.push(deps.emitFunctionValueExpression(arg, context))
@@ -410,7 +511,7 @@ export function emitPreparedCallArgs(
     }
   }
 
-  for (let index = expression.args.length; index < params.length; index += 1) {
+  for (let index = expression.args.length; index < params.length; index = index + 1) {
     const param = params[index]
 
     if (param.optional === true) {
@@ -447,9 +548,12 @@ function emitPreparedThrowingCallExpression(
   const returnInfo = resolveCFunctionCallReturnInfo(name, context)
   const returnType = returnInfo.returnType
   const returnNullable = returnInfo.returnNullable
-  const callArgs = [...args]
-  const lines: string[] = [...preparedLines]
+  const callArgs: string[] = []
+  const lines: string[] = []
   let result = ''
+
+  appendLines(callArgs, args)
+  appendLines(lines, preparedLines)
 
   if (deps.currentErrorTarget(context) == null && !context.throwingFunction) {
     context.diagnostics.push(
@@ -462,7 +566,7 @@ function emitPreparedThrowingCallExpression(
   }
 
   deps.registerErrorChannel(context)
-  lines.push(...emitPrepareOwnedValueWrite('ccjs_error'))
+  appendLines(lines, emitPrepareOwnedValueWrite('ccjs_error'))
 
   if (returnType !== 'void') {
     if (isManagedRuntimeReturnType(returnType) || (returnNullable && isNullableScalarType(returnType))) {
@@ -481,7 +585,7 @@ function emitPreparedThrowingCallExpression(
   const status = nextCName(context, 'ccjs_call_status')
 
   lines.push(`ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${callArgs.join(', ')});`)
-  lines.push(...emitThrowingCallStatusCheck(status, context, deps))
+  appendLines(lines, emitThrowingCallStatusCheck(status, context, deps))
 
   return {
     lines,
@@ -489,12 +593,24 @@ function emitPreparedThrowingCallExpression(
   }
 }
 
-function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext): { returnType: string; returnNullable: boolean } {
-  const returnType = context.functionReturnTypes.get(name) ?? 'void'
+function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext): CFunctionCallReturnInfo {
+  const configuredReturnType = context.functionReturnTypes.get(name)
+  let returnType = 'void'
+
+  if (configuredReturnType != null) {
+    returnType = configuredReturnType
+  }
 
   if (context.functionAsyncFlags.get(name) === true && returnType === 'promise') {
+    const promiseValueType = context.functionReturnPromiseValueTypes.get(name)
+    let asyncReturnType = 'void'
+
+    if (promiseValueType != null) {
+      asyncReturnType = promiseValueType
+    }
+
     return {
-      returnType: context.functionReturnPromiseValueTypes.get(name) ?? 'void',
+      returnType: asyncReturnType,
       returnNullable: false
     }
   }
@@ -525,11 +641,15 @@ function emitThrowingCallStatusCheck(status: string, context: CFunctionContext, 
 }
 
 export function isThrowingFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
-  return callee?.type === 'Reference' && callee.path.length === 1 && isThrowingFunctionName(callee.path[0], context)
+  return callee != null && callee.type === 'Reference' && callee.path.length === 1 && isThrowingFunctionName(callee.path[0], context)
 }
 
 export function isThrowingFunctionName(name: string, context: CEmitContext): boolean {
-  return context.throwingFunctions?.has(name) === true
+  if (context.throwingFunctions == null) {
+    return false
+  }
+
+  return context.throwingFunctions.has(name)
 }
 
 export function emitCallee(callee: AnyNode, context: CFunctionContext): string {
@@ -545,7 +665,13 @@ export function emitCallee(callee: AnyNode, context: CFunctionContext): string {
       return '_'
     }
 
-    return context.functionNames.get(callee.path[0]) ?? callee.path[0]
+    const functionName = context.functionNames.get(callee.path[0])
+
+    if (functionName != null) {
+      return functionName
+    }
+
+    return callee.path[0]
   }
 
   if (usesCJsGlobal(callee, context)) {
@@ -567,69 +693,69 @@ export function emitCExpression(expression: AnyNode, context: CFunctionContext, 
     return '0'
   }
 
-  const type = deps.inferExpressionType(expression, context)
+  const valueType = deps.inferExpressionType(expression, context)
 
-  if (type === 'string') {
+  if (valueType === 'string') {
     return deps.emitStringExpression(expression, context)
   }
 
-  if (type === 'function') {
+  if (valueType === 'function') {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FUNCTION_VALUE',
         'function values are not supported by the current C backend slice',
-        expression?.loc
+        expressionLocation(expression)
       )
     )
     return '0'
   }
 
-  if (type === 'timer') {
+  if (valueType === 'timer') {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_TIMER_HANDLE',
         'timer handles can only be stored or passed to clear timer functions in the current C backend slice',
-        expression?.loc
+        expressionLocation(expression)
       )
     )
     return '0'
   }
 
-  if (type === 'crypto-hash') {
+  if (valueType === 'crypto-hash') {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_CRYPTO_HASH',
         'crypto hash handles can only be stored or used through Hash.update() and Hash.digest() in the current C backend slice',
-        expression?.loc
+        expressionLocation(expression)
       )
     )
     return '0'
   }
 
-  if (type === 'crypto-hmac') {
+  if (valueType === 'crypto-hmac') {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_CRYPTO_HMAC',
         'crypto hmac handles can only be stored or used through Hmac.update() and Hmac.digest() in the current C backend slice',
-        expression?.loc
+        expressionLocation(expression)
       )
     )
     return '0'
   }
 
-  if (type === 'optional') {
+  if (valueType === 'optional') {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_OPTIONAL_CHAINING',
         'optional chaining is not supported by the current C backend slice',
-        expression?.loc
+        expressionLocation(expression)
       )
     )
     return '0'
   }
 
-  if (type === 'js-global') {
-    deps.reportCJsGlobalDiagnostic(context.diagnostics, expression?.loc)
+  if (valueType === 'js-global') {
+    deps.reportCJsGlobalDiagnostic(context.diagnostics, expressionLocation(expression))
     return '0'
   }
 
@@ -656,7 +782,7 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression?.bufferRuntimeConstant === 'MAX_LENGTH') {
+  if (expression != null && expression.bufferRuntimeConstant === 'MAX_LENGTH') {
     return {
       lines: [],
       expression: '((double)((size_t)-1))'
@@ -681,7 +807,7 @@ export function emitPreparedNumberExpression(
     return processNumber
   }
 
-  if (expression?.type === 'NumberLiteral') {
+  if (expression != null && expression.type === 'NumberLiteral') {
     return {
       lines: [],
       expression: expression.value
@@ -690,11 +816,16 @@ export function emitPreparedNumberExpression(
 
   if (isNarrowedNullableScalarReference(expression, context)) {
     const name = expression.path[0]
-    const valueType = context.variables.get(name)
+    const resolvedType = context.variables.get(name)
+    let valueType = 'number'
+
+    if (resolvedType != null) {
+      valueType = resolvedType
+    }
 
     return {
       lines: [],
-      expression: valueType === 'boolean' ? `(${name}.as.boolean ? 1 : 0)` : `${name}.as.number`
+      expression: scalarRuntimeValueExpression(name, valueType)
     }
   }
 
@@ -713,21 +844,27 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression?.type === 'Reference') {
+  if (expression != null && expression.type === 'Reference') {
     return {
       lines: [],
       expression: deps.emitReference(expression, context)
     }
   }
 
-  if (expression?.type === 'BooleanLiteral') {
+  if (expression != null && expression.type === 'BooleanLiteral') {
+    let value = '0'
+
+    if (expression.value) {
+      value = '1'
+    }
+
     return {
       lines: [],
-      expression: expression.value ? '1' : '0'
+      expression: value
     }
   }
 
-  if (expression?.type === 'UnaryExpression') {
+  if (expression != null && expression.type === 'UnaryExpression') {
     const argument = emitPreparedNumberExpression(expression.argument, context, deps)
 
     return {
@@ -736,11 +873,11 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression?.type === 'UpdateExpression') {
+  if (expression != null && expression.type === 'UpdateExpression') {
     return emitPreparedUpdateExpression(expression, context, deps)
   }
 
-  if (expression?.type === 'BinaryExpression') {
+  if (expression != null && expression.type === 'BinaryExpression') {
     const scalarNullish = emitPreparedScalarNullishCoalescingExpression(expression, context, deps)
 
     if (scalarNullish != null) {
@@ -770,7 +907,7 @@ export function emitPreparedNumberExpression(
       return nullableNullCompare
     }
 
-    if (['===', '!==', '==', '!='].includes(expression.operator) && leftType === 'string' && rightType === 'string') {
+    if (isEqualityOperator(expression.operator) && leftType === 'string' && rightType === 'string') {
       return deps.emitPreparedStringCompareExpression(expression, context)
     }
 
@@ -789,20 +926,25 @@ export function emitPreparedNumberExpression(
       }
     }
 
-    if (['&&', '||'].includes(expression.operator)) {
+    if (expression.operator === '&&' || expression.operator === '||') {
       return emitPreparedLogicalExpression(expression, context, deps)
     }
 
     const left = emitPreparedNumberExpression(expression.left, context, deps)
     const right = emitPreparedNumberExpression(expression.right, context, deps)
 
+    const lines: string[] = []
+
+    appendLines(lines, left.lines)
+    appendLines(lines, right.lines)
+
     return {
-      lines: [...left.lines, ...right.lines],
+      lines,
       expression: `(${left.expression} ${emitCOperator(expression.operator)} ${right.expression})`
     }
   }
 
-  if (expression?.type === 'AssignmentExpression') {
+  if (expression != null && expression.type === 'AssignmentExpression') {
     const value = emitPreparedNumberExpression(expression.value, context, deps)
 
     return {
@@ -811,7 +953,7 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression?.type === 'CallExpression') {
+  if (expression != null && expression.type === 'CallExpression') {
     const jsonScalarParse = deps.emitPreparedJsonScalarParseExpression(expression, context)
 
     if (jsonScalarParse != null) {
@@ -888,49 +1030,41 @@ export function emitPreparedNumberExpression(
 
     const member = deps.resolveKnownObjectMember(expression, context)
 
-    if (member != null && ['number', 'boolean'].includes(member.valueType)) {
-      return emitPreparedRuntimeNumberValue(
-        member.valueType,
-        (temp) =>
-          `ccjs_object_get_known(${deps.emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
-        context
-      )
+    if (member != null && isNumberOrBooleanValueType(member.valueType)) {
+      const value = nextCName(context, 'ccjs_expr_value')
+      const getCall = `ccjs_object_get_known(${deps.emitObjectValueReference(member.objectName, context)}, ${member.index}, &${value})`
+
+      return emitPreparedRuntimeNumberValue(member.valueType, value, getCall, context)
     }
   }
 
   if (deps.isIndexAccessExpression(expression)) {
     const element = deps.resolveKnownArrayIndex(expression, context)
 
-    if (element != null && ['number', 'boolean'].includes(element.valueType)) {
-      return emitPreparedRuntimeNumberValue(
-        element.valueType,
-        (temp) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
-        context
-      )
+    if (element != null && isNumberOrBooleanValueType(element.valueType)) {
+      const value = nextCName(context, 'ccjs_expr_value')
+      const getCall = `ccjs_array_get(${element.arrayName}, ${element.index}, &${value})`
+
+      return emitPreparedRuntimeNumberValue(element.valueType, value, getCall, context)
     }
 
     const field = deps.resolveKnownObjectIndex(expression, context)
 
-    if (field != null && ['number', 'boolean'].includes(field.valueType)) {
-      return emitPreparedRuntimeNumberValue(
-        field.valueType,
-        (temp) =>
-          `ccjs_object_get(${deps.emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
-        context
-      )
+    if (field != null && isNumberOrBooleanValueType(field.valueType)) {
+      const value = nextCName(context, 'ccjs_expr_value')
+      const getCall = `ccjs_object_get(${deps.emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
+
+      return emitPreparedRuntimeNumberValue(field.valueType, value, getCall, context)
     }
 
     const runtimeElement = deps.resolveRuntimeArrayIndex(expression, context)
 
-    if (runtimeElement != null && ['number', 'boolean'].includes(runtimeElement.valueType)) {
+    if (runtimeElement != null && isNumberOrBooleanValueType(runtimeElement.valueType)) {
       const value = deps.emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_expr_value')
 
       return {
         lines: value.lines,
-        expression:
-          runtimeElement.valueType === 'boolean'
-            ? `(${value.expression}.as.boolean ? 1 : 0)`
-            : `${value.expression}.as.number`
+        expression: scalarRuntimeValueExpression(value.expression, runtimeElement.valueType)
       }
     }
 
@@ -941,14 +1075,13 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression?.type === 'AwaitExpression') {
+  if (expression != null && expression.type === 'AwaitExpression') {
     const valueType = deps.inferExpressionType(expression, context)
     const awaited = deps.emitCAwaitValueExpression(expression, context)
 
     return {
       lines: awaited.lines,
-      expression:
-        valueType === 'boolean' ? `(${awaited.expression}.as.boolean ? 1 : 0)` : `${awaited.expression}.as.number`
+      expression: scalarRuntimeValueExpression(awaited.expression, valueType)
     }
   }
 
@@ -957,7 +1090,7 @@ export function emitPreparedNumberExpression(
       diagnostic(
         'CCJS_C_OPTIONAL_CHAINING',
         'optional chaining is not supported by the current C backend slice',
-        expression?.loc
+        expressionLocation(expression)
       )
     )
     return {
@@ -983,43 +1116,47 @@ function emitPreparedLogicalExpression(
 ): PreparedExpression {
   const left = emitPreparedNumberExpression(expression.left, context, deps)
   const leftNarrowing = resolveNullableScalarConditionNarrowing(expression.left, context)
-  const rightNarrowed = expression.operator === '&&' ? leftNarrowing.trueNames : leftNarrowing.falseNames
-  const snapshot = pushNullableScalarNarrowing(context, rightNarrowed)
-  let right: PreparedExpression
+  let rightNarrowed = leftNarrowing.falseNames
 
-  try {
-    right = emitPreparedNumberExpression(expression.right, context, deps)
-  } finally {
-    restoreNullableScalarNarrowing(context, snapshot)
+  if (expression.operator === '&&') {
+    rightNarrowed = leftNarrowing.trueNames
   }
+  const snapshot = pushNullableScalarNarrowing(context, rightNarrowed)
+  const right = emitPreparedNumberExpression(expression.right, context, deps)
+
+  restoreNullableScalarNarrowing(context, snapshot)
 
   const temp = nextCName(context, 'ccjs_logical')
 
   if (expression.operator === '&&') {
+    const lines: string[] = []
+
+    appendLines(lines, left.lines)
+    lines.push(`double ${temp} = 0;`)
+    lines.push(`if ${emitCConditionClause(left.expression)} {`)
+    appendPrefixedLines(lines, right.lines, '  ')
+    lines.push(`  ${temp} = ${right.expression};`)
+    lines.push('}')
+
     return {
-      lines: [
-        ...left.lines,
-        `double ${temp} = 0;`,
-        `if ${emitCConditionClause(left.expression)} {`,
-        ...right.lines.map((line) => `  ${line}`),
-        `  ${temp} = ${right.expression};`,
-        '}'
-      ],
+      lines,
       expression: temp
     }
   }
 
+  const lines: string[] = []
+
+  appendLines(lines, left.lines)
+  lines.push(`double ${temp} = 0;`)
+  lines.push(`if ${emitCConditionClause(left.expression)} {`)
+  lines.push(`  ${temp} = 1;`)
+  lines.push('} else {')
+  appendPrefixedLines(lines, right.lines, '  ')
+  lines.push(`  ${temp} = ${right.expression};`)
+  lines.push('}')
+
   return {
-    lines: [
-      ...left.lines,
-      `double ${temp} = 0;`,
-      `if ${emitCConditionClause(left.expression)} {`,
-      `  ${temp} = 1;`,
-      '} else {',
-      ...right.lines.map((line) => `  ${line}`),
-      `  ${temp} = ${right.expression};`,
-      '}'
-    ],
+    lines,
     expression: temp
   }
 }
@@ -1038,20 +1175,22 @@ function emitPreparedScalarNullishCoalescingExpression(
   const left = deps.emitCValueExpression(expression.left, context)
   const right = emitPreparedNumberExpression(expression.right, context, deps)
   const temp = nextCName(context, 'ccjs_nullable_scalar')
-  const leftValue = valueType === 'boolean' ? `(${left.expression}.as.boolean ? 1 : 0)` : `${left.expression}.as.number`
+  const leftValue = scalarRuntimeValueExpression(left.expression, valueType)
+  const leftTypeCheck = emitRuntimeTypeCheck(`${left.expression}.tag != ${expectedTag}`, context)
+  const lines: string[] = []
+
+  appendLines(lines, left.lines)
+  lines.push(`double ${temp} = 0;`)
+  lines.push(`if (${left.expression}.tag == CCJS_TAG_NULL) {`)
+  appendPrefixedLines(lines, right.lines, '  ')
+  lines.push(`  ${temp} = ${right.expression};`)
+  lines.push('} else {')
+  lines.push(`  ${leftTypeCheck}`)
+  lines.push(`  ${temp} = ${leftValue};`)
+  lines.push('}')
 
   return {
-    lines: [
-      ...left.lines,
-      `double ${temp} = 0;`,
-      `if (${left.expression}.tag == CCJS_TAG_NULL) {`,
-      ...right.lines.map((line) => `  ${line}`),
-      `  ${temp} = ${right.expression};`,
-      '} else {',
-      `  ${emitRuntimeTypeCheck(`${left.expression}.tag != ${expectedTag}`, context)}`,
-      `  ${temp} = ${leftValue};`,
-      '}'
-    ],
+    lines,
     expression: temp
   }
 }
@@ -1061,23 +1200,33 @@ function emitPreparedNullableNullCompareExpression(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression | null {
-  if (!['===', '!==', '==', '!='].includes(expression.operator)) {
+  if (!isEqualityOperator(expression.operator)) {
     return null
   }
 
-  const nullable = expression.left?.type === 'NullLiteral' ? expression.right : expression.left
-  const maybeNull = expression.left?.type === 'NullLiteral' ? expression.left : expression.right
+  let nullable = expression.left
+  let maybeNull = expression.right
 
-  if (maybeNull?.type !== 'NullLiteral' || !isNullableRuntimeExpression(nullable, context)) {
+  if (expression.left != null && expression.left.type === 'NullLiteral') {
+    nullable = expression.right
+    maybeNull = expression.left
+  }
+
+  if (maybeNull == null || maybeNull.type !== 'NullLiteral' || !isNullableRuntimeExpression(nullable, context)) {
     return null
   }
 
   const value = deps.emitCValueExpression(nullable, context)
   const equals = `(${value.expression}.tag == CCJS_TAG_NULL)`
+  let result = `(!${equals})`
+
+  if (isPositiveEqualityOperator(expression.operator)) {
+    result = equals
+  }
 
   return {
     lines: value.lines,
-    expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
+    expression: result
   }
 }
 
@@ -1099,9 +1248,13 @@ function emitPreparedNumericCastExpression(
 
   if (cast === 'f32') {
     const result = nextCName(context, 'ccjs_f32')
+    const lines: string[] = []
+
+    appendLines(lines, value.lines)
+    lines.push(`double ${result} = (double)((float)${value.expression});`)
 
     return {
-      lines: [...value.lines, `double ${result} = (double)((float)${value.expression});`],
+      lines,
       expression: result
     }
   }
@@ -1115,27 +1268,29 @@ function emitPreparedNumericCastExpression(
   const raw = nextCName(context, `ccjs_${cast}_value`)
   const truncated = nextCName(context, `ccjs_${cast}_truncated`)
   const result = nextCName(context, `ccjs_${cast}`)
+  const lines: string[] = []
+
+  appendLines(lines, value.lines)
+  lines.push(`double ${raw} = ${value.expression};`)
+  lines.push(emitRuntimeTypeCheck(`${raw} != ${raw} || (${raw} - ${raw}) != 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${raw} <= ${limits.preMin} || ${raw} >= ${limits.preMax}`, context))
+  lines.push(`long long ${truncated} = (long long)${raw};`)
+  lines.push(emitRuntimeTypeCheck(`${truncated} < ${limits.min}LL || ${truncated} > ${limits.max}LL`, context))
+  lines.push(`double ${result} = (double)${truncated};`)
 
   return {
-    lines: [
-      ...value.lines,
-      `double ${raw} = ${value.expression};`,
-      emitRuntimeTypeCheck(`${raw} != ${raw} || (${raw} - ${raw}) != 0`, context),
-      emitRuntimeTypeCheck(`${raw} <= ${limits.preMin} || ${raw} >= ${limits.preMax}`, context),
-      `long long ${truncated} = (long long)${raw};`,
-      emitRuntimeTypeCheck(`${truncated} < ${limits.min}LL || ${truncated} > ${limits.max}LL`, context),
-      `double ${result} = (double)${truncated};`
-    ],
+    lines,
     expression: result
   }
 }
 
 function isNumericCastCall(expression: AnyNode, context: CFunctionContext, deps: CScalarExpressionDependencies): boolean {
   if (
-    expression?.type !== 'CallExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1 ||
-    !['i32', 'u32', 'u64', 'f32', 'f64'].includes(expression.callee.path[0]) ||
+    !isNumericCastName(expression.callee.path[0]) ||
     expression.args.length !== 1
   ) {
     return false
@@ -1144,7 +1299,7 @@ function isNumericCastCall(expression: AnyNode, context: CFunctionContext, deps:
   return deps.inferExpressionType(expression.args[0], context) === 'number'
 }
 
-function numericIntegerCastLimits(cast: string): { preMin: string; preMax: string; min: string; max: string } | null {
+function numericIntegerCastLimits(cast: string): NumericIntegerCastLimits | null {
   if (cast === 'i32') {
     return {
       preMin: '-2147483649.0',
@@ -1181,7 +1336,11 @@ export function emitPreparedUpdateExpression(
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
   const reference = deps.emitReference(expression.argument, context)
-  const operator = expression.operator === '--' ? '--' : '++'
+  let operator = '++'
+
+  if (expression.operator === '--') {
+    operator = '--'
+  }
 
   if (expression.prefix !== false) {
     return {
@@ -1200,79 +1359,83 @@ export function emitPreparedUpdateExpression(
 
 function emitPreparedRuntimeNumberValue(
   valueType: string,
-  emitGetCall: (temp: string) => string,
+  value: string,
+  getCall: string,
   context: CFunctionContext
 ): PreparedExpression {
-  const value = nextCName(context, 'ccjs_expr_value')
   registerOwnedValue(context, value)
+  const lines: string[] = []
+
+  appendLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(emitStatusCheck(getCall, context))
 
   return {
-    lines: [...emitPrepareOwnedValueWrite(value), emitStatusCheck(emitGetCall(value), context)],
-    expression: valueType === 'boolean' ? `(${value}.as.boolean ? 1 : 0)` : `${value}.as.number`
+    lines,
+    expression: scalarRuntimeValueExpression(value, valueType)
   }
 }
 
 export type CValueExpressionDependencies = {
-  emitCArrayLiteralValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCAwaitValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCClassObjectValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCErrorObjectValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCNullishCoalescingValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCNumberConversionValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitCObjectLiteralValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCOptionalIndexValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCOptionalMemberValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCStringConcatValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCStringConversionValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCStringSliceValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCStringSplitValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCStringTrimValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCTemplateLiteralValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitOptionalRuntimeCallbackCallValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedArrayPopCallExpression: (
+  emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCClassObjectValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCErrorObjectValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCNumberConversionValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitCObjectLiteralValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCOptionalIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCOptionalMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCStringConcatValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCStringConversionValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCStringSliceValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCStringSplitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCStringTrimValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCTemplateLiteralValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitOptionalRuntimeCallbackCallValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedArrayPopCallExpression(
     expression: AnyNode,
     context: CFunctionContext,
     options: PreparedCallOptions | null
-  ) => PreparedExpression | null
-  emitPreparedBinaryValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedChildProcessCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCollectionCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedDebugMemoryCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedFsSyncValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedKnownArrayIndexValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedKnownObjectIndexValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedKnownObjectMemberValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedMapIndexGetExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedNullableScalarRuntimeValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedOsConstantExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedOsStringCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathConstantExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedProcessStringExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedRuntimeArrayIndexValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedUrlSearchParamsObjectExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedUrlStringCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
-  isBoxedRuntimeValueName: (name: string, context: CFunctionContext) => boolean
-  isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isErrorConstructorExpression: (expression: AnyNode) => boolean
-  isIndexAccessExpression: (expression: AnyNode) => boolean
-  isMemberAccessExpression: (expression: AnyNode) => boolean
-  isNullableRuntimeExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isNullableScalarRuntimeExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringConcatExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringSliceCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringSplitCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringTrimCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  ): PreparedExpression | null
+  emitPreparedBinaryValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedChildProcessCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedClassMethodCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCollectionCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCryptoCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedDebugMemoryCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedFetchHeadersCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedFsSyncValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedJsonCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedKnownArrayIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedKnownObjectIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedKnownObjectMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedMapIndexGetExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedNullableScalarRuntimeValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedOsConstantExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedOsStringCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedPathConstantExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedPathObjectCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedPathStringCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedProcessStringExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedRuntimeArrayIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedUrlObjectExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedUrlSearchParamsCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedUrlSearchParamsObjectExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedUrlStringCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  inferExpressionType(expression: AnyNode, context: CFunctionContext): string
+  isBoxedRuntimeValueName(name: string, context: CFunctionContext): boolean
+  isClassConstructorExpression(expression: AnyNode, context: CFunctionContext): boolean
+  isErrorConstructorExpression(expression: AnyNode): boolean
+  isIndexAccessExpression(expression: AnyNode): boolean
+  isMemberAccessExpression(expression: AnyNode): boolean
+  isNullableRuntimeExpression(expression: AnyNode, context: CFunctionContext): boolean
+  isNullableScalarRuntimeExpression(expression: AnyNode, context: CFunctionContext): boolean
+  isStringConcatExpression(expression: AnyNode, context: CFunctionContext): boolean
+  isStringConversionCall(expression: AnyNode, context: CFunctionContext): boolean
+  isStringSliceCall(expression: AnyNode, context: CFunctionContext): boolean
+  isStringSplitCall(expression: AnyNode, context: CFunctionContext): boolean
+  isStringTrimCall(expression: AnyNode, context: CFunctionContext): boolean
 }
 
 export function emitCValueExpression(
@@ -1284,7 +1447,7 @@ export function emitCValueExpression(
     return deps.emitCNullishCoalescingValueExpression(expression, context)
   }
 
-  if (expression?.type === 'AwaitExpression') {
+  if (expression != null && expression.type === 'AwaitExpression') {
     return deps.emitCAwaitValueExpression(expression, context)
   }
 
@@ -1410,7 +1573,7 @@ export function emitCValueExpression(
     return deps.emitCClassObjectValueExpression(expression, context)
   }
 
-  if (expression?.type === 'OptionalCallExpression' && deps.isNullableRuntimeExpression(expression, context)) {
+  if (expression != null && expression.type === 'OptionalCallExpression' && deps.isNullableRuntimeExpression(expression, context)) {
     return deps.emitOptionalRuntimeCallbackCallValueExpression(expression, context)
   }
 
@@ -1444,58 +1607,61 @@ export function emitCValueExpression(
     return deps.emitCStringConcatValueExpression(expression, context)
   }
 
-  if (expression?.type === 'TemplateLiteral') {
+  if (expression != null && expression.type === 'TemplateLiteral') {
     return deps.emitCTemplateLiteralValueExpression(expression, context)
   }
 
-  if (expression?.type === 'ArrayLiteral') {
+  if (expression != null && expression.type === 'ArrayLiteral') {
     return deps.emitCArrayLiteralValueExpression(expression, context)
   }
 
-  if (expression?.type === 'ObjectLiteral') {
+  if (expression != null && expression.type === 'ObjectLiteral') {
     return deps.emitCObjectLiteralValueExpression(expression, context)
   }
 
-  if (expression?.type === 'StringLiteral') {
+  if (expression != null && expression.type === 'StringLiteral') {
     const temp = nextCName(context, 'ccjs_value')
     registerOwnedValue(context, temp)
+    const lines: string[] = []
+
+    appendLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(
+      emitStatusCheck(
+        `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(expression.value)}, ${utf8ByteLength(expression.value)}, &${temp})`,
+        context
+      )
+    )
 
     return {
-      lines: [
-        ...emitPrepareOwnedValueWrite(temp),
-        emitStatusCheck(
-          `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(expression.value)}, ${utf8ByteLength(expression.value)}, &${temp})`,
-          context
-        )
-      ],
+      lines,
       expression: temp
     }
   }
 
-  if (expression?.type === 'NumberLiteral') {
+  if (expression != null && expression.type === 'NumberLiteral') {
     return {
       lines: [],
       expression: `ccjs_number_value(${expression.value})`
     }
   }
 
-  if (expression?.type === 'BooleanLiteral') {
+  if (expression != null && expression.type === 'BooleanLiteral') {
     return {
       lines: [],
-      expression: `ccjs_bool_value(${expression.value ? 'true' : 'false'})`
+      expression: `ccjs_bool_value(${runtimeBoolValueExpression(expression.value)})`
     }
   }
 
-  if (expression?.type === 'NullLiteral') {
+  if (expression != null && expression.type === 'NullLiteral') {
     return {
       lines: [],
       expression: 'ccjs_null_value()'
     }
   }
 
-  if (expression?.type === 'Reference') {
+  if (expression != null && expression.type === 'Reference') {
     const name = expression.path.join('_')
-    const type = context.variables.get(name)
+    const valueType = context.variables.get(name)
 
     if (context.nullableVariables.has(name)) {
       return {
@@ -1505,7 +1671,11 @@ export function emitCValueExpression(
     }
 
     if (deps.isBoxedRuntimeValueName(name, context)) {
-      const tag = type === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
+      let tag = 'CCJS_TAG_OBJECT'
+
+      if (valueType === 'string') {
+        tag = 'CCJS_TAG_STRING'
+      }
 
       return {
         lines: [emitRuntimeTypeCheck(`(*${name}).tag != ${tag} || (*${name}).as.ref == 0`, context)],
@@ -1513,7 +1683,7 @@ export function emitCValueExpression(
       }
     }
 
-    if (type === 'string' && context.runtimeStrings.has(name)) {
+    if (valueType === 'string' && context.runtimeStrings.has(name)) {
       const temp = nextCName(context, 'ccjs_value')
 
       return {
@@ -1526,28 +1696,28 @@ export function emitCValueExpression(
       }
     }
 
-    if (type === 'bytes' || type === 'object' || type === 'array') {
+    if (valueType === 'bytes' || valueType === 'object' || valueType === 'array') {
       return {
         lines: [],
         expression: name
       }
     }
 
-    if (type === 'map' || type === 'set') {
+    if (valueType === 'map' || valueType === 'set') {
       return {
         lines: [],
         expression: name
       }
     }
 
-    if (type === 'number') {
+    if (valueType === 'number') {
       return {
         lines: [],
         expression: `ccjs_number_value(${name})`
       }
     }
 
-    if (type === 'boolean') {
+    if (valueType === 'boolean') {
       return {
         lines: [],
         expression: `ccjs_bool_value(${name})`
@@ -1555,11 +1725,11 @@ export function emitCValueExpression(
     }
   }
 
-  if (expression?.type === 'OptionalMemberExpression') {
+  if (expression != null && expression.type === 'OptionalMemberExpression') {
     return deps.emitCOptionalMemberValueExpression(expression, context)
   }
 
-  if (expression?.type === 'OptionalIndexExpression') {
+  if (expression != null && expression.type === 'OptionalIndexExpression') {
     return deps.emitCOptionalIndexValueExpression(expression, context)
   }
 
@@ -1591,7 +1761,7 @@ export function emitCValueExpression(
     }
   }
 
-  if (expression?.type === 'CallExpression' && isManagedRuntimeReturnType(deps.inferExpressionType(expression, context))) {
+  if (expression != null && expression.type === 'CallExpression' && isManagedRuntimeReturnType(deps.inferExpressionType(expression, context))) {
     const valueType = deps.inferExpressionType(expression, context)
     const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
 
@@ -1609,26 +1779,31 @@ export function emitCValueExpression(
     const tag = cRuntimeValueTag(valueType)
     registerOwnedValue(context, temp)
     const call = deps.emitPreparedCallExpression(expression, context)
+    const lines: string[] = []
+
+    appendLines(lines, call.lines)
+    appendLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(`${temp} = ${call.expression};`)
+    lines.push(emitRuntimeValueCheck(temp, tag, context))
 
     return {
-      lines: [
-        ...call.lines,
-        ...emitPrepareOwnedValueWrite(temp),
-        `${temp} = ${call.expression};`,
-        emitRuntimeValueCheck(temp, tag, context)
-      ],
+      lines,
       expression: temp
     }
   }
 
   const unsupportedType = deps.inferExpressionType(expression, context)
+  let unsupportedMessage = 'this object field expression is not supported by the current C backend slice'
+
+  if (unsupportedType === 'function') {
+    unsupportedMessage = 'stored callback values need delayed closure lifetime support and are not supported by the current C backend slice'
+  }
+
   context.diagnostics.push(
     diagnostic(
       cUnsupportedExpressionCode(unsupportedType),
-      unsupportedType === 'function'
-        ? 'stored callback values need delayed closure lifetime support and are not supported by the current C backend slice'
-        : 'this object field expression is not supported by the current C backend slice',
-      expression?.loc
+      unsupportedMessage,
+      expressionLocation(expression)
     )
   )
 
@@ -1641,7 +1816,7 @@ export function emitCValueExpression(
 export function emitCConditionClause(expression: string): string {
   const trimmed = expression.trim()
 
-  return isWrappedCExpression(trimmed) ? trimmed : `(${trimmed})`
+  return wrappedCExpression(trimmed)
 }
 
 export function emitCNegatedConditionClause(expression: string): string {
@@ -1655,13 +1830,13 @@ function isWrappedCExpression(expression: string): boolean {
 
   let depth = 0
 
-  for (let index = 0; index < expression.length; index += 1) {
+  for (let index = 0; index < expression.length; index = index + 1) {
     const char = expression[index]
 
     if (char === '(') {
-      depth += 1
+      depth = depth + 1
     } else if (char === ')') {
-      depth -= 1
+      depth = depth - 1
 
       if (depth === 0 && index < expression.length - 1) {
         return false
