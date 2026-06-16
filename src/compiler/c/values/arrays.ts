@@ -114,6 +114,8 @@ type RuntimeForOfArray = {
   lines: string[]
 }
 
+type ArrayMaybeNode = AnyNode | null | undefined
+
 type ArrayCallbackBody =
   | {
       kind: 'prepared-return'
@@ -406,56 +408,85 @@ function cloneArrayShape(shape: CArrayElementInfo[]): CArrayElementInfo[] {
   return out
 }
 
-export function isArrayMethodCall(expression: AnyNode): boolean {
-  return (
-    expression != null &&
-    expression.type === 'CallExpression' &&
-    expression.callee.type === 'MemberExpression' &&
-    arrayRuntimeMethodName(expression.callee.property) != null
-  )
+function arrayElementInfoAt(elements: CArrayElementInfo[], index: number): CArrayElementInfo {
+  return elements[index]
 }
 
-export function isArrayLengthExpression(expression: AnyNode, context: ArrayFunctionContext): boolean {
-  return (
-    expression != null &&
-    expression.type === 'MemberExpression' &&
-    expression.property === 'length' &&
-    inferArrayMetadataExpressionType(expression.object, context) === 'array'
-  )
+function arrayCallbackStatementAt(statements: AnyNode[], index: number): AnyNode {
+  return statements[index]
 }
 
-export function resolveKnownArrayIndex(expression: AnyNode, context: ArrayFunctionContext): CKnownArrayElement | null {
-  if (
-    expression == null ||
-    expression.type !== 'IndexExpression' ||
-    expression.object.type !== 'Reference' ||
-    expression.object.path.length !== 1 ||
-    expression.index.type !== 'NumberLiteral'
-  ) {
+export function isArrayMethodCall(expression: ArrayMaybeNode): boolean {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.type !== 'CallExpression') {
+    return false
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  return arrayRuntimeMethodName(callee.property) != null
+}
+
+export function isArrayLengthExpression(expression: ArrayMaybeNode, context: ArrayFunctionContext): boolean {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.type !== 'MemberExpression' || expression.property !== 'length') {
+    return false
+  }
+
+  return inferArrayMetadataExpressionType(expression.object, context) === 'array'
+}
+
+export function resolveKnownArrayIndex(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): CKnownArrayElement | null {
+  if (expression == null || expression.type !== 'IndexExpression') {
     return null
   }
 
-  const arrayName = expression.object.path[0]
+  const object = expression.object
+  const indexExpression = expression.index
+
+  if (object.type !== 'Reference' || object.path.length !== 1 || indexExpression.type !== 'NumberLiteral') {
+    return null
+  }
+
+  const arrayName = object.path[0]
   const elements = findArrayShape(context, arrayName)
 
-  if (elements == null) {
-    return null
+  if (elements != null) {
+    const index = parseArrayIndex(indexExpression.value)
+
+    if (index < 0 || index >= elements.length) {
+      return null
+    }
+
+    const element = arrayElementInfoAt(elements, index)
+
+    return {
+      arrayName,
+      index,
+      valueType: element.valueType
+    }
   }
 
-  const index = parseArrayIndex(expression.index.value)
-
-  if (index < 0 || index >= elements.length) {
-    return null
-  }
-
-  return {
-    arrayName,
-    index,
-    valueType: elements[index].valueType
-  }
+  return null
 }
 
-export function resolveRuntimeArrayIndex(expression: AnyNode, context: ArrayFunctionContext): CRuntimeArrayElement | null {
+export function resolveRuntimeArrayIndex(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): CRuntimeArrayElement | null {
   if (expression == null || expression.type !== 'IndexExpression') {
     return null
   }
@@ -492,7 +523,7 @@ export function resolveRuntimeArrayIndex(expression: AnyNode, context: ArrayFunc
 }
 
 export function resolveOptionalRuntimeArrayIndex(
-  expression: AnyNode,
+  expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): CRuntimeArrayElement | null {
   if (expression == null || expression.type !== 'OptionalIndexExpression') {
@@ -530,8 +561,12 @@ export function resolveOptionalRuntimeArrayIndex(
   }
 }
 
-export function resolveRuntimeArrayElementType(expression: AnyNode, context: ArrayFunctionContext): string | null {
-  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
+export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {
+  if (expression == null) {
+    return null
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
     const runtimeElementType = context.runtimeArrayElementTypes.get(expression.path[0])
 
     if (runtimeElementType != null) {
@@ -547,7 +582,7 @@ export function resolveRuntimeArrayElementType(expression: AnyNode, context: Arr
     return null
   }
 
-  if (expression != null && expression.type === 'CallExpression') {
+  if (expression.type === 'CallExpression') {
     const functionReturn = resolveFunctionReturnNameFromCall(expression)
 
     if (expression.valueType !== 'array') {
@@ -569,7 +604,7 @@ export function resolveRuntimeArrayElementType(expression: AnyNode, context: Arr
     return 'unknown'
   }
 
-  if (expression != null && expression.type === 'MemberExpression') {
+  if (expression.type === 'MemberExpression') {
     const deps = optionalArrayDeps(context)
     let member: CObjectFieldInfo | null = null
 
@@ -577,18 +612,22 @@ export function resolveRuntimeArrayElementType(expression: AnyNode, context: Arr
       member = deps.resolveKnownObjectMember(expression, context)
     }
 
-    if (member == null || member.valueType !== 'array') {
-      return null
+    if (member != null) {
+      if (member.valueType !== 'array') {
+        return null
+      }
+
+      if (member.arrayElementType != null) {
+        return member.arrayElementType
+      }
+
+      return 'unknown'
     }
 
-    if (member.arrayElementType != null) {
-      return member.arrayElementType
-    }
-
-    return 'unknown'
+    return null
   }
 
-  if (expression != null && expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     const deps = optionalArrayDeps(context)
     let field: CObjectFieldInfo | null = null
 
@@ -596,31 +635,36 @@ export function resolveRuntimeArrayElementType(expression: AnyNode, context: Arr
       field = deps.resolveKnownObjectIndex(expression, context)
     }
 
-    if (field == null || field.valueType !== 'array') {
-      return null
+    if (field != null) {
+      if (field.valueType !== 'array') {
+        return null
+      }
+
+      if (field.arrayElementType != null) {
+        return field.arrayElementType
+      }
+
+      return 'unknown'
     }
 
-    if (field.arrayElementType != null) {
-      return field.arrayElementType
-    }
-
-    return 'unknown'
+    return null
   }
 
   return null
 }
 
-function resolveFunctionReturnNameFromCall(expression: AnyNode): string | null {
-  if (
-    expression == null ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'Reference' ||
-    expression.callee.path.length !== 1
-  ) {
+function resolveFunctionReturnNameFromCall(expression: ArrayMaybeNode): string | null {
+  if (expression == null || expression.type !== 'CallExpression') {
     return null
   }
 
-  return expression.callee.path[0]
+  const callee = expression.callee
+
+  if (callee.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  return callee.path[0]
 }
 
 export function emitPreparedRuntimeArrayIndexValue(
@@ -671,28 +715,34 @@ export function emitPreparedKnownArrayIndexValueExpression(
 ): PreparedExpression | null {
   const element = resolveKnownArrayIndex(expression, context)
 
-  if (element == null || (element.valueType !== 'array' && element.valueType !== 'string')) {
-    return null
+  if (element != null) {
+    const elementValueType = element.valueType
+
+    if (elementValueType !== 'array' && elementValueType !== 'string') {
+      return null
+    }
+
+    const temp = nextCName(context, 'ccjs_value')
+    let tag = 'CCJS_TAG_STRING'
+
+    if (elementValueType === 'array') {
+      tag = 'CCJS_TAG_ARRAY'
+    }
+
+    registerOwnedValue(context, temp)
+    const lines: string[] = []
+
+    appendLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
+    appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+
+    return {
+      lines,
+      expression: temp
+    }
   }
 
-  const temp = nextCName(context, 'ccjs_value')
-  let tag = 'CCJS_TAG_STRING'
-
-  if (element.valueType === 'array') {
-    tag = 'CCJS_TAG_ARRAY'
-  }
-
-  registerOwnedValue(context, temp)
-  const lines: string[] = []
-
-  appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
-  appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
-
-  return {
-    lines,
-    expression: temp
-  }
+  return null
 }
 
 export function emitPreparedRuntimeArrayIndexValueExpression(
@@ -701,42 +751,42 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
 ): PreparedExpression | null {
   const runtimeElement = resolveRuntimeArrayIndex(expression, context)
 
-  if (runtimeElement == null) {
-    return null
-  }
+  if (runtimeElement != null) {
+    const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_value')
 
-  const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_value')
+    if (runtimeElement.valueType === 'string') {
+      const lines: string[] = []
 
-  if (runtimeElement.valueType === 'string') {
-    const lines: string[] = []
+      appendLines(lines, value.lines)
+      appendLines(lines, emitRuntimeFieldValueCheck(value.expression, 'CCJS_TAG_STRING', expression, context))
 
-    appendLines(lines, value.lines)
-    appendLines(lines, emitRuntimeFieldValueCheck(value.expression, 'CCJS_TAG_STRING', expression, context))
+      return {
+        lines,
+        expression: value.expression
+      }
+    }
+
+    const tag = cRuntimeValueTag(runtimeElement.valueType)
+
+    if (tag == null) {
+      return value
+    }
+
+    const checkedLines: string[] = []
+
+    appendLines(checkedLines, value.lines)
+    appendLines(checkedLines, emitRuntimeFieldValueCheck(value.expression, tag, expression, context))
 
     return {
-      lines,
+      lines: checkedLines,
       expression: value.expression
     }
   }
 
-  const tag = cRuntimeValueTag(runtimeElement.valueType)
-
-  if (tag == null) {
-    return value
-  }
-
-  const checkedLines: string[] = []
-
-  appendLines(checkedLines, value.lines)
-  appendLines(checkedLines, emitRuntimeFieldValueCheck(value.expression, tag, expression, context))
-
-  return {
-    lines: checkedLines,
-    expression: value.expression
-  }
+  return null
 }
 
-export function resolveKnownArrayLength(expression: AnyNode, context: ArrayFunctionContext): string | null {
+export function resolveKnownArrayLength(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {
   if (expression == null || expression.type !== 'MemberExpression' || expression.property !== 'length') {
     return null
   }
@@ -759,7 +809,7 @@ export function resolveKnownArrayLength(expression: AnyNode, context: ArrayFunct
 }
 
 export function emitPreparedArrayLengthExpression(
-  expression: AnyNode,
+  expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedExpression | null {
   if (expression == null || expression.type !== 'MemberExpression' || expression.property !== 'length') {
@@ -794,7 +844,7 @@ export function emitPreparedArrayLengthExpression(
 }
 
 export function resolveKnownForOfArray(
-  expression: AnyNode,
+  expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): KnownForOfArray | null {
   if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
@@ -815,16 +865,20 @@ export function resolveKnownForOfArray(
 }
 
 export function resolveRuntimeForOfArray(
-  expression: AnyNode,
+  expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): RuntimeForOfArray | null {
+  if (expression == null) {
+    return null
+  }
+
   const elementType = resolveRuntimeArrayElementType(expression, context)
 
   if (elementType == null) {
     return null
   }
 
-  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
     return {
       name: expression.path[0],
       elementType,
@@ -846,19 +900,21 @@ export function resolveForOfElementType(elements: CArrayElementInfo[]): string {
     return 'unknown'
   }
 
-  const first = elements[0]
+  const first = arrayElementInfoAt(elements, 0)
 
-  if (first == null || first.valueType == null || first.valueType === 'unknown') {
+  const firstValueType = first.valueType
+
+  if (firstValueType === 'unknown') {
     return 'unknown'
   }
 
   for (const element of elements) {
-    if (element.valueType !== first.valueType) {
+    if (element.valueType !== firstValueType) {
       return 'unknown'
     }
   }
 
-  return first.valueType
+  return firstValueType
 }
 
 export function updateKnownArrayElementValueType(
@@ -872,12 +928,14 @@ export function updateKnownArrayElementValueType(
 
   const elements = findArrayShape(context, element.arrayName)
 
-  if (elements == null || elements[element.index] == null) {
-    return
-  }
+  if (elements != null) {
+    if (element.index < 0 || element.index >= elements.length) {
+      return
+    }
 
-  elements[element.index] = {
-    valueType
+    elements[element.index] = {
+      valueType
+    }
   }
 }
 
@@ -966,120 +1024,126 @@ export function emitArrayMapVariableDeclaration(
 }
 
 export function emitPreparedArraySortCallExpression(
-  expression: AnyNode,
+  expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayExpression | null {
-  if (
-    expression == null ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'sort' ||
-    expression.args.length > 1
-  ) {
+  if (expression == null || expression.type !== 'CallExpression') {
     return null
   }
 
-  const receiver = emitPreparedArrayReceiver(expression.callee.object, context)
+  const callee = expression.callee
 
-  if (receiver == null) {
+  if (callee.type !== 'MemberExpression' || callee.property !== 'sort' || expression.args.length > 1) {
     return null
   }
 
-  if (expression.args.length === 1) {
-    return emitPreparedArrayComparatorSortCallExpression(expression, receiver, context)
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
+
+  if (receiver != null) {
+    if (expression.args.length === 1) {
+      return emitPreparedArrayComparatorSortCallExpression(expression, receiver, context)
+    }
+
+    const lines: string[] = []
+
+    appendLines(lines, receiver.lines)
+    lines.push(emitStatusCheck(`ccjs_array_sort(${receiver.expression})`, context))
+
+    return {
+      lines,
+      expression: receiver.expression,
+      elementType: receiver.elementType
+    }
   }
 
-  const lines: string[] = []
-
-  appendLines(lines, receiver.lines)
-  lines.push(emitStatusCheck(`ccjs_array_sort(${receiver.expression})`, context))
-
-  return {
-    lines,
-    expression: receiver.expression,
-    elementType: receiver.elementType
-  }
+  return null
 }
 
 export function emitPreparedArrayPushCallExpression(
-  expression: AnyNode,
+  expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayExpression | null {
-  if (
-    expression == null ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'push' ||
-    expression.args.length !== 1
-  ) {
+  if (expression == null || expression.type !== 'CallExpression') {
     return null
   }
 
-  const receiver = emitPreparedArrayReceiver(expression.callee.object, context)
+  const callee = expression.callee
 
-  if (receiver == null) {
+  if (callee.type !== 'MemberExpression' || callee.property !== 'push' || expression.args.length !== 1) {
     return null
   }
 
-  const valueType = arrayDeps(context).inferExpressionType(expression.args[0], context)
-  const value = emitPreparedArrayElementValue(expression.args[0], valueType, context)
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  updatePushedArrayMetadata(expression.callee.object, valueType, context)
+  if (receiver != null) {
+    const arg = expression.args[0]
 
-  const lines: string[] = []
+    if (arg == null) {
+      return null
+    }
 
-  appendLines(lines, receiver.lines)
-  appendLines(lines, value.lines)
-  lines.push(emitStatusCheck(`ccjs_array_push(${receiver.expression}, ${value.expression})`, context))
+    const valueType = arrayDeps(context).inferExpressionType(arg, context)
+    const value = emitPreparedArrayElementValue(arg, valueType, context)
 
-  return {
-    lines,
-    expression: '',
-    elementType: receiver.elementType
+    updatePushedArrayMetadata(callee.object, valueType, context)
+
+    const lines: string[] = []
+
+    appendLines(lines, receiver.lines)
+    appendLines(lines, value.lines)
+    lines.push(emitStatusCheck(`ccjs_array_push(${receiver.expression}, ${value.expression})`, context))
+
+    return {
+      lines,
+      expression: '',
+      elementType: receiver.elementType
+    }
   }
+
+  return null
 }
 
 export function emitPreparedArrayPopCallExpression(
-  expression: AnyNode,
+  expression: ArrayMaybeNode,
   context: ArrayFunctionContext,
   options: PreparedCallOptions | null
 ): PreparedArrayExpression | null {
-  if (
-    expression == null ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'pop' ||
-    expression.args.length !== 0
-  ) {
+  if (expression == null || expression.type !== 'CallExpression') {
     return null
   }
 
-  const receiver = emitPreparedArrayReceiver(expression.callee.object, context)
+  const callee = expression.callee
 
-  if (receiver == null) {
+  if (callee.type !== 'MemberExpression' || callee.property !== 'pop' || expression.args.length !== 0) {
     return null
   }
 
-  const value = nextCName(context, 'ccjs_array_pop')
-  registerOwnedValue(context, value)
-  updatePoppedArrayMetadata(expression.callee.object, context)
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  const lines: string[] = []
+  if (receiver != null) {
+    const value = nextCName(context, 'ccjs_array_pop')
+    registerOwnedValue(context, value)
+    updatePoppedArrayMetadata(callee.object, context)
 
-  appendLines(lines, receiver.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(`ccjs_array_pop(${receiver.expression}, &${value})`, context))
+    const lines: string[] = []
 
-  if (options != null && options.discard === true) {
-    lines.push(`ccjs_release(${value});`)
-    lines.push(`${value} = ccjs_undefined_value();`)
+    appendLines(lines, receiver.lines)
+    appendLines(lines, emitPrepareOwnedValueWrite(value))
+    lines.push(emitStatusCheck(`ccjs_array_pop(${receiver.expression}, &${value})`, context))
+
+    if (options != null && options.discard === true) {
+      lines.push(`ccjs_release(${value});`)
+      lines.push(`${value} = ccjs_undefined_value();`)
+    }
+
+    return {
+      lines,
+      expression: value,
+      elementType: receiver.elementType
+    }
   }
 
-  return {
-    lines,
-    expression: value,
-    elementType: receiver.elementType
-  }
+  return null
 }
 
 function emitPreparedArrayComparatorSortCallExpression(
@@ -1155,191 +1219,208 @@ function emitPreparedArrayComparatorSortCallExpression(
 }
 
 export function emitPreparedArrayMapCallExpression(
-  expression: AnyNode,
+  expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayExpression | null {
-  if (
-    expression == null ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'map' ||
-    expression.args.length !== 1
-  ) {
+  if (expression == null || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression' || callee.property !== 'map' || expression.args.length !== 1) {
     return null
   }
 
   const callback = expression.args[0]
+
+  if (callback == null || callback.type !== 'ArrowFunctionExpression' || callback.params.length > 2) {
+    return null
+  }
+
   const callbackBody = resolveArrayCallbackBody(callback)
 
-  if (
-    callback == null ||
-    callback.type !== 'ArrowFunctionExpression' ||
-    callbackBody == null ||
-    callback.params.length > 2
-  ) {
+  if (callbackBody == null) {
     return null
   }
 
-  const receiver = emitPreparedArrayReceiver(expression.callee.object, context)
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver == null || !isSupportedRuntimeArrayElementType(receiver.elementType)) {
-    return null
-  }
-
-  const out = nextCName(context, 'ccjs_map_array')
-  const length = nextCName(context, 'ccjs_map_length')
-  const index = nextCName(context, 'ccjs_map_index')
-  const value = nextCName(context, 'ccjs_map_value')
-  let mappedElementType = 'unknown'
-
-  if (expression.arrayElementType != null) {
-    mappedElementType = expression.arrayElementType
-  }
-
-  registerOwnedValue(context, out)
-  registerOwnedValue(context, value)
-
-  const bodyScope = pushArrayVariableScope(context)
-  let body: string[] | null = null
-
-  try {
-    const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
-
-    if (mappedElementType === 'unknown') {
-      mappedElementType = resolveArrayCallbackReturnType(callbackBody, context)
+  if (receiver != null) {
+    if (!isSupportedRuntimeArrayElementType(receiver.elementType)) {
+      return null
     }
 
-    if (!isSupportedRuntimeArrayElementType(mappedElementType)) {
-      body = null
-    } else {
-      body = []
-      appendLines(body, input)
-      appendLines(body, emitArrayMapCallbackBodyLines(callbackBody, mappedElementType, out, context))
+    const out = nextCName(context, 'ccjs_map_array')
+    const length = nextCName(context, 'ccjs_map_length')
+    const index = nextCName(context, 'ccjs_map_index')
+    const value = nextCName(context, 'ccjs_map_value')
+    let mappedElementType = 'unknown'
+
+    if (expression.arrayElementType != null) {
+      mappedElementType = expression.arrayElementType
     }
-  } finally {
-    restoreArrayVariableScope(context, bodyScope)
+
+    registerOwnedValue(context, out)
+    registerOwnedValue(context, value)
+
+    const bodyScope = pushArrayVariableScope(context)
+    let body: string[] = []
+    let bodyReady = false
+
+    try {
+      const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
+
+      if (mappedElementType === 'unknown') {
+        mappedElementType = resolveArrayCallbackReturnType(callbackBody, context)
+      }
+
+      if (!isSupportedRuntimeArrayElementType(mappedElementType)) {
+        bodyReady = false
+      } else {
+        body = []
+        appendLines(body, input)
+        appendLines(body, emitArrayMapCallbackBodyLines(callbackBody, mappedElementType, out, context))
+        bodyReady = true
+      }
+    } finally {
+      restoreArrayVariableScope(context, bodyScope)
+    }
+
+    if (!bodyReady) {
+      return null
+    }
+
+    const readStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)
+    const lines: string[] = []
+
+    appendLines(lines, receiver.lines)
+    appendLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, 0, &${out})`, context))
+    lines.push(`size_t ${length} = 0;`)
+    lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context))
+    lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
+    appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
+    lines.push(`  ${readStatus}`)
+    appendPrefixedLines(lines, body, '  ')
+    lines.push('}')
+    appendLines(lines, emitPrepareOwnedValueWrite(value))
+
+    return {
+      lines,
+      expression: out,
+      elementType: mappedElementType
+    }
   }
 
-  if (body == null) {
-    return null
-  }
-
-  const readStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)
-  const lines: string[] = []
-
-  appendLines(lines, receiver.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, 0, &${out})`, context))
-  lines.push(`size_t ${length} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context))
-  lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
-  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
-  lines.push(`  ${readStatus}`)
-  appendPrefixedLines(lines, body, '  ')
-  lines.push('}')
-  appendLines(lines, emitPrepareOwnedValueWrite(value))
-
-  return {
-    lines,
-    expression: out,
-    elementType: mappedElementType
-  }
+  return null
 }
 
 export function emitPreparedArrayFilterCallExpression(
-  expression: AnyNode,
+  expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayExpression | null {
-  if (
-    expression == null ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'filter' ||
-    expression.args.length !== 1
-  ) {
+  if (expression == null || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression' || callee.property !== 'filter' || expression.args.length !== 1) {
     return null
   }
 
   const callback = expression.args[0]
+
+  if (callback == null) {
+    return null
+  }
+
   const booleanCallback = isArrayFilterBooleanCallback(callback)
   let callbackBody: ArrayCallbackBody | null = null
 
   if (!booleanCallback) {
-    callbackBody = resolveArrayCallbackBody(callback)
-  }
-
-  if (
-    callback == null ||
-    (!booleanCallback &&
-      (callback.type !== 'ArrowFunctionExpression' ||
-        callbackBody == null ||
-        callback.params.length > 2))
-  ) {
-    return null
-  }
-
-  const receiver = emitPreparedArrayReceiver(expression.callee.object, context)
-
-  if (receiver == null || !isSupportedRuntimeArrayElementType(receiver.elementType)) {
-    return null
-  }
-
-  const out = nextCName(context, 'ccjs_filter_array')
-  const length = nextCName(context, 'ccjs_filter_length')
-  const index = nextCName(context, 'ccjs_filter_index')
-  const value = nextCName(context, 'ccjs_filter_value')
-
-  registerOwnedValue(context, out)
-  registerOwnedValue(context, value)
-
-  const bodyScope = pushArrayVariableScope(context)
-  let body: string[] = []
-
-  try {
-    if (booleanCallback) {
-      appendLines(body, emitArrayFilterBooleanCallbackBodyLines(receiver.elementType, out, value, context))
-    } else {
-      if (callbackBody == null) {
-        return null
-      }
-
-      const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
-
-      body = []
-      appendLines(body, input)
-      appendLines(body, emitArrayFilterCallbackBodyLines(callbackBody, out, value, context))
+    if (callback.type !== 'ArrowFunctionExpression' || callback.params.length > 2) {
+      return null
     }
-  } finally {
-    restoreArrayVariableScope(context, bodyScope)
+
+    callbackBody = resolveArrayCallbackBody(callback)
+
+    if (callbackBody == null) {
+      return null
+    }
   }
 
-  const readStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)
-  const lines: string[] = []
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  appendLines(lines, receiver.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, 0, &${out})`, context))
-  lines.push(`size_t ${length} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context))
-  lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
-  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
-  lines.push(`  ${readStatus}`)
-  appendPrefixedLines(lines, body, '  ')
-  lines.push('}')
-  appendLines(lines, emitPrepareOwnedValueWrite(value))
+  if (receiver != null) {
+    if (!isSupportedRuntimeArrayElementType(receiver.elementType)) {
+      return null
+    }
 
-  return {
-    lines,
-    expression: out,
-    elementType: receiver.elementType
+    const out = nextCName(context, 'ccjs_filter_array')
+    const length = nextCName(context, 'ccjs_filter_length')
+    const index = nextCName(context, 'ccjs_filter_index')
+    const value = nextCName(context, 'ccjs_filter_value')
+
+    registerOwnedValue(context, out)
+    registerOwnedValue(context, value)
+
+    const bodyScope = pushArrayVariableScope(context)
+    let body: string[] = []
+
+    try {
+      if (booleanCallback) {
+        appendLines(body, emitArrayFilterBooleanCallbackBodyLines(receiver.elementType, out, value, context))
+      } else {
+        if (callbackBody == null) {
+          return null
+        }
+
+        const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
+
+        body = []
+        appendLines(body, input)
+        appendLines(body, emitArrayFilterCallbackBodyLines(callbackBody, out, value, context))
+      }
+    } finally {
+      restoreArrayVariableScope(context, bodyScope)
+    }
+
+    const readStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)
+    const lines: string[] = []
+
+    appendLines(lines, receiver.lines)
+    appendLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, 0, &${out})`, context))
+    lines.push(`size_t ${length} = 0;`)
+    lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context))
+    lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
+    appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
+    lines.push(`  ${readStatus}`)
+    appendPrefixedLines(lines, body, '  ')
+    lines.push('}')
+    appendLines(lines, emitPrepareOwnedValueWrite(value))
+
+    return {
+      lines,
+      expression: out,
+      elementType: receiver.elementType
+    }
   }
+
+  return null
 }
 
-function isArrayFilterBooleanCallback(callback: AnyNode): boolean {
+function isArrayFilterBooleanCallback(callback: ArrayMaybeNode): boolean {
+  if (callback == null) {
+    return false
+  }
+
   return callback.type === 'Reference' && callback.path.length === 1 && callback.path[0] === 'Boolean'
 }
 
-function resolveArrowReturnExpression(callback: AnyNode): AnyNode | null {
+function resolveArrowReturnExpression(callback: ArrayMaybeNode): AnyNode | null {
   if (callback == null || callback.type !== 'ArrowFunctionExpression') {
     return null
   }
@@ -1356,20 +1437,24 @@ function resolveArrowReturnExpression(callback: AnyNode): AnyNode | null {
     statements = callback.body.body
   }
 
-  if (statements == null || statements.length !== 1) {
-    return null
+  if (statements != null) {
+    if (statements.length !== 1) {
+      return null
+    }
+
+    const statement = arrayCallbackStatementAt(statements, 0)
+
+    if (statement.type !== 'ReturnStatement' || statement.argument == null) {
+      return null
+    }
+
+    return statement.argument
   }
 
-  const statement = statements[0]
-
-  if (statement == null || statement.type !== 'ReturnStatement' || statement.argument == null) {
-    return null
-  }
-
-  return statement.argument
+  return null
 }
 
-function resolveArrayCallbackBody(callback: AnyNode): ArrayCallbackBody | null {
+function resolveArrayCallbackBody(callback: ArrayMaybeNode): ArrayCallbackBody | null {
   const returnExpression = resolveArrowReturnExpression(callback)
 
   if (returnExpression != null) {
@@ -1666,7 +1751,7 @@ function emitArrayCallbackStatementListLines(
 }
 
 function emitArrayCallbackStatementLines(
-  statement: AnyNode,
+  statement: ArrayMaybeNode,
   doneLabel: string,
   returnKind: string,
   elementType: string,
@@ -1821,7 +1906,7 @@ function emitPreparedArrayCallbackInput(
   return lines
 }
 
-function updatePushedArrayMetadata(receiver: AnyNode, valueType: string, context: ArrayFunctionContext): void {
+function updatePushedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, context: ArrayFunctionContext): void {
   if (receiver == null || receiver.type !== 'Reference' || receiver.path.length !== 1 || valueType === 'unknown') {
     return
   }
@@ -1863,7 +1948,7 @@ function updatePushedArrayMetadata(receiver: AnyNode, valueType: string, context
   ensureArrayShapes(context).set(name, nextElements)
 }
 
-function updatePoppedArrayMetadata(receiver: AnyNode, context: ArrayFunctionContext): void {
+function updatePoppedArrayMetadata(receiver: ArrayMaybeNode, context: ArrayFunctionContext): void {
   if (receiver == null || receiver.type !== 'Reference' || receiver.path.length !== 1) {
     return
   }
@@ -1871,11 +1956,9 @@ function updatePoppedArrayMetadata(receiver: AnyNode, context: ArrayFunctionCont
   const name = receiver.path[0]
   const elements = findArrayShape(context, name)
 
-  if (elements == null) {
-    return
+  if (elements != null) {
+    ensureArrayShapes(context).set(name, elements.slice(0, -1))
   }
-
-  ensureArrayShapes(context).set(name, elements.slice(0, -1))
 }
 
 function emitPreparedArrayMapValue(expression: AnyNode, valueType: string, context: ArrayFunctionContext): PreparedExpression {
@@ -1952,8 +2035,15 @@ function emitPreparedArraySortComparatorParam(
   return [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context), `double ${name} = ${value}.as.number;`]
 }
 
-function emitPreparedArrayReceiver(expression: AnyNode, context: ArrayFunctionContext): PreparedArrayReceiver | null {
-  if (expression != null && expression.type === 'ArrayLiteral') {
+function emitPreparedArrayReceiver(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): PreparedArrayReceiver | null {
+  if (expression == null) {
+    return null
+  }
+
+  if (expression.type === 'ArrayLiteral') {
     const value = arrayDeps(context).emitCArrayLiteralValueExpression(expression, context)
     const elements: CArrayElementInfo[] = []
 
@@ -1970,7 +2060,7 @@ function emitPreparedArrayReceiver(expression: AnyNode, context: ArrayFunctionCo
     }
   }
 
-  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 
     if (context.variables.get(name) !== 'array') {
@@ -1996,10 +2086,7 @@ function emitPreparedArrayReceiver(expression: AnyNode, context: ArrayFunctionCo
     }
   }
 
-  if (
-    expression != null &&
-    (expression.type === 'MemberExpression' || expression.type === 'IndexExpression')
-  ) {
+  if (expression.type === 'MemberExpression' || expression.type === 'IndexExpression') {
     const valueType = arrayDeps(context).inferExpressionType(expression, context)
 
     if (valueType !== 'array') {
@@ -2015,7 +2102,7 @@ function emitPreparedArrayReceiver(expression: AnyNode, context: ArrayFunctionCo
     }
   }
 
-  if (expression != null && expression.type === 'CallExpression') {
+  if (expression.type === 'CallExpression') {
     const valueType = arrayDeps(context).inferExpressionType(expression, context)
 
     if (valueType !== 'array') {
@@ -2036,15 +2123,15 @@ function emitPreparedArrayReceiver(expression: AnyNode, context: ArrayFunctionCo
       call = arrayDeps(context).emitCStringSplitValueExpression(expression, context)
     }
 
-    if (call == null) {
-      return null
+    if (call != null) {
+      return {
+        lines: call.lines,
+        expression: call.expression,
+        elementType: call.elementType
+      }
     }
 
-    return {
-      lines: call.lines,
-      expression: call.expression,
-      elementType: call.elementType
-    }
+    return null
   }
 
   return null
