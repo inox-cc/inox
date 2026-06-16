@@ -1,4 +1,4 @@
-import { CompileError } from '../diagnostics.ts'
+import { throwDiagnostics } from '../diagnostics.ts'
 import {
   collectIrFunctionDeclarations,
   collectIrFunctionNodeEntries,
@@ -20,22 +20,22 @@ import {
   emitRuntimeCallbackWrapperHead,
   isPromiseChainCallbackWrapperWithContext,
   isRuntimeArrowCallbackWrapperWithContext,
-  isRuntimeCallbackWrapper,
-  type CallbackLoweringDependencies
+  isRuntimeCallbackWrapper
 } from './async/callbacks.ts'
+import type { CallbackLoweringDependencies } from './async/callbacks.ts'
 import {
   collectPromiseChainWrappers,
   emitPromiseChainCallbackWrapperDeclaration,
-  emitPromiseChainCallbackWrapperHead,
-  type PromiseChainLoweringDependencies
+  emitPromiseChainCallbackWrapperHead
 } from './async/promises.ts'
+import type { PromiseChainLoweringDependencies } from './async/promises.ts'
 import {
   collectAsyncTaskWrappers,
   emitAsyncTaskFrameType,
   emitAsyncTaskWrapperDeclaration,
-  emitAsyncTaskWrapperPrototypes,
-  type AsyncTaskLoweringDependencies
+  emitAsyncTaskWrapperPrototypes
 } from './async/tasks.ts'
+import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import type { CEmitContext } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCPrelude } from './prelude.ts'
@@ -49,21 +49,21 @@ import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
   collectDgramMessageHandlers,
   emitDgramMessageHandlerDeclaration,
-  emitDgramMessageHandlerHead,
-  type DgramLoweringDependencies
+  emitDgramMessageHandlerHead
 } from './stdlib/dgram.ts'
+import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
 import {
   collectHttpHandlers,
   emitHttpHandlerDeclaration,
-  emitHttpHandlerHead,
-  type HttpLoweringDependencies
+  emitHttpHandlerHead
 } from './stdlib/http.ts'
+import type { HttpLoweringDependencies } from './stdlib/http.ts'
 import {
   collectNetHandlers,
   emitNetHandlerDeclaration,
-  emitNetHandlerHead,
-  type NetLoweringDependencies
+  emitNetHandlerHead
 } from './stdlib/net.ts'
+import type { NetLoweringDependencies } from './stdlib/net.ts'
 import type { CClassInfo, CClassMethod, CEmitOptions } from './types.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
 
@@ -71,12 +71,7 @@ export type CUnitDependencies = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
   collectExternalEventLoopFunctions: (functions: AnyNode[]) => Set<string>
-  createBaseContext: (
-    diagnostics: Diagnostic[],
-    functionDeclarations: IrFunctionDeclaration[],
-    functionEffects: IrFunctionEffect[],
-    jsGlobalRoots: Set<string>
-  ) => CEmitContext
+  createBaseContext: (diagnostics: Diagnostic[], functionDeclarations: IrFunctionDeclaration[], functionEffects: IrFunctionEffect[], jsGlobalRoots: Set<string>) => CEmitContext
   dgramLoweringDependencies: DgramLoweringDependencies
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) => string[]
   emitClassMethodHead: (info: CClassInfo, method: AnyNode, context: CEmitContext) => string
@@ -88,16 +83,52 @@ export type CUnitDependencies = {
   promiseChainLoweringDependencies: PromiseChainLoweringDependencies
 }
 
+function pushUnitLines(target: string[], lines: string[]): void {
+  for (const line of lines) {
+    target.push(line)
+  }
+}
+
+function collectUnitFunctionNodes(functionEntries: AnyNode[]): AnyNode[] {
+  const functions: AnyNode[] = []
+
+  for (const entry of functionEntries) {
+    functions.push(entry.node)
+  }
+
+  return functions
+}
+
+function hasCUnitRuntimeCallbackWrapper(baseContext: CEmitContext): boolean {
+  for (const wrapper of baseContext.callbackWrappers.values()) {
+    if (isRuntimeCallbackWrapper(wrapper)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function joinCUnitLines(lines: string[]): string {
+  let output = ''
+
+  for (const line of lines) {
+    output = `${output}${line}\n`
+  }
+
+  return output
+}
+
 export function emitCUnit(
   irPrograms: IrProgram[],
-  entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null,
-  options: CEmitOptions = {},
-  entryIrPrograms: IrProgram[] = entryIrProgram == null ? [] : [entryIrProgram],
+  entryIrProgram: IrProgram | null,
+  options: CEmitOptions,
+  entryIrPrograms: IrProgram[],
   deps: CUnitDependencies
 ): string {
   const diagnostics: Diagnostic[] = []
   const functionEntries = collectIrFunctionNodeEntries(irPrograms)
-  const functions = functionEntries.map((entry) => entry.node)
+  const functions = collectUnitFunctionNodes(functionEntries)
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
   const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
@@ -155,42 +186,45 @@ export function emitCUnit(
   baseContext.httpHandlers = collectHttpHandlers(irPrograms, baseContext)
   baseContext.netHandlers = collectNetHandlers(irPrograms, baseContext)
   const classMethods = collectClassMethods(baseContext)
-  const {
-    needsRuntime,
-    needsTimeRuntime,
-    needsMathRuntime,
-    needsCryptoRuntime,
-    needsDebugMemoryRuntime,
-    needsAsyncRuntime,
-    needsCallbackRuntime,
-    needsStringHeader,
-    needsCollectionRuntime,
-    needsBinaryRuntime,
-    needsObjectRuntime,
-    needsChildProcessRuntime,
-    needsFsRuntime,
-    needsOsRuntime,
-    needsPathRuntime,
-    needsUrlRuntime,
-    needsProcessRuntime,
-    needsJsonRuntime,
-    needsTimerRuntime,
-    needsConsoleRuntime,
-    needsDgramRuntime,
-    needsFetchRuntime,
-    needsHttpRuntime,
-    needsNetRuntime
-  } = resolveCRuntimePreludeRequirements({
+  const preludeRequirements = resolveCRuntimePreludeRequirements({
     classInfoCount: baseContext.classInfos.size,
     cryptoContext: baseContext,
     globalUsages,
-    hasRuntimeCallbackWrapper: [...baseContext.callbackWrappers.values()].some(isRuntimeCallbackWrapper),
+    hasRuntimeCallbackWrapper: hasCUnitRuntimeCallbackWrapper(baseContext),
     irPrograms,
     runtimeRequirements,
     throwingFunctionCount: baseContext.throwingFunctions.size
   })
+  const needsRuntime = preludeRequirements.needsRuntime
+  const needsTimeRuntime = preludeRequirements.needsTimeRuntime
+  const needsMathRuntime = preludeRequirements.needsMathRuntime
+  const needsCryptoRuntime = preludeRequirements.needsCryptoRuntime
+  const needsDebugMemoryRuntime = preludeRequirements.needsDebugMemoryRuntime
+  const needsAsyncRuntime = preludeRequirements.needsAsyncRuntime
+  const needsCallbackRuntime = preludeRequirements.needsCallbackRuntime
+  const needsStringHeader = preludeRequirements.needsStringHeader
+  const needsCollectionRuntime = preludeRequirements.needsCollectionRuntime
+  const needsBinaryRuntime = preludeRequirements.needsBinaryRuntime
+  const needsObjectRuntime = preludeRequirements.needsObjectRuntime
+  const needsChildProcessRuntime = preludeRequirements.needsChildProcessRuntime
+  const needsFsRuntime = preludeRequirements.needsFsRuntime
+  const needsOsRuntime = preludeRequirements.needsOsRuntime
+  const needsPathRuntime = preludeRequirements.needsPathRuntime
+  const needsUrlRuntime = preludeRequirements.needsUrlRuntime
+  const needsProcessRuntime = preludeRequirements.needsProcessRuntime
+  const needsJsonRuntime = preludeRequirements.needsJsonRuntime
+  const needsTimerRuntime = preludeRequirements.needsTimerRuntime
+  const needsConsoleRuntime = preludeRequirements.needsConsoleRuntime
+  const needsDgramRuntime = preludeRequirements.needsDgramRuntime
+  const needsFetchRuntime = preludeRequirements.needsFetchRuntime
+  const needsHttpRuntime = preludeRequirements.needsHttpRuntime
+  const needsNetRuntime = preludeRequirements.needsNetRuntime
   baseContext.processRuntime = needsProcessRuntime
-  baseContext.unhandledRejectionFlag = needsAsyncRuntime ? 'ccjs_unhandled_rejection' : null
+  if (needsAsyncRuntime) {
+    baseContext.unhandledRejectionFlag = 'ccjs_unhandled_rejection'
+  } else {
+    baseContext.unhandledRejectionFlag = null
+  }
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, baseContext)
   const lines = emitCPrelude(
@@ -236,17 +270,17 @@ export function emitCUnit(
   }
 
   for (const wrapper of baseContext.asyncTaskWrappers.values()) {
-    lines.push(...emitAsyncTaskFrameType(wrapper))
+    pushUnitLines(lines, emitAsyncTaskFrameType(wrapper))
     lines.push('')
   }
 
   for (const wrapper of arrowCallbackWrappers) {
-    lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
+    pushUnitLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
   }
 
   for (const wrapper of promiseChainCallbackWrappers) {
-    lines.push(...emitRuntimeArrowCallbackContextType(wrapper))
+    pushUnitLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
   }
 
@@ -259,12 +293,12 @@ export function emitCUnit(
     lines.push(`${deps.emitFunctionHead(item, baseContext)};`)
   }
 
-  for (const { info, method } of classMethods) {
-    lines.push(`${deps.emitClassMethodHead(info, method, baseContext)};`)
+  for (const classMethod of classMethods) {
+    lines.push(`${deps.emitClassMethodHead(classMethod.info, classMethod.method, baseContext)};`)
   }
 
   for (const wrapper of baseContext.asyncTaskWrappers.values()) {
-    lines.push(...emitAsyncTaskWrapperPrototypes(wrapper))
+    pushUnitLines(lines, emitAsyncTaskWrapperPrototypes(wrapper))
   }
 
   for (const wrapper of baseContext.callbackWrappers.values()) {
@@ -314,56 +348,53 @@ export function emitCUnit(
   }
 
   for (const wrapper of baseContext.asyncTaskWrappers.values()) {
-    lines.push(...emitAsyncTaskWrapperDeclaration(wrapper, baseContext, deps.asyncTaskLoweringDependencies))
+    pushUnitLines(lines, emitAsyncTaskWrapperDeclaration(wrapper, baseContext, deps.asyncTaskLoweringDependencies))
     lines.push('')
   }
 
   for (const wrapper of baseContext.callbackWrappers.values()) {
-    lines.push(
-      ...(wrapper.kind === 'plain-arrow'
-        ? emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext, deps.callbackLoweringDependencies)
-        : emitRuntimeCallbackWrapperDeclaration(wrapper, baseContext, deps.callbackLoweringDependencies))
-    )
+    if (wrapper.kind === 'plain-arrow') {
+      pushUnitLines(lines, emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext, deps.callbackLoweringDependencies))
+    } else {
+      pushUnitLines(lines, emitRuntimeCallbackWrapperDeclaration(wrapper, baseContext, deps.callbackLoweringDependencies))
+    }
+
     lines.push('')
   }
 
   for (const wrapper of baseContext.promiseChainWrappers.values()) {
-    lines.push(
-      ...emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext, deps.promiseChainLoweringDependencies)
-    )
+    pushUnitLines(lines, emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext, deps.promiseChainLoweringDependencies))
     lines.push('')
   }
 
   for (const wrapper of baseContext.dgramMessageHandlers.values()) {
-    lines.push(...emitDgramMessageHandlerDeclaration(wrapper, baseContext, deps.dgramLoweringDependencies))
+    pushUnitLines(lines, emitDgramMessageHandlerDeclaration(wrapper, baseContext, deps.dgramLoweringDependencies))
     lines.push('')
   }
 
   for (const wrapper of baseContext.httpHandlers.values()) {
-    lines.push(...emitHttpHandlerDeclaration(wrapper, baseContext, deps.httpLoweringDependencies))
+    pushUnitLines(lines, emitHttpHandlerDeclaration(wrapper, baseContext, deps.httpLoweringDependencies))
     lines.push('')
   }
 
   for (const wrapper of baseContext.netHandlers.values()) {
-    lines.push(...emitNetHandlerDeclaration(wrapper, baseContext, deps.netLoweringDependencies))
+    pushUnitLines(lines, emitNetHandlerDeclaration(wrapper, baseContext, deps.netLoweringDependencies))
     lines.push('')
   }
 
   for (const item of functions) {
-    lines.push(...deps.emitFunctionDeclaration(item, baseContext))
+    pushUnitLines(lines, deps.emitFunctionDeclaration(item, baseContext))
     lines.push('')
   }
 
-  for (const { info, method } of classMethods) {
-    lines.push(...deps.emitClassMethodDeclaration(info, method, baseContext))
+  for (const classMethod of classMethods) {
+    pushUnitLines(lines, deps.emitClassMethodDeclaration(classMethod.info, classMethod.method, baseContext))
     lines.push('')
   }
 
-  lines.push(...deps.emitMainWrapper(entryIrPrograms, baseContext))
+  pushUnitLines(lines, deps.emitMainWrapper(entryIrPrograms, baseContext))
 
-  if (diagnostics.length > 0) {
-    throw new CompileError(diagnostics)
-  }
+  throwDiagnostics(diagnostics)
 
-  return `${lines.join('\n')}\n`
+  return joinCUnitLines(lines)
 }
