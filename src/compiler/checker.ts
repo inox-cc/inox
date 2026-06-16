@@ -3433,7 +3433,7 @@ class Checker {
     }
   }
 
-  resolveCryptoRuntimeMethod(path: readonly string[] | null | undefined): string | null {
+  resolveCryptoRuntimeMethod(path: string[] | null | undefined): string | null {
     if (path == null) {
       return null
     }

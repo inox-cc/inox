@@ -9,13 +9,13 @@ export const cryptoRuntimeMethods = [
   'randomInt',
   'randomUUID',
   'timingSafeEqual'
-] as const
+]
 
-export type CryptoRuntimeMethod = (typeof cryptoRuntimeMethods)[number]
+export type CryptoRuntimeMethod = string
 
-const cryptoRuntimeMethodSet = new Set<string>(cryptoRuntimeMethods)
-const cryptoGlobalRuntimeMethodSet = new Set<string>(['getRandomValues'])
-const nodeCryptoImportSources = new Set(['node:crypto'])
+const cryptoRuntimeMethodSet = createStringSet(cryptoRuntimeMethods)
+const cryptoGlobalRuntimeMethodSet = createStringSet(['getRandomValues'])
+const nodeCryptoImportSources = createStringSet(['node:crypto'])
 
 export const unsupportedNodeCryptoMethods = [
   'argon2',
@@ -63,21 +63,30 @@ export const unsupportedNodeCryptoMethods = [
   'setFips',
   'sign',
   'verify'
-] as const
+]
 
-const unsupportedNodeCryptoMethodSet = new Set<string>(unsupportedNodeCryptoMethods)
+const unsupportedNodeCryptoMethodSet = createStringSet(unsupportedNodeCryptoMethods)
 
 export function cryptoRuntimeMethodNameFromPath(
-  path: readonly string[] | null | undefined
+  path: string[] | null | undefined
 ): CryptoRuntimeMethod | null {
-  if (path == null || path.length !== 2 || path[0] !== 'crypto') {
+  if (path == null || path.length !== 2) {
     return null
   }
 
-  return isCryptoRuntimeMethod(path[1]) && cryptoGlobalRuntimeMethodSet.has(path[1]) ? path[1] : null
+  const root = pathSegment(path, 0)
+  const method = pathSegment(path, 1)
+
+  if (root === 'crypto' && method != null) {
+    if (isCryptoRuntimeMethod(method) && cryptoGlobalRuntimeMethodSet.has(method)) {
+      return method
+    }
+  }
+
+  return null
 }
 
-export function isCryptoRuntimeMethod(method: string): method is CryptoRuntimeMethod {
+export function isCryptoRuntimeMethod(method: string): boolean {
   return cryptoRuntimeMethodSet.has(method)
 }
 
@@ -87,4 +96,22 @@ export function isNodeCryptoImportSource(source: string | null | undefined): boo
 
 export function isUnsupportedNodeCryptoMethod(method: string): boolean {
   return unsupportedNodeCryptoMethodSet.has(method)
+}
+
+function createStringSet(values: string[]): Set<string> {
+  const set: Set<string> = new Set()
+
+  for (const value of values) {
+    set.add(value)
+  }
+
+  return set
+}
+
+function pathSegment(path: string[], index: number): string | null {
+  if (index < 0 || index >= path.length) {
+    return null
+  }
+
+  return path[index]
 }
