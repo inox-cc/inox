@@ -431,7 +431,7 @@ export function emitMainWrapper(
   baseContext: CEmitContext,
   deps: CDeclarationEmissionDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, 'number')
+  const context = createFunctionContext(baseContext, 'number', false)
   const body = collectIrTopLevelNodesFromPrograms(irPrograms, 'statement')
   const bodyLines: string[] = []
   const lines = [context.processRuntime ? 'int main(int argc, char** argv) {' : 'int main(void) {']

@@ -137,55 +137,100 @@ export type CFunctionContext = CEmitContext & {
 export function createFunctionContext(
   baseContext: CEmitContext,
   returnType: string,
-  returnNullable = false
+  returnNullable: boolean
 ): CFunctionContext {
   return {
-    ...baseContext,
-    arrayShapes: new Map<string, CArrayElementInfo[]>(),
+    arrayLoweringDependencies: baseContext.arrayLoweringDependencies,
+    asyncTaskLoweringDependencies: baseContext.asyncTaskLoweringDependencies,
+    asyncTaskWrappers: baseContext.asyncTaskWrappers,
+    boxedMutableCaptureDeclarations: baseContext.boxedMutableCaptureDeclarations,
+    callbackArrowWrappers: baseContext.callbackArrowWrappers,
+    callbackWrappers: baseContext.callbackWrappers,
+    classInfos: baseContext.classInfos,
+    classLoweringDependencies: baseContext.classLoweringDependencies,
+    collectionLoweringDependencies: baseContext.collectionLoweringDependencies,
+    cryptoImportNames: baseContext.cryptoImportNames,
+    diagnostics: baseContext.diagnostics,
+    dgramCreateSocketNames: baseContext.dgramCreateSocketNames,
+    dgramImportNames: baseContext.dgramImportNames,
+    dgramMessageHandlers: baseContext.dgramMessageHandlers,
+    externalEventLoopFunctions: baseContext.externalEventLoopFunctions,
+    forceRuntimeStringDeclarations: baseContext.forceRuntimeStringDeclarations,
+    functionAsyncFlags: baseContext.functionAsyncFlags,
+    functionNames: baseContext.functionNames,
+    functionParams: baseContext.functionParams,
+    functionReturnArrayElementDeclaredTypes: baseContext.functionReturnArrayElementDeclaredTypes,
+    functionReturnArrayElementTypes: baseContext.functionReturnArrayElementTypes,
+    functionReturnMapTypes: baseContext.functionReturnMapTypes,
+    functionReturnNullables: baseContext.functionReturnNullables,
+    functionReturnPromiseValueTypes: baseContext.functionReturnPromiseValueTypes,
+    functionReturnSetElementTypes: baseContext.functionReturnSetElementTypes,
+    functionReturnShapes: baseContext.functionReturnShapes,
+    functionReturnTypes: baseContext.functionReturnTypes,
+    functionThrowValueTypes: baseContext.functionThrowValueTypes,
+    httpCreateServerNames: baseContext.httpCreateServerNames,
+    httpHandlers: baseContext.httpHandlers,
+    httpImportNames: baseContext.httpImportNames,
+    jsGlobalRoots: baseContext.jsGlobalRoots,
+    netConnectNames: baseContext.netConnectNames,
+    netCreateServerNames: baseContext.netCreateServerNames,
+    netHandlers: baseContext.netHandlers,
+    netImportNames: baseContext.netImportNames,
+    nextId: baseContext.nextId,
+    nullableLoweringDependencies: baseContext.nullableLoweringDependencies,
+    processRuntime: baseContext.processRuntime,
+    promiseChainArrowWrappers: baseContext.promiseChainArrowWrappers,
+    promiseChainWrappers: baseContext.promiseChainWrappers,
+    runtimeFunctionParams: baseContext.runtimeFunctionParams,
+    statementLoweringDependencies: baseContext.statementLoweringDependencies,
+    stringLoweringDependencies: baseContext.stringLoweringDependencies,
+    throwingFunctions: baseContext.throwingFunctions,
+    unhandledRejectionFlag: baseContext.unhandledRejectionFlag,
+    arrayShapes: new Map(),
     breakFlowUsed: false,
     breakTargets: [],
-    boxedValueTypes: new Map<string, string>(),
+    boxedValueTypes: new Map(),
     boxedValues: [],
-    boxedVariables: new Set<string>(),
-    classInstanceTypes: new Map<string, string>(),
+    boxedVariables: new Set(),
+    classInstanceTypes: new Map(),
     continueFlowUsed: false,
     continueTargets: [],
     cleanupEnabled: true,
-    dgramBoundSockets: new Set<string>(),
-    dgramMessageSockets: new Set<string>(),
-    dgramReuseAddrSockets: new Set<string>(),
+    dgramBoundSockets: new Set(),
+    dgramMessageSockets: new Set(),
+    dgramReuseAddrSockets: new Set(),
     errorChannelUsed: false,
-    errorObjectNames: new Set<string>(),
+    errorObjectNames: new Set(),
     errorTargets: [],
     functionErrorOut: null,
     functionReturnOut: null,
-    functionTypes: new Map<string, CFunctionType>(),
+    functionTypes: new Map(),
     eventLoopUsed: false,
     externalEventLoop: false,
-    mapTypes: new Map<string, CFunctionReturnMapType>(),
-    netReadingSockets: new Set<string>(),
-    narrowedNullableScalars: new Set<string>(),
-    nullableVariables: new Set<string>(),
-    objectShapes: new Map<string, CObjectShapeField[]>(),
+    mapTypes: new Map(),
+    netReadingSockets: new Set(),
+    narrowedNullableScalars: new Set(),
+    nullableVariables: new Set(),
+    objectShapes: new Map(),
     ownedPromises: [],
     ownedCryptoHashes: [],
     ownedCryptoHmacs: [],
     ownedValues: [],
-    promiseRejectionValueTypes: new Map<string, string>(),
-    promiseConstructorHandlers: new Map<string, CPromiseConstructorHandler>(),
-    promiseValueTypes: new Map<string, string>(),
+    promiseRejectionValueTypes: new Map(),
+    promiseConstructorHandlers: new Map(),
+    promiseValueTypes: new Map(),
     returnFlowUsed: false,
     returnTargets: [],
-    runtimeCallbacks: new Set<string>(),
-    runtimeArrayElementTypes: new Map<string, string>(),
-    setElementTypes: new Map<string, string>(),
-    runtimeStrings: new Set<string>(),
+    runtimeCallbacks: new Set(),
+    runtimeArrayElementTypes: new Map(),
+    setElementTypes: new Map(),
+    runtimeStrings: new Set(),
     statusReturn: false,
     throwingFunction: false,
     usedCleanupGoto: false,
-    variables: new Map<string, string>(),
-    returnNullable,
-    returnType
+    variables: new Map(),
+    returnNullable: returnNullable,
+    returnType: returnType
   }
 }
 
@@ -217,7 +262,11 @@ export function emitFailureStatement(context: CFunctionContext): string {
     return 'goto ccjs_cleanup;'
   }
 
-  return context.returnType === 'void' ? 'return;' : 'return 0;'
+  if (context.returnType === 'void') {
+    return 'return;'
+  }
+
+  return 'return 0;'
 }
 
 export function registerOwnedValue(context: CFunctionContext, name: string): void {
@@ -310,72 +359,134 @@ export function emitReturnValueDeclarations(context: CFunctionContext): string[]
 }
 
 export function emitStatusResultDeclarations(context: CFunctionContext): string[] {
-  return context.throwingFunction ? ['ccjs_status ccjs_status_result = CCJS_OK;'] : []
+  if (context.throwingFunction) {
+    return ['ccjs_status ccjs_status_result = CCJS_OK;']
+  }
+
+  return []
 }
 
 export function emitLoopFlowDeclarations(context: CFunctionContext): string[] {
-  return [
-    ...(context.breakFlowUsed ? ['int ccjs_break_active = 0;'] : []),
-    ...(context.continueFlowUsed ? ['int ccjs_continue_active = 0;'] : [])
-  ]
+  const lines: string[] = []
+
+  if (context.breakFlowUsed) {
+    lines.push('int ccjs_break_active = 0;')
+  }
+
+  if (context.continueFlowUsed) {
+    lines.push('int ccjs_continue_active = 0;')
+  }
+
+  return lines
 }
 
 export function emitReturnFlowDeclarations(context: CFunctionContext): string[] {
-  return context.returnFlowUsed ? ['int ccjs_return_active = 0;'] : []
+  if (context.returnFlowUsed) {
+    return ['int ccjs_return_active = 0;']
+  }
+
+  return []
 }
 
 export function emitOwnedValueDeclarations(context: CFunctionContext): string[] {
-  return [
-    ...context.ownedValues.map((name: string) => `ccjs_value ${name} = ccjs_undefined_value();`),
-    ...context.ownedCryptoHashes.map((name: string) => `ccjs_crypto_hash* ${name} = 0;`),
-    ...context.ownedCryptoHmacs.map((name: string) => `ccjs_crypto_hmac* ${name} = 0;`)
-  ]
+  const lines: string[] = []
+
+  for (const name of context.ownedValues) {
+    lines.push(`ccjs_value ${name} = ccjs_undefined_value();`)
+  }
+
+  for (const name of context.ownedCryptoHashes) {
+    lines.push(`ccjs_crypto_hash* ${name} = 0;`)
+  }
+
+  for (const name of context.ownedCryptoHmacs) {
+    lines.push(`ccjs_crypto_hmac* ${name} = 0;`)
+  }
+
+  return lines
 }
 
 export function emitOwnedPromiseDeclarations(context: CFunctionContext): string[] {
-  return context.ownedPromises.map((name: string) => `ccjs_promise* ${name} = 0;`)
+  const lines: string[] = []
+
+  for (const name of context.ownedPromises) {
+    lines.push(`ccjs_promise* ${name} = 0;`)
+  }
+
+  return lines
 }
 
 export function emitEventLoopDeclarations(context: CFunctionContext): string[] {
-  return context.eventLoopUsed && !context.externalEventLoop
-    ? ['ccjs_loop ccjs_loop;', 'int ccjs_loop_active = 0;']
-    : []
+  if (context.eventLoopUsed && !context.externalEventLoop) {
+    return ['ccjs_loop ccjs_loop;', 'int ccjs_loop_active = 0;']
+  }
+
+  return []
 }
 
 export function emitErrorChannelDeclarations(context: CFunctionContext): string[] {
-  return context.errorChannelUsed ? ['int ccjs_error_active = 0;'] : []
+  if (context.errorChannelUsed) {
+    return ['int ccjs_error_active = 0;']
+  }
+
+  return []
 }
 
 export function emitBoxedValueDeclarations(context: CFunctionContext): string[] {
-  return context.boxedValues.map((name: string) =>
-    isRuntimeBoxedValueType(context.boxedValueTypes.get(name)) ? `ccjs_value* ${name} = 0;` : `double* ${name} = 0;`
-  )
+  const lines: string[] = []
+
+  for (const name of context.boxedValues) {
+    if (isRuntimeBoxedValueType(context.boxedValueTypes.get(name))) {
+      lines.push(`ccjs_value* ${name} = 0;`)
+    } else {
+      lines.push(`double* ${name} = 0;`)
+    }
+  }
+
+  return lines
 }
 
 export function emitOwnedValueCleanup(context: CFunctionContext): string[] {
-  return [
-    ...context.ownedCryptoHmacs.toReversed().map((name: string) => `ccjs_crypto_hmac_free(${name});`),
-    ...context.ownedCryptoHashes.toReversed().map((name: string) => `ccjs_crypto_hash_free(${name});`),
-    ...context.ownedValues.toReversed().map((name: string) => `ccjs_release(${name});`)
-  ]
+  const lines: string[] = []
+
+  for (let index = context.ownedCryptoHmacs.length - 1; index >= 0; index--) {
+    const name = context.ownedCryptoHmacs[index]
+    lines.push(`ccjs_crypto_hmac_free(${name});`)
+  }
+
+  for (let index = context.ownedCryptoHashes.length - 1; index >= 0; index--) {
+    const name = context.ownedCryptoHashes[index]
+    lines.push(`ccjs_crypto_hash_free(${name});`)
+  }
+
+  for (let index = context.ownedValues.length - 1; index >= 0; index--) {
+    const name = context.ownedValues[index]
+    lines.push(`ccjs_release(${name});`)
+  }
+
+  return lines
 }
 
 export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
-  return context.ownedPromises.toReversed().flatMap((name: string) => {
+  const lines: string[] = []
+
+  for (let index = context.ownedPromises.length - 1; index >= 0; index--) {
+    const name = context.ownedPromises[index]
     const release = `if (${name} != 0) ccjs_promise_release(${name});`
 
     if (context.unhandledRejectionFlag == null) {
-      return [release]
+      lines.push(release)
+      continue
     }
 
-    return [
-      `if (${name} != 0 && ccjs_promise_is_unhandled_rejection(${name})) {`,
-      '  fprintf(stderr, "Unhandled Promise rejection\\n");',
-      `  ${context.unhandledRejectionFlag} = 1;`,
-      '}',
-      release
-    ]
-  })
+    lines.push(`if (${name} != 0 && ccjs_promise_is_unhandled_rejection(${name})) {`)
+    lines.push('  fprintf(stderr, "Unhandled Promise rejection\\n");')
+    lines.push(`  ${context.unhandledRejectionFlag} = 1;`)
+    lines.push('}')
+    lines.push(release)
+  }
+
+  return lines
 }
 
 export function emitEventLoopInit(context: CFunctionContext): string[] {
@@ -400,23 +511,35 @@ export function emitEventLoopDrain(context: CFunctionContext): string[] {
   }
 
   const loop = emitEventLoopReference(context)
+  const statusCheck = emitStatusCheck(`ccjs_loop_poll(${loop}, ${emitEventLoopCurrentTimeExpression()})`, context)
+  const lines: string[] = []
 
-  return [
-    `while (ccjs_loop_has_work(${loop})) {`,
-    ...emitEventLoopSleepUntilNextTimerLines(context, '  '),
-    `  ${emitStatusCheck(`ccjs_loop_poll(${loop}, ${emitEventLoopCurrentTimeExpression()})`, context)}`,
-    '}'
-  ]
+  lines.push(`while (ccjs_loop_has_work(${loop})) {`)
+
+  for (const line of emitEventLoopSleepUntilNextTimerLines(context, '  ')) {
+    lines.push(line)
+  }
+
+  lines.push(`  ${statusCheck}`)
+  lines.push('}')
+
+  return lines
 }
 
 export function emitEventLoopCleanup(context: CFunctionContext): string[] {
-  return context.eventLoopUsed && !context.externalEventLoop
-    ? ['if (ccjs_loop_active) ccjs_loop_dispose(&ccjs_loop);']
-    : []
+  if (context.eventLoopUsed && !context.externalEventLoop) {
+    return ['if (ccjs_loop_active) ccjs_loop_dispose(&ccjs_loop);']
+  }
+
+  return []
 }
 
 export function emitEventLoopReference(context: CFunctionContext): string {
-  return context.externalEventLoop ? 'ccjs_loop' : '&ccjs_loop'
+  if (context.externalEventLoop) {
+    return 'ccjs_loop'
+  }
+
+  return '&ccjs_loop'
 }
 
 export function emitEventLoopNextTimeExpression(context: CFunctionContext): string {
@@ -427,7 +550,7 @@ export function emitEventLoopCurrentTimeExpression(): string {
   return 'ccjs_performance_now()'
 }
 
-export function emitEventLoopSleepUntilNextTimerLines(context: CFunctionContext, indent = ''): string[] {
+export function emitEventLoopSleepUntilNextTimerLines(context: CFunctionContext, indent: string): string[] {
   const loop = emitEventLoopReference(context)
 
   return [
@@ -444,22 +567,26 @@ export function emitEventLoopSleepUntilNextTimerLines(context: CFunctionContext,
 }
 
 export function emitBoxedValueCleanup(context: CFunctionContext): string[] {
-  return context.boxedValues
-    .toReversed()
-    .flatMap((name: string) =>
-      isRuntimeBoxedValueType(context.boxedValueTypes.get(name))
-        ? [
-            `if (${name} != 0) {`,
-            `  ccjs_release(*${name});`,
-            `  ccjs_default_free(0, ${name}, sizeof(ccjs_value), _Alignof(ccjs_value));`,
-            '}'
-          ]
-        : [`if (${name} != 0) ccjs_default_free(0, ${name}, sizeof(double), _Alignof(double));`]
-    )
+  const lines: string[] = []
+
+  for (let index = context.boxedValues.length - 1; index >= 0; index--) {
+    const name = context.boxedValues[index]
+
+    if (isRuntimeBoxedValueType(context.boxedValueTypes.get(name))) {
+      lines.push(`if (${name} != 0) {`)
+      lines.push(`  ccjs_release(*${name});`)
+      lines.push(`  ccjs_default_free(0, ${name}, sizeof(ccjs_value), _Alignof(ccjs_value));`)
+      lines.push('}')
+    } else {
+      lines.push(`if (${name} != 0) ccjs_default_free(0, ${name}, sizeof(double), _Alignof(double));`)
+    }
+  }
+
+  return lines
 }
 
 export function isRuntimeBoxedValueType(valueType: string | null | undefined): boolean {
-  return valueType != null && ['string', 'object'].includes(valueType)
+  return valueType === 'string' || valueType === 'object'
 }
 
 export function emitCleanupReturn(context: CFunctionContext): string[] {
@@ -492,7 +619,7 @@ export function emitThrowingFunctionErrorTransfer(context: CFunctionContext): st
 }
 
 export function emitThrowingFunctionCleanupReturn(context: CFunctionContext): string[] {
-  const lines = ['if (ccjs_status_result != CCJS_OK) return ccjs_status_result;']
+  const lines: string[] = ['if (ccjs_status_result != CCJS_OK) return ccjs_status_result;']
 
   if (context.returnType !== 'void') {
     lines.push(`*${context.functionReturnOut} = ccjs_return;`)
@@ -505,7 +632,7 @@ export function emitThrowingFunctionCleanupReturn(context: CFunctionContext): st
 
 export function nextCName(context: CFunctionContext, prefix: string): string {
   const name = `${prefix}_${context.nextId}`
-  context.nextId += 1
+  context.nextId = context.nextId + 1
 
   return name
 }

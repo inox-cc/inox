@@ -1006,7 +1006,7 @@ export function emitPromiseChainCallbackWrapperDeclaration(
     lines.push('')
   }
 
-  const context = createFunctionContext(baseContext, 'void')
+  const context = createFunctionContext(baseContext, 'void', false)
   context.cleanupEnabled = false
   context.statusReturn = true
   context.runtimeCallbackReturnType = wrapper.returnType

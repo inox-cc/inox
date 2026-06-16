@@ -1083,10 +1083,23 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   baseContext: CEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, wrapper.functionType?.returnType ?? 'void')
+  let returnType = 'void'
+  let params: CFunctionParam[] = []
+
+  if (wrapper.functionType != null) {
+    returnType = wrapper.functionType.returnType
+    params = wrapper.functionType.params
+  }
+
+  const context = createFunctionContext(baseContext, returnType, false)
   context.cleanupEnabled = false
 
-  for (const [index, param] of (wrapper.functionType?.params ?? []).entries()) {
+  let paramIndex = 0
+
+  for (const param of params) {
+    const index = paramIndex
+    paramIndex += 1
+
     context.variables.set(plainArrowCallbackParamName(wrapper, index), param.valueType)
   }
 
@@ -1228,7 +1241,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
     lines.push('')
   }
 
-  const context = createFunctionContext(baseContext, 'void')
+  const context = createFunctionContext(baseContext, 'void', false)
   context.cleanupEnabled = false
   context.statusReturn = true
   context.runtimeCallbackReturnType = wrapper.functionType.returnType

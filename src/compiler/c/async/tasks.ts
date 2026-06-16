@@ -1626,7 +1626,7 @@ function createAsyncTaskEmitContext(
   returnType: string,
   visibleAwaitCount: number
 ): CFunctionContext {
-  const context = createFunctionContext(baseContext, returnType)
+  const context = createFunctionContext(baseContext, returnType, false)
   context.statusReturn = true
   context.externalEventLoop = true
   context.eventLoopUsed = true

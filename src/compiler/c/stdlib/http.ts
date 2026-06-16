@@ -46,7 +46,7 @@ export function emitHttpHandlerDeclaration(
   baseContext: CEmitContext,
   deps: HttpLoweringDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, 'void')
+  const context = createFunctionContext(baseContext, 'void', false)
   const expression = wrapper.expression
   const requestName = expression.params[0]?.name ?? null
   const responseName = expression.params[1]?.name ?? null

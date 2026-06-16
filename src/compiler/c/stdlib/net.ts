@@ -41,7 +41,7 @@ export type NetLoweringDependencies = {
   createFunctionContext: (
     baseContext: CEmitContext,
     returnType: string,
-    returnNullable?: boolean
+    returnNullable: boolean
   ) => CFunctionContext
   emitConsoleLogStatement: (method: string, args: AnyNode[], context: CFunctionContext) => string[]
   emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
@@ -97,7 +97,7 @@ export function emitNetHandlerDeclaration(
     socketName,
     stringLocals: new Map<string, string>()
   }
-  const context = deps.createFunctionContext(baseContext, 'void')
+  const context = deps.createFunctionContext(baseContext, 'void', false)
   context.statusReturn = true
 
   if (socketName != null) {

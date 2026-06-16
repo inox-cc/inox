@@ -472,7 +472,7 @@ function emitCModuleInitFunction(
   baseContext: CEmitContext,
   deps: CModuleEmissionDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, 'void')
+  const context = createFunctionContext(baseContext, 'void', false)
   const body = collectIrTopLevelNodes(plan.ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
   const bodyLines = deps.emitStatementList(body, context)
@@ -515,7 +515,7 @@ function emitCModuleMainFunction(
   baseContext: CEmitContext,
   deps: CModuleEmissionDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, 'number')
+  const context = createFunctionContext(baseContext, 'number', false)
   const body = collectIrTopLevelNodes(plan.ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
   const bodyLines = deps.emitStatementList(body, context)

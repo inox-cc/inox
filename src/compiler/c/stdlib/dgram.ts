@@ -46,7 +46,7 @@ export function emitDgramMessageHandlerDeclaration(
   baseContext: CEmitContext,
   deps: DgramLoweringDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, 'void')
+  const context = createFunctionContext(baseContext, 'void', false)
   const expression = wrapper.expression
   const messageName = expression.params[0]?.name ?? null
   const rinfoName = expression.params[1]?.name ?? null
