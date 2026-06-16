@@ -3,11 +3,15 @@ import { memberExpressionPath } from '../../member-paths.ts'
 import type { AnyNode } from '../../types.ts'
 
 export function cDebugRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression?.type !== 'CallExpression' || typeof expression.debugRuntimeMethod !== 'string') {
+  if (expression.type !== 'CallExpression' || expression.debugRuntimeMethod == null) {
     return null
   }
 
-  return debugRuntimeMethodNameFromPath(memberExpressionPath(expression.callee)) === expression.debugRuntimeMethod
-    ? expression.debugRuntimeMethod
-    : null
+  const expected = debugRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+
+  if (expected !== expression.debugRuntimeMethod) {
+    return null
+  }
+
+  return expression.debugRuntimeMethod
 }
