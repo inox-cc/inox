@@ -7,10 +7,9 @@ import {
   emitRuntimeTypeCheck,
   nextCName,
   pushVariableScope,
-  restoreVariableScope,
-  type CEmitContext,
-  type CFunctionContext
+  restoreVariableScope
 } from '../context.ts'
+import type { CEmitContext, CFunctionContext } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from '../stdlib/fetch.ts'
@@ -24,6 +23,8 @@ import {
 } from './promises.ts'
 import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
 import type { AnyNode, IrFunctionDeclaration } from '../../types.ts'
+
+type AsyncTaskAstNode = AnyNode
 import type {
   CAsyncTaskPhase,
   CAsyncTaskAwaitFrameLocal,
@@ -55,54 +56,55 @@ import type {
 
 
 export type AsyncTaskLoweringDependencies = {
-  emitCallee: (callee: AnyNode, context: CFunctionContext) => string
-  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitFunctionHead: (statement: AnyNode, context: CFunctionContext) => string
-  emitFsBooleanFlag: (expression: AnyNode, field: string) => string
-  emitPreparedCallArgs: (
-    expression: AnyNode,
-    params: CFunctionParam[],
-    context: CFunctionContext
-  ) => CPreparedCallArgs
-  emitPreparedCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedFetchInitOperand: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedFsAccessModeExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringBytesOperand: (
-    expression: AnyNode,
+  emitCallee(callee: AsyncTaskAstNode, context: CFunctionContext): string
+  emitCValueExpression(expression: AsyncTaskAstNode, context: CFunctionContext): PreparedExpression
+  emitFunctionHead(statement: AsyncTaskAstNode, context: CFunctionContext): string
+  emitFsBooleanFlag(expression: AsyncTaskAstNode, field: string): string
+  emitPreparedCallArgs(expression: AsyncTaskAstNode, params: CFunctionParam[], context: CFunctionContext): CPreparedCallArgs
+  emitPreparedCallExpression(expression: AsyncTaskAstNode, context: CFunctionContext): PreparedExpression
+  emitPreparedFetchInitOperand(expression: AsyncTaskAstNode, context: CFunctionContext): PreparedExpression
+  emitPreparedFsAccessModeExpression(expression: AsyncTaskAstNode, context: CFunctionContext): PreparedExpression
+  emitPreparedNumberExpression(expression: AsyncTaskAstNode, context: CFunctionContext): PreparedExpression
+  emitPreparedStringBytesOperand(
+    expression: AsyncTaskAstNode,
     context: CFunctionContext,
     prefix: string
-  ) => CPreparedStringBytesOperand
-  emitRuntimeArrowCaptureStoreLines: (
+  ): CPreparedStringBytesOperand
+  emitRuntimeArrowCaptureStoreLines(
     capture: CRuntimeArrowCapture,
     contextName: string,
     context: CFunctionContext
-  ) => string[]
-  emitStatementList: (statements: AnyNode[], context: CFunctionContext) => string[]
-  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
-  isIndexAccessExpression: (expression: AnyNode) => boolean
-  isMemberAccessExpression: (expression: AnyNode) => boolean
-  isRuntimeProducedStringExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isThrowingFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
-  isThrowingFunctionName: (name: string, context: CEmitContext) => boolean
-  registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
-  registerRuntimeValueMetadata: (
+  ): string[]
+  emitStatementList(statements: AsyncTaskAstNode[], context: CFunctionContext): string[]
+  inferExpressionType(expression: AsyncTaskAstNode, context: CFunctionContext): string
+  isIndexAccessExpression(expression: AsyncTaskAstNode): boolean
+  isMemberAccessExpression(expression: AsyncTaskAstNode): boolean
+  isRuntimeProducedStringExpression(expression: AsyncTaskAstNode, context: CFunctionContext): boolean
+  isThrowingFunctionCallee(callee: AsyncTaskAstNode, context: CFunctionContext): boolean
+  isThrowingFunctionName(name: string, context: CEmitContext): boolean
+  registerObjectShape(context: CFunctionContext, name: string, shape: CObjectShape | null | undefined): void
+  registerRuntimeValueMetadata(
     name: string,
     valueType: string,
-    declaration: AnyNode,
-    expression: AnyNode,
+    declaration: AsyncTaskAstNode,
+    expression: AsyncTaskAstNode,
     context: CFunctionContext
-  ) => void
-  resolveFunctionDeclarationParams: (name: string, fallback: CFunctionParam[], context: CEmitContext) => CFunctionParam[]
-  resolveFunctionParams: (callee: AnyNode, context: CFunctionContext) => CFunctionParam[] | null
-  resolveKnownArrayIndex: (expression: AnyNode, context: CFunctionContext) => CKnownArrayElement | null
-  resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CKnownObjectIndexField | null
-  resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CKnownObjectField | null
-  resolveRuntimeArrayElementType: (expression: AnyNode, context: CFunctionContext) => string | null
-  resolveRuntimeArrayIndex: (expression: AnyNode, context: CFunctionContext) => CRuntimeArrayElement | null
-  resolveRuntimeMapType: (expression: AnyNode, context: CFunctionContext) => { key: string; value: string } | null
-  resolveRuntimeSetElementType: (expression: AnyNode, context: CFunctionContext) => string | null
-  resolveRuntimeStringReference: (expression: AnyNode, context: CFunctionContext) => string | null
+  ): void
+  resolveFunctionDeclarationParams(name: string, fallback: CFunctionParam[], context: CEmitContext): CFunctionParam[]
+  resolveFunctionParams(callee: AsyncTaskAstNode, context: CFunctionContext): CFunctionParam[] | null
+  resolveKnownArrayIndex(expression: AsyncTaskAstNode, context: CFunctionContext): CKnownArrayElement | null
+  resolveKnownObjectIndex(expression: AsyncTaskAstNode, context: CFunctionContext): CKnownObjectIndexField | null
+  resolveKnownObjectMember(expression: AsyncTaskAstNode, context: CFunctionContext): CKnownObjectField | null
+  resolveRuntimeArrayElementType(expression: AsyncTaskAstNode, context: CFunctionContext): string | null
+  resolveRuntimeArrayIndex(expression: AsyncTaskAstNode, context: CFunctionContext): CRuntimeArrayElement | null
+  resolveRuntimeMapType(expression: AsyncTaskAstNode, context: CFunctionContext): CAsyncTaskRuntimeMapType | null
+  resolveRuntimeSetElementType(expression: AsyncTaskAstNode, context: CFunctionContext): string | null
+  resolveRuntimeStringReference(expression: AsyncTaskAstNode, context: CFunctionContext): string | null
+}
+
+export type CAsyncTaskRuntimeMapType = {
+  key: string
+  value: string
 }
 
 function asyncTaskDeps(context: CEmitContext): AsyncTaskLoweringDependencies {
@@ -111,34 +113,87 @@ function asyncTaskDeps(context: CEmitContext): AsyncTaskLoweringDependencies {
 
 type AsyncTaskTryRegionDraft = {
   handler: CAsyncTaskTryHandlerPlan | null
-  preHandlerFinalizerStatements: AnyNode[]
-  successFinalizerStatements: AnyNode[]
-  handlerFinalizerStatements: AnyNode[]
+  preHandlerFinalizerStatements: AsyncTaskAstNode[]
+  successFinalizerStatements: AsyncTaskAstNode[]
+  handlerFinalizerStatements: AsyncTaskAstNode[]
 }
 
 type AsyncTaskBodyDraft = {
   awaits: CAsyncTaskAwaitStep[]
-  prefixStatements: AnyNode[]
+  prefixStatements: AsyncTaskAstNode[]
   prefixLocals: CAsyncTaskPrefixLocal[]
-  successPreFinalizerStatements: AnyNode[]
-  successPrefixFinalizerStatements: AnyNode[]
-  successStatements: AnyNode[]
-  returnExpression: AnyNode | null
+  successPreFinalizerStatements: AsyncTaskAstNode[]
+  successPrefixFinalizerStatements: AsyncTaskAstNode[]
+  successStatements: AsyncTaskAstNode[]
+  returnExpression: AsyncTaskAstNode | null
   returnType: string
   tryRegion: AsyncTaskTryRegionDraft | null
 }
 
 type AsyncTaskBodyPlan = {
   awaits: CAsyncTaskAwaitStep[]
-  prefixStatements: AnyNode[]
+  prefixStatements: AsyncTaskAstNode[]
   frameLocals: CAsyncTaskFrameLocal[]
   successPhases: CAsyncTaskPhase[]
   tryPhases: CAsyncTaskPhase[]
-  returnExpression: AnyNode | null
+  returnExpression: AsyncTaskAstNode | null
   returnType: string
   hasTryRegion: boolean
   tryHandler: CAsyncTaskTryHandlerPlan | null
 }
+
+type AsyncTaskAwaitStepsResult = {
+  awaits: CAsyncTaskAwaitStep[]
+  trailingStatements: AsyncTaskAstNode[]
+}
+
+type AsyncTaskLiveAcrossSuspensionInput = {
+  awaits: CAsyncTaskAwaitStep[]
+  returnExpression: AsyncTaskAstNode | null
+  successPhases: CAsyncTaskPhase[]
+  tryHandler: CAsyncTaskTryHandlerPlan | null
+  tryPhases: CAsyncTaskPhase[]
+}
+
+type AsyncTaskChildValue = AsyncTaskAstNode | AsyncTaskAstNode[] | string | number | boolean | null | undefined
+
+type AsyncTaskChildNode = {
+  [key: string]: AsyncTaskChildValue
+}
+
+const ASYNC_TASK_NODE_CHILD_KEYS = [
+  'body',
+  'params',
+  'fields',
+  'methods',
+  'init',
+  'condition',
+  'consequent',
+  'alternate',
+  'test',
+  'update',
+  'iterable',
+  'discriminant',
+  'cases',
+  'block',
+  'handler',
+  'finalizer',
+  'argument',
+  'args',
+  'callee',
+  'object',
+  'index',
+  'target',
+  'value',
+  'valueType',
+  'functionType',
+  'returnShape',
+  'left',
+  'right',
+  'elements',
+  'properties',
+  'expression'
+]
 
 type AsyncTaskPlannerContext = CFunctionContext
 
@@ -158,15 +213,19 @@ type AsyncTaskPromiseChainCallbackContext = {
   finalizer: string
 }
 
+type AsyncTaskVisibleLocalReadOptions = {
+  includePrefixLocals: boolean
+}
+
 type AsyncTaskLeadingPrefixSplit = {
-  prefixStatements: AnyNode[]
-  awaitStatements: AnyNode[]
+  prefixStatements: AsyncTaskAstNode[]
+  awaitStatements: AsyncTaskAstNode[]
 }
 
 type AsyncTaskNestedTryChain = {
-  chain: AnyNode[]
-  prefixStatements: AnyNode[]
-  postNestedStatements: AnyNode[]
+  chain: AsyncTaskAstNode[]
+  prefixStatements: AsyncTaskAstNode[]
+  postNestedStatements: AsyncTaskAstNode[]
   postNestedOwnerIndex: number
 }
 
@@ -186,9 +245,11 @@ export function collectAsyncTaskWrappers(
 ): Map<string, CAsyncTaskWrapper> {
   context.asyncTaskLoweringDependencies = dependencies
   const plannerContext = asAsyncTaskPlannerContext(context)
-  const wrappers = new Map<string, CAsyncTaskWrapper>()
+  const wrappers = new Map()
 
-  for (const { declaration, node: item } of functions) {
+  for (const entry of functions) {
+    const declaration = entry.declaration
+    const item = entry.node
     const params = resolveAsyncTaskWrapperParams(declaration, plannerContext)
 
     if (params == null) {
@@ -211,7 +272,15 @@ export function collectAsyncTaskWrappers(
       rejectName: `ccjs_async_task_${cName}_reject`,
       finalizerName: `ccjs_async_task_${cName}_finalize`,
       params,
-      ...bodyPlan
+      awaits: bodyPlan.awaits,
+      prefixStatements: bodyPlan.prefixStatements,
+      frameLocals: bodyPlan.frameLocals,
+      successPhases: bodyPlan.successPhases,
+      tryPhases: bodyPlan.tryPhases,
+      returnExpression: bodyPlan.returnExpression,
+      returnType: bodyPlan.returnType,
+      hasTryRegion: bodyPlan.hasTryRegion,
+      tryHandler: bodyPlan.tryHandler
     }
 
     wrappers.set(declaration.name, wrapper)
@@ -222,29 +291,44 @@ export function collectAsyncTaskWrappers(
 
 function createAsyncTaskBodyPlan(body: AsyncTaskBodyDraft): AsyncTaskBodyPlan {
   const successPhases = createAsyncTaskSuccessPhases(body)
-  const tryRegion = body.tryRegion ?? null
+  let tryRegion = body.tryRegion
+
+  if (tryRegion == null) {
+    tryRegion = null
+  }
+
   const awaits = body.awaits
-  const prefixLocals = body.prefixLocals ?? []
+  let prefixLocals = body.prefixLocals
+
+  if (prefixLocals == null) {
+    prefixLocals = []
+  }
+
   const tryPhases = createAsyncTaskTryPhases(tryRegion, successPhases)
-  const tryHandler = tryRegion?.handler ?? null
+  let tryHandler: CAsyncTaskTryHandlerPlan | null = null
+
+  if (tryRegion != null) {
+    tryHandler = tryRegion.handler
+  }
+
   const livePrefixLocalNames = collectAsyncTaskLiveAcrossSuspensionNames({
-    awaits,
-    successPhases,
-    tryPhases,
+    awaits: awaits,
+    successPhases: successPhases,
+    tryPhases: tryPhases,
     returnExpression: body.returnExpression,
-    tryHandler
+    tryHandler: tryHandler
   })
 
   return {
-    awaits,
-    prefixStatements: body.prefixStatements ?? [],
+    awaits: awaits,
+    prefixStatements: body.prefixStatements,
     frameLocals: createAsyncTaskFrameLocals(prefixLocals, awaits, livePrefixLocalNames),
-    successPhases,
-    tryPhases,
+    successPhases: successPhases,
+    tryPhases: tryPhases,
     returnExpression: body.returnExpression,
     returnType: body.returnType,
     hasTryRegion: tryRegion != null,
-    tryHandler
+    tryHandler: tryHandler
   }
 }
 
@@ -253,86 +337,135 @@ function createAsyncTaskFrameLocals(
   awaits: CAsyncTaskAwaitStep[],
   livePrefixLocalNames: Set<string>
 ): CAsyncTaskFrameLocal[] {
-  return [
-    ...prefixLocals
-      .filter((local) => livePrefixLocalNames.has(local.name))
-      .map((local): CAsyncTaskFrameLocal => ({
-        ...local,
-        kind: 'prefix' as const
-      })),
-    ...awaits
-      .filter(isAsyncTaskAwaitFrameLocal)
-      .map((item): CAsyncTaskFrameLocal => ({
-        ...item,
-        kind: 'await' as const
-      }))
-  ]
+  const frameLocals: CAsyncTaskFrameLocal[] = []
+
+  for (const local of prefixLocals) {
+    if (!livePrefixLocalNames.has(local.name)) {
+      continue
+    }
+
+    frameLocals.push({
+      name: local.name,
+      type: local.type,
+      fieldName: local.fieldName,
+      arrayElementType: local.arrayElementType,
+      forceRuntimeStringDeclaration: local.forceRuntimeStringDeclaration,
+      mapKeyType: local.mapKeyType,
+      mapValueType: local.mapValueType,
+      setElementType: local.setElementType,
+      shape: local.shape,
+      kind: 'prefix'
+    })
+  }
+
+  for (const item of awaits) {
+    if (item.fieldName == null || item.name == null) {
+      continue
+    }
+
+    frameLocals.push({
+      index: item.index,
+      name: item.name,
+      type: item.type,
+      fieldName: item.fieldName,
+      arrayElementType: item.arrayElementType,
+      awaitedExpression: item.awaitedExpression,
+      awaitedPromiseExpression: item.awaitedPromiseExpression,
+      mapKeyType: item.mapKeyType,
+      mapValueType: item.mapValueType,
+      setElementType: item.setElementType,
+      shape: item.shape,
+      kind: 'await'
+    })
+  }
+
+  return frameLocals
 }
 
-function isAsyncTaskAwaitFrameLocal(item: CAsyncTaskAwaitStep): item is CAsyncTaskAwaitFrameLocal {
-  return item.fieldName != null && item.name != null
-}
+function collectAsyncTaskLiveAcrossSuspensionNames(input: AsyncTaskLiveAcrossSuspensionInput): Set<string> {
+  const nodes: AsyncTaskAstNode[] = []
 
-function collectAsyncTaskLiveAcrossSuspensionNames({
-  awaits,
-  successPhases,
-  tryPhases,
-  returnExpression,
-  tryHandler
-}: {
-  awaits: CAsyncTaskAwaitStep[]
-  successPhases: CAsyncTaskPhase[]
-  tryPhases: CAsyncTaskPhase[]
-  returnExpression: AnyNode | null
-  tryHandler: CAsyncTaskTryHandlerPlan | null
-}): Set<string> {
-  return collectAsyncTaskReferencedNames([
-    ...awaits.slice(1).flatMap((item) => [item.awaitedExpression, item.awaitedPromiseExpression]),
-    ...successPhases.flatMap((phase) => phase.statements),
-    ...tryPhases.flatMap((phase) => phase.statements),
-    returnExpression,
-    ...(tryHandler == null ? [] : [...(tryHandler.statements ?? []), tryHandler.returnExpression])
-  ])
-}
+  for (let index = 1; index < input.awaits.length; index = index + 1) {
+    const item = input.awaits[index]
 
-function collectAsyncTaskReferencedNames(nodes: unknown): Set<string> {
-  const names = new Set<string>()
-  const visit = (node: unknown): void => {
-    if (node == null) {
-      return
+    if (item.awaitedExpression != null) {
+      nodes.push(item.awaitedExpression)
     }
 
-    if (Array.isArray(node)) {
-      node.forEach(visit)
-      return
-    }
-
-    if (typeof node !== 'object') {
-      return
-    }
-
-    const current = node as AnyNode
-
-    if (current.type === 'Reference') {
-      if (current.path.length === 1) {
-        names.add(current.path[0])
-      }
-
-      return
-    }
-
-    for (const [key, value] of Object.entries(current)) {
-      if (key === 'loc' || key === 'shape' || key === 'functionType') {
-        continue
-      }
-
-      visit(value)
+    if (item.awaitedPromiseExpression != null) {
+      nodes.push(item.awaitedPromiseExpression)
     }
   }
 
-  visit(nodes)
+  for (const phase of input.successPhases) {
+    for (const statement of phase.statements) {
+      nodes.push(statement)
+    }
+  }
+
+  for (const phase of input.tryPhases) {
+    for (const statement of phase.statements) {
+      nodes.push(statement)
+    }
+  }
+
+  if (input.returnExpression != null) {
+    nodes.push(input.returnExpression)
+  }
+
+  if (input.tryHandler != null) {
+    for (const statement of input.tryHandler.statements) {
+      nodes.push(statement)
+    }
+
+    if (input.tryHandler.returnExpression != null) {
+      nodes.push(input.tryHandler.returnExpression)
+    }
+  }
+
+  return collectAsyncTaskReferencedNames(nodes)
+}
+
+function collectAsyncTaskReferencedNames(nodes: AsyncTaskAstNode[]): Set<string> {
+  const names: Set<string> = new Set()
+
+  for (const node of nodes) {
+    visitAsyncTaskReferencedValue(node, names)
+  }
 
   return names
+}
+
+function visitAsyncTaskReferencedValue(value: AsyncTaskChildValue, names: Set<string>): void {
+  if (value == null) {
+    return
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      visitAsyncTaskReferencedValue(item, names)
+    }
+
+    return
+  }
+
+  const current = value as AsyncTaskAstNode
+
+  if (current.type === 'Reference') {
+    if (current.path.length === 1) {
+      names.add(current.path[0])
+    }
+
+    return
+  }
+
+  const childNode = current as AsyncTaskChildNode
+
+  for (const key of ASYNC_TASK_NODE_CHILD_KEYS) {
+    const child = childNode[key]
+
+    visitAsyncTaskReferencedValue(child, names)
+  }
 }
 
 function createAsyncTaskSuccessPhases(body: AsyncTaskBodyDraft): CAsyncTaskPhase[] {
@@ -348,15 +481,15 @@ function createAsyncTaskSuccessPhases(body: AsyncTaskBodyDraft): CAsyncTaskPhase
 function appendAsyncTaskSuccessPhase(
   phases: CAsyncTaskPhase[],
   kind: CAsyncTaskSuccessPhaseKind,
-  statements: AnyNode[]
+  statements: AsyncTaskAstNode[]
 ): void {
-  if ((statements?.length ?? 0) === 0) {
+  if (statements.length === 0) {
     return
   }
 
   phases.push({
-    kind,
-    statements
+    kind: kind,
+    statements: statements
   })
 }
 
@@ -369,18 +502,26 @@ function createAsyncTaskTryPhases(
   }
 
   const phases: CAsyncTaskPhase[] = []
-  const successPrefixFinalizerStatements = successPhases
-    .filter((phase) => phase.kind === 'prefix-finalizer')
-    .flatMap((phase) => phase.statements)
-  const successFinalizerStatements = [
-    ...(successPrefixFinalizerStatements.length > 0 ? [] : tryRegion.preHandlerFinalizerStatements),
-    ...tryRegion.successFinalizerStatements
-  ]
-  const rejectFinalizerStatements = [
-    ...successPrefixFinalizerStatements,
-    ...tryRegion.preHandlerFinalizerStatements,
-    ...tryRegion.successFinalizerStatements
-  ]
+  const successPrefixFinalizerStatements: AsyncTaskAstNode[] = []
+  const successFinalizerStatements: AsyncTaskAstNode[] = []
+  const rejectFinalizerStatements: AsyncTaskAstNode[] = []
+
+  for (const phase of successPhases) {
+    if (phase.kind !== 'prefix-finalizer') {
+      continue
+    }
+
+    appendAsyncTaskNodes(successPrefixFinalizerStatements, phase.statements)
+  }
+
+  if (successPrefixFinalizerStatements.length === 0) {
+    appendAsyncTaskNodes(successFinalizerStatements, tryRegion.preHandlerFinalizerStatements)
+  }
+
+  appendAsyncTaskNodes(successFinalizerStatements, tryRegion.successFinalizerStatements)
+  appendAsyncTaskNodes(rejectFinalizerStatements, successPrefixFinalizerStatements)
+  appendAsyncTaskNodes(rejectFinalizerStatements, tryRegion.preHandlerFinalizerStatements)
+  appendAsyncTaskNodes(rejectFinalizerStatements, tryRegion.successFinalizerStatements)
 
   appendAsyncTaskTryPhase(phases, 'success-finalizer', successFinalizerStatements)
   appendAsyncTaskTryPhase(phases, 'reject-finalizer', rejectFinalizerStatements)
@@ -393,16 +534,67 @@ function createAsyncTaskTryPhases(
 function appendAsyncTaskTryPhase(
   phases: CAsyncTaskPhase[],
   kind: CAsyncTaskTryPhaseKind,
-  statements: AnyNode[]
+  statements: AsyncTaskAstNode[]
 ): void {
-  if ((statements?.length ?? 0) === 0) {
+  if (statements.length === 0) {
     return
   }
 
   phases.push({
-    kind,
-    statements
+    kind: kind,
+    statements: statements
   })
+}
+
+function appendAsyncTaskNodes(target: AsyncTaskAstNode[], source: AsyncTaskAstNode[]): void {
+  for (const item of source) {
+    target.push(item)
+  }
+}
+
+function appendAsyncTaskLines(target: string[], source: string[]): void {
+  for (const line of source) {
+    target.push(line)
+  }
+}
+
+function appendIndentedAsyncTaskLines(target: string[], source: string[], indent: string): void {
+  for (const line of source) {
+    target.push(`${indent}${line}`)
+  }
+}
+
+function appendAsyncTaskFrameLocals(
+  target: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>,
+  source: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>
+): void {
+  for (const item of source) {
+    target.push(item)
+  }
+}
+
+function getAsyncTaskBlockStatements(block: AsyncTaskAstNode | null | undefined): AsyncTaskAstNode[] {
+  if (block == null || block.body == null) {
+    return []
+  }
+
+  return block.body
+}
+
+function getAsyncTaskLastStatement(statements: AsyncTaskAstNode[]): AsyncTaskAstNode | null {
+  if (statements.length === 0) {
+    return null
+  }
+
+  return statements[statements.length - 1]
+}
+
+function getAsyncTaskStatementsBeforeLast(statements: AsyncTaskAstNode[]): AsyncTaskAstNode[] {
+  if (statements.length === 0) {
+    return []
+  }
+
+  return statements.slice(0, statements.length - 1)
 }
 
 function resolveAsyncTaskWrapperParams(
@@ -423,15 +615,25 @@ function resolveAsyncTaskWrapperParams(
     context
   )
 
-  if (params.some((param) => param.nullable === true || !isSupportedAsyncTaskParamType(param.valueType))) {
-    return null
+  for (const param of params) {
+    if (param.nullable === true || !isSupportedAsyncTaskParamType(param.valueType)) {
+      return null
+    }
   }
 
-  return params.map((param) => ({
-    ...param,
-    fieldName: `param_${emitCIdentifier(param.name)}`,
-    argName: `ccjs_arg_${emitCIdentifier(param.name)}`
-  }))
+  const result: CAsyncTaskParam[] = []
+
+  for (const param of params) {
+    result.push({
+      name: param.name,
+      valueType: param.valueType,
+      nullable: param.nullable,
+      fieldName: `param_${emitCIdentifier(param.name)}`,
+      argName: `ccjs_arg_${emitCIdentifier(param.name)}`
+    })
+  }
+
+  return result
 }
 
 function isSupportedAsyncTaskParamType(valueType: string): boolean {
@@ -453,7 +655,7 @@ function isSupportedAsyncTaskValueType(valueType: string): boolean {
 }
 
 function resolveAsyncTaskBodyPlan(
-  statement: AnyNode,
+  statement: AsyncTaskAstNode,
   declaration: IrFunctionDeclaration,
   context: AsyncTaskPlannerContext,
   params: CAsyncTaskParam[]
@@ -466,8 +668,15 @@ function resolveAsyncTaskBodyPlan(
     return null
   }
 
-  const returnType =
-    declaration.returnPromiseValueType ?? context.functionReturnPromiseValueTypes.get(declaration.name) ?? 'unknown'
+  let returnType = declaration.returnPromiseValueType
+
+  if (returnType == null) {
+    returnType = context.functionReturnPromiseValueTypes.get(declaration.name)
+  }
+
+  if (returnType == null) {
+    returnType = 'unknown'
+  }
 
   if (!isSupportedAsyncTaskValueType(returnType)) {
     return null
@@ -483,32 +692,22 @@ function resolveAsyncTaskBodyPlan(
     return null
   }
 
-  const returnStatement = statement.body.at(-1)
+  const returnStatement = getAsyncTaskLastStatement(statement.body)
 
-  if (returnStatement?.type !== 'ReturnStatement') {
+  if (returnStatement == null || returnStatement.type !== 'ReturnStatement') {
     return null
   }
 
-  const awaits = resolveAsyncTaskAwaitSteps(statement.body.slice(0, -1), context)
+  const awaits = resolveAsyncTaskAwaitSteps(getAsyncTaskStatementsBeforeLast(statement.body), context)
 
-  const returnContext = {
-    ...context,
-    variables: new Map(context.variables ?? [])
+  if (awaits == null) {
+    return null
   }
 
-  for (const param of params) {
-    returnContext.variables.set(param.name, param.valueType)
-  }
-
-  for (const item of awaits ?? []) {
-    if (item.name != null) {
-      returnContext.variables.set(item.name, item.type)
-    }
-  }
-
+  const returnContext = createAsyncTaskExpressionContext(context, params, awaits)
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
 
-  if (awaits == null || (returnType !== 'void' && returnExpression == null)) {
+  if (returnType !== 'void' && returnExpression == null) {
     return null
   }
 
@@ -526,26 +725,31 @@ function resolveAsyncTaskBodyPlan(
 }
 
 function resolveAsyncTaskTryBodyPlan(
-  statement: AnyNode,
+  statement: AsyncTaskAstNode,
   context: AsyncTaskPlannerContext,
   params: CAsyncTaskParam[],
   returnType: string
 ): AsyncTaskBodyPlan | null {
-  if (statement.body.length !== 1 || statement.body[0]?.type !== 'TryStatement') {
+  if (statement.body.length !== 1) {
     return null
   }
 
   const tryStatement = statement.body[0]
+
+  if (tryStatement.type !== 'TryStatement') {
+    return null
+  }
+
   const nestedTryFinallyBody = resolveAsyncTaskNestedTryBodyPlan(tryStatement, context, params, returnType)
 
   if (nestedTryFinallyBody != null) {
     return nestedTryFinallyBody
   }
 
-  const tryStatements = tryStatement.block?.body ?? []
-  const returnStatement = tryStatements.at(-1)
+  const tryStatements = getAsyncTaskBlockStatements(tryStatement.block)
+  const returnStatement = getAsyncTaskLastStatement(tryStatements)
 
-  if (returnStatement?.type !== 'ReturnStatement') {
+  if (returnStatement == null || returnStatement.type !== 'ReturnStatement') {
     return null
   }
 
@@ -553,7 +757,7 @@ function resolveAsyncTaskTryBodyPlan(
     return null
   }
 
-  const awaits = resolveAsyncTaskAwaitSteps(tryStatements.slice(0, -1), context)
+  const awaits = resolveAsyncTaskAwaitSteps(getAsyncTaskStatementsBeforeLast(tryStatements), context)
 
   if (awaits == null) {
     return null
@@ -567,7 +771,7 @@ function resolveAsyncTaskTryBodyPlan(
   }
 
   const handler = resolveAsyncTaskTryHandler(tryStatement.handler, context, params, returnType)
-  const finalizerStatements = tryStatement.finalizer?.body ?? []
+  const finalizerStatements = getAsyncTaskBlockStatements(tryStatement.finalizer)
 
   if ((tryStatement.handler != null && handler == null) || hasUnsupportedAsyncTaskTryControlFlow(finalizerStatements)) {
     return null
@@ -592,7 +796,7 @@ function resolveAsyncTaskTryBodyPlan(
 }
 
 function resolveAsyncTaskNestedTryBodyPlan(
-  tryStatement: AnyNode,
+  tryStatement: AsyncTaskAstNode,
   context: AsyncTaskPlannerContext,
   params: CAsyncTaskParam[],
   returnType: string
@@ -605,18 +809,29 @@ function resolveAsyncTaskNestedTryBodyPlan(
 
   const tryChain = tryChainResult.chain
   const innerTry = tryChain[tryChain.length - 1]
-  const innerTryStatements = innerTry.block?.body ?? []
-  const postNestedStatements = tryChainResult.postNestedStatements ?? []
+  const innerTryStatements = getAsyncTaskBlockStatements(innerTry.block)
+  const postNestedStatements = tryChainResult.postNestedStatements
   const hasPostNestedStatements = postNestedStatements.length > 0
-  const returnStatement = hasPostNestedStatements ? postNestedStatements.at(-1) : innerTryStatements.at(-1)
-  const innerAwaitStatements = hasPostNestedStatements ? innerTryStatements : innerTryStatements.slice(0, -1)
+  let returnStatement: AsyncTaskAstNode | null = null
+  let innerAwaitStatements: AsyncTaskAstNode[] = []
+
+  if (hasPostNestedStatements) {
+    returnStatement = getAsyncTaskLastStatement(postNestedStatements)
+    innerAwaitStatements = innerTryStatements
+  } else {
+    returnStatement = getAsyncTaskLastStatement(innerTryStatements)
+    innerAwaitStatements = getAsyncTaskStatementsBeforeLast(innerTryStatements)
+  }
+
   const innerPrefixResult = splitAsyncTaskLeadingPrefixStatements(innerAwaitStatements)
 
-  if (returnStatement?.type !== 'ReturnStatement' || innerPrefixResult == null) {
+  if (returnStatement == null || returnStatement.type !== 'ReturnStatement' || innerPrefixResult == null) {
     return null
   }
 
-  const prefixStatements = [...tryChainResult.prefixStatements, ...innerPrefixResult.prefixStatements]
+  const prefixStatements: AsyncTaskAstNode[] = []
+  appendAsyncTaskNodes(prefixStatements, tryChainResult.prefixStatements)
+  appendAsyncTaskNodes(prefixStatements, innerPrefixResult.prefixStatements)
   const prefixResult = resolveAsyncTaskPrefixLocals(context, params, prefixStatements)
 
   if (prefixResult == null) {
@@ -631,16 +846,29 @@ function resolveAsyncTaskNestedTryBodyPlan(
   }
 
   const awaits = awaitResult.awaits
-  const successPreFinalizerStatements = hasPostNestedStatements ? awaitResult.trailingStatements : []
-  const successStatements = hasPostNestedStatements ? postNestedStatements.slice(0, -1) : awaitResult.trailingStatements
-  const returnContext = createAsyncTaskExpressionContext(
-    context,
-    params,
-    hasPostNestedStatements ? prefixResult.locals : [...prefixResult.locals, ...awaits]
-  )
+  const successPreFinalizerStatements: AsyncTaskAstNode[] = []
+  let successStatements: AsyncTaskAstNode[] = []
+  const returnContextLocals: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal> = []
+
+  if (hasPostNestedStatements) {
+    appendAsyncTaskNodes(successPreFinalizerStatements, awaitResult.trailingStatements)
+    successStatements = getAsyncTaskStatementsBeforeLast(postNestedStatements)
+    appendAsyncTaskFrameLocals(returnContextLocals, prefixResult.locals)
+  } else {
+    successStatements = awaitResult.trailingStatements
+    appendAsyncTaskFrameLocals(returnContextLocals, prefixResult.locals)
+    appendAsyncTaskFrameLocals(returnContextLocals, awaits)
+  }
+
+  const returnContext = createAsyncTaskExpressionContext(context, params, returnContextLocals)
   const finalizers = collectAsyncTaskTryFinalizers(tryChain)
   const handlerIndex = findAsyncTaskNearestTryHandlerIndex(tryChain)
-  const handlerSource = handlerIndex < 0 ? null : tryChain[handlerIndex].handler
+  let handlerSource: AsyncTaskAstNode | null = null
+
+  if (handlerIndex >= 0) {
+    handlerSource = tryChain[handlerIndex].handler
+  }
+
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
   registerAsyncTaskStatementListLocals(returnContext, successStatements)
   const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement.argument, returnType, returnContext)
@@ -649,57 +877,79 @@ function resolveAsyncTaskNestedTryBodyPlan(
     return null
   }
 
-  const successFinalizerStatements = hasPostNestedStatements
-    ? collectAsyncTaskTryFinalizerStatements(finalizers, tryChainResult.postNestedOwnerIndex, 0)
-    : handlerIndex < 0
-      ? collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, 0)
-      : collectAsyncTaskTryFinalizerStatements(finalizers, handlerIndex, 0)
-  const handlerFinalizerStatements =
-    handlerIndex < 0
-      ? []
-      : hasPostNestedStatements
-        ? collectAsyncTaskTryFinalizerStatements(finalizers, handlerIndex, 0)
-        : successFinalizerStatements
+  let successFinalizerStatements: AsyncTaskAstNode[] = []
+
+  if (hasPostNestedStatements) {
+    successFinalizerStatements = collectAsyncTaskTryFinalizerStatements(finalizers, tryChainResult.postNestedOwnerIndex, 0)
+  } else if (handlerIndex < 0) {
+    successFinalizerStatements = collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, 0)
+  } else {
+    successFinalizerStatements = collectAsyncTaskTryFinalizerStatements(finalizers, handlerIndex, 0)
+  }
+
+  let handlerFinalizerStatements: AsyncTaskAstNode[] = []
+
+  if (handlerIndex >= 0) {
+    if (hasPostNestedStatements) {
+      handlerFinalizerStatements = collectAsyncTaskTryFinalizerStatements(finalizers, handlerIndex, 0)
+    } else {
+      handlerFinalizerStatements = successFinalizerStatements
+    }
+  }
+  let finalizersUnsupported = false
+
+  for (const statements of finalizers) {
+    if (hasUnsupportedAsyncTaskTryControlFlow(statements)) {
+      finalizersUnsupported = true
+    }
+  }
 
   if (
     (handlerSource != null && handler == null) ||
     hasUnsupportedAsyncTaskTryControlFlow(prefixStatements) ||
     hasUnsupportedAsyncTaskTryControlFlow(successPreFinalizerStatements) ||
     hasUnsupportedAsyncTaskTryControlFlow(successStatements) ||
-    finalizers.some((statements) => hasUnsupportedAsyncTaskTryControlFlow(statements))
+    finalizersUnsupported
   ) {
     return null
   }
 
+  let successPrefixFinalizerStatements: AsyncTaskAstNode[] = []
+
+  if (hasPostNestedStatements) {
+    successPrefixFinalizerStatements = collectAsyncTaskTryFinalizerStatements(
+      finalizers,
+      finalizers.length - 1,
+      tryChainResult.postNestedOwnerIndex + 1
+    )
+  }
+
+  let preHandlerFinalizerStatements: AsyncTaskAstNode[] = []
+
+  if (handlerIndex >= 0) {
+    preHandlerFinalizerStatements = collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, handlerIndex + 1)
+  }
+
   return createAsyncTaskBodyPlan({
-    awaits,
-    prefixStatements,
+    awaits: awaits,
+    prefixStatements: prefixStatements,
     prefixLocals: prefixResult.locals,
-    successPreFinalizerStatements,
-    successPrefixFinalizerStatements: hasPostNestedStatements
-      ? collectAsyncTaskTryFinalizerStatements(
-          finalizers,
-          finalizers.length - 1,
-          tryChainResult.postNestedOwnerIndex + 1
-        )
-      : [],
-    successStatements,
-    returnExpression,
-    returnType,
+    successPreFinalizerStatements: successPreFinalizerStatements,
+    successPrefixFinalizerStatements: successPrefixFinalizerStatements,
+    successStatements: successStatements,
+    returnExpression: returnExpression,
+    returnType: returnType,
     tryRegion: {
-      handler,
-      preHandlerFinalizerStatements:
-        handlerIndex < 0
-          ? []
-          : collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, handlerIndex + 1),
-      successFinalizerStatements,
-      handlerFinalizerStatements
+      handler: handler,
+      preHandlerFinalizerStatements: preHandlerFinalizerStatements,
+      successFinalizerStatements: successFinalizerStatements,
+      handlerFinalizerStatements: handlerFinalizerStatements
     }
   })
 }
 
-function splitAsyncTaskLeadingPrefixStatements(statements: AnyNode[]): AsyncTaskLeadingPrefixSplit {
-  const prefixStatements: AnyNode[] = []
+function splitAsyncTaskLeadingPrefixStatements(statements: AsyncTaskAstNode[]): AsyncTaskLeadingPrefixSplit {
+  const prefixStatements: AsyncTaskAstNode[] = []
   let index = 0
 
   while (index < statements.length) {
@@ -715,50 +965,67 @@ function splitAsyncTaskLeadingPrefixStatements(statements: AnyNode[]): AsyncTask
     }
 
     prefixStatements.push(statement)
-    index += 1
+    index = index + 1
   }
 
   return {
-    prefixStatements,
+    prefixStatements: prefixStatements,
     awaitStatements: statements.slice(index)
   }
 }
 
-function isAsyncTaskDirectAwaitStatementShape(statement: AnyNode): boolean {
-  return statement?.type === 'VariableDeclaration' && statement.init?.type === 'AwaitExpression'
+function isAsyncTaskDirectAwaitStatementShape(statement: AsyncTaskAstNode): boolean {
+  if (statement == null || statement.type !== 'VariableDeclaration' || statement.init == null) {
+    return false
+  }
+
+  return statement.init.type === 'AwaitExpression'
 }
 
-function isAsyncTaskStatementAwaitShape(statement: AnyNode): boolean {
-  return statement?.type === 'ExpressionStatement' && statement.expression?.type === 'AwaitExpression'
+function isAsyncTaskStatementAwaitShape(statement: AsyncTaskAstNode): boolean {
+  if (statement == null || statement.type !== 'ExpressionStatement' || statement.expression == null) {
+    return false
+  }
+
+  return statement.expression.type === 'AwaitExpression'
 }
 
-function isAsyncTaskLocalPromiseAwaitShape(promiseStatement: AnyNode, awaitStatement: AnyNode | undefined): boolean {
-  return (
-    promiseStatement?.type === 'VariableDeclaration' &&
-    promiseStatement.init?.valueType === 'promise' &&
-    awaitStatement?.type === 'VariableDeclaration' &&
-    awaitStatement.init?.type === 'AwaitExpression'
-  )
+function isAsyncTaskLocalPromiseAwaitShape(promiseStatement: AsyncTaskAstNode, awaitStatement: AsyncTaskAstNode | undefined): boolean {
+  if (promiseStatement == null || promiseStatement.type !== 'VariableDeclaration' || promiseStatement.init == null) {
+    return false
+  }
+
+  if (awaitStatement == null || awaitStatement.type !== 'VariableDeclaration' || awaitStatement.init == null) {
+    return false
+  }
+
+  return promiseStatement.init.valueType === 'promise' && awaitStatement.init.type === 'AwaitExpression'
 }
 
-function collectAsyncTaskNestedTryChain(tryStatement: AnyNode): AsyncTaskNestedTryChain | null {
-  const chain: AnyNode[] = []
-  const prefixStatements: AnyNode[] = []
-  const postNestedStatements: AnyNode[] = []
+function collectAsyncTaskNestedTryChain(tryStatement: AsyncTaskAstNode): AsyncTaskNestedTryChain | null {
+  const chain: AsyncTaskAstNode[] = []
+  const prefixStatements: AsyncTaskAstNode[] = []
+  const postNestedStatements: AsyncTaskAstNode[] = []
   let postNestedOwnerIndex = -1
-  let current: AnyNode = tryStatement
+  let current: AsyncTaskAstNode = tryStatement
 
-  while (current?.type === 'TryStatement') {
+  while (current != null && current.type === 'TryStatement') {
     if (current.handler == null && current.finalizer == null) {
       return null
     }
 
     chain.push(current)
 
-    const body = current.block?.body ?? []
-    const nestedTryIndexes = body.flatMap((item: AnyNode, index: number) =>
-      item?.type === 'TryStatement' ? [index] : []
-    )
+    const body = getAsyncTaskBlockStatements(current.block)
+    const nestedTryIndexes: number[] = []
+
+    for (let index = 0; index < body.length; index = index + 1) {
+      const item = body[index]
+
+      if (item != null && item.type === 'TryStatement') {
+        nestedTryIndexes.push(index)
+      }
+    }
 
     if (nestedTryIndexes.length === 1) {
       const nestedTryIndex = nestedTryIndexes[0]
@@ -769,32 +1036,38 @@ function collectAsyncTaskNestedTryChain(tryStatement: AnyNode): AsyncTaskNestedT
           return null
         }
 
-        postNestedStatements.push(...suffixStatements)
+        appendAsyncTaskNodes(postNestedStatements, suffixStatements)
         postNestedOwnerIndex = chain.length - 1
       }
 
-      prefixStatements.push(...body.slice(0, nestedTryIndex))
+      appendAsyncTaskNodes(prefixStatements, body.slice(0, nestedTryIndex))
       current = body[nestedTryIndex]
       continue
     }
 
     return {
-      chain,
-      prefixStatements,
-      postNestedStatements,
-      postNestedOwnerIndex
+      chain: chain,
+      prefixStatements: prefixStatements,
+      postNestedStatements: postNestedStatements,
+      postNestedOwnerIndex: postNestedOwnerIndex
     }
   }
 
   return null
 }
 
-function collectAsyncTaskTryFinalizers(tryChain: AnyNode[]): AnyNode[][] {
-  return tryChain.map((item) => item.finalizer?.body ?? [])
+function collectAsyncTaskTryFinalizers(tryChain: AsyncTaskAstNode[]): AsyncTaskAstNode[][] {
+  const finalizers: AsyncTaskAstNode[][] = []
+
+  for (const item of tryChain) {
+    finalizers.push(getAsyncTaskBlockStatements(item.finalizer))
+  }
+
+  return finalizers
 }
 
-function findAsyncTaskNearestTryHandlerIndex(tryChain: AnyNode[]): number {
-  for (let index = tryChain.length - 1; index >= 0; index -= 1) {
+function findAsyncTaskNearestTryHandlerIndex(tryChain: AsyncTaskAstNode[]): number {
+  for (let index = tryChain.length - 1; index >= 0; index = index - 1) {
     if (tryChain[index].handler != null) {
       return index
     }
@@ -804,14 +1077,14 @@ function findAsyncTaskNearestTryHandlerIndex(tryChain: AnyNode[]): number {
 }
 
 function collectAsyncTaskTryFinalizerStatements(
-  finalizers: AnyNode[][],
+  finalizers: AsyncTaskAstNode[][],
   fromIndex: number,
   toIndex: number
-): AnyNode[] {
-  const statements: AnyNode[] = []
+): AsyncTaskAstNode[] {
+  const statements: AsyncTaskAstNode[] = []
 
-  for (let index = fromIndex; index >= toIndex; index -= 1) {
-    statements.push(...finalizers[index])
+  for (let index = fromIndex; index >= toIndex; index = index - 1) {
+    appendAsyncTaskNodes(statements, finalizers[index])
   }
 
   return statements
@@ -820,17 +1093,21 @@ function collectAsyncTaskTryFinalizerStatements(
 function resolveAsyncTaskPrefixLocals(
   context: AsyncTaskPlannerContext,
   params: CAsyncTaskParam[],
-  prefixStatements: AnyNode[]
+  prefixStatements: AsyncTaskAstNode[]
 ): AsyncTaskPrefixLocalsResult | null {
   const result = createAsyncTaskExpressionContext(context, params, [])
   const locals: CAsyncTaskPrefixLocal[] = []
 
   for (const statement of prefixStatements) {
-    if (statement?.type !== 'VariableDeclaration') {
+    if (statement == null || statement.type !== 'VariableDeclaration') {
       continue
     }
 
-    const valueType = statement.valueType ?? asyncTaskDeps(context).inferExpressionType(statement.init, result)
+    let valueType = statement.valueType
+
+    if (valueType == null) {
+      valueType = asyncTaskDeps(context).inferExpressionType(statement.init, result)
+    }
 
     if (!isSupportedAsyncTaskPrefixLocalType(valueType)) {
       return null
@@ -843,38 +1120,86 @@ function resolveAsyncTaskPrefixLocals(
     }
 
     if (isSupportedAsyncTaskFramePrefixLocal(statement, valueType, result)) {
+      let shape: CObjectShape | null | undefined = undefined
+      let arrayElementType: string | undefined = undefined
+      let mapKeyType: string | undefined = undefined
+      let mapValueType: string | undefined = undefined
+      let setElementType: string | undefined = undefined
+
+      if (valueType === 'object') {
+        if (statement.shape != null) {
+          shape = statement.shape
+        } else if (statement.init != null && statement.init.shape != null) {
+          shape = statement.init.shape
+        } else {
+          shape = null
+        }
+      }
+
+      if (valueType === 'array') {
+        if (statement.arrayElementType != null) {
+          arrayElementType = statement.arrayElementType
+        } else if (statement.init != null && statement.init.arrayElementType != null) {
+          arrayElementType = statement.init.arrayElementType
+        } else {
+          const resolvedArrayElementType = asyncTaskDeps(context).resolveRuntimeArrayElementType(statement.init, result)
+
+          if (resolvedArrayElementType != null) {
+            arrayElementType = resolvedArrayElementType
+          } else {
+            arrayElementType = 'unknown'
+          }
+        }
+      }
+
+      if (valueType === 'map') {
+        const resolvedMapType = asyncTaskDeps(context).resolveRuntimeMapType(statement.init, result)
+
+        if (statement.mapKeyType != null) {
+          mapKeyType = statement.mapKeyType
+        } else if (resolvedMapType != null) {
+          mapKeyType = resolvedMapType.key
+        } else if (statement.init != null && statement.init.mapKeyType != null) {
+          mapKeyType = statement.init.mapKeyType
+        } else {
+          mapKeyType = 'unknown'
+        }
+
+        if (statement.mapValueType != null) {
+          mapValueType = statement.mapValueType
+        } else if (resolvedMapType != null) {
+          mapValueType = resolvedMapType.value
+        } else if (statement.init != null && statement.init.mapValueType != null) {
+          mapValueType = statement.init.mapValueType
+        } else {
+          mapValueType = 'unknown'
+        }
+      }
+
+      if (valueType === 'set') {
+        if (statement.setElementType != null) {
+          setElementType = statement.setElementType
+        } else {
+          const resolvedSetElementType = asyncTaskDeps(context).resolveRuntimeSetElementType(statement.init, result)
+
+          if (resolvedSetElementType != null) {
+            setElementType = resolvedSetElementType
+          } else if (statement.init != null && statement.init.setElementType != null) {
+            setElementType = statement.init.setElementType
+          } else {
+            setElementType = 'unknown'
+          }
+        }
+      }
+
       locals.push({
         name: statement.name,
         type: valueType,
-        shape: valueType === 'object' ? (statement.shape ?? statement.init?.shape ?? null) : undefined,
-        arrayElementType:
-          valueType === 'array'
-            ? (statement.arrayElementType ??
-              statement.init?.arrayElementType ??
-              asyncTaskDeps(context).resolveRuntimeArrayElementType(statement.init, result) ??
-              'unknown')
-            : undefined,
-        mapKeyType:
-          valueType === 'map'
-            ? (statement.mapKeyType ??
-              asyncTaskDeps(context).resolveRuntimeMapType(statement.init, result)?.key ??
-              statement.init?.mapKeyType ??
-              'unknown')
-            : undefined,
-        mapValueType:
-          valueType === 'map'
-            ? (statement.mapValueType ??
-              asyncTaskDeps(context).resolveRuntimeMapType(statement.init, result)?.value ??
-              statement.init?.mapValueType ??
-              'unknown')
-            : undefined,
-        setElementType:
-          valueType === 'set'
-            ? (statement.setElementType ??
-              asyncTaskDeps(context).resolveRuntimeSetElementType(statement.init, result) ??
-              statement.init?.setElementType ??
-              'unknown')
-            : undefined,
+        shape: shape,
+        arrayElementType: arrayElementType,
+        mapKeyType: mapKeyType,
+        mapValueType: mapValueType,
+        setElementType: setElementType,
         fieldName: `prefix_${emitCIdentifier(statement.name)}`,
         forceRuntimeStringDeclaration: valueType === 'string' && isRawStringLiteralExpression(statement.init)
       })
@@ -887,13 +1212,17 @@ function resolveAsyncTaskPrefixLocals(
   }
 }
 
-function registerAsyncTaskStatementListLocals(context: AsyncTaskPlannerContext, statements: AnyNode[]): void {
+function registerAsyncTaskStatementListLocals(context: AsyncTaskPlannerContext, statements: AsyncTaskAstNode[]): void {
   for (const statement of statements) {
-    if (statement?.type !== 'VariableDeclaration') {
+    if (statement == null || statement.type !== 'VariableDeclaration') {
       continue
     }
 
-    const valueType = statement.valueType ?? asyncTaskDeps(context).inferExpressionType(statement.init, context)
+    let valueType = statement.valueType
+
+    if (valueType == null) {
+      valueType = asyncTaskDeps(context).inferExpressionType(statement.init, context)
+    }
 
     asyncTaskDeps(context).registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
 
@@ -930,7 +1259,7 @@ function isSupportedAsyncTaskFramePrefixLocalType(valueType: string): boolean {
 }
 
 function isSupportedAsyncTaskFramePrefixLocal(
-  statement: AnyNode,
+  statement: AsyncTaskAstNode,
   valueType: string,
   context: AsyncTaskPlannerContext
 ): boolean {
@@ -941,8 +1270,8 @@ function isSupportedAsyncTaskFramePrefixLocal(
   return valueType !== 'string' || isRuntimeStringPrefixLocalDeclaration(statement, context)
 }
 
-function isRuntimeStringPrefixLocalDeclaration(statement: AnyNode, context: AsyncTaskPlannerContext): boolean {
-  const expression = statement?.init
+function isRuntimeStringPrefixLocalDeclaration(statement: AsyncTaskAstNode, context: AsyncTaskPlannerContext): boolean {
+  const expression = statement.init
 
   if (
     asyncTaskDeps(context).resolveRuntimeStringReference(expression, context) != null ||
@@ -955,7 +1284,7 @@ function isRuntimeStringPrefixLocalDeclaration(statement: AnyNode, context: Asyn
   if (asyncTaskDeps(context).isMemberAccessExpression(expression)) {
     const member = asyncTaskDeps(context).resolveKnownObjectMember(expression, context)
 
-    return member?.valueType === 'string'
+    return member != null && member.valueType === 'string'
   }
 
   if (asyncTaskDeps(context).isIndexAccessExpression(expression)) {
@@ -963,20 +1292,34 @@ function isRuntimeStringPrefixLocalDeclaration(statement: AnyNode, context: Asyn
     const field = asyncTaskDeps(context).resolveKnownObjectIndex(expression, context)
     const runtimeElement = asyncTaskDeps(context).resolveRuntimeArrayIndex(expression, context)
 
-    return element?.valueType === 'string' || field?.valueType === 'string' || runtimeElement?.valueType === 'string'
+    if (element != null && element.valueType === 'string') {
+      return true
+    }
+
+    if (field != null && field.valueType === 'string') {
+      return true
+    }
+
+    return runtimeElement != null && runtimeElement.valueType === 'string'
   }
 
   return false
 }
 
-function isRawStringLiteralExpression(expression: AnyNode): boolean {
-  return (
-    expression?.type === 'StringLiteral' || (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${'))
-  )
+function isRawStringLiteralExpression(expression: AsyncTaskAstNode): boolean {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.type === 'StringLiteral') {
+    return true
+  }
+
+  return expression.type === 'TemplateLiteral' && !expression.raw.includes('${')
 }
 
 function resolveAsyncTaskTryHandler(
-  handler: AnyNode | null | undefined,
+  handler: AsyncTaskAstNode | null | undefined,
   context: AsyncTaskPlannerContext,
   params: CAsyncTaskParam[],
   returnType: string
@@ -985,11 +1328,11 @@ function resolveAsyncTaskTryHandler(
     return null
   }
 
-  const statements = handler.body?.body ?? []
-  const returnStatement = statements.at(-1)
-  const handlerStatements = statements.slice(0, -1)
+  const statements = getAsyncTaskBlockStatements(handler.body)
+  const returnStatement = getAsyncTaskLastStatement(statements)
+  const handlerStatements = getAsyncTaskStatementsBeforeLast(statements)
 
-  if (returnStatement?.type !== 'ReturnStatement' || hasUnsupportedAsyncTaskTryControlFlow(handlerStatements)) {
+  if (returnStatement == null || returnStatement.type !== 'ReturnStatement' || hasUnsupportedAsyncTaskTryControlFlow(handlerStatements)) {
     return null
   }
 
@@ -1007,10 +1350,16 @@ function resolveAsyncTaskTryHandler(
     return null
   }
 
+  let handlerParam: string | null = null
+
+  if (handler.param != null) {
+    handlerParam = handler.param
+  }
+
   return {
-    param: handler.param ?? null,
+    param: handlerParam,
     statements: handlerStatements,
-    returnExpression
+    returnExpression: returnExpression
   }
 }
 
@@ -1019,21 +1368,65 @@ function createAsyncTaskExpressionContext(
   params: CAsyncTaskParam[],
   awaits: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>
 ): AsyncTaskPlannerContext {
-  const result = {
-    ...context,
-    mapTypes: new Map(context.mapTypes ?? []),
-    objectShapes: new Map(context.objectShapes ?? []),
-    runtimeArrayElementTypes: new Map(context.runtimeArrayElementTypes ?? []),
-    setElementTypes: new Map(context.setElementTypes ?? []),
-    variables: new Map(context.variables ?? []),
-    runtimeStrings: new Set(context.runtimeStrings ?? [])
-  } as AsyncTaskPlannerContext
+  const result = createFunctionContext(context, context.returnType, context.returnNullable)
+
+  result.arrayShapes = context.arrayShapes
+  result.breakFlowUsed = context.breakFlowUsed
+  result.breakTargets = context.breakTargets
+  result.boxedValueTypes = context.boxedValueTypes
+  result.boxedValues = context.boxedValues
+  result.boxedVariables = context.boxedVariables
+  result.classInstanceTypes = context.classInstanceTypes
+  result.cleanupEnabled = context.cleanupEnabled
+  result.continueFlowUsed = context.continueFlowUsed
+  result.continueTargets = context.continueTargets
+  result.dgramBoundSockets = context.dgramBoundSockets
+  result.dgramMessageSockets = context.dgramMessageSockets
+  result.dgramReuseAddrSockets = context.dgramReuseAddrSockets
+  result.errorChannelUsed = context.errorChannelUsed
+  result.errorObjectNames = context.errorObjectNames
+  result.errorTargets = context.errorTargets
+  result.eventLoopUsed = context.eventLoopUsed
+  result.externalEventLoop = context.externalEventLoop
+  result.failureStatement = context.failureStatement
+  result.failureStatementUsed = context.failureStatementUsed
+  result.functionErrorOut = context.functionErrorOut
+  result.functionReturnOut = context.functionReturnOut
+  result.functionTypes = context.functionTypes
+  result.mapTypes = new Map(context.mapTypes)
+  result.narrowedNullableScalars = context.narrowedNullableScalars
+  result.netReadingSockets = context.netReadingSockets
+  result.nullableVariables = context.nullableVariables
+  result.objectShapes = new Map(context.objectShapes)
+  result.ownedCryptoHashes = context.ownedCryptoHashes
+  result.ownedCryptoHmacs = context.ownedCryptoHmacs
+  result.ownedPromises = context.ownedPromises
+  result.ownedValues = context.ownedValues
+  result.promiseConstructorHandlers = context.promiseConstructorHandlers
+  result.promiseRejectionValueTypes = context.promiseRejectionValueTypes
+  result.promiseValueTypes = context.promiseValueTypes
+  result.returnFlowUsed = context.returnFlowUsed
+  result.returnShape = context.returnShape
+  result.returnTargets = context.returnTargets
+  result.runtimeArrayElementTypes = new Map(context.runtimeArrayElementTypes)
+  result.runtimeCallbackCleanupLabel = context.runtimeCallbackCleanupLabel
+  result.runtimeCallbackReturnOut = context.runtimeCallbackReturnOut
+  result.runtimeCallbackReturnShape = context.runtimeCallbackReturnShape
+  result.runtimeCallbackReturnType = context.runtimeCallbackReturnType
+  result.runtimeCallbacks = context.runtimeCallbacks
+  result.runtimeStrings = new Set(context.runtimeStrings)
+  result.setElementTypes = new Map(context.setElementTypes)
+  result.statusReturn = context.statusReturn
+  result.throwingFunction = context.throwingFunction
+  result.usedCleanupGoto = context.usedCleanupGoto
+  result.usedRuntimeCallbackCleanupGoto = context.usedRuntimeCallbackCleanupGoto
+  result.variables = new Map(context.variables)
 
   for (const param of params) {
     registerAsyncTaskLocalMetadata(param.name, param.valueType, param, result)
   }
 
-  for (const item of awaits ?? []) {
+  for (const item of awaits) {
     if (item.name != null) {
       registerAsyncTaskLocalMetadata(item.name, item.type, item, result)
     }
@@ -1042,39 +1435,51 @@ function createAsyncTaskExpressionContext(
   return result
 }
 
-function hasUnsupportedAsyncTaskTryControlFlow(node: unknown): boolean {
-  if (node == null) {
+function hasUnsupportedAsyncTaskTryControlFlow(value: AsyncTaskChildValue): boolean {
+  if (value == null) {
     return false
   }
 
-  if (Array.isArray(node)) {
-    return node.some((item) => hasUnsupportedAsyncTaskTryControlFlow(item))
-  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (hasUnsupportedAsyncTaskTryControlFlow(item)) {
+        return true
+      }
+    }
 
-  if (typeof node !== 'object') {
     return false
   }
 
-  const current = node as AnyNode
+  const current = value as AsyncTaskAstNode
 
-  if (
-    [
-      'AwaitExpression',
-      'ReturnStatement',
-      'ThrowStatement',
-      'TryStatement',
-      'BreakStatement',
-      'ContinueStatement'
-    ].includes(current.type ?? '')
-  ) {
+  if (current.type != null && isUnsupportedAsyncTaskTryControlFlowType(current.type)) {
     return true
   }
 
-  return Object.values(node).some((value) => hasUnsupportedAsyncTaskTryControlFlow(value))
+  const childNode = current as AsyncTaskChildNode
+
+  for (const key of ASYNC_TASK_NODE_CHILD_KEYS) {
+    if (hasUnsupportedAsyncTaskTryControlFlow(childNode[key])) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function isUnsupportedAsyncTaskTryControlFlowType(nodeType: string): boolean {
+  return (
+    nodeType === 'AwaitExpression' ||
+    nodeType === 'ReturnStatement' ||
+    nodeType === 'ThrowStatement' ||
+    nodeType === 'TryStatement' ||
+    nodeType === 'BreakStatement' ||
+    nodeType === 'ContinueStatement'
+  )
 }
 
 function resolveAsyncTaskAwaitSteps(
-  statements: AnyNode[],
+  statements: AsyncTaskAstNode[],
   context: AsyncTaskPlannerContext
 ): CAsyncTaskAwaitStep[] | null {
   const result = resolveAsyncTaskAwaitStepsAndTrailingStatements(statements, context)
@@ -1087,9 +1492,9 @@ function resolveAsyncTaskAwaitSteps(
 }
 
 function resolveAsyncTaskAwaitStepsAndTrailingStatements(
-  statements: AnyNode[],
+  statements: AsyncTaskAstNode[],
   context: AsyncTaskPlannerContext
-): { awaits: CAsyncTaskAwaitStep[]; trailingStatements: AnyNode[] } | null {
+): AsyncTaskAwaitStepsResult | null {
   const awaits: CAsyncTaskAwaitStep[] = []
 
   for (let index = 0; index < statements.length; ) {
@@ -1099,7 +1504,7 @@ function resolveAsyncTaskAwaitStepsAndTrailingStatements(
 
     if (directAwait != null) {
       awaits.push(directAwait)
-      index += 1
+      index = index + 1
       continue
     }
 
@@ -1107,7 +1512,7 @@ function resolveAsyncTaskAwaitStepsAndTrailingStatements(
 
     if (statementAwait != null) {
       awaits.push(statementAwait)
-      index += 1
+      index = index + 1
       continue
     }
 
@@ -1115,7 +1520,7 @@ function resolveAsyncTaskAwaitStepsAndTrailingStatements(
 
     if (localPromiseAwait != null) {
       awaits.push(localPromiseAwait)
-      index += 2
+      index = index + 2
       continue
     }
 
@@ -1124,102 +1529,193 @@ function resolveAsyncTaskAwaitStepsAndTrailingStatements(
     }
 
     return {
-      awaits,
+      awaits: awaits,
       trailingStatements: statements.slice(index)
     }
   }
 
-  return awaits.length === 0
-    ? null
-    : {
-        awaits,
-        trailingStatements: []
-      }
-}
-
-function resolveAsyncTaskDirectAwaitStep(
-  statement: AnyNode,
-  context: AsyncTaskPlannerContext,
-  index: number
-): CAsyncTaskAwaitStep | null {
-  if (statement?.type !== 'VariableDeclaration' || statement.init?.type !== 'AwaitExpression') {
+  if (awaits.length === 0) {
     return null
   }
 
-  const awaitedType = statement.valueType ?? statement.init.valueType ?? 'unknown'
+  return {
+    awaits: awaits,
+    trailingStatements: []
+  }
+}
+
+function resolveAsyncTaskDirectAwaitStep(
+  statement: AsyncTaskAstNode,
+  context: AsyncTaskPlannerContext,
+  index: number
+): CAsyncTaskAwaitStep | null {
+  if (statement == null || statement.type !== 'VariableDeclaration' || statement.init == null) {
+    return null
+  }
+
+  if (statement.init.type !== 'AwaitExpression') {
+    return null
+  }
+
+  let awaitedType = statement.valueType
+
+  if (awaitedType == null) {
+    awaitedType = statement.init.valueType
+  }
+
+  if (awaitedType == null) {
+    awaitedType = 'unknown'
+  }
+
   const awaitedExpression = statement.init.argument
-  const awaitedPromiseExpression = isSupportedAsyncTaskDirectAwaitPromiseExpression(awaitedExpression, context)
-    ? awaitedExpression
-    : null
+  let awaitedPromiseExpression: AsyncTaskAstNode | null = null
+
+  if (isSupportedAsyncTaskDirectAwaitPromiseExpression(awaitedExpression, context)) {
+    awaitedPromiseExpression = awaitedExpression
+  }
 
   if (!isSupportedAsyncTaskValueType(awaitedType) || awaitedType === 'void') {
     return null
   }
 
+  let shape: CObjectShape | null | undefined = undefined
+  let arrayElementType = 'unknown'
+  let mapKeyType: string | undefined = undefined
+  let mapValueType: string | undefined = undefined
+  let setElementType: string | undefined = undefined
+
+  if (awaitedType === 'object') {
+    if (statement.shape != null) {
+      shape = statement.shape
+    } else if (statement.init.shape != null) {
+      shape = statement.init.shape
+    } else if (awaitedExpression != null && awaitedExpression.shape != null) {
+      shape = awaitedExpression.shape
+    } else {
+      shape = null
+    }
+  }
+
+  if (statement.arrayElementType != null) {
+    arrayElementType = statement.arrayElementType
+  } else if (statement.init.arrayElementType != null) {
+    arrayElementType = statement.init.arrayElementType
+  } else if (awaitedExpression != null && awaitedExpression.arrayElementType != null) {
+    arrayElementType = awaitedExpression.arrayElementType
+  }
+
+  if (awaitedType === 'map') {
+    if (statement.mapKeyType != null) {
+      mapKeyType = statement.mapKeyType
+    } else if (statement.init.mapKeyType != null) {
+      mapKeyType = statement.init.mapKeyType
+    } else if (awaitedExpression != null && awaitedExpression.mapKeyType != null) {
+      mapKeyType = awaitedExpression.mapKeyType
+    } else {
+      mapKeyType = 'unknown'
+    }
+
+    if (statement.mapValueType != null) {
+      mapValueType = statement.mapValueType
+    } else if (statement.init.mapValueType != null) {
+      mapValueType = statement.init.mapValueType
+    } else if (awaitedExpression != null && awaitedExpression.mapValueType != null) {
+      mapValueType = awaitedExpression.mapValueType
+    } else {
+      mapValueType = 'unknown'
+    }
+  }
+
+  if (awaitedType === 'set') {
+    if (statement.setElementType != null) {
+      setElementType = statement.setElementType
+    } else if (statement.init.setElementType != null) {
+      setElementType = statement.init.setElementType
+    } else if (awaitedExpression != null && awaitedExpression.setElementType != null) {
+      setElementType = awaitedExpression.setElementType
+    } else {
+      setElementType = 'unknown'
+    }
+  }
+
+  let storedAwaitedExpression: AsyncTaskAstNode | null = awaitedExpression
+
+  if (awaitedPromiseExpression != null) {
+    storedAwaitedExpression = null
+  }
+
   return {
-    index,
+    index: index,
     name: statement.name,
     type: awaitedType,
     fieldName: `local_${emitCIdentifier(statement.name)}`,
-    shape:
-      awaitedType === 'object'
-        ? (statement.shape ?? statement.init.shape ?? awaitedExpression?.shape ?? null)
-        : undefined,
-    arrayElementType:
-      statement.arrayElementType ?? statement.init.arrayElementType ?? awaitedExpression?.arrayElementType ?? 'unknown',
-    mapKeyType:
-      awaitedType === 'map'
-        ? (statement.mapKeyType ?? statement.init.mapKeyType ?? awaitedExpression?.mapKeyType ?? 'unknown')
-        : undefined,
-    mapValueType:
-      awaitedType === 'map'
-        ? (statement.mapValueType ?? statement.init.mapValueType ?? awaitedExpression?.mapValueType ?? 'unknown')
-        : undefined,
-    setElementType:
-      awaitedType === 'set'
-        ? (statement.setElementType ?? statement.init.setElementType ?? awaitedExpression?.setElementType ?? 'unknown')
-        : undefined,
-    awaitedExpression: awaitedPromiseExpression == null ? awaitedExpression : null,
-    awaitedPromiseExpression
+    shape: shape,
+    arrayElementType: arrayElementType,
+    mapKeyType: mapKeyType,
+    mapValueType: mapValueType,
+    setElementType: setElementType,
+    awaitedExpression: storedAwaitedExpression,
+    awaitedPromiseExpression: awaitedPromiseExpression
   }
 }
 
 function resolveAsyncTaskStatementAwaitStep(
-  statement: AnyNode,
+  statement: AsyncTaskAstNode,
   context: AsyncTaskPlannerContext,
   index: number
 ): CAsyncTaskAwaitStep | null {
-  if (statement?.type !== 'ExpressionStatement' || statement.expression?.type !== 'AwaitExpression') {
+  if (statement == null || statement.type !== 'ExpressionStatement' || statement.expression == null) {
     return null
   }
 
-  const awaitedType = statement.expression.valueType ?? 'void'
+  if (statement.expression.type !== 'AwaitExpression') {
+    return null
+  }
+
+  let awaitedType = statement.expression.valueType
+
+  if (awaitedType == null) {
+    awaitedType = 'void'
+  }
+
   const awaitedExpression = statement.expression.argument
-  const awaitedPromiseExpression = isSupportedAsyncTaskDirectAwaitPromiseExpression(awaitedExpression, context)
-    ? awaitedExpression
-    : null
+  let awaitedPromiseExpression: AsyncTaskAstNode | null = null
+
+  if (isSupportedAsyncTaskDirectAwaitPromiseExpression(awaitedExpression, context)) {
+    awaitedPromiseExpression = awaitedExpression
+  }
 
   if (awaitedType !== 'void') {
     return null
   }
 
+  let storedAwaitedExpression: AsyncTaskAstNode | null = awaitedExpression
+
+  if (awaitedPromiseExpression != null) {
+    storedAwaitedExpression = null
+  }
+
   return {
-    index,
+    index: index,
     name: null,
     type: awaitedType,
     fieldName: null,
-    awaitedExpression: awaitedPromiseExpression == null ? awaitedExpression : null,
-    awaitedPromiseExpression
+    awaitedExpression: storedAwaitedExpression,
+    awaitedPromiseExpression: awaitedPromiseExpression
   }
 }
 
 function resolveAsyncTaskLocalPromiseAwaitStep(
-  promiseStatement: AnyNode,
-  awaitStatement: AnyNode | undefined,
+  promiseStatement: AsyncTaskAstNode,
+  awaitStatement: AsyncTaskAstNode | undefined,
   context: AsyncTaskPlannerContext,
   index: number
 ): CAsyncTaskAwaitStep | null {
-  if (awaitStatement?.type !== 'VariableDeclaration' || awaitStatement.init?.type !== 'AwaitExpression') {
+  if (awaitStatement == null || awaitStatement.type !== 'VariableDeclaration' || awaitStatement.init == null) {
+    return null
+  }
+
+  if (awaitStatement.init.type !== 'AwaitExpression') {
     return null
   }
 
@@ -1229,71 +1725,120 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
     return null
   }
 
-  const awaitedType = awaitStatement.valueType ?? awaitStatement.init.valueType ?? 'unknown'
+  let awaitedType = awaitStatement.valueType
+
+  if (awaitedType == null) {
+    awaitedType = awaitStatement.init.valueType
+  }
+
+  if (awaitedType == null) {
+    awaitedType = 'unknown'
+  }
 
   if (!isSupportedAsyncTaskValueType(awaitedType) || awaitedType === 'void') {
     return null
   }
 
+  let shape: CObjectShape | null | undefined = undefined
+  let arrayElementType: string | undefined = undefined
+  let mapKeyType: string | undefined = undefined
+  let mapValueType: string | undefined = undefined
+  let setElementType: string | undefined = undefined
+
+  if (awaitedType === 'object') {
+    if (awaitStatement.shape != null) {
+      shape = awaitStatement.shape
+    } else if (awaitStatement.init.shape != null) {
+      shape = awaitStatement.init.shape
+    } else if (awaitedPromiseExpression.shape != null) {
+      shape = awaitedPromiseExpression.shape
+    } else {
+      shape = null
+    }
+  }
+
+  if (awaitStatement.arrayElementType != null) {
+    arrayElementType = awaitStatement.arrayElementType
+  } else if (awaitStatement.init.arrayElementType != null) {
+    arrayElementType = awaitStatement.init.arrayElementType
+  } else {
+    arrayElementType = awaitedPromiseExpression.arrayElementType
+  }
+
+  if (awaitedType === 'map') {
+    if (awaitStatement.mapKeyType != null) {
+      mapKeyType = awaitStatement.mapKeyType
+    } else if (awaitStatement.init.mapKeyType != null) {
+      mapKeyType = awaitStatement.init.mapKeyType
+    } else if (awaitedPromiseExpression.mapKeyType != null) {
+      mapKeyType = awaitedPromiseExpression.mapKeyType
+    } else {
+      mapKeyType = 'unknown'
+    }
+
+    if (awaitStatement.mapValueType != null) {
+      mapValueType = awaitStatement.mapValueType
+    } else if (awaitStatement.init.mapValueType != null) {
+      mapValueType = awaitStatement.init.mapValueType
+    } else if (awaitedPromiseExpression.mapValueType != null) {
+      mapValueType = awaitedPromiseExpression.mapValueType
+    } else {
+      mapValueType = 'unknown'
+    }
+  }
+
+  if (awaitedType === 'set') {
+    if (awaitStatement.setElementType != null) {
+      setElementType = awaitStatement.setElementType
+    } else if (awaitStatement.init.setElementType != null) {
+      setElementType = awaitStatement.init.setElementType
+    } else if (awaitedPromiseExpression.setElementType != null) {
+      setElementType = awaitedPromiseExpression.setElementType
+    } else {
+      setElementType = 'unknown'
+    }
+  }
+
   return {
-    index,
+    index: index,
     name: awaitStatement.name,
     type: awaitedType,
     fieldName: `local_${emitCIdentifier(awaitStatement.name)}`,
-    shape:
-      awaitedType === 'object'
-        ? (awaitStatement.shape ?? awaitStatement.init.shape ?? awaitedPromiseExpression.shape ?? null)
-        : undefined,
-    arrayElementType:
-      awaitStatement.arrayElementType ??
-      awaitStatement.init.arrayElementType ??
-      awaitedPromiseExpression.arrayElementType,
-    mapKeyType:
-      awaitedType === 'map'
-        ? (awaitStatement.mapKeyType ??
-          awaitStatement.init.mapKeyType ??
-          awaitedPromiseExpression.mapKeyType ??
-          'unknown')
-        : undefined,
-    mapValueType:
-      awaitedType === 'map'
-        ? (awaitStatement.mapValueType ??
-          awaitStatement.init.mapValueType ??
-          awaitedPromiseExpression.mapValueType ??
-          'unknown')
-        : undefined,
-    setElementType:
-      awaitedType === 'set'
-        ? (awaitStatement.setElementType ??
-          awaitStatement.init.setElementType ??
-          awaitedPromiseExpression.setElementType ??
-          'unknown')
-        : undefined,
+    shape: shape,
+    arrayElementType: arrayElementType,
+    mapKeyType: mapKeyType,
+    mapValueType: mapValueType,
+    setElementType: setElementType,
     awaitedExpression: null,
-    awaitedPromiseExpression
+    awaitedPromiseExpression: awaitedPromiseExpression
   }
 }
 
 function resolveAsyncTaskAwaitedPromiseExpression(
-  promiseStatement: AnyNode | undefined,
-  awaitStatement: AnyNode,
+  promiseStatement: AsyncTaskAstNode | undefined,
+  awaitStatement: AsyncTaskAstNode,
   context: AsyncTaskPlannerContext
-): AnyNode | null {
+): AsyncTaskAstNode | null {
   if (promiseStatement == null) {
     return null
   }
 
   if (
     promiseStatement.type !== 'VariableDeclaration' ||
-    promiseStatement.init?.valueType !== 'promise' ||
+    promiseStatement.init == null ||
+    promiseStatement.init.valueType !== 'promise' ||
     !isSupportedAsyncTaskAwaitedPromiseExpression(promiseStatement.init, context)
   ) {
     return null
   }
 
-  const awaited = awaitStatement.init?.argument
+  let awaited: AsyncTaskAstNode | null = null
 
-  if (awaited?.type !== 'Reference' || awaited.path.length !== 1 || awaited.path[0] !== promiseStatement.name) {
+  if (awaitStatement.init != null) {
+    awaited = awaitStatement.init.argument
+  }
+
+  if (awaited == null || awaited.type !== 'Reference' || awaited.path.length !== 1 || awaited.path[0] !== promiseStatement.name) {
     return null
   }
 
@@ -1301,10 +1846,10 @@ function resolveAsyncTaskAwaitedPromiseExpression(
 }
 
 function isSupportedAsyncTaskAwaitedPromiseExpression(
-  expression: AnyNode,
+  expression: AsyncTaskAstNode,
   context: AsyncTaskPlannerContext
 ): boolean {
-  if (expression?.type !== 'CallExpression') {
+  if (expression == null || expression.type !== 'CallExpression') {
     return false
   }
 
@@ -1316,23 +1861,26 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(
     return true
   }
 
-  if (expression.callee?.type !== 'MemberExpression' || expression.callee.property !== 'then') {
+  if (expression.callee == null || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'then') {
     return false
   }
 
   const receiver = expression.callee.object
   const callback = expression.args[0]
 
-  return (
-    receiver?.type === 'CallExpression' &&
-    cPromiseRuntimeCallName(receiver.callee) === 'resolve' &&
-    callback?.type === 'ArrowFunctionExpression' &&
-    context.promiseChainArrowWrappers.has(callback)
-  )
+  if (receiver == null || receiver.type !== 'CallExpression') {
+    return false
+  }
+
+  if (cPromiseRuntimeCallName(receiver.callee) !== 'resolve') {
+    return false
+  }
+
+  return callback != null && callback.type === 'ArrowFunctionExpression' && context.promiseChainArrowWrappers.has(callback)
 }
 
-function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression: AnyNode, context: AsyncTaskPlannerContext): boolean {
-  if (expression?.type !== 'CallExpression') {
+function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression: AsyncTaskAstNode, context: AsyncTaskPlannerContext): boolean {
+  if (expression == null || expression.type !== 'CallExpression') {
     return false
   }
 
@@ -1356,35 +1904,51 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(expression: AnyNode, c
     return false
   }
 
-  const valueType =
-    resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
+  let valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context)
+
+  if (valueType == null) {
+    valueType = expression.promiseValueType
+  }
+
+  if (valueType == null) {
+    valueType = 'unknown'
+  }
 
   return isSupportedAsyncTaskValueType(valueType)
 }
 
 function resolveAsyncTaskReturnValueExpression(
-  expression: AnyNode | null | undefined,
+  expression: AsyncTaskAstNode | null | undefined,
   returnType: string,
   context: AsyncTaskPlannerContext
-): AnyNode | null {
+): AsyncTaskAstNode | null {
   if (returnType === 'void') {
-    return expression == null ? null : expression
+    if (expression == null) {
+      return null
+    }
+
+    return expression
   }
 
-  if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'resolve') {
-    return expression.args[0] ?? null
+  if (expression != null && expression.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'resolve') {
+    if (expression.args[0] == null) {
+      return null
+    }
+
+    return expression.args[0]
   }
 
   if (expression == null) {
     return null
   }
 
-  const expressionType =
-    expression?.valueType != null && expression.valueType !== 'unknown'
-      ? expression.valueType
-      : context.variables == null
-        ? 'unknown'
-        : asyncTaskDeps(context).inferExpressionType(expression, context)
+  let expressionType = 'unknown'
+
+  if (expression.valueType != null && expression.valueType !== 'unknown') {
+    expressionType = expression.valueType
+  } else if (context.variables != null) {
+    expressionType = asyncTaskDeps(context).inferExpressionType(expression, context)
+  }
 
   if (isSupportedAsyncTaskValueType(returnType) && expressionType === returnType) {
     return expression
@@ -1394,24 +1958,41 @@ function resolveAsyncTaskReturnValueExpression(
 }
 
 export function emitAsyncTaskFrameType(wrapper: CAsyncTaskWrapper): string[] {
-  return [
-    `typedef struct ${wrapper.frameTypeName} {`,
-    '  ccjs_loop* ccjs_loop;',
-    '  ccjs_promise* promise;',
-    '  ccjs_promise* awaited;',
-    '  int state;',
-    ...wrapper.params.map((param) => `  ${emitAsyncTaskStorageCType(param.valueType)} ${param.fieldName};`),
-    ...wrapper.frameLocals.map((local) => `  ${emitAsyncTaskStorageCType(local.type)} ${local.fieldName};`),
-    `} ${wrapper.frameTypeName};`
-  ]
+  const lines: string[] = []
+
+  lines.push(`typedef struct ${wrapper.frameTypeName} {`)
+  lines.push('  ccjs_loop* ccjs_loop;')
+  lines.push('  ccjs_promise* promise;')
+  lines.push('  ccjs_promise* awaited;')
+  lines.push('  int state;')
+
+  for (const param of wrapper.params) {
+    lines.push(`  ${emitAsyncTaskStorageCType(param.valueType)} ${param.fieldName};`)
+  }
+
+  for (const local of wrapper.frameLocals) {
+    lines.push(`  ${emitAsyncTaskStorageCType(local.type)} ${local.fieldName};`)
+  }
+
+  lines.push(`} ${wrapper.frameTypeName};`)
+
+  return lines
 }
 
 function emitAsyncTaskStorageCType(valueType: string): string {
-  return isManagedRuntimeReturnType(valueType) ? 'ccjs_value' : emitCType(valueType)
+  if (isManagedRuntimeReturnType(valueType)) {
+    return 'ccjs_value'
+  }
+
+  return emitCType(valueType)
 }
 
 function emitAsyncTaskStorageInit(valueType: string): string {
-  return isManagedRuntimeReturnType(valueType) ? 'ccjs_undefined_value()' : '0'
+  if (isManagedRuntimeReturnType(valueType)) {
+    return 'ccjs_undefined_value()'
+  }
+
+  return '0'
 }
 
 export function emitAsyncTaskWrapperPrototypes(wrapper: CAsyncTaskWrapper): string[] {
@@ -1429,89 +2010,110 @@ export function emitAsyncTaskWrapperDeclaration(
   dependencies: AsyncTaskLoweringDependencies
 ): string[] {
   baseContext.asyncTaskLoweringDependencies = dependencies
-  return [
-    ...emitAsyncTaskStartDeclaration(wrapper, baseContext),
-    '',
-    ...emitAsyncTaskResumeDeclaration(wrapper, baseContext),
-    '',
-    ...emitAsyncTaskRejectDeclaration(wrapper, baseContext),
-    '',
-    ...emitAsyncTaskFinalizerDeclaration(wrapper)
-  ]
+  const lines: string[] = []
+
+  appendAsyncTaskLines(lines, emitAsyncTaskStartDeclaration(wrapper, baseContext))
+  lines.push('')
+  appendAsyncTaskLines(lines, emitAsyncTaskResumeDeclaration(wrapper, baseContext))
+  lines.push('')
+  appendAsyncTaskLines(lines, emitAsyncTaskRejectDeclaration(wrapper, baseContext))
+  lines.push('')
+  appendAsyncTaskLines(lines, emitAsyncTaskFinalizerDeclaration(wrapper))
+
+  return lines
 }
 
 function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: CEmitContext): string[] {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', 0)
-  context.forceRuntimeStringDeclarations = new Set(
-    collectAsyncTaskFrameLocals(wrapper, 'prefix')
-      .filter((local) => local.forceRuntimeStringDeclaration === true)
-      .map((local) => local.name)
-  )
+  context.forceRuntimeStringDeclarations = new Set()
+
+  for (const local of collectAsyncTaskFrameLocals(wrapper, 'prefix')) {
+    if (local.forceRuntimeStringDeclaration === true) {
+      context.forceRuntimeStringDeclarations.add(local.name)
+    }
+  }
+
   context.failureStatement = 'goto ccjs_start_error;'
   const prefixScope = pushVariableScope(context)
   let prefixAndScheduleLines: string[] = []
 
   try {
-    prefixAndScheduleLines = [
-      ...asyncTaskDeps(context).emitStatementList(wrapper.prefixStatements ?? [], context),
-      ...emitAsyncTaskStorePrefixLocalLines(wrapper),
-      ...emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
+    prefixAndScheduleLines = []
+    appendAsyncTaskLines(prefixAndScheduleLines, asyncTaskDeps(context).emitStatementList(wrapper.prefixStatements, context))
+    appendAsyncTaskLines(prefixAndScheduleLines, emitAsyncTaskStorePrefixLocalLines(wrapper))
+    appendAsyncTaskLines(
+      prefixAndScheduleLines,
+      emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
         cleanup: 'start',
         final: wrapper.awaits.length === 1
       })
-    ]
+    )
   } finally {
     restoreVariableScope(context, prefixScope)
   }
-  const lines = [
-    `static ccjs_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`,
-    '  if (ccjs_loop == 0 || ccjs_loop->allocator == 0 || out == 0) return CCJS_ERR_TYPE;',
-    '  *out = 0;',
-    `  ${wrapper.frameTypeName}* frame = ccjs_loop->allocator->alloc(ccjs_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`,
-    '  if (frame == 0) return CCJS_ERR_OOM;',
-    '  frame->ccjs_loop = ccjs_loop;',
-    '  frame->promise = 0;',
-    '  frame->awaited = 0;',
-    '  frame->state = 0;',
-    ...wrapper.params.map((param) => `  frame->${param.fieldName} = ${param.argName};`),
-    ...wrapper.frameLocals.map((local) => `  frame->${local.fieldName} = ${emitAsyncTaskStorageInit(local.type)};`),
-    '  ccjs_status status = ccjs_promise_new(ccjs_loop, &frame->promise);',
-    ...emitOwnedValueDeclarations(context).map((line) => `  ${line}`),
-    '  if (status != CCJS_OK) {',
-    '    ccjs_loop->allocator->free(ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));',
-    '    return status;',
-    '  }',
-    ...wrapper.params
-      .filter((param) => isManagedRuntimeReturnType(param.valueType))
-      .map((param) => `  ccjs_retain(frame->${param.fieldName});`),
-    '  ccjs_promise_retain(frame->promise);',
-    '  *out = frame->promise;',
-    ...emitAsyncTaskVisibleLocalReads(wrapper, 0, { includePrefixLocals: false }).map((line) => `  ${line}`),
-    ...prefixAndScheduleLines.map((line) => `  ${line}`),
-    ...emitOwnedValueCleanup(context).map((line) => `  ${line}`),
-    '  return CCJS_OK;',
-    ...(context.failureStatementUsed
-      ? [
-          'ccjs_start_error:',
-          ...emitOwnedValueCleanup(context).map((line) => `  ${line}`),
-          '  ccjs_promise_release(*out);',
-          '  *out = 0;',
-          `  ${wrapper.finalizerName}(frame);`,
-          '  return CCJS_ERR_TYPE;'
-        ]
-      : []),
-    '}'
-  ]
+
+  const lines: string[] = []
+
+  lines.push(`static ccjs_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`)
+  lines.push('  if (ccjs_loop == 0 || ccjs_loop->allocator == 0 || out == 0) return CCJS_ERR_TYPE;')
+  lines.push('  *out = 0;')
+  lines.push(`  ${wrapper.frameTypeName}* frame = ccjs_loop->allocator->alloc(ccjs_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`)
+  lines.push('  if (frame == 0) return CCJS_ERR_OOM;')
+  lines.push('  frame->ccjs_loop = ccjs_loop;')
+  lines.push('  frame->promise = 0;')
+  lines.push('  frame->awaited = 0;')
+  lines.push('  frame->state = 0;')
+
+  for (const param of wrapper.params) {
+    lines.push(`  frame->${param.fieldName} = ${param.argName};`)
+  }
+
+  for (const local of wrapper.frameLocals) {
+    lines.push(`  frame->${local.fieldName} = ${emitAsyncTaskStorageInit(local.type)};`)
+  }
+
+  lines.push('  ccjs_status status = ccjs_promise_new(ccjs_loop, &frame->promise);')
+  appendIndentedAsyncTaskLines(lines, emitOwnedValueDeclarations(context), '  ')
+  lines.push('  if (status != CCJS_OK) {')
+  lines.push('    ccjs_loop->allocator->free(ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));')
+  lines.push('    return status;')
+  lines.push('  }')
+
+  for (const param of wrapper.params) {
+    if (isManagedRuntimeReturnType(param.valueType)) {
+      lines.push(`  ccjs_retain(frame->${param.fieldName});`)
+    }
+  }
+
+  lines.push('  ccjs_promise_retain(frame->promise);')
+  lines.push('  *out = frame->promise;')
+  appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, 0, { includePrefixLocals: false }), '  ')
+  appendIndentedAsyncTaskLines(lines, prefixAndScheduleLines, '  ')
+  appendIndentedAsyncTaskLines(lines, emitOwnedValueCleanup(context), '  ')
+  lines.push('  return CCJS_OK;')
+
+  if (context.failureStatementUsed) {
+    lines.push('ccjs_start_error:')
+    appendIndentedAsyncTaskLines(lines, emitOwnedValueCleanup(context), '  ')
+    lines.push('  ccjs_promise_release(*out);')
+    lines.push('  *out = 0;')
+    lines.push(`  ${wrapper.finalizerName}(frame);`)
+    lines.push('  return CCJS_ERR_TYPE;')
+  }
+
+  lines.push('}')
 
   return lines
 }
 
 function emitAsyncTaskStartParams(wrapper: CAsyncTaskWrapper): string {
-  const params = [
-    'ccjs_loop* ccjs_loop',
-    ...wrapper.params.map((param) => `${emitCType(param.valueType)} ${param.argName}`),
-    'ccjs_promise** out'
-  ]
+  const params = ['ccjs_loop* ccjs_loop']
+
+  for (const param of wrapper.params) {
+    params.push(`${emitCType(param.valueType)} ${param.argName}`)
+  }
+
+  params.push('ccjs_promise** out')
 
   return params.join(', ')
 }
@@ -1535,44 +2137,52 @@ function registerAsyncTaskPrefixLocals(wrapper: CAsyncTaskWrapper, context: CFun
 }
 
 function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[] {
-  return collectAsyncTaskFrameLocals(wrapper, 'prefix').flatMap((local) => {
+  const lines: string[] = []
+
+  for (const local of collectAsyncTaskFrameLocals(wrapper, 'prefix')) {
     if (local.type === 'string') {
-      return [
-        ...emitPrepareOwnedValueWrite(`frame->${local.fieldName}`),
-        `frame->${local.fieldName}.tag = CCJS_TAG_STRING;`,
-        `frame->${local.fieldName}.as.ref = (ccjs_ref*)&${local.name}->header;`,
-        `ccjs_retain(frame->${local.fieldName});`
-      ]
+      appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`))
+      lines.push(`frame->${local.fieldName}.tag = CCJS_TAG_STRING;`)
+      lines.push(`frame->${local.fieldName}.as.ref = (ccjs_ref*)&${local.name}->header;`)
+      lines.push(`ccjs_retain(frame->${local.fieldName});`)
+      continue
     }
 
     if (isManagedRuntimeReturnType(local.type)) {
-      return [
-        ...emitPrepareOwnedValueWrite(`frame->${local.fieldName}`),
-        `frame->${local.fieldName} = ${local.name};`,
-        `ccjs_retain(frame->${local.fieldName});`
-      ]
+      appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`))
+      lines.push(`frame->${local.fieldName} = ${local.name};`)
+      lines.push(`ccjs_retain(frame->${local.fieldName});`)
+      continue
     }
 
-    return [`frame->${local.fieldName} = ${local.name};`]
-  })
+    lines.push(`frame->${local.fieldName} = ${local.name};`)
+  }
+
+  return lines
 }
 
 function emitAsyncTaskVisibleLocalReads(
   wrapper: CAsyncTaskWrapper,
   count: number,
-  options = { includePrefixLocals: true }
+  options: AsyncTaskVisibleLocalReadOptions | null
 ): string[] {
-  return [
-    ...wrapper.params.flatMap((param) => emitAsyncTaskVisibleLocalRead(param.name, param.valueType, param.fieldName)),
-    ...(options.includePrefixLocals === false
-      ? []
-      : collectAsyncTaskFrameLocals(wrapper, 'prefix').flatMap((local) =>
-          emitAsyncTaskVisibleLocalRead(local.name, local.type, local.fieldName)
-        )),
-    ...collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count).flatMap((item) =>
-      emitAsyncTaskVisibleLocalRead(item.name, item.type, item.fieldName)
-    )
-  ]
+  const lines: string[] = []
+
+  for (const param of wrapper.params) {
+    appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(param.name, param.valueType, param.fieldName))
+  }
+
+  if (options == null || options.includePrefixLocals !== false) {
+    for (const local of collectAsyncTaskFrameLocals(wrapper, 'prefix')) {
+      appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(local.name, local.type, local.fieldName))
+    }
+  }
+
+  for (const item of collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)) {
+    appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(item.name, item.type, item.fieldName))
+  }
+
+  return lines
 }
 
 function collectAsyncTaskFrameLocals(wrapper: CAsyncTaskWrapper, kind: 'prefix'): CAsyncTaskPrefixFrameLocal[]
@@ -1582,14 +2192,30 @@ function collectAsyncTaskFrameLocals(
   wrapper: CAsyncTaskWrapper,
   kind: CAsyncTaskFrameLocalKind | null = null
 ): CAsyncTaskFrameLocal[] {
-  return (wrapper.frameLocals ?? []).filter((local) => kind == null || local.kind === kind)
+  const locals: CAsyncTaskFrameLocal[] = []
+
+  for (const local of wrapper.frameLocals) {
+    if (kind == null || local.kind === kind) {
+      locals.push(local)
+    }
+  }
+
+  return locals
 }
 
 function collectAsyncTaskVisibleAwaitFrameLocals(
   wrapper: CAsyncTaskWrapper,
   count: number
 ): CAsyncTaskAwaitFrameLocal[] {
-  return collectAsyncTaskFrameLocals(wrapper, 'await').filter((local) => local.index < count && local.name != null)
+  const locals: CAsyncTaskAwaitFrameLocal[] = []
+
+  for (const local of collectAsyncTaskFrameLocals(wrapper, 'await')) {
+    if (local.index < count && local.name != null) {
+      locals.push(local)
+    }
+  }
+
+  return locals
 }
 
 function registerAsyncTaskLocalMetadata(
@@ -1605,14 +2231,37 @@ function registerAsyncTaskLocalMetadata(
   } else if (valueType === 'object') {
     asyncTaskDeps(context).registerObjectShape(context, name, item.shape)
   } else if (valueType === 'array') {
-    context.runtimeArrayElementTypes.set(name, item.arrayElementType ?? 'unknown')
+    let arrayElementType = item.arrayElementType
+
+    if (arrayElementType == null) {
+      arrayElementType = 'unknown'
+    }
+
+    context.runtimeArrayElementTypes.set(name, arrayElementType)
   } else if (valueType === 'map') {
+    let mapKeyType = item.mapKeyType
+    let mapValueType = item.mapValueType
+
+    if (mapKeyType == null) {
+      mapKeyType = 'unknown'
+    }
+
+    if (mapValueType == null) {
+      mapValueType = 'unknown'
+    }
+
     context.mapTypes.set(name, {
-      key: item.mapKeyType ?? 'unknown',
-      value: item.mapValueType ?? 'unknown'
+      key: mapKeyType,
+      value: mapValueType
     })
   } else if (valueType === 'set') {
-    context.setElementTypes.set(name, item.setElementType ?? 'unknown')
+    let setElementType = item.setElementType
+
+    if (setElementType == null) {
+      setElementType = 'unknown'
+    }
+
+    context.setElementTypes.set(name, setElementType)
   }
 }
 
@@ -1652,78 +2301,123 @@ function emitAsyncTaskScheduleAwaitLines(
   options: AsyncTaskScheduleOptions
 ): string[] {
   const awaitedPromise = emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, options)
-  const awaited = awaitedPromise == null ? emitPreparedAsyncTaskAwaitedValueExpression(item, context) : null
-  const finalizer = options.final ? wrapper.finalizerName : '0'
-  const cleanupLines = options.cleanupLines ?? emitOwnedValueCleanup(context)
+  let awaited: PreparedExpression | null = null
 
-  return [
-    ...(awaitedPromise == null
-      ? [
-          'status = ccjs_promise_new(ccjs_loop, &frame->awaited);',
-          ...emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines)
-        ]
-      : awaitedPromise.lines),
-    `status = ccjs_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${finalizer});`,
-    ...emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines),
-    ...(awaitedPromise == null
-      ? [
-          ...(awaited?.lines ?? []),
-          `status = ccjs_promise_resolve(frame->awaited, ${awaited?.expression ?? 'ccjs_undefined_value()'});`,
-          ...emitAsyncTaskResolveStatusCheck(wrapper, options, cleanupLines)
-        ]
-      : [])
-  ]
+  if (awaitedPromise == null) {
+    awaited = emitPreparedAsyncTaskAwaitedValueExpression(item, context)
+  }
+
+  let finalizer = '0'
+
+  if (options.final) {
+    finalizer = wrapper.finalizerName
+  }
+
+  let cleanupLines = options.cleanupLines
+
+  if (cleanupLines == null) {
+    cleanupLines = emitOwnedValueCleanup(context)
+  }
+
+  const lines: string[] = []
+
+  if (awaitedPromise == null) {
+    lines.push('status = ccjs_promise_new(ccjs_loop, &frame->awaited);')
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
+  } else {
+    appendAsyncTaskLines(lines, awaitedPromise.lines)
+  }
+
+  lines.push(`status = ccjs_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${finalizer});`)
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
+
+  if (awaitedPromise == null) {
+    let awaitedExpression = 'ccjs_undefined_value()'
+
+    if (awaited != null) {
+      appendAsyncTaskLines(lines, awaited.lines)
+      awaitedExpression = awaited.expression
+    }
+
+    lines.push(`status = ccjs_promise_resolve(frame->awaited, ${awaitedExpression});`)
+    appendAsyncTaskLines(lines, emitAsyncTaskResolveStatusCheck(wrapper, options, cleanupLines))
+  }
+
+  return lines
 }
 
 function emitAsyncTaskScheduleStatusCheck(
   wrapper: CAsyncTaskWrapper,
   options: AsyncTaskScheduleOptions,
-  cleanupLines: string[] = []
+  cleanupLines: string[] | null
 ): string[] {
-  if (options.cleanup === 'start') {
-    return [
-      'if (status != CCJS_OK) {',
-      ...cleanupLines.map((line) => `  ${line}`),
-      '  ccjs_promise_release(*out);',
-      '  *out = 0;',
-      `  ${wrapper.finalizerName}(frame);`,
-      '  return status;',
-      '}'
-    ]
+  const lines: string[] = []
+  let activeCleanupLines = cleanupLines
+
+  if (activeCleanupLines == null) {
+    activeCleanupLines = []
   }
 
-  return [
-    'if (status != CCJS_OK) {',
-    ...cleanupLines.map((line) => `  ${line}`),
-    '  ccjs_status reject_status = ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)status));',
-    `  ${wrapper.finalizerName}(frame);`,
-    '  return reject_status == CCJS_OK ? status : reject_status;',
-    '}'
-  ]
+  if (options.cleanup === 'start') {
+    lines.push('if (status != CCJS_OK) {')
+    appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
+    lines.push('  ccjs_promise_release(*out);')
+    lines.push('  *out = 0;')
+    lines.push(`  ${wrapper.finalizerName}(frame);`)
+    lines.push('  return status;')
+    lines.push('}')
+
+    return lines
+  }
+
+  lines.push('if (status != CCJS_OK) {')
+  appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
+  lines.push('  ccjs_status reject_status = ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)status));')
+  lines.push(`  ${wrapper.finalizerName}(frame);`)
+  lines.push('  return reject_status == CCJS_OK ? status : reject_status;')
+  lines.push('}')
+
+  return lines
 }
 
 function emitAsyncTaskResolveStatusCheck(
   wrapper: CAsyncTaskWrapper,
   options: AsyncTaskScheduleOptions,
-  cleanupLines: string[] = []
+  cleanupLines: string[] | null
 ): string[] {
+  const lines: string[] = []
+  let activeCleanupLines = cleanupLines
+
+  if (activeCleanupLines == null) {
+    activeCleanupLines = []
+  }
+
   if (options.cleanup === 'start') {
-    return [
-      'if (status != CCJS_OK) {',
-      ...cleanupLines.map((line) => `  ${line}`),
-      '  ccjs_promise_release(*out);',
-      '  *out = 0;',
-      ...(options.final ? [] : [`  ${wrapper.finalizerName}(frame);`]),
-      '  return status;',
-      '}'
-    ]
+    lines.push('if (status != CCJS_OK) {')
+    appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
+    lines.push('  ccjs_promise_release(*out);')
+    lines.push('  *out = 0;')
+
+    if (!options.final) {
+      lines.push(`  ${wrapper.finalizerName}(frame);`)
+    }
+
+    lines.push('  return status;')
+    lines.push('}')
+
+    return lines
   }
 
   if (options.final) {
-    return ['if (status != CCJS_OK) {', ...cleanupLines.map((line) => `  ${line}`), '  return status;', '}']
+    lines.push('if (status != CCJS_OK) {')
+    appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
+    lines.push('  return status;')
+    lines.push('}')
+
+    return lines
   }
 
-  return emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines)
+  return emitAsyncTaskScheduleStatusCheck(wrapper, options, activeCleanupLines)
 }
 
 function emitPreparedAsyncTaskAwaitedPromiseExpression(
@@ -1749,31 +2443,47 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
   }
 
   if (
-    item.awaitedPromiseExpression?.type !== 'CallExpression' ||
+    item.awaitedPromiseExpression == null ||
+    item.awaitedPromiseExpression.type !== 'CallExpression' ||
     cPromiseRuntimeCallName(item.awaitedPromiseExpression.callee) !== 'resolve'
   ) {
+    let loc: any = undefined
+
+    if (item.awaitedPromiseExpression != null) {
+      loc = item.awaitedPromiseExpression.loc
+    }
+
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_ASYNC',
         'async task state-machine slice currently supports local Promise.resolve(...) variables only',
-        item.awaitedPromiseExpression?.loc
+        loc
       )
     )
 
     return {
-      lines: ['status = CCJS_ERR_TYPE;', ...emitAsyncTaskScheduleStatusCheck(wrapper, options)]
+      lines: emitAsyncTaskErrorStatusLines(wrapper, options)
     }
   }
 
   const value = emitPreparedAsyncTaskValueExpression(item.awaitedPromiseExpression.args[0], item.type, context)
+  const lines: string[] = []
+
+  appendAsyncTaskLines(lines, value.lines)
+  lines.push(`status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &frame->awaited);`)
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
   return {
-    lines: [
-      ...value.lines,
-      `status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &frame->awaited);`,
-      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
-    ]
+    lines: lines
   }
+}
+
+function emitAsyncTaskErrorStatusLines(wrapper: CAsyncTaskWrapper, options: AsyncTaskScheduleOptions): string[] {
+  const lines = ['status = CCJS_ERR_TYPE;']
+
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+
+  return lines
 }
 
 function emitPreparedAsyncTaskPromiseSourceExpression(
@@ -1784,7 +2494,7 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
 ): PreparedAsyncTaskPromise | null {
   const expression = item.awaitedPromiseExpression
 
-  if (expression?.type !== 'CallExpression') {
+  if (expression == null || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1839,7 +2549,9 @@ function emitPreparedAsyncTaskFsSourceExpression(
 
   const method = cFsRuntimeExpressionMethod(expression)
   const path = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
-  const lines = [...path.lines]
+  const lines: string[] = []
+
+  appendAsyncTaskLines(lines, path.lines)
 
   if (method === 'readFile') {
     lines.push(`status = ccjs_fs_read_file(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
@@ -1860,14 +2572,14 @@ function emitPreparedAsyncTaskFsSourceExpression(
   } else if (method === 'access') {
     const mode = asyncTaskDeps(context).emitPreparedFsAccessModeExpression(expression, context)
 
-    lines.push(...mode.lines)
+    appendAsyncTaskLines(lines, mode.lines)
     lines.push(
       `status = ccjs_fs_access(ccjs_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`
     )
   } else if (method === 'appendFileBytes') {
     const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
 
-    lines.push(...bytes.lines)
+    appendAsyncTaskLines(lines, bytes.lines)
     lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
     lines.push(
       `status = ccjs_fs_append_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
@@ -1875,21 +2587,21 @@ function emitPreparedAsyncTaskFsSourceExpression(
   } else if (method === 'appendFile') {
     const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
 
-    lines.push(...bytes.lines)
+    appendAsyncTaskLines(lines, bytes.lines)
     lines.push(
       `status = ccjs_fs_append_file(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
     )
   } else if (method === 'copyFile') {
     const destPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_dest_path')
 
-    lines.push(...destPath.lines)
+    appendAsyncTaskLines(lines, destPath.lines)
     lines.push(
       `status = ccjs_fs_copy_file(ccjs_loop, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &frame->awaited);`
     )
   } else if (method === 'symlink') {
     const linkPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_link_path')
 
-    lines.push(...linkPath.lines)
+    appendAsyncTaskLines(lines, linkPath.lines)
     lines.push(
       `status = ccjs_fs_symlink(ccjs_loop, ${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length}, &frame->awaited);`
     )
@@ -1906,14 +2618,14 @@ function emitPreparedAsyncTaskFsSourceExpression(
   } else if (method === 'rename') {
     const newPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_new_path')
 
-    lines.push(...newPath.lines)
+    appendAsyncTaskLines(lines, newPath.lines)
     lines.push(
       `status = ccjs_fs_rename(ccjs_loop, ${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length}, &frame->awaited);`
     )
   } else if (method === 'writeFileBytes') {
     const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
 
-    lines.push(...bytes.lines)
+    appendAsyncTaskLines(lines, bytes.lines)
     lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
     lines.push(
       `status = ccjs_fs_write_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
@@ -1921,14 +2633,16 @@ function emitPreparedAsyncTaskFsSourceExpression(
   } else {
     const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
 
-    lines.push(...bytes.lines)
+    appendAsyncTaskLines(lines, bytes.lines)
     lines.push(
       `status = ccjs_fs_write_file(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
     )
   }
 
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+
   return {
-    lines: [...lines, ...emitAsyncTaskScheduleStatusCheck(wrapper, options)]
+    lines: lines
   }
 }
 
@@ -1949,17 +2663,18 @@ function emitPreparedAsyncTaskFetchSourceExpression(
     const url = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_url')
     const init = asyncTaskDeps(context).emitPreparedFetchInitOperand(expression, context)
 
-    lines.push(...url.lines)
-    lines.push(...init.lines)
-    lines.push(
-      init.expression === '0'
-        ? `status = ccjs_fetch(ccjs_loop, ${url.bytes}, ${url.length}, &frame->awaited);`
-        : `status = ccjs_fetch_with_init(ccjs_loop, ${url.bytes}, ${url.length}, ${init.expression}, &frame->awaited);`
-    )
+    appendAsyncTaskLines(lines, url.lines)
+    appendAsyncTaskLines(lines, init.lines)
+
+    if (init.expression === '0') {
+      lines.push(`status = ccjs_fetch(ccjs_loop, ${url.bytes}, ${url.length}, &frame->awaited);`)
+    } else {
+      lines.push(`status = ccjs_fetch_with_init(ccjs_loop, ${url.bytes}, ${url.length}, ${init.expression}, &frame->awaited);`)
+    }
   } else {
     const response = asyncTaskDeps(context).emitCValueExpression(expression.callee.object, context)
 
-    lines.push(...response.lines)
+    appendAsyncTaskLines(lines, response.lines)
     lines.push(
       emitRuntimeTypeCheck(
         `${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`,
@@ -1969,8 +2684,10 @@ function emitPreparedAsyncTaskFetchSourceExpression(
     lines.push(`status = ccjs_fetch_response_text(ccjs_loop, ${response.expression}, &frame->awaited);`)
   }
 
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+
   return {
-    lines: [...lines, ...emitAsyncTaskScheduleStatusCheck(wrapper, options)]
+    lines: lines
   }
 }
 
@@ -1984,21 +2701,22 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
     return null
   }
 
-  if (expression.args[0]?.type === 'StringLiteral') {
+  if (expression.args[0] != null && expression.args[0].type === 'StringLiteral') {
     const value = nextCName(context, 'ccjs_reject_value')
     const bytes = cStringLiteral(expression.args[0].value)
     const length = utf8ByteLength(expression.args[0].value)
+    const lines: string[] = []
+
+    lines.push(`ccjs_value ${value} = ccjs_undefined_value();`)
+    lines.push(`status = ccjs_string_from_literal(&ccjs_default_allocator, ${bytes}, ${length}, &${value});`)
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, [`ccjs_release(${value});`]))
+    lines.push(`status = ccjs_promise_rejected(ccjs_loop, ${value}, &frame->awaited);`)
+    lines.push(`ccjs_release(${value});`)
+    lines.push(`${value} = ccjs_undefined_value();`)
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
     return {
-      lines: [
-        `ccjs_value ${value} = ccjs_undefined_value();`,
-        `status = ccjs_string_from_literal(&ccjs_default_allocator, ${bytes}, ${length}, &${value});`,
-        ...emitAsyncTaskScheduleStatusCheck(wrapper, options, [`ccjs_release(${value});`]),
-        `status = ccjs_promise_rejected(ccjs_loop, ${value}, &frame->awaited);`,
-        `ccjs_release(${value});`,
-        `${value} = ccjs_undefined_value();`,
-        ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
-      ]
+      lines: lines
     }
   }
 
@@ -2016,24 +2734,28 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
     )
 
     return {
-      lines: ['status = CCJS_ERR_TYPE;', ...emitAsyncTaskScheduleStatusCheck(wrapper, options)]
+      lines: emitAsyncTaskErrorStatusLines(wrapper, options)
     }
   }
 
-  const value =
-    expression.args[0] == null
-      ? {
-          lines: [],
-          expression: 'ccjs_undefined_value()'
-        }
-      : asyncTaskDeps(context).emitCValueExpression(expression.args[0], context)
+  let valueLines: string[] = []
+  let valueExpression = 'ccjs_undefined_value()'
+
+  if (expression.args[0] != null) {
+    const value = asyncTaskDeps(context).emitCValueExpression(expression.args[0], context)
+
+    valueLines = value.lines
+    valueExpression = value.expression
+  }
+
+  const lines: string[] = []
+
+  appendAsyncTaskLines(lines, valueLines)
+  lines.push(`status = ccjs_promise_rejected(ccjs_loop, ${valueExpression}, &frame->awaited);`)
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
   return {
-    lines: [
-      ...value.lines,
-      `status = ccjs_promise_rejected(ccjs_loop, ${value.expression}, &frame->awaited);`,
-      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
-    ]
+    lines: lines
   }
 }
 
@@ -2043,7 +2765,7 @@ function emitPreparedAsyncTaskSourceCallExpression(
   context: CFunctionContext,
   options: AsyncTaskScheduleOptions
 ): PreparedAsyncTaskPromise | null {
-  if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
+  if (expression.callee == null || expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
     return null
   }
 
@@ -2054,14 +2776,20 @@ function emitPreparedAsyncTaskSourceCallExpression(
   }
 
   const prepared = asyncTaskDeps(context).emitPreparedCallArgs(expression, target.params, context)
-  const args = ['ccjs_loop', ...prepared.args, '&frame->awaited']
+  const args = ['ccjs_loop']
+  const lines: string[] = []
+
+  for (const arg of prepared.args) {
+    args.push(arg)
+  }
+
+  args.push('&frame->awaited')
+  appendAsyncTaskLines(lines, prepared.lines)
+  lines.push(`status = ${target.startName}(${args.join(', ')});`)
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
   return {
-    lines: [
-      ...prepared.lines,
-      `status = ${target.startName}(${args.join(', ')});`,
-      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
-    ]
+    lines: lines
   }
 }
 
@@ -2075,8 +2803,15 @@ function emitPreparedAsyncFunctionSourceCallExpression(
     return null
   }
 
-  const valueType =
-    resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
+  let valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context)
+
+  if (valueType == null) {
+    valueType = expression.promiseValueType
+  }
+
+  if (valueType == null) {
+    valueType = 'unknown'
+  }
 
   if (!isSupportedAsyncTaskValueType(valueType)) {
     return null
@@ -2085,13 +2820,15 @@ function emitPreparedAsyncFunctionSourceCallExpression(
   const call = asyncTaskDeps(context).emitPreparedCallExpression(expression, context)
 
   if (valueType === 'void') {
+    const lines: string[] = []
+
+    appendAsyncTaskLines(lines, call.lines)
+    lines.push(`${call.expression};`)
+    lines.push('status = ccjs_promise_resolved(ccjs_loop, ccjs_undefined_value(), &frame->awaited);')
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+
     return {
-      lines: [
-        ...call.lines,
-        `${call.expression};`,
-        'status = ccjs_promise_resolved(ccjs_loop, ccjs_undefined_value(), &frame->awaited);',
-        ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
-      ]
+      lines: lines
     }
   }
 
@@ -2099,27 +2836,34 @@ function emitPreparedAsyncFunctionSourceCallExpression(
     const value = nextCName(context, 'ccjs_async_value')
     const tag = cRuntimeValueTag(valueType)
 
+    const lines: string[] = []
+
+    appendAsyncTaskLines(lines, call.lines)
+    lines.push(`ccjs_value ${value} = ${call.expression};`)
+    lines.push(emitRuntimeValueCheck(value, tag, context))
+    lines.push(`status = ccjs_promise_resolved(ccjs_loop, ${value}, &frame->awaited);`)
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, [`ccjs_release(${value});`]))
+    lines.push(`ccjs_release(${value});`)
+
     return {
-      lines: [
-        ...call.lines,
-        `ccjs_value ${value} = ${call.expression};`,
-        emitRuntimeValueCheck(value, tag, context),
-        `status = ccjs_promise_resolved(ccjs_loop, ${value}, &frame->awaited);`,
-        ...emitAsyncTaskScheduleStatusCheck(wrapper, options, [`ccjs_release(${value});`]),
-        `ccjs_release(${value});`
-      ]
+      lines: lines
     }
   }
 
-  const value =
-    valueType === 'boolean' ? `ccjs_bool_value((${call.expression}) != 0)` : `ccjs_number_value(${call.expression})`
+  let value = `ccjs_number_value(${call.expression})`
+
+  if (valueType === 'boolean') {
+    value = `ccjs_bool_value((${call.expression}) != 0)`
+  }
+
+  const lines: string[] = []
+
+  appendAsyncTaskLines(lines, call.lines)
+  lines.push(`status = ccjs_promise_resolved(ccjs_loop, ${value}, &frame->awaited);`)
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
   return {
-    lines: [
-      ...call.lines,
-      `status = ccjs_promise_resolved(ccjs_loop, ${value}, &frame->awaited);`,
-      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
-    ]
+    lines: lines
   }
 }
 
@@ -2140,14 +2884,20 @@ function emitPreparedPlainPromiseSourceCallExpression(
   }
 
   const prepared = asyncTaskDeps(context).emitPreparedCallArgs(expression, params, context)
+  const args = ['ccjs_loop']
+  const lines: string[] = []
+
+  for (const arg of prepared.args) {
+    args.push(arg)
+  }
+
+  appendAsyncTaskLines(lines, prepared.lines)
+  lines.push(`frame->awaited = ${asyncTaskDeps(context).emitCallee(expression.callee, context)}(${args.join(', ')});`)
+  lines.push('status = frame->awaited == 0 ? CCJS_ERR_TYPE : CCJS_OK;')
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
   return {
-    lines: [
-      ...prepared.lines,
-      `frame->awaited = ${asyncTaskDeps(context).emitCallee(expression.callee, context)}(${['ccjs_loop', ...prepared.args].join(', ')});`,
-      'status = frame->awaited == 0 ? CCJS_ERR_TYPE : CCJS_OK;',
-      ...emitAsyncTaskScheduleStatusCheck(wrapper, options)
-    ]
+    lines: lines
   }
 }
 
@@ -2160,8 +2910,10 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
   const expression = item.awaitedPromiseExpression
 
   if (
-    expression?.type !== 'CallExpression' ||
-    expression.callee?.type !== 'MemberExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
+    expression.callee == null ||
+    expression.callee.type !== 'MemberExpression' ||
     expression.callee.property !== 'then'
   ) {
     return null
@@ -2169,10 +2921,15 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
 
   const receiver = expression.callee.object
   const callback = expression.args[0]
-  const chainWrapper = callback == null ? null : context.promiseChainArrowWrappers.get(callback)
+  let chainWrapper: CPromiseChainWrapper | null | undefined = null
+
+  if (callback != null) {
+    chainWrapper = context.promiseChainArrowWrappers.get(callback)
+  }
 
   if (
-    receiver?.type !== 'CallExpression' ||
+    receiver == null ||
+    receiver.type !== 'CallExpression' ||
     cPromiseRuntimeCallName(receiver.callee) !== 'resolve' ||
     chainWrapper == null
   ) {
@@ -2185,29 +2942,43 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
     )
 
     return {
-      lines: ['status = CCJS_ERR_TYPE;', ...emitAsyncTaskScheduleStatusCheck(wrapper, options)]
+      lines: emitAsyncTaskErrorStatusLines(wrapper, options)
     }
   }
 
   const source = nextCName(context, 'ccjs_async_task_source')
-  const sourceType = receiver.promiseValueType ?? callback.params[0]?.valueType ?? item.type
+  let sourceType = receiver.promiseValueType
+
+  if (sourceType == null && callback != null && callback.params[0] != null) {
+    sourceType = callback.params[0].valueType
+  }
+
+  if (sourceType == null) {
+    sourceType = item.type
+  }
+
   const value = emitPreparedAsyncTaskValueExpression(receiver.args[0], sourceType, context)
   const callbackContext = emitAsyncTaskPromiseChainCallbackContext(wrapper, chainWrapper, context, options)
-  const cleanupLines =
-    callbackContext.expression === '0' ? [] : [`${chainWrapper.finalizerName}(${callbackContext.expression});`]
+  const cleanupLines: string[] = []
+
+  if (callbackContext.expression !== '0') {
+    cleanupLines.push(`${chainWrapper.finalizerName}(${callbackContext.expression});`)
+  }
+
+  const lines: string[] = []
+
+  appendAsyncTaskLines(lines, callbackContext.lines)
+  lines.push(`ccjs_promise* ${source} = 0;`)
+  appendAsyncTaskLines(lines, value.lines)
+  lines.push(`status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &${source});`)
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
+  lines.push(`status = ccjs_promise_chain(${source}, ${chainWrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &frame->awaited);`)
+  lines.push(`ccjs_promise_release(${source});`)
+  lines.push(`${source} = 0;`)
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
 
   return {
-    lines: [
-      ...callbackContext.lines,
-      `ccjs_promise* ${source} = 0;`,
-      ...value.lines,
-      `status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &${source});`,
-      ...emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines),
-      `status = ccjs_promise_chain(${source}, ${chainWrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &frame->awaited);`,
-      `ccjs_promise_release(${source});`,
-      `${source} = 0;`,
-      ...emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines)
-    ]
+    lines: lines
   }
 }
 
@@ -2238,7 +3009,7 @@ function emitAsyncTaskPromiseChainCallbackContext(
       )
     }
 
-    if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
+    if (!isSupportedAsyncTaskPromiseCaptureType(capture.valueType)) {
       context.diagnostics.push(
         diagnostic(
           'CCJS_C_ASYNC',
@@ -2256,7 +3027,7 @@ function emitAsyncTaskPromiseChainCallbackContext(
   )
   lines.push('if (' + contextName + ' == 0) {')
   lines.push('  status = CCJS_ERR_OOM;')
-  lines.push(...emitAsyncTaskScheduleStatusCheck(asyncWrapper, options).map((line) => `  ${line}`))
+  appendIndentedAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(asyncWrapper, options, null), '  ')
   lines.push('}')
 
   if (chainWrapper.needsEventLoop === true) {
@@ -2264,14 +3035,18 @@ function emitAsyncTaskPromiseChainCallbackContext(
   }
 
   for (const capture of chainWrapper.captures) {
-    lines.push(...asyncTaskDeps(context).emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
+    appendAsyncTaskLines(lines, asyncTaskDeps(context).emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
   }
 
   return {
-    lines,
+    lines: lines,
     expression: contextName,
     finalizer: chainWrapper.finalizerName
   }
+}
+
+function isSupportedAsyncTaskPromiseCaptureType(valueType: string): boolean {
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'object'
 }
 
 function emitPreparedAsyncTaskAwaitedValueExpression(
@@ -2279,14 +3054,21 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
   context: CFunctionContext
 ): PreparedExpression {
   if (
-    item.awaitedExpression?.type !== 'CallExpression' ||
+    item.awaitedExpression == null ||
+    item.awaitedExpression.type !== 'CallExpression' ||
     cPromiseRuntimeCallName(item.awaitedExpression.callee) !== 'resolve'
   ) {
+    let loc: any = undefined
+
+    if (item.awaitedExpression != null) {
+      loc = item.awaitedExpression.loc
+    }
+
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_ASYNC',
         'async task state-machine slice currently supports await Promise.resolve(...) only',
-        item.awaitedExpression?.loc
+        loc
       )
     )
 
@@ -2314,9 +3096,13 @@ function emitPreparedAsyncTaskValueExpression(
   if (isManagedRuntimeReturnType(valueType)) {
     const value = asyncTaskDeps(context).emitCValueExpression(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
+    const lines: string[] = []
+
+    appendAsyncTaskLines(lines, value.lines)
+    lines.push(emitRuntimeValueCheck(value.expression, expectedTag, context))
 
     return {
-      lines: [...value.lines, emitRuntimeValueCheck(value.expression, expectedTag, context)],
+      lines: lines,
       expression: value.expression
     }
   }
@@ -2340,26 +3126,40 @@ function emitPreparedAsyncTaskValueExpression(
 
 function emitAsyncTaskResumeDeclaration(wrapper: CAsyncTaskWrapper, baseContext: CEmitContext): string[] {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, wrapper.awaits.length)
-  const returnValue = hasAsyncTaskStatementLocalDeclarations(collectAsyncTaskSuccessPhaseStatements(wrapper, ['body']))
-    ? null
-    : emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
-  const returnValueOwnedValues = returnValue == null ? [] : [...context.ownedValues]
-  const cases = wrapper.awaits.flatMap((item) =>
-    emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue, returnValueOwnedValues)
-  )
+  let returnValue: PreparedExpression | null = null
 
-  return [
-    `static ccjs_status ${wrapper.resumeName}(void* context, ccjs_value ccjs_value_input) {`,
-    `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`,
-    '  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;',
-    '  ccjs_status status = CCJS_OK;',
-    '  switch (frame->state) {',
-    ...cases.map((line) => `  ${line}`),
-    '  default:',
-    '    return ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE));',
-    '  }',
-    '}'
-  ]
+  if (!hasAsyncTaskStatementLocalDeclarations(collectAsyncTaskSuccessPhaseStatements(wrapper, ['body']))) {
+    returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
+  }
+
+  const returnValueOwnedValues: string[] = []
+
+  if (returnValue != null) {
+    for (const name of context.ownedValues) {
+      returnValueOwnedValues.push(name)
+    }
+  }
+
+  const cases: string[] = []
+
+  for (const item of wrapper.awaits) {
+    appendAsyncTaskLines(cases, emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue, returnValueOwnedValues))
+  }
+
+  const lines: string[] = []
+
+  lines.push(`static ccjs_status ${wrapper.resumeName}(void* context, ccjs_value ccjs_value_input) {`)
+  lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
+  lines.push('  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;')
+  lines.push('  ccjs_status status = CCJS_OK;')
+  lines.push('  switch (frame->state) {')
+  appendIndentedAsyncTaskLines(lines, cases, '  ')
+  lines.push('  default:')
+  lines.push('    return ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE));')
+  lines.push('  }')
+  lines.push('}')
+
+  return lines
 }
 
 function emitAsyncTaskResumeCase(
@@ -2369,42 +3169,46 @@ function emitAsyncTaskResumeCase(
   returnValue: PreparedExpression | null,
   returnValueOwnedValues: string[]
 ): string[] {
-  const nextItem = wrapper.awaits[item.index + 1] ?? null
+  let nextItem: CAsyncTaskAwaitStep | null = null
+
+  if (wrapper.awaits[item.index + 1] != null) {
+    nextItem = wrapper.awaits[item.index + 1]
+  }
+
   const valueCheck = emitAsyncTaskFulfilledValueCheck(wrapper, item)
-  const lines = [
-    `case ${item.index}: {`,
-    ...valueCheck.map((line) => `  ${line}`),
-    ...emitAsyncTaskStoreFulfilledValueLines(item).map((line) => `  ${line}`),
-    '  if (frame->awaited != 0) {',
-    '    ccjs_promise_release(frame->awaited);',
-    '    frame->awaited = 0;',
-    '  }'
-  ]
+  const lines: string[] = []
+
+  lines.push(`case ${item.index}: {`)
+  appendIndentedAsyncTaskLines(lines, valueCheck, '  ')
+  appendIndentedAsyncTaskLines(lines, emitAsyncTaskStoreFulfilledValueLines(item), '  ')
+  lines.push('  if (frame->awaited != 0) {')
+  lines.push('    ccjs_promise_release(frame->awaited);')
+  lines.push('    frame->awaited = 0;')
+  lines.push('  }')
 
   if (nextItem == null) {
-    lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1).map((line) => `  ${line}`))
+    appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1, null), '  ')
     if (returnValue == null) {
-      lines.push(...emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext).map((line) => `  ${line}`))
+      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext), '  ')
     } else if (returnValueOwnedValues.length > 0) {
-      lines.push(...returnValueOwnedValues.map((name) => `  ccjs_value ${name} = ccjs_undefined_value();`))
-      lines.push(
-        ...emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1).map((line) => `  ${line}`)
-      )
-      lines.push(...returnValue.lines.map((line) => `  ${line}`))
-      lines.push(
-        ...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1).map((line) => `  ${line}`)
-      )
+      for (const name of returnValueOwnedValues) {
+        lines.push(`  ccjs_value ${name} = ccjs_undefined_value();`)
+      }
+
+      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1), '  ')
+      appendIndentedAsyncTaskLines(lines, returnValue.lines, '  ')
+      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1), '  ')
       lines.push(`  status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
-      lines.push(...returnValueOwnedValues.toReversed().map((name) => `  ccjs_release(${name});`))
+
+      for (let index = returnValueOwnedValues.length - 1; index >= 0; index = index - 1) {
+        lines.push(`  ccjs_release(${returnValueOwnedValues[index]});`)
+      }
+
       lines.push('  return status;')
     } else {
-      lines.push(
-        ...emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1).map((line) => `  ${line}`)
-      )
-      lines.push(...returnValue.lines.map((line) => `  ${line}`))
-      lines.push(
-        ...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1).map((line) => `  ${line}`)
-      )
+      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1), '  ')
+      appendIndentedAsyncTaskLines(lines, returnValue.lines, '  ')
+      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1), '  ')
       lines.push(`  return ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
     }
     lines.push('}')
@@ -2417,42 +3221,66 @@ function emitAsyncTaskResumeCase(
     final: nextItem.index === wrapper.awaits.length - 1
   })
 
-  lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1).map((line) => `  ${line}`))
+  appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1, null), '  ')
   lines.push('  ccjs_loop* ccjs_loop = frame->ccjs_loop;')
   lines.push('  if (ccjs_loop == 0) {')
-  lines.push(
-    ...emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)').map(
-      (line) => `    ${line}`
-    )
+  appendIndentedAsyncTaskLines(
+    lines,
+    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)'),
+    '    '
   )
   lines.push('  }')
   lines.push(`  frame->state = ${nextItem.index};`)
-  lines.push(...schedule.map((line) => `  ${line}`))
+  appendIndentedAsyncTaskLines(lines, schedule, '  ')
   lines.push('  return CCJS_OK;')
   lines.push('}')
 
   return lines
 }
 
-function hasAsyncTaskStatementLocalDeclarations(statements: AnyNode[]): boolean {
-  return statements.some(
-    (statement) => statement?.type === 'VariableDeclaration' && isManagedRuntimeReturnType(statement.valueType)
-  )
+function hasAsyncTaskStatementLocalDeclarations(statements: AsyncTaskAstNode[]): boolean {
+  for (const statement of statements) {
+    if (statement != null && statement.type === 'VariableDeclaration' && isManagedRuntimeReturnType(statement.valueType)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function collectAsyncTaskSuccessPhaseStatements(
   wrapper: CAsyncTaskWrapper,
-  kinds: CAsyncTaskSuccessPhaseKind[] | null = null
-): AnyNode[] {
-  const allowedKinds = kinds == null ? null : new Set(kinds)
+  kinds: CAsyncTaskSuccessPhaseKind[] | null
+): AsyncTaskAstNode[] {
+  let allowedKinds: Set<CAsyncTaskSuccessPhaseKind> | null = null
 
-  return (wrapper.successPhases ?? [])
-    .filter((phase) => allowedKinds == null || allowedKinds.has(phase.kind as CAsyncTaskSuccessPhaseKind))
-    .flatMap((phase) => phase.statements)
+  if (kinds != null) {
+    allowedKinds = new Set(kinds)
+  }
+
+  const statements: AsyncTaskAstNode[] = []
+
+  for (const phase of wrapper.successPhases) {
+    if (allowedKinds != null && !allowedKinds.has(phase.kind as CAsyncTaskSuccessPhaseKind)) {
+      continue
+    }
+
+    appendAsyncTaskNodes(statements, phase.statements)
+  }
+
+  return statements
 }
 
-function collectAsyncTaskTryPhaseStatements(wrapper: CAsyncTaskWrapper, kind: CAsyncTaskTryPhaseKind): AnyNode[] {
-  return (wrapper.tryPhases ?? []).filter((phase) => phase.kind === kind).flatMap((phase) => phase.statements)
+function collectAsyncTaskTryPhaseStatements(wrapper: CAsyncTaskWrapper, kind: CAsyncTaskTryPhaseKind): AsyncTaskAstNode[] {
+  const statements: AsyncTaskAstNode[] = []
+
+  for (const phase of wrapper.tryPhases) {
+    if (phase.kind === kind) {
+      appendAsyncTaskNodes(statements, phase.statements)
+    }
+  }
+
+  return statements
 }
 
 function emitAsyncTaskFulfilledValueCheck(wrapper: CAsyncTaskWrapper, item: CAsyncTaskAwaitStep): string[] {
@@ -2462,15 +3290,23 @@ function emitAsyncTaskFulfilledValueCheck(wrapper: CAsyncTaskWrapper, item: CAsy
     return []
   }
 
-  const refCheck = isManagedRuntimeReturnType(item.type) ? ' || ccjs_value_input.as.ref == 0' : ''
+  let refCheck = ''
 
-  return [
-    `if (ccjs_value_input.tag != ${expectedTag}${refCheck}) {`,
-    ...emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)').map(
-      (line) => `  ${line}`
-    ),
-    '}'
-  ]
+  if (isManagedRuntimeReturnType(item.type)) {
+    refCheck = ' || ccjs_value_input.as.ref == 0'
+  }
+
+  const lines: string[] = []
+
+  lines.push(`if (ccjs_value_input.tag != ${expectedTag}${refCheck}) {`)
+  appendIndentedAsyncTaskLines(
+    lines,
+    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)'),
+    '  '
+  )
+  lines.push('}')
+
+  return lines
 }
 
 function emitAsyncTaskStoreFulfilledValueLines(item: CAsyncTaskAwaitStep): string[] {
@@ -2498,11 +3334,17 @@ function emitAsyncTaskRejectAndMaybeFinalizeLines(
   item: CAsyncTaskAwaitStep,
   errorExpression: string
 ): string[] {
-  return [
-    `ccjs_status reject_status = ccjs_promise_reject(frame->promise, ${errorExpression});`,
-    ...(item.index < wrapper.awaits.length - 1 ? [`${wrapper.finalizerName}(frame);`] : []),
-    'return reject_status;'
-  ]
+  const lines: string[] = []
+
+  lines.push(`ccjs_status reject_status = ccjs_promise_reject(frame->promise, ${errorExpression});`)
+
+  if (item.index < wrapper.awaits.length - 1) {
+    lines.push(`${wrapper.finalizerName}(frame);`)
+  }
+
+  lines.push('return reject_status;')
+
+  return lines
 }
 
 function emitAsyncTaskTrySuccessFinallyLines(
@@ -2528,7 +3370,7 @@ function emitAsyncTaskTrySuccessPreludeLines(
   visibleAwaitCount: number
 ): string[] {
   return emitAsyncTaskTryStatementList(
-    collectAsyncTaskSuccessPhaseStatements(wrapper),
+    collectAsyncTaskSuccessPhaseStatements(wrapper, null),
     wrapper,
     baseContext,
     visibleAwaitCount
@@ -2547,21 +3389,23 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(
   let returnValue: PreparedExpression = { lines: [], expression: '0' }
 
   try {
-    preludeLines = asyncTaskDeps(context).emitStatementList(collectAsyncTaskSuccessPhaseStatements(wrapper), context)
+    preludeLines = asyncTaskDeps(context).emitStatementList(collectAsyncTaskSuccessPhaseStatements(wrapper, null), context)
     returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
   } finally {
     restoreVariableScope(context, resultScope)
   }
 
-  return [
-    ...emitOwnedValueDeclarations(context),
-    ...preludeLines,
-    ...returnValue.lines,
-    ...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitCount),
-    `status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`,
-    ...emitOwnedValueCleanup(context),
-    'return status;'
-  ]
+  const lines: string[] = []
+
+  appendAsyncTaskLines(lines, emitOwnedValueDeclarations(context))
+  appendAsyncTaskLines(lines, preludeLines)
+  appendAsyncTaskLines(lines, returnValue.lines)
+  appendAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitCount))
+  lines.push(`status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+  appendAsyncTaskLines(lines, emitOwnedValueCleanup(context))
+  lines.push('return status;')
+
+  return lines
 }
 
 function emitAsyncTaskTryRejectFinallyLines(
@@ -2616,7 +3460,7 @@ function emitAsyncTaskTryFinallyLines(
 }
 
 function emitAsyncTaskTryStatementList(
-  statements: AnyNode[],
+  statements: AsyncTaskAstNode[],
   wrapper: CAsyncTaskWrapper,
   baseContext: CEmitContext,
   visibleAwaitCount: number
@@ -2635,7 +3479,13 @@ function emitAsyncTaskTryStatementList(
     restoreVariableScope(context, scope)
   }
 
-  return [...emitOwnedValueDeclarations(context), ...lines, ...emitOwnedValueCleanup(context)]
+  const result: string[] = []
+
+  appendAsyncTaskLines(result, emitOwnedValueDeclarations(context))
+  appendAsyncTaskLines(result, lines)
+  appendAsyncTaskLines(result, emitOwnedValueCleanup(context))
+
+  return result
 }
 
 function emitAsyncTaskSettleAndMaybeFinalizeLines(
@@ -2643,11 +3493,17 @@ function emitAsyncTaskSettleAndMaybeFinalizeLines(
   item: CAsyncTaskAwaitStep,
   call: string
 ): string[] {
-  return [
-    `status = ${call};`,
-    ...(item.index < wrapper.awaits.length - 1 ? [`${wrapper.finalizerName}(frame);`] : []),
-    'return status;'
-  ]
+  const lines: string[] = []
+
+  lines.push(`status = ${call};`)
+
+  if (item.index < wrapper.awaits.length - 1) {
+    lines.push(`${wrapper.finalizerName}(frame);`)
+  }
+
+  lines.push('return status;')
+
+  return lines
 }
 
 function emitAsyncTaskRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext: CEmitContext): string[] {
@@ -2657,33 +3513,47 @@ function emitAsyncTaskRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext:
 
   const lastState = wrapper.awaits.length - 1
 
-  return [
-    `static ccjs_status ${wrapper.rejectName}(void* context, ccjs_value ccjs_error) {`,
-    `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`,
-    '  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;',
-    '  ccjs_status status = ccjs_promise_reject(frame->promise, ccjs_error);',
-    ...(lastState > 0 ? [`  if (frame->state < ${lastState}) {`, `    ${wrapper.finalizerName}(frame);`, '  }'] : []),
-    '  return status;',
-    '}'
-  ]
+  const lines: string[] = []
+
+  lines.push(`static ccjs_status ${wrapper.rejectName}(void* context, ccjs_value ccjs_error) {`)
+  lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
+  lines.push('  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;')
+  lines.push('  ccjs_status status = ccjs_promise_reject(frame->promise, ccjs_error);')
+
+  if (lastState > 0) {
+    lines.push(`  if (frame->state < ${lastState}) {`)
+    lines.push(`    ${wrapper.finalizerName}(frame);`)
+    lines.push('  }')
+  }
+
+  lines.push('  return status;')
+  lines.push('}')
+
+  return lines
 }
 
 function emitAsyncTaskTryRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext: CEmitContext): string[] {
-  const cases = wrapper.awaits.flatMap((item) => emitAsyncTaskTryRejectCase(wrapper, item, baseContext))
+  const cases: string[] = []
 
-  return [
-    `static ccjs_status ${wrapper.rejectName}(void* context, ccjs_value ccjs_error) {`,
-    `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`,
-    '  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;',
-    '  ccjs_status status = CCJS_OK;',
-    '  switch (frame->state) {',
-    ...cases.map((line) => `  ${line}`),
-    '  default:',
-    '    status = ccjs_promise_reject(frame->promise, ccjs_error);',
-    '    return status;',
-    '  }',
-    '}'
-  ]
+  for (const item of wrapper.awaits) {
+    appendAsyncTaskLines(cases, emitAsyncTaskTryRejectCase(wrapper, item, baseContext))
+  }
+
+  const lines: string[] = []
+
+  lines.push(`static ccjs_status ${wrapper.rejectName}(void* context, ccjs_value ccjs_error) {`)
+  lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
+  lines.push('  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;')
+  lines.push('  ccjs_status status = CCJS_OK;')
+  lines.push('  switch (frame->state) {')
+  appendIndentedAsyncTaskLines(lines, cases, '  ')
+  lines.push('  default:')
+  lines.push('    status = ccjs_promise_reject(frame->promise, ccjs_error);')
+  lines.push('    return status;')
+  lines.push('  }')
+  lines.push('}')
+
+  return lines
 }
 
 function emitAsyncTaskTryRejectCase(
@@ -2691,16 +3561,21 @@ function emitAsyncTaskTryRejectCase(
   item: CAsyncTaskAwaitStep,
   baseContext: CEmitContext
 ): string[] {
-  const handler = wrapper.tryHandler ?? null
+  let handler = wrapper.tryHandler
+
+  if (handler == null) {
+    handler = null
+  }
+
   const lines = [`case ${item.index}: {`]
 
   if (handler == null) {
-    lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index).map((line) => `  ${line}`))
-    lines.push(...emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, item.index).map((line) => `  ${line}`))
-    lines.push(
-      ...emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, 'ccjs_promise_reject(frame->promise, ccjs_error)').map(
-        (line) => `  ${line}`
-      )
+    appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, item.index, null), '  ')
+    appendIndentedAsyncTaskLines(lines, emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, item.index), '  ')
+    appendIndentedAsyncTaskLines(
+      lines,
+      emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, 'ccjs_promise_reject(frame->promise, ccjs_error)'),
+      '  '
     )
     lines.push('}')
 
@@ -2709,26 +3584,26 @@ function emitAsyncTaskTryRejectCase(
 
   if (handler.param != null) {
     lines.push('  if (ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0) {')
-    lines.push(
-      ...emitAsyncTaskSettleAndMaybeFinalizeLines(
+    appendIndentedAsyncTaskLines(
+      lines,
+      emitAsyncTaskSettleAndMaybeFinalizeLines(
         wrapper,
         item,
         'ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE))'
-      ).map((line) => `    ${line}`)
+      ),
+      '    '
     )
     lines.push('  }')
   }
 
-  lines.push(...emitAsyncTaskVisibleLocalReads(wrapper, item.index).map((line) => `  ${line}`))
-  lines.push(...emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, item.index).map((line) => `  ${line}`))
+  appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, item.index, null), '  ')
+  appendIndentedAsyncTaskLines(lines, emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, item.index), '  ')
 
   if (handler.param != null) {
     lines.push(`  ccjs_string* ${handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
   }
 
-  lines.push(
-    ...emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler).map((line) => `  ${line}`)
-  )
+  appendIndentedAsyncTaskLines(lines, emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler), '  ')
   lines.push('}')
 
   return lines
@@ -2753,42 +3628,57 @@ function emitAsyncTaskTryHandlerBodyAndReturnLines(
   let returnValue: PreparedExpression = { lines: [], expression: '0' }
 
   try {
-    handlerLines = asyncTaskDeps(context).emitStatementList(handler.statements ?? [], context)
+    handlerLines = asyncTaskDeps(context).emitStatementList(handler.statements, context)
     returnValue = emitPreparedAsyncTaskValueExpression(handler.returnExpression, wrapper.returnType, context)
   } finally {
     restoreVariableScope(context, resultScope)
   }
 
-  return [
-    ...emitOwnedValueDeclarations(context),
-    ...handlerLines,
-    ...returnValue.lines,
-    ...emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount),
-    `status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`,
-    ...emitOwnedValueCleanup(context),
-    ...(item.index < wrapper.awaits.length - 1 ? [`${wrapper.finalizerName}(frame);`] : []),
-    'return status;'
-  ]
+  const lines: string[] = []
+
+  appendAsyncTaskLines(lines, emitOwnedValueDeclarations(context))
+  appendAsyncTaskLines(lines, handlerLines)
+  appendAsyncTaskLines(lines, returnValue.lines)
+  appendAsyncTaskLines(lines, emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount))
+  lines.push(`status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+  appendAsyncTaskLines(lines, emitOwnedValueCleanup(context))
+
+  if (item.index < wrapper.awaits.length - 1) {
+    lines.push(`${wrapper.finalizerName}(frame);`)
+  }
+
+  lines.push('return status;')
+
+  return lines
 }
 
 function emitAsyncTaskFinalizerDeclaration(wrapper: CAsyncTaskWrapper): string[] {
-  return [
-    `static void ${wrapper.finalizerName}(void* context) {`,
-    `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`,
-    '  if (frame == 0) return;',
-    '  if (frame->awaited != 0) ccjs_promise_release(frame->awaited);',
-    ...wrapper.params
-      .filter((param) => isManagedRuntimeReturnType(param.valueType))
-      .map((param) => `  ccjs_release(frame->${param.fieldName});`),
-    ...wrapper.frameLocals
-      .filter((local) => isManagedRuntimeReturnType(local.type))
-      .map((local) => `  ccjs_release(frame->${local.fieldName});`),
-    '  if (frame->promise != 0) ccjs_promise_release(frame->promise);',
-    '  if (frame->ccjs_loop != 0 && frame->ccjs_loop->allocator != 0) {',
-    '    frame->ccjs_loop->allocator->free(frame->ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));',
-    '  }',
-    '}'
-  ]
+  const lines: string[] = []
+
+  lines.push(`static void ${wrapper.finalizerName}(void* context) {`)
+  lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
+  lines.push('  if (frame == 0) return;')
+  lines.push('  if (frame->awaited != 0) ccjs_promise_release(frame->awaited);')
+
+  for (const param of wrapper.params) {
+    if (isManagedRuntimeReturnType(param.valueType)) {
+      lines.push(`  ccjs_release(frame->${param.fieldName});`)
+    }
+  }
+
+  for (const local of wrapper.frameLocals) {
+    if (isManagedRuntimeReturnType(local.type)) {
+      lines.push(`  ccjs_release(frame->${local.fieldName});`)
+    }
+  }
+
+  lines.push('  if (frame->promise != 0) ccjs_promise_release(frame->promise);')
+  lines.push('  if (frame->ccjs_loop != 0 && frame->ccjs_loop->allocator != 0) {')
+  lines.push('    frame->ccjs_loop->allocator->free(frame->ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));')
+  lines.push('  }')
+  lines.push('}')
+
+  return lines
 }
 
 
@@ -2798,12 +3688,13 @@ export function emitAsyncTaskFunctionStubDeclaration(
   dependencies: AsyncTaskLoweringDependencies
 ) {
   context.asyncTaskLoweringDependencies = dependencies
-  const returnLine =
-    context.returnType === 'void'
-      ? '  return;'
-      : isManagedRuntimeReturnType(context.returnType)
-        ? '  return ccjs_undefined_value();'
-        : '  return 0;'
+  let returnLine = '  return 0;'
+
+  if (context.returnType === 'void') {
+    returnLine = '  return;'
+  } else if (isManagedRuntimeReturnType(context.returnType)) {
+    returnLine = '  return ccjs_undefined_value();'
+  }
 
   return [`${asyncTaskDeps(context).emitFunctionHead(statement, context)} {`, returnLine, '}']
 }
