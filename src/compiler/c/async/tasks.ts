@@ -2685,14 +2685,10 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
   }
 
   if (
-    awaitedPromiseExpression?.type !== 'CallExpression' ||
-    cPromiseRuntimeCallName(awaitedPromiseExpression?.callee) !== 'resolve'
+    awaitedPromiseExpression.type !== 'CallExpression' ||
+    cPromiseRuntimeCallName(awaitedPromiseExpression.callee) !== 'resolve'
   ) {
-    let loc: SourceLocation | null = null
-
-    if (awaitedPromiseExpression != null) {
-      loc = awaitedPromiseExpression.loc
-    }
+    const loc: SourceLocation | null = awaitedPromiseExpression.loc
 
     context.diagnostics.push(
       diagnostic(
@@ -2707,7 +2703,13 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
     }
   }
 
-  const value = emitPreparedAsyncTaskValueExpression(awaitedPromiseExpression?.args[0] ?? null, item.type, context)
+  let awaitedValueExpression: AnyNode | null = null
+
+  if (awaitedPromiseExpression.args[0] != null) {
+    awaitedValueExpression = awaitedPromiseExpression.args[0]
+  }
+
+  const value = emitPreparedAsyncTaskValueExpression(awaitedValueExpression, item.type, context)
   const lines: string[] = []
 
   appendAsyncTaskLines(lines, value.lines)

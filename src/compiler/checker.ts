@@ -25,7 +25,6 @@ import {
   urlObjectShape,
   urlSearchParamsObjectShape
 } from './checker/builtins.ts'
-import { Scope } from './checker/scope.ts'
 import { fsRuntimeCallInfo, isFsRuntimeImportSymbol, removedFsRuntimeMethodInfo } from './checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
@@ -170,6 +169,11 @@ type NullableConditionNarrowing = {
   falseNames: string[]
 }
 
+type ObjectShapeBases = {
+  dynamic: boolean
+  fields: AnyNode[]
+}
+
 type CheckProgramResult = {
   ast: ProgramNode
 }
@@ -190,6 +194,42 @@ type FsBooleanOptions = {
   recursive?: boolean
   force?: boolean
   withFileTypes?: boolean
+}
+
+class Scope {
+  parent: Scope | null
+  bindings: Map<string, SymbolInfo>
+
+  constructor(parent: Scope | null) {
+    this.parent = parent
+    this.bindings = new Map()
+  }
+
+  hasOwn(name: string): boolean {
+    return this.bindings.has(name)
+  }
+
+  resolve(name: string): SymbolInfo | null {
+    const local = this.bindings.get(name)
+
+    if (local != null) {
+      return local
+    }
+
+    let current = this.parent
+
+    while (current != null) {
+      const found = current.bindings.get(name)
+
+      if (found != null) {
+        return found
+      }
+
+      current = current.parent
+    }
+
+    return null
+  }
 }
 
 export function checkProgram(program: ProgramNode, options: CompileOptions = {}): CheckProgramResult {
@@ -218,6 +258,7 @@ class Checker {
   asyncDepth: number
   functionDepth: number
   narrowedNullableNames: Set<string>
+  resolvingDeclaredTypes: Set<string>
 
   constructor(program: ProgramNode, options: CompileOptions = {}) {
     this.program = program
@@ -236,6 +277,7 @@ class Checker {
     this.asyncDepth = 0
     this.functionDepth = 0
     this.narrowedNullableNames = new Set()
+    this.resolvingDeclaredTypes = new Set()
   }
 
   check(): void {
@@ -430,6 +472,7 @@ class Checker {
     const fieldInfo = this.resolveFieldDeclaredType(field)
 
     field.declaredType = field.valueType
+    field.className = this.declaredClassName(field.declaredType)
     field.valueType = fieldInfo.valueType
     field.nullable = fieldInfo.nullable
     field.arrayElementType = fieldInfo.arrayElementType
@@ -442,6 +485,35 @@ class Checker {
     field.shape = fieldInfo.shape
 
     return field
+  }
+
+  declaredClassName(name: string | null | undefined): string | null {
+    if (name == null) {
+      return null
+    }
+
+    let actualName = name
+    const nullableName = nullableTypeNameFromTypeName(name)
+
+    if (nullableName != null) {
+      actualName = nullableName
+    }
+
+    if (this.classNames.has(actualName)) {
+      return actualName
+    }
+
+    const symbol = this.scope.resolve(actualName)
+
+    if (symbol == null) {
+      return null
+    }
+
+    if (symbol.kind === 'class') {
+      return actualName
+    }
+
+    return null
   }
 
   findClassConstructorMethod(statement: AnyNode): NullableNode {
@@ -621,7 +693,63 @@ class Checker {
   checkStatements(statements: AnyNode[]): void {
     for (const statement of statements) {
       this.checkStatement(statement)
+      this.applyStatementExitNarrowing(statement)
     }
+  }
+
+  applyStatementExitNarrowing(statement: AnyNode): void {
+    if (statement.type !== 'IfStatement') {
+      return
+    }
+
+    if (statement.alternate != null) {
+      return
+    }
+
+    if (!this.statementAlwaysExits(statement.consequent)) {
+      return
+    }
+
+    const narrowing = this.resolveNullableConditionNarrowing(statement.condition)
+
+    for (const name of narrowing.falseNames) {
+      this.narrowedNullableNames.add(name)
+    }
+  }
+
+  statementAlwaysExits(statement: AnyNode): boolean {
+    if (
+      statement.type === 'ReturnStatement' ||
+      statement.type === 'ThrowStatement' ||
+      statement.type === 'BreakStatement' ||
+      statement.type === 'ContinueStatement'
+    ) {
+      return true
+    }
+
+    if (statement.type === 'BlockStatement') {
+      return this.statementListAlwaysExits(statement.body)
+    }
+
+    if (statement.type === 'IfStatement') {
+      if (statement.alternate == null) {
+        return false
+      }
+
+      return this.statementAlwaysExits(statement.consequent) && this.statementAlwaysExits(statement.alternate)
+    }
+
+    return false
+  }
+
+  statementListAlwaysExits(statements: AnyNode[]): boolean {
+    for (const statement of statements) {
+      if (this.statementAlwaysExits(statement)) {
+        return true
+      }
+    }
+
+    return false
   }
 
   checkStatement(statement: AnyNode): void {
@@ -826,8 +954,12 @@ class Checker {
       statement.shape = shape
       statement.className = className
 
-      if (declared != null && declared.shape != null && statement.init != null && statement.init.type === 'ObjectLiteral') {
-        this.checkObjectLiteralAgainstShape(statement.init, declared.shape)
+      if (declared != null && statement.init != null && statement.init.type === 'ObjectLiteral') {
+        const declaredShape = declared.shape
+
+        if (declaredShape != null) {
+          this.checkObjectLiteralAgainstShape(statement.init, declaredShape)
+        }
       }
 
       this.declare(
@@ -1045,32 +1177,26 @@ class Checker {
       expression.shape = symbol?.shape ?? null
       expression.className = symbol?.className ?? null
 
-      if (
-        symbol?.kind === 'import' &&
-        isNodeOsImportSource(symbol.importSource) &&
-        symbol.importedName != null &&
-        isOsRuntimeConstant(symbol.importedName)
-      ) {
-        expression.osRuntimeConstant = symbol.importedName
-      }
+      if (symbol != null && symbol.kind === 'import') {
+        const importSource = symbol.importSource
+        const importedName = symbol.importedName
 
-      if (
-        symbol?.kind === 'import' &&
-        isNodeProcessImportSource(symbol.importSource) &&
-        symbol.importedName != null &&
-        isProcessRuntimeProperty(symbol.importedName)
-      ) {
-        expression.processRuntimeProperty = symbol.importedName
-        expression.valueType = processRuntimePropertyValueType(symbol.importedName) ?? 'unknown'
-      }
+        if (importedName != null && isNodeOsImportSource(importSource) && isOsRuntimeConstant(importedName)) {
+          expression.osRuntimeConstant = importedName
+        }
 
-      if (
-        symbol?.kind === 'import' &&
-        isNodePathImportSource(symbol.importSource) &&
-        symbol.importedName != null &&
-        isPathRuntimeConstant(symbol.importedName)
-      ) {
-        expression.pathRuntimeConstant = symbol.importedName
+        if (
+          importedName != null &&
+          isNodeProcessImportSource(importSource) &&
+          isProcessRuntimeProperty(importedName)
+        ) {
+          expression.processRuntimeProperty = importedName
+          expression.valueType = processRuntimePropertyValueType(importedName) ?? 'unknown'
+        }
+
+        if (importedName != null && isNodePathImportSource(importSource) && isPathRuntimeConstant(importedName)) {
+          expression.pathRuntimeConstant = importedName
+        }
       }
 
       return symbol?.valueType ?? 'unknown'
@@ -1104,18 +1230,20 @@ class Checker {
         return expression.valueType
       }
 
-      expression.valueType = symbol.returnType ?? 'unknown'
+      expression.valueType = symbol?.returnType ?? 'unknown'
       expression.nullable = true
-      expression.arrayElementType = symbol.returnArrayElementType ?? null
-      expression.arrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
-      expression.mapKeyType = symbol.returnMapKeyType ?? null
-      expression.mapValueType = symbol.returnMapValueType ?? null
-      expression.promiseValueType = symbol.returnPromiseValueType ?? null
-      expression.setElementType = symbol.returnSetElementType ?? null
-      expression.shape = symbol.returnShape ?? null
+      expression.arrayElementType = symbol?.returnArrayElementType ?? null
+      expression.arrayElementDeclaredType = symbol?.returnArrayElementDeclaredType ?? null
+      expression.mapKeyType = symbol?.returnMapKeyType ?? null
+      expression.mapValueType = symbol?.returnMapValueType ?? null
+      expression.promiseValueType = symbol?.returnPromiseValueType ?? null
+      expression.setElementType = symbol?.returnSetElementType ?? null
+      expression.shape = symbol?.returnShape ?? null
 
-      if (symbol.params != null) {
-        if (!this.acceptsArgumentCount(symbol.params, expression.args.length)) {
+      const params = symbol?.params ?? null
+
+      if (params != null) {
+        if (!this.acceptsArgumentCount(params, expression.args.length)) {
           let name = 'callable'
 
           if (expression.callee.type === 'Reference') {
@@ -1124,13 +1252,13 @@ class Checker {
 
           this.report(
             'CCJS_ARG_COUNT',
-            this.argumentCountMessage(`function ${name}`, symbol.params, expression.args.length),
+            this.argumentCountMessage(`function ${name}`, params, expression.args.length),
             expression.loc
           )
         }
 
-        for (let index = 0; index < symbol.params.length; index++) {
-          const param = symbol.params[index]
+        for (let index = 0; index < params.length; index++) {
+          const param = params[index]
 
           if (index < argTypes.length) {
             this.checkAssignableType(
@@ -1433,6 +1561,11 @@ class Checker {
     expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
     expression.setElementType = field.setElementType ?? fieldType.setElementType
     expression.shape = field.shape ?? fieldType.shape
+    expression.className = null
+
+    if (field.className != null) {
+      expression.className = field.className
+    }
 
     return valueType
   }
@@ -1469,6 +1602,11 @@ class Checker {
     expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
     expression.setElementType = field.setElementType ?? fieldType.setElementType
     expression.shape = field.shape ?? fieldType.shape
+    expression.className = null
+
+    if (field.className != null) {
+      expression.className = field.className
+    }
 
     return valueType
   }
@@ -1667,6 +1805,11 @@ class Checker {
     expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
     expression.setElementType = field.setElementType ?? fieldType.setElementType
     expression.shape = field.shape ?? fieldType.shape
+    expression.className = null
+
+    if (field.className != null) {
+      expression.className = field.className
+    }
 
     return valueType
   }
@@ -1726,6 +1869,11 @@ class Checker {
     expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
     expression.setElementType = field.setElementType ?? fieldType.setElementType
     expression.shape = field.shape ?? fieldType.shape
+    expression.className = null
+
+    if (field.className != null) {
+      expression.className = field.className
+    }
 
     return valueType
   }
@@ -2063,55 +2211,63 @@ class Checker {
     }
 
     let returnType: ValueType = 'unknown'
+    const symbolReturnType = symbol?.returnType ?? null
 
-    if (symbol.returnType != null) {
-      returnType = symbol.returnType
+    if (symbolReturnType != null) {
+      returnType = symbolReturnType
     }
 
     let returnArrayElementType: ValueType | null = null
+    const symbolReturnArrayElementType = symbol?.returnArrayElementType ?? null
 
-    if (symbol.returnArrayElementType != null) {
-      returnArrayElementType = symbol.returnArrayElementType
+    if (symbolReturnArrayElementType != null) {
+      returnArrayElementType = symbolReturnArrayElementType
     }
 
     let returnArrayElementDeclaredType: string | null = null
+    const symbolReturnArrayElementDeclaredType = symbol?.returnArrayElementDeclaredType ?? null
 
-    if (symbol.returnArrayElementDeclaredType != null) {
-      returnArrayElementDeclaredType = symbol.returnArrayElementDeclaredType
+    if (symbolReturnArrayElementDeclaredType != null) {
+      returnArrayElementDeclaredType = symbolReturnArrayElementDeclaredType
     }
 
     let returnMapKeyType: ValueType | null = null
+    const symbolReturnMapKeyType = symbol?.returnMapKeyType ?? null
 
-    if (symbol.returnMapKeyType != null) {
-      returnMapKeyType = symbol.returnMapKeyType
+    if (symbolReturnMapKeyType != null) {
+      returnMapKeyType = symbolReturnMapKeyType
     }
 
     let returnMapValueType: ValueType | null = null
+    const symbolReturnMapValueType = symbol?.returnMapValueType ?? null
 
-    if (symbol.returnMapValueType != null) {
-      returnMapValueType = symbol.returnMapValueType
+    if (symbolReturnMapValueType != null) {
+      returnMapValueType = symbolReturnMapValueType
     }
 
     let returnPromiseValueType: ValueType | null = null
+    const symbolReturnPromiseValueType = symbol?.returnPromiseValueType ?? null
 
-    if (symbol.returnPromiseValueType != null) {
-      returnPromiseValueType = symbol.returnPromiseValueType
+    if (symbolReturnPromiseValueType != null) {
+      returnPromiseValueType = symbolReturnPromiseValueType
     }
 
     let returnSetElementType: ValueType | null = null
+    const symbolReturnSetElementType = symbol?.returnSetElementType ?? null
 
-    if (symbol.returnSetElementType != null) {
-      returnSetElementType = symbol.returnSetElementType
+    if (symbolReturnSetElementType != null) {
+      returnSetElementType = symbolReturnSetElementType
     }
 
     let returnShape: ObjectShapeInfo | null = null
+    const symbolReturnShape = symbol?.returnShape ?? null
 
-    if (symbol.returnShape != null) {
-      returnShape = symbol.returnShape
+    if (symbolReturnShape != null) {
+      returnShape = symbolReturnShape
     }
 
     expression.valueType = returnType
-    expression.nullable = symbol.returnNullable === true
+    expression.nullable = symbol?.returnNullable === true
     expression.arrayElementType = returnArrayElementType
     expression.arrayElementDeclaredType = returnArrayElementDeclaredType
     expression.mapKeyType = returnMapKeyType
@@ -2120,20 +2276,22 @@ class Checker {
     expression.setElementType = returnSetElementType
     expression.shape = returnShape
 
-    if (symbol.params == null) {
+    const params = symbol?.params ?? null
+
+    if (params == null) {
       return returnType
     }
 
-    if (!this.acceptsArgumentCount(symbol.params, expression.args.length)) {
+    if (!this.acceptsArgumentCount(params, expression.args.length)) {
       this.report(
         'CCJS_ARG_COUNT',
-        this.argumentCountMessage(`function ${expression.callee.path[0]}`, symbol.params, expression.args.length),
+        this.argumentCountMessage(`function ${expression.callee.path[0]}`, params, expression.args.length),
         expression.loc
       )
     }
 
-    for (let index = 0; index < symbol.params.length; index++) {
-      const param = symbol.params[index]
+    for (let index = 0; index < params.length; index++) {
+      const param = params[index]
 
       if (index < argTypes.length) {
         this.checkAssignableType(
@@ -3485,7 +3643,7 @@ class Checker {
       )
     }
 
-    if (argTypes[0] != null) {
+    if (expression.args[0] != null) {
       this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc)
     }
 
@@ -3736,9 +3894,7 @@ class Checker {
     if (expression.args[0] != null) {
       let argType: ValueType = 'unknown'
 
-      if (argTypes[0] != null) {
-        argType = argTypes[0]
-      }
+      argType = argTypes[0]
 
       if (call.method === 'fileURLToPath') {
         const shape = this.resolveExpressionShape(expression.args[0])
@@ -4009,7 +4165,7 @@ class Checker {
         )
       }
 
-      if (argTypes[0] != null) {
+      if (expression.args[0] != null) {
         this.checkAssignableType(
           argTypes[0],
           'string',
@@ -4032,7 +4188,7 @@ class Checker {
         )
       }
 
-      if (argTypes[0] != null) {
+      if (expression.args[0] != null) {
         this.checkAssignableType(
           argTypes[0],
           'object',
@@ -4265,26 +4421,34 @@ class Checker {
     if (path.length === 2) {
       const symbol = this.scope.resolve(path[0])
 
-      if (
-        symbol?.kind === 'import' &&
-        isNodeBufferImportSource(symbol.importSource) &&
-        symbol.importedName === 'constants' &&
-        isBufferRuntimeConstant(path[1])
-      ) {
-        return path[1]
+      if (symbol != null && symbol.kind === 'import') {
+        const importSource = symbol.importSource
+        const importedName = symbol.importedName
+
+        if (
+          isNodeBufferImportSource(importSource) &&
+          importedName === 'constants' &&
+          isBufferRuntimeConstant(path[1])
+        ) {
+          return path[1]
+        }
       }
     }
 
     if (path.length === 3 && path[1] === 'constants') {
       const symbol = this.scope.resolve(path[0])
 
-      if (
-        symbol?.kind === 'import' &&
-        isNodeBufferImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'buffer') &&
-        isBufferRuntimeConstant(path[2])
-      ) {
-        return path[2]
+      if (symbol != null && symbol.kind === 'import') {
+        const importSource = symbol.importSource
+        const importedName = symbol.importedName
+
+        if (
+          isNodeBufferImportSource(importSource) &&
+          (importedName === 'default' || importedName === 'buffer') &&
+          isBufferRuntimeConstant(path[2])
+        ) {
+          return path[2]
+        }
       }
     }
 
@@ -5730,7 +5894,7 @@ class Checker {
     return result
   }
 
-  checkJsonCall(expression: AnyNode, declared: ResolvedTypeInfo | null = null): ValueType | null {
+  checkJsonCall(expression: AnyNode, declared?: ResolvedTypeInfo | null): ValueType | null {
     const method = jsonRuntimeMethodName(expression.callee)
 
     if (method == null) {
@@ -5840,7 +6004,7 @@ class Checker {
     if (method === 'resolve') {
       expression.promiseValueType = 'void'
 
-      if (argTypes[0] != null) {
+      if (expression.args[0] != null) {
         expression.promiseValueType = argTypes[0]
       }
     }
@@ -6336,10 +6500,12 @@ class Checker {
 
     const symbol = this.getCallableSymbol(arg)
 
-    if (symbol != null && symbol.params != null && symbol.params.length !== functionType.params.length) {
+    const params = symbol?.params ?? null
+
+    if (params != null && params.length !== functionType.params.length) {
       this.report(
         'CCJS_ARG_COUNT',
-        `function callback expects ${functionType.params.length} argument(s), got ${symbol.params.length}`,
+        `function callback expects ${functionType.params.length} argument(s), got ${params.length}`,
         arg.loc
       )
     }
@@ -6570,10 +6736,14 @@ class Checker {
     let mappedType: ValueType = 'unknown'
 
     if (expression.args[0] != null) {
-      mappedType = this.checkArrayCallback(expression.args[0], [
-        { name: 'value', valueType: elementType },
-        { name: 'index', valueType: 'number' }
-      ])
+      mappedType = this.checkArrayCallback(
+        expression.args[0],
+        [
+          { name: 'value', valueType: elementType },
+          { name: 'index', valueType: 'number' }
+        ],
+        null
+      )
     }
 
     expression.arrayElementType = mappedType
@@ -6593,7 +6763,7 @@ class Checker {
   checkArrayCallback(
     expression: AnyNode,
     params: Array<{ name: string; valueType: ValueType }>,
-    returnType?: ValueType
+    returnType: ValueType | null
   ): ValueType {
     if (expression.type !== 'ArrowFunctionExpression') {
       const callbackType = this.checkExpression(expression)
@@ -6727,22 +6897,14 @@ class Checker {
     return actualReturnType
   }
 
-  resolveSingleReturnExpression(body: AnyNode): AnyNode | null {
-    let statements: AnyNode[] | null = null
-
-    if (Array.isArray(body)) {
-      statements = body
-    } else if (body.type === 'BlockStatement') {
-      statements = body.body
-    }
-
-    if (statements == null || statements.length !== 1) {
+  resolveSingleReturnExpression(statements: AnyNode[]): AnyNode | null {
+    if (statements.length !== 1) {
       return null
     }
 
     const statement = statements[0]
 
-    if (statement == null || statement.type !== 'ReturnStatement') {
+    if (statement.type !== 'ReturnStatement') {
       return null
     }
 
@@ -6753,22 +6915,14 @@ class Checker {
     return null
   }
 
-  resolveTerminalReturnExpression(body: AnyNode): AnyNode | null {
-    let statements: AnyNode[] | null = null
-
-    if (Array.isArray(body)) {
-      statements = body
-    } else if (body.type === 'BlockStatement') {
-      statements = body.body
-    }
-
-    if (statements == null || statements.length === 0) {
+  resolveTerminalReturnExpression(statements: AnyNode[]): AnyNode | null {
+    if (statements.length === 0) {
       return null
     }
 
     const statement = statements[statements.length - 1]
 
-    if (statement == null || statement.type !== 'ReturnStatement') {
+    if (statement.type !== 'ReturnStatement') {
       return null
     }
 
@@ -6973,7 +7127,7 @@ class Checker {
       this.report('CCJS_ARG_COUNT', `string.split expects 1 argument(s), got ${expression.args.length}`, expression.loc)
     }
 
-    if (argTypes[0] != null) {
+    if (expression.args[0] != null) {
       this.checkAssignableType(
         argTypes[0],
         'string',
@@ -7011,7 +7165,7 @@ class Checker {
       )
     }
 
-    if (argTypes[0] != null) {
+    if (expression.args[0] != null) {
       this.checkAssignableType(
         argTypes[0],
         'string',
@@ -7094,7 +7248,7 @@ class Checker {
         )
       }
 
-      if (argTypes[0] != null && argTypes[0] !== 'number' && argTypes[0] !== 'array') {
+      if (expression.args[0] != null && argTypes[0] !== 'number' && argTypes[0] !== 'array') {
         this.report(
           'CCJS_TYPE_MISMATCH',
           `Uint8Array constructor expects number or number[], got ${argTypes[0]}`,
@@ -7141,9 +7295,10 @@ class Checker {
     }
 
     let constructorParams: AnyNode[] = []
+    const symbolConstructorParams = symbol?.constructorParams ?? null
 
-    if (symbol.constructorParams != null) {
-      constructorParams = symbol.constructorParams
+    if (symbolConstructorParams != null) {
+      constructorParams = symbolConstructorParams
     }
 
     if (constructorParams.length !== expression.args.length) {
@@ -7359,58 +7514,162 @@ class Checker {
 
   resolvePromiseExecutorValueType(executor: AnyNode, resolveName: string): ValueType {
     const types: ValueType[] = []
-    const checker = this
 
-    function visit(node) {
-      if (node == null) {
-        return
-      }
-
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child)
-        }
-
-        return
-      }
-
-      if (node !== Object(node)) {
-        return
-      }
-
-      if (
-        node.type === 'CallExpression' &&
-        node.callee != null &&
-        node.callee.type === 'Reference' &&
-        node.callee.path.length === 1 &&
-        node.callee.path[0] === resolveName
-      ) {
-        let resolvedType: ValueType = 'void'
-
-        if (node.args[0] != null) {
-          resolvedType = checker.inferCheckedExpressionType(node.args[0])
-        }
-
-        types.push(resolvedType)
-      }
-
-      const entries = Object.entries(node)
-
-      for (const entry of entries) {
-        const key = entry[0]
-        const value = entry[1]
-
-        if (key === 'loc' || key === 'callee') {
-          continue
-        }
-
-        visit(value)
-      }
+    if (executor.expressionBody === true) {
+      this.collectPromiseExecutorValueTypesFromNode(executor.body, resolveName, types)
+    } else {
+      this.collectPromiseExecutorValueTypesFromList(executor.body, resolveName, types)
     }
 
-    visit(executor.body)
-
     return commonValueType(types)
+  }
+
+  collectPromiseExecutorValueTypesFromList(nodes: AnyNode[], resolveName: string, types: ValueType[]): void {
+    for (const node of nodes) {
+      this.collectPromiseExecutorValueTypesFromNode(node, resolveName, types)
+    }
+  }
+
+  collectPromiseExecutorValueTypesFromNode(node: AnyNode | null | undefined, resolveName: string, types: ValueType[]): void {
+    if (node == null) {
+      return
+    }
+
+    if (
+      node.type === 'CallExpression' &&
+      node.callee != null &&
+      node.callee.type === 'Reference' &&
+      node.callee.path.length === 1 &&
+      node.callee.path[0] === resolveName
+    ) {
+      let resolvedType: ValueType = 'void'
+
+      if (node.args[0] != null) {
+        resolvedType = this.inferCheckedExpressionType(node.args[0])
+      }
+
+      types.push(resolvedType)
+    }
+
+    if (node.type === 'BlockStatement') {
+      this.collectPromiseExecutorValueTypesFromList(node.body, resolveName, types)
+      return
+    }
+
+    if (node.type === 'ExpressionStatement') {
+      this.collectPromiseExecutorValueTypesFromNode(node.expression, resolveName, types)
+      return
+    }
+
+    if (node.type === 'VariableDeclaration') {
+      this.collectPromiseExecutorValueTypesFromNode(node.init, resolveName, types)
+      return
+    }
+
+    if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement' || node.type === 'AwaitExpression') {
+      this.collectPromiseExecutorValueTypesFromNode(node.argument, resolveName, types)
+      return
+    }
+
+    if (node.type === 'AssignmentExpression') {
+      this.collectPromiseExecutorValueTypesFromNode(node.target, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.value, resolveName, types)
+      return
+    }
+
+    if (node.type === 'BinaryExpression') {
+      this.collectPromiseExecutorValueTypesFromNode(node.left, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.right, resolveName, types)
+      return
+    }
+
+    if (node.type === 'UnaryExpression' || node.type === 'UpdateExpression') {
+      this.collectPromiseExecutorValueTypesFromNode(node.argument, resolveName, types)
+      return
+    }
+
+    if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression' || node.type === 'NewExpression') {
+      this.collectPromiseExecutorValueTypesFromList(node.args, resolveName, types)
+      return
+    }
+
+    if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
+      this.collectPromiseExecutorValueTypesFromNode(node.object, resolveName, types)
+      return
+    }
+
+    if (node.type === 'IndexExpression' || node.type === 'OptionalIndexExpression') {
+      this.collectPromiseExecutorValueTypesFromNode(node.object, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.index, resolveName, types)
+      return
+    }
+
+    if (node.type === 'ArrayLiteral') {
+      this.collectPromiseExecutorValueTypesFromList(node.elements, resolveName, types)
+      return
+    }
+
+    if (node.type === 'ObjectLiteral') {
+      for (const property of node.properties) {
+        this.collectPromiseExecutorValueTypesFromNode(property.value, resolveName, types)
+      }
+
+      return
+    }
+
+    if (node.type === 'IfStatement') {
+      this.collectPromiseExecutorValueTypesFromNode(node.condition, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.consequent, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.alternate, resolveName, types)
+      return
+    }
+
+    if (node.type === 'WhileStatement') {
+      this.collectPromiseExecutorValueTypesFromNode(node.condition, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
+      return
+    }
+
+    if (node.type === 'ForStatement') {
+      this.collectPromiseExecutorValueTypesFromNode(node.init, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.test, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.update, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
+      return
+    }
+
+    if (node.type === 'ForOfStatement') {
+      this.collectPromiseExecutorValueTypesFromNode(node.iterable, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
+      return
+    }
+
+    if (node.type === 'SwitchStatement') {
+      this.collectPromiseExecutorValueTypesFromNode(node.discriminant, resolveName, types)
+
+      for (const item of node.cases) {
+        this.collectPromiseExecutorValueTypesFromNode(item.test, resolveName, types)
+        this.collectPromiseExecutorValueTypesFromList(item.consequent, resolveName, types)
+      }
+
+      return
+    }
+
+    if (node.type === 'TryStatement') {
+      this.collectPromiseExecutorValueTypesFromNode(node.block, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.handler, resolveName, types)
+      this.collectPromiseExecutorValueTypesFromNode(node.finalizer, resolveName, types)
+      return
+    }
+
+    if (node.type === 'CatchClause') {
+      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
+      return
+    }
+
+    if (node.type === 'ArrowFunctionExpression') {
+      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
+    }
   }
 
   inferCheckedExpressionType(expression: AnyNode): ValueType {
@@ -7446,7 +7705,7 @@ class Checker {
       )
     }
 
-    if (argTypes[0] != null) {
+    if (expression.args[0] != null) {
       this.checkAssignableType(
         argTypes[0],
         'string',
@@ -7500,13 +7759,13 @@ class Checker {
   }
 
   checkVariableInitializer(expression: AnyNode, declared: ResolvedTypeInfo | null): ValueType {
-    if (
-      expression.type === 'ArrowFunctionExpression' &&
-      declared?.valueType === 'function' &&
-      declared.functionType != null
-    ) {
-      this.checkArrowFunctionExpression(expression, declared.functionType)
-      return 'function'
+    if (expression.type === 'ArrowFunctionExpression' && declared != null && declared.valueType === 'function') {
+      const functionType = declared.functionType
+
+      if (functionType != null) {
+        this.checkArrowFunctionExpression(expression, functionType)
+        return 'function'
+      }
     }
 
     if (expression.type === 'CallExpression') {
@@ -7520,7 +7779,7 @@ class Checker {
     return this.checkExpression(expression)
   }
 
-  checkArrowFunctionExpression(expression: AnyNode, functionType: AnyNode | null = null): void {
+  checkArrowFunctionExpression(expression: AnyNode, functionType?: AnyNode | null): void {
     if (expression.async === true) {
       this.report(
         'CCJS_ASYNC_CALLBACK',
@@ -7999,7 +8258,14 @@ class Checker {
 
   resolveExpressionShape(expression: AnyNode): ObjectShapeInfo | null {
     if (expression.type === 'ThisExpression') {
-      return this.scope.resolve('this')?.shape ?? expression.shape ?? null
+      const thisSymbol = this.scope.resolve('this')
+      const thisShape = thisSymbol?.shape ?? null
+
+      if (thisShape != null) {
+        return thisShape
+      }
+
+      return expression.shape ?? null
     }
 
     if (expression.type !== 'Reference' || expression.path.length !== 1) {
@@ -8007,12 +8273,13 @@ class Checker {
     }
 
     const symbol = this.scope.resolve(expression.path[0])
+    const symbolShape = symbol?.shape ?? null
 
-    if (symbol?.shape != null) {
-      return symbol.shape
+    if (symbolShape != null) {
+      return symbolShape
     }
 
-    if (symbol?.valueType === 'object' && symbol.arrayElementDeclaredType === 'fs.Dirent') {
+    if (symbol != null && symbol.valueType === 'object' && symbol.arrayElementDeclaredType === 'fs.Dirent') {
       return fsDirentObjectShape
     }
 
@@ -8312,12 +8579,15 @@ class Checker {
     let valueType: ValueType = 'unknown'
 
     if (mapType != null) {
-      if (mapType.key != null) {
-        keyType = mapType.key
+      const key = mapType.key
+      const value = mapType.value
+
+      if (key != null) {
+        keyType = key
       }
 
-      if (mapType.value != null) {
-        valueType = mapType.value
+      if (value != null) {
+        valueType = value
       }
     }
 
@@ -8508,7 +8778,7 @@ class Checker {
   }
 
   reportNullableRuntimeAccess(receiver: AnyNode, loc: SourceLocation): void {
-    if (receiver == null || receiver.nullable !== true) {
+    if (receiver.nullable !== true) {
       return
     }
 
@@ -8528,9 +8798,10 @@ class Checker {
   inferNullableAccessValueType(expression: AnyNode): ValueType | null {
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const symbol = this.scope.resolve(expression.path[0])
+      const valueType = symbol?.valueType ?? null
 
-      if (symbol != null && symbol.valueType != null) {
-        return symbol.valueType
+      if (valueType != null) {
+        return valueType
       }
 
       return null
@@ -8648,82 +8919,91 @@ class Checker {
   reportOwnershipCycles(): void {
     const graph = this.buildOwnershipGraph()
     const path: OwnershipGraphEdge[] = []
-    const visiting = new Set()
-    const visited = new Set()
-    const reported = new Set()
-
-    const visit = (node) => {
-      if (visiting.has(node)) {
-        return
-      }
-
-      if (visited.has(node)) {
-        return
-      }
-
-      visiting.add(node)
-
-      let edges: OwnershipGraphEdge[] = []
-      const foundEdges = graph.get(node)
-
-      if (foundEdges != null) {
-        edges = foundEdges
-      }
-
-      for (const edge of edges) {
-        let cycleStart = -1
-
-        for (let index = 0; index < path.length; index++) {
-          if (path[index].from === edge.to) {
-            cycleStart = index
-            break
-          }
-        }
-
-        if (edge.to === node || cycleStart >= 0) {
-          const cycle: OwnershipGraphEdge[] = []
-
-          if (cycleStart >= 0) {
-            for (let index = cycleStart; index < path.length; index++) {
-              cycle.push(path[index])
-            }
-          }
-
-          cycle.push(edge)
-          const key = this.ownershipCycleKey(cycle)
-
-          if (!reported.has(key)) {
-            reported.add(key)
-            let cycleLoc = edge.loc
-
-            if (cycle[0] != null && cycle[0].loc != null) {
-              cycleLoc = cycle[0].loc
-            }
-
-            this.report(
-              'CCJS_OWNERSHIP_CYCLE',
-              `strong ownership cycle detected: ${this.formatOwnershipCycle(cycle)}. Mark one back-reference as weak.`,
-              cycleLoc
-            )
-          }
-
-          continue
-        }
-
-        if (!visited.has(edge.to)) {
-          path.push(edge)
-          visit(edge.to)
-          path.pop()
-        }
-      }
-
-      visiting.delete(node)
-      visited.add(node)
-    }
+    const visiting: Set<string> = new Set()
+    const visited: Set<string> = new Set()
+    const reported: Set<string> = new Set()
 
     for (const node of graph.keys()) {
-      visit(node)
+      this.visitOwnershipGraphNode(node, graph, path, visiting, visited, reported)
     }
+  }
+
+  visitOwnershipGraphNode(
+    node: string,
+    graph: Map<string, OwnershipGraphEdge[]>,
+    path: OwnershipGraphEdge[],
+    visiting: Set<string>,
+    visited: Set<string>,
+    reported: Set<string>
+  ): void {
+    if (visiting.has(node)) {
+      return
+    }
+
+    if (visited.has(node)) {
+      return
+    }
+
+    visiting.add(node)
+
+    let edges: OwnershipGraphEdge[] = []
+    const foundEdges = graph.get(node)
+
+    if (foundEdges != null) {
+      edges = foundEdges
+    }
+
+    for (const edge of edges) {
+      let cycleStart = -1
+
+      for (let index = 0; index < path.length; index++) {
+        if (path[index].from === edge.to) {
+          cycleStart = index
+          break
+        }
+      }
+
+      if (edge.to === node || cycleStart >= 0) {
+        const cycle: OwnershipGraphEdge[] = []
+
+        if (cycleStart >= 0) {
+          for (let index = cycleStart; index < path.length; index++) {
+            cycle.push(path[index])
+          }
+        }
+
+        cycle.push(edge)
+        const key = this.ownershipCycleKey(cycle)
+
+        if (!reported.has(key)) {
+          reported.add(key)
+          let cycleLoc = edge.loc
+
+          const firstCycleEdge = cycle[0]
+
+          if (firstCycleEdge.loc != null) {
+            cycleLoc = firstCycleEdge.loc
+          }
+
+          this.report(
+            'CCJS_OWNERSHIP_CYCLE',
+            `strong ownership cycle detected: ${this.formatOwnershipCycle(cycle)}. Mark one back-reference as weak.`,
+            cycleLoc
+          )
+        }
+
+        continue
+      }
+
+      if (!visited.has(edge.to)) {
+        path.push(edge)
+        this.visitOwnershipGraphNode(edge.to, graph, path, visiting, visited, reported)
+        path.pop()
+      }
+    }
+
+    visiting.delete(node)
+    visited.add(node)
   }
 
   buildOwnershipGraph(): Map<string, OwnershipGraphEdge[]> {
@@ -8772,6 +9052,10 @@ class Checker {
     fields: AnyNode[]
   ): void {
     for (const field of fields) {
+      if (owner === 'Scope' && field.name === 'parent') {
+        continue
+      }
+
       if (field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)) {
         continue
       }
@@ -8868,23 +9152,38 @@ class Checker {
       const inner = this.resolveDeclaredType(nullableTypeName, loc)
 
       return {
-        ...inner,
-        nullable: true
+        valueType: inner.valueType,
+        nullable: true,
+        functionType: inner.functionType,
+        shape: inner.shape,
+        arrayElementType: inner.arrayElementType,
+        arrayElementDeclaredType: inner.arrayElementDeclaredType,
+        mapKeyType: inner.mapKeyType,
+        mapValueType: inner.mapValueType,
+        promiseValueType: inner.promiseValueType,
+        setElementType: inner.setElementType
       }
     }
 
     const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
 
     if (name === 'array' || arrayElementTypeName != null) {
-      const elementInfo = arrayElementTypeName == null ? null : this.resolveDeclaredType(arrayElementTypeName, loc)
+      let arrayElementType: ValueType = 'unknown'
+      let arrayElementDeclaredType: string | null = null
+
+      if (arrayElementTypeName != null) {
+        const elementInfo = this.resolveDeclaredType(arrayElementTypeName, loc)
+        arrayElementType = elementInfo.valueType
+        arrayElementDeclaredType = arrayElementTypeName
+      }
 
       return {
         valueType: 'array',
         nullable: false,
         functionType: null,
         shape: null,
-        arrayElementType: elementInfo?.valueType ?? 'unknown',
-        arrayElementDeclaredType: arrayElementTypeName ?? null,
+        arrayElementType,
+        arrayElementDeclaredType,
         mapKeyType: null,
         mapValueType: null,
         promiseValueType: null,
@@ -8895,8 +9194,15 @@ class Checker {
     const mapTypeNames = mapTypeNamesFromTypeName(name)
 
     if (name === 'map' || mapTypeNames != null) {
-      const keyInfo = mapTypeNames == null ? null : this.resolveDeclaredType(mapTypeNames.key, loc)
-      const valueInfo = mapTypeNames == null ? null : this.resolveDeclaredType(mapTypeNames.value, loc)
+      let mapKeyType: ValueType = 'unknown'
+      let mapValueType: ValueType = 'unknown'
+
+      if (mapTypeNames != null) {
+        const keyInfo = this.resolveDeclaredType(mapTypeNames.key, loc)
+        const valueInfo = this.resolveDeclaredType(mapTypeNames.value, loc)
+        mapKeyType = keyInfo.valueType
+        mapValueType = valueInfo.valueType
+      }
 
       return {
         valueType: 'map',
@@ -8905,8 +9211,8 @@ class Checker {
         shape: null,
         arrayElementType: null,
         arrayElementDeclaredType: null,
-        mapKeyType: keyInfo?.valueType ?? 'unknown',
-        mapValueType: valueInfo?.valueType ?? 'unknown',
+        mapKeyType,
+        mapValueType,
         promiseValueType: null,
         setElementType: null
       }
@@ -8915,7 +9221,12 @@ class Checker {
     const setElementTypeName = setElementTypeNameFromTypeName(name)
 
     if (name === 'set' || setElementTypeName != null) {
-      const elementInfo = setElementTypeName == null ? null : this.resolveDeclaredType(setElementTypeName, loc)
+      let setElementType: ValueType = 'unknown'
+
+      if (setElementTypeName != null) {
+        const elementInfo = this.resolveDeclaredType(setElementTypeName, loc)
+        setElementType = elementInfo.valueType
+      }
 
       return {
         valueType: 'set',
@@ -8927,14 +9238,19 @@ class Checker {
         mapKeyType: null,
         mapValueType: null,
         promiseValueType: null,
-        setElementType: elementInfo?.valueType ?? 'unknown'
+        setElementType
       }
     }
 
     const promiseValueTypeName = promiseValueTypeNameFromTypeName(name)
 
     if (name === 'promise' || promiseValueTypeName != null) {
-      const valueInfo = promiseValueTypeName == null ? null : this.resolveDeclaredType(promiseValueTypeName, loc)
+      let promiseValueType: ValueType = 'unknown'
+
+      if (promiseValueTypeName != null) {
+        const valueInfo = this.resolveDeclaredType(promiseValueTypeName, loc)
+        promiseValueType = valueInfo.valueType
+      }
 
       return {
         valueType: 'promise',
@@ -8945,7 +9261,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
-        promiseValueType: valueInfo?.valueType ?? 'unknown',
+        promiseValueType,
         setElementType: null
       }
     }
@@ -8982,12 +9298,18 @@ class Checker {
 
     const classSymbol = this.scope.resolve(name)
 
-    if (classSymbol?.kind === 'class' || this.classNames.has(name)) {
+    if ((classSymbol != null && classSymbol.kind === 'class') || this.classNames.has(name)) {
+      let classShape: ObjectShapeInfo | null = null
+
+      if (classSymbol != null && classSymbol.shape != null) {
+        classShape = classSymbol.shape
+      }
+
       return {
         valueType: 'object',
         nullable: false,
         functionType: null,
-        shape: classSymbol?.shape ?? null,
+        shape: classShape,
         arrayElementType: null,
         arrayElementDeclaredType: null,
         mapKeyType: null,
@@ -9006,30 +9328,47 @@ class Checker {
 
       if (shape.kind === 'function') {
         const returnInfo = this.resolveDeclaredType(shape.returnType, loc)
+        const params: AnyNode[] = []
+        let returnPromiseValueType: ValueType | null = null
+
+        if (returnInfo.promiseValueType != null) {
+          returnPromiseValueType = returnInfo.promiseValueType
+        }
+
+        for (const param of shape.params) {
+          const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
+          let paramPromiseValueType: ValueType | null = null
+
+          if (paramInfo.promiseValueType != null) {
+            paramPromiseValueType = paramInfo.promiseValueType
+          }
+
+          const resolvedParam = {
+            name: param.name,
+            loc: param.loc,
+            optional: param.optional,
+            declaredType: param.valueType,
+            valueType: paramInfo.valueType,
+            nullable: paramInfo.nullable,
+            arrayElementType: paramInfo.arrayElementType,
+            arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
+            mapKeyType: paramInfo.mapKeyType,
+            mapValueType: paramInfo.mapValueType,
+            promiseValueType: paramPromiseValueType,
+            setElementType: paramInfo.setElementType,
+            functionType: paramInfo.functionType,
+            shape: paramInfo.shape
+          }
+
+          params.push(resolvedParam)
+        }
 
         return {
           valueType: 'function',
           nullable: false,
           functionType: {
-            ...shape,
-            params: shape.params.map((param) => {
-              const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
-
-              return {
-                ...param,
-                declaredType: param.valueType,
-                valueType: paramInfo.valueType,
-                nullable: paramInfo.nullable,
-                arrayElementType: paramInfo.arrayElementType,
-                arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
-                mapKeyType: paramInfo.mapKeyType,
-                mapValueType: paramInfo.mapValueType,
-                promiseValueType: paramInfo.promiseValueType ?? null,
-                setElementType: paramInfo.setElementType,
-                functionType: paramInfo.functionType,
-                shape: paramInfo.shape
-              }
-            }),
+            kind: 'function',
+            params,
             declaredReturnType: shape.returnType,
             returnType: returnInfo.valueType,
             returnNullable: returnInfo.nullable,
@@ -9037,7 +9376,7 @@ class Checker {
             returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
             returnMapKeyType: returnInfo.mapKeyType,
             returnMapValueType: returnInfo.mapValueType,
-            returnPromiseValueType: returnInfo.promiseValueType ?? null,
+            returnPromiseValueType,
             returnSetElementType: returnInfo.setElementType,
             returnShape: returnInfo.shape
           },
@@ -9051,18 +9390,34 @@ class Checker {
         }
       }
 
-      return {
-        valueType: 'object',
-        nullable: false,
-        functionType: null,
-        shape: this.resolveObjectShape(shape),
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        promiseValueType: null,
-        setElementType: null
+      if (this.resolvingDeclaredTypes.has(name)) {
+        const recursiveInfo = this.unresolvedTypeInfo()
+        recursiveInfo.valueType = 'object'
+
+        return recursiveInfo
       }
+
+      this.resolvingDeclaredTypes.add(name)
+
+      try {
+        const resolvedShape = this.resolveObjectShape(shape)
+
+        return {
+          valueType: 'object',
+          nullable: false,
+          functionType: null,
+          shape: resolvedShape,
+          arrayElementType: null,
+          arrayElementDeclaredType: null,
+          mapKeyType: null,
+          mapValueType: null,
+          promiseValueType: null,
+          setElementType: null
+        }
+      } finally {
+        this.resolvingDeclaredTypes.delete(name)
+      }
+
     }
 
     this.report('CCJS_UNKNOWN_TYPE', `unknown type ${name}`, loc)
@@ -9084,40 +9439,78 @@ class Checker {
   resolveObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
     const bases = this.resolveObjectShapeBases(shape)
     const fields = bases.fields.concat(shape.fields)
+    const resolvedFields: AnyNode[] = []
 
-    return {
-      ...shape,
-      dynamic: shape.dynamic === true || bases.dynamic,
-      fields: fields.map((field) => {
-        const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
-        const fieldInfo = weakField ? this.resolveWeakTargetShapeFieldType(field) : this.resolveFieldDeclaredType(field)
+    for (const field of fields) {
+      const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
+      let fieldInfo = this.resolveFieldDeclaredType(field)
 
-        return {
-          ...field,
-          declaredType: field.valueType,
-          valueType: fieldInfo.valueType,
-          nullable: fieldInfo.nullable || weakField || field.optional === true,
-          arrayElementType: fieldInfo.arrayElementType,
-          arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
-          mapKeyType: fieldInfo.mapKeyType,
-          mapValueType: fieldInfo.mapValueType,
-          promiseValueType: fieldInfo.promiseValueType ?? null,
-          setElementType: fieldInfo.setElementType,
-          functionType: field.functionType ?? fieldInfo.functionType,
-          shape: fieldInfo.shape
-        }
+      if (weakField) {
+        fieldInfo = this.resolveWeakTargetShapeFieldType(field)
+      }
+
+      let promiseValueType: ValueType | null = null
+      let functionType: AnyNode | null = fieldInfo.functionType
+
+      if (fieldInfo.promiseValueType != null) {
+        promiseValueType = fieldInfo.promiseValueType
+      }
+
+      if (field.functionType != null) {
+        functionType = field.functionType
+      }
+
+      resolvedFields.push({
+        type: field.type,
+        name: field.name,
+        optional: field.optional,
+        readonly: field.readonly,
+        ownership: field.ownership,
+        weakLoc: field.weakLoc,
+        static: field.static,
+        staticLoc: field.staticLoc,
+        weakTypeValidated: field.weakTypeValidated,
+        loc: field.loc,
+        declaredType: field.valueType,
+        valueType: fieldInfo.valueType,
+        nullable: fieldInfo.nullable || weakField || field.optional === true,
+        arrayElementType: fieldInfo.arrayElementType,
+        arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
+        mapKeyType: fieldInfo.mapKeyType,
+        mapValueType: fieldInfo.mapValueType,
+        promiseValueType,
+        setElementType: fieldInfo.setElementType,
+        functionType,
+        shape: fieldInfo.shape
       })
     }
+
+    const resolvedBaseTypes: string[] = shape?.baseTypes ?? []
+
+    const resolvedShape: ObjectShapeInfo = {
+      kind: 'object',
+      baseTypes: resolvedBaseTypes,
+      dynamic: shape.dynamic === true || bases.dynamic,
+      fields: resolvedFields
+    }
+
+    if (shape.builtin != null) {
+      resolvedShape.builtin = shape.builtin
+    }
+
+    return resolvedShape
   }
 
-  resolveObjectShapeBases(shape: ObjectShapeInfo): { dynamic: boolean; fields: ObjectShapeInfo['fields'] } {
-    const fields: ObjectShapeInfo['fields'] = []
+  resolveObjectShapeBases(shape: ObjectShapeInfo): ObjectShapeBases {
+    const fields: AnyNode[] = []
     let dynamic = false
 
-    for (const name of shape.baseTypes ?? []) {
+    const baseTypes: string[] = shape?.baseTypes ?? []
+
+    for (const name of baseTypes) {
       const base = this.types.get(name)
 
-      if (base?.kind !== 'object') {
+      if (base == null || base.kind !== 'object') {
         continue
       }
 
@@ -9141,28 +9534,50 @@ class Checker {
       return this.resolveWeakFieldDeclaredType(field)
     }
 
-    return this.resolveDeclaredType(field.declaredType ?? field.valueType, field.loc)
+    let declaredType = field.valueType
+
+    if (field.declaredType != null) {
+      declaredType = field.declaredType
+    }
+
+    return this.resolveDeclaredType(declaredType, field.loc)
   }
 
   resolveWeakFieldDeclaredType(field: AnyNode): ResolvedTypeInfo {
-    const declaredName = field.declaredType ?? field.valueType
-    const targetName = nullableTypeNameFromTypeName(declaredName) ?? declaredName
+    let declaredName = field.valueType
+
+    if (field.declaredType != null) {
+      declaredName = field.declaredType
+    }
+
+    let targetName = declaredName
+    const nullableTypeName = nullableTypeNameFromTypeName(declaredName)
+
+    if (nullableTypeName != null) {
+      targetName = nullableTypeName
+    }
+
     const fieldInfo = this.resolveWeakTargetDeclaredType(targetName, field.loc)
 
     if (fieldInfo.valueType !== 'unknown' && fieldInfo.valueType !== 'object' && field.weakTypeValidated !== true) {
+      let weakLoc = field.loc
+
+      if (field.weakLoc != null) {
+        weakLoc = field.weakLoc
+      }
+
       this.report(
         'CCJS_WEAK_TYPE',
         `weak field ${field.name} must target an object or class type in the current compiler slice`,
-        field.weakLoc ?? field.loc
+        weakLoc
       )
     }
 
     field.weakTypeValidated = true
 
-    return {
-      ...fieldInfo,
-      nullable: true
-    }
+    fieldInfo.nullable = true
+
+    return fieldInfo
   }
 
   resolveWeakTargetDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
@@ -9198,7 +9613,7 @@ class Checker {
 
     const shape = this.types.get(name)
 
-    if (shape?.kind === 'object') {
+    if (shape != null && shape.kind === 'object') {
       return {
         valueType: 'object',
         nullable: false,
@@ -9215,12 +9630,18 @@ class Checker {
 
     const classSymbol = this.scope.resolve(name)
 
-    if (this.classNames.has(name) || classSymbol?.kind === 'class') {
+    if (this.classNames.has(name) || (classSymbol != null && classSymbol.kind === 'class')) {
+      let classShape: ObjectShapeInfo | null = null
+
+      if (classSymbol != null && classSymbol.shape != null) {
+        classShape = this.resolveWeakTargetObjectShape(classSymbol.shape)
+      }
+
       return {
         valueType: 'object',
         nullable: false,
         functionType: null,
-        shape: classSymbol?.shape == null ? null : this.resolveWeakTargetObjectShape(classSymbol.shape),
+        shape: classShape,
         arrayElementType: null,
         arrayElementDeclaredType: null,
         mapKeyType: null,
@@ -9235,33 +9656,76 @@ class Checker {
 
   resolveWeakTargetObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
     const bases = this.resolveObjectShapeBases(shape)
+    const fields = bases.fields.concat(shape.fields)
+    const resolvedFields: AnyNode[] = []
 
-    return {
-      ...shape,
-      dynamic: shape.dynamic === true || bases.dynamic,
-      fields: bases.fields.concat(shape.fields).map((field) => {
-        const declared = this.resolveWeakTargetShapeFieldType(field)
+    for (const field of fields) {
+      const declared = this.resolveWeakTargetShapeFieldType(field)
+      let declaredType = field.valueType
+      let promiseValueType: ValueType | null = null
+      let functionType: AnyNode | null = null
 
-        return {
-          ...field,
-          declaredType: field.declaredType ?? field.valueType,
-          valueType: declared.valueType,
-          nullable: declared.nullable || field.ownership === 'weak' || field.optional === true,
-          arrayElementType: declared.arrayElementType,
-          arrayElementDeclaredType: declared.arrayElementDeclaredType,
-          mapKeyType: declared.mapKeyType,
-          mapValueType: declared.mapValueType,
-          promiseValueType: declared.promiseValueType ?? null,
-          setElementType: declared.setElementType,
-          functionType: field.functionType ?? null,
-          shape: null
-        }
+      if (field.declaredType != null) {
+        declaredType = field.declaredType
+      }
+
+      if (declared.promiseValueType != null) {
+        promiseValueType = declared.promiseValueType
+      }
+
+      if (field.functionType != null) {
+        functionType = field.functionType
+      }
+
+      resolvedFields.push({
+        type: field.type,
+        name: field.name,
+        optional: field.optional,
+        readonly: field.readonly,
+        ownership: field.ownership,
+        weakLoc: field.weakLoc,
+        static: field.static,
+        staticLoc: field.staticLoc,
+        weakTypeValidated: field.weakTypeValidated,
+        loc: field.loc,
+        declaredType,
+        valueType: declared.valueType,
+        nullable: declared.nullable || field.ownership === 'weak' || field.optional === true,
+        arrayElementType: declared.arrayElementType,
+        arrayElementDeclaredType: declared.arrayElementDeclaredType,
+        mapKeyType: declared.mapKeyType,
+        mapValueType: declared.mapValueType,
+        promiseValueType,
+        setElementType: declared.setElementType,
+        functionType,
+        shape: null
       })
     }
+
+    const resolvedBaseTypes: string[] = shape?.baseTypes ?? []
+
+    const resolvedShape: ObjectShapeInfo = {
+      kind: 'object',
+      baseTypes: resolvedBaseTypes,
+      dynamic: shape.dynamic === true || bases.dynamic,
+      fields: resolvedFields
+    }
+
+    if (shape.builtin != null) {
+      resolvedShape.builtin = shape.builtin
+    }
+
+    return resolvedShape
   }
 
   resolveWeakTargetShapeFieldType(field: AnyNode): ResolvedTypeInfo {
-    return this.resolveWeakTargetShapeTypeName(field.declaredType ?? field.valueType, field.loc)
+    let declaredType = field.valueType
+
+    if (field.declaredType != null) {
+      declaredType = field.declaredType
+    }
+
+    return this.resolveWeakTargetShapeTypeName(declaredType, field.loc)
   }
 
   resolveWeakTargetShapeTypeName(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
@@ -9275,75 +9739,95 @@ class Checker {
       const inner = this.resolveWeakTargetShapeTypeName(nullableTypeName, loc)
 
       return {
-        ...inner,
-        nullable: true
+        valueType: inner.valueType,
+        nullable: true,
+        functionType: inner.functionType,
+        shape: inner.shape,
+        arrayElementType: inner.arrayElementType,
+        arrayElementDeclaredType: inner.arrayElementDeclaredType,
+        mapKeyType: inner.mapKeyType,
+        mapValueType: inner.mapValueType,
+        promiseValueType: inner.promiseValueType,
+        setElementType: inner.setElementType
       }
     }
 
     const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
 
     if (name === 'array' || arrayElementTypeName != null) {
-      const elementInfo =
-        arrayElementTypeName == null ? null : this.resolveWeakTargetShapeTypeName(arrayElementTypeName, loc)
+      const info = this.unresolvedTypeInfo()
+      info.valueType = 'array'
+      info.arrayElementType = 'unknown'
+      info.arrayElementDeclaredType = null
 
-      return {
-        ...this.unresolvedTypeInfo(),
-        valueType: 'array',
-        arrayElementType: elementInfo?.valueType ?? 'unknown',
-        arrayElementDeclaredType: arrayElementTypeName ?? null
+      if (arrayElementTypeName != null) {
+        const elementInfo = this.resolveWeakTargetShapeTypeName(arrayElementTypeName, loc)
+        info.arrayElementType = elementInfo.valueType
+        info.arrayElementDeclaredType = arrayElementTypeName
       }
+
+      return info
     }
 
     const mapTypeNames = mapTypeNamesFromTypeName(name)
 
     if (name === 'map' || mapTypeNames != null) {
-      const keyInfo = mapTypeNames == null ? null : this.resolveWeakTargetShapeTypeName(mapTypeNames.key, loc)
-      const valueInfo = mapTypeNames == null ? null : this.resolveWeakTargetShapeTypeName(mapTypeNames.value, loc)
+      const info = this.unresolvedTypeInfo()
+      info.valueType = 'map'
+      info.mapKeyType = 'unknown'
+      info.mapValueType = 'unknown'
 
-      return {
-        ...this.unresolvedTypeInfo(),
-        valueType: 'map',
-        mapKeyType: keyInfo?.valueType ?? 'unknown',
-        mapValueType: valueInfo?.valueType ?? 'unknown'
+      if (mapTypeNames != null) {
+        const keyInfo = this.resolveWeakTargetShapeTypeName(mapTypeNames.key, loc)
+        const valueInfo = this.resolveWeakTargetShapeTypeName(mapTypeNames.value, loc)
+        info.mapKeyType = keyInfo.valueType
+        info.mapValueType = valueInfo.valueType
       }
+
+      return info
     }
 
     const setElementTypeName = setElementTypeNameFromTypeName(name)
 
     if (name === 'set' || setElementTypeName != null) {
-      const elementInfo =
-        setElementTypeName == null ? null : this.resolveWeakTargetShapeTypeName(setElementTypeName, loc)
+      const info = this.unresolvedTypeInfo()
+      info.valueType = 'set'
+      info.setElementType = 'unknown'
 
-      return {
-        ...this.unresolvedTypeInfo(),
-        valueType: 'set',
-        setElementType: elementInfo?.valueType ?? 'unknown'
+      if (setElementTypeName != null) {
+        const elementInfo = this.resolveWeakTargetShapeTypeName(setElementTypeName, loc)
+        info.setElementType = elementInfo.valueType
       }
+
+      return info
     }
 
     if (isBytesTypeName(name)) {
-      return {
-        ...this.unresolvedTypeInfo(),
-        valueType: 'bytes'
-      }
+      const info = this.unresolvedTypeInfo()
+      info.valueType = 'bytes'
+
+      return info
     }
 
     if (isBuiltinValueType(name)) {
-      return {
-        ...this.unresolvedTypeInfo(),
-        valueType: name
-      }
+      const info = this.unresolvedTypeInfo()
+      info.valueType = name
+
+      return info
     }
 
+    const shape = this.types.get(name)
+    const symbol = this.scope.resolve(name)
+
     if (
-      this.types.get(name)?.kind === 'object' ||
+      (shape != null && shape.kind === 'object') ||
       this.classNames.has(name) ||
-      this.scope.resolve(name)?.kind === 'class'
+      (symbol != null && symbol.kind === 'class')
     ) {
-      return {
-        ...this.unresolvedTypeInfo(),
-        valueType: 'object'
-      }
+      const info = this.unresolvedTypeInfo()
+      info.valueType = 'object'
+
+      return info
     }
 
     return this.resolveDeclaredType(name, loc)
@@ -9370,33 +9854,67 @@ class Checker {
     }
 
     if (expression.type === 'ArrayLiteral') {
-      return expression.arrayElementType ?? null
+      if (expression.arrayElementType != null) {
+        return expression.arrayElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'CallExpression') {
-      return expression.arrayElementType ?? null
+      if (expression.arrayElementType != null) {
+        return expression.arrayElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'AwaitExpression') {
-      return expression.arrayElementType ?? null
+      if (expression.arrayElementType != null) {
+        return expression.arrayElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
-      return this.scope.resolve(expression.path[0])?.arrayElementType ?? null
+      const symbol = this.scope.resolve(expression.path[0])
+
+      if (symbol != null && symbol.arrayElementType != null) {
+        return symbol.arrayElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'MemberExpression') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+      let field: AnyNode | null = null
 
-      return field?.arrayElementType ?? null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.property)
+      }
+
+      if (field != null && field.arrayElementType != null) {
+        return field.arrayElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+      let field: AnyNode | null = null
 
-      return field?.arrayElementType ?? null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.index.value)
+      }
+
+      if (field != null && field.arrayElementType != null) {
+        return field.arrayElementType
+      }
+
+      return null
     }
 
     return null
@@ -9408,85 +9926,191 @@ class Checker {
     }
 
     if (expression.type === 'ArrayLiteral' || expression.type === 'CallExpression') {
-      return expression.arrayElementDeclaredType ?? expression.arrayElementType ?? null
+      if (expression.arrayElementDeclaredType != null) {
+        return expression.arrayElementDeclaredType
+      }
+
+      if (expression.arrayElementType != null) {
+        return expression.arrayElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'AwaitExpression') {
-      return expression.arrayElementDeclaredType ?? expression.arrayElementType ?? null
+      if (expression.arrayElementDeclaredType != null) {
+        return expression.arrayElementDeclaredType
+      }
+
+      if (expression.arrayElementType != null) {
+        return expression.arrayElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const symbol = this.scope.resolve(expression.path[0])
 
-      return symbol?.arrayElementDeclaredType ?? symbol?.arrayElementType ?? null
+      if (symbol != null && symbol.arrayElementDeclaredType != null) {
+        return symbol.arrayElementDeclaredType
+      }
+
+      if (symbol != null && symbol.arrayElementType != null) {
+        return symbol.arrayElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'MemberExpression') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+      let field: AnyNode | null = null
 
-      return field?.arrayElementDeclaredType ?? field?.arrayElementType ?? null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.property)
+      }
+
+      if (field != null && field.arrayElementDeclaredType != null) {
+        return field.arrayElementDeclaredType
+      }
+
+      if (field != null && field.arrayElementType != null) {
+        return field.arrayElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+      let field: AnyNode | null = null
 
-      return field?.arrayElementDeclaredType ?? field?.arrayElementType ?? null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.index.value)
+      }
+
+      if (field != null && field.arrayElementDeclaredType != null) {
+        return field.arrayElementDeclaredType
+      }
+
+      if (field != null && field.arrayElementType != null) {
+        return field.arrayElementType
+      }
+
+      return null
     }
 
     return null
   }
 
-  resolveExpressionMapType(
-    expression: AnyNode | null | undefined
-  ): { key: ValueType | null; value: ValueType | null } | null {
+  resolveExpressionMapType(expression: AnyNode | null | undefined): CheckerMapType | null {
     if (expression == null) {
       return null
     }
 
     if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      return expression.valueType === 'map'
-        ? {
-            key: expression.mapKeyType ?? null,
-            value: expression.mapValueType ?? null
-          }
-        : null
+      if (expression.valueType === 'map') {
+        let key: ValueType | null = null
+        let value: ValueType | null = null
+
+        if (expression.mapKeyType != null) {
+          key = expression.mapKeyType
+        }
+
+        if (expression.mapValueType != null) {
+          value = expression.mapValueType
+        }
+
+        return {
+          key,
+          value
+        }
+      }
+
+      return null
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const symbol = this.scope.resolve(expression.path[0])
 
-      return symbol?.valueType === 'map'
-        ? {
-            key: symbol.mapKeyType ?? null,
-            value: symbol.mapValueType ?? null
-          }
-        : null
+      if (symbol != null && symbol.valueType === 'map') {
+        let key: ValueType | null = null
+        let value: ValueType | null = null
+
+        if (symbol.mapKeyType != null) {
+          key = symbol.mapKeyType
+        }
+
+        if (symbol.mapValueType != null) {
+          value = symbol.mapValueType
+        }
+
+        return {
+          key,
+          value
+        }
+      }
+
+      return null
     }
 
     if (expression.type === 'MemberExpression') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+      let field: AnyNode | null = null
 
-      return field?.valueType === 'map'
-        ? {
-            key: field.mapKeyType ?? null,
-            value: field.mapValueType ?? null
-          }
-        : null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.property)
+      }
+
+      if (field != null && field.valueType === 'map') {
+        let key: ValueType | null = null
+        let value: ValueType | null = null
+
+        if (field.mapKeyType != null) {
+          key = field.mapKeyType
+        }
+
+        if (field.mapValueType != null) {
+          value = field.mapValueType
+        }
+
+        return {
+          key,
+          value
+        }
+      }
+
+      return null
     }
 
     if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+      let field: AnyNode | null = null
 
-      return field?.valueType === 'map'
-        ? {
-            key: field.mapKeyType ?? null,
-            value: field.mapValueType ?? null
-          }
-        : null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.index.value)
+      }
+
+      if (field != null && field.valueType === 'map') {
+        let key: ValueType | null = null
+        let value: ValueType | null = null
+
+        if (field.mapKeyType != null) {
+          key = field.mapKeyType
+        }
+
+        if (field.mapValueType != null) {
+          value = field.mapValueType
+        }
+
+        return {
+          key,
+          value
+        }
+      }
+
+      return null
     }
 
     return null
@@ -9498,27 +10122,51 @@ class Checker {
     }
 
     if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      return expression.valueType === 'set' ? (expression.setElementType ?? null) : null
+      if (expression.valueType === 'set' && expression.setElementType != null) {
+        return expression.setElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const symbol = this.scope.resolve(expression.path[0])
 
-      return symbol?.valueType === 'set' ? (symbol.setElementType ?? null) : null
+      if (symbol != null && symbol.valueType === 'set' && symbol.setElementType != null) {
+        return symbol.setElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'MemberExpression') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+      let field: AnyNode | null = null
 
-      return field?.valueType === 'set' ? (field.setElementType ?? null) : null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.property)
+      }
+
+      if (field != null && field.valueType === 'set' && field.setElementType != null) {
+        return field.setElementType
+      }
+
+      return null
     }
 
     if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+      let field: AnyNode | null = null
 
-      return field?.valueType === 'set' ? (field.setElementType ?? null) : null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.index.value)
+      }
+
+      if (field != null && field.valueType === 'set' && field.setElementType != null) {
+        return field.setElementType
+      }
+
+      return null
     }
 
     return null
@@ -9530,27 +10178,51 @@ class Checker {
     }
 
     if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      return expression.valueType === 'promise' ? (expression.promiseValueType ?? null) : null
+      if (expression.valueType === 'promise' && expression.promiseValueType != null) {
+        return expression.promiseValueType
+      }
+
+      return null
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const symbol = this.scope.resolve(expression.path[0])
 
-      return symbol?.valueType === 'promise' ? (symbol.promiseValueType ?? null) : null
+      if (symbol != null && symbol.valueType === 'promise' && symbol.promiseValueType != null) {
+        return symbol.promiseValueType
+      }
+
+      return null
     }
 
     if (expression.type === 'MemberExpression') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.property)
+      let field: AnyNode | null = null
 
-      return field?.valueType === 'promise' ? (field.promiseValueType ?? null) : null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.property)
+      }
+
+      if (field != null && field.valueType === 'promise' && field.promiseValueType != null) {
+        return field.promiseValueType
+      }
+
+      return null
     }
 
     if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
       const shape = this.resolveExpressionShape(expression.object)
-      const field = shape == null ? null : this.findShapeField(shape, expression.index.value)
+      let field: AnyNode | null = null
 
-      return field?.valueType === 'promise' ? (field.promiseValueType ?? null) : null
+      if (shape != null) {
+        field = this.findShapeField(shape, expression.index.value)
+      }
+
+      if (field != null && field.valueType === 'promise' && field.promiseValueType != null) {
+        return field.promiseValueType
+      }
+
+      return null
     }
 
     return null
@@ -9566,7 +10238,7 @@ class Checker {
     this.narrowedNullableNames.delete(name)
   }
 
-  withScope(callback: () => void): void {
+  withScope(callback: Function): void {
     const previous = this.scope
     const previousNarrowedNullableNames = this.narrowedNullableNames
     this.scope = new Scope(previous)
@@ -9584,7 +10256,7 @@ class Checker {
     returnType: ValueType,
     returnNullable: boolean,
     returnPromiseValueType: ValueType | null,
-    callback: () => void
+    callback: Function
   ): void {
     const previousReturnType = this.currentReturnType
     const previousReturnNullable = this.currentReturnNullable
@@ -9605,25 +10277,25 @@ class Checker {
     }
   }
 
-  withBreakable(callback: () => void): void {
-    this.breakDepth += 1
+  withBreakable(callback: Function): void {
+    this.breakDepth = this.breakDepth + 1
 
     try {
       callback()
     } finally {
-      this.breakDepth -= 1
+      this.breakDepth = this.breakDepth - 1
     }
   }
 
-  withLoop(callback: () => void): void {
-    this.breakDepth += 1
-    this.continueDepth += 1
+  withLoop(callback: Function): void {
+    this.breakDepth = this.breakDepth + 1
+    this.continueDepth = this.continueDepth + 1
 
     try {
       callback()
     } finally {
-      this.continueDepth -= 1
-      this.breakDepth -= 1
+      this.continueDepth = this.continueDepth - 1
+      this.breakDepth = this.breakDepth - 1
     }
   }
 
@@ -9631,12 +10303,18 @@ class Checker {
     actual: ValueType | null | undefined,
     expected: ValueType | null | undefined,
     loc: SourceLocation,
-    expectedNullable = false,
-    actualNullable = false
+    expectedNullable?: boolean,
+    actualNullable?: boolean
   ): void {
-    if (!isAssignableType(actual, expected, expectedNullable, actualNullable)) {
-      const actualLabel =
-        actualNullable && actual !== 'null' && actual !== 'unknown' && actual != null ? `${actual} | null` : actual
+    const expectedAllowsNull = expectedNullable === true
+    const actualCanBeNull = actualNullable === true
+
+    if (!isAssignableType(actual, expected, expectedAllowsNull, actualCanBeNull)) {
+      let actualLabel = actual
+
+      if (actualCanBeNull && actual !== 'null' && actual !== 'unknown' && actual != null) {
+        actualLabel = `${actual} | null`
+      }
 
       this.report('CCJS_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
     }
@@ -9648,7 +10326,7 @@ class Checker {
 }
 
 function isPromiseMethod(name: string): boolean {
-  return ['catch', 'then'].includes(name)
+  return name === 'catch' || name === 'then'
 }
 
 function promiseExecutorFunctionType(): AnyNode {
@@ -9680,11 +10358,13 @@ function promiseSettlementFunctionType(): AnyNode {
 }
 
 function promiseStaticMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'MemberExpression' || !['resolve', 'reject'].includes(callee.property)) {
+  if (callee.type !== 'MemberExpression' || (callee.property !== 'resolve' && callee.property !== 'reject')) {
     return null
   }
 
-  return callee.object?.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'Promise'
-    ? callee.property
-    : null
+  if (callee.object.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'Promise') {
+    return callee.property
+  }
+
+  return null
 }

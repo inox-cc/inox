@@ -212,7 +212,7 @@ export const libuvOnlyRuntimeImports = new Map([
   ['node:net', 'node:net']
 ])
 
-export const globals = new Map<string, SymbolInfo>([
+export const globals: Map<string, SymbolInfo> = new Map([
   [
     'ccjs',
     {

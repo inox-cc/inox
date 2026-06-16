@@ -2061,6 +2061,33 @@ export function main(): void {
   )
 })
 
+test('narrows C nullable object values after null-checked early returns', () => {
+  const result = compileSource(
+    `type User = {
+  name: string
+}
+
+function readName(user: User | null): string {
+  if (user === null) {
+    return 'none'
+  }
+
+  return user.name
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  console.log(readName(user))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_\w+_\d+\)/)
+})
+
 
 test('narrows C nullable scalar values inside loop bodies', () => {
   const result = compileSource(

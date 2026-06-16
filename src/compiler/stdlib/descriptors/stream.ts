@@ -12,7 +12,7 @@ export const unsupportedStreamRuntimeExports = [
 ] as const
 
 const nodeStreamImportSources = new Set(['node:stream'])
-const unsupportedStreamRuntimeExportSet = new Set<string>(unsupportedStreamRuntimeExports)
+const unsupportedStreamRuntimeExportSet: Set<string> = new Set(unsupportedStreamRuntimeExports)
 
 export function isNodeStreamImportSource(source: string | null | undefined): boolean {
   return source != null && nodeStreamImportSources.has(source)

@@ -13,7 +13,11 @@ export function timerRuntimeMethodName(callee: AnyNode): string | null {
 }
 
 export function timerClearMethodName(method: string): string | null {
-  return isTimerClearMethod(method) ? method : null
+  if (isTimerClearMethod(method)) {
+    return method
+  }
+
+  return null
 }
 
 export function timerCallbackFunctionType(): AnyNode {

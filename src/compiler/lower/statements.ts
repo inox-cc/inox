@@ -111,13 +111,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
     return {
       type: 'TryStatement',
       block: lowerStatementBody(statement.block, context),
-      handler:
-        statement.handler == null
-          ? null
-          : {
-              ...statement.handler,
-              body: lowerStatementBody(statement.handler.body, context)
-            },
+      handler: lowerCatchClause(statement.handler, context),
       finalizer: statement.finalizer == null ? null : lowerStatementBody(statement.finalizer, context),
       loc: statement.loc
     }
@@ -227,6 +221,48 @@ function lowerStatementBody(statement: LowerNode, context: LowerContext): LowerN
     type: 'BlockStatement',
     body: lowered,
     loc: statement.loc
+  }
+}
+
+function lowerCatchClause(handler: LowerNode | null | undefined, context: LowerContext): LowerNode | null {
+  if (handler == null) {
+    return null
+  }
+
+  let previous: LowerNode | null = null
+  let hadPrevious = false
+
+  if (handler.param != null) {
+    hadPrevious = context.variables.has(handler.param)
+
+    if (hadPrevious) {
+      const found = context.variables.get(handler.param)
+
+      if (found != null) {
+        previous = found
+      }
+    }
+
+    context.variables.set(handler.param, {
+      valueType: 'unknown',
+      nullable: false,
+      shape: null
+    })
+  }
+
+  const body = lowerStatementBody(handler.body, context)
+
+  if (handler.param != null) {
+    if (hadPrevious && previous != null) {
+      context.variables.set(handler.param, previous)
+    } else {
+      context.variables.delete(handler.param)
+    }
+  }
+
+  return {
+    ...handler,
+    body
   }
 }
 

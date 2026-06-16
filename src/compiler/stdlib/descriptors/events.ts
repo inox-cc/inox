@@ -14,7 +14,7 @@ export const unsupportedEventsRuntimeExports = [
 ] as const
 
 const nodeEventsImportSources = new Set(['node:events'])
-const unsupportedEventsRuntimeExportSet = new Set<string>(unsupportedEventsRuntimeExports)
+const unsupportedEventsRuntimeExportSet: Set<string> = new Set(unsupportedEventsRuntimeExports)
 
 export function isNodeEventsImportSource(source: string | null | undefined): boolean {
   return source != null && nodeEventsImportSources.has(source)

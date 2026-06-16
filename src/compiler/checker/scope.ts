@@ -14,6 +14,24 @@ export class Scope {
   }
 
   resolve(name: string): SymbolInfo | null {
-    return this.bindings.get(name) ?? this.parent?.resolve(name) ?? null
+    const local = this.bindings.get(name)
+
+    if (local != null) {
+      return local
+    }
+
+    let current = this.parent
+
+    while (current != null) {
+      const found = current.bindings.get(name)
+
+      if (found != null) {
+        return found
+      }
+
+      current = current.parent
+    }
+
+    return null
   }
 }
