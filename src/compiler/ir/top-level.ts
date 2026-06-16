@@ -13,6 +13,21 @@ export type IrModuleRecord = {
   ir: IrProgram
 }
 
+type NodeList = AnyNode[]
+
+type IrProgramWithFunctionDeclarations = {
+  functionDeclarations: IrFunctionDeclaration[]
+}
+
+type IrTopLevelProgram = {
+  body: NodeList
+  topLevelItems: IrTopLevelItem[]
+}
+
+type IrFunctionNodeProgram = IrTopLevelProgram & {
+  functionDeclarations: IrFunctionDeclaration[]
+}
+
 type IrTopLevelNodeEntry = {
   kind: IrTopLevelItemKind
   node: AnyNode
@@ -23,148 +38,286 @@ export type IrFunctionNodeEntry = {
   node: AnyNode
 }
 
+type FunctionDeclarationMap = Map<string, IrFunctionDeclaration[]>
+
 export function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
-  return graph.modules.flatMap((module) =>
-    module.ir == null
-      ? []
-      : [
-          {
-            path: module.path,
-            ir: module.ir
-          }
-        ]
-  )
+  const records: IrModuleRecord[] = []
+
+  for (const module of graph.modules) {
+    if (module.ir != null) {
+      records.push({
+        path: module.path,
+        ir: module.ir
+      })
+    }
+  }
+
+  return records
 }
 
 export function collectIrPrograms(records: IrModuleRecord[]): IrProgram[] {
-  return records.map((record) => record.ir)
+  const programs: IrProgram[] = []
+
+  for (const record of records) {
+    programs.push(record.ir)
+  }
+
+  return programs
 }
 
 export function findIrEntryProgram(records: IrModuleRecord[], entry: string): IrProgram | null {
-  return records.find((record) => record.path === entry)?.ir ?? null
+  for (const record of records) {
+    if (record.path === entry) {
+      return record.ir
+    }
+  }
+
+  return null
 }
 
 export function collectIrFunctionDeclarations(
-  programs: Array<{ functionDeclarations: IrFunctionDeclaration[] }>
+  programs: IrProgramWithFunctionDeclarations[]
 ): IrFunctionDeclaration[] {
-  return programs.flatMap((program) => program.functionDeclarations)
+  const declarations: IrFunctionDeclaration[] = []
+
+  for (const program of programs) {
+    for (const declaration of program.functionDeclarations) {
+      declarations.push(declaration)
+    }
+  }
+
+  return declarations
 }
 
-export function collectIrFunctionNodeEntries(
-  programs: Array<{
-    body: AnyNode[]
-    functionDeclarations: IrFunctionDeclaration[]
-    topLevelItems: IrTopLevelItem[]
-  }>
-): IrFunctionNodeEntry[] {
-  return programs.flatMap((program) => {
-    const declarationsByName = new Map<string, IrFunctionDeclaration[]>()
+export function collectIrFunctionNodeEntries(programs: IrFunctionNodeProgram[]): IrFunctionNodeEntry[] {
+  const entries: IrFunctionNodeEntry[] = []
 
-    for (const declaration of program.functionDeclarations) {
-      declarationsByName.set(declaration.name, [...(declarationsByName.get(declaration.name) ?? []), declaration])
-    }
+  for (const program of programs) {
+    const declarationsByName = collectFunctionDeclarationsByName(program.functionDeclarations)
+    const topLevelEntries = collectIrTopLevelNodeEntries(program)
 
-    return collectIrTopLevelNodeEntries(program)
-      .filter((item) => item.kind === 'function')
-      .flatMap((item) => {
-        const name = typeof item.node.name === 'string' ? item.node.name : ''
+    for (const item of topLevelEntries) {
+      if (item.kind === 'function') {
+        const name = nodeNameForTopLevelLookup(item.node)
         const declarations = declarationsByName.get(name)
-        const declaration = declarations?.shift()
+        const declaration = shiftFunctionDeclaration(declarations)
 
-        return declaration == null
-          ? []
-          : [
-              {
-                declaration,
-                node: item.node
-              }
-            ]
-      })
-  })
+        if (declaration != null) {
+          entries.push({
+            declaration,
+            node: item.node
+          })
+        }
+      }
+    }
+  }
+
+  return entries
 }
 
 export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, name: string): boolean {
-  return program?.functionDeclarations.some((item) => item.name === name) === true
+  if (program == null) {
+    return false
+  }
+
+  for (const item of program.functionDeclarations) {
+    if (item.name === name) {
+      return true
+    }
+  }
+
+  return false
 }
 
-export function collectIrTopLevelNodeEntries(program: {
-  body: AnyNode[]
-  topLevelItems: IrTopLevelItem[]
-}): IrTopLevelNodeEntry[] {
-  return program.topLevelItems.flatMap((item) => {
-    const node = program.body[item.index]
+export function collectIrTopLevelNodeEntries(program: IrTopLevelProgram): IrTopLevelNodeEntry[] {
+  const entries: IrTopLevelNodeEntry[] = []
 
-    return node == null
-      ? []
-      : [
-          {
-            kind: item.kind,
-            node
-          }
-        ]
-  })
+  for (const item of program.topLevelItems) {
+    const node = nodeAt(program.body, item.index)
+
+    if (node != null) {
+      entries.push({
+        kind: item.kind,
+        node
+      })
+    }
+  }
+
+  return entries
 }
 
-export function collectIrTopLevelNodes(
-  program: { body: AnyNode[]; topLevelItems: IrTopLevelItem[] },
-  kind: IrTopLevelItemKind
-): AnyNode[] {
-  return collectIrTopLevelNodeEntries(program)
-    .filter((item) => item.kind === kind)
-    .map((item) => item.node)
+export function collectIrTopLevelNodes(program: IrTopLevelProgram, kind: IrTopLevelItemKind): NodeList {
+  const nodes: NodeList = []
+
+  for (const item of collectIrTopLevelNodeEntries(program)) {
+    if (item.kind === kind) {
+      nodes.push(item.node)
+    }
+  }
+
+  return nodes
 }
 
 export function collectIrTopLevelNodesFromPrograms(
-  programs: Array<{ body: AnyNode[]; topLevelItems: IrTopLevelItem[] }>,
+  programs: IrTopLevelProgram[],
   kind: IrTopLevelItemKind
-): AnyNode[] {
-  return programs.flatMap((program) => collectIrTopLevelNodes(program, kind))
+): NodeList {
+  const nodes: NodeList = []
+
+  for (const program of programs) {
+    for (const node of collectIrTopLevelNodes(program, kind)) {
+      nodes.push(node)
+    }
+  }
+
+  return nodes
 }
 
 export function collectTopLevelItems(program: ProgramNode): IrTopLevelItem[] {
-  return program.body.flatMap((item, index) =>
-    item.type === 'ExportDeclaration'
-      ? []
-      : [
-          {
-            kind: topLevelItemKind(item),
-            index,
-            loc: item.loc
-          }
-        ]
-  )
+  const items: IrTopLevelItem[] = []
+
+  for (let index = 0; index < program.body.length; index = index + 1) {
+    const item = program.body[index]
+
+    if (item.type !== 'ExportDeclaration') {
+      items.push({
+        kind: topLevelItemKind(item),
+        index,
+        loc: item.loc
+      })
+    }
+  }
+
+  return items
 }
 
 export function collectFunctionDeclarations(
   program: ProgramNode,
   topLevelItems: IrTopLevelItem[]
 ): IrFunctionDeclaration[] {
-  return collectIrTopLevelNodes(
+  const declarations: IrFunctionDeclaration[] = []
+  const nodes = collectIrTopLevelNodes(
     {
       body: program.body,
       topLevelItems
     },
     'function'
   )
-    .filter((item): item is AnyNode & { name: string } => typeof item.name === 'string')
-    .map((item) => ({
-      name: item.name,
-      exported: item.exported === true,
-      async: item.async === true,
-      params: item.params,
-      returnType: item.returnType,
-      returnNullable: item.returnNullable === true,
-      ...(item.returnArrayElementType == null ? {} : { returnArrayElementType: item.returnArrayElementType }),
-      ...(item.returnArrayElementDeclaredType == null
-        ? {}
-        : { returnArrayElementDeclaredType: item.returnArrayElementDeclaredType }),
-      ...(item.returnMapKeyType == null ? {} : { returnMapKeyType: item.returnMapKeyType }),
-      ...(item.returnMapValueType == null ? {} : { returnMapValueType: item.returnMapValueType }),
-      ...(item.returnPromiseValueType == null ? {} : { returnPromiseValueType: item.returnPromiseValueType }),
-      ...(item.returnSetElementType == null ? {} : { returnSetElementType: item.returnSetElementType }),
-      ...(item.returnShape == null ? {} : { returnShape: item.returnShape }),
-      loc: item.loc
-    }))
+
+  for (const item of nodes) {
+    const name = item.name
+
+    if (name != null) {
+      declarations.push(createFunctionDeclaration(item, name))
+    }
+  }
+
+  return declarations
+}
+
+function collectFunctionDeclarationsByName(declarations: IrFunctionDeclaration[]): FunctionDeclarationMap {
+  const declarationsByName = createFunctionDeclarationMap()
+
+  for (const declaration of declarations) {
+    const items = functionDeclarationListForName(declarationsByName, declaration.name)
+    items.push(declaration)
+  }
+
+  return declarationsByName
+}
+
+function createFunctionDeclarationMap(): FunctionDeclarationMap {
+  const map: FunctionDeclarationMap = new Map()
+  return map
+}
+
+function functionDeclarationListForName(
+  declarationsByName: FunctionDeclarationMap,
+  name: string
+): IrFunctionDeclaration[] {
+  const existing = declarationsByName.get(name)
+
+  if (existing != null) {
+    return existing
+  }
+
+  const created: IrFunctionDeclaration[] = []
+  declarationsByName.set(name, created)
+  return created
+}
+
+function nodeAt(nodes: NodeList, index: number): AnyNode | null {
+  if (index < 0 || index >= nodes.length) {
+    return null
+  }
+
+  return nodes[index]
+}
+
+function shiftFunctionDeclaration(
+  declarations: IrFunctionDeclaration[] | null | undefined
+): IrFunctionDeclaration | null {
+  if (declarations == null) {
+    return null
+  }
+
+  const declaration = declarations.shift()
+
+  if (declaration == null) {
+    return null
+  }
+
+  return declaration
+}
+
+function nodeNameForTopLevelLookup(node: AnyNode): string {
+  if (node.name == null) {
+    return ''
+  }
+
+  return node.name
+}
+
+function createFunctionDeclaration(item: AnyNode, name: string): IrFunctionDeclaration {
+  const declaration: IrFunctionDeclaration = {
+    name,
+    exported: item.exported === true,
+    async: item.async === true,
+    params: item.params,
+    returnType: item.returnType,
+    returnNullable: item.returnNullable === true,
+    loc: item.loc
+  }
+
+  if (item.returnArrayElementType != null) {
+    declaration.returnArrayElementType = item.returnArrayElementType
+  }
+
+  if (item.returnArrayElementDeclaredType != null) {
+    declaration.returnArrayElementDeclaredType = item.returnArrayElementDeclaredType
+  }
+
+  if (item.returnMapKeyType != null) {
+    declaration.returnMapKeyType = item.returnMapKeyType
+  }
+
+  if (item.returnMapValueType != null) {
+    declaration.returnMapValueType = item.returnMapValueType
+  }
+
+  if (item.returnPromiseValueType != null) {
+    declaration.returnPromiseValueType = item.returnPromiseValueType
+  }
+
+  if (item.returnSetElementType != null) {
+    declaration.returnSetElementType = item.returnSetElementType
+  }
+
+  if (item.returnShape != null) {
+    declaration.returnShape = item.returnShape
+  }
+
+  return declaration
 }
 
 function topLevelItemKind(item: AnyNode): IrTopLevelItemKind {
