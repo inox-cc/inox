@@ -102,7 +102,7 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
 
 export function compileSourceToIr(source: string, options: CompileOptions = {}): SourceIrCompileResult {
   const target = resolveCompileTarget(options)
-  const tokens = tokenize(source)
+  const tokens = tokenize(source, {})
   const ast = parse(tokens)
   const checked = checkProgram(ast, compileOptionsWithTarget(options, target))
   const hir = lowerProgram(checked.ast)

@@ -13,7 +13,7 @@ test('normalizes TypeScript-style type names for parser lowering', () => {
 })
 
 test('reads type annotations through nested generics until a stop token', () => {
-  const tokens = tokenize('let users: Map<string, Array<User | null>> = source')
+  const tokens = tokenize('let users: Map<string, Array<User | null>> = source', {})
   const start = tokens.findIndex((token) => token.value === 'Map')
 
   const result = readTypeAnnotation(tokens, start, ['='])
@@ -23,7 +23,7 @@ test('reads type annotations through nested generics until a stop token', () => 
 })
 
 test('stops type annotation reads at statement boundaries when requested', () => {
-  const tokens = tokenize('type Callback = (value: string) => number\nconst next = 1')
+  const tokens = tokenize('type Callback = (value: string) => number\nconst next = 1', {})
   const start = tokens.findIndex((token) => token.value === 'number')
 
   const result = readTypeAnnotation(tokens, start, [';', ',', '}'], {

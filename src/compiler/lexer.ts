@@ -5,6 +5,16 @@ type TokenizeOptions = {
   file?: string
 }
 
+type LexerState = {
+  source: string
+  tokens: Token[]
+  diagnostics: Diagnostic[]
+  file: string | null
+  index: number
+  line: number
+  column: number
+}
+
 const keywords = new Set([
   'async',
   'await',
@@ -69,269 +79,300 @@ const punctuators = new Set([
   '?'
 ])
 
-export function tokenize(source: string, options: TokenizeOptions = {}): Token[] {
-  const tokens: Token[] = []
-  const diagnostics: Diagnostic[] = []
-  const file = options.file
-  let index = 0
-  let line = 1
-  let column = 1
+export function tokenize(source: string, options: TokenizeOptions): Token[] {
+  const state: LexerState = {
+    source,
+    tokens: [],
+    diagnostics: [],
+    file: null,
+    index: 0,
+    line: 1,
+    column: 1
+  }
 
-  while (index < source.length) {
-    const char = source[index]
+  if (options.file != null) {
+    state.file = options.file
+  }
+
+  while (state.index < state.source.length) {
+    const char = state.source[state.index]
 
     if (char === ' ' || char === '\t' || char === '\r') {
-      advance(char)
+      advanceLexer(state, char)
       continue
     }
 
     if (char === '\n') {
-      advance(char)
+      advanceLexer(state, char)
       continue
     }
 
-    if (char === '/' && source[index + 1] === '/') {
-      skipLineComment()
+    if (char === '/' && state.source[state.index + 1] === '/') {
+      skipLineComment(state)
       continue
     }
 
-    if (char === '/' && source[index + 1] === '*') {
-      skipBlockComment()
+    if (char === '/' && state.source[state.index + 1] === '*') {
+      skipBlockComment(state)
       continue
     }
 
     if (char === "'" || char === '"') {
-      tokens.push(readString(char))
+      state.tokens.push(readStringToken(state, char))
       continue
     }
 
     if (char === '`') {
-      tokens.push(readTemplate())
+      state.tokens.push(readTemplateToken(state))
       continue
     }
 
     if (isDigit(char)) {
-      tokens.push(readNumber())
+      state.tokens.push(readNumberToken(state))
       continue
     }
 
     if (isIdentifierStart(char)) {
-      tokens.push(readIdentifier())
+      state.tokens.push(readIdentifierToken(state))
       continue
     }
 
     if (punctuators.has(char)) {
-      tokens.push(readPunctuator())
+      state.tokens.push(readPunctuatorToken(state))
       continue
     }
 
-    diagnostics.push(
-      diagnostic('CCJS_UNKNOWN_CHAR', `unknown character ${JSON.stringify(char)}`, location(line, column))
+    state.diagnostics.push(
+      diagnostic('CCJS_UNKNOWN_CHAR', `unknown character ${JSON.stringify(char)}`, lexerLocation(state, state.line, state.column))
     )
-    advance(char)
+    advanceLexer(state, char)
   }
 
-  tokens.push(makeToken('eof', '<eof>', line, column, index, file))
-  throwDiagnostics(diagnostics)
+  state.tokens.push(makeToken('eof', '<eof>', state.line, state.column, state.index, state.file))
+  throwDiagnostics(state.diagnostics)
 
-  return tokens
+  return state.tokens
+}
 
-  function readString(quote: string): Token {
-    const startLine = line
-    const startColumn = column
-    const startIndex = index
-    let value = ''
+function readStringToken(state: LexerState, quote: string): Token {
+  const startLine = state.line
+  const startColumn = state.column
+  const startIndex = state.index
+  let value = ''
 
-    advance(quote)
+  advanceLexer(state, quote)
 
-    while (index < source.length) {
-      const char = source[index]
+  while (state.index < state.source.length) {
+    const char = state.source[state.index]
 
-      if (char === quote) {
-        advance(char)
-        return makeToken('string', value, startLine, startColumn, startIndex, file)
-      }
-
-      if (char === '\\') {
-        value += readEscape()
-      } else {
-        value += char
-        advance(char)
-      }
+    if (char === quote) {
+      advanceLexer(state, char)
+      return makeToken('string', value, startLine, startColumn, startIndex, state.file)
     }
 
-    diagnostics.push(
-      diagnostic('CCJS_UNTERMINATED_STRING', 'unterminated string literal', location(startLine, startColumn))
-    )
-
-    return makeToken('string', value, startLine, startColumn, startIndex, file)
-  }
-
-  function readTemplate(): Token {
-    const startLine = line
-    const startColumn = column
-    const startIndex = index
-    let raw = '`'
-
-    advance('`')
-
-    while (index < source.length) {
-      const char = source[index]
-      raw += char
-      advance(char)
-
-      if (char === '\\' && index < source.length) {
-        raw += source[index]
-        advance(source[index])
-        continue
-      }
-
-      if (char === '`') {
-        return makeToken('template', raw, startLine, startColumn, startIndex, file)
-      }
-    }
-
-    diagnostics.push(
-      diagnostic('CCJS_UNTERMINATED_TEMPLATE', 'unterminated template literal', location(startLine, startColumn))
-    )
-
-    return makeToken('template', raw, startLine, startColumn, startIndex, file)
-  }
-
-  function readNumber(): Token {
-    const startLine = line
-    const startColumn = column
-    const startIndex = index
-    let value = ''
-
-    while (index < source.length && isDigit(source[index])) {
-      value += source[index]
-      advance(source[index])
-    }
-
-    if (source[index] === '.') {
-      value += '.'
-      advance('.')
-
-      while (index < source.length && isDigit(source[index])) {
-        value += source[index]
-        advance(source[index])
-      }
-    }
-
-    return makeToken('number', value, startLine, startColumn, startIndex, file)
-  }
-
-  function readIdentifier(): Token {
-    const startLine = line
-    const startColumn = column
-    const startIndex = index
-    let value = ''
-
-    while (index < source.length && isIdentifierPart(source[index])) {
-      value += source[index]
-      advance(source[index])
-    }
-
-    return makeToken(keywords.has(value) ? 'keyword' : 'identifier', value, startLine, startColumn, startIndex, file)
-  }
-
-  function readPunctuator(): Token {
-    const startLine = line
-    const startColumn = column
-    const startIndex = index
-    const three = source.slice(index, index + 3)
-    const two = source.slice(index, index + 2)
-    let value = source[index]
-
-    if (threeCharPunctuators.has(three)) {
-      value = three
-    } else if (twoCharPunctuators.has(two)) {
-      value = two
-    }
-
-    for (const char of value) {
-      advance(char)
-    }
-
-    return makeToken('punctuator', value, startLine, startColumn, startIndex, file)
-  }
-
-  function readEscape(): string {
-    advance('\\')
-    const char = source[index]
-
-    if (char == null) {
-      return '\\'
-    }
-
-    advance(char)
-
-    if (char === 'n') {
-      return '\n'
-    }
-
-    if (char === 't') {
-      return '\t'
-    }
-
-    if (char === 'r') {
-      return '\r'
-    }
-
-    return char
-  }
-
-  function skipLineComment(): void {
-    while (index < source.length && source[index] !== '\n') {
-      advance(source[index])
-    }
-  }
-
-  function skipBlockComment(): void {
-    advance('/')
-    advance('*')
-
-    while (index < source.length) {
-      if (source[index] === '*' && source[index + 1] === '/') {
-        advance('*')
-        advance('/')
-        return
-      }
-
-      advance(source[index])
-    }
-  }
-
-  function advance(char: string): void {
-    index += 1
-
-    if (char === '\n') {
-      line += 1
-      column = 1
+    if (char === '\\') {
+      value = value + readEscapeValue(state)
     } else {
-      column += 1
+      value = value + char
+      advanceLexer(state, char)
     }
   }
 
-  function location(line: number, column: number): SourceLocation {
-    return {
-      ...(file == null ? {} : { file }),
-      line,
-      column
+  state.diagnostics.push(
+    diagnostic('CCJS_UNTERMINATED_STRING', 'unterminated string literal', lexerLocation(state, startLine, startColumn))
+  )
+
+  return makeToken('string', value, startLine, startColumn, startIndex, state.file)
+}
+
+function readTemplateToken(state: LexerState): Token {
+  const startLine = state.line
+  const startColumn = state.column
+  const startIndex = state.index
+  let raw = '`'
+
+  advanceLexer(state, '`')
+
+  while (state.index < state.source.length) {
+    const char = state.source[state.index]
+    raw = raw + char
+    advanceLexer(state, char)
+
+    if (char === '\\' && state.index < state.source.length) {
+      raw = raw + state.source[state.index]
+      advanceLexer(state, state.source[state.index])
+      continue
     }
+
+    if (char === '`') {
+      return makeToken('template', raw, startLine, startColumn, startIndex, state.file)
+    }
+  }
+
+  state.diagnostics.push(
+    diagnostic('CCJS_UNTERMINATED_TEMPLATE', 'unterminated template literal', lexerLocation(state, startLine, startColumn))
+  )
+
+  return makeToken('template', raw, startLine, startColumn, startIndex, state.file)
+}
+
+function readNumberToken(state: LexerState): Token {
+  const startLine = state.line
+  const startColumn = state.column
+  const startIndex = state.index
+  let value = ''
+
+  while (state.index < state.source.length && isDigit(state.source[state.index])) {
+    value = value + state.source[state.index]
+    advanceLexer(state, state.source[state.index])
+  }
+
+  if (state.source[state.index] === '.') {
+    value = value + '.'
+    advanceLexer(state, '.')
+
+    while (state.index < state.source.length && isDigit(state.source[state.index])) {
+      value = value + state.source[state.index]
+      advanceLexer(state, state.source[state.index])
+    }
+  }
+
+  return makeToken('number', value, startLine, startColumn, startIndex, state.file)
+}
+
+function readIdentifierToken(state: LexerState): Token {
+  const startLine = state.line
+  const startColumn = state.column
+  const startIndex = state.index
+  let value = ''
+
+  while (state.index < state.source.length && isIdentifierPart(state.source[state.index])) {
+    value = value + state.source[state.index]
+    advanceLexer(state, state.source[state.index])
+  }
+
+  let tokenType = 'identifier'
+
+  if (keywords.has(value)) {
+    tokenType = 'keyword'
+  }
+
+  return makeToken(tokenType, value, startLine, startColumn, startIndex, state.file)
+}
+
+function readPunctuatorToken(state: LexerState): Token {
+  const startLine = state.line
+  const startColumn = state.column
+  const startIndex = state.index
+  const three = state.source.slice(state.index, state.index + 3)
+  const two = state.source.slice(state.index, state.index + 2)
+  let value = state.source[state.index]
+
+  if (threeCharPunctuators.has(three)) {
+    value = three
+  } else if (twoCharPunctuators.has(two)) {
+    value = two
+  }
+
+  for (const char of value) {
+    advanceLexer(state, char)
+  }
+
+  return makeToken('punctuator', value, startLine, startColumn, startIndex, state.file)
+}
+
+function readEscapeValue(state: LexerState): string {
+  advanceLexer(state, '\\')
+  const char = state.source[state.index]
+
+  if (char == null) {
+    return '\\'
+  }
+
+  advanceLexer(state, char)
+
+  if (char === 'n') {
+    return '\n'
+  }
+
+  if (char === 't') {
+    return '\t'
+  }
+
+  if (char === 'r') {
+    return '\r'
+  }
+
+  return char
+}
+
+function skipLineComment(state: LexerState): void {
+  while (state.index < state.source.length && state.source[state.index] !== '\n') {
+    advanceLexer(state, state.source[state.index])
   }
 }
 
-function makeToken(type: string, value: string, line: number, column: number, index: number, file?: string): Token {
+function skipBlockComment(state: LexerState): void {
+  advanceLexer(state, '/')
+  advanceLexer(state, '*')
+
+  while (state.index < state.source.length) {
+    if (state.source[state.index] === '*' && state.source[state.index + 1] === '/') {
+      advanceLexer(state, '*')
+      advanceLexer(state, '/')
+      return
+    }
+
+    advanceLexer(state, state.source[state.index])
+  }
+}
+
+function advanceLexer(state: LexerState, char: string): void {
+  state.index = state.index + 1
+
+  if (char === '\n') {
+    state.line = state.line + 1
+    state.column = 1
+  } else {
+    state.column = state.column + 1
+  }
+}
+
+function lexerLocation(state: LexerState, line: number, column: number): SourceLocation {
+  const file = state.file
+
+  if (file != null) {
+    return lexerLocationWithFile(file, line, column)
+  }
+
   return {
-    type,
+    line,
+    column
+  }
+}
+
+function lexerLocationWithFile(file: string, line: number, column: number): SourceLocation {
+  return {
+    file,
+    line,
+    column
+  }
+}
+
+function makeToken(tokenType: string, value: string, line: number, column: number, index: number, file: string | null): Token {
+  const token: Token = {
+    type: tokenType,
     value,
-    ...(file == null ? {} : { file }),
     line,
     column,
     index
   }
+
+  if (file != null) {
+    token.file = file
+  }
+
+  return token
 }
 
 function isDigit(char: string): boolean {
