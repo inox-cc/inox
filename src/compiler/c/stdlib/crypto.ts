@@ -1,14 +1,14 @@
 import { diagnostic } from '../../diagnostics.ts'
-import type { AnyNode } from '../../types.ts'
+import type { AnyNode, SourceLocation } from '../../types.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
   nextCName,
   registerOwnedCryptoHash,
   registerOwnedCryptoHmac,
-  registerOwnedValue,
-  type CFunctionContext
+  registerOwnedValue
 } from '../context.ts'
+import type { CFunctionContext } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
@@ -17,19 +17,59 @@ import type {
 } from '../types.ts'
 
 export type CryptoLoweringDependencies = {
-  cStringLiteralNode: (value: string, loc?: AnyNode['loc']) => AnyNode
+  cStringLiteralNode: (value: string, loc: SourceLocation | undefined) => AnyNode
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringBytesOperand: (
-    expression: AnyNode,
-    context: CFunctionContext,
-    tempPrefix?: string
-  ) => PreparedStringBytesOperand
+  emitPreparedStringBytesOperand: (expression: AnyNode, context: CFunctionContext, tempPrefix: string) => PreparedStringBytesOperand
   inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
 }
 
+type CryptoRandomFillCall = {
+  lines: string[]
+  call: string
+}
+
+function pushCryptoLines(target: string[], lines: string[]): void {
+  for (const line of lines) {
+    target.push(line)
+  }
+}
+
+function emptyPreparedCryptoExpression(expression: string): PreparedExpression {
+  return {
+    lines: [],
+    expression
+  }
+}
+
+function cryptoArgOrEmptyString(expression: AnyNode, index: number, deps: CryptoLoweringDependencies): AnyNode {
+  if (expression.args.length > index) {
+    return expression.args[index]
+  }
+
+  return deps.cStringLiteralNode('', expression.loc)
+}
+
+function cryptoOutName(options: PreparedCallOptions, context: CFunctionContext, prefix: string): string {
+  let out = nextCName(context, prefix)
+
+  if (options.out != null) {
+    out = options.out
+  }
+
+  return out
+}
+
+function cryptoResultExpression(options: PreparedCallOptions, value: string): string {
+  if (options.discard === true) {
+    return ''
+  }
+
+  return value
+}
+
 export function cryptoRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression?.type !== 'CallExpression' || typeof expression.cryptoRuntimeMethod !== 'string') {
+  if (expression.type !== 'CallExpression' || expression.cryptoRuntimeMethod == null) {
     return null
   }
 
@@ -41,24 +81,32 @@ export function emitCryptoHashVariableDeclaration(
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): string[] | null {
-  if (statement.init?.type !== 'CallExpression') {
+  if (statement.init == null || statement.init.type !== 'CallExpression') {
     return null
   }
 
   if (cryptoRuntimeMethodName(statement.init) === 'createHash') {
-    return (
-      emitPreparedCryptoHashCallExpression(statement.init, context, deps, {
-        out: statement.name
-      })?.lines ?? null
-    )
+    const prepared = emitPreparedCryptoHashCallExpression(statement.init, context, deps, {
+      out: statement.name
+    })
+
+    if (prepared != null) {
+      return prepared.lines
+    }
+
+    return null
   }
 
   if (cryptoRuntimeMethodName(statement.init) === 'createHmac') {
-    return (
-      emitPreparedCryptoHmacCallExpression(statement.init, context, deps, {
-        out: statement.name
-      })?.lines ?? null
-    )
+    const prepared = emitPreparedCryptoHmacCallExpression(statement.init, context, deps, {
+      out: statement.name
+    })
+
+    if (prepared != null) {
+      return prepared.lines
+    }
+
+    return null
   }
 
   if (deps.inferExpressionType(statement.init, context) !== 'crypto-hash') {
@@ -70,14 +118,20 @@ export function emitCryptoHashVariableDeclaration(
 
     context.variables.set(statement.name, 'crypto-hmac')
 
-    return [...handle.lines, `ccjs_crypto_hmac* ${statement.name} = ${handle.expression};`]
+    const lines: string[] = []
+    pushCryptoLines(lines, handle.lines)
+    lines.push(`ccjs_crypto_hmac* ${statement.name} = ${handle.expression};`)
+    return lines
   }
 
   const handle = emitPreparedCryptoHashHandleExpression(statement.init, context, deps)
 
   context.variables.set(statement.name, 'crypto-hash')
 
-  return [...handle.lines, `ccjs_crypto_hash* ${statement.name} = ${handle.expression};`]
+  const lines: string[] = []
+  pushCryptoLines(lines, handle.lines)
+  lines.push(`ccjs_crypto_hash* ${statement.name} = ${handle.expression};`)
+  return lines
 }
 
 export function emitCryptoHandleVariableDeclaration(
@@ -91,7 +145,10 @@ export function emitCryptoHandleVariableDeclaration(
 
     context.variables.set(statement.name, 'crypto-hash')
 
-    return [...handle.lines, `ccjs_crypto_hash* ${statement.name} = ${handle.expression};`]
+    const lines: string[] = []
+    pushCryptoLines(lines, handle.lines)
+    lines.push(`ccjs_crypto_hash* ${statement.name} = ${handle.expression};`)
+    return lines
   }
 
   if (inferred === 'crypto-hmac') {
@@ -99,7 +156,10 @@ export function emitCryptoHandleVariableDeclaration(
 
     context.variables.set(statement.name, 'crypto-hmac')
 
-    return [...handle.lines, `ccjs_crypto_hmac* ${statement.name} = ${handle.expression};`]
+    const lines: string[] = []
+    pushCryptoLines(lines, handle.lines)
+    lines.push(`ccjs_crypto_hmac* ${statement.name} = ${handle.expression};`)
+    return lines
   }
 
   return null
@@ -114,12 +174,9 @@ export function emitPreparedCryptoHashCallExpression(
   const method = cryptoRuntimeMethodName(expression)
 
   if (method === 'createHash') {
-    const algorithm = deps.emitPreparedStringBytesOperand(
-      expression.args[0] ?? deps.cStringLiteralNode('', expression.loc),
-      context,
-      'ccjs_crypto_algorithm'
-    )
-    const out = options.out ?? nextCName(context, 'ccjs_crypto_hash')
+    const algorithmArg = cryptoArgOrEmptyString(expression, 0, deps)
+    const algorithm = deps.emitPreparedStringBytesOperand(algorithmArg, context, 'ccjs_crypto_algorithm')
+    const out = cryptoOutName(options, context, 'ccjs_crypto_hash')
 
     if (options.owned !== false) {
       registerOwnedCryptoHash(context, out)
@@ -127,16 +184,19 @@ export function emitPreparedCryptoHashCallExpression(
       context.variables.set(out, 'crypto-hash')
     }
 
+    const lines: string[] = []
+    pushCryptoLines(lines, algorithm.lines)
+    lines.push(`ccjs_crypto_hash_free(${out});`)
+    lines.push(`${out} = 0;`)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_crypto_hash_create(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, &${out})`,
+        context
+      )
+    )
+
     return {
-      lines: [
-        ...algorithm.lines,
-        `ccjs_crypto_hash_free(${out});`,
-        `${out} = 0;`,
-        emitStatusCheck(
-          `ccjs_crypto_hash_create(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, &${out})`,
-          context
-        )
-      ],
+      lines,
       expression: out
     }
   }
@@ -146,14 +206,16 @@ export function emitPreparedCryptoHashCallExpression(
   }
 
   const handle = emitPreparedCryptoHashHandleExpression(expression.callee.object, context, deps)
-  const data = deps.emitCValueExpression(expression.args[0] ?? deps.cStringLiteralNode('', expression.loc), context)
+  const dataArg = cryptoArgOrEmptyString(expression, 0, deps)
+  const data = deps.emitCValueExpression(dataArg, context)
+  const lines: string[] = []
+
+  pushCryptoLines(lines, handle.lines)
+  pushCryptoLines(lines, data.lines)
+  lines.push(emitStatusCheck(`ccjs_crypto_hash_update(${handle.expression}, ${data.expression})`, context))
 
   return {
-    lines: [
-      ...handle.lines,
-      ...data.lines,
-      emitStatusCheck(`ccjs_crypto_hash_update(${handle.expression}, ${data.expression})`, context)
-    ],
+    lines,
     expression: handle.expression
   }
 }
@@ -167,13 +229,11 @@ export function emitPreparedCryptoHmacCallExpression(
   const method = cryptoRuntimeMethodName(expression)
 
   if (method === 'createHmac') {
-    const algorithm = deps.emitPreparedStringBytesOperand(
-      expression.args[0] ?? deps.cStringLiteralNode('', expression.loc),
-      context,
-      'ccjs_crypto_algorithm'
-    )
-    const key = deps.emitCValueExpression(expression.args[1] ?? deps.cStringLiteralNode('', expression.loc), context)
-    const out = options.out ?? nextCName(context, 'ccjs_crypto_hmac')
+    const algorithmArg = cryptoArgOrEmptyString(expression, 0, deps)
+    const algorithm = deps.emitPreparedStringBytesOperand(algorithmArg, context, 'ccjs_crypto_algorithm')
+    const keyArg = cryptoArgOrEmptyString(expression, 1, deps)
+    const key = deps.emitCValueExpression(keyArg, context)
+    const out = cryptoOutName(options, context, 'ccjs_crypto_hmac')
 
     if (options.owned !== false) {
       registerOwnedCryptoHmac(context, out)
@@ -181,17 +241,20 @@ export function emitPreparedCryptoHmacCallExpression(
       context.variables.set(out, 'crypto-hmac')
     }
 
+    const lines: string[] = []
+    pushCryptoLines(lines, algorithm.lines)
+    pushCryptoLines(lines, key.lines)
+    lines.push(`ccjs_crypto_hmac_free(${out});`)
+    lines.push(`${out} = 0;`)
+    lines.push(
+      emitStatusCheck(
+        `ccjs_crypto_hmac_create(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${key.expression}, &${out})`,
+        context
+      )
+    )
+
     return {
-      lines: [
-        ...algorithm.lines,
-        ...key.lines,
-        `ccjs_crypto_hmac_free(${out});`,
-        `${out} = 0;`,
-        emitStatusCheck(
-          `ccjs_crypto_hmac_create(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${key.expression}, &${out})`,
-          context
-        )
-      ],
+      lines,
       expression: out
     }
   }
@@ -201,14 +264,16 @@ export function emitPreparedCryptoHmacCallExpression(
   }
 
   const handle = emitPreparedCryptoHmacHandleExpression(expression.callee.object, context, deps)
-  const data = deps.emitCValueExpression(expression.args[0] ?? deps.cStringLiteralNode('', expression.loc), context)
+  const dataArg = cryptoArgOrEmptyString(expression, 0, deps)
+  const data = deps.emitCValueExpression(dataArg, context)
+  const lines: string[] = []
+
+  pushCryptoLines(lines, handle.lines)
+  pushCryptoLines(lines, data.lines)
+  lines.push(emitStatusCheck(`ccjs_crypto_hmac_update(${handle.expression}, ${data.expression})`, context))
 
   return {
-    lines: [
-      ...handle.lines,
-      ...data.lines,
-      emitStatusCheck(`ccjs_crypto_hmac_update(${handle.expression}, ${data.expression})`, context)
-    ],
+    lines,
     expression: handle.expression
   }
 }
@@ -231,100 +296,125 @@ export function emitPreparedCryptoCallExpression(
 
   if (method === 'getHashes') {
     const out = nextCName(context, 'ccjs_crypto_hashes')
+    const lines: string[] = []
+
     registerOwnedValue(context, out)
+    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(`ccjs_crypto_get_hashes(&ccjs_default_allocator, &${out})`, context))
+    lines.push(emitRuntimeValueCheck(out, 'CCJS_TAG_ARRAY', context))
 
     return {
-      lines: [
-        ...emitPrepareOwnedValueWrite(out),
-        emitStatusCheck(`ccjs_crypto_get_hashes(&ccjs_default_allocator, &${out})`, context),
-        emitRuntimeValueCheck(out, 'CCJS_TAG_ARRAY', context)
-      ],
-      expression: options.discard === true ? '' : out
+      lines,
+      expression: cryptoResultExpression(options, out)
     }
   }
 
   if (method === 'hash') {
-    const algorithm = deps.emitPreparedStringBytesOperand(
-      expression.args[0] ?? deps.cStringLiteralNode('', expression.loc),
-      context,
-      'ccjs_crypto_algorithm'
-    )
-    const data = deps.emitCValueExpression(expression.args[1] ?? deps.cStringLiteralNode('', expression.loc), context)
+    const algorithmArg = cryptoArgOrEmptyString(expression, 0, deps)
+    const algorithm = deps.emitPreparedStringBytesOperand(algorithmArg, context, 'ccjs_crypto_algorithm')
+    const dataArg = cryptoArgOrEmptyString(expression, 1, deps)
+    const data = deps.emitCValueExpression(dataArg, context)
     const out = nextCName(context, 'ccjs_crypto_digest')
-    const encoding = expression.cryptoHashDigestEncoding === 'bytes' ? 'bytes' : 'hex'
-    const digestCall =
-      encoding === 'hex'
-        ? `ccjs_crypto_hash_oneshot_hex(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${data.expression}, &${out})`
-        : `ccjs_crypto_hash_oneshot_bytes(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${data.expression}, &${out})`
-    const expectedTag = encoding === 'hex' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_BYTES'
+    let encoding = 'hex'
+    let digestCall = `ccjs_crypto_hash_oneshot_bytes(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${data.expression}, &${out})`
+    let expectedTag = 'CCJS_TAG_BYTES'
+    const lines: string[] = []
+
+    if (expression.cryptoHashDigestEncoding === 'bytes') {
+      encoding = 'bytes'
+    }
+
+    if (encoding === 'hex') {
+      digestCall = `ccjs_crypto_hash_oneshot_hex(&ccjs_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${data.expression}, &${out})`
+      expectedTag = 'CCJS_TAG_STRING'
+    }
 
     registerOwnedValue(context, out)
+    pushCryptoLines(lines, algorithm.lines)
+    pushCryptoLines(lines, data.lines)
+    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(digestCall, context))
+    lines.push(emitRuntimeValueCheck(out, expectedTag, context))
 
     return {
-      lines: [
-        ...algorithm.lines,
-        ...data.lines,
-        ...emitPrepareOwnedValueWrite(out),
-        emitStatusCheck(digestCall, context),
-        emitRuntimeValueCheck(out, expectedTag, context)
-      ],
-      expression: options.discard === true ? '' : out
+      lines,
+      expression: cryptoResultExpression(options, out)
     }
   }
 
   if (method === 'Hash.digest' || method === 'Hmac.digest') {
     const isHmac = method === 'Hmac.digest'
-    const handle = isHmac
-      ? emitPreparedCryptoHmacHandleExpression(expression.callee.object, context, deps)
-      : emitPreparedCryptoHashHandleExpression(expression.callee.object, context, deps)
+    let handle = emptyPreparedCryptoExpression('0')
     const out = nextCName(context, 'ccjs_crypto_digest')
-    const encoding = expression.cryptoHashDigestEncoding === 'hex' ? 'hex' : 'bytes'
-    const digestCall =
-      encoding === 'hex'
-        ? `ccjs_crypto_${isHmac ? 'hmac' : 'hash'}_digest_hex(&ccjs_default_allocator, ${handle.expression}, &${out})`
-        : `ccjs_crypto_${isHmac ? 'hmac' : 'hash'}_digest_bytes(&ccjs_default_allocator, ${handle.expression}, &${out})`
-    const expectedTag = encoding === 'hex' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_BYTES'
+    let encoding = 'bytes'
+    let runtimeKind = 'hash'
+    let digestCall = ''
+    let expectedTag = 'CCJS_TAG_BYTES'
+    const lines: string[] = []
+
+    if (isHmac) {
+      handle = emitPreparedCryptoHmacHandleExpression(expression.callee.object, context, deps)
+      runtimeKind = 'hmac'
+    } else {
+      handle = emitPreparedCryptoHashHandleExpression(expression.callee.object, context, deps)
+    }
+
+    if (expression.cryptoHashDigestEncoding === 'hex') {
+      encoding = 'hex'
+    }
+
+    if (encoding === 'hex') {
+      digestCall = `ccjs_crypto_${runtimeKind}_digest_hex(&ccjs_default_allocator, ${handle.expression}, &${out})`
+      expectedTag = 'CCJS_TAG_STRING'
+    } else {
+      digestCall = `ccjs_crypto_${runtimeKind}_digest_bytes(&ccjs_default_allocator, ${handle.expression}, &${out})`
+    }
 
     registerOwnedValue(context, out)
+    pushCryptoLines(lines, handle.lines)
+    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(digestCall, context))
+    lines.push(emitRuntimeValueCheck(out, expectedTag, context))
 
     return {
-      lines: [
-        ...handle.lines,
-        ...emitPrepareOwnedValueWrite(out),
-        emitStatusCheck(digestCall, context),
-        emitRuntimeValueCheck(out, expectedTag, context)
-      ],
-      expression: options.discard === true ? '' : out
+      lines,
+      expression: cryptoResultExpression(options, out)
     }
   }
 
   if (method === 'getRandomValues' || method === 'randomFillSync') {
     const value = deps.emitCValueExpression(expression.args[0], context)
-    const preparedCall =
-      method === 'getRandomValues'
-        ? { lines: [], call: `ccjs_crypto_get_random_values(${value.expression})` }
-        : emitCryptoRandomFillCall(value.expression, expression, context, deps)
+    let preparedCall: CryptoRandomFillCall = {
+      lines: [],
+      call: `ccjs_crypto_get_random_values(${value.expression})`
+    }
+    const lines: string[] = []
+
+    if (method === 'randomFillSync') {
+      preparedCall = emitCryptoRandomFillCall(value.expression, expression, context, deps)
+    }
+
+    pushCryptoLines(lines, value.lines)
+    pushCryptoLines(lines, preparedCall.lines)
+    lines.push(emitStatusCheck(preparedCall.call, context))
 
     if (options.discard === true) {
       return {
-        lines: [...value.lines, ...preparedCall.lines, emitStatusCheck(preparedCall.call, context)],
+        lines,
         expression: ''
       }
     }
 
     const out = nextCName(context, 'ccjs_crypto_bytes')
+
     registerOwnedValue(context, out)
+    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(`${out} = ${value.expression};`)
+    lines.push(emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context))
+    lines.push(`ccjs_retain(${out});`)
 
     return {
-      lines: [
-        ...value.lines,
-        ...preparedCall.lines,
-        emitStatusCheck(preparedCall.call, context),
-        ...emitPrepareOwnedValueWrite(out),
-        `${out} = ${value.expression};`,
-        emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context),
-        `ccjs_retain(${out});`
-      ],
+      lines,
       expression: out
     }
   }
@@ -332,29 +422,31 @@ export function emitPreparedCryptoCallExpression(
   if (method === 'randomBytes') {
     const size = deps.emitPreparedNumberExpression(expression.args[0], context)
     const out = nextCName(context, 'ccjs_crypto_bytes')
+    const lines: string[] = []
+
     registerOwnedValue(context, out)
+    pushCryptoLines(lines, size.lines)
+    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(`ccjs_crypto_random_bytes(&ccjs_default_allocator, ${size.expression}, &${out})`, context))
+    lines.push(emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context))
 
     return {
-      lines: [
-        ...size.lines,
-        ...emitPrepareOwnedValueWrite(out),
-        emitStatusCheck(`ccjs_crypto_random_bytes(&ccjs_default_allocator, ${size.expression}, &${out})`, context),
-        emitRuntimeValueCheck(out, 'CCJS_TAG_BYTES', context)
-      ],
-      expression: options.discard === true ? '' : out
+      lines,
+      expression: cryptoResultExpression(options, out)
     }
   }
 
   const out = nextCName(context, 'ccjs_crypto_uuid')
+  const lines: string[] = []
+
   registerOwnedValue(context, out)
+  pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(emitStatusCheck(`ccjs_crypto_random_uuid(&ccjs_default_allocator, &${out})`, context))
+  lines.push(emitRuntimeValueCheck(out, 'CCJS_TAG_STRING', context))
 
   return {
-    lines: [
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_crypto_random_uuid(&ccjs_default_allocator, &${out})`, context),
-      emitRuntimeValueCheck(out, 'CCJS_TAG_STRING', context)
-    ],
-    expression: options.discard === true ? '' : out
+    lines,
+    expression: cryptoResultExpression(options, out)
   }
 }
 
@@ -369,14 +461,15 @@ export function emitPreparedCryptoNumberCallExpression(
     const left = deps.emitCValueExpression(expression.args[0], context)
     const right = deps.emitCValueExpression(expression.args[1], context)
     const out = nextCName(context, 'ccjs_crypto_equal')
+    const lines: string[] = []
+
+    pushCryptoLines(lines, left.lines)
+    pushCryptoLines(lines, right.lines)
+    lines.push(`int ${out} = 0;`)
+    lines.push(emitStatusCheck(`ccjs_crypto_timing_safe_equal(${left.expression}, ${right.expression}, &${out})`, context))
 
     return {
-      lines: [
-        ...left.lines,
-        ...right.lines,
-        `int ${out} = 0;`,
-        emitStatusCheck(`ccjs_crypto_timing_safe_equal(${left.expression}, ${right.expression}, &${out})`, context)
-      ],
+      lines,
       expression: out
     }
   }
@@ -385,23 +478,24 @@ export function emitPreparedCryptoNumberCallExpression(
     return null
   }
 
-  const min =
-    expression.args.length === 1
-      ? { lines: [], expression: '0' }
-      : deps.emitPreparedNumberExpression(expression.args[0], context)
-  const max = deps.emitPreparedNumberExpression(
-    expression.args.length === 1 ? expression.args[0] : expression.args[1],
-    context
-  )
+  let min = emptyPreparedCryptoExpression('0')
+  let maxArg = expression.args[0]
+  if (expression.args.length !== 1) {
+    min = deps.emitPreparedNumberExpression(expression.args[0], context)
+    maxArg = expression.args[1]
+  }
+
+  const max = deps.emitPreparedNumberExpression(maxArg, context)
   const out = nextCName(context, 'ccjs_crypto_int')
+  const lines: string[] = []
+
+  pushCryptoLines(lines, min.lines)
+  pushCryptoLines(lines, max.lines)
+  lines.push(`ccjs_number ${out} = 0;`)
+  lines.push(emitStatusCheck(`ccjs_crypto_random_int(${min.expression}, ${max.expression}, &${out})`, context))
 
   return {
-    lines: [
-      ...min.lines,
-      ...max.lines,
-      `ccjs_number ${out} = 0;`,
-      emitStatusCheck(`ccjs_crypto_random_int(${min.expression}, ${max.expression}, &${out})`, context)
-    ],
+    lines,
     expression: out
   }
 }
@@ -411,7 +505,7 @@ export function emitPreparedCryptoHashHandleExpression(
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): PreparedExpression {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 
     if (context.variables.get(name) === 'crypto-hash') {
@@ -422,8 +516,8 @@ export function emitPreparedCryptoHashHandleExpression(
     }
   }
 
-  if (expression?.type === 'CallExpression') {
-    const call = emitPreparedCryptoHashCallExpression(expression, context, deps)
+  if (expression.type === 'CallExpression') {
+    const call = emitPreparedCryptoHashCallExpression(expression, context, deps, {})
 
     if (call != null) {
       return call
@@ -434,7 +528,7 @@ export function emitPreparedCryptoHashHandleExpression(
     diagnostic(
       'CCJS_C_CRYPTO_HASH',
       'this crypto hash expression is not supported by the current C backend slice',
-      expression?.loc
+      expression.loc
     )
   )
 
@@ -449,7 +543,7 @@ export function emitPreparedCryptoHmacHandleExpression(
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): PreparedExpression {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 
     if (context.variables.get(name) === 'crypto-hmac') {
@@ -460,8 +554,8 @@ export function emitPreparedCryptoHmacHandleExpression(
     }
   }
 
-  if (expression?.type === 'CallExpression') {
-    const call = emitPreparedCryptoHmacCallExpression(expression, context, deps)
+  if (expression.type === 'CallExpression') {
+    const call = emitPreparedCryptoHmacCallExpression(expression, context, deps, {})
 
     if (call != null) {
       return call
@@ -472,7 +566,7 @@ export function emitPreparedCryptoHmacHandleExpression(
     diagnostic(
       'CCJS_C_CRYPTO_HMAC',
       'this crypto hmac expression is not supported by the current C backend slice',
-      expression?.loc
+      expression.loc
     )
   )
 
@@ -487,19 +581,26 @@ function emitCryptoRandomFillCall(
   expression: AnyNode,
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
-): { lines: string[]; call: string } {
-  const offset =
-    expression.args[1] == null
-      ? { lines: [], expression: '0' }
-      : deps.emitPreparedNumberExpression(expression.args[1], context)
-  const size =
-    expression.args[2] == null
-      ? { lines: [], expression: '0' }
-      : deps.emitPreparedNumberExpression(expression.args[2], context)
-  const hasSize = expression.args[2] == null ? '0' : '1'
+): CryptoRandomFillCall {
+  let offset = emptyPreparedCryptoExpression('0')
+  let size = emptyPreparedCryptoExpression('0')
+  let hasSize = '0'
+  const lines: string[] = []
+
+  if (expression.args.length > 1) {
+    offset = deps.emitPreparedNumberExpression(expression.args[1], context)
+  }
+
+  if (expression.args.length > 2) {
+    size = deps.emitPreparedNumberExpression(expression.args[2], context)
+    hasSize = '1'
+  }
+
+  pushCryptoLines(lines, offset.lines)
+  pushCryptoLines(lines, size.lines)
 
   return {
-    lines: [...offset.lines, ...size.lines],
+    lines,
     call: `ccjs_crypto_random_fill(${value}, ${offset.expression}, ${size.expression}, ${hasSize})`
   }
 }
