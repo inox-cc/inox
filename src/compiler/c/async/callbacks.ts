@@ -10,6 +10,7 @@ import type {
   CFunctionParam,
   CFunctionType,
   CObjectShape,
+  CObjectShapeField,
   CPlainArrowCallbackWrapper,
   CPromiseChainWrapper,
   CRuntimeArrowCallbackWrapper,
@@ -25,6 +26,7 @@ type CallbackBooleanMap = Map<string, boolean>
 type CallbackFunctionParamMap = Map<string, CFunctionParam[]>
 type CallbackFunctionTypeMap = Map<string, CFunctionType>
 type CallbackMutableDeclarationSet = Set<AnyNode | null | undefined>
+type CallbackObjectShapeMap = Map<string, CObjectShapeField[]>
 type CallbackPromiseConstructorHandlerMap = Map<string, {
   kind: 'reject' | 'resolve'
   promise: string
@@ -52,6 +54,7 @@ type CallbackFunctionContext = CallbackEmitContext & {
   cleanupEnabled: boolean
   eventLoopUsed: boolean
   externalEventLoop: boolean
+  objectShapes: CallbackObjectShapeMap
   promiseConstructorHandlers: CallbackPromiseConstructorHandlerMap
   runtimeCallbackCleanupLabel?: string
   runtimeCallbackReturnOut?: string

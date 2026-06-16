@@ -6,6 +6,7 @@ import type {
   CFunctionParam,
   CFunctionType,
   CObjectShape,
+  CObjectShapeField,
   CPromiseConstructorHandler,
   CPromiseChainWrapper,
   CRuntimeArrowCapture
@@ -21,6 +22,7 @@ type PromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
 type PromiseFunctionParamMap = Map<string, CFunctionParam[]>
 type PromiseFunctionTypeMap = Map<string, CFunctionType>
 type PromiseMutableDeclarationSet = Set<AnyNode | null | undefined>
+type PromiseObjectShapeMap = Map<string, CObjectShapeField[]>
 type PromiseStringMap = Map<string, string>
 type PromiseStringNullableMap = Map<string, string | null>
 type PromiseStringSet = Set<string>
@@ -49,6 +51,7 @@ type PromiseFunctionContext = PromiseEmitContext & {
   failureStatement?: string | null
   failureStatementUsed?: boolean
   nextId: number
+  objectShapes: PromiseObjectShapeMap
   ownedPromises: string[]
   promiseConstructorHandlers: PromiseConstructorHandlerMap
   promiseRejectionValueTypes: PromiseStringMap
