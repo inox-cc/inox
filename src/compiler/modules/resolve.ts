@@ -3,7 +3,13 @@ import type { CompilerHost } from '../host.ts'
 const sourceExtensions = ['', '.ts', '.js']
 
 export async function resolveExistingSource(path: string, host: CompilerHost): Promise<string> {
-  const normalized = host.normalizePath(host.isAbsolutePath(path) ? path : host.resolvePath(path))
+  let resolved = path
+
+  if (!host.isAbsolutePath(path)) {
+    resolved = host.resolvePath(path)
+  }
+
+  const normalized = host.normalizePath(resolved)
   const candidates: string[] = []
 
   if (host.extname(normalized) === '') {
@@ -30,8 +36,8 @@ export async function resolveExistingSource(path: string, host: CompilerHost): P
   throw new Error(`Source not found: ${path}`)
 }
 
-export async function resolveImport(from: string, specifier: string, host: CompilerHost): Promise<string> {
-  return resolveExistingSource(host.joinPath(host.dirname(from), specifier), host)
+export async function resolveImport(fromPath: string, specifier: string, host: CompilerHost): Promise<string> {
+  return resolveExistingSource(host.joinPath(host.dirname(fromPath), specifier), host)
 }
 
 export function isRelativeSpecifier(specifier: string): boolean {
