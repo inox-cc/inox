@@ -1,16 +1,19 @@
 import { collectIrTopLevelNodes } from '../ir.ts'
-import type { IrProgram, AnyNode } from '../types.ts'
+import type { IrProgram } from '../types.ts'
+
+type RuntimeImportSourceSet = Set<string>
+type RuntimeImportNameSet = Set<string>
 
 export function collectRuntimeImportNames(
   irPrograms: IrProgram[],
-  sources: ReadonlySet<string>,
-  importedNames: ReadonlySet<string>
-): Set<string> {
-  const names = new Set<string>()
+  sources: RuntimeImportSourceSet,
+  importedNames: RuntimeImportNameSet
+): RuntimeImportNameSet {
+  const names: RuntimeImportNameSet = new Set()
 
   for (const ir of irPrograms) {
     for (const item of collectIrTopLevelNodes(ir, 'import')) {
-      if (!sources.has(item.source)) {
+      if (sources.has(item.source) === false) {
         continue
       }
 
@@ -27,14 +30,14 @@ export function collectRuntimeImportNames(
 
 export function collectRuntimeNamedImportNames(
   irPrograms: IrProgram[],
-  sources: ReadonlySet<string>,
+  sources: RuntimeImportSourceSet,
   importedName: string
-): Set<string> {
-  const names = new Set<string>()
+): RuntimeImportNameSet {
+  const names: RuntimeImportNameSet = new Set()
 
   for (const ir of irPrograms) {
     for (const item of collectIrTopLevelNodes(ir, 'import')) {
-      if (!sources.has(item.source)) {
+      if (sources.has(item.source) === false) {
         continue
       }
 
@@ -49,12 +52,12 @@ export function collectRuntimeNamedImportNames(
   return names
 }
 
-export function collectHttpRuntimeImportNames(irPrograms: IrProgram[]): Set<string> {
-  const names = new Set<string>()
+export function collectHttpRuntimeImportNames(irPrograms: IrProgram[]): RuntimeImportNameSet {
+  const names: RuntimeImportNameSet = new Set()
 
   for (const ir of irPrograms) {
     for (const item of collectIrTopLevelNodes(ir, 'import')) {
-      if (!['http', 'node:http'].includes(item.source)) {
+      if (isHttpRuntimeImportSource(item.source) === false) {
         continue
       }
 
@@ -69,12 +72,12 @@ export function collectHttpRuntimeImportNames(irPrograms: IrProgram[]): Set<stri
   return names
 }
 
-export function collectHttpRuntimeCreateServerNames(irPrograms: IrProgram[]): Set<string> {
-  const names = new Set<string>()
+export function collectHttpRuntimeCreateServerNames(irPrograms: IrProgram[]): RuntimeImportNameSet {
+  const names: RuntimeImportNameSet = new Set()
 
   for (const ir of irPrograms) {
     for (const item of collectIrTopLevelNodes(ir, 'import')) {
-      if (!['http', 'node:http'].includes(item.source)) {
+      if (isHttpRuntimeImportSource(item.source) === false) {
         continue
       }
 
@@ -89,38 +92,18 @@ export function collectHttpRuntimeCreateServerNames(irPrograms: IrProgram[]): Se
   return names
 }
 
-export function irProgramsUseRuntimeImport(programs: IrProgram[], sources: ReadonlySet<string>): boolean {
-  return programs.some((program) => containsRuntimeImport(program.body, sources))
-}
-
-function containsRuntimeImport(node: unknown, sources: ReadonlySet<string>): boolean {
-  if (node == null) {
-    return false
-  }
-
-  if (Array.isArray(node)) {
-    return node.some((item) => containsRuntimeImport(item, sources))
-  }
-
-  if (typeof node !== 'object') {
-    return false
-  }
-
-  const item = node as AnyNode
-
-  if (item.type === 'ImportDeclaration' && sources.has(item.source)) {
-    return true
-  }
-
-  for (const [key, value] of Object.entries(item)) {
-    if (key === 'loc' || key === 'shape') {
-      continue
-    }
-
-    if (containsRuntimeImport(value, sources)) {
-      return true
+export function irProgramsUseRuntimeImport(programs: IrProgram[], sources: RuntimeImportSourceSet): boolean {
+  for (const program of programs) {
+    for (const item of collectIrTopLevelNodes(program, 'import')) {
+      if (sources.has(item.source)) {
+        return true
+      }
     }
   }
 
   return false
+}
+
+function isHttpRuntimeImportSource(source: string): boolean {
+  return source === 'http' || source === 'node:http'
 }
