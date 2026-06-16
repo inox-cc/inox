@@ -17,6 +17,11 @@ type ArrayExpressionHoist = {
   expression: LowerNode
 }
 
+type ArrayMethodExpressionList = {
+  statements: LowerNode[]
+  expressions: LowerNode[]
+}
+
 type InferredMapType = {
   key: string | null
   value: string | null
@@ -829,9 +834,13 @@ function lowerArrayMethodReceiver(receiver: LowerNode, context: LowerContext): A
 function lowerArrayMethodSubexpressions(
   expression: LowerNode,
   context: LowerContext,
-  allowRoot: boolean = true
+  allowRoot?: boolean
 ): ArrayExpressionHoist | null {
-  const root = allowRoot ? lowerArrayMethodExpressionToTemp(expression, context) : null
+  let root: ArrayExpressionHoist | null = null
+
+  if (allowRoot !== false) {
+    root = lowerArrayMethodExpressionToTemp(expression, context)
+  }
 
   if (root != null) {
     return root
@@ -850,10 +859,7 @@ function lowerArrayMethodSubexpressions(
 
     return {
       statements: args.statements,
-      expression: {
-        ...expression,
-        args: args.expressions
-      }
+      expression: cloneCallExpressionWithArgs(expression, args.expressions)
     }
   }
 
@@ -866,10 +872,7 @@ function lowerArrayMethodSubexpressions(
 
     return {
       statements: object.statements,
-      expression: {
-        ...expression,
-        object: object.expression
-      }
+      expression: cloneMemberExpressionWithObject(expression, object.expression)
     }
   }
 
@@ -893,13 +896,20 @@ function lowerArrayMethodSubexpressions(
       return null
     }
 
+    let objectExpression = expression.object
+    let indexExpression = expression.index
+
+    if (object != null) {
+      objectExpression = object.expression
+    }
+
+    if (index != null) {
+      indexExpression = index.expression
+    }
+
     return {
       statements,
-      expression: {
-        ...expression,
-        object: object == null ? expression.object : object.expression,
-        index: index == null ? expression.index : index.expression
-      }
+      expression: cloneIndexExpressionWithParts(expression, objectExpression, indexExpression)
     }
   }
 
@@ -923,18 +933,26 @@ function lowerArrayMethodSubexpressions(
       return null
     }
 
+    let leftExpression = expression.left
+    let rightExpression = expression.right
+
+    if (left != null) {
+      leftExpression = left.expression
+    }
+
+    if (right != null) {
+      rightExpression = right.expression
+    }
+
     return {
       statements,
-      expression: {
-        ...expression,
-        left: left == null ? expression.left : left.expression,
-        right: right == null ? expression.right : right.expression
-      }
+      expression: cloneBinaryExpressionWithParts(expression, leftExpression, rightExpression)
     }
   }
 
   if (expression.type === 'UnaryExpression' || expression.type === 'TypeAssertionExpression') {
-    const operand = lowerArrayMethodSubexpressions(expression.argument ?? expression.expression, context)
+    const operandSource = unaryOrTypeAssertionOperand(expression)
+    const operand = lowerArrayMethodSubexpressions(operandSource, context)
 
     if (operand == null) {
       return null
@@ -942,11 +960,7 @@ function lowerArrayMethodSubexpressions(
 
     return {
       statements: operand.statements,
-      expression: {
-        ...expression,
-        argument: operand.expression,
-        expression: expression.expression == null ? expression.expression : operand.expression
-      }
+      expression: cloneUnaryOrTypeAssertionExpressionWithOperand(expression, operand.expression)
     }
   }
 
@@ -959,10 +973,7 @@ function lowerArrayMethodSubexpressions(
 
     return {
       statements: elements.statements,
-      expression: {
-        ...expression,
-        elements: elements.expressions
-      }
+      expression: cloneArrayLiteralWithElements(expression, elements.expressions)
     }
   }
 
@@ -980,10 +991,7 @@ function lowerArrayMethodSubexpressions(
       }
 
       appendLoweredHoistStatements(statements, hoisted.statements)
-      properties.push({
-        ...property,
-        value: hoisted.expression
-      })
+      properties.push(cloneObjectPropertyWithValue(property, hoisted.expression))
       changed = true
     }
 
@@ -993,20 +1001,199 @@ function lowerArrayMethodSubexpressions(
 
     return {
       statements,
-      expression: {
-        ...expression,
-        properties
-      }
+      expression: cloneObjectLiteralWithProperties(expression, properties)
     }
   }
 
   return null
 }
 
+function cloneCallExpressionWithArgs(expression: LowerNode, args: LowerNode[]): LowerNode {
+  return {
+    type: expression.type,
+    callee: expression.callee,
+    args,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
+function cloneMemberExpressionWithObject(expression: LowerNode, object: LowerNode): LowerNode {
+  return {
+    type: expression.type,
+    object,
+    property: expression.property,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
+function cloneIndexExpressionWithParts(expression: LowerNode, object: LowerNode, index: LowerNode): LowerNode {
+  return {
+    type: expression.type,
+    object,
+    index,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
+function cloneBinaryExpressionWithParts(expression: LowerNode, left: LowerNode, right: LowerNode): LowerNode {
+  return {
+    type: 'BinaryExpression',
+    operator: expression.operator,
+    left,
+    right,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
+function unaryOrTypeAssertionOperand(expression: LowerNode): LowerNode {
+  if (expression.type === 'TypeAssertionExpression') {
+    return expression.expression
+  }
+
+  return expression.argument
+}
+
+function cloneUnaryOrTypeAssertionExpressionWithOperand(expression: LowerNode, operand: LowerNode): LowerNode {
+  if (expression.type === 'TypeAssertionExpression') {
+    return {
+      type: 'TypeAssertionExpression',
+      expression: operand,
+      valueType: expression.valueType,
+      nullable: expression.nullable === true,
+      arrayElementType: nullableString(expression.arrayElementType),
+      arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+      mapKeyType: nullableString(expression.mapKeyType),
+      mapValueType: nullableString(expression.mapValueType),
+      promiseValueType: nullableString(expression.promiseValueType),
+      setElementType: nullableString(expression.setElementType),
+      functionType: nullableNode(expression.functionType),
+      shape: nullableNode(expression.shape),
+      className: nullableString(expression.className),
+      collectionKind: nullableString(expression.collectionKind),
+      loc: expression.loc
+    }
+  }
+
+  return {
+    type: 'UnaryExpression',
+    operator: expression.operator,
+    argument: operand,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
+function cloneArrayLiteralWithElements(expression: LowerNode, elements: LowerNode[]): LowerNode {
+  return {
+    type: 'ArrayLiteral',
+    elements,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
+function cloneObjectPropertyWithValue(property: LowerNode, value: LowerNode): LowerNode {
+  return {
+    key: property.key,
+    value,
+    loc: property.loc
+  }
+}
+
+function cloneObjectLiteralWithProperties(expression: LowerNode, properties: LowerNode[]): LowerNode {
+  return {
+    type: 'ObjectLiteral',
+    properties,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
 function lowerArrayMethodExpressionList(
   expressions: LowerNode[],
   context: LowerContext
-): { statements: LowerNode[]; expressions: LowerNode[] } | null {
+): ArrayMethodExpressionList | null {
   const statements: LowerNode[] = []
   const lowered: LowerNode[] = []
   let changed = false
