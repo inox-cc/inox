@@ -7351,7 +7351,7 @@ class Checker {
     fields: AnyNode[]
   ): void {
     for (const field of fields) {
-      if (field.ownership === 'weak') {
+      if (field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)) {
         continue
       }
 
@@ -7368,6 +7368,18 @@ class Checker {
         })
       }
     }
+  }
+
+  hasWeakOwnershipMarker(fields: AnyNode[], fieldName: string): boolean {
+    const markerName = `${fieldName}Ownership`
+
+    for (const field of fields) {
+      if (field.name === markerName && field.optional === true && field.valueType === 'string') {
+        return true
+      }
+    }
+
+    return false
   }
 
   ownershipTargetsFromTypeName(name: string | null | undefined): string[] {

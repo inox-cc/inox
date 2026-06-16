@@ -152,6 +152,20 @@ export function main(): void {}
   assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
 })
 
+test('allows TypeScript-compatible weak ownership markers on type fields', () => {
+  compileSource(`type Param = {
+  functionTypeOwnership?: 'weak'
+  functionType?: Fn | null
+}
+
+type Fn = {
+  params: Param[]
+}
+
+export function main(): void {}
+`)
+})
+
 test('rejects direct weak dereference without a null check', () => {
   assertDiagnostic(
     `type Parent = {

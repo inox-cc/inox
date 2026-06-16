@@ -104,6 +104,7 @@ export type CRuntimeArrayElement = CArrayElementInfo & {
 
 export type CFunctionParam = {
   arrayElementType?: string | null
+  functionTypeOwnership?: 'weak'
   functionType?: CFunctionType | null
   loc?: AnyNode['loc']
   mapKeyType?: string | null
@@ -338,5 +339,6 @@ export type CModulePlan = {
 
 export type CModuleImportPlan = {
   declaration: AnyNode
+  moduleOwnership?: 'weak'
   module: CModulePlan
 }
