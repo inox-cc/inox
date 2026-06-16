@@ -3,9 +3,9 @@ import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
   nextCName,
-  registerOwnedValue,
-  type CFunctionContext
+  registerOwnedValue
 } from '../context.ts'
+import type { CFunctionContext } from '../context.ts'
 import type {
   CObjectShape,
   CPreparedCallOptions as PreparedCallOptions,
@@ -17,8 +17,28 @@ export type ChildProcessLoweringDependencies = {
   registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
 }
 
+function pushChildProcessLines(target: string[], lines: string[]): void {
+  for (const line of lines) {
+    target.push(line)
+  }
+}
+
+function emitChildProcessArgumentArray(args: PreparedExpression[]): string {
+  let output = ''
+
+  for (let index = 0; index < args.length; index = index + 1) {
+    if (index === 0) {
+      output = args[index].expression
+    } else {
+      output = `${output}, ${args[index].expression}`
+    }
+  }
+
+  return output
+}
+
 export function cChildProcessRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression?.type !== 'CallExpression' || typeof expression.childProcessRuntimeMethod !== 'string') {
+  if (expression.type !== 'CallExpression' || expression.childProcessRuntimeMethod == null) {
     return null
   }
 
@@ -38,8 +58,16 @@ export function emitPreparedChildProcessCallExpression(
   }
 
   const command = dependencies.emitCValueExpression(expression.args[0], context)
-  const out = options.out ?? nextCName(context, 'ccjs_child_process_output')
-  const lines = [...command.lines, ...emitPrepareOwnedValueWrite(out)]
+  let out = nextCName(context, 'ccjs_child_process_output')
+
+  if (options.out != null) {
+    out = options.out
+  }
+
+  const lines: string[] = []
+
+  pushChildProcessLines(lines, command.lines)
+  pushChildProcessLines(lines, emitPrepareOwnedValueWrite(out))
 
   if (options.owned !== false) {
     registerOwnedValue(context, out)
@@ -47,7 +75,7 @@ export function emitPreparedChildProcessCallExpression(
 
   if (method === 'execSync') {
     const childOptions = dependencies.emitCValueExpression(expression.args[1], context)
-    lines.push(...childOptions.lines)
+    pushChildProcessLines(lines, childOptions.lines)
     lines.push(
       emitStatusCheck(
         `ccjs_child_process_exec_sync(&ccjs_default_allocator, ${command.expression}, ${childOptions.expression}, &${out})`,
@@ -61,26 +89,50 @@ export function emitPreparedChildProcessCallExpression(
     }
   }
 
-  const second = expression.args[1]
-  const argArray = second?.type === 'ObjectLiteral' ? null : second
-  const optionsArg = second?.type === 'ObjectLiteral' ? second : expression.args[2]
-  const childOptions =
-    optionsArg == null
-      ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
-      : dependencies.emitCValueExpression(optionsArg, context)
-  const args =
-    argArray?.type === 'ArrayLiteral'
-      ? argArray.elements.map((arg: AnyNode) => dependencies.emitCValueExpression(arg, context))
-      : []
+  let second: AnyNode | null = null
 
-  lines.push(...args.flatMap((arg: PreparedExpression) => arg.lines))
-  lines.push(...childOptions.lines)
+  if (expression.args.length > 1) {
+    second = expression.args[1]
+  }
+
+  let argArray: AnyNode | null = second
+  let optionsArg: AnyNode | null = null
+
+  if (second != null && second.type === 'ObjectLiteral') {
+    argArray = null
+    optionsArg = second
+  } else if (expression.args.length > 2) {
+    optionsArg = expression.args[2]
+  }
+
+  let childOptions: PreparedExpression = {
+    lines: [],
+    expression: 'ccjs_undefined_value()'
+  }
+
+  if (optionsArg != null) {
+    childOptions = dependencies.emitCValueExpression(optionsArg, context)
+  }
+
+  const args: PreparedExpression[] = []
+
+  if (argArray != null && argArray.type === 'ArrayLiteral') {
+    for (const arg of argArray.elements) {
+      args.push(dependencies.emitCValueExpression(arg, context))
+    }
+  }
+
+  for (const arg of args) {
+    pushChildProcessLines(lines, arg.lines)
+  }
+
+  pushChildProcessLines(lines, childOptions.lines)
 
   if (method === 'spawnSync') {
     const shape = emitChildProcessSpawnSyncResultShape(context)
     context.variables.set(out, 'object')
     dependencies.registerObjectShape(context, out, expression.shape)
-    lines.push(...shape.lines)
+    pushChildProcessLines(lines, shape.lines)
 
     if (args.length === 0) {
       lines.push(
@@ -91,8 +143,9 @@ export function emitPreparedChildProcessCallExpression(
       )
     } else {
       const argsName = nextCName(context, 'ccjs_child_process_args')
+      const argsValue = emitChildProcessArgumentArray(args)
 
-      lines.push(`ccjs_value ${argsName}[] = { ${args.map((arg: PreparedExpression) => arg.expression).join(', ')} };`)
+      lines.push(`ccjs_value ${argsName}[] = { ${argsValue} };`)
       lines.push(
         emitStatusCheck(
           `ccjs_child_process_spawn_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, ${shape.expression}, &${out})`,
@@ -116,8 +169,9 @@ export function emitPreparedChildProcessCallExpression(
     )
   } else {
     const argsName = nextCName(context, 'ccjs_child_process_args')
+    const argsValue = emitChildProcessArgumentArray(args)
 
-    lines.push(`ccjs_value ${argsName}[] = { ${args.map((arg: PreparedExpression) => arg.expression).join(', ')} };`)
+    lines.push(`ccjs_value ${argsName}[] = { ${argsValue} };`)
     lines.push(
       emitStatusCheck(
         `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, &${out})`,
