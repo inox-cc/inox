@@ -9,20 +9,21 @@ import {
   registerBoxedValue,
   registerOwnedValue,
   restoreNullableScalarNarrowing,
-  restoreVariableScope,
-  type CFunctionContext
+  restoreVariableScope
 } from '../context.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import { diagnostic } from '../../diagnostics.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType, isRuntimeNullableType } from '../value-types.ts'
-import { resolveRuntimeArrayElementType, type PreparedArrayExpression } from './arrays.ts'
+import { resolveRuntimeArrayElementType } from './arrays.ts'
 import { resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
 import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
+import type { CFunctionContext } from '../context.ts'
+import type { PreparedArrayExpression } from './arrays.ts'
 import type { AnyNode, SourceLocation } from '../../types.ts'
 import type {
   CArrayElementInfo,
@@ -63,159 +64,216 @@ type RuntimeForOfSet = {
   name: string
 }
 
+type NullableScalarConditionNarrowing = {
+  trueNames: string[]
+  falseNames: string[]
+}
+
 export type StatementLoweringDependencies = {
-  emitArrayVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[]
-  emitArrayFilterVariableDeclaration: (
+  emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[]
+  emitArrayFilterVariableDeclaration(
     statement: AnyNode,
     filtered: PreparedArrayExpression,
     context: CFunctionContext
-  ) => string[]
-  emitArrayMapVariableDeclaration: (statement: AnyNode, mapped: PreparedArrayExpression, context: CFunctionContext) => string[]
-  emitArraySortVariableDeclaration: (statement: AnyNode, sorted: PreparedArrayExpression, context: CFunctionContext) => string[]
-  emitBoxedObjectVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[]
-  emitCAwaitValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitCExpression: (expression: AnyNode, context: CFunctionContext) => string
-  emitClassObjectVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[]
-  emitCObjectLiteralValueExpression: (
+  ): string[]
+  emitArrayMapVariableDeclaration(statement: AnyNode, mapped: PreparedArrayExpression, context: CFunctionContext): string[]
+  emitArraySortVariableDeclaration(statement: AnyNode, sorted: PreparedArrayExpression, context: CFunctionContext): string[]
+  emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[]
+  emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCExpression(expression: AnyNode, context: CFunctionContext): string
+  emitClassObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[]
+  emitCObjectLiteralValueExpression(
     expression: AnyNode,
     context: CFunctionContext,
     shape?: CObjectShape | null
-  ) => PreparedExpression
-  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  collectionConstructorName: (expression: AnyNode) => string | null
-  emitDgramAddressVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitDgramNumberVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitDgramSocketVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitDgramSocketCallStatement: (expression: AnyNode, context: CFunctionContext) => string[] | null
-  emitDynamicObjectMemberVariableDeclaration: (
+  ): PreparedExpression
+  emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  collectionConstructorName(expression: AnyNode): string | null
+  emitDgramAddressVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitDgramNumberVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitDgramSocketVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitDgramSocketCallStatement(expression: AnyNode, context: CFunctionContext): string[] | null
+  emitDynamicObjectMemberVariableDeclaration(
     statement: AnyNode,
     member: CKnownObjectIndexField,
     context: CFunctionContext
-  ) => string[]
-  emitDynamicObjectMemberAssignment: (expression: AnyNode, member: CKnownObjectIndexField, context: CFunctionContext) => string[]
-  emitErrorObjectVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[]
-  emitFailureStatement: (context: CFunctionContext) => string
-  emitFetchAbortControllerVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitFetchAbortControllerAbortStatement: (expression: AnyNode, context: CFunctionContext) => string[] | null
-  emitFunctionPointerVariable: (
+  ): string[]
+  emitDynamicObjectMemberAssignment(expression: AnyNode, member: CKnownObjectIndexField, context: CFunctionContext): string[]
+  emitErrorObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[]
+  emitFailureStatement(context: CFunctionContext): string
+  emitFetchAbortControllerVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CFunctionContext): string[] | null
+  emitFunctionPointerVariable(
     name: string,
     init: AnyNode,
     context: CFunctionContext,
     isConst: boolean,
     functionType: CFunctionType | null | undefined,
     loc: CSourceLocation
-  ) => string
-  emitHttpServerVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitHttpServerCallStatement: (expression: AnyNode, context: CFunctionContext) => string[] | null
-  emitJsonParseVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitKnownArrayIndexAssignment: (expression: AnyNode, element: CKnownArrayElement, context: CFunctionContext) => string[]
-  emitKnownArrayIndexVariableDeclaration: (
+  ): string
+  emitHttpServerVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitHttpServerCallStatement(expression: AnyNode, context: CFunctionContext): string[] | null
+  emitJsonParseVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitKnownArrayIndexAssignment(expression: AnyNode, element: CKnownArrayElement, context: CFunctionContext): string[]
+  emitKnownArrayIndexVariableDeclaration(
     statement: AnyNode,
     element: CKnownArrayElement,
     context: CFunctionContext
-  ) => string[]
-  emitKnownObjectMemberAssignment: (expression: AnyNode, member: CKnownObjectField, context: CFunctionContext) => string[]
-  emitKnownObjectMemberVariableDeclaration: (
+  ): string[]
+  emitKnownObjectMemberAssignment(expression: AnyNode, member: CKnownObjectField, context: CFunctionContext): string[]
+  emitKnownObjectMemberVariableDeclaration(
     statement: AnyNode,
     member: CKnownObjectField,
     context: CFunctionContext
-  ) => string[]
-  emitNetAddressMemberVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitNetAddressVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitNetNumberVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitNetServerCallStatement: (expression: AnyNode, context: CFunctionContext) => string[] | null
-  emitNetServerVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitNetSocketCallStatement: (expression: AnyNode, context: CFunctionContext) => string[] | null
-  emitNetSocketVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[] | null
-  emitNullableScalarValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitNullableRuntimeValueAssignment: (expression: AnyNode, context: CFunctionContext) => string[]
-  emitObjectVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[]
-  emitOptionalRuntimeCallbackCallExpression: (expression: AnyNode, context: CFunctionContext) => string[]
-  emitPreparedArrayFilterCallExpression: (
+  ): string[]
+  emitNetAddressMemberVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitNetAddressVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitNetNumberVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitNetServerCallStatement(expression: AnyNode, context: CFunctionContext): string[] | null
+  emitNetServerVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitNetSocketCallStatement(expression: AnyNode, context: CFunctionContext): string[] | null
+  emitNetSocketVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null
+  emitNullableScalarValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[]
+  emitObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[]
+  emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context: CFunctionContext): string[]
+  emitPreparedArrayFilterCallExpression(
     expression: AnyNode,
     context: CFunctionContext
-  ) => PreparedArrayExpression | null
-  emitPreparedArrayMapCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedArrayExpression | null
-  emitPreparedArrayPopCallExpression: (
+  ): PreparedArrayExpression | null
+  emitPreparedArrayMapCallExpression(expression: AnyNode, context: CFunctionContext): PreparedArrayExpression | null
+  emitPreparedArrayPopCallExpression(
     expression: AnyNode,
     context: CFunctionContext,
     options: PreparedCallOptions | null
-  ) => PreparedExpression | null
-  emitPreparedArrayPushCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedArraySortCallExpression: (
+  ): PreparedExpression | null
+  emitPreparedArrayPushCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArraySortCallExpression(
     expression: AnyNode,
     context: CFunctionContext
-  ) => PreparedArrayExpression | null
-  emitPreparedAsyncFunctionPromiseCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedBytesIndexAssignment: (expression: AnyNode, context: CFunctionContext) => PreparedStatement | null
-  emitPreparedCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedChildProcessCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCollectionCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedCryptoHashCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoHmacCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedCryptoNumberCallExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedDebugMemoryCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedFsSyncStatementExpression: (expression: AnyNode, context: CFunctionContext) => PreparedStatement | null
-  emitPreparedMapIndexAssignment: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
-  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedPromiseConstructorExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedPromiseExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedPromiseReturningCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedUpdateExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitPreparedUrlSearchParamsObjectExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) => PreparedExpression | null
-  emitProcessExitCodeAssignment: (expression: AnyNode, context: CFunctionContext) => string[] | null
-  emitProcessExitStatement: (expression: AnyNode, context: CFunctionContext) => string[] | null
-  emitPromiseConstructorSettlementCall: (expression: AnyNode, context: CFunctionContext) => string[] | null
-  emitReference: (expression: AnyNode, context: CFunctionContext) => string
-  emitRuntimeCallbackVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[]
-  emitScalarVariableDeclaration: (statement: AnyNode, context: CFunctionContext) => string[]
-  emitStatement: (statement: AnyNode, context: CFunctionContext) => string[]
-  emitStringExpression: (expression: AnyNode, context: CFunctionContext) => string
-  emitUrlObjectFieldAssignment: (expression: AnyNode, context: CFunctionContext) => string[] | null
-  inferCatchBindingValueType: (statement: AnyNode, context: CFunctionContext) => string
-  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
-  isArrayMethodCall: (expression: AnyNode) => boolean
-  isBoxedRuntimeValueAssignment: (expression: AnyNode, context: CFunctionContext) => boolean
-  isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isConsoleLog: (expression: AnyNode) => boolean
-  isCollectionConstructorExpression: (expression: AnyNode) => boolean
-  isErrorConstructorExpression: (expression: AnyNode) => boolean
-  isErrorValueExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isIndexAccessExpression: (expression: AnyNode) => boolean
-  isMemberAccessExpression: (expression: AnyNode) => boolean
-  isNullableRuntimeValueAssignment: (expression: AnyNode, context: CFunctionContext) => boolean
-  isRuntimeProducedStringExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  registerErrorObjectShape: (context: CFunctionContext, name: string) => void
-  resolveForOfElementType: (elements: CArrayElementInfo[]) => string
-  resolveKnownArrayIndex: (expression: AnyNode, context: CFunctionContext) => CKnownArrayElement | null
-  resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CKnownObjectIndexField | null
-  resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CKnownObjectField | null
-  resolveKnownForOfArray: (expression: AnyNode, context: CFunctionContext) => KnownForOfArray | null
-  resolveNullableScalarConditionNarrowing: (expression: AnyNode, context: CFunctionContext) => {
-    trueNames: string[]
-    falseNames: string[]
-  }
-  resolveRuntimeStringReference: (expression: AnyNode, context: CFunctionContext) => string | null
-  resolveRuntimeArrayIndex: (expression: AnyNode, context: CFunctionContext) => CRuntimeArrayElement | null
-  resolveRuntimeForOfArray: (expression: AnyNode, context: CFunctionContext) => RuntimeForOfArray | null
-  resolveRuntimeForOfMap: (expression: AnyNode, context: CFunctionContext) => RuntimeForOfMap | null
-  resolveRuntimeForOfSet: (expression: AnyNode, context: CFunctionContext) => RuntimeForOfSet | null
-  emitBoxedRuntimeValueAssignment: (expression: AnyNode, context: CFunctionContext) => string[]
-  emitConsoleLogStatement: (method: string, args: AnyNode[], context: CFunctionContext) => string[]
+  ): PreparedArrayExpression | null
+  emitPreparedAsyncFunctionPromiseCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedBytesIndexAssignment(expression: AnyNode, context: CFunctionContext): PreparedStatement | null
+  emitPreparedCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedChildProcessCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedClassMethodCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCollectionCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCryptoCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedCryptoHashCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCryptoHmacCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCryptoNumberCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedDebugMemoryCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedFetchCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedFetchHeadersCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedFsCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedFsSyncStatementExpression(expression: AnyNode, context: CFunctionContext): PreparedStatement | null
+  emitPreparedMapIndexAssignment(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedPathObjectCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedPromiseConstructorExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedPromiseExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedPromiseMethodExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedPromiseReturningCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedPromiseStaticExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedTimerCallExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedUpdateExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedUrlObjectExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitPreparedUrlSearchParamsObjectExpression(expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
+  emitProcessExitCodeAssignment(expression: AnyNode, context: CFunctionContext): string[] | null
+  emitProcessExitStatement(expression: AnyNode, context: CFunctionContext): string[] | null
+  emitPromiseConstructorSettlementCall(expression: AnyNode, context: CFunctionContext): string[] | null
+  emitReference(expression: AnyNode, context: CFunctionContext): string
+  emitRuntimeCallbackVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[]
+  emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[]
+  emitStatement(statement: AnyNode, context: CFunctionContext): string[]
+  emitStringExpression(expression: AnyNode, context: CFunctionContext): string
+  emitUrlObjectFieldAssignment(expression: AnyNode, context: CFunctionContext): string[] | null
+  inferCatchBindingValueType(statement: AnyNode, context: CFunctionContext): string
+  inferExpressionType(expression: AnyNode, context: CFunctionContext): string
+  isArrayMethodCall(expression: AnyNode): boolean
+  isBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): boolean
+  isClassConstructorExpression(expression: AnyNode, context: CFunctionContext): boolean
+  isConsoleLog(expression: AnyNode): boolean
+  isCollectionConstructorExpression(expression: AnyNode): boolean
+  isErrorConstructorExpression(expression: AnyNode): boolean
+  isErrorValueExpression(expression: AnyNode, context: CFunctionContext): boolean
+  isIndexAccessExpression(expression: AnyNode): boolean
+  isMemberAccessExpression(expression: AnyNode): boolean
+  isNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): boolean
+  isRuntimeProducedStringExpression(expression: AnyNode, context: CFunctionContext): boolean
+  registerErrorObjectShape(context: CFunctionContext, name: string): void
+  resolveForOfElementType(elements: CArrayElementInfo[]): string
+  resolveKnownArrayIndex(expression: AnyNode, context: CFunctionContext): CKnownArrayElement | null
+  resolveKnownObjectIndex(expression: AnyNode, context: CFunctionContext): CKnownObjectIndexField | null
+  resolveKnownObjectMember(expression: AnyNode, context: CFunctionContext): CKnownObjectField | null
+  resolveKnownForOfArray(expression: AnyNode, context: CFunctionContext): KnownForOfArray | null
+  resolveNullableScalarConditionNarrowing(
+    expression: AnyNode,
+    context: CFunctionContext
+  ): NullableScalarConditionNarrowing
+  resolveRuntimeStringReference(expression: AnyNode, context: CFunctionContext): string | null
+  resolveRuntimeArrayIndex(expression: AnyNode, context: CFunctionContext): CRuntimeArrayElement | null
+  resolveRuntimeForOfArray(expression: AnyNode, context: CFunctionContext): RuntimeForOfArray | null
+  resolveRuntimeForOfMap(expression: AnyNode, context: CFunctionContext): RuntimeForOfMap | null
+  resolveRuntimeForOfSet(expression: AnyNode, context: CFunctionContext): RuntimeForOfSet | null
+  emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[]
+  emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[]
 }
 
 function statementDeps(context: CFunctionContext): StatementLoweringDependencies {
   return context.statementLoweringDependencies
+}
+
+function pushAllLines(target: string[], source: string[]): void {
+  for (const line of source) {
+    target.push(line)
+  }
+}
+
+function pushIndentedLines(target: string[], source: string[], indent: string): void {
+  for (const line of source) {
+    target.push(`${indent}${line}`)
+  }
+}
+
+function constPrefix(isConst: boolean): string {
+  if (isConst) {
+    return 'const '
+  }
+
+  return ''
+}
+
+function stringOrUnknown(value: string | null | undefined): string {
+  if (value != null) {
+    return value
+  }
+
+  return 'unknown'
+}
+
+function nodeLocOrFallback(node, fallback: CSourceLocation): CSourceLocation {
+  if (node != null && node.loc != null) {
+    return node.loc
+  }
+
+  return fallback
+}
+
+function lastStringOrNull(values: string[]): string | null {
+  if (values.length === 0) {
+    return null
+  }
+
+  return values[values.length - 1]
+}
+
+function lastFlowTargetOrNull(values) {
+  if (values.length === 0) {
+    return null
+  }
+
+  return values[values.length - 1]
 }
 
 export function emitStatementBody(statement, context: CFunctionContext) {
@@ -227,13 +285,16 @@ export function emitStatementBody(statement, context: CFunctionContext) {
 }
 
 export function emitStatementList(statements, context: CFunctionContext) {
-  return statements.flatMap((statement) => {
+  const result: string[] = []
+
+  for (const statement of statements) {
     const lines = statementDeps(context).emitStatement(statement, context)
+    pushAllLines(result, lines)
 
     applyNullableScalarEarlyReturnNarrowing(statement, context)
+  }
 
-    return lines
-  })
+  return result
 }
 
 function applyNullableScalarEarlyReturnNarrowing(statement, context: CFunctionContext) {
@@ -295,11 +356,10 @@ function emitScopedStatementList(statements: AnyNode[], context: CFunctionContex
 export function emitIfStatement(statement, context: CFunctionContext) {
   const condition = statementDeps(context).emitPreparedNumberExpression(statement.condition, context)
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
-  const lines = [
-    ...condition.lines,
-    `if ${emitCConditionClause(condition.expression)} {`,
-    ...emitScopedStatementBody(statement.consequent, context, narrowing.trueNames).map((line) => `  ${line}`)
-  ]
+  const lines: string[] = []
+  pushAllLines(lines, condition.lines)
+  lines.push(`if ${emitCConditionClause(condition.expression)} {`)
+  pushIndentedLines(lines, emitScopedStatementBody(statement.consequent, context, narrowing.trueNames), '  ')
 
   if (statement.alternate == null) {
     lines.push('}')
@@ -307,9 +367,7 @@ export function emitIfStatement(statement, context: CFunctionContext) {
   }
 
   lines.push('} else {')
-  lines.push(
-    ...emitScopedStatementBody(statement.alternate, context, narrowing.falseNames).map((line) => `  ${line}`)
-  )
+  pushIndentedLines(lines, emitScopedStatementBody(statement.alternate, context, narrowing.falseNames), '  ')
   lines.push('}')
 
   return lines
@@ -327,24 +385,26 @@ export function emitWhileStatement(statement, context: CFunctionContext) {
   )
 
   if (condition.lines.length === 0) {
-    return [
-      `while ${emitCConditionClause(condition.expression)} {`,
-      ...body.map((line) => `  ${line}`),
-      ...emitContinueTargetLabel(continueLabel, context),
-      '}',
-      ...emitBreakTargetLabel(breakLabel, context)
-    ]
+    const lines: string[] = []
+    lines.push(`while ${emitCConditionClause(condition.expression)} {`)
+    pushIndentedLines(lines, body, '  ')
+    pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+    lines.push('}')
+    pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+
+    return lines
   }
 
-  return [
-    'while (1) {',
-    ...condition.lines.map((line) => `  ${line}`),
-    `  if ${emitCNegatedConditionClause(condition.expression)} break;`,
-    ...body.map((line) => `  ${line}`),
-    ...emitContinueTargetLabel(continueLabel, context),
-    '}',
-    ...emitBreakTargetLabel(breakLabel, context)
-  ]
+  const lines: string[] = []
+  lines.push('while (1) {')
+  pushIndentedLines(lines, condition.lines, '  ')
+  lines.push(`  if ${emitCNegatedConditionClause(condition.expression)} break;`)
+  pushIndentedLines(lines, body, '  ')
+  pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+  lines.push('}')
+  pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+
+  return lines
 }
 
 export function emitForStatement(statement, context: CFunctionContext) {
@@ -365,40 +425,41 @@ export function emitForStatement(statement, context: CFunctionContext) {
     const needsPreparedLowering = init.lines.length > 0 || test.lines.length > 0 || update.lines.length > 0
 
     if (!needsPreparedLowering) {
-      return [
-        `for (${init.expression}; ${test.expression}; ${update.expression}) {`,
-        ...body.map((line) => `  ${line}`),
-        ...emitContinueTargetLabel(continueLabel, context),
-        '}',
-        ...emitBreakTargetLabel(breakLabel, context)
-      ]
+      const lines: string[] = []
+      lines.push(`for (${init.expression}; ${test.expression}; ${update.expression}) {`)
+      pushIndentedLines(lines, body, '  ')
+      pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+      lines.push('}')
+      pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+
+      return lines
     }
 
     const lines = ['{']
 
-    lines.push(...init.lines.map((line) => `  ${line}`))
+    pushIndentedLines(lines, init.lines, '  ')
 
     if (init.expression !== '') {
       lines.push(`  ${init.expression};`)
     }
 
     lines.push('  for (;;) {')
-    lines.push(...test.lines.map((line) => `    ${line}`))
+    pushIndentedLines(lines, test.lines, '    ')
 
     if (test.expression !== '') {
       lines.push(`    if ${emitCNegatedConditionClause(test.expression)} break;`)
     }
 
-    lines.push(...body.map((line) => `    ${line}`))
-    lines.push(...emitContinueTargetLabel(continueLabel, context).map((line) => `  ${line}`))
-    lines.push(...update.lines.map((line) => `    ${line}`))
+    pushIndentedLines(lines, body, '    ')
+    pushIndentedLines(lines, emitContinueTargetLabel(continueLabel, context), '  ')
+    pushIndentedLines(lines, update.lines, '    ')
 
     if (update.expression !== '') {
       lines.push(`    ${update.expression};`)
     }
 
     lines.push('  }')
-    lines.push(...emitBreakTargetLabel(breakLabel, context).map((line) => `  ${line}`))
+    pushIndentedLines(lines, emitBreakTargetLabel(breakLabel, context), '  ')
     lines.push('}')
 
     return lines
@@ -409,10 +470,9 @@ export function emitForStatement(statement, context: CFunctionContext) {
 
 export function emitRuntimeStringVariableDeclaration(statement, expression, context: CFunctionContext) {
   const value = statementDeps(context).emitCValueExpression(expression, context)
-  const lines = [
-    ...value.lines,
-    `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = (ccjs_string*)${value.expression}.as.ref;`
-  ]
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  lines.push(`${constPrefix(statement.kind === 'const')}ccjs_string* ${statement.name} = (ccjs_string*)${value.expression}.as.ref;`)
 
   context.variables.set(statement.name, 'string')
   context.runtimeStrings.add(statement.name)
@@ -435,25 +495,27 @@ export function emitStringScalarVariableDeclaration(statement: AnyNode, context:
 
   if (runtimeString != null) {
     context.runtimeStrings.add(statement.name)
-    return [`${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString};`]
+    return [`${constPrefix(statement.kind === 'const')}ccjs_string* ${statement.name} = ${runtimeString};`]
   }
 
   const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
+  const forcedRuntimeStrings = context.forceRuntimeStringDeclarations
 
-  if (context.forceRuntimeStringDeclarations?.has(statement.name) && isRawStringLiteralExpression(statement.init)) {
+  if (forcedRuntimeStrings != null) {
+    if (forcedRuntimeStrings.has(statement.name) && isRawStringLiteralExpression(statement.init)) {
+      return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
+    }
+  }
+
+  if (deps.isRuntimeProducedStringExpression(statement.init, context)) {
     return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
   }
 
-  if (deps.isRuntimeProducedStringExpression(statement.init, context) || runtimeElement?.valueType === 'string') {
+  if (runtimeElement != null && runtimeElement.valueType === 'string') {
     return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
   }
 
-  return [
-    `${statement.kind === 'const' ? 'const ' : ''}char* ${statement.name} = ${deps.emitStringExpression(
-      statement.init,
-      context
-    )};`
-  ]
+  return [`${constPrefix(statement.kind === 'const')}char* ${statement.name} = ${deps.emitStringExpression(statement.init, context)};`]
 }
 
 export function emitFunctionScalarVariableDeclaration(
@@ -466,13 +528,19 @@ export function emitFunctionScalarVariableDeclaration(
   }
 
   const deps = statementDeps(context)
-  const runtimeFunctionType =
-    context.callbackArrowWrappers.get(statement.init)?.kind === 'arrow'
-      ? normalizeFunctionType(statement.functionType)
-      : null
+  let runtimeFunctionType: CFunctionType | null = null
+  const callbackWrapper = context.callbackArrowWrappers.get(statement.init)
+
+  if (callbackWrapper != null && callbackWrapper.kind === 'arrow') {
+    runtimeFunctionType = normalizeFunctionType(statement.functionType)
+  }
 
   context.variables.set(statement.name, 'function')
-  context.functionTypes.set(statement.name, runtimeFunctionType ?? statement.functionType)
+  if (runtimeFunctionType != null) {
+    context.functionTypes.set(statement.name, runtimeFunctionType)
+  } else {
+    context.functionTypes.set(statement.name, statement.functionType)
+  }
 
   if (isRuntimeFunctionType(statement.functionType) || runtimeFunctionType != null) {
     return deps.emitRuntimeCallbackVariableDeclaration(statement, context)
@@ -507,65 +575,147 @@ export function emitNumberBooleanScalarVariableDeclaration(statement: AnyNode, c
   }
 
   const value = statementDeps(context).emitPreparedNumberExpression(statement.init, context)
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${value.expression};`)
 
-  return [
-    ...value.lines,
-    `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${value.expression};`
-  ]
+  return lines
 }
 
 export function emitRuntimeValueVariableDeclaration(statement, expression, context: CFunctionContext) {
   const valueType = statementDeps(context).inferExpressionType(expression, context)
   const expectedTag = cRuntimeValueTag(valueType)
-  const value =
-    valueType === 'object' && expression?.type === 'ObjectLiteral'
-      ? statementDeps(context).emitCObjectLiteralValueExpression(expression, context, statement.shape)
-      : statementDeps(context).emitCValueExpression(expression, context)
+  let value: PreparedExpression
+  let objectLiteralExpression = false
+
+  if (valueType === 'object') {
+    if (expression != null && expression.type === 'ObjectLiteral') {
+      objectLiteralExpression = true
+    }
+  }
+
+  if (objectLiteralExpression) {
+    value = statementDeps(context).emitCObjectLiteralValueExpression(expression, context, statement.shape)
+  } else {
+    value = statementDeps(context).emitCValueExpression(expression, context)
+  }
 
   registerOwnedValue(context, statement.name)
   registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
 
-  return [
-    ...value.lines,
-    ...emitPrepareOwnedValueWrite(statement.name),
-    `${statement.name} = ${value.expression};`,
-    emitRuntimeValueCheck(statement.name, expectedTag, context),
-    `ccjs_retain(${statement.name});`
-  ]
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(`${statement.name} = ${value.expression};`)
+  lines.push(emitRuntimeValueCheck(statement.name, expectedTag, context))
+  lines.push(`ccjs_retain(${statement.name});`)
+
+  return lines
 }
 
 export function registerRuntimeValueMetadata(name, valueType, declaration, expression, context: CFunctionContext) {
   context.variables.set(name, valueType)
 
   if (valueType === 'object') {
-    registerObjectShape(context, name, declaration.shape ?? expression?.shape ?? null)
+    registerObjectShape(context, name, resolveRuntimeObjectShape(declaration, expression))
   } else if (valueType === 'array') {
-    const fsDirentArray =
-      expression?.fsRuntimeMethod === 'readDirDirents' || expression?.fsRuntimeMethod === 'readDirDirentsSync'
-    context.runtimeArrayElementTypes.set(
-      name,
-      declaration.arrayElementType ??
-        resolveRuntimeArrayElementType(expression, context) ??
-        expression?.arrayElementType ??
-        (fsDirentArray ? 'object' : null) ??
-        'unknown'
-    )
+    context.runtimeArrayElementTypes.set(name, resolveRuntimeArrayMetadataElementType(declaration, expression, context))
   } else if (valueType === 'map') {
     const mapType = resolveRuntimeMapType(expression, context)
 
     context.mapTypes.set(name, {
-      key: declaration.mapKeyType ?? mapType?.key ?? expression?.mapKeyType ?? 'unknown',
-      value: declaration.mapValueType ?? mapType?.value ?? expression?.mapValueType ?? 'unknown'
+      key: resolveRuntimeMapMetadataKeyType(declaration, expression, mapType),
+      value: resolveRuntimeMapMetadataValueType(declaration, expression, mapType)
     })
   } else if (valueType === 'set') {
-    context.setElementTypes.set(
-      name,
-      declaration.setElementType ??
-        resolveRuntimeSetElementType(expression, context) ??
-        expression?.setElementType ??
-        'unknown'
-    )
+    context.setElementTypes.set(name, resolveRuntimeSetMetadataElementType(declaration, expression, context))
   }
+}
+
+function resolveRuntimeObjectShape(declaration, expression): CObjectShape | null {
+  if (declaration.shape != null) {
+    return declaration.shape
+  }
+
+  if (expression != null && expression.shape != null) {
+    return expression.shape
+  }
+
+  return null
+}
+
+function resolveRuntimeArrayMetadataElementType(declaration, expression, context: CFunctionContext): string {
+  if (declaration.arrayElementType != null) {
+    return declaration.arrayElementType
+  }
+
+  const resolvedElementType = resolveRuntimeArrayElementType(expression, context)
+
+  if (resolvedElementType != null) {
+    return resolvedElementType
+  }
+
+  if (expression != null && expression.arrayElementType != null) {
+    return expression.arrayElementType
+  }
+
+  if (expression != null) {
+    if (expression.fsRuntimeMethod === 'readDirDirents' || expression.fsRuntimeMethod === 'readDirDirentsSync') {
+      return 'object'
+    }
+  }
+
+  return 'unknown'
+}
+
+function resolveRuntimeMapMetadataKeyType(declaration, expression, mapType): string {
+  if (declaration.mapKeyType != null) {
+    return declaration.mapKeyType
+  }
+
+  if (mapType != null && mapType.key != null) {
+    return mapType.key
+  }
+
+  if (expression != null && expression.mapKeyType != null) {
+    return expression.mapKeyType
+  }
+
+  return 'unknown'
+}
+
+function resolveRuntimeMapMetadataValueType(declaration, expression, mapType): string {
+  if (declaration.mapValueType != null) {
+    return declaration.mapValueType
+  }
+
+  if (mapType != null && mapType.value != null) {
+    return mapType.value
+  }
+
+  if (expression != null && expression.mapValueType != null) {
+    return expression.mapValueType
+  }
+
+  return 'unknown'
+}
+
+function resolveRuntimeSetMetadataElementType(declaration, expression, context: CFunctionContext): string {
+  if (declaration.setElementType != null) {
+    return declaration.setElementType
+  }
+
+  const resolvedElementType = resolveRuntimeSetElementType(expression, context)
+
+  if (resolvedElementType != null) {
+    return resolvedElementType
+  }
+
+  if (expression != null && expression.setElementType != null) {
+    return expression.setElementType
+  }
+
+  return 'unknown'
 }
 
 export function isRuntimeValueLocalExpression(expression, context: CFunctionContext) {
@@ -588,32 +738,38 @@ export function emitBoxedScalarVariableDeclaration(statement, context: CFunction
   registerBoxedValue(context, statement.name, inferred)
   context.boxedVariables.add(statement.name)
 
-  return [
-    ...value.lines,
-    `${statement.name} = ccjs_default_alloc(0, sizeof(double), _Alignof(double));`,
-    `if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`,
-    `*${statement.name} = ${value.expression};`
-  ]
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  lines.push(`${statement.name} = ccjs_default_alloc(0, sizeof(double), _Alignof(double));`)
+  lines.push(`if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`)
+  lines.push(`*${statement.name} = ${value.expression};`)
+
+  return lines
 }
 
 export function emitBoxedRuntimeValueVariableDeclaration(statement, expression, context: CFunctionContext) {
   const deps = statementDeps(context)
   const valueType = deps.inferExpressionType(expression, context)
   const value = deps.emitCValueExpression(expression, context)
-  const tag = valueType === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
+  let tag = 'CCJS_TAG_OBJECT'
+
+  if (valueType === 'string') {
+    tag = 'CCJS_TAG_STRING'
+  }
 
   registerBoxedValue(context, statement.name, valueType)
   context.boxedVariables.add(statement.name)
   context.variables.set(statement.name, valueType)
 
-  return [
-    ...value.lines,
-    `${statement.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`,
-    `if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`,
-    `*${statement.name} = ${value.expression};`,
-    emitRuntimeTypeCheck(`(*${statement.name}).tag != ${tag} || (*${statement.name}).as.ref == 0`, context),
-    `ccjs_retain(*${statement.name});`
-  ]
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  lines.push(`${statement.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`)
+  lines.push(`if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`)
+  lines.push(`*${statement.name} = ${value.expression};`)
+  lines.push(emitRuntimeTypeCheck(`(*${statement.name}).tag != ${tag} || (*${statement.name}).as.ref == 0`, context))
+  lines.push(`ccjs_retain(*${statement.name});`)
+
+  return lines
 }
 
 export function reportCCollectionHashability(valueType, subject, loc, context: CFunctionContext) {
@@ -632,9 +788,9 @@ function isCCollectionHashableType(valueType) {
 
 function emitCollectionVariableDeclaration(statement, context: CFunctionContext) {
   const deps = statementDeps(context)
-  const constructor = deps.collectionConstructorName(statement.init)
+  const collectionConstructor = deps.collectionConstructorName(statement.init)
 
-  if (constructor == null) {
+  if (collectionConstructor == null) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_COLLECTION',
@@ -657,34 +813,34 @@ function emitCollectionVariableDeclaration(statement, context: CFunctionContext)
 
   registerOwnedValue(context, statement.name)
 
-  if (constructor === 'Map') {
+  if (collectionConstructor === 'Map') {
+    const mapKeyType = stringOrUnknown(statement.mapKeyType)
+    const mapValueType = stringOrUnknown(statement.mapValueType)
     context.variables.set(statement.name, 'map')
     context.mapTypes.set(statement.name, {
-      key: statement.mapKeyType ?? 'unknown',
-      value: statement.mapValueType ?? 'unknown'
+      key: mapKeyType,
+      value: mapValueType
     })
     reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
 
-    const lines = [
-      ...emitPrepareOwnedValueWrite(statement.name),
-      emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context)
-    ]
+    const lines: string[] = []
+    pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
+    lines.push(emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context))
 
-    lines.push(...emitMapConstructorEntries(statement.name, statement.init.args[0], context, statement.init.loc))
+    pushAllLines(lines, emitMapConstructorEntries(statement.name, statement.init.args[0], context, statement.init.loc))
 
     return lines
   }
 
   context.variables.set(statement.name, 'set')
-  context.setElementTypes.set(statement.name, statement.setElementType ?? 'unknown')
+  context.setElementTypes.set(statement.name, stringOrUnknown(statement.setElementType))
   reportCCollectionHashability(statement.setElementType, 'Set values', statement.loc, context)
 
-  const lines = [
-    ...emitPrepareOwnedValueWrite(statement.name),
-    emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context)
-  ]
+  const lines: string[] = []
+  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context))
 
-  lines.push(...emitSetConstructorValues(statement.name, statement.init.args[0], context, statement.init.loc))
+  pushAllLines(lines, emitSetConstructorValues(statement.name, statement.init.args[0], context, statement.init.loc))
 
   return lines
 }
@@ -699,11 +855,11 @@ function emitMapConstructorEntries(name, expression, context: CFunctionContext, 
   if (expression.type !== 'ArrayLiteral') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_COLLECTION',
-        'C Map constructor currently supports only array literal entries',
-        expression.loc ?? loc
-      )
-    )
+	        'CCJS_C_COLLECTION',
+	        'C Map constructor currently supports only array literal entries',
+	        nodeLocOrFallback(expression, loc)
+	      )
+	    )
     return []
   }
 
@@ -713,26 +869,26 @@ function emitMapConstructorEntries(name, expression, context: CFunctionContext, 
     if (entry.type !== 'ArrayLiteral' || entry.elements.length !== 2) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_COLLECTION',
-          'C Map constructor entries must be [key, value] array literals',
-          entry.loc ?? loc
-        )
-      )
+	        'CCJS_C_COLLECTION',
+	        'C Map constructor entries must be [key, value] array literals',
+	        nodeLocOrFallback(entry, loc)
+	      )
+	    )
       continue
     }
 
     const key = deps.emitCValueExpression(entry.elements[0], context)
     const value = deps.emitCValueExpression(entry.elements[1], context)
     reportCCollectionHashability(
-      deps.inferExpressionType(entry.elements[0], context),
-      'Map keys',
-      entry.elements[0].loc ?? entry.loc ?? loc,
-      context
-    )
+	      deps.inferExpressionType(entry.elements[0], context),
+	      'Map keys',
+	      nodeLocOrFallback(entry.elements[0], nodeLocOrFallback(entry, loc)),
+	      context
+	    )
 
-    lines.push(...key.lines)
-    lines.push(...value.lines)
-    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+	    pushAllLines(lines, key.lines)
+	    pushAllLines(lines, value.lines)
+	    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
   }
 
   return lines
@@ -748,23 +904,23 @@ function emitSetConstructorValues(name, expression, context: CFunctionContext, l
   if (expression.type !== 'ArrayLiteral') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_COLLECTION',
-        'C Set constructor currently supports only array literal values',
-        expression.loc ?? loc
-      )
-    )
+	        'CCJS_C_COLLECTION',
+	        'C Set constructor currently supports only array literal values',
+	        nodeLocOrFallback(expression, loc)
+	      )
+	    )
     return []
   }
 
   const lines: string[] = []
 
-  for (const element of expression.elements) {
-    const value = deps.emitCValueExpression(element, context)
-    reportCCollectionHashability(deps.inferExpressionType(element, context), 'Set values', element.loc ?? loc, context)
+	  for (const element of expression.elements) {
+	    const value = deps.emitCValueExpression(element, context)
+	    reportCCollectionHashability(deps.inferExpressionType(element, context), 'Set values', nodeLocOrFallback(element, loc), context)
 
-    lines.push(...value.lines)
-    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
-  }
+	    pushAllLines(lines, value.lines)
+	    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
+	  }
 
   return lines
 }
@@ -772,8 +928,15 @@ function emitSetConstructorValues(name, expression, context: CFunctionContext, l
 function emitDirentArrayIndexVariableDeclaration(statement, context: CFunctionContext) {
   const expression = statement.init
 
+  if (expression == null) {
+    return null
+  }
+
+  if (expression.type !== 'IndexExpression') {
+    return null
+  }
+
   if (
-    expression?.type !== 'IndexExpression' ||
     expression.object.type !== 'Reference' ||
     expression.index.type !== 'NumberLiteral' ||
     expression.arrayElementDeclaredType !== 'fs.Dirent'
@@ -792,13 +955,14 @@ function emitDirentArrayIndexVariableDeclaration(statement, context: CFunctionCo
   context.variables.set(statement.name, 'object')
   registerObjectShape(context, statement.name, expression.shape)
 
-  return [
-    ...array.lines,
-    ...emitPrepareOwnedValueWrite(statement.name),
-    emitStatusCheck(`ccjs_array_get(${array.expression}, ${index}, &${statement.name})`, context),
-    emitRuntimeValueCheck(statement.name, 'CCJS_TAG_OBJECT', context),
-    `ccjs_retain(${statement.name});`
-  ]
+  const lines: string[] = []
+  pushAllLines(lines, array.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(emitStatusCheck(`ccjs_array_get(${array.expression}, ${index}, &${statement.name})`, context))
+  lines.push(emitRuntimeValueCheck(statement.name, 'CCJS_TAG_OBJECT', context))
+  lines.push(`ccjs_retain(${statement.name});`)
+
+  return lines
 }
 
 function emitPreparedForInitializer(init, context: CFunctionContext) {
@@ -1089,26 +1253,30 @@ export function emitForOfStatement(statement, context: CFunctionContext) {
   let runtimeMap: RuntimeForOfMap | null = null
   let runtimeSet: RuntimeForOfSet | null = null
 
-  if (array == null && statement.iterable?.type === 'ArrayLiteral') {
-    const name = nextCName(context, 'ccjs_for_array')
+  if (array == null) {
+    const iterable = statement.iterable
 
-    setup.push(
-      ...statementDeps(context).emitArrayVariableDeclaration(
+    if (iterable != null && iterable.type === 'ArrayLiteral') {
+      const name = nextCName(context, 'ccjs_for_array')
+      pushAllLines(
+        setup,
+        statementDeps(context).emitArrayVariableDeclaration(
+          {
+            kind: 'const',
+            name,
+            init: iterable
+          },
+          context
+        )
+      )
+      array = statementDeps(context).resolveKnownForOfArray(
         {
-          kind: 'const',
-          name,
-          init: statement.iterable
+          type: 'Reference',
+          path: [name]
         },
         context
       )
-    )
-    array = statementDeps(context).resolveKnownForOfArray(
-      {
-        type: 'Reference',
-        path: [name]
-      },
-      context
-    )
+    }
   }
 
   if (array == null) {
@@ -1138,8 +1306,13 @@ export function emitForOfStatement(statement, context: CFunctionContext) {
     return []
   }
 
-  const elementType =
-    runtimeArray != null ? runtimeArray.elementType : statementDeps(context).resolveForOfElementType(array!.elements)
+  let elementType = 'unknown'
+
+  if (runtimeArray != null) {
+    elementType = runtimeArray.elementType
+  } else if (array != null) {
+    elementType = statementDeps(context).resolveForOfElementType(array.elements)
+  }
 
   if (!['number', 'boolean', 'string'].includes(elementType)) {
     context.diagnostics.push(
@@ -1154,11 +1327,24 @@ export function emitForOfStatement(statement, context: CFunctionContext) {
 
   const index = nextCName(context, 'ccjs_for_index')
   const value = nextCName(context, 'ccjs_for_value')
-  const length = runtimeArray == null ? `${array!.elements.length}` : nextCName(context, 'ccjs_for_length')
-  const arrayName = runtimeArray?.name ?? array!.name
+  let length = '0'
+  let arrayName = ''
+
+  if (runtimeArray != null) {
+    length = nextCName(context, 'ccjs_for_length')
+    arrayName = runtimeArray.name
+  } else if (array != null) {
+    length = `${array.elements.length}`
+    arrayName = array.name
+  }
+
   const breakLabel = nextCName(context, 'ccjs_break')
   const continueLabel = nextCName(context, 'ccjs_continue')
-  const loopValue = elementType === 'boolean' ? `((double)(${value}.as.boolean ? 1 : 0))` : `${value}.as.number`
+  let loopValue = `${value}.as.number`
+
+  if (elementType === 'boolean') {
+    loopValue = `((double)(${value}.as.boolean ? 1 : 0))`
+  }
 
   registerOwnedValue(context, value)
 
@@ -1172,40 +1358,44 @@ export function emitForOfStatement(statement, context: CFunctionContext) {
     const body = withBreakTarget(context, breakLabel, false, () =>
       withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
     )
-    const declaration =
-      elementType === 'string'
-        ? `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
-        : `double ${statement.name} = ${loopValue};`
-    const checks =
-      elementType === 'string'
-        ? [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context)]
-        : []
+    let declaration = `double ${statement.name} = ${loopValue};`
+    const checks: string[] = []
 
-    return [
-      ...setup,
-      ...(runtimeArray?.lines ?? []),
-      ...(runtimeArray == null
-        ? []
-        : [`size_t ${length} = 0;`, emitStatusCheck(`ccjs_array_len(${arrayName}, &${length})`, context)]),
-      `for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`,
-      ...emitPrepareOwnedValueWrite(value).map((line) => `  ${line}`),
-      `  ${emitStatusCheck(`ccjs_array_get(${arrayName}, ${index}, &${value})`, context)}`,
-      ...checks.map((line) => `  ${line}`),
-      `  ${declaration}`,
-      ...body.map((line) => `  ${line}`),
-      ...emitContinueTargetLabel(continueLabel, context),
-      '}',
-      ...emitBreakTargetLabel(breakLabel, context),
-      ...emitPrepareOwnedValueWrite(value)
-    ]
+    if (elementType === 'string') {
+      declaration = `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
+      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+    }
+
+    const getElementStatus = emitStatusCheck(`ccjs_array_get(${arrayName}, ${index}, &${value})`, context)
+    const lines: string[] = []
+    pushAllLines(lines, setup)
+
+    if (runtimeArray != null) {
+      pushAllLines(lines, runtimeArray.lines)
+      lines.push(`size_t ${length} = 0;`)
+      lines.push(emitStatusCheck(`ccjs_array_len(${arrayName}, &${length})`, context))
+    }
+
+    lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
+    pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
+    lines.push(`  ${getElementStatus}`)
+    pushIndentedLines(lines, checks, '  ')
+    lines.push(`  ${declaration}`)
+    pushIndentedLines(lines, body, '  ')
+    pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+    lines.push('}')
+    pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+    pushAllLines(lines, emitPrepareOwnedValueWrite(value))
+
+    return lines
   } finally {
     restoreVariableScope(context, variableScope)
   }
 }
 
 function emitRuntimeMapForOfStatement(statement, runtimeMap, context: CFunctionContext) {
-  const keyType = runtimeMap.keyType ?? 'unknown'
-  const valueType = runtimeMap.valueType ?? 'unknown'
+  const keyType = stringOrUnknown(runtimeMap.keyType)
+  const valueType = stringOrUnknown(runtimeMap.valueType)
 
   if (!['number', 'boolean', 'string'].includes(keyType) || !['number', 'boolean', 'string'].includes(valueType)) {
     context.diagnostics.push(
@@ -1224,18 +1414,18 @@ function emitRuntimeMapForOfStatement(statement, runtimeMap, context: CFunctionC
   const fieldsName = `${shapeName}_fields`
   const breakLabel = nextCName(context, 'ccjs_break')
   const continueLabel = nextCName(context, 'ccjs_continue')
-  const fields = [
-    {
-      name: 'key',
-      readonlyField: true,
-      valueType: keyType
-    },
-    {
-      name: 'value',
-      readonlyField: true,
-      valueType
-    }
-  ]
+	  const fields = [
+	    {
+	      name: 'key',
+	      readonlyField: true,
+	      valueType: keyType
+	    },
+	    {
+	      name: 'value',
+	      readonlyField: true,
+	      valueType: valueType
+	    }
+	  ]
 
   registerOwnedValue(context, statement.name)
 
@@ -1247,30 +1437,43 @@ function emitRuntimeMapForOfStatement(statement, runtimeMap, context: CFunctionC
     const body = withBreakTarget(context, breakLabel, false, () =>
       withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
     )
+    const createEntryStatus = emitStatusCheck(
+      `ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`,
+      context
+    )
+    const initKeyStatus = emitStatusCheck(
+      `ccjs_object_init_known(${statement.name}, 0, ${map}->entries[${index}].key)`,
+      context
+    )
+    const initValueStatus = emitStatusCheck(
+      `ccjs_object_init_known(${statement.name}, 1, ${map}->entries[${index}].value)`,
+      context
+    )
 
-    return [
-      `static const ccjs_field_info ${fieldsName}[] = {`,
-      '  { "key", CCJS_FIELD_READONLY },',
-      '  { "value", CCJS_FIELD_READONLY },',
-      '};',
-      `static const ccjs_shape ${shapeName} = {`,
-      '  2,',
-      `  ${fieldsName}`,
-      '};',
-      ...runtimeMap.lines,
-      `ccjs_map* ${map} = (ccjs_map*)${runtimeMap.name}.as.ref;`,
-      `for (size_t ${index} = 0; ${index} < ${map}->cap; ${index} += 1) {`,
-      `  if (${map}->entries[${index}].state != CCJS_MAP_SLOT_OCCUPIED) continue;`,
-      ...emitPrepareOwnedValueWrite(statement.name).map((line) => `  ${line}`),
-      `  ${emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`, context)}`,
-      `  ${emitStatusCheck(`ccjs_object_init_known(${statement.name}, 0, ${map}->entries[${index}].key)`, context)}`,
-      `  ${emitStatusCheck(`ccjs_object_init_known(${statement.name}, 1, ${map}->entries[${index}].value)`, context)}`,
-      ...body.map((line) => `  ${line}`),
-      ...emitContinueTargetLabel(continueLabel, context),
-      '}',
-      ...emitBreakTargetLabel(breakLabel, context),
-      ...emitPrepareOwnedValueWrite(statement.name)
-    ]
+    const lines: string[] = []
+    lines.push(`static const ccjs_field_info ${fieldsName}[] = {`)
+    lines.push('  { "key", CCJS_FIELD_READONLY },')
+    lines.push('  { "value", CCJS_FIELD_READONLY },')
+    lines.push('};')
+    lines.push(`static const ccjs_shape ${shapeName} = {`)
+    lines.push('  2,')
+    lines.push(`  ${fieldsName}`)
+    lines.push('};')
+    pushAllLines(lines, runtimeMap.lines)
+    lines.push(`ccjs_map* ${map} = (ccjs_map*)${runtimeMap.name}.as.ref;`)
+    lines.push(`for (size_t ${index} = 0; ${index} < ${map}->cap; ${index} += 1) {`)
+    lines.push(`  if (${map}->entries[${index}].state != CCJS_MAP_SLOT_OCCUPIED) continue;`)
+    pushIndentedLines(lines, emitPrepareOwnedValueWrite(statement.name), '  ')
+    lines.push(`  ${createEntryStatus}`)
+    lines.push(`  ${initKeyStatus}`)
+    lines.push(`  ${initValueStatus}`)
+    pushIndentedLines(lines, body, '  ')
+    pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+    lines.push('}')
+    pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+    pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
+
+    return lines
   } finally {
     restoreVariableScope(context, variableScope)
   }
@@ -1295,7 +1498,11 @@ function emitRuntimeSetForOfStatement(statement, runtimeSet, context: CFunctionC
   const value = nextCName(context, 'ccjs_for_value')
   const breakLabel = nextCName(context, 'ccjs_break')
   const continueLabel = nextCName(context, 'ccjs_continue')
-  const loopValue = elementType === 'boolean' ? `((double)(${value}.as.boolean ? 1 : 0))` : `${value}.as.number`
+  let loopValue = `${value}.as.number`
+
+  if (elementType === 'boolean') {
+    loopValue = `((double)(${value}.as.boolean ? 1 : 0))`
+  }
 
   registerOwnedValue(context, value)
 
@@ -1309,33 +1516,35 @@ function emitRuntimeSetForOfStatement(statement, runtimeSet, context: CFunctionC
     const body = withBreakTarget(context, breakLabel, false, () =>
       withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
     )
-    const declaration =
-      elementType === 'string'
-        ? `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
-        : `double ${statement.name} = ${loopValue};`
-    const checks =
-      elementType === 'string'
-        ? [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context)]
-        : elementType === 'boolean'
-          ? [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context)]
-          : [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context)]
+    let declaration = `double ${statement.name} = ${loopValue};`
+    const checks: string[] = []
 
-    return [
-      ...runtimeSet.lines,
-      `ccjs_set* ${set} = (ccjs_set*)${runtimeSet.name}.as.ref;`,
-      `for (size_t ${index} = 0; ${index} < ${set}->cap; ${index} += 1) {`,
-      `  if (${set}->entries[${index}].state != CCJS_SET_SLOT_OCCUPIED) continue;`,
-      ...emitPrepareOwnedValueWrite(value).map((line) => `  ${line}`),
-      `  ${value} = ${set}->entries[${index}].value;`,
-      `  ccjs_retain(${value});`,
-      ...checks.map((line) => `  ${line}`),
-      `  ${declaration}`,
-      ...body.map((line) => `  ${line}`),
-      ...emitContinueTargetLabel(continueLabel, context),
-      '}',
-      ...emitBreakTargetLabel(breakLabel, context),
-      ...emitPrepareOwnedValueWrite(value)
-    ]
+    if (elementType === 'string') {
+      declaration = `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
+      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+    } else if (elementType === 'boolean') {
+      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context))
+    } else {
+      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context))
+    }
+
+    const lines: string[] = []
+    pushAllLines(lines, runtimeSet.lines)
+    lines.push(`ccjs_set* ${set} = (ccjs_set*)${runtimeSet.name}.as.ref;`)
+    lines.push(`for (size_t ${index} = 0; ${index} < ${set}->cap; ${index} += 1) {`)
+    lines.push(`  if (${set}->entries[${index}].state != CCJS_SET_SLOT_OCCUPIED) continue;`)
+    pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
+    lines.push(`  ${value} = ${set}->entries[${index}].value;`)
+    lines.push(`  ccjs_retain(${value});`)
+    pushIndentedLines(lines, checks, '  ')
+    lines.push(`  ${declaration}`)
+    pushIndentedLines(lines, body, '  ')
+    pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+    lines.push('}')
+    pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+    pushAllLines(lines, emitPrepareOwnedValueWrite(value))
+
+    return lines
   } finally {
     restoreVariableScope(context, variableScope)
   }
@@ -1344,20 +1553,24 @@ function emitRuntimeSetForOfStatement(statement, runtimeSet, context: CFunctionC
 export function emitSwitchStatement(statement, context: CFunctionContext) {
   const discriminant = statementDeps(context).emitPreparedNumberExpression(statement.discriminant, context)
   const breakLabel = nextCName(context, 'ccjs_break')
-  const lines = [...discriminant.lines, `switch ((int)${discriminant.expression}) {`]
+  const lines: string[] = []
+  pushAllLines(lines, discriminant.lines)
+  lines.push(`switch ((int)${discriminant.expression}) {`)
 
   for (const item of statement.cases) {
-    lines.push(item.test == null ? '  default: {' : `  case ${emitSwitchCaseLabel(item.test, context)}: {`)
-    lines.push(
-      ...withBreakTarget(context, breakLabel, false, () =>
-        emitScopedStatementList(item.consequent, context)
-      ).map((line) => `    ${line}`)
-    )
+    if (item.test == null) {
+      lines.push('  default: {')
+    } else {
+      lines.push(`  case ${emitSwitchCaseLabel(item.test, context)}: {`)
+    }
+
+    const body = withBreakTarget(context, breakLabel, false, () => emitScopedStatementList(item.consequent, context))
+    pushIndentedLines(lines, body, '    ')
     lines.push('  }')
   }
 
   lines.push('}')
-  lines.push(...emitBreakTargetLabel(breakLabel, context))
+  pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
 
   return lines
 }
@@ -1408,10 +1621,24 @@ export function emitTryStatement(statement, context: CFunctionContext) {
   registerErrorChannel(context)
 
   const id = nextCName(context, 'ccjs_try')
-  const catchLabel = statement.handler == null ? null : `${id}_catch`
-  const finallyLabel = statement.finalizer == null ? null : `${id}_finally`
+  let catchLabel: string | null = null
+  let finallyLabel: string | null = null
+
+  if (statement.handler != null) {
+    catchLabel = `${id}_catch`
+  }
+
+  if (statement.finalizer != null) {
+    finallyLabel = `${id}_finally`
+  }
+
   const endLabel = `${id}_end`
-  const throwTarget = catchLabel ?? finallyLabel
+  let throwTarget = catchLabel
+
+  if (throwTarget == null) {
+    throwTarget = finallyLabel
+  }
+
   const outerReturnTarget = currentReturnTarget(context)
   const outerBreakTarget = currentBreakTarget(context)
   const outerContinueTarget = currentContinueTarget(context)
@@ -1422,8 +1649,12 @@ export function emitTryStatement(statement, context: CFunctionContext) {
     )
   )
 
-  lines.push(...tryBody.map((line) => `  ${line}`))
-  lines.push(`  goto ${finallyLabel ?? endLabel};`)
+  pushIndentedLines(lines, tryBody, '  ')
+  if (finallyLabel != null) {
+    lines.push(`  goto ${finallyLabel};`)
+  } else {
+    lines.push(`  goto ${endLabel};`)
+  }
 
   if (statement.handler != null && catchLabel != null) {
     const catchValueType = statementDeps(context).inferCatchBindingValueType(statement, context)
@@ -1445,7 +1676,7 @@ export function emitTryStatement(statement, context: CFunctionContext) {
           }
         }
 
-        body.push(...emitStatementBody(statement.handler.body, context))
+        pushAllLines(body, emitStatementBody(statement.handler.body, context))
 
         return body
       } finally {
@@ -1459,7 +1690,7 @@ export function emitTryStatement(statement, context: CFunctionContext) {
     )
     lines.push('  ccjs_error_active = 0;')
     lines.push('  {')
-    lines.push(...catchBody.map((line) => `    ${line}`))
+    pushIndentedLines(lines, catchBody, '    ')
     lines.push('  }')
     lines.push('  ccjs_release(ccjs_error);')
     lines.push('  ccjs_error = ccjs_undefined_value();')
@@ -1467,13 +1698,28 @@ export function emitTryStatement(statement, context: CFunctionContext) {
 
   if (statement.finalizer != null && finallyLabel != null) {
     const outerThrowTarget = currentErrorTarget(context)
+    let outerBreakLabel: string | null = null
+    let outerBreakThroughFinally = false
+    let outerContinueLabel: string | null = null
+    let outerContinueThroughFinally = false
+
+    if (outerBreakTarget != null) {
+      outerBreakLabel = outerBreakTarget.label
+      outerBreakThroughFinally = outerBreakTarget.throughFinally === true
+    }
+
+    if (outerContinueTarget != null) {
+      outerContinueLabel = outerContinueTarget.label
+      outerContinueThroughFinally = outerContinueTarget.throughFinally === true
+    }
+
     const finalizerBody = withErrorTarget(context, outerThrowTarget, () =>
       withReturnTarget(context, outerReturnTarget, () =>
-        withBreakTarget(context, outerBreakTarget?.label ?? null, outerBreakTarget?.throughFinally === true, () =>
+        withBreakTarget(context, outerBreakLabel, outerBreakThroughFinally, () =>
           withContinueTarget(
             context,
-            outerContinueTarget?.label ?? null,
-            outerContinueTarget?.throughFinally === true,
+            outerContinueLabel,
+            outerContinueThroughFinally,
             () => emitScopedStatementBody(statement.finalizer, context, [])
           )
         )
@@ -1481,7 +1727,7 @@ export function emitTryStatement(statement, context: CFunctionContext) {
     )
 
     lines.push(`${finallyLabel}:`)
-    lines.push(...finalizerBody.map((line) => `  ${line}`))
+    pushIndentedLines(lines, finalizerBody, '  ')
 
     if (outerThrowTarget != null) {
       lines.push(`  if (ccjs_error_active) goto ${outerThrowTarget};`)
@@ -1539,33 +1785,46 @@ export function emitThrowStatement(statement, context: CFunctionContext) {
   registerErrorChannel(context)
 
   const value = statementDeps(context).emitCValueExpression(statement.argument, context)
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite('ccjs_error'))
+  lines.push(`ccjs_error = ${value.expression};`)
 
-  return [
-    ...value.lines,
-    ...emitPrepareOwnedValueWrite('ccjs_error'),
-    `ccjs_error = ${value.expression};`,
-    emitRuntimeTypeCheck(
-      isErrorObject
-        ? 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
-        : 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0',
-      context
-    ),
-    'ccjs_retain(ccjs_error);',
-    ...(target == null ? ['ccjs_status_result = CCJS_ERR_THROW;'] : []),
-    'ccjs_error_active = 1;',
-    `goto ${target ?? 'ccjs_cleanup'};`
-  ]
+  let typeCheck = 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
+
+  if (isErrorObject) {
+    typeCheck = 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
+  }
+
+  lines.push(emitRuntimeTypeCheck(typeCheck, context))
+  lines.push('ccjs_retain(ccjs_error);')
+
+  if (target == null) {
+    lines.push('ccjs_status_result = CCJS_ERR_THROW;')
+  }
+
+  lines.push('ccjs_error_active = 1;')
+
+  if (target != null) {
+    lines.push(`goto ${target};`)
+  } else {
+    lines.push('goto ccjs_cleanup;')
+  }
+
+  return lines
 }
 
 export function emitReturnStatement(statement, context: CFunctionContext) {
   const argument = normalizeCAsyncReturnArgument(statement.argument, context, statement.loc)
-  const returnStatement =
-    argument === statement.argument
-      ? statement
-      : {
-          ...statement,
-          argument
-        }
+  let returnStatement = statement
+
+  if (argument !== statement.argument) {
+    returnStatement = {
+      type: statement.type,
+      argument,
+      loc: statement.loc
+    }
+  }
 
   if (isRuntimeCallbackReturnContext(context)) {
     return emitRuntimeCallbackReturnStatement(returnStatement, context)
@@ -1584,22 +1843,40 @@ export function emitReturnStatement(statement, context: CFunctionContext) {
   }
 
   if (context.returnType !== 'void') {
-    const value =
-      argument == null
-        ? {
-            lines: [],
-            expression: '0'
-          }
-        : statementDeps(context).emitPreparedNumberExpression(argument, context)
+    let value: PreparedExpression = {
+      lines: [],
+      expression: '0'
+    }
 
-    return [...value.lines, `ccjs_return = ${value.expression};`, ...emitReturnJump(context)]
+    if (argument != null) {
+      value = statementDeps(context).emitPreparedNumberExpression(argument, context)
+    }
+
+    const lines: string[] = []
+    pushAllLines(lines, value.lines)
+    lines.push(`ccjs_return = ${value.expression};`)
+    pushAllLines(lines, emitReturnJump(context))
+
+    return lines
   }
 
-  const value = argument?.type === 'AwaitExpression' ? statementDeps(context).emitCAwaitValueExpression(argument, context) : null
+  let value: PreparedExpression | null = null
+
+  if (argument != null && argument.type === 'AwaitExpression') {
+    value = statementDeps(context).emitCAwaitValueExpression(argument, context)
+  }
 
   if (argument == null || context.returnType === 'void') {
     if (context.cleanupEnabled) {
-      return [...(value?.lines ?? []), ...emitReturnJump(context)]
+      const lines: string[] = []
+
+      if (value != null) {
+        pushAllLines(lines, value.lines)
+      }
+
+      pushAllLines(lines, emitReturnJump(context))
+
+      return lines
     }
 
     return ['return;']
@@ -1943,9 +2220,14 @@ export function emitExpressionStatement(statement, context: CFunctionContext) {
     const classMethodCall = deps.emitPreparedClassMethodCallExpression(statement.expression, context)
 
     if (classMethodCall != null) {
-      return classMethodCall.expression === ''
-        ? classMethodCall.lines
-        : [...classMethodCall.lines, `${classMethodCall.expression};`]
+      if (classMethodCall.expression === '') {
+        return classMethodCall.lines
+      }
+
+      const lines: string[] = []
+      pushAllLines(lines, classMethodCall.lines)
+      lines.push(`${classMethodCall.expression};`)
+      return lines
     }
 
     const fetchAbortCall = deps.emitFetchAbortControllerAbortStatement(statement.expression, context)
@@ -2043,7 +2325,14 @@ export function emitExpressionStatement(statement, context: CFunctionContext) {
 
     const call = deps.emitPreparedCallExpression(statement.expression, context)
 
-    return call.expression === '' ? call.lines : [...call.lines, `${call.expression};`]
+    if (call.expression === '') {
+      return call.lines
+    }
+
+    const lines: string[] = []
+    pushAllLines(lines, call.lines)
+    lines.push(`${call.expression};`)
+    return lines
   }
 
   if (statement.expression.type === 'AwaitExpression') {
@@ -2055,7 +2344,10 @@ export function emitExpressionStatement(statement, context: CFunctionContext) {
   if (statement.expression.type === 'UpdateExpression') {
     const value = deps.emitPreparedUpdateExpression(statement.expression, context)
 
-    return [...value.lines, `${value.expression};`]
+    const lines: string[] = []
+    pushAllLines(lines, value.lines)
+    lines.push(`${value.expression};`)
+    return lines
   }
 
   if (statement.expression.type === 'AssignmentExpression') {
@@ -2118,7 +2410,10 @@ export function emitExpressionStatement(statement, context: CFunctionContext) {
     if (valueType === 'number' || valueType === 'boolean') {
       const value = deps.emitPreparedNumberExpression(statement.expression.value, context)
 
-      return [...value.lines, `${deps.emitReference(statement.expression.target, context)} = ${value.expression};`]
+      const lines: string[] = []
+      pushAllLines(lines, value.lines)
+      lines.push(`${deps.emitReference(statement.expression.target, context)} = ${value.expression};`)
+      return lines
     }
 
     return [
@@ -2178,7 +2473,10 @@ function emitPromiseReturnStatement(statement, context: CFunctionContext) {
     return emitReturnJump(context)
   }
 
-  return [...promise.lines, ...emitReturnJump(context)]
+  const lines: string[] = []
+  pushAllLines(lines, promise.lines)
+  pushAllLines(lines, emitReturnJump(context))
+  return lines
 }
 
 function emitRuntimeCallbackReturnStatement(statement, context: CFunctionContext) {
@@ -2186,27 +2484,40 @@ function emitRuntimeCallbackReturnStatement(statement, context: CFunctionContext
     return emitReturnJump(context)
   }
 
-  const lines = isManagedRuntimeReturnType(context.runtimeCallbackReturnType)
-    ? emitRuntimeCallbackRuntimeValueReturnLines(statement.argument, context)
-    : emitRuntimeCallbackScalarReturnLines(statement.argument, context)
+  const lines: string[] = []
 
-  return [...lines, ...emitReturnJump(context)]
+  if (isManagedRuntimeReturnType(context.runtimeCallbackReturnType)) {
+    pushAllLines(lines, emitRuntimeCallbackRuntimeValueReturnLines(statement.argument, context))
+  } else {
+    pushAllLines(lines, emitRuntimeCallbackScalarReturnLines(statement.argument, context))
+  }
+
+  pushAllLines(lines, emitReturnJump(context))
+  return lines
 }
 
 function emitRuntimeCallbackScalarReturnLines(argument, context: CFunctionContext) {
-  const value =
-    argument == null
-      ? {
-          lines: [],
-          expression: '0'
-        }
-      : statementDeps(context).emitPreparedNumberExpression(argument, context)
-  const expression =
-    context.runtimeCallbackReturnType === 'number'
-      ? `ccjs_number_value(${value.expression})`
-      : `ccjs_bool_value((${value.expression}) != 0)`
+  let value: PreparedExpression;
 
-  return [...value.lines, `${context.runtimeCallbackReturnOut} = ${expression};`]
+  if (argument == null) {
+    value = {
+      lines: [],
+      expression: '0'
+    }
+  } else {
+    value = statementDeps(context).emitPreparedNumberExpression(argument, context)
+  }
+
+  let expression = `ccjs_bool_value((${value.expression}) != 0)`
+
+  if (context.runtimeCallbackReturnType === 'number') {
+    expression = `ccjs_number_value(${value.expression})`
+  }
+
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  lines.push(`${context.runtimeCallbackReturnOut} = ${expression};`)
+  return lines
 }
 
 export function emitRuntimeCallbackRuntimeValueReturnLines(argument, context: CFunctionContext) {
@@ -2215,29 +2526,32 @@ export function emitRuntimeCallbackRuntimeValueReturnLines(argument, context: CF
   }
 
   const expectedTag = cRuntimeValueTag(context.runtimeCallbackReturnType)
-  const value =
-    argument == null
-      ? {
-          lines: [],
-          expression: 'ccjs_undefined_value()'
-        }
-      : emitRuntimeReturnValueExpression(
-          argument,
-          context,
-          context.runtimeCallbackReturnType,
-          context.runtimeCallbackReturnShape
-        )
+  let value: PreparedExpression;
 
-  return [
-    ...value.lines,
-    `${context.runtimeCallbackReturnOut} = ${value.expression};`,
-    emitRuntimeValueCheck(context.runtimeCallbackReturnOut, expectedTag, context),
-    `ccjs_retain(${context.runtimeCallbackReturnOut});`
-  ]
+  if (argument == null) {
+    value = {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+  } else {
+    value = emitRuntimeReturnValueExpression(
+      argument,
+      context,
+      context.runtimeCallbackReturnType,
+      context.runtimeCallbackReturnShape
+    )
+  }
+
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  lines.push(`${context.runtimeCallbackReturnOut} = ${value.expression};`)
+  lines.push(emitRuntimeValueCheck(context.runtimeCallbackReturnOut, expectedTag, context))
+  lines.push(`ccjs_retain(${context.runtimeCallbackReturnOut});`)
+  return lines
 }
 
 function emitRuntimeReturnValueExpression(argument, context: CFunctionContext, returnType, returnShape) {
-  if (returnType === 'object' && argument?.type === 'ObjectLiteral') {
+  if (returnType === 'object' && argument != null && argument.type === 'ObjectLiteral') {
     return statementDeps(context).emitCObjectLiteralValueExpression(argument, context, returnShape)
   }
 
@@ -2252,37 +2566,42 @@ function emitRuntimeValueReturnStatement(statement, context: CFunctionContext) {
   const expectedTag = cRuntimeValueTag(context.returnType)
   const value = emitRuntimeReturnValueExpression(statement.argument, context, context.returnType, context.returnShape)
 
-  return [
-    ...value.lines,
-    `ccjs_return = ${value.expression};`,
-    emitRuntimeValueCheck('ccjs_return', expectedTag, context),
-    'ccjs_retain(ccjs_return);',
-    ...emitReturnJump(context)
-  ]
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  lines.push(`ccjs_return = ${value.expression};`)
+  lines.push(emitRuntimeValueCheck('ccjs_return', expectedTag, context))
+  lines.push('ccjs_retain(ccjs_return);')
+  pushAllLines(lines, emitReturnJump(context))
+  return lines
 }
 
 function emitNullableScalarReturnStatement(statement, context: CFunctionContext) {
   const expectedTag = cRuntimeValueTag(context.returnType)
-  const value =
-    statement.argument == null
-      ? {
-          lines: [],
-          expression: 'ccjs_null_value()'
-        }
-      : statementDeps(context).emitNullableScalarValueExpression(statement.argument, context)
+  let value: PreparedExpression;
 
-  return [
-    ...value.lines,
-    `ccjs_return = ${value.expression};`,
-    ...emitRuntimeNullableValueCheck('ccjs_return', expectedTag, context),
-    ...emitReturnJump(context)
-  ]
+  if (statement.argument == null) {
+    value = {
+      lines: [],
+      expression: 'ccjs_null_value()'
+    }
+  } else {
+    value = statementDeps(context).emitNullableScalarValueExpression(statement.argument, context)
+  }
+
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  lines.push(`ccjs_return = ${value.expression};`)
+  pushAllLines(lines, emitRuntimeNullableValueCheck('ccjs_return', expectedTag, context))
+  pushAllLines(lines, emitReturnJump(context))
+  return lines
 }
 
 export function emitCatchBindingTypeCheck(valueType) {
-  return valueType === 'object'
-    ? 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
-    : 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
+  if (valueType === 'object') {
+    return 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
+  }
+
+  return 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
 }
 
 export function registerErrorChannel(context: CFunctionContext) {
@@ -2291,7 +2610,7 @@ export function registerErrorChannel(context: CFunctionContext) {
 }
 
 export function currentErrorTarget(context: CFunctionContext) {
-  return context.errorTargets.at(-1) ?? null
+  return lastStringOrNull(context.errorTargets)
 }
 
 export function emitBreakJump(context: CFunctionContext) {
@@ -2327,15 +2646,25 @@ export function emitContinueJump(context: CFunctionContext) {
 }
 
 export function emitBreakTargetLabel(label, context: CFunctionContext) {
-  return [`${label}:`, ...(context.breakFlowUsed ? ['  if (ccjs_break_active) ccjs_break_active = 0;'] : []), ';']
+  const lines = [`${label}:`]
+
+  if (context.breakFlowUsed) {
+    lines.push('  if (ccjs_break_active) ccjs_break_active = 0;')
+  }
+
+  lines.push(';')
+  return lines
 }
 
 export function emitContinueTargetLabel(label, context: CFunctionContext) {
-  return [
-    `${label}:`,
-    ...(context.continueFlowUsed ? ['  if (ccjs_continue_active) ccjs_continue_active = 0;'] : []),
-    '  ;'
-  ]
+  const lines = [`${label}:`]
+
+  if (context.continueFlowUsed) {
+    lines.push('  if (ccjs_continue_active) ccjs_continue_active = 0;')
+  }
+
+  lines.push('  ;')
+  return lines
 }
 
 function registerBreakFlow(context: CFunctionContext) {
@@ -2347,11 +2676,11 @@ function registerContinueFlow(context: CFunctionContext) {
 }
 
 export function currentBreakTarget(context: CFunctionContext) {
-  return context.breakTargets.at(-1) ?? null
+  return lastFlowTargetOrNull(context.breakTargets)
 }
 
 export function currentContinueTarget(context: CFunctionContext) {
-  return context.continueTargets.at(-1) ?? null
+  return lastFlowTargetOrNull(context.continueTargets)
 }
 
 export function withBreakTarget(context: CFunctionContext, label, throughFinally, callback) {
@@ -2419,7 +2748,11 @@ export function emitReturnCleanupStatement(context: CFunctionContext) {
     return 'goto ccjs_cleanup;'
   }
 
-  return context.returnType === 'void' ? 'return;' : 'return ccjs_return;'
+  if (context.returnType === 'void') {
+    return 'return;'
+  }
+
+  return 'return ccjs_return;'
 }
 
 function registerReturnFlow(context: CFunctionContext) {
@@ -2427,7 +2760,7 @@ function registerReturnFlow(context: CFunctionContext) {
 }
 
 export function currentReturnTarget(context: CFunctionContext) {
-  return context.returnTargets.at(-1) ?? null
+  return lastStringOrNull(context.returnTargets)
 }
 
 export function withReturnTarget(context: CFunctionContext, target, callback) {
