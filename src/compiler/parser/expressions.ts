@@ -58,6 +58,15 @@ export function createUnaryExpression(operator: Token, argument: AnyNode): AnyNo
   }
 }
 
+export function createTypeAssertionExpression(expression: AnyNode, valueType: string): AnyNode {
+  return {
+    type: 'TypeAssertionExpression',
+    expression,
+    valueType,
+    loc: expression.loc
+  }
+}
+
 export function createMemberExpression(object: AnyNode, property: Token): AnyNode {
   return {
     type: 'MemberExpression',

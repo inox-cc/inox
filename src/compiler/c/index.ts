@@ -29,10 +29,9 @@ import {
   registerEventLoop,
   registerOwnedPromise,
   registerOwnedValue,
-  type CEmitContext,
-  type CFunctionContext,
   withVariableScope
 } from './context.ts'
+import type { CEmitContext, CFunctionContext } from './context.ts'
 import {
   reportCJsGlobalDiagnostic,
   reportUnsupportedCGlobalUsages,
@@ -48,11 +47,12 @@ import { isCJsGlobalRoot, usesCJsGlobal } from './globals.ts'
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, escapeCString, utf8ByteLength } from './identifiers.ts'
 import {
   emitCModuleHeader as emitCModuleHeaderWithDependencies,
-  emitCModuleSource as emitCModuleSourceWithDependencies,
-  type CModuleEmissionDependencies
+  emitCModuleSource as emitCModuleSourceWithDependencies
 } from './module-emission.ts'
+import type { CModuleEmissionDependencies } from './module-emission.ts'
 import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
-import { emitCUnit as emitCUnitWithDependencies, type CUnitDependencies } from './unit.ts'
+import { emitCUnit as emitCUnitWithDependencies } from './unit.ts'
+import type { CUnitDependencies } from './unit.ts'
 import {
   collectHttpRuntimeCreateServerNames,
   collectHttpRuntimeImportNames,
@@ -83,17 +83,16 @@ import {
   resolveCAsyncFunctionAwaitValueType,
   resolvePromiseChainArrowBody,
   resolvePromiseExpressionValueType,
-  resolvePromiseReturningFunctionValueType,
-  type PromiseChainLoweringDependencies,
-  type PromiseLoweringDependencies
+  resolvePromiseReturningFunctionValueType
 } from './async/promises.ts'
+import type { PromiseChainLoweringDependencies, PromiseLoweringDependencies } from './async/promises.ts'
 import {
   collectAsyncTaskWrappers,
   emitAsyncTaskFrameType,
   emitAsyncTaskWrapperDeclaration,
-  emitAsyncTaskWrapperPrototypes,
-  type AsyncTaskLoweringDependencies
+  emitAsyncTaskWrapperPrototypes
 } from './async/tasks.ts'
+import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
   collectArrowCaptures,
   collectCallbackWrappers,
@@ -119,11 +118,10 @@ import {
   markRuntimeFunctionParam,
   normalizeFunctionType,
   resolveRuntimeFunctionArgumentType,
-  runtimeCallbackWrapperFor,
-  type CallbackLoweringDependencies
+  runtimeCallbackWrapperFor
 } from './async/callbacks.ts'
+import type { CallbackLoweringDependencies } from './async/callbacks.ts'
 import {
-  type BinaryLoweringDependencies,
   binaryRuntimeExpressionReturnType,
   binaryRuntimeMethodName,
   emitPreparedBinaryNumberCallExpression,
@@ -134,11 +132,12 @@ import {
   isBinaryConstructorExpression,
   isBinaryRuntimeCall
 } from './stdlib/binary.ts'
+import type { BinaryLoweringDependencies } from './stdlib/binary.ts'
 import {
   cChildProcessRuntimeMethodName,
-  emitPreparedChildProcessCallExpression,
-  type ChildProcessLoweringDependencies
+  emitPreparedChildProcessCallExpression
 } from './stdlib/child-process.ts'
+import type { ChildProcessLoweringDependencies } from './stdlib/child-process.ts'
 import { isConsoleLog } from './stdlib/console.ts'
 import {
   cryptoRuntimeMethodName,
@@ -147,9 +146,9 @@ import {
   emitPreparedCryptoCallExpression,
   emitPreparedCryptoHashCallExpression,
   emitPreparedCryptoHmacCallExpression,
-  emitPreparedCryptoNumberCallExpression,
-  type CryptoLoweringDependencies
+  emitPreparedCryptoNumberCallExpression
 } from './stdlib/crypto.ts'
+import type { CryptoLoweringDependencies } from './stdlib/crypto.ts'
 import {
   collectDgramMessageHandlers,
   emitDgramAddressVariableDeclaration,
@@ -158,17 +157,17 @@ import {
   emitDgramNumberVariableDeclaration,
   emitDgramSocketCallStatement,
   emitDgramSocketVariableDeclaration,
-  emitPreparedDgramAddressPortExpression,
-  type DgramLoweringDependencies
+  emitPreparedDgramAddressPortExpression
 } from './stdlib/dgram.ts'
+import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
 import {
   collectHttpHandlers,
   emitHttpHandlerDeclaration,
   emitHttpHandlerHead,
   emitHttpServerCallStatement,
-  emitHttpServerVariableDeclaration,
-  type HttpLoweringDependencies
+  emitHttpServerVariableDeclaration
 } from './stdlib/http.ts'
+import type { HttpLoweringDependencies } from './stdlib/http.ts'
 import {
   collectNetHandlers,
   emitNetAddressMemberVariableDeclaration,
@@ -181,18 +180,18 @@ import {
   emitNetSocketCallStatement,
   emitNetSocketVariableDeclaration,
   emitPreparedNetAddressPortExpression,
-  resolveNetAddressStringMember,
-  type NetLoweringDependencies
+  resolveNetAddressStringMember
 } from './stdlib/net.ts'
+import type { NetLoweringDependencies } from './stdlib/net.ts'
 import {
   cFetchRuntimeExpressionMethod,
   emitFetchHeadersBooleanVariableDeclaration,
   emitPreparedFetchCallExpression,
   emitPreparedFetchHeadersCallExpression,
   emitPreparedFetchInitOperand,
-  isAsyncFetchRuntimeCallExpression,
-  type FetchLoweringDependencies
+  isAsyncFetchRuntimeCallExpression
 } from './stdlib/fetch.ts'
+import type { FetchLoweringDependencies } from './stdlib/fetch.ts'
 import {
   cFsRuntimeConstantExpression,
   cFsRuntimeExpressionMethod,
@@ -202,16 +201,16 @@ import {
   emitPreparedFsStatsMethodExpression,
   emitPreparedFsSyncStatementExpression,
   emitPreparedFsSyncValueExpression,
-  isAsyncFsRuntimeCallExpression,
-  type FsLoweringDependencies
+  isAsyncFsRuntimeCallExpression
 } from './stdlib/fs.ts'
+import type { FsLoweringDependencies } from './stdlib/fs.ts'
 import {
   cJsonRuntimeCallName,
   emitJsonParseVariableDeclaration,
   emitPreparedJsonCallExpression,
-  emitPreparedJsonScalarParseExpression,
-  type JsonDeclarationDependencies
+  emitPreparedJsonScalarParseExpression
 } from './stdlib/json.ts'
+import type { JsonDeclarationDependencies } from './stdlib/json.ts'
 import {
   cOsRuntimeConstantName,
   cOsRuntimeMethodName,
@@ -224,9 +223,9 @@ import {
   emitPreparedPathBooleanCallExpression,
   emitPreparedPathConstantExpression,
   emitPreparedPathObjectCallExpression,
-  emitPreparedPathStringCallExpression,
-  type PathLoweringDependencies
+  emitPreparedPathStringCallExpression
 } from './stdlib/path.ts'
+import type { PathLoweringDependencies } from './stdlib/path.ts'
 import {
   cProcessRuntimeEnvName,
   cProcessRuntimeMethodName,
@@ -235,24 +234,24 @@ import {
   emitPreparedProcessNumberExpression,
   emitPreparedProcessStringExpression,
   emitProcessExitCodeAssignment,
-  emitProcessExitStatement,
-  type ProcessLoweringDependencies
+  emitProcessExitStatement
 } from './stdlib/process.ts'
+import type { ProcessLoweringDependencies } from './stdlib/process.ts'
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import {
   emitPreparedTimerCallExpression,
-  emitTimerVariableDeclaration,
-  type TimerLoweringDependencies
+  emitTimerVariableDeclaration
 } from './stdlib/timers.ts'
+import type { TimerLoweringDependencies } from './stdlib/timers.ts'
 import {
   cUrlRuntimeMethodName,
   emitPreparedUrlObjectExpression,
   emitPreparedUrlSearchParamsCallExpression,
   emitPreparedUrlSearchParamsObjectExpression,
   emitPreparedUrlStringCallExpression,
-  emitUrlObjectFieldAssignment,
-  type UrlLoweringDependencies
+  emitUrlObjectFieldAssignment
 } from './stdlib/url.ts'
+import type { UrlLoweringDependencies } from './stdlib/url.ts'
 import {
   cUnsupportedExpressionCode,
   cUnsupportedVariableDeclarationCode,
@@ -302,9 +301,9 @@ import {
   emitNullableRuntimeValueVariableDeclaration,
   isNullableRuntimeExpression,
   isNullableScalarRuntimeExpression,
-  resolveNullableScalarConditionNarrowing,
-  type NullableLoweringDependencies
+  resolveNullableScalarConditionNarrowing
 } from './values/nullable.ts'
+import type { NullableLoweringDependencies } from './values/nullable.ts'
 import {
   collectClassMethods,
   createClassInfos,
@@ -313,9 +312,9 @@ import {
   emitClassObjectVariableDeclaration,
   emitPreparedClassMethodCallExpression,
   isClassConstructorExpression,
-  registerClassObjectShape,
-  type ClassLoweringDependencies
+  registerClassObjectShape
 } from './values/classes.ts'
+import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
   emitObjectVariableDeclaration,
   emitObjectValueReference,
@@ -329,9 +328,9 @@ import {
   resolveKnownObjectMember,
   resolveObjectExpressionIndex,
   resolveObjectExpressionMember,
-  updateKnownObjectMemberValueType,
-  type ObjectVariableDeclarationDependencies
+  updateKnownObjectMemberValueType
 } from './values/objects.ts'
+import type { ObjectVariableDeclarationDependencies } from './values/objects.ts'
 import {
   collectionConstructorName,
   emitPreparedCollectionCallExpression,
@@ -343,9 +342,9 @@ import {
   resolveRuntimeForOfMap,
   resolveRuntimeForOfSet,
   resolveRuntimeMapType,
-  resolveRuntimeSetElementType,
-  type CollectionLoweringDependencies
+  resolveRuntimeSetElementType
 } from './values/collections.ts'
+import type { CollectionLoweringDependencies } from './values/collections.ts'
 import {
   emitArrayFilterVariableDeclaration,
   emitArrayMapVariableDeclaration,
@@ -369,9 +368,9 @@ import {
   resolveRuntimeArrayElementType,
   resolveRuntimeArrayIndex,
   resolveRuntimeForOfArray,
-  updateKnownArrayElementValueType,
-  type ArrayLoweringDependencies
+  updateKnownArrayElementValueType
 } from './values/arrays.ts'
+import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import {
   collectTemplatePlaceholderExpressions,
   emitCNumberConversionValueExpression,
@@ -395,9 +394,9 @@ import {
   isStringSliceCall,
   isStringSplitCall,
   isStringTrimCall,
-  resolveRuntimeStringReference,
-  type StringLoweringDependencies
+  resolveRuntimeStringReference
 } from './values/strings.ts'
+import type { StringLoweringDependencies } from './values/strings.ts'
 import {
   emitCallExpression as emitCallExpressionWithDependencies,
   emitCallee as emitCalleeFromExpressions,
@@ -410,15 +409,17 @@ import {
   emitPreparedNumberExpression as emitPreparedNumberExpressionWithDependencies,
   emitPreparedUpdateExpression as emitPreparedUpdateExpressionWithDependencies,
   isThrowingFunctionCallee as isThrowingFunctionCalleeFromExpressions,
-  isThrowingFunctionName as isThrowingFunctionNameFromExpressions,
-  type CCallExpressionDependencies,
-  type CScalarExpressionDependencies,
-  type CValueExpressionDependencies
+  isThrowingFunctionName as isThrowingFunctionNameFromExpressions
+} from './values/expressions.ts'
+import type {
+  CCallExpressionDependencies,
+  CScalarExpressionDependencies,
+  CValueExpressionDependencies
 } from './values/expressions.ts'
 import {
-  inferExpressionType as inferExpressionTypeWithDependencies,
-  type CExpressionTypeDependencies
+  inferExpressionType as inferExpressionTypeWithDependencies
 } from './values/types.ts'
+import type { CExpressionTypeDependencies } from './values/types.ts'
 import {
   currentBreakTarget,
   currentContinueTarget,
@@ -457,9 +458,9 @@ import {
   withContinueTarget,
   withErrorTarget,
   withFinallyFlowTarget,
-  withReturnTarget,
-  type StatementLoweringDependencies
+  withReturnTarget
 } from './values/statements.ts'
+import type { StatementLoweringDependencies } from './values/statements.ts'
 import {
   emitClassMethodDeclaration as emitClassMethodDeclarationWithDependencies,
   emitClassMethodHead,
@@ -468,14 +469,15 @@ import {
   emitMainReturnExpression,
   emitMainWrapper as emitMainWrapperWithDependencies,
   reportUnsupportedCFunctionType,
-  resolveFunctionDeclarationParams,
-  type CDeclarationEmissionDependencies
+  resolveFunctionDeclarationParams
 } from './declarations.ts'
+import type { CDeclarationEmissionDependencies } from './declarations.ts'
 import type {
   AnyNode,
   Diagnostic,
   IrFunctionDeclaration,
   IrFunctionEffect,
+  IrThrowValueType,
   IrProgram,
   ModuleGraph,
   SourceLocation
@@ -483,6 +485,7 @@ import type {
 export type { CModuleOutputFile } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
+type TempValueEmitter = (temp: string) => string
 
 const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression,
@@ -1111,8 +1114,29 @@ export function emitCBundleFromIrModules(
   options: CEmitOptions = {}
 ): string {
   const irPrograms = collectIrPrograms(irModules)
-  const entryIndex = irModules.findIndex((module: IrModuleRecord) => module.path === entry)
-  const entryIrPrograms = collectIrPrograms(entryIndex < 0 ? irModules : irModules.slice(0, entryIndex + 1))
+  let entryIndex = -1
+
+  for (let index = 0; index < irModules.length; index++) {
+    const module = irModules[index]
+
+    if (module.path === entry) {
+      entryIndex = index
+      break
+    }
+  }
+
+  const entryModules: IrModuleRecord[] = []
+  if (entryIndex < 0) {
+    for (const module of irModules) {
+      entryModules.push(module)
+    }
+  } else {
+    for (let index = 0; index <= entryIndex; index++) {
+      entryModules.push(irModules[index])
+    }
+  }
+
+  const entryIrPrograms = collectIrPrograms(entryModules)
   const entryIr = findIrEntryProgram(irModules, entry)
 
   return formatGeneratedC(emitCUnit(irPrograms, entryIr, options, entryIrPrograms), 'ccjs.bundle.c')
@@ -1134,9 +1158,9 @@ export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEm
 
 function emitCUnit(
   irPrograms: IrProgram[],
-  entryIrProgram: IrProgram | null = irPrograms.at(-1) ?? null,
-  options: CEmitOptions = {},
-  entryIrPrograms: IrProgram[] = entryIrProgram == null ? [] : [entryIrProgram]
+  entryIrProgram: IrProgram | null,
+  options: CEmitOptions,
+  entryIrPrograms: IrProgram[]
 ) {
   return emitCUnitWithDependencies(irPrograms, entryIrProgram, options, entryIrPrograms, cUnitDependencies)
 }
@@ -1145,10 +1169,12 @@ function createThrowingFunctionInfo(
   functionDeclarations: IrFunctionDeclaration[],
   functionEffects: IrFunctionEffect[]
 ) {
-  const functionThrowValueTypes = new Map<string, IrFunctionEffect['throwValueTypes']>(
-    functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, []])
-  )
-  const throwingFunctions = new Set<string>()
+  const functionThrowValueTypes: Map<string, IrThrowValueType[]> = new Map()
+  const throwingFunctions: Set<string> = new Set()
+
+  for (const item of functionDeclarations) {
+    functionThrowValueTypes.set(item.name, [])
+  }
 
   for (const effect of functionEffects) {
     if (!functionThrowValueTypes.has(effect.name)) {
@@ -1179,7 +1205,11 @@ function emitCFieldFlags(field: AnyNode): string {
     flags.push('CCJS_FIELD_WEAK')
   }
 
-  return flags.length === 0 ? '0' : flags.join(' | ')
+  if (flags.length === 0) {
+    return '0'
+  }
+
+  return flags.join(' | ')
 }
 
 function createBaseContext(
@@ -1189,12 +1219,77 @@ function createBaseContext(
   jsGlobalRoots: Set<string>
 ): CEmitContext {
   const throwing = createThrowingFunctionInfo(functionDeclarations, functionEffects)
+  const functionNames: Map<string, string> = new Map()
+  const functionParams: Map<string, CFunctionParam[]> = new Map()
+  const functionReturnArrayElementTypes: Map<string, string | null> = new Map()
+  const functionReturnArrayElementDeclaredTypes: Map<string, string | null> = new Map()
+  const functionReturnMapTypes: Map<string, CFunctionReturnMapType> = new Map()
+  const functionReturnNullables: Map<string, boolean> = new Map()
+  const functionReturnPromiseValueTypes: Map<string, string | null> = new Map()
+  const functionReturnShapes: Map<string, CObjectShape | null> = new Map()
+  const functionReturnSetElementTypes: Map<string, string | null> = new Map()
+  const functionReturnTypes: Map<string, string> = new Map()
+  const functionAsyncFlags: Map<string, boolean> = new Map()
+  const unhandledRejectionFlag: string | null = null
+
+  for (const item of functionDeclarations) {
+    let returnArrayElementType: string | null = null
+    let returnArrayElementDeclaredType: string | null = null
+    let returnPromiseValueType: string | null = null
+    let returnShape: CObjectShape | null = null
+    let returnSetElementType: string | null = null
+
+    if (item.returnArrayElementType != null) {
+      returnArrayElementType = item.returnArrayElementType
+    }
+
+    if (item.returnArrayElementDeclaredType != null) {
+      returnArrayElementDeclaredType = item.returnArrayElementDeclaredType
+    }
+
+    if (item.returnPromiseValueType != null) {
+      returnPromiseValueType = item.returnPromiseValueType
+    }
+
+    if (item.returnShape != null) {
+      returnShape = item.returnShape
+    }
+
+    if (item.returnSetElementType != null) {
+      returnSetElementType = item.returnSetElementType
+    }
+
+    const returnMapType: CFunctionReturnMapType = {
+      key: null,
+      value: null
+    }
+
+    if (item.returnMapKeyType != null) {
+      returnMapType.key = item.returnMapKeyType
+    }
+
+    if (item.returnMapValueType != null) {
+      returnMapType.value = item.returnMapValueType
+    }
+
+    functionNames.set(item.name, emitCFunctionName(item.name))
+    functionParams.set(item.name, item.params as CFunctionParam[])
+    functionReturnArrayElementTypes.set(item.name, returnArrayElementType)
+    functionReturnArrayElementDeclaredTypes.set(item.name, returnArrayElementDeclaredType)
+    functionReturnMapTypes.set(item.name, returnMapType)
+    functionReturnNullables.set(item.name, item.returnNullable === true)
+    functionReturnPromiseValueTypes.set(item.name, returnPromiseValueType)
+    functionReturnShapes.set(item.name, returnShape)
+    functionReturnSetElementTypes.set(item.name, returnSetElementType)
+    functionReturnTypes.set(item.name, item.returnType)
+    functionAsyncFlags.set(item.name, item.async === true)
+  }
 
   return {
-    boxedMutableCaptureDeclarations: new Set<AnyNode>(),
-    classInfos: new Map<string, CClassInfo>(),
-    callbackArrowWrappers: new Map<AnyNode, CCallbackWrapper>(),
-    callbackWrappers: new Map<string, CCallbackWrapper>(),
+    boxedMutableCaptureDeclarations: new Set(),
+    classInfos: new Map(),
+    callbackArrowWrappers: new Map(),
+    callbackWrappers: new Map(),
     asyncTaskLoweringDependencies,
     statementLoweringDependencies,
     classLoweringDependencies,
@@ -1202,85 +1297,63 @@ function createBaseContext(
     collectionLoweringDependencies,
     arrayLoweringDependencies,
     stringLoweringDependencies,
-    cryptoImportNames: new Set<string>(),
+    cryptoImportNames: new Set(),
     diagnostics,
-    dgramCreateSocketNames: new Set<string>(),
-    dgramImportNames: new Set<string>(),
-    dgramMessageHandlers: new Map<AnyNode, CDgramMessageHandler>(),
+    dgramCreateSocketNames: new Set(),
+    dgramImportNames: new Set(),
+    dgramMessageHandlers: new Map(),
     functionThrowValueTypes: throwing.functionThrowValueTypes,
-    functionNames: new Map<string, string>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, emitCFunctionName(item.name)])
-    ),
-    functionParams: new Map<string, CFunctionParam[]>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.params as CFunctionParam[]])
-    ),
-    functionReturnArrayElementTypes: new Map<string, string | null>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnArrayElementType ?? null])
-    ),
-    functionReturnArrayElementDeclaredTypes: new Map<string, string | null>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [
-        item.name,
-        item.returnArrayElementDeclaredType ?? null
-      ])
-    ),
-    functionReturnMapTypes: new Map<string, CFunctionReturnMapType>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [
-        item.name,
-        {
-          key: item.returnMapKeyType ?? null,
-          value: item.returnMapValueType ?? null
-        }
-      ])
-    ),
-    functionReturnNullables: new Map<string, boolean>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnNullable === true])
-    ),
-    functionReturnPromiseValueTypes: new Map<string, string | null>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnPromiseValueType ?? null])
-    ),
-    functionReturnShapes: new Map<string, CObjectShape | null>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnShape ?? null])
-    ),
-    functionReturnSetElementTypes: new Map<string, string | null>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnSetElementType ?? null])
-    ),
-    functionReturnTypes: new Map<string, string>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.returnType])
-    ),
-    functionAsyncFlags: new Map<string, boolean>(
-      functionDeclarations.map((item: IrFunctionDeclaration) => [item.name, item.async === true])
-    ),
-    asyncTaskWrappers: new Map<string, CAsyncTaskWrapper>(),
+    functionNames,
+    functionParams,
+    functionReturnArrayElementTypes,
+    functionReturnArrayElementDeclaredTypes,
+    functionReturnMapTypes,
+    functionReturnNullables,
+    functionReturnPromiseValueTypes,
+    functionReturnShapes,
+    functionReturnSetElementTypes,
+    functionReturnTypes,
+    functionAsyncFlags,
+    asyncTaskWrappers: new Map(),
     jsGlobalRoots,
-    promiseChainArrowWrappers: new Map<AnyNode, CPromiseChainWrapper>(),
-    promiseChainWrappers: new Map<string, CPromiseChainWrapper>(),
+    promiseChainArrowWrappers: new Map(),
+    promiseChainWrappers: new Map(),
     processRuntime: false,
-    httpCreateServerNames: new Set<string>(),
-    httpHandlers: new Map<AnyNode, CHttpHandler>(),
-    httpImportNames: new Set<string>(),
-    netConnectNames: new Set<string>(),
-    netCreateServerNames: new Set<string>(),
-    netHandlers: new Map<string, CNetHandler>(),
-    netImportNames: new Set<string>(),
-    runtimeFunctionParams: new Map<string, CFunctionType>(),
-    externalEventLoopFunctions: new Set<string>(),
+    httpCreateServerNames: new Set(),
+    httpHandlers: new Map(),
+    httpImportNames: new Set(),
+    netConnectNames: new Set(),
+    netCreateServerNames: new Set(),
+    netHandlers: new Map(),
+    netImportNames: new Set(),
+    runtimeFunctionParams: new Map(),
+    externalEventLoopFunctions: new Set(),
     throwingFunctions: throwing.throwingFunctions,
-    unhandledRejectionFlag: null as string | null,
+    unhandledRejectionFlag,
     nextId: 0
   }
 }
 
 function collectExternalEventLoopFunctions(functions: AnyNode[]): Set<string> {
-  const functionsByName = new Map(
-    functions.flatMap((item: AnyNode) => (typeof item.name === 'string' ? [[item.name, item]] : []))
-  )
-  const names = new Set<string>()
+  const functionsByName: Map<string, AnyNode> = new Map()
+  const names: Set<string> = new Set()
   let changed = true
+
+  for (const item of functions) {
+    if (item.name == null) {
+      continue
+    }
+
+    functionsByName.set(item.name, item)
+  }
 
   while (changed) {
     changed = false
 
-    for (const [name, item] of functionsByName) {
+    for (const entry of functionsByName) {
+      const name = entry[0]
+      const item = entry[1]
+
       if (names.has(name)) {
         continue
       }
@@ -1296,17 +1369,31 @@ function collectExternalEventLoopFunctions(functions: AnyNode[]): Set<string> {
 }
 
 function findObjectLiteralPropertyValue(expression: AnyNode, key: string): AnyNode | null {
-  return expression?.properties?.find((property: AnyNode) => property.key === key)?.value ?? null
+  if (expression == null || expression.properties == null) {
+    return null
+  }
+
+  for (const property of expression.properties) {
+    if (property.key === key) {
+      if (property.value != null) {
+        return property.value
+      }
+
+      return null
+    }
+  }
+
+  return null
 }
 
 function staticObjectStringPropertyValue(expression: AnyNode, key: string): string | null {
   const value = findObjectLiteralPropertyValue(expression, key)
 
-  if (value?.type === 'StringLiteral') {
+  if (value != null && value.type === 'StringLiteral') {
     return value.value
   }
 
-  if (value?.type === 'TemplateLiteral' && !value.raw.includes('${')) {
+  if (value != null && value.type === 'TemplateLiteral' && !value.raw.includes('${')) {
     return value.raw.slice(1, -1)
   }
 
@@ -1316,7 +1403,7 @@ function staticObjectStringPropertyValue(expression: AnyNode, key: string): stri
 function staticObjectBooleanPropertyValue(expression: AnyNode, key: string): boolean | null {
   const value = findObjectLiteralPropertyValue(expression, key)
 
-  if (value?.type === 'BooleanLiteral') {
+  if (value != null && value.type === 'BooleanLiteral') {
     return value.value === true
   }
 
@@ -1338,11 +1425,17 @@ function emitFunctionPointerVariable(
 
 function emitStatement(statement: AnyNode, context: CFunctionContext): string[] {
   if (statement.type === 'BlockStatement') {
-    return withVariableScope(context, () => [
-      '{',
-      ...emitStatementBody(statement, context).map((line: string) => `  ${line}`),
-      '}'
-    ])
+    return withVariableScope(context, () => {
+      const lines = ['{']
+
+      for (const line of emitStatementBody(statement, context)) {
+        lines.push(`  ${line}`)
+      }
+
+      lines.push('}')
+
+      return lines
+    })
   }
 
   if (statement.type === 'IfStatement') {
@@ -1397,22 +1490,102 @@ function emitStatement(statement: AnyNode, context: CFunctionContext): string[] 
 }
 
 function inferCatchBindingValueType(statement: AnyNode, context: CFunctionContext): string {
-  const types = [
-    ...collectIrLocalThrowValueTypes(statement.block, {
-      errorObjectNames: context.errorObjectNames,
-      functionThrowValueTypes: context.functionThrowValueTypes
-    }),
-    ...collectLocalAwaitRejectionValueTypes(statement.block, context)
-  ]
+  const types: string[] = []
+  const localThrowTypes = collectIrLocalThrowValueTypes(statement.block, {
+    errorObjectNames: context.errorObjectNames,
+    functionThrowValueTypes: context.functionThrowValueTypes
+  })
 
-  return types.length > 0 && types.every((type: string) => type === 'error') ? 'object' : 'string'
+  for (const throwType of localThrowTypes) {
+    types.push(throwType)
+  }
+
+  const localAwaitTypes = collectLocalAwaitRejectionValueTypes(statement.block, context)
+
+  for (const awaitType of localAwaitTypes) {
+    types.push(awaitType)
+  }
+
+  if (types.length === 0) {
+    return 'string'
+  }
+
+  for (const valueType of types) {
+    if (valueType !== 'error') {
+      return 'string'
+    }
+  }
+
+  return 'object'
+}
+
+const LOCAL_AWAIT_REJECTION_CHILD_KEYS = [
+  'body',
+  'init',
+  'argument',
+  'args',
+  'callee',
+  'object',
+  'index',
+  'properties',
+  'value',
+  'left',
+  'right',
+  'consequent',
+  'alternate',
+  'test',
+  'update',
+  'iterable',
+  'cases',
+  'block',
+  'handler',
+  'finalizer',
+  'expression'
+]
+
+function pushAll(target: string[], values: string[]): void {
+  for (const value of values) {
+    target.push(value)
+  }
+}
+
+function copyStringSet(source: Set<string>): Set<string> {
+  const result: Set<string> = new Set()
+
+  for (const value of source) {
+    result.add(value)
+  }
+
+  return result
+}
+
+function copyStringMap(source: Map<string, string>): Map<string, string> {
+  const result: Map<string, string> = new Map()
+
+  for (const entry of source) {
+    result.set(entry[0], entry[1])
+  }
+
+  return result
 }
 
 function collectLocalAwaitRejectionValueTypes(
   node: unknown,
+  context: CFunctionContext
+): string[] {
+  return collectLocalAwaitRejectionValueTypesWithState(
+    node,
+    context,
+    new Map(),
+    copyStringSet(context.errorObjectNames)
+  )
+}
+
+function collectLocalAwaitRejectionValueTypesWithState(
+  node: unknown,
   context: CFunctionContext,
-  localPromiseRejectionValueTypes: Map<string, string> = new Map<string, string>(),
-  localErrorObjectNames: Set<string> = new Set(context.errorObjectNames)
+  localPromiseRejectionValueTypes: Map<string, string>,
+  localErrorObjectNames: Set<string>
 ): string[] {
   if (node == null) {
     return []
@@ -1422,31 +1595,33 @@ function collectLocalAwaitRejectionValueTypes(
     const types: string[] = []
 
     for (const item of node) {
-      types.push(
-        ...collectLocalAwaitRejectionValueTypes(item, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+      pushAll(
+        types,
+        collectLocalAwaitRejectionValueTypesWithState(
+          item,
+          context,
+          localPromiseRejectionValueTypes,
+          localErrorObjectNames
+        )
       )
     }
 
     return types
   }
 
-  if (typeof node !== 'object') {
-    return []
-  }
-
   const current = node as AnyNode
 
   if (current.type === 'BlockStatement') {
-    return collectLocalAwaitRejectionValueTypes(
+    return collectLocalAwaitRejectionValueTypesWithState(
       current.body,
       context,
-      new Map(localPromiseRejectionValueTypes),
-      new Set(localErrorObjectNames)
+      copyStringMap(localPromiseRejectionValueTypes),
+      copyStringSet(localErrorObjectNames)
     )
   }
 
   if (current.type === 'VariableDeclaration') {
-    const types = collectLocalAwaitRejectionValueTypes(
+    const types = collectLocalAwaitRejectionValueTypesWithState(
       current.init,
       context,
       localPromiseRejectionValueTypes,
@@ -1481,38 +1656,68 @@ function collectLocalAwaitRejectionValueTypes(
       localErrorObjectNames
     )
 
-    return rejectionValueType === 'unknown' ? [] : [rejectionValueType]
+    if (rejectionValueType === 'unknown') {
+      return []
+    }
+
+    return [rejectionValueType]
   }
 
-  return Object.values(current).flatMap((value: unknown) =>
-    collectLocalAwaitRejectionValueTypes(value, context, localPromiseRejectionValueTypes, localErrorObjectNames)
-  )
+  const types: string[] = []
+
+  for (const key of LOCAL_AWAIT_REJECTION_CHILD_KEYS) {
+    const value = current[key]
+
+    if (value == null) {
+      continue
+    }
+
+    pushAll(
+      types,
+      collectLocalAwaitRejectionValueTypesWithState(
+        value,
+        context,
+        localPromiseRejectionValueTypes,
+        localErrorObjectNames
+      )
+    )
+  }
+
+  return types
 }
 
 function inferPromiseRejectionValueType(
   expression: AnyNode,
   context: CFunctionContext,
-  localPromiseRejectionValueTypes: Map<string, string> = context.promiseRejectionValueTypes,
-  localErrorObjectNames: Set<string> = context.errorObjectNames
+  localPromiseRejectionValueTypes: Map<string, string>,
+  localErrorObjectNames: Set<string>
 ): string {
-  if (expression?.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'reject') {
-    return inferRejectedValueType(expression.args[0], context, localErrorObjectNames)
+  if (expression != null && expression.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'reject') {
+    return inferRejectedValueTypeWithErrors(expression.args[0], context, localErrorObjectNames)
   }
 
-  if (expression?.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression) != null) {
+  if (expression != null && expression.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression) != null) {
     return 'error'
   }
 
-  if (expression?.type === 'CallExpression' && cFetchRuntimeExpressionMethod(expression) != null) {
+  if (expression != null && expression.type === 'CallExpression' && cFetchRuntimeExpressionMethod(expression) != null) {
     return 'error'
   }
 
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return (
-      localPromiseRejectionValueTypes.get(expression.path[0]) ??
-      context.promiseRejectionValueTypes.get(expression.path[0]) ??
-      'unknown'
-    )
+  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
+    const localValueType = localPromiseRejectionValueTypes.get(expression.path[0])
+
+    if (localValueType != null) {
+      return localValueType
+    }
+
+    const contextValueType = context.promiseRejectionValueTypes.get(expression.path[0])
+
+    if (contextValueType != null) {
+      return contextValueType
+    }
+
+    return 'unknown'
   }
 
   return 'unknown'
@@ -1520,16 +1725,23 @@ function inferPromiseRejectionValueType(
 
 function inferRejectedValueType(
   expression: AnyNode,
+  context: CFunctionContext
+): string {
+  return inferRejectedValueTypeWithErrors(expression, context, context.errorObjectNames)
+}
+
+function inferRejectedValueTypeWithErrors(
+  expression: AnyNode,
   context: CFunctionContext,
-  localErrorObjectNames: Set<string> = context.errorObjectNames
+  localErrorObjectNames: Set<string>
 ): string {
   if (isKnownErrorValueExpression(expression, context, localErrorObjectNames)) {
     return 'error'
   }
 
   if (
-    expression?.type === 'StringLiteral' ||
-    expression?.type === 'TemplateLiteral' ||
+    (expression != null && expression.type === 'StringLiteral') ||
+    (expression != null && expression.type === 'TemplateLiteral') ||
     inferExpressionType(expression, context) === 'string'
   ) {
     return 'string'
@@ -1632,36 +1844,59 @@ function isNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctio
   )
 }
 
+function emptyPreparedExpression(): PreparedExpression {
+  return {
+    lines: [],
+    expression: 'ccjs_undefined_value()'
+  }
+}
+
 function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
   const name = expression.target.path[0]
   const expectedTag = cRuntimeValueTag(context.variables.get(name))
   const targetType = context.variables.get(name)
-  const value = isNullableScalarType(targetType)
-    ? emitNullableScalarValueExpression(expression.value, context)
-    : targetType === 'function'
-      ? emitNullableFunctionValueExpression(expression.value, context.functionTypes.get(name), context)
-      : expression.value.type === 'ObjectLiteral'
-        ? emitCObjectLiteralValueExpression(
-            expression.value,
-            context,
-            context.objectShapes.get(name) == null
-              ? null
-              : {
-                  fields: context.objectShapes.get(name)
-                }
-          )
-        : emitCValueExpression(expression.value, context)
-  const temp = nextCName(context, 'ccjs_nullable_value')
+  let value = emptyPreparedExpression()
 
-  return [
-    ...value.lines,
-    `ccjs_value ${temp} = ${value.expression};`,
-    ...emitRuntimeNullableValueCheck(temp, expectedTag, context),
-    `ccjs_retain(${temp});`,
-    `ccjs_release(${name});`,
-    `${name} = ${temp};`,
-    ...clearNullableScalarNarrowing(name, context)
-  ]
+  if (isNullableScalarType(targetType)) {
+    value = emitNullableScalarValueExpression(expression.value, context)
+  } else if (targetType === 'function') {
+    value = emitNullableFunctionValueExpression(expression.value, context.functionTypes.get(name), context)
+  } else if (expression.value.type === 'ObjectLiteral') {
+    let shape: CObjectShape | null = null
+    const fields = context.objectShapes.get(name)
+
+    if (fields != null) {
+      shape = {
+        fields
+      }
+    }
+
+    value = emitCObjectLiteralValueExpression(expression.value, context, shape)
+  } else {
+    value = emitCValueExpression(expression.value, context)
+  }
+  const temp = nextCName(context, 'ccjs_nullable_value')
+  const lines: string[] = []
+
+  for (const line of value.lines) {
+    lines.push(line)
+  }
+
+  lines.push(`ccjs_value ${temp} = ${value.expression};`)
+
+  for (const line of emitRuntimeNullableValueCheck(temp, expectedTag, context)) {
+    lines.push(line)
+  }
+
+  lines.push(`ccjs_retain(${temp});`)
+  lines.push(`ccjs_release(${name});`)
+  lines.push(`${name} = ${temp};`)
+
+  for (const line of clearNullableScalarNarrowing(name, context)) {
+    lines.push(line)
+  }
+
+  return lines
 }
 
 function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
@@ -1669,16 +1904,25 @@ function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunction
   const expected = context.variables.get(name)
   const value = emitCValueExpression(expression.value, context)
   const temp = nextCName(context, 'ccjs_box_value')
-  const tag = expected === 'string' ? 'CCJS_TAG_STRING' : 'CCJS_TAG_OBJECT'
+  let tag = 'CCJS_TAG_OBJECT'
 
-  return [
-    ...value.lines,
-    `ccjs_value ${temp} = ${value.expression};`,
-    emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context),
-    `ccjs_retain(${temp});`,
-    `ccjs_release(*${name});`,
-    `*${name} = ${temp};`
-  ]
+  if (expected === 'string') {
+    tag = 'CCJS_TAG_STRING'
+  }
+
+  const lines: string[] = []
+
+  for (const line of value.lines) {
+    lines.push(line)
+  }
+
+  lines.push(`ccjs_value ${temp} = ${value.expression};`)
+  lines.push(emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context))
+  lines.push(`ccjs_retain(${temp});`)
+  lines.push(`ccjs_release(*${name});`)
+  lines.push(`*${name} = ${temp};`)
+
+  return lines
 }
 
 function isBoxedRuntimeValueName(name: string, context: CFunctionContext): boolean {
@@ -1707,7 +1951,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       readonly: false,
       valueType: inferExpressionType(property.value, context)
     }))
-  const properties = new Map<string, AnyNode>(
+  const properties: Map<string, AnyNode> = new Map(
     statement.init.properties.map((property: AnyNode) => [property.key, property])
   )
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
@@ -1742,7 +1986,8 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   lines.push(`*${statement.name} = ccjs_undefined_value();`)
   lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, ${statement.name})`, context))
 
-  for (const [index, field] of fields.entries()) {
+  for (let index = 0; index < fields.length; index++) {
+    const field = fields[index]
     const property = properties.get(field.name)
 
     if (property == null) {
@@ -1753,7 +1998,11 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     }
 
     const value = emitCValueExpression(property.value, context)
-    lines.push(...value.lines)
+
+    for (const line of value.lines) {
+      lines.push(line)
+    }
+
     lines.push(emitStatusCheck(`ccjs_object_init_known(*${statement.name}, ${index}, ${value.expression})`, context))
   }
 
@@ -1792,7 +2041,7 @@ function emitObjectMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: (temp: string) => string
+  emitGetCall: TempValueEmitter
 ): string[] {
   if (member.valueType === 'array') {
     return emitObjectArrayMemberVariableDeclaration(statement, member, context, emitGetCall)
@@ -1815,12 +2064,17 @@ function emitObjectMemberVariableDeclaration(
   }
 
   if (!['number', 'boolean'].includes(member.valueType)) {
+    let message = 'this object field type is not supported by the current C backend slice'
+
+    if (member.valueType === 'function') {
+      message =
+        'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
+    }
+
     context.diagnostics.push(
       diagnostic(
         cUnsupportedExpressionCode(member.valueType),
-        member.valueType === 'function'
-          ? 'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
-          : 'this object field type is not supported by the current C backend slice',
+        message,
         statement.loc
       )
     )
@@ -1829,10 +2083,12 @@ function emitObjectMemberVariableDeclaration(
 
   const temp = nextCName(context, 'ccjs_field')
   registerOwnedValue(context, temp)
+  const constPrefix = statement.kind === 'const' ? 'const ' : ''
+  const runtimeValueExpression = member.valueType === 'boolean' ? `${temp}.as.boolean ? 1 : 0` : `${temp}.as.number`
   const lines = [
     ...emitPrepareOwnedValueWrite(temp),
     emitStatusCheck(emitGetCall(temp), context),
-    `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${member.valueType === 'boolean' ? `${temp}.as.boolean ? 1 : 0` : `${temp}.as.number`};`
+    `${constPrefix}double ${statement.name} = ${runtimeValueExpression};`
   ]
 
   context.variables.set(statement.name, member.valueType)
@@ -1844,7 +2100,7 @@ function emitObjectArrayMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: (temp: string) => string
+  emitGetCall: TempValueEmitter
 ): string[] {
   registerOwnedValue(context, statement.name)
 
@@ -1864,7 +2120,7 @@ function emitObjectCollectionMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: (temp: string) => string
+  emitGetCall: TempValueEmitter
 ): string[] {
   registerOwnedValue(context, statement.name)
 
@@ -1893,7 +2149,7 @@ function emitObjectBytesMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: (temp: string) => string
+  emitGetCall: TempValueEmitter
 ): string[] {
   registerOwnedValue(context, statement.name)
   const lines = [
@@ -1911,7 +2167,7 @@ function emitObjectObjectMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: (temp: string) => string
+  emitGetCall: TempValueEmitter
 ): string[] {
   registerOwnedValue(context, statement.name)
   const lines = [
@@ -1933,7 +2189,7 @@ function emitObjectStringMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: (temp: string) => string
+  emitGetCall: TempValueEmitter
 ): string[] {
   const temp = nextCName(context, 'ccjs_field')
   registerOwnedValue(context, temp)
@@ -2012,10 +2268,12 @@ function emitKnownArrayIndexVariableDeclaration(
 
   const temp = nextCName(context, 'ccjs_item')
   registerOwnedValue(context, temp)
+  const constPrefix = statement.kind === 'const' ? 'const ' : ''
+  const runtimeValueExpression = element.valueType === 'boolean' ? `${temp}.as.boolean ? 1 : 0` : `${temp}.as.number`
   const lines = [
     ...emitPrepareOwnedValueWrite(temp),
     emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context),
-    `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${element.valueType === 'boolean' ? `${temp}.as.boolean ? 1 : 0` : `${temp}.as.number`};`
+    `${constPrefix}double ${statement.name} = ${runtimeValueExpression};`
   ]
 
   context.variables.set(statement.name, element.valueType)
@@ -2262,7 +2520,7 @@ function emitCObjectLiteralValueExpression(
       readonly: false,
       valueType: inferExpressionType(property.value, context)
     }))
-  const properties = new Map<string, AnyNode>(
+  const properties: Map<string, AnyNode> = new Map(
     expression.properties.map((property: AnyNode) => [property.key, property])
   )
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
@@ -2797,7 +3055,7 @@ function emitNumberLogValue(expression: AnyNode, type: string, context: CFunctio
 }
 
 function emitRuntimeStringLogValue(
-  emitGetCall: (temp: string) => string,
+  emitGetCall: TempValueEmitter,
   context: CFunctionContext
 ): ConsoleLogValue {
   const value = nextCName(context, 'ccjs_log_value')
@@ -2818,7 +3076,7 @@ function emitRuntimeStringLogValue(
 
 function emitRuntimeNumberLogValue(
   valueType: string,
-  emitGetCall: (temp: string) => string,
+  emitGetCall: TempValueEmitter,
   context: CFunctionContext
 ): ConsoleLogValue {
   const value = nextCName(context, 'ccjs_log_value')
@@ -3175,14 +3433,16 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   const status = nextCName(context, 'ccjs_async_status')
   const args = [...prepared.args]
   const rejectionValueType = resolveCFunctionRejectionValueType(expression.callee, context)
-  const fulfilledValue =
-    valueType === 'void'
-      ? 'ccjs_undefined_value()'
-      : valueType === 'boolean'
-        ? `ccjs_bool_value((${result}) != 0)`
-        : valueType === 'number'
-          ? `ccjs_number_value(${result})`
-          : result
+  let fulfilledValue = 'ccjs_undefined_value()'
+  if (result != null) {
+    if (valueType === 'boolean') {
+      fulfilledValue = `ccjs_bool_value((${result}) != 0)`
+    } else if (valueType === 'number') {
+      fulfilledValue = `ccjs_number_value(${result})`
+    } else {
+      fulfilledValue = result
+    }
+  }
   const valueCheck = managedResult ? emitRuntimeValueCheck(result, cRuntimeValueTag(valueType), context) : ''
 
   if (result != null) {
@@ -3199,21 +3459,40 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
     registerOwnedValue(context, result)
   }
 
+  const resultPreparationLines: string[] = []
+  if (result != null) {
+    if (managedResult) {
+      resultPreparationLines.push(...emitPrepareOwnedValueWrite(result))
+    } else {
+      resultPreparationLines.push(`double ${result} = 0;`)
+    }
+  }
+
+  const managedResultResetLines: string[] = []
+  if (managedResult && result != null) {
+    for (const line of emitPrepareOwnedValueWrite(result)) {
+      managedResultResetLines.push(`  ${line}`)
+    }
+  }
+
+  const rejectedCall = `ccjs_promise_rejected(${emitEventLoopReference(context)}, ccjs_error, &${out})`
+  const resolvedCall = `ccjs_promise_resolved(${emitEventLoopReference(context)}, ${fulfilledValue}, &${out})`
+
   return {
     lines: [
       ...prepared.lines,
       ...emitPrepareOwnedValueWrite('ccjs_error'),
-      ...(result == null ? [] : managedResult ? emitPrepareOwnedValueWrite(result) : [`double ${result} = 0;`]),
+      ...resultPreparationLines,
       `ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${args.join(', ')});`,
       `if (${status} == CCJS_ERR_THROW) {`,
-      `  ${emitStatusCheck(`ccjs_promise_rejected(${emitEventLoopReference(context)}, ccjs_error, &${out})`, context)}`,
+      `  ${emitStatusCheck(rejectedCall, context)}`,
       '  ccjs_release(ccjs_error);',
       '  ccjs_error = ccjs_undefined_value();',
       '} else {',
       `  if (${status} != CCJS_OK) ${emitFailureStatement(context)}`,
       ...(valueCheck === '' ? [] : [`  ${valueCheck}`]),
-      `  ${emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${fulfilledValue}, &${out})`, context)}`,
-      ...(managedResult ? emitPrepareOwnedValueWrite(result).map((line: string) => `  ${line}`) : []),
+      `  ${emitStatusCheck(resolvedCall, context)}`,
+      ...managedResultResetLines,
       '}'
     ],
     expression: out,
@@ -3301,6 +3580,7 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
   const value = nextCName(context, 'ccjs_await_value')
   const valueTag = cRuntimeValueTag(valueType)
   const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
+  const pollCall = `ccjs_loop_poll(${emitEventLoopReference(context)}, ${emitEventLoopNextTimeExpression(context)})`
   registerOwnedValue(context, value)
 
   return {
@@ -3309,7 +3589,7 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
       ...emitPrepareOwnedValueWrite(value),
       `while (ccjs_promise_get_state(${promise.expression}) == CCJS_PROMISE_PENDING && ccjs_loop_has_work(${emitEventLoopReference(context)})) {`,
       ...emitEventLoopSleepUntilNextTimerLines(context, '  '),
-      `  ${emitStatusCheck(`ccjs_loop_poll(${emitEventLoopReference(context)}, ${emitEventLoopNextTimeExpression(context)})`, context)}`,
+      `  ${emitStatusCheck(pollCall, context)}`,
       '}',
       ...emitAwaitRejectedPromiseLines(promise.expression, promise.rejectionValueType ?? 'unknown', context),
       `if (ccjs_promise_get_state(${promise.expression}) != CCJS_PROMISE_FULFILLED) ${emitFailureStatement(context)}`,
@@ -3338,11 +3618,12 @@ function emitAwaitRejectedPromiseLines(
   }
 
   registerErrorChannel(context)
+  const resultCall = `ccjs_promise_get_result(${promiseExpression}, &ccjs_error)`
 
   return [
     `if (ccjs_promise_get_state(${promiseExpression}) == CCJS_PROMISE_REJECTED) {`,
     ...emitPrepareOwnedValueWrite('ccjs_error').map((line: string) => `  ${line}`),
-    `  ${emitStatusCheck(`ccjs_promise_get_result(${promiseExpression}, &ccjs_error)`, context)}`,
+    `  ${emitStatusCheck(resultCall, context)}`,
     `  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`,
     '  ccjs_error_active = 1;',
     ...(target == null ? ['  ccjs_status_result = CCJS_ERR_THROW;', '  goto ccjs_cleanup;'] : [`  goto ${target};`]),
@@ -3755,9 +4036,10 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
   }
 
   const callee = emitReference(expression.callee, context)
+  const calleeTypeCheck = `${callee}.tag != CCJS_TAG_FUNCTION || ${callee}.as.ref == 0`
   const lines: string[] = [
     `if (${callee}.tag != CCJS_TAG_NULL) {`,
-    `  ${emitRuntimeTypeCheck(`${callee}.tag != CCJS_TAG_FUNCTION || ${callee}.as.ref == 0`, context)}`
+    `  ${emitRuntimeTypeCheck(calleeTypeCheck, context)}`
   ]
   const args: string[] = []
 
@@ -3773,12 +4055,14 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
   lines.push(...emitPrepareOwnedValueWrite(out).map((line: string) => `  ${line}`))
 
   if (args.length === 0) {
-    lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, 0, 0, &${out})`, context)}`)
+    const call = `ccjs_callback_call(${callee}, 0, 0, &${out})`
+    lines.push(`  ${emitStatusCheck(call, context)}`)
   } else {
     const argArray = nextCName(context, 'ccjs_callback_args')
+    const call = `ccjs_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`
 
     lines.push(`  ccjs_value ${argArray}[] = { ${args.join(', ')} };`)
-    lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`, context)}`)
+    lines.push(`  ${emitStatusCheck(call, context)}`)
   }
 
   lines.push('}')
@@ -3811,11 +4095,12 @@ function emitOptionalRuntimeCallbackCallValueExpression(
 
   const callee = emitReference(expression.callee, context)
   const out = nextCName(context, 'ccjs_optional_call')
+  const calleeTypeCheck = `${callee}.tag != CCJS_TAG_FUNCTION || ${callee}.as.ref == 0`
   const lines: string[] = [
     ...emitPrepareOwnedValueWrite(out),
     `${out} = ccjs_null_value();`,
     `if (${callee}.tag != CCJS_TAG_NULL) {`,
-    `  ${emitRuntimeTypeCheck(`${callee}.tag != CCJS_TAG_FUNCTION || ${callee}.as.ref == 0`, context)}`
+    `  ${emitRuntimeTypeCheck(calleeTypeCheck, context)}`
   ]
   const args: string[] = []
 
@@ -3831,12 +4116,14 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   lines.push(...emitPrepareOwnedValueWrite(out).map((line: string) => `  ${line}`))
 
   if (args.length === 0) {
-    lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, 0, 0, &${out})`, context)}`)
+    const call = `ccjs_callback_call(${callee}, 0, 0, &${out})`
+    lines.push(`  ${emitStatusCheck(call, context)}`)
   } else {
     const argArray = nextCName(context, 'ccjs_callback_args')
+    const call = `ccjs_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`
 
     lines.push(`  ccjs_value ${argArray}[] = { ${args.join(', ')} };`)
-    lines.push(`  ${emitStatusCheck(`ccjs_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`, context)}`)
+    lines.push(`  ${emitStatusCheck(call, context)}`)
   }
 
   lines.push(`  ${emitRuntimeValueCheck(out, expectedTag, context)}`)

@@ -25,7 +25,7 @@ export function readTypeAnnotation(
   while (tokens[position]?.type !== 'eof') {
     const token = tokens[position]
 
-    if (genericDepth === 0 && stopValues.includes(token.value)) {
+    if (genericDepth === 0 && stopValues.includes(token.value) && !isArrayTypeSuffixClose(parts, token.value)) {
       break
     }
 
@@ -64,6 +64,10 @@ export function readTypeAnnotation(
     typeName: normalizeTypeName(parts.join('')),
     position
   }
+}
+
+function isArrayTypeSuffixClose(parts: string[], value: string): boolean {
+  return value === ']' && parts.length > 0 && parts[parts.length - 1] === '['
 }
 
 export function normalizeTypeName(name: string): string {

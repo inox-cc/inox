@@ -115,6 +115,25 @@ test('emits C for numeric operators', () => {
   assert.match(result.code, /printf\("%g %g\\n", \(\(double\)value\), \(\(double\)\(value == 7\)\)\);/)
 })
 
+test('erases TypeScript as expressions before C emission', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const value = 42 as number
+  const label = 'answer' as string
+  const record = { kind: 'ready' as const, value }
+  console.log(label, record.value)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /const double value = 42;/)
+  assert.match(result.code, /const char \*label = "answer";/)
+  assert.match(result.code, /ccjs_object_init_known\(record, 1, ccjs_number_value\(value\)\)/)
+})
+
 
 test('treats double equality as C equality aliases', () => {
   const source = `export function main(): void {

@@ -39,6 +39,7 @@ import {
   createStringLiteral,
   createTemplateLiteral,
   createThisExpression,
+  createTypeAssertionExpression,
   createUnaryExpression,
   createUpdateExpression
 } from './parser/expressions.ts'
@@ -978,10 +979,23 @@ class Parser {
       return this.parseArrowFunction()
     }
 
-    const expression = this.parseNullish()
+    const expression = this.parseTypeAssertion()
 
     if (this.matchValue('=')) {
       return createAssignmentExpression(expression, this.parseAssignment())
+    }
+
+    return expression
+  }
+
+  parseTypeAssertion(): AnyNode {
+    let expression = this.parseNullish()
+
+    while (this.matchIdentifier('as')) {
+      const valueType = this.parseTypeAnnotation([',', ')', ']', ';', '}', ':'], {
+        stopAtLineBreak: true
+      })
+      expression = createTypeAssertionExpression(expression, valueType)
     }
 
     return expression

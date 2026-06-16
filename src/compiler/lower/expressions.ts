@@ -46,6 +46,10 @@ export function lowerExpression(
     }
   }
 
+  if (expression.type === 'TypeAssertionExpression') {
+    return lowerExpression(expression.expression, context)
+  }
+
   if (expression.type === 'ThisExpression') {
     return {
       ...expression,

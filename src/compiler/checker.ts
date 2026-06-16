@@ -828,6 +828,24 @@ class Checker {
       return 'null'
     }
 
+    if (expression.type === 'TypeAssertionExpression') {
+      const valueType = this.checkExpression(expression.expression)
+
+      expression.nullable = expression.expression.nullable === true
+      expression.valueType = valueType
+      expression.arrayElementType = expression.expression.arrayElementType ?? null
+      expression.arrayElementDeclaredType = expression.expression.arrayElementDeclaredType ?? null
+      expression.mapKeyType = expression.expression.mapKeyType ?? null
+      expression.mapValueType = expression.expression.mapValueType ?? null
+      expression.promiseValueType = expression.expression.promiseValueType ?? null
+      expression.setElementType = expression.expression.setElementType ?? null
+      expression.functionType = expression.expression.functionType ?? null
+      expression.shape = expression.expression.shape ?? null
+      expression.className = expression.expression.className ?? null
+
+      return valueType
+    }
+
     if (expression.type === 'ThisExpression') {
       const symbol = this.resolveReference({
         type: 'Reference',
