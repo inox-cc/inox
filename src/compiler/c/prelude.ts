@@ -1,7 +1,19 @@
 import type { RandomOptions } from '../types.ts'
 import type { CEmitOptions } from './types.ts'
 
-const defaultRandomSeed = 0x6d2b79f5
+const defaultRandomSeed = 1831565813
+
+type CRandomBackend = 'simple' | 'xorshift32' | 'os'
+
+function pushCPreludeLines(target: string[], source: string[]): void {
+  for (let index = 0; index < source.length; index = index + 1) {
+    target.push(source[index])
+  }
+}
+
+function cPreludeUsesOsRandom(options: CEmitOptions): boolean {
+  return (options.random?.backend ?? 'simple') === 'os'
+}
 
 export function emitCPrelude(
   needsRuntime,
@@ -29,7 +41,7 @@ export function emitCPrelude(
   needsHttpRuntime,
   needsNetRuntime,
   options: CEmitOptions = {}
-) {
+): string[] {
   const lines = ['#include <stdio.h>']
 
   if (needsConsoleRuntime) {
@@ -61,8 +73,8 @@ export function emitCPrelude(
     lines.push('#include <stdint.h>')
   }
 
-  if (needsMathRuntime && (options.random?.backend ?? 'simple') === 'os') {
-    lines.push(...emitOsEntropyHeaders())
+  if (needsMathRuntime && cPreludeUsesOsRandom(options)) {
+    pushCPreludeLines(lines, emitOsEntropyHeaders())
   }
 
   if (needsStringHeader) {
@@ -130,13 +142,13 @@ export function emitCPrelude(
 
   lines.push('')
 
-  if (needsMathRuntime && (options.random?.backend ?? 'simple') === 'os') {
-    lines.push(...emitOsEntropyHelper())
+  if (needsMathRuntime && cPreludeUsesOsRandom(options)) {
+    pushCPreludeLines(lines, emitOsEntropyHelper())
     lines.push('')
   }
 
   if (needsMathRuntime) {
-    lines.push(...emitMathHelpers(options.random))
+    pushCPreludeLines(lines, emitMathHelpers(options.random))
     lines.push('')
   }
 
@@ -214,82 +226,83 @@ export function emitCPrelude(
   return lines
 }
 
-function emitMathHelpers(random: RandomOptions = {}) {
+function emitMathHelpers(random: RandomOptions = {}): string[] {
   const randomSeed = emitRandomSeedLiteral(random)
-  const randomBackend = random.backend ?? 'simple'
+  const randomBackend = cPreludeRandomBackend(random)
+  const lines: string[] = []
 
-  return [
-    'static double ccjs_math_abs(double value) {',
-    '  return value < 0 ? -value : value;',
-    '}',
-    '',
-    'static double ccjs_math_floor(double value) {',
-    '  long long truncated = (long long)value;',
-    '  return (double)truncated > value ? (double)(truncated - 1) : (double)truncated;',
-    '}',
-    '',
-    'static double ccjs_math_ceil(double value) {',
-    '  long long truncated = (long long)value;',
-    '  return (double)truncated < value ? (double)(truncated + 1) : (double)truncated;',
-    '}',
-    '',
-    'static double ccjs_math_round(double value) {',
-    '  return ccjs_math_floor(value + 0.5);',
-    '}',
-    '',
-    'static double ccjs_math_trunc(double value) {',
-    '  return (double)((long long)value);',
-    '}',
-    '',
-    'static double ccjs_math_fround(double value) {',
-    '  return (double)((float)value);',
-    '}',
-    '',
-    'static double ccjs_math_min(double left, double right) {',
-    '  return left < right ? left : right;',
-    '}',
-    '',
-    'static double ccjs_math_max(double left, double right) {',
-    '  return left > right ? left : right;',
-    '}',
-    '',
-    'static double ccjs_math_sqrt(double value) {',
-    '  if (value < 0) return 0.0 / 0.0;',
-    '  if (value == 0) return 0;',
-    '  double estimate = value < 1 ? 1 : value;',
-    '  for (int index = 0; index < 24; index += 1) {',
-    '    estimate = 0.5 * (estimate + value / estimate);',
-    '  }',
-    '  return estimate;',
-    '}',
-    '',
-    'static double ccjs_math_reduce_radians(double value) {',
-    '  const double pi = 3.14159265358979323846;',
-    '  const double tau = 6.28318530717958647692;',
-    '  while (value > pi) value -= tau;',
-    '  while (value < -pi) value += tau;',
-    '  return value;',
-    '}',
-    '',
-    'static double ccjs_math_sin(double value) {',
-    '  double x = ccjs_math_reduce_radians(value);',
-    '  double x2 = x * x;',
-    '  return x * (1 - x2 / 6 + (x2 * x2) / 120 - (x2 * x2 * x2) / 5040 + (x2 * x2 * x2 * x2) / 362880);',
-    '}',
-    '',
-    'static double ccjs_math_cos(double value) {',
-    '  double x = ccjs_math_reduce_radians(value);',
-    '  double x2 = x * x;',
-    '  return 1 - x2 / 2 + (x2 * x2) / 24 - (x2 * x2 * x2) / 720 + (x2 * x2 * x2 * x2) / 40320;',
-    '}',
-    '',
-    `static uint32_t ccjs_math_random_state = ${randomSeed};`,
-    '',
-    ...emitRandomBackendHelper(randomBackend)
-  ]
+  lines.push('static double ccjs_math_abs(double value) {')
+  lines.push('  return value < 0 ? -value : value;')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_floor(double value) {')
+  lines.push('  long long truncated = (long long)value;')
+  lines.push('  return (double)truncated > value ? (double)(truncated - 1) : (double)truncated;')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_ceil(double value) {')
+  lines.push('  long long truncated = (long long)value;')
+  lines.push('  return (double)truncated < value ? (double)(truncated + 1) : (double)truncated;')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_round(double value) {')
+  lines.push('  return ccjs_math_floor(value + 0.5);')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_trunc(double value) {')
+  lines.push('  return (double)((long long)value);')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_fround(double value) {')
+  lines.push('  return (double)((float)value);')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_min(double left, double right) {')
+  lines.push('  return left < right ? left : right;')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_max(double left, double right) {')
+  lines.push('  return left > right ? left : right;')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_sqrt(double value) {')
+  lines.push('  if (value < 0) return 0.0 / 0.0;')
+  lines.push('  if (value == 0) return 0;')
+  lines.push('  double estimate = value < 1 ? 1 : value;')
+  lines.push('  for (int index = 0; index < 24; index += 1) {')
+  lines.push('    estimate = 0.5 * (estimate + value / estimate);')
+  lines.push('  }')
+  lines.push('  return estimate;')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_reduce_radians(double value) {')
+  lines.push('  const double pi = 3.14159265358979323846;')
+  lines.push('  const double tau = 6.28318530717958647692;')
+  lines.push('  while (value > pi) value -= tau;')
+  lines.push('  while (value < -pi) value += tau;')
+  lines.push('  return value;')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_sin(double value) {')
+  lines.push('  double x = ccjs_math_reduce_radians(value);')
+  lines.push('  double x2 = x * x;')
+  lines.push('  return x * (1 - x2 / 6 + (x2 * x2) / 120 - (x2 * x2 * x2) / 5040 + (x2 * x2 * x2 * x2) / 362880);')
+  lines.push('}')
+  lines.push('')
+  lines.push('static double ccjs_math_cos(double value) {')
+  lines.push('  double x = ccjs_math_reduce_radians(value);')
+  lines.push('  double x2 = x * x;')
+  lines.push('  return 1 - x2 / 2 + (x2 * x2) / 24 - (x2 * x2 * x2) / 720 + (x2 * x2 * x2 * x2) / 40320;')
+  lines.push('}')
+  lines.push('')
+  lines.push(`static uint32_t ccjs_math_random_state = ${randomSeed};`)
+  lines.push('')
+  pushCPreludeLines(lines, emitRandomBackendHelper(randomBackend))
+
+  return lines
 }
 
-function emitOsEntropyHeaders() {
+function emitOsEntropyHeaders(): string[] {
   return [
     '#if defined(_WIN32) && defined(_MSC_VER)',
     '#define _CRT_RAND_S',
@@ -308,7 +321,7 @@ function emitOsEntropyHeaders() {
   ]
 }
 
-function emitOsEntropyHelper() {
+function emitOsEntropyHelper(): string[] {
   return [
     'static int ccjs_os_random_bytes(uint8_t* out, size_t len) {',
     '  if (out == 0 && len != 0) return 0;',
@@ -357,7 +370,7 @@ function emitOsEntropyHelper() {
   ]
 }
 
-function emitRandomBackendHelper(backend: NonNullable<RandomOptions['backend']>) {
+function emitRandomBackendHelper(backend: CRandomBackend): string[] {
   if (backend === 'os') {
     return [
       'static double ccjs_math_random(void) {',
@@ -394,15 +407,57 @@ function emitRandomBackendHelper(backend: NonNullable<RandomOptions['backend']>)
 }
 
 function emitRandomSeedLiteral(random: RandomOptions = {}): string {
-  if (random.backend != null && !['simple', 'xorshift32', 'os'].includes(random.backend)) {
-    throw new Error(`unsupported random backend ${JSON.stringify(random.backend)}`)
+  const backend = random.backend
+
+  if (backend != null) {
+    if (isSupportedCRandomBackend(backend) === false) {
+      throw new Error(`unsupported random backend ${JSON.stringify(backend)}`)
+    }
   }
 
-  const seed = random.seed ?? defaultRandomSeed
+  const seed = cPreludeRandomSeed(random)
 
-  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
-    throw new Error('random.seed must be an integer from 0 to 4294967295')
+  if (isValidCRandomSeed(seed)) {
+    return `0x${seed.toString(16).padStart(8, '0')}u`
   }
 
-  return `0x${seed.toString(16).padStart(8, '0')}u`
+  throw new Error('random.seed must be an integer from 0 to 4294967295')
+}
+
+function cPreludeRandomBackend(random: RandomOptions): CRandomBackend {
+  const backend = random.backend ?? 'simple'
+
+  if (backend === 'os') {
+    return 'os'
+  }
+
+  if (backend === 'xorshift32') {
+    return 'xorshift32'
+  }
+
+  return 'simple'
+}
+
+function cPreludeRandomSeed(random: RandomOptions): number {
+  return random.seed ?? defaultRandomSeed
+}
+
+function isSupportedCRandomBackend(backend: string): boolean {
+  return backend === 'simple' || backend === 'xorshift32' || backend === 'os'
+}
+
+function isValidCRandomSeed(seed: number): boolean {
+  if (seed < 0) {
+    return false
+  }
+
+  if (seed > 4294967295) {
+    return false
+  }
+
+  if (seed !== seed) {
+    return false
+  }
+
+  return Math.floor(seed) === seed
 }
