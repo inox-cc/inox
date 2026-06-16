@@ -2,10 +2,18 @@ import { CompileError, diagnostic } from '../diagnostics.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
 import { formatGeneratedC } from './format.ts'
 import { emitCIdentifier } from './identifiers.ts'
+import type { CompilerHost } from '../host.ts'
 import type { AnyNode, Diagnostic, ModuleGraph } from '../types.ts'
 import type { CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
 
 const cModuleSourceExtensions = ['', '.ts', '.js']
+
+type CModuleExtension = string
+type CModuleHost = CompilerHost
+type CModuleInitName = string | null
+type CModulePathSet = Set<string>
+type NullableCModulePath = string | null
+type NullableCModulePlan = CModulePlan | null
 
 export type CModuleFileEmitters = {
   emitHeader(plan: CModulePlan, plans: CModulePlan[], diagnostics: Diagnostic[]): string
@@ -24,7 +32,11 @@ export function emitCModuleFilesFromGraph(
 ): CModuleOutputFile[] {
   const diagnostics: Diagnostic[] = []
   const plans = createCModulePlans(graph, options, diagnostics)
-  const files = plans.flatMap((plan) => emitCModuleFiles(plan, plans, options, diagnostics, emitters))
+  const files: CModuleOutputFile[] = []
+
+  for (const plan of plans) {
+    pushCModuleOutputFiles(files, emitCModuleFiles(plan, plans, options, diagnostics, emitters))
+  }
 
   if (diagnostics.length > 0) {
     throw new CompileError(diagnostics)
@@ -34,46 +46,77 @@ export function emitCModuleFilesFromGraph(
 }
 
 function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, diagnostics: Diagnostic[]): CModulePlan[] {
-  const modulePaths = new Set(graph.modules.map((module) => module.path))
+  const modulePaths: CModulePathSet = new Set()
+  const modulePathList: string[] = []
   const host = options.host
-  const sourceRoot = host.resolvePath(
-    options.sourceRoot ?? commonDirectory(graph.modules.map((module) => module.path), host)
-  )
-  const plans: CModulePlan[] = graph.modules.flatMap((record) => {
+  let sourceRootInput: string
+  const plans: CModulePlan[] = []
+  const plansByPath: Map<string, CModulePlan> = new Map()
+
+  for (const item of graph.modules) {
+    modulePaths.add(item.path)
+    modulePathList.push(item.path)
+  }
+
+  if (options.sourceRoot == null) {
+    sourceRootInput = commonDirectory(modulePathList, host)
+  } else {
+    sourceRootInput = options.sourceRoot
+  }
+
+  const sourceRoot = host.resolvePath(sourceRootInput)
+
+  for (const record of graph.modules) {
     if (record.ir == null) {
-      return []
+      continue
     }
 
     const relativeSourcePath = relativeCModuleSourcePath(sourceRoot, record.path, host)
     const sourcePath = replaceCModuleExtension(relativeSourcePath, '.c', host)
     const headerPath = replaceCModuleExtension(relativeSourcePath, '.h', host)
     const symbolPrefix = cModuleSymbolPrefix(relativeSourcePath, record.path, host)
+    let initName: CModuleInitName = null
 
-    return [
-      {
-        record,
-        ir: record.ir,
-        isEntry: record.path === graph.entry,
-        relativeSourcePath,
-        sourcePath,
-        headerPath,
-        symbolPrefix,
-        headerGuard: `${symbolPrefix.toUpperCase()}_H`,
-        initName: record.path === graph.entry ? null : `${symbolPrefix}_init`,
-        imports: []
-      }
-    ]
-  })
-  const plansByPath = new Map(plans.map((plan) => [plan.record.path, plan]))
+    if (record.path !== graph.entry) {
+      initName = `${symbolPrefix}_init`
+    }
+
+    plans.push({
+      record,
+      ir: record.ir,
+      isEntry: record.path === graph.entry,
+      relativeSourcePath,
+      sourcePath,
+      headerPath,
+      symbolPrefix,
+      headerGuard: `${symbolPrefix.toUpperCase()}_H`,
+      initName,
+      imports: []
+    })
+  }
 
   for (const plan of plans) {
-    plan.imports = plan.record.imports.flatMap((declaration) => {
+    plansByPath.set(plan.record.path, plan)
+  }
+
+  for (const plan of plans) {
+    const imports: CModuleImportPlan[] = []
+
+    for (const declaration of plan.record.imports) {
       if (declaration.typeOnly || isRuntimeBuiltinImportSource(declaration.source)) {
-        return []
+        continue
       }
 
       const importedPath = resolveKnownCModuleImport(plan.record.path, declaration.source, modulePaths, host)
-      const importedModule = importedPath == null ? null : plansByPath.get(importedPath)
+      let importedModule: NullableCModulePlan = null
+
+      if (importedPath != null) {
+        const candidate = plansByPath.get(importedPath)
+
+        if (candidate != null) {
+          importedModule = candidate
+        }
+      }
 
       if (importedModule == null) {
         diagnostics.push(
@@ -83,21 +126,27 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
             declaration.loc
           )
         )
-        return []
+        continue
       }
 
       reportUnsupportedCModuleImports(declaration, importedModule, diagnostics)
 
-      return [
-        {
-          declaration,
-          module: importedModule
-        }
-      ]
-    })
+      imports.push({
+        declaration,
+        module: importedModule
+      })
+    }
+
+    plan.imports = imports
   }
 
   return plans
+}
+
+function pushCModuleOutputFiles(target: CModuleOutputFile[], source: CModuleOutputFile[]): void {
+  for (let index = 0; index < source.length; index = index + 1) {
+    target.push(source[index])
+  }
 }
 
 function emitCModuleFiles(
@@ -107,20 +156,22 @@ function emitCModuleFiles(
   diagnostics: Diagnostic[],
   emitters: CModuleFileEmitters
 ): CModuleOutputFile[] {
-  return [
-    {
-      kind: 'source',
-      path: plan.sourcePath,
-      sourcePath: plan.record.path,
-      code: formatGeneratedC(emitters.emitSource(plan, plans, options, diagnostics), plan.sourcePath)
-    },
-    {
-      kind: 'header',
-      path: plan.headerPath,
-      sourcePath: plan.record.path,
-      code: formatGeneratedC(emitters.emitHeader(plan, plans, diagnostics), plan.headerPath)
-    }
-  ]
+  const files: CModuleOutputFile[] = []
+
+  files.push({
+    kind: 'source',
+    path: plan.sourcePath,
+    sourcePath: plan.record.path,
+    code: formatGeneratedC(emitters.emitSource(plan, plans, options, diagnostics), plan.sourcePath)
+  })
+  files.push({
+    kind: 'header',
+    path: plan.headerPath,
+    sourcePath: plan.record.path,
+    code: formatGeneratedC(emitters.emitHeader(plan, plans, diagnostics), plan.headerPath)
+  })
+
+  return files
 }
 
 function reportUnsupportedCModuleImports(
@@ -146,7 +197,7 @@ function reportUnsupportedCModuleImports(
 }
 
 export function uniqueCModuleImports(imports: CModuleImportPlan[]): CModuleImportPlan[] {
-  const seen = new Set<string>()
+  const seen: Set<string> = new Set()
   const unique: CModuleImportPlan[] = []
 
   for (const item of imports) {
@@ -162,12 +213,12 @@ export function uniqueCModuleImports(imports: CModuleImportPlan[]): CModuleImpor
 }
 
 function resolveKnownCModuleImport(
-  from: string,
+  fromPath: string,
   specifier: string,
-  modulePaths: Set<string>,
-  host: CModuleEmitOptions['host']
-): string | null {
-  const normalized = host.normalizePath(host.resolvePath(host.joinPath(host.dirname(from), specifier)))
+  modulePaths: CModulePathSet,
+  host: CModuleHost
+): NullableCModulePath {
+  const normalized = host.normalizePath(host.resolvePath(host.joinPath(host.dirname(fromPath), specifier)))
   const candidates: string[] = []
 
   if (host.extname(normalized) === '') {
@@ -182,10 +233,16 @@ function resolveKnownCModuleImport(
     candidates.push(normalized)
   }
 
-  return candidates.find((candidate) => modulePaths.has(candidate)) ?? null
+  for (const candidate of candidates) {
+    if (modulePaths.has(candidate)) {
+      return candidate
+    }
+  }
+
+  return null
 }
 
-function relativeCModuleSourcePath(sourceRoot: string, file: string, host: CModuleEmitOptions['host']): string {
+function relativeCModuleSourcePath(sourceRoot: string, file: string, host: CModuleHost): string {
   const relativePath = host.normalizePath(host.relativePath(sourceRoot, file))
 
   if (relativePath !== '' && !relativePath.startsWith('..') && !host.isAbsolutePath(relativePath)) {
@@ -195,54 +252,88 @@ function relativeCModuleSourcePath(sourceRoot: string, file: string, host: CModu
   return toCPath(host.joinPath('external', `${shortCModuleHash(file, host)}_${emitCIdentifier(file)}`), host)
 }
 
-function replaceCModuleExtension(path: string, extension: '.c' | '.h', host: CModuleEmitOptions['host']): string {
+function replaceCModuleExtension(path: string, extension: CModuleExtension, host: CModuleHost): string {
   const currentExtension = host.posixPath.extname(path)
 
-  return currentExtension === '' ? `${path}${extension}` : `${path.slice(0, -currentExtension.length)}${extension}`
+  if (currentExtension === '') {
+    return `${path}${extension}`
+  }
+
+  return `${path.slice(0, -currentExtension.length)}${extension}`
 }
 
 function cModuleSymbolPrefix(
   relativeSourcePath: string,
   sourcePath: string,
-  host: CModuleEmitOptions['host']
+  host: CModuleHost
 ): string {
   return `ccjs_mod_${emitCIdentifier(relativeSourcePath)}_${shortCModuleHash(sourcePath, host)}`
 }
 
-function shortCModuleHash(value: string, host: CModuleEmitOptions['host']): string {
+function shortCModuleHash(value: string, host: CModuleHost): string {
   return host.shortHash(value)
 }
 
 export function relativeCIncludePath(
   fromSourcePath: string,
   toHeaderPath: string,
-  host: CModuleEmitOptions['host']
+  host: CModuleHost
 ): string {
   const includePath = host.posixPath.relative(host.posixPath.dirname(fromSourcePath), toHeaderPath)
 
-  return includePath === '' ? host.posixPath.basename(toHeaderPath) : includePath
+  if (includePath === '') {
+    return host.posixPath.basename(toHeaderPath)
+  }
+
+  return includePath
 }
 
-function toCPath(path: string, host: CModuleEmitOptions['host']): string {
-  return host.pathSeparator === '/' ? path : path.split(host.pathSeparator).join('/')
+function toCPath(path: string, host: CModuleHost): string {
+  if (host.pathSeparator === '/') {
+    return path
+  }
+
+  return path.split(host.pathSeparator).join('/')
 }
 
-function commonDirectory(paths: string[], host: CModuleEmitOptions['host']): string {
+function commonDirectory(paths: string[], host: CModuleHost): string {
   if (paths.length === 0) {
     return '.'
   }
 
-  const [first, ...rest] = paths.map((item) => host.resolvePath(item).split(host.pathSeparator))
+  const first = cModuleResolvedPathSegments(paths[0], host)
   let length = first.length
 
-  for (const path of rest) {
+  for (let pathIndex = 1; pathIndex < paths.length; pathIndex = pathIndex + 1) {
+    const path = cModuleResolvedPathSegments(paths[pathIndex], host)
+
     while (
       length > 0 &&
-      first.slice(0, length).join(host.pathSeparator) !== path.slice(0, length).join(host.pathSeparator)
+      cModulePathPrefix(first, length, host) !== cModulePathPrefix(path, length, host)
     ) {
-      length -= 1
+      length = length - 1
     }
   }
 
-  return first.slice(0, length).join(host.pathSeparator) || host.pathSeparator
+  const directory = cModulePathPrefix(first, length, host)
+
+  if (directory === '') {
+    return host.pathSeparator
+  }
+
+  return directory
+}
+
+function cModuleResolvedPathSegments(path: string, host: CModuleHost): string[] {
+  return host.resolvePath(path).split(host.pathSeparator)
+}
+
+function cModulePathPrefix(segments: string[], length: number, host: CModuleHost): string {
+  const prefix: string[] = []
+
+  for (let index = 0; index < length; index = index + 1) {
+    prefix.push(segments[index])
+  }
+
+  return prefix.join(host.pathSeparator)
 }
