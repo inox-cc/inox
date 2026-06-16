@@ -1,5 +1,5 @@
 import { checkProgram } from '../checker.ts'
-import { CompileError, diagnostic } from '../diagnostics.ts'
+import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import type { CompilerHost } from '../host.ts'
 import { requireCompilerHost } from '../host.ts'
 import { lowerHirToIr } from '../ir.ts'
@@ -7,7 +7,7 @@ import { tokenize } from '../lexer.ts'
 import { lowerProgram } from '../lower.ts'
 import { parse } from '../parser.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
-import type { AnyNode, CompileOptions, Diagnostic, ModuleGraph, ModuleRecord, SourceLocation } from '../types.ts'
+import type { AnyNode, CompileOptions, Diagnostic, ModuleGraph, ModuleRecord, ProgramNode, SourceLocation } from '../types.ts'
 import { collectExports } from './exports.ts'
 import { isRelativeSpecifier, resolveExistingSource, resolveImport as resolveImportSpecifier } from './resolve.ts'
 import {
@@ -39,9 +39,7 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
 
   await visitModuleGraphFile(context, entryPath)
 
-  if (context.diagnostics.length > 0) {
-    throw new CompileError(context.diagnostics)
-  }
+  throwDiagnostics(context.diagnostics)
 
   return {
     entry: entryPath,
@@ -49,22 +47,16 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
   }
 }
 
-async function visitModuleGraphFile(context: ModuleGraphContext, file: string): Promise<ModuleRecord | null> {
+async function visitModuleGraphFile(context: ModuleGraphContext, file: string): Promise<boolean> {
   const path = await resolveExistingSource(file, context.host)
 
   if (context.visiting.has(path)) {
     context.diagnostics.push(diagnostic('CCJS_CIRCULAR_IMPORT', `circular import involving ${path}`))
-    return null
+    return false
   }
 
   if (context.modules.has(path)) {
-    const existing = context.modules.get(path)
-
-    if (existing != null) {
-      return existing
-    }
-
-    return null
+    return true
   }
 
   context.visiting.add(path)
@@ -128,16 +120,17 @@ async function visitModuleGraphFile(context: ModuleGraphContext, file: string): 
 
     const importedPath = await resolveModuleGraphImport(context, path, item.source, item.loc)
 
-    if (importedPath == null) {
+    if (importedPath === '') {
       continue
     }
 
-    const importedModule = await visitModuleGraphFile(context, importedPath)
+    const importedOk = await visitModuleGraphFile(context, importedPath)
 
-    if (importedModule == null) {
+    if (!importedOk) {
       continue
     }
 
+    const importedModule = requireModuleGraphRecord(context, importedPath)
     const aliases: AnyNode[] = []
     const types: AnyNode[] = []
     const typeNames: Set<string> = new Set()
@@ -164,11 +157,7 @@ async function visitModuleGraphFile(context: ModuleGraphContext, file: string): 
           continue
         }
 
-        let importedProgram = importedModule.ast
-
-        if (importedModule.hir != null) {
-          importedProgram = importedModule.hir
-        }
+        const importedProgram = moduleProgramForTypeImports(importedModule)
 
         for (const declaration of createTypeImportDeclarations(specifier, importedProgram)) {
           if (!typeNames.has(declaration.name)) {
@@ -222,15 +211,17 @@ async function visitModuleGraphFile(context: ModuleGraphContext, file: string): 
 
     const importedPath = await resolveModuleGraphImport(context, path, item.source, item.loc)
 
-    if (importedPath == null) {
+    if (importedPath === '') {
       continue
     }
 
-    const importedModule = await visitModuleGraphFile(context, importedPath)
+    const importedOk = await visitModuleGraphFile(context, importedPath)
 
-    if (importedModule == null) {
+    if (!importedOk) {
       continue
     }
+
+    const importedModule = requireModuleGraphRecord(context, importedPath)
 
     for (const specifier of item.specifiers) {
       const exported = importedModule.exports.get(specifier.imported)
@@ -263,14 +254,34 @@ async function visitModuleGraphFile(context: ModuleGraphContext, file: string): 
   context.visiting.delete(path)
   context.order.push(module)
 
+  return true
+}
+
+function requireModuleGraphRecord(context: ModuleGraphContext, path: string): ModuleRecord {
+  const module = context.modules.get(path)
+
+  if (module == null) {
+    throw new Error(`missing module record ${path}`)
+  }
+
   return module
 }
 
-async function resolveModuleGraphImport(context: ModuleGraphContext, fromPath: string, specifier: string, loc: SourceLocation): Promise<string | null> {
+function moduleProgramForTypeImports(module: ModuleRecord): ProgramNode {
+  const hir = module.hir
+
+  if (hir != null) {
+    return hir
+  }
+
+  return module.ast
+}
+
+async function resolveModuleGraphImport(context: ModuleGraphContext, fromPath: string, specifier: string, loc: SourceLocation): Promise<string> {
   try {
     return await resolveImportSpecifier(fromPath, specifier, context.host)
   } catch {
     context.diagnostics.push(diagnostic('CCJS_MODULE_NOT_FOUND', `cannot resolve import ${specifier}`, loc))
-    return null
+    return ''
   }
 }
