@@ -9,34 +9,81 @@ import { createMemoryCompilerHost } from './memory-host.ts'
 import { buildModuleGraph } from './module-graph.ts'
 import { createNodeCompilerHost } from './node-host.ts'
 import { parse } from './parser.ts'
-import type { CompileOptions, CompileTarget, FileCompileResult, IrProgram, SourceCompileResult } from './types.ts'
+import type { CompilerHost } from './host.ts'
+import type { IrModuleRecord } from './ir.ts'
+import type {
+  CompileOptions,
+  CompileTarget,
+  FileCompileResult,
+  IrProgram,
+  ModuleGraph,
+  ProgramNode,
+  RandomOptions,
+  RuntimeBudgets,
+  RuntimeCapabilities,
+  RuntimeLoopBackend,
+  RuntimeProfile,
+  SourceCompileResult,
+  TlsBackend
+} from './types.ts'
 import type { CModuleOutputFile } from './codegen-c.ts'
-import type { MemoryCompilerHostOptions, MemoryCompilerSourceFile } from './memory-host.ts'
+import type { MemoryCompilerSourceFile } from './memory-host.ts'
 
-export type CModuleCompileOptions = CompileOptions & {
+export type CModuleCompileOptions = {
+  target?: CompileTarget
+  callMain?: boolean
+  budgets?: RuntimeBudgets
+  capabilities?: RuntimeCapabilities
+  host?: CompilerHost
+  loopBackend?: RuntimeLoopBackend
+  profile?: RuntimeProfile
+  random?: RandomOptions
+  tlsBackend?: TlsBackend
   sourceRoot?: string
 }
 
-export type MemoryCompileOptions = CompileOptions & MemoryCompilerHostOptions
-export type MemoryCModuleCompileOptions = CModuleCompileOptions & MemoryCompilerHostOptions
+export type MemoryCompileOptions = {
+  target?: CompileTarget
+  callMain?: boolean
+  budgets?: RuntimeBudgets
+  capabilities?: RuntimeCapabilities
+  loopBackend?: RuntimeLoopBackend
+  profile?: RuntimeProfile
+  random?: RandomOptions
+  root?: string
+  tlsBackend?: TlsBackend
+}
+
+export type MemoryCModuleCompileOptions = {
+  target?: CompileTarget
+  callMain?: boolean
+  budgets?: RuntimeBudgets
+  capabilities?: RuntimeCapabilities
+  loopBackend?: RuntimeLoopBackend
+  profile?: RuntimeProfile
+  random?: RandomOptions
+  root?: string
+  tlsBackend?: TlsBackend
+  sourceRoot?: string
+}
 
 export type CModuleCompileResult = {
   target: 'c'
-  graph: FileCompileResult['graph']
+  graph: ModuleGraph
   files: CModuleOutputFile[]
 }
 
 export type SourceIrCompileResult = {
   target: CompileTarget
-  ast: SourceCompileResult['ast']
-  hir: SourceCompileResult['hir']
+  ast: ProgramNode
+  hir: ProgramNode
   ir: IrProgram
 }
 
 export type GraphIrCompileResult = {
   target: CompileTarget
-  graph: FileCompileResult['graph']
-  irModules: ReturnType<typeof collectIrModuleRecords>
+  graph: ModuleGraph
+  irModules: IrModuleRecord[]
 }
 
 export function compileSource(source: string, options: CompileOptions = {}): SourceCompileResult {
@@ -45,7 +92,10 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
   runCStaticChecks([compiled.ir], options)
 
   return {
-    ...compiled,
+    target: compiled.target,
+    ast: compiled.ast,
+    hir: compiled.hir,
+    ir: compiled.ir,
     code: emitTargetFromIr(compiled.target, compiled.ir, options)
   }
 }
@@ -54,10 +104,7 @@ export function compileSourceToIr(source: string, options: CompileOptions = {}):
   const target = resolveCompileTarget(options)
   const tokens = tokenize(source)
   const ast = parse(tokens)
-  const checked = checkProgram(ast, {
-    ...options,
-    target
-  })
+  const checked = checkProgram(ast, compileOptionsWithTarget(options, target))
   const hir = lowerProgram(checked.ast)
   const ir = lowerHirToIr(hir)
 
@@ -102,11 +149,7 @@ export async function compileFileToCModules(
   options: CModuleCompileOptions = {}
 ): Promise<CModuleCompileResult> {
   const host = options.host ?? createNodeCompilerHost()
-  const compiled = await compileGraphToIrModules(entry, {
-    ...options,
-    host,
-    target: 'c'
-  })
+  const compiled = await compileGraphToIrModules(entry, cModuleOptionsWithHostAndTarget(options, host, 'c'))
 
   runCStaticChecks(
     compiled.irModules.map((module) => module.ir),
@@ -150,11 +193,7 @@ export async function compileGraphToIrModules(
 ): Promise<GraphIrCompileResult> {
   const target = resolveCompileTarget(options)
   const host = options.host ?? createNodeCompilerHost()
-  const graph = await buildModuleGraph(entry, {
-    ...options,
-    host,
-    target
-  })
+  const graph = await buildModuleGraph(entry, compileOptionsWithHostAndTarget(options, host, target))
 
   return {
     target,
@@ -169,7 +208,7 @@ export function runCStaticChecks(irs: IrProgram[], options: CompileOptions = {})
 }
 
 function resolveCompileTarget(options: CompileOptions): CompileTarget {
-  const target = options.target as string | undefined
+  const target = options.target
 
   if (target == null || target === 'c') {
     return 'c'
@@ -178,7 +217,57 @@ function resolveCompileTarget(options: CompileOptions): CompileTarget {
   throw new Error(`Unsupported target ${target}`)
 }
 
-function memoryCompileOptions(options: MemoryCompileOptions, host: CompileOptions['host']): CompileOptions {
+function compileOptionsWithTarget(options: CompileOptions, target: CompileTarget): CompileOptions {
+  return {
+    target,
+    callMain: options.callMain,
+    budgets: options.budgets,
+    capabilities: options.capabilities,
+    host: options.host,
+    loopBackend: options.loopBackend,
+    profile: options.profile,
+    random: options.random,
+    tlsBackend: options.tlsBackend
+  }
+}
+
+function compileOptionsWithHostAndTarget(
+  options: CompileOptions,
+  host: CompilerHost,
+  target: CompileTarget
+): CompileOptions {
+  return {
+    target,
+    callMain: options.callMain,
+    budgets: options.budgets,
+    capabilities: options.capabilities,
+    host,
+    loopBackend: options.loopBackend,
+    profile: options.profile,
+    random: options.random,
+    tlsBackend: options.tlsBackend
+  }
+}
+
+function cModuleOptionsWithHostAndTarget(
+  options: CModuleCompileOptions,
+  host: CompilerHost,
+  target: CompileTarget
+): CompileOptions {
+  return {
+    target,
+    callMain: options.callMain,
+    budgets: options.budgets,
+    capabilities: options.capabilities,
+    host,
+    loopBackend: options.loopBackend,
+    profile: options.profile,
+    random: options.random,
+    tlsBackend: options.tlsBackend
+  }
+}
+
+function memoryCompileOptions(options: MemoryCompileOptions, host: CompilerHost): CompileOptions {
   return {
     target: options.target,
     callMain: options.callMain,
@@ -194,7 +283,7 @@ function memoryCompileOptions(options: MemoryCompileOptions, host: CompileOption
 
 function memoryCModuleCompileOptions(
   options: MemoryCModuleCompileOptions,
-  host: CompileOptions['host']
+  host: CompilerHost
 ): CModuleCompileOptions {
   const base = memoryCompileOptions(options, host)
 

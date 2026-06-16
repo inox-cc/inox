@@ -344,6 +344,126 @@ export function main(): void {
   assert.match(c.code, /ccjs_object_get_known\(user, 0, &ccjs_field_\d+\)/)
 })
 
+test('allows optional typed object fields to be omitted', () => {
+  const source = `type Options = {
+  target?: string,
+  retries: number
+}
+
+export function main(): void {
+  const options: Options = { retries: 2 }
+  console.log(options.retries)
+}
+`
+  const result = compileSource(source, {
+    target: 'c'
+  })
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+  const options = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'options')
+  assert.ok(options)
+
+  assert.deepEqual(
+    options.shape.fields.map((field) => ({
+      name: field.name,
+      optional: field.optional === true,
+      valueType: field.valueType
+    })),
+    [
+      {
+        name: 'target',
+        optional: true,
+        valueType: 'string'
+      },
+      {
+        name: 'retries',
+        optional: false,
+        valueType: 'number'
+      }
+    ]
+  )
+  assert.match(result.code, /ccjs_object_init_known\(options, 1, ccjs_number_value\(2\)\)/)
+})
+
+test('allows trailing optional function arguments to be omitted', () => {
+  const result = compileSource(
+    `type Location = {
+  line: number,
+  column: number
+}
+
+function lineOf(value?: Location | null): number {
+  return value?.line ?? 1
+}
+
+export function main(): void {
+  console.log(lineOf(), lineOf({ line: 7, column: 2 }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const lineOf = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'lineOf')
+  assert.ok(lineOf)
+  assert.equal(lineOf.params[0].optional, true)
+  assert.equal(lineOf.params[0].nullable, true)
+  assert.match(result.code, /lineOf\(ccjs_null_value\(\)\)/)
+})
+
+test('supports type-only aliases and intersection object type aliases', () => {
+  const result = compileSource(
+    `type Base = {
+  line: number
+  column: number
+}
+
+type Token = Base & {
+  type: string
+  [key: string]: any
+}
+
+type TokenKind = 'identifier' | 'keyword'
+
+type Tagged = {
+  type: 'Tagged'
+  version: 1
+}
+
+export function main(): void {
+  const token: Token = { line: 1, column: 2, type: 'identifier', extra: 3 }
+  const tagged: Tagged = { type: 'Tagged', version: 1 }
+  console.log(token.line, token.type, tagged.version)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+  const token = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'token')
+  assert.ok(token)
+  assert.equal(token.shape.dynamic, true)
+  assert.deepEqual(
+    token.shape.fields.map((field) => field.name),
+    ['line', 'column', 'type']
+  )
+  const tagged = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'tagged')
+  assert.ok(tagged)
+  assert.deepEqual(
+    tagged.shape.fields.map((field) => ({ name: field.name, valueType: field.valueType })),
+    [
+      { name: 'type', valueType: 'string' },
+      { name: 'version', valueType: 'number' }
+    ]
+  )
+  assert.match(result.code, /ccjs_object_init_known\(token, 0, ccjs_number_value\(1\)\)/)
+  assert.match(result.code, /ccjs_object_init_known\(token, 2, ccjs_value_\d+\)/)
+})
+
 
 test('rejects readonly typed object field assignment', () => {
   assertDiagnostic(

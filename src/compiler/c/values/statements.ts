@@ -35,7 +35,7 @@ import type {
   CRuntimeArrayElement
 } from '../types.ts'
 
-type CSourceLocation = Partial<SourceLocation> | null | undefined
+type CSourceLocation = SourceLocation | null | undefined
 
 type KnownForOfArray = {
   elements: CArrayElementInfo[]

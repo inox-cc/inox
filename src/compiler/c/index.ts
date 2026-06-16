@@ -482,7 +482,7 @@ import type {
 } from '../types.ts'
 export type { CModuleOutputFile } from './types.ts'
 
-type CSourceLocation = Partial<SourceLocation> | null | undefined
+type CSourceLocation = SourceLocation | null | undefined
 
 const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression,
@@ -1728,6 +1728,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     statement.name,
     fields.map((field: CObjectShapeField) => ({
       name: field.name,
+      optional: field.optional,
       ownership: field.ownership ?? 'strong',
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
@@ -1745,7 +1746,9 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     const property = properties.get(field.name)
 
     if (property == null) {
-      context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
+      if (field.optional !== true) {
+        context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
+      }
       continue
     }
 
@@ -2281,7 +2284,9 @@ function emitCObjectLiteralValueExpression(
     const property = properties.get(field.name)
 
     if (property == null) {
-      context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, expression.loc))
+      if (field.optional !== true) {
+        context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, expression.loc))
+      }
       continue
     }
 

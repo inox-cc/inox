@@ -159,6 +159,7 @@ export function lowerParam(param: AnyNode, context: LowerContext): AnyNode {
   return {
     ...param,
     declaredType: param.valueType,
+    optional: param.optional === true,
     valueType: declared.valueType ?? param.valueType,
     nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,

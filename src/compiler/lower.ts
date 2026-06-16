@@ -23,6 +23,16 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
     }
   }
 
+  if (item.type === 'ExportDeclaration') {
+    return {
+      type: 'ExportDeclaration',
+      typeOnly: item.typeOnly,
+      specifiers: item.specifiers,
+      source: item.source,
+      loc: item.loc
+    }
+  }
+
   if (item.type === 'FunctionDeclaration') {
     const returnType = resolveDeclaredType(item.returnType, context)
 
@@ -57,6 +67,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): AnyNode {
       fields: (item.fields ?? []).map((field) => ({
         ...field,
         declaredType: field.declaredType ?? field.valueType,
+        optional: field.optional === true,
         valueType: field.valueType ?? 'unknown',
         nullable: field.nullable === true,
         arrayElementType: field.arrayElementType ?? null,

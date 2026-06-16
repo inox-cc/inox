@@ -21,7 +21,8 @@ import {
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
   isNullableScalarParam,
-  isNullableScalarType
+  isNullableScalarType,
+  isRuntimeNullableType
 } from '../value-types.ts'
 import { cTimeRuntimeCallName } from '../stdlib/time.ts'
 import {
@@ -404,10 +405,30 @@ export function emitPreparedCallArgs(
     }
   }
 
+  for (let index = expression.args.length; index < params.length; index += 1) {
+    const param = params[index]
+
+    if (param.optional === true) {
+      args.push(emitDefaultOptionalArg(param))
+    }
+  }
+
   return {
     lines,
     args
   }
+}
+
+function emitDefaultOptionalArg(param: CFunctionParam): string {
+  if (param.nullable === true && isRuntimeNullableType(param.valueType)) {
+    return 'ccjs_null_value()'
+  }
+
+  if (isManagedRuntimeReturnType(param.valueType)) {
+    return 'ccjs_undefined_value()'
+  }
+
+  return '0'
 }
 
 function emitPreparedThrowingCallExpression(

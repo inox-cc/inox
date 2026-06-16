@@ -153,6 +153,11 @@ type OwnershipGraphEdge = {
   loc: SourceLocation
 }
 
+type OptionalParamInfo = {
+  optional?: boolean
+  [key: string]: unknown
+}
+
 export function checkProgram(program: ProgramNode, options: CompileOptions = {}): { ast: ProgramNode } {
   const checker = new Checker(program, options)
   checker.check()
@@ -300,6 +305,7 @@ class Checker {
 
     return {
       ...param,
+      optional: param.optional === true,
       valueType: paramInfo.valueType,
       nullable: paramInfo.nullable,
       arrayElementType: paramInfo.arrayElementType,
@@ -311,6 +317,30 @@ class Checker {
       functionType: paramInfo.functionType,
       shape: paramInfo.shape
     }
+  }
+
+  acceptsArgumentCount(params: OptionalParamInfo[], count: number): boolean {
+    return count >= this.requiredParamCount(params) && count <= params.length
+  }
+
+  argumentCountMessage(label: string, params: OptionalParamInfo[], count: number): string {
+    const min = this.requiredParamCount(params)
+    const max = params.length
+    const expected = min === max ? `${max}` : `${min}-${max}`
+
+    return `${label} expects ${expected} argument(s), got ${count}`
+  }
+
+  requiredParamCount(params: OptionalParamInfo[]): number {
+    let count = 0
+
+    for (const param of params) {
+      if (param.optional !== true) {
+        count += 1
+      }
+    }
+
+    return count
   }
 
   resolveClassInstanceShape(statement: AnyNode, constructorParams: AnyNode[]): ObjectShapeInfo {
@@ -429,6 +459,10 @@ class Checker {
 
     if (item.type === 'ImportDeclaration') {
       this.checkRuntimeBuiltinImport(item)
+      return
+    }
+
+    if (item.type === 'ExportDeclaration') {
       return
     }
 
@@ -893,12 +927,12 @@ class Checker {
       expression.shape = symbol.returnShape ?? null
 
       if (symbol.params != null) {
-        if (symbol.params.length !== expression.args.length) {
+        if (!this.acceptsArgumentCount(symbol.params, expression.args.length)) {
           const name = expression.callee.type === 'Reference' ? expression.callee.path[0] : 'callable'
 
           this.report(
             'CCJS_ARG_COUNT',
-            `function ${name} expects ${symbol.params.length} argument(s), got ${expression.args.length}`,
+            this.argumentCountMessage(`function ${name}`, symbol.params, expression.args.length),
             expression.loc
           )
         }
@@ -1829,10 +1863,10 @@ class Checker {
       return symbol.returnType ?? 'unknown'
     }
 
-    if (symbol.params.length !== expression.args.length) {
+    if (!this.acceptsArgumentCount(symbol.params, expression.args.length)) {
       this.report(
         'CCJS_ARG_COUNT',
-        `function ${expression.callee.path[0]} expects ${symbol.params.length} argument(s), got ${expression.args.length}`,
+        this.argumentCountMessage(`function ${expression.callee.path[0]}`, symbol.params, expression.args.length),
         expression.loc
       )
     }
@@ -3765,10 +3799,10 @@ class Checker {
     const params = method.params.map((param) => this.resolveParam(param))
     const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
 
-    if (params.length !== expression.args.length) {
+    if (!this.acceptsArgumentCount(params, expression.args.length)) {
       this.report(
         'CCJS_ARG_COUNT',
-        `method ${expression.callee.property} expects ${params.length} argument(s), got ${expression.args.length}`,
+        this.argumentCountMessage(`method ${expression.callee.property}`, params, expression.args.length),
         expression.loc
       )
     }
@@ -6730,7 +6764,9 @@ class Checker {
       const property = properties.get(field.name)
 
       if (property == null) {
-        this.report('CCJS_MISSING_FIELD', `missing field ${field.name}`, expression.loc)
+        if (field.optional !== true) {
+          this.report('CCJS_MISSING_FIELD', `missing field ${field.name}`, expression.loc)
+        }
         continue
       }
 
@@ -6783,7 +6819,7 @@ class Checker {
     }
 
     for (const property of expression.properties) {
-      if (this.findShapeField(shape, property.key) == null) {
+      if (shape.dynamic !== true && this.findShapeField(shape, property.key) == null) {
         this.report('CCJS_UNKNOWN_FIELD', `unknown field ${property.key}`, property.loc)
       }
     }
@@ -6823,7 +6859,17 @@ class Checker {
   }
 
   findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {
-    return shape.fields.find((field) => field.name === name) ?? null
+    return shape.fields.find((field) => field.name === name) ?? (shape.dynamic === true ? this.dynamicShapeField(name) : null)
+  }
+
+  dynamicShapeField(name: string) {
+    return {
+      name,
+      optional: true,
+      readonly: false,
+      ownership: 'strong',
+      valueType: 'unknown'
+    }
   }
 
   getCallableSymbol(callee: AnyNode): SymbolInfo | null {
@@ -7581,26 +7627,55 @@ class Checker {
   }
 
   resolveObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
+    const bases = this.resolveObjectShapeBases(shape)
+
     return {
       ...shape,
-      fields: shape.fields.map((field) => {
+      dynamic: shape.dynamic === true || bases.dynamic,
+      fields: bases.fields.concat(shape.fields).map((field) => {
         const fieldInfo = this.resolveFieldDeclaredType(field)
 
         return {
           ...field,
           declaredType: field.valueType,
           valueType: fieldInfo.valueType,
-          nullable: fieldInfo.nullable,
+          nullable: fieldInfo.nullable || field.optional === true,
           arrayElementType: fieldInfo.arrayElementType,
           arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
           mapKeyType: fieldInfo.mapKeyType,
           mapValueType: fieldInfo.mapValueType,
           promiseValueType: fieldInfo.promiseValueType ?? null,
           setElementType: fieldInfo.setElementType,
-          functionType: fieldInfo.functionType,
+          functionType: field.functionType ?? fieldInfo.functionType,
           shape: fieldInfo.shape
         }
       })
+    }
+  }
+
+  resolveObjectShapeBases(shape: ObjectShapeInfo): { dynamic: boolean; fields: ObjectShapeInfo['fields'] } {
+    const fields: ObjectShapeInfo['fields'] = []
+    let dynamic = false
+
+    for (const name of shape.baseTypes ?? []) {
+      const base = this.types.get(name)
+
+      if (base?.kind !== 'object') {
+        continue
+      }
+
+      const resolved = this.resolveObjectShape(base)
+
+      for (const field of resolved.fields) {
+        fields.push(field)
+      }
+
+      dynamic = dynamic || resolved.dynamic === true
+    }
+
+    return {
+      dynamic,
+      fields
     }
   }
 
@@ -7702,23 +7777,26 @@ class Checker {
   }
 
   resolveWeakTargetObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
+    const bases = this.resolveObjectShapeBases(shape)
+
     return {
       ...shape,
-      fields: shape.fields.map((field) => {
+      dynamic: shape.dynamic === true || bases.dynamic,
+      fields: bases.fields.concat(shape.fields).map((field) => {
         const declared = this.resolveWeakTargetShapeFieldType(field)
 
         return {
           ...field,
           declaredType: field.declaredType ?? field.valueType,
           valueType: declared.valueType,
-          nullable: declared.nullable || field.ownership === 'weak',
+          nullable: declared.nullable || field.ownership === 'weak' || field.optional === true,
           arrayElementType: declared.arrayElementType,
           arrayElementDeclaredType: declared.arrayElementDeclaredType,
           mapKeyType: declared.mapKeyType,
           mapValueType: declared.mapValueType,
           promiseValueType: declared.promiseValueType ?? null,
           setElementType: declared.setElementType,
-          functionType: null,
+          functionType: field.functionType ?? null,
           shape: null
         }
       })

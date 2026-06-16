@@ -158,6 +158,8 @@ export type FunctionTypeInfo = {
 
 export type ObjectShapeInfo = {
   kind: 'object'
+  baseTypes?: string[]
+  dynamic?: boolean
   fields: AnyNode[]
   [key: string]: any
 }

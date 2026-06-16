@@ -57,7 +57,7 @@ import { emitCFunctionName } from './identifiers.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
 import type { CClassInfo, CFunctionParam, CFunctionType } from './types.ts'
 
-type CSourceLocation = Partial<SourceLocation> | null | undefined
+type CSourceLocation = SourceLocation | null | undefined
 
 export type CDeclarationEmissionDependencies = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
@@ -153,9 +153,12 @@ export function emitFunctionDeclaration(
 
 function registerFunctionParamsInContext(statement: CNode, params: CFunctionParam[], context: CFunctionContext): void {
   for (const [index, param] of params.entries()) {
+    if (param.nullable === true && isRuntimeNullableType(param.valueType)) {
+      context.nullableVariables.add(param.name)
+    }
+
     if (isNullableScalarParam(param)) {
       context.variables.set(param.name, param.valueType)
-      context.nullableVariables.add(param.name)
     } else if (
       isBoxedFunctionParam(param, index, statement, context) &&
       ['number', 'boolean', 'string', 'object'].includes(param.valueType)
@@ -512,13 +515,17 @@ function emitRuntimeParamPreludeForParams(statement: CNode, params: CFunctionPar
     }
 
     if (param.valueType === 'object') {
-      return [emitRuntimeTypeCheck(`${param.name}.tag != CCJS_TAG_OBJECT || ${param.name}.as.ref == 0`, context)]
+      return param.nullable === true
+        ? emitRuntimeNullableValueCheck(param.name, 'CCJS_TAG_OBJECT', context)
+        : [emitRuntimeTypeCheck(`${param.name}.tag != CCJS_TAG_OBJECT || ${param.name}.as.ref == 0`, context)]
     }
 
     if (param.valueType === 'array' || param.valueType === 'map' || param.valueType === 'set') {
       const tag = cRuntimeValueTag(param.valueType)
 
-      return [emitRuntimeTypeCheck(`${param.name}.tag != ${tag} || ${param.name}.as.ref == 0`, context)]
+      return param.nullable === true
+        ? emitRuntimeNullableValueCheck(param.name, tag, context)
+        : [emitRuntimeTypeCheck(`${param.name}.tag != ${tag} || ${param.name}.as.ref == 0`, context)]
     }
 
     if (

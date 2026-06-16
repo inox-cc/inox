@@ -122,11 +122,17 @@ export function collectIrTopLevelNodesFromPrograms(
 }
 
 export function collectTopLevelItems(program: ProgramNode): IrTopLevelItem[] {
-  return program.body.map((item, index) => ({
-    kind: topLevelItemKind(item),
-    index,
-    loc: item.loc
-  }))
+  return program.body.flatMap((item, index) =>
+    item.type === 'ExportDeclaration'
+      ? []
+      : [
+          {
+            kind: topLevelItemKind(item),
+            index,
+            loc: item.loc
+          }
+        ]
+  )
 }
 
 export function collectFunctionDeclarations(

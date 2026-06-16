@@ -63,6 +63,7 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
       imports: ast.body.filter((item) => item.type === 'ImportDeclaration'),
       exports: collectExports(ast)
     }
+    const reexports = ast.body.filter((item) => item.type === 'ExportDeclaration')
 
     modules.set(path, module)
 
@@ -152,6 +153,55 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
 
       if (types.length > 0) {
         importTypeDeclarations.set(importIndex, types)
+      }
+    }
+
+    for (const item of reexports) {
+      if (!isRelativeSpecifier(item.source)) {
+        diagnostics.push(
+          diagnostic(
+            'CCJS_UNSUPPORTED_IMPORT_SOURCE',
+            `only relative exports are implemented, got ${item.source}`,
+            item.loc
+          )
+        )
+        continue
+      }
+
+      const importedPath = await resolveImport(path, item.source, item.loc)
+
+      if (importedPath == null) {
+        continue
+      }
+
+      const importedModule = await visit(importedPath)
+
+      if (importedModule == null) {
+        continue
+      }
+
+      for (const specifier of item.specifiers) {
+        const exported = importedModule.exports.get(specifier.imported)
+
+        if (exported == null) {
+          diagnostics.push(
+            diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
+          )
+          continue
+        }
+
+        if (item.typeOnly && exported.type !== 'TypeAliasDeclaration') {
+          diagnostics.push(
+            diagnostic(
+              'CCJS_UNKNOWN_EXPORT',
+              `${item.source} does not export type ${specifier.imported}`,
+              specifier.loc
+            )
+          )
+          continue
+        }
+
+        module.exports.set(specifier.local, exported)
       }
     }
 

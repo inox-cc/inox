@@ -89,6 +89,43 @@ export function main(): void {
   }
 })
 
+test('module graph resolves named re-exports', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-reexports-'))
+
+  try {
+    await writeFile(
+      join(dir, 'lib.js'),
+      `export function greet(): void {
+  console.log('from lib')
+}
+`
+    )
+    await writeFile(
+      join(dir, 'barrel.js'),
+      `export { greet } from './lib.js'
+`
+    )
+    await writeFile(
+      join(dir, 'main.js'),
+      `import { greet } from './barrel.js'
+
+export function main(): void {
+  greet()
+}
+`
+    )
+
+    const result = await compileFile(join(dir, 'main.js'), {
+      target: 'c'
+    })
+
+    assert.equal(result.graph.modules.some((module) => module.path.endsWith('barrel.js')), true)
+    assert.match(result.code, /from lib/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 
 test('collects target-neutral IR module records from stored IR without HIR', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-ir-module-records-'))

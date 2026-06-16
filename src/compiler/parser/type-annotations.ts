@@ -49,7 +49,13 @@ export function readTypeAnnotation(
       genericDepth -= 1
     }
 
-    parts.push(token.value)
+    if (token.type === 'string') {
+      parts.push('string')
+    } else if (token.type === 'number') {
+      parts.push('number')
+    } else {
+      parts.push(token.value)
+    }
     lastTokenLine = token.line
     position += 1
   }
@@ -66,6 +72,11 @@ export function normalizeTypeName(name: string): string {
   if (unionArgs.length > 1) {
     const normalized = unionArgs.map((arg) => normalizeTypeName(arg))
     const withoutNull = normalized.filter((arg) => arg !== 'null')
+    const unique = new Set(normalized)
+
+    if (unique.size === 1) {
+      return normalized[0]
+    }
 
     return normalized.length === 2 && withoutNull.length === 1 ? `nullable<${withoutNull[0]}>` : 'unknown'
   }

@@ -176,16 +176,19 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
 }
 
 function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
+  const bases = resolveObjectShapeBases(shape, context)
+
   return {
     ...shape,
-    fields: shape.fields.map((field) => {
+    dynamic: shape.dynamic === true || bases.dynamic,
+    fields: bases.fields.concat(shape.fields).map((field) => {
       const declared = resolveFieldDeclaredType(field, context)
 
       return {
         ...field,
         declaredType: field.valueType,
         valueType: declared.valueType ?? field.valueType,
-        nullable: declared.nullable,
+        nullable: declared.nullable || field.optional === true,
         arrayElementType: declared.arrayElementType,
         arrayElementDeclaredType: declared.arrayElementDeclaredType,
         mapKeyType: declared.mapKeyType,
@@ -193,9 +196,35 @@ function resolveObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
         promiseValueType: declared.promiseValueType ?? null,
         setElementType: declared.setElementType,
         shape: declared.shape,
-        functionType: declared.functionType
+        functionType: field.functionType ?? declared.functionType
       }
     })
+  }
+}
+
+function resolveObjectShapeBases(shape: AnyNode, context: LowerContext) {
+  const fields = shape.fields.slice(0, 0)
+  let dynamic = false
+
+  for (const name of shape.baseTypes ?? []) {
+    const base = context.types.get(name)
+
+    if (base?.kind !== 'object') {
+      continue
+    }
+
+    const resolved = resolveObjectShape(base, context)
+
+    for (const field of resolved.fields) {
+      fields.push(field)
+    }
+
+    dynamic = dynamic || resolved.dynamic === true
+  }
+
+  return {
+    dynamic,
+    fields
   }
 }
 
@@ -235,16 +264,19 @@ function resolveWeakFieldDeclaredType(field: AnyNode, context: LowerContext): Lo
 }
 
 function resolveWeakTargetObjectShape(shape: AnyNode, context: LowerContext): AnyNode {
+  const bases = resolveObjectShapeBases(shape, context)
+
   return {
     ...shape,
-    fields: shape.fields.map((field) => {
+    dynamic: shape.dynamic === true || bases.dynamic,
+    fields: bases.fields.concat(shape.fields).map((field) => {
       const declared = resolveWeakTargetShapeFieldType(field, context)
 
       return {
         ...field,
         declaredType: field.declaredType ?? field.valueType,
         valueType: declared.valueType ?? field.valueType,
-        nullable: declared.nullable || field.ownership === 'weak',
+        nullable: declared.nullable || field.ownership === 'weak' || field.optional === true,
         arrayElementType: declared.arrayElementType,
         arrayElementDeclaredType: declared.arrayElementDeclaredType,
         mapKeyType: declared.mapKeyType,
@@ -252,7 +284,7 @@ function resolveWeakTargetObjectShape(shape: AnyNode, context: LowerContext): An
         promiseValueType: declared.promiseValueType ?? null,
         setElementType: declared.setElementType,
         shape: null,
-        functionType: null
+        functionType: field.functionType ?? null
       }
     })
   }
@@ -351,11 +383,15 @@ function collectTypes(ast: ProgramNode): Map<string, AnyNode> {
     if (item.type === 'TypeAliasDeclaration' && item.valueType.kind === 'object') {
       types.set(item.name, {
         kind: 'object',
+        baseTypes: item.valueType.baseTypes ?? [],
+        dynamic: item.valueType.dynamic === true,
         fields: item.valueType.fields.map((field) => ({
           name: field.name,
+          optional: field.optional === true,
           readonly: field.readonly,
           ownership: field.ownership ?? 'strong',
           weakLoc: field.weakLoc ?? null,
+          functionType: field.functionType ?? null,
           valueType: field.valueType,
           loc: field.loc
         }))

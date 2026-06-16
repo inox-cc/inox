@@ -4,6 +4,8 @@ import {
   createFieldDefinition,
   createFunctionDeclaration,
   createFunctionType,
+  createAliasType,
+  createExportDeclaration,
   createImportDeclaration,
   createImportSpecifier,
   createMethodDefinition,
@@ -100,7 +102,15 @@ class Parser {
       return this.parseClassDeclaration(exported)
     }
 
+    if (exported && this.isValue('{')) {
+      return this.parseExportDeclaration(false)
+    }
+
     if (this.matchKeyword('type')) {
+      if (exported && this.isValue('{')) {
+        return this.parseExportDeclaration(true)
+      }
+
       return this.parseTypeAliasDeclaration(exported)
     }
 
@@ -152,6 +162,25 @@ class Parser {
     return createImportDeclaration(importTypeOnly, specifiers, source)
   }
 
+  parseExportDeclaration(typeOnly: boolean) {
+    const specifiers = this.matchValue('{') ? this.parseNamedImportSpecifiers() : []
+
+    if (specifiers.length === 0) {
+      this.report('CCJS_UNSUPPORTED_EXPORT', 'expected named export specifiers')
+      this.skipStatement()
+
+      return {
+        type: 'InvalidStatement'
+      }
+    }
+
+    this.expectKeyword('from', 'CCJS_EXPECTED_EXPORT', 'expected from after export specifiers')
+    const source = this.expect('string', 'CCJS_EXPECTED_EXPORT', 'expected export source string')
+    this.matchValue(';')
+
+    return createExportDeclaration(typeOnly, specifiers, source)
+  }
+
   parseNamedImportSpecifiers(): AnyNode[] {
     const specifiers: AnyNode[] = []
 
@@ -191,13 +220,14 @@ class Parser {
 
     while (!this.isValue(')') && !this.is('eof')) {
       const param = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected parameter name')
+      const optional = this.matchValue('?')
       let valueType = 'unknown'
 
       if (this.matchValue(':')) {
         valueType = this.parseTypeAnnotation([',', ')'])
       }
 
-      params.push(createParam(param, valueType))
+      params.push(createParam(param, valueType, optional))
 
       if (!this.matchValue(',')) {
         break
@@ -229,16 +259,20 @@ class Parser {
       return createTypeAliasDeclaration(exported, name, this.parseFunctionType())
     }
 
-    if (!this.isValue('{')) {
-      this.report('CCJS_EXPECTED_TYPE', 'only object type aliases are implemented in the current compiler slice')
-      this.skipStatement()
-
-      return createTypeAliasDeclaration(exported, name, {
-        kind: 'unknown'
-      })
+    if (this.is('identifier') && this.peek(1).value === '&') {
+      return createTypeAliasDeclaration(exported, name, this.parseIntersectionObjectType())
     }
 
-    return createTypeAliasDeclaration(exported, name, this.parseObjectType())
+    if (this.isValue('{')) {
+      return createTypeAliasDeclaration(exported, name, this.parseObjectType())
+    }
+
+    const valueType = this.parseTypeAnnotation([';'], {
+      stopAtStatementBoundary: true
+    })
+    this.matchValue(';')
+
+    return createTypeAliasDeclaration(exported, name, createAliasType(valueType))
   }
 
   parseFunctionType(): AnyNode {
@@ -248,10 +282,11 @@ class Parser {
 
     while (!this.isValue(')') && !this.is('eof')) {
       const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected function type parameter name')
+      const optional = this.matchValue('?')
       this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after function type parameter name')
       const valueType = this.parseTypeAnnotation([',', ')'])
 
-      params.push(createParam(name, valueType))
+      params.push(createParam(name, valueType, optional))
 
       if (!this.matchValue(',')) {
         break
@@ -268,36 +303,142 @@ class Parser {
     return createFunctionType(params, returnType)
   }
 
-  parseObjectType(): AnyNode {
+  parseIntersectionObjectType() {
+    const baseTypes: string[] = []
+
+    while (this.is('identifier')) {
+      baseTypes.push(this.advance().value)
+
+      if (!this.matchValue('&')) {
+        break
+      }
+
+      if (this.isValue('{')) {
+        return this.parseObjectType(baseTypes)
+      }
+    }
+
+    this.skipStatement()
+
+    return createObjectType([], baseTypes, true)
+  }
+
+  parseObjectType(baseTypes: string[] = []) {
     const fields: AnyNode[] = []
+    let dynamic = false
 
     this.expectValue('{', 'CCJS_EXPECTED_TYPE', 'expected { in object type')
 
     while (!this.isValue('}') && !this.is('eof')) {
+      if (this.matchValue('[')) {
+        dynamic = true
+        this.skipTypeIndexSignature()
+        this.matchValue(',')
+        this.matchValue(';')
+        continue
+      }
+
       const modifiers = this.parseFieldModifiers()
-      const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected object type field name')
+      const name = this.expectTypeFieldName()
+      const optional = this.matchValue('?')
+
+      if (this.isValue('(')) {
+        const field = createObjectTypeField(
+          name,
+          modifiers.readonly,
+          optional,
+          'function',
+          modifiers.weakToken == null ? 'strong' : 'weak',
+          modifiers.weakToken
+        )
+        field.functionType = this.parseObjectTypeMethodSignature()
+        fields.push(field)
+        this.matchValue(',')
+        this.matchValue(';')
+        continue
+      }
+
       this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after object type field name')
-      const valueType = this.parseTypeAnnotation([',', '}'])
+      const valueType = this.parseTypeAnnotation([',', ';', '}'], {
+        stopAtLineBreak: true
+      })
 
       fields.push(
         createObjectTypeField(
           name,
           modifiers.readonly,
+          optional,
           valueType,
           modifiers.weakToken == null ? 'strong' : 'weak',
           modifiers.weakToken
         )
       )
 
-      if (!this.matchValue(',')) {
-        break
-      }
+      this.matchValue(',')
+      this.matchValue(';')
     }
 
     this.expectValue('}', 'CCJS_EXPECTED_TYPE', 'expected } after object type')
     this.matchValue(';')
 
-    return createObjectType(fields)
+    return createObjectType(fields, baseTypes, dynamic)
+  }
+
+  parseObjectTypeMethodSignature() {
+    const params: AnyNode[] = []
+
+    this.expectValue('(', 'CCJS_EXPECTED_TYPE', 'expected ( in object type method')
+
+    while (!this.isValue(')') && !this.is('eof')) {
+      const name = this.expectTypeParameterName()
+      const optional = this.matchValue('?')
+      this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after method type parameter name')
+      const valueType = this.parseTypeAnnotation([',', ')'])
+
+      params.push(createParam(name, valueType, optional))
+
+      if (!this.matchValue(',')) {
+        break
+      }
+    }
+
+    this.expectValue(')', 'CCJS_EXPECTED_TYPE', 'expected ) after object type method parameters')
+    this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after object type method parameters')
+    const returnType = this.parseTypeAnnotation([',', ';', '}'], {
+      stopAtLineBreak: true
+    })
+
+    return createFunctionType(params, returnType)
+  }
+
+  skipTypeIndexSignature(): void {
+    while (!this.is('eof') && !this.isValue(']')) {
+      this.advance()
+    }
+
+    this.expectValue(']', 'CCJS_EXPECTED_TYPE', 'expected ] after type index signature')
+
+    if (this.matchValue(':')) {
+      this.parseTypeAnnotation([',', ';', '}'], {
+        stopAtLineBreak: true
+      })
+    }
+  }
+
+  expectTypeFieldName(): Token {
+    if (this.is('identifier') || this.is('keyword')) {
+      return this.advance()
+    }
+
+    return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected object type field name')
+  }
+
+  expectTypeParameterName(): Token {
+    if (this.is('identifier') || this.is('keyword')) {
+      return this.advance()
+    }
+
+    return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected method type parameter name')
   }
 
   parseClassDeclaration(exported: boolean): AnyNode {
@@ -396,13 +537,14 @@ class Parser {
 
     while (!this.isValue(')') && !this.is('eof')) {
       const param = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected parameter name')
+      const optional = this.matchValue('?')
       let valueType = 'unknown'
 
       if (this.matchValue(':')) {
         valueType = this.parseTypeAnnotation([',', ')'])
       }
 
-      params.push(createParam(param, valueType))
+      params.push(createParam(param, valueType, optional))
 
       if (!this.matchValue(',')) {
         break
@@ -871,13 +1013,14 @@ class Parser {
 
     while (!this.isValue(')') && !this.is('eof')) {
       const param = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected parameter name')
+      const optional = this.matchValue('?')
       let valueType = 'unknown'
 
       if (this.matchValue(':')) {
         valueType = this.parseTypeAnnotation([',', ')'])
       }
 
-      params.push(createParam(param, valueType))
+      params.push(createParam(param, valueType, optional))
 
       if (!this.matchValue(',')) {
         break

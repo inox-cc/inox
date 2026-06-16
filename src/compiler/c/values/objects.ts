@@ -249,6 +249,7 @@ export function registerObjectShape(
     name,
     shape.fields.map((field) => ({
       name: field.name,
+      optional: field.optional,
       ownership: field.ownership ?? 'strong',
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
@@ -309,7 +310,9 @@ export function emitObjectVariableDeclaration(
     const property = properties.get(field.name)
 
     if (property == null) {
-      context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
+      if (field.optional !== true) {
+        context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
+      }
       continue
     }
 

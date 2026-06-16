@@ -46,6 +46,7 @@ export type CShapeValueMetadata = {
 
 export type CObjectShapeField = CShapeValueMetadata & {
   name: string
+  optional?: boolean
   ownership?: string
   readonly?: boolean
 }
@@ -101,6 +102,7 @@ export type CFunctionParam = {
   mapValueType?: string | null
   name: string
   nullable?: boolean
+  optional?: boolean
   promiseValueType?: string | null
   setElementType?: string | null
   shape?: CObjectShape | null

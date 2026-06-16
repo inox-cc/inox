@@ -45,7 +45,7 @@ test('builds parser declaration nodes with normalized source locations', () => {
     async: false,
     name: 'main',
     loc: { line: 1, column: 1 },
-    params: [{ name: 'value', valueType: 'number', loc: { line: 1, column: 1 } }],
+    params: [{ name: 'value', optional: false, valueType: 'number', loc: { line: 1, column: 1 } }],
     returnType: 'void',
     body
   })

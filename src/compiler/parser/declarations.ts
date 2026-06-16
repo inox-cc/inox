@@ -20,9 +20,20 @@ export function createImportDeclaration(typeOnly: boolean, specifiers: AnyNode[]
   }
 }
 
-export function createParam(token: Token, valueType = 'unknown'): AnyNode {
+export function createExportDeclaration(typeOnly: boolean, specifiers: AnyNode[], source: Token): AnyNode {
+  return {
+    type: 'ExportDeclaration',
+    typeOnly,
+    specifiers,
+    source: source.value,
+    loc: locFromToken(source)
+  }
+}
+
+export function createParam(token: Token, valueType = 'unknown', optional = false): AnyNode {
   return {
     name: token.value,
+    optional,
     valueType,
     loc: locFromToken(token)
   }
@@ -66,9 +77,18 @@ export function createFunctionType(params: AnyNode[], returnType: string): AnyNo
   }
 }
 
-export function createObjectType(fields: AnyNode[]): AnyNode {
+export function createAliasType(valueType: string): AnyNode {
+  return {
+    kind: 'alias',
+    valueType
+  }
+}
+
+export function createObjectType(fields: AnyNode[], baseTypes: string[] = [], dynamic = false): AnyNode {
   return {
     kind: 'object',
+    baseTypes,
+    dynamic,
     fields
   }
 }
@@ -76,12 +96,14 @@ export function createObjectType(fields: AnyNode[]): AnyNode {
 export function createObjectTypeField(
   name: Token,
   readonly: boolean,
+  optional: boolean,
   valueType: string,
   ownership = 'strong',
   weakToken: Token | null = null
 ): AnyNode {
   return {
     name: name.value,
+    optional,
     readonly,
     ownership,
     weakLoc: weakToken == null ? null : locFromToken(weakToken),
