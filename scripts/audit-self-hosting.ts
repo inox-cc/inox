@@ -10,15 +10,24 @@ type SourceFile = {
 
 type PatternInfo = {
   name: string
-  status: string
+  decision: 'supported now' | 'simplify/remove' | 'implement support' | 'host-adapter boundary'
   pattern: RegExp
   note: string
+  maxAllowedMatches?: number
 }
 
 type PatternSummary = {
   info: PatternInfo
   count: number
   files: Map<string, number>
+}
+
+type AuditReport = {
+  files: SourceFile[]
+  totalLines: number
+  hostImports: Map<string, Set<string>>
+  summaries: PatternSummary[]
+  largest: SourceFile[]
 }
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -28,77 +37,107 @@ const outputPath = join(repoRoot, 'docs/compiler-self-hosting-capability-matrix.
 const patterns: PatternInfo[] = [
   {
     name: 'AnyNode / open AST shapes',
-    status: 'rewrite',
+    decision: 'simplify/remove',
     pattern: /\bAnyNode\b/g,
-    note: 'Replace hot paths with explicit AST/HIR/IR node shapes before self-hosting.'
+    note: 'Replace hot paths with explicit AST/HIR/IR node shapes before self-hosting.',
+    maxAllowedMatches: 1618
   },
   {
     name: 'object/array spread',
-    status: 'rewrite or implement',
+    decision: 'simplify/remove',
     pattern: /\.\.\./g,
-    note: 'Current C subset does not lower broad spread-heavy object copying.'
+    note: 'Current C subset does not lower broad spread-heavy object copying.',
+    maxAllowedMatches: 1078
   },
   {
     name: 'Object.entries / Object.keys / Object.values',
-    status: 'rewrite or implement',
+    decision: 'simplify/remove',
     pattern: /\bObject\.(entries|keys|values)\s*\(/g,
-    note: 'Prefer explicit loops over known arrays of records in compiler-core.'
+    note: 'Prefer explicit loops over known arrays of records in compiler-core.',
+    maxAllowedMatches: 16
   },
   {
     name: 'Array.from',
-    status: 'rewrite or implement',
+    decision: 'simplify/remove',
     pattern: /\bArray\.from\s*\(/g,
-    note: 'Usually replaceable with direct array accumulation.'
+    note: 'Usually replaceable with direct array accumulation.',
+    maxAllowedMatches: 0
   },
   {
     name: 'flatMap / map / filter / reduce / sort',
-    status: 'rewrite or broaden stdlib',
+    decision: 'simplify/remove',
     pattern: /\.(flatMap|map|filter|reduce|sort)\s*\(/g,
-    note: 'Some array methods exist at runtime, but broad generic callback use is not self-hosting-ready.'
+    note: 'Some array methods exist at runtime, but broad generic callback use is not self-hosting-ready.',
+    maxAllowedMatches: 444
   },
   {
     name: 'try / catch',
-    status: 'implement or isolate',
+    decision: 'implement support',
     pattern: /\b(try|catch)\b/g,
-    note: 'Use only at host adapter boundaries until C exception lowering is planned.'
+    note: 'Use only at host adapter boundaries until C exception lowering is planned.',
+    maxAllowedMatches: 45
   },
   {
     name: 'async / await',
-    status: 'supported slice, review',
+    decision: 'supported now',
     pattern: /\b(async|await)\b/g,
     note: 'Compiler-core should start in-memory; module graph loading can stay behind host adapters.'
   },
   {
     name: 'RegExp usage',
-    status: 'rewrite or implement',
+    decision: 'simplify/remove',
     pattern: /\bRegExp\b|(^|[=(,:\s])\/(?:\\.|[^/\n])+\/[dgimsuvy]*/gm,
-    note: 'Lexer, parser helpers and C formatting should avoid regex where a small scanner is clearer.'
+    note: 'Lexer, parser helpers and C formatting should avoid regex where a small scanner is clearer.',
+    maxAllowedMatches: 22
   },
   {
     name: 'generic container types',
-    status: 'simplify types',
+    decision: 'simplify/remove',
     pattern: /\b(Record|ReadonlyMap|Map|Set)<|ReadonlyArray</g,
-    note: 'Self-hosted type surface should prefer explicit aliases and concrete record arrays.'
+    note: 'Self-hosted type surface should prefer explicit aliases and concrete record arrays.',
+    maxAllowedMatches: 323
   }
 ]
 
+const allowedHostImports = new Map<string, Set<string>>([
+  ['node:crypto', new Set(['src/compiler/node-host.ts'])],
+  ['node:fs/promises', new Set(['src/compiler/node-host.ts'])],
+  ['node:path', new Set(['src/compiler/node-host.ts'])],
+  ['node:url', new Set(['src/compiler/node-host.ts'])]
+])
+
 async function main(): Promise<void> {
-  const mode = process.argv.includes('--write') ? 'write' : process.argv.includes('--check') ? 'check' : 'print'
+  const args = new Set(process.argv.slice(2).filter((arg) => arg !== '--'))
+  const mode = args.has('--write') ? 'write' : args.has('--gate') ? 'gate' : args.has('--check') ? 'check' : 'print'
   const files = await readSourceFiles(compilerRoot)
-  const markdown = renderMatrix(files)
+  const report = analyzeFiles(files)
+  const markdown = renderMatrix(report)
 
   if (mode === 'write') {
     await writeFile(outputPath, markdown)
     return
   }
 
-  if (mode === 'check') {
+  if (mode === 'check' || mode === 'gate') {
     const current = await readFile(outputPath, 'utf8').catch(() => '')
 
     if (current !== markdown) {
       console.error(`${relative(repoRoot, outputPath)} is stale. Run pnpm run audit:self-hosting -- --write.`)
       process.exitCode = 1
     }
+
+    if (mode === 'gate') {
+      const failures = collectGateFailures(report)
+
+      for (const failure of failures) {
+        console.error(failure)
+      }
+
+      if (failures.length > 0) {
+        process.exitCode = 1
+      }
+    }
+
     return
   }
 
@@ -140,12 +179,22 @@ async function readSourceFiles(root: string): Promise<SourceFile[]> {
   }
 }
 
-function renderMatrix(files: SourceFile[]): string {
+function analyzeFiles(files: SourceFile[]): AuditReport {
   const totalLines = files.reduce((sum, file) => sum + file.lines, 0)
   const hostImports = collectHostImports(files)
   const summaries = patterns.map((info) => summarizePattern(info, files))
   const largest = [...files].sort((left, right) => right.lines - left.lines).slice(0, 10)
 
+  return {
+    files,
+    totalLines,
+    hostImports,
+    summaries,
+    largest
+  }
+}
+
+function renderMatrix(report: AuditReport): string {
   const lines: string[] = [
     '# Compiler Self-Hosting Capability Matrix',
     '',
@@ -155,48 +204,56 @@ function renderMatrix(files: SourceFile[]): string {
     'is intentionally an audit artifact, not a failing support matrix: unsupported',
     'features are expected while the compiler is still hosted by Node.',
     '',
+    'The CI-friendly gate is `pnpm run audit:self-hosting -- --gate`. It fails if',
+    'this generated file is stale, if host `node:*` imports move outside approved',
+    'host adapter boundaries, or if unsupported blocker counts grow above the',
+    'current baseline.',
+    '',
     '## Snapshot',
     '',
-    `- TypeScript files: ${files.length}`,
-    `- TypeScript lines: ${totalLines}`,
-    `- Largest file: ${largest[0]?.path ?? '-'} (${largest[0]?.lines ?? 0} lines)`,
+    `- TypeScript files: ${report.files.length}`,
+    `- TypeScript lines: ${report.totalLines}`,
+    `- Largest file: ${report.largest[0]?.path ?? '-'} (${report.largest[0]?.lines ?? 0} lines)`,
+    '- Source set: `src/compiler/**/*.ts`',
     '',
     '## Largest Files',
     '',
     '<!-- prettier-ignore-start -->',
     '| File | Lines |',
     '| --- | ---: |',
-    ...largest.map((file) => `| \`${file.path}\` | ${file.lines} |`),
+    ...report.largest.map((file) => `| \`${file.path}\` | ${file.lines} |`),
     '<!-- prettier-ignore-end -->',
     '',
     '## Host Node Imports',
     '',
     '<!-- prettier-ignore-start -->',
-    '| Module | Files |',
-    '| --- | --- |',
-    ...[...hostImports.entries()].map(([module, moduleFiles]) => {
+    '| Module | Decision | Files |',
+    '| --- | --- | --- |',
+    ...[...report.hostImports.entries()].map(([module, moduleFiles]) => {
       const fileList = [...moduleFiles]
         .sort()
         .map((file) => `\`${file}\``)
         .join('<br>')
+      const decision = hostImportDecision(module, moduleFiles)
 
-      return `| \`${module}\` | ${fileList} |`
+      return `| \`${module}\` | ${decision} | ${fileList} |`
     }),
     '<!-- prettier-ignore-end -->',
     '',
     '## Feature Heuristics',
     '',
     '<!-- prettier-ignore-start -->',
-    '| Feature | Status | Matches | Hot Files | Note |',
-    '| --- | --- | ---: | --- | --- |',
-    ...summaries.map((summary) => {
+    '| Feature | Decision | Matches | Gate baseline | Hot Files | Note |',
+    '| --- | --- | ---: | --- | --- | --- |',
+    ...report.summaries.map((summary) => {
       const hotFiles = [...summary.files.entries()]
         .sort((left, right) => right[1] - left[1])
         .slice(0, 5)
         .map(([file, count]) => `\`${file}\` (${count})`)
         .join('<br>')
+      const baseline = summary.info.maxAllowedMatches == null ? '-' : `<= ${summary.info.maxAllowedMatches}`
 
-      return `| ${summary.info.name} | ${summary.info.status} | ${summary.count} | ${hotFiles || '-'} | ${summary.info.note} |`
+      return `| ${summary.info.name} | ${summary.info.decision} | ${summary.count} | ${baseline} | ${hotFiles || '-'} | ${summary.info.note} |`
     }),
     '<!-- prettier-ignore-end -->',
     '',
@@ -210,6 +267,55 @@ function renderMatrix(files: SourceFile[]): string {
   ]
 
   return `${lines.join('\n')}\n`
+}
+
+function collectGateFailures(report: AuditReport): string[] {
+  const failures: string[] = []
+
+  for (const summary of report.summaries) {
+    const max = summary.info.maxAllowedMatches
+
+    if (max == null || summary.count <= max) {
+      continue
+    }
+
+    failures.push(
+      `${summary.info.name} increased to ${summary.count}; self-hosting gate baseline is ${max}. ` +
+        `Reduce the new usage or update the baseline with a plan note.`
+    )
+  }
+
+  for (const [module, files] of report.hostImports) {
+    const allowedFiles = allowedHostImports.get(module)
+
+    for (const file of files) {
+      if (allowedFiles != null && allowedFiles.has(file)) {
+        continue
+      }
+
+      failures.push(
+        `${module} host import in ${file} is outside the approved compiler host adapter boundary.`
+      )
+    }
+  }
+
+  return failures
+}
+
+function hostImportDecision(module: string, files: Set<string>): string {
+  const allowedFiles = allowedHostImports.get(module)
+
+  if (allowedFiles == null) {
+    return 'unapproved host dependency'
+  }
+
+  for (const file of files) {
+    if (!allowedFiles.has(file)) {
+      return 'outside host-adapter boundary'
+    }
+  }
+
+  return 'host-adapter boundary'
 }
 
 function collectHostImports(files: SourceFile[]): Map<string, Set<string>> {

@@ -20,6 +20,7 @@
     "build": "node scripts/build.ts",
     "clean": "node scripts/clean.ts",
     "audit:self-hosting": "node scripts/audit-self-hosting.ts",
+    "audit:self-hosting:gate": "node scripts/audit-self-hosting.ts --gate",
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts tests/**/*.test.ts",
