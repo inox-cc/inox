@@ -6,8 +6,7 @@ import {
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
-  registerOwnedValue,
-  type CFunctionContext
+  registerOwnedValue
 } from '../context.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
@@ -22,6 +21,7 @@ import {
 import { cUnsupportedExpressionCode, isNullishCoalescingExpression, isOptionalChainExpression } from '../syntax.ts'
 import { isStringPredicateMethod, isStringRuntimeMethod } from '../../stdlib/descriptors/collections.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
+import type { CFunctionContext } from '../context.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type {
   CObjectFieldInfo,
@@ -33,59 +33,118 @@ type StringDiagnosticContext = {
   diagnostics: Diagnostic[]
 }
 
-type TemplateLiteralPart =
-  | {
-      type: 'text'
-      value: string
-    }
-  | {
-      type: 'placeholder'
-      value: string
-      loc: SourceLocation
-    }
+type TemplateLiteralPart = {
+  kind: string
+  value: string
+  loc?: SourceLocation
+}
+
+type TokenizeLocationOptions = {
+  file?: string
+}
+
+type PreparedStringSplitExpression = PreparedExpression & {
+  elementType: string
+}
+
+type TrimmedTemplatePlaceholder = {
+  value: string
+  loc: SourceLocation
+}
 
 export type StringLoweringDependencies = {
-  canLowerCNullishCoalescingExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  emitCallExpression: (expression: AnyNode, context: CFunctionContext) => string
-  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitReference: (expression: AnyNode, context: CFunctionContext) => string
-  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
-  isBoxedRuntimeStringName: (name: string, context: CFunctionContext) => boolean
-  isBoxedRuntimeStringReference: (expression: AnyNode, context: CFunctionContext) => boolean
-  isMemberAccessExpression: (expression: AnyNode) => boolean
-  resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CObjectFieldInfo | null
-  resolveNetAddressStringMember: (expression: AnyNode, context: CFunctionContext) => string | null
+  canLowerCNullishCoalescingExpression(expression: AnyNode, context: CFunctionContext): boolean
+  emitCallExpression(expression: AnyNode, context: CFunctionContext): string
+  emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitReference(expression: AnyNode, context: CFunctionContext): string
+  inferExpressionType(expression: AnyNode, context: CFunctionContext): string
+  isBoxedRuntimeStringName(name: string, context: CFunctionContext): boolean
+  isBoxedRuntimeStringReference(expression: AnyNode, context: CFunctionContext): boolean
+  isMemberAccessExpression(expression: AnyNode): boolean
+  resolveKnownObjectMember(expression: AnyNode, context: CFunctionContext): CObjectFieldInfo | null
+  resolveNetAddressStringMember(expression: AnyNode, context: CFunctionContext): string | null
 }
 
 function stringDeps(context: CFunctionContext): StringLoweringDependencies {
   return context.stringLoweringDependencies
 }
 
+function pushAllLines(target: string[], source: string[]): void {
+  for (const line of source) {
+    target.push(line)
+  }
+}
+
+function sourceLocationWithFile(loc: SourceLocation | undefined, line: number, column: number): SourceLocation {
+  const result: SourceLocation = {
+    line,
+    column
+  }
+
+  if (loc != null && loc.file != null) {
+    result.file = loc.file
+  }
+
+  return result
+}
+
+function tokenizeLocationOptions(loc: SourceLocation | undefined): TokenizeLocationOptions {
+  const options: TokenizeLocationOptions = {}
+
+  if (loc != null && loc.file != null) {
+    options.file = loc.file
+  }
+
+  return options
+}
+
+function nodeLocation(node): SourceLocation | null | undefined {
+  if (node != null) {
+    return node.loc
+  }
+
+  return null
+}
+
+function compileErrorOrNull(error): CompileError | null {
+  const candidate = error as CompileError
+
+  if (candidate != null && Array.isArray(candidate.diagnostics)) {
+    return candidate
+  }
+
+  return null
+}
+
 export function resolveRuntimeStringReference(expression: AnyNode, context: CFunctionContext): string | null {
-  if (expression?.type !== 'Reference' || expression.path.length !== 1) {
+  if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
     return null
   }
 
   const name = expression.path[0]
 
-  return context.runtimeStrings.has(name) ? name : null
+  if (context.runtimeStrings.has(name)) {
+    return name
+  }
+
+  return null
 }
 
 export function emitStringExpression(expression: AnyNode, context: CFunctionContext): string {
-  if (expression?.type === 'StringLiteral') {
+  if (expression != null && expression.type === 'StringLiteral') {
     return JSON.stringify(expression.value)
   }
 
-  if (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
+  if (expression != null && expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
     return JSON.stringify(expression.raw.slice(1, -1))
   }
 
-  if (expression?.type === 'Reference') {
+  if (expression != null && expression.type === 'Reference') {
     return stringDeps(context).emitReference(expression, context)
   }
 
-  if (expression?.type === 'CallExpression') {
+  if (expression != null && expression.type === 'CallExpression') {
     return stringDeps(context).emitCallExpression(expression, context)
   }
 
@@ -111,9 +170,9 @@ export function emitStringExpression(expression: AnyNode, context: CFunctionCont
     }
   }
 
-  if (expression?.type === 'AwaitExpression') {
+  if (expression != null && expression.type === 'AwaitExpression') {
     context.diagnostics.push(
-      diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', expression?.loc)
+      diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', nodeLocation(expression))
     )
     return '""'
   }
@@ -123,7 +182,7 @@ export function emitStringExpression(expression: AnyNode, context: CFunctionCont
       diagnostic(
         'CCJS_C_OPTIONAL_CHAINING',
         'optional chaining is not supported by the current C backend slice',
-        expression?.loc
+        nodeLocation(expression)
       )
     )
     return '""'
@@ -133,7 +192,7 @@ export function emitStringExpression(expression: AnyNode, context: CFunctionCont
     diagnostic(
       'CCJS_C_STRING_EXPR',
       'this string expression is not supported by the current C backend slice',
-      expression?.loc
+      nodeLocation(expression)
     )
   )
   return '""'
@@ -144,7 +203,8 @@ export function emitPreparedStringLengthExpression(
   context: CFunctionContext
 ): PreparedExpression | null {
   if (
-    expression?.type !== 'MemberExpression' ||
+    expression == null ||
+    expression.type !== 'MemberExpression' ||
     expression.property !== 'length' ||
     !isStringLengthObject(expression.object, context)
   ) {
@@ -153,12 +213,13 @@ export function emitPreparedStringLengthExpression(
 
   const operand = emitPreparedStringBytesOperand(expression.object, context, 'ccjs_length_string')
   const length = nextCName(context, 'ccjs_string_length')
+  const lines: string[] = []
+
+  pushAllLines(lines, operand.lines)
+  lines.push(`size_t ${length} = ccjs_string_code_point_length_parts(${operand.bytes}, ${operand.length});`)
 
   return {
-    lines: [
-      ...operand.lines,
-      `size_t ${length} = ccjs_string_code_point_length_parts(${operand.bytes}, ${operand.length});`
-    ],
+    lines,
     expression: `((double)${length})`
   }
 }
@@ -167,10 +228,19 @@ export function emitPreparedStringCompareExpression(expression: AnyNode, context
   const left = emitPreparedStringBytesOperand(expression.left, context)
   const right = emitPreparedStringBytesOperand(expression.right, context)
   const equals = `(${left.length} == ${right.length} && memcmp(${left.bytes}, ${right.bytes}, ${left.length}) == 0)`
+  const lines: string[] = []
+  let resultExpression = `(!${equals})`
+
+  pushAllLines(lines, left.lines)
+  pushAllLines(lines, right.lines)
+
+  if (expression.operator === '===' || expression.operator === '==') {
+    resultExpression = equals
+  }
 
   return {
-    lines: [...left.lines, ...right.lines],
-    expression: ['===', '=='].includes(expression.operator) ? equals : `(!${equals})`
+    lines,
+    expression: resultExpression
   }
 }
 
@@ -178,9 +248,13 @@ export function emitPreparedStringPredicateCall(expression: AnyNode, context: CF
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_string_method_value')
   const search = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_string_method_search')
   const helper = cStringPredicateHelperName(expression.callee.property)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, search.lines)
 
   return {
-    lines: [...value.lines, ...search.lines],
+    lines,
     expression: `(${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}) ? 1 : 0)`
   }
 }
@@ -188,9 +262,15 @@ export function emitPreparedStringPredicateCall(expression: AnyNode, context: CF
 export function emitPreparedStringBytesOperand(
   expression: AnyNode,
   context: CFunctionContext,
-  tempPrefix = 'ccjs_cmp_string'
+  tempPrefix?: string
 ): PreparedStringBytesOperand {
-  if (expression?.type === 'StringLiteral') {
+  let actualTempPrefix = 'ccjs_cmp_string'
+
+  if (tempPrefix != null) {
+    actualTempPrefix = tempPrefix
+  }
+
+  if (expression != null && expression.type === 'StringLiteral') {
     return {
       lines: [],
       bytes: cStringLiteral(expression.value),
@@ -198,7 +278,7 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
-  if (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
+  if (expression != null && expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
     const value = expression.raw.slice(1, -1)
 
     return {
@@ -208,23 +288,27 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
-  if (expression?.type === 'TemplateLiteral') {
+  if (expression != null && expression.type === 'TemplateLiteral') {
     const value = emitCTemplateLiteralValueExpression(expression, context)
-    const string = nextCName(context, tempPrefix)
+    const string = nextCName(context, actualTempPrefix)
+    const lines: string[] = []
+
+    pushAllLines(lines, value.lines)
+    lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
 
     return {
-      lines: [...value.lines, `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`],
+      lines,
       bytes: `${string}->bytes`,
       length: `${string}->len`
     }
   }
 
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
+  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 
     if (context.variables.get(name) === 'string') {
       if (stringDeps(context).isBoxedRuntimeStringName(name, context)) {
-        const string = nextCName(context, tempPrefix)
+        const string = nextCName(context, actualTempPrefix)
 
         return {
           lines: [
@@ -266,10 +350,14 @@ export function emitPreparedStringBytesOperand(
 
   if (stringDeps(context).inferExpressionType(expression, context) === 'string') {
     const value = stringDeps(context).emitCValueExpression(expression, context)
-    const string = nextCName(context, tempPrefix)
+    const string = nextCName(context, actualTempPrefix)
+    const lines: string[] = []
+
+    pushAllLines(lines, value.lines)
+    lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
 
     return {
-      lines: [...value.lines, `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`],
+      lines,
       bytes: `${string}->bytes`,
       length: `${string}->len`
     }
@@ -279,7 +367,7 @@ export function emitPreparedStringBytesOperand(
     diagnostic(
       'CCJS_C_STRING_EXPR',
       'this string operand is not supported by the current C backend slice',
-      expression?.loc
+      nodeLocation(expression)
     )
   )
 
@@ -294,69 +382,85 @@ export function emitCStringConcatValueExpression(expression: AnyNode, context: C
   const left = emitPreparedStringBytesOperand(expression.left, context)
   const right = emitPreparedStringBytesOperand(expression.right, context)
   const temp = nextCName(context, 'ccjs_value')
+  const lines: string[] = []
   registerOwnedValue(context, temp)
 
+  pushAllLines(lines, left.lines)
+  pushAllLines(lines, right.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_concat_parts(&ccjs_default_allocator, ${left.bytes}, ${left.length}, ${right.bytes}, ${right.length}, &${temp})`,
+      context
+    )
+  )
+
   return {
-    lines: [
-      ...left.lines,
-      ...right.lines,
-      ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(
-        `ccjs_string_concat_parts(&ccjs_default_allocator, ${left.bytes}, ${left.length}, ${right.bytes}, ${right.length}, &${temp})`,
-        context
-      )
-    ],
+    lines,
     expression: temp
   }
 }
 
 export function emitCTemplateLiteralValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const parts = parseTemplateLiteralParts(expression.raw, context, expression.loc)
-  const operands = parts
-    .map((part) => {
-      if (part.type === 'text') {
-        return {
-          lines: [],
-          bytes: cStringLiteral(part.value),
-          length: `${utf8ByteLength(part.value)}`
-        }
-      }
+  const operands: PreparedStringBytesOperand[] = []
 
-      const placeholder = parseTemplatePlaceholderExpression(part.value, part.loc, context)
+  for (const part of parts) {
+    if (part.kind === 'text') {
+      operands.push({
+        lines: [],
+        bytes: cStringLiteral(part.value),
+        length: `${utf8ByteLength(part.value)}`
+      })
+      continue
+    }
 
-      return placeholder == null ? null : emitPreparedTemplatePlaceholderBytesOperand(placeholder, context)
-    })
-    .filter((operand) => operand != null)
+    if (part.loc == null) {
+      continue
+    }
+
+    const placeholder = parseTemplatePlaceholderExpression(part.value, part.loc, context)
+
+    if (placeholder != null) {
+      operands.push(emitPreparedTemplatePlaceholderBytesOperand(placeholder, context))
+    }
+  }
 
   if (operands.length === 0) {
     const temp = nextCName(context, 'ccjs_value')
+    const lines: string[] = []
     registerOwnedValue(context, temp)
 
+    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, "", 0, &${temp})`, context))
+
     return {
-      lines: [
-        ...emitPrepareOwnedValueWrite(temp),
-        emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, "", 0, &${temp})`, context)
-      ],
+      lines,
       expression: temp
     }
   }
 
-  const lines = operands.flatMap((operand) => operand.lines)
+  const lines: string[] = []
+
+  for (const operand of operands) {
+    pushAllLines(lines, operand.lines)
+  }
 
   if (operands.length === 1) {
-    const [operand] = operands
+    const operand = operands[0]
     const temp = nextCName(context, 'ccjs_value')
     registerOwnedValue(context, temp)
 
+    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(
+      emitStatusCheck(
+        `ccjs_string_from_literal(&ccjs_default_allocator, ${operand.bytes}, ${operand.length}, &${temp})`,
+        context
+      )
+    )
+
     return {
-      lines: [
-        ...lines,
-        ...emitPrepareOwnedValueWrite(temp),
-        emitStatusCheck(
-          `ccjs_string_from_literal(&ccjs_default_allocator, ${operand.bytes}, ${operand.length}, &${temp})`,
-          context
-        )
-      ],
+      lines,
       expression: temp
     }
   }
@@ -364,7 +468,8 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
   let current = operands[0]
   let currentValue = ''
 
-  for (const operand of operands.slice(1)) {
+  for (let index = 1; index < operands.length; index = index + 1) {
+    const operand = operands[index]
     const temp = nextCName(context, 'ccjs_value')
     registerOwnedValue(context, temp)
 
@@ -379,8 +484,8 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
       }
     }
 
+    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
-      ...emitPrepareOwnedValueWrite(temp),
       emitStatusCheck(
         `ccjs_string_concat_parts(&ccjs_default_allocator, ${current.bytes}, ${current.length}, ${operand.bytes}, ${operand.length}, &${temp})`,
         context
@@ -400,13 +505,13 @@ function emitPreparedTemplatePlaceholderBytesOperand(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedStringBytesOperand {
-  const type = stringDeps(context).inferExpressionType(expression, context)
+  const valueType = stringDeps(context).inferExpressionType(expression, context)
 
-  if (type === 'string') {
+  if (valueType === 'string') {
     return emitPreparedStringBytesOperand(expression, context, 'ccjs_template_string')
   }
 
-  if (type === 'number' || type === 'boolean' || type === 'null') {
+  if (valueType === 'number' || valueType === 'boolean' || valueType === 'null') {
     const value = emitCStringConversionValueExpression(
       {
         type: 'CallExpression',
@@ -421,9 +526,13 @@ function emitPreparedTemplatePlaceholderBytesOperand(
       context
     )
     const string = nextCName(context, 'ccjs_template_string')
+    const lines: string[] = []
+
+    pushAllLines(lines, value.lines)
+    lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
 
     return {
-      lines: [...value.lines, `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`],
+      lines,
       bytes: `${string}->bytes`,
       length: `${string}->len`
     }
@@ -431,9 +540,9 @@ function emitPreparedTemplatePlaceholderBytesOperand(
 
   context.diagnostics.push(
     diagnostic(
-      cUnsupportedExpressionCode(type),
+      cUnsupportedExpressionCode(valueType),
       'template placeholders currently support string, number, boolean and null expressions in C',
-      expression?.loc
+      nodeLocation(expression)
     )
   )
 
@@ -445,45 +554,56 @@ function emitPreparedTemplatePlaceholderBytesOperand(
 }
 
 export function emitCStringConversionValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  const [arg] = expression.args
-  const type = stringDeps(context).inferExpressionType(arg, context)
+  const arg = expression.args[0]
+  const valueType = stringDeps(context).inferExpressionType(arg, context)
   const temp = nextCName(context, 'ccjs_value')
   registerOwnedValue(context, temp)
 
-  if (type === 'string') {
+  if (valueType === 'string') {
     const value = emitPreparedStringBytesOperand(arg, context, 'ccjs_string_conversion')
+    const lines: string[] = []
+
+    pushAllLines(lines, value.lines)
+    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(
+      emitStatusCheck(
+        `ccjs_string_from_literal(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
+        context
+      )
+    )
 
     return {
-      lines: [
-        ...value.lines,
-        ...emitPrepareOwnedValueWrite(temp),
-        emitStatusCheck(
-          `ccjs_string_from_literal(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
-          context
-        )
-      ],
+      lines,
       expression: temp
     }
   }
 
-  if (type === 'null') {
+  if (valueType === 'null') {
+    const lines: string[] = []
+
+    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, "null", 4, &${temp})`, context))
+
     return {
-      lines: [
-        ...emitPrepareOwnedValueWrite(temp),
-        emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, "null", 4, &${temp})`, context)
-      ],
+      lines,
       expression: temp
     }
   }
 
   const value = stringDeps(context).emitPreparedNumberExpression(arg, context)
-  const helper =
-    type === 'boolean'
-      ? `ccjs_string_from_bool(&ccjs_default_allocator, (${value.expression}) != 0, &${temp})`
-      : `ccjs_string_from_number(&ccjs_default_allocator, ${value.expression}, &${temp})`
+  let helper = `ccjs_string_from_number(&ccjs_default_allocator, ${value.expression}, &${temp})`
+  const lines: string[] = []
+
+  if (valueType === 'boolean') {
+    helper = `ccjs_string_from_bool(&ccjs_default_allocator, (${value.expression}) != 0, &${temp})`
+  }
+
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(helper, context))
 
   return {
-    lines: [...value.lines, ...emitPrepareOwnedValueWrite(temp), emitStatusCheck(helper, context)],
+    lines,
     expression: temp
   }
 }
@@ -498,14 +618,15 @@ export function emitCNumberConversionValueExpression(
 
   const value = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_number_conversion')
   const temp = nextCName(context, 'ccjs_value')
+  const lines: string[] = []
   registerOwnedValue(context, temp)
 
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(`ccjs_string_to_number(${value.bytes}, ${value.length}, &${temp})`, context))
+
   return {
-    lines: [
-      ...value.lines,
-      ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(`ccjs_string_to_number(${value.bytes}, ${value.length}, &${temp})`, context)
-    ],
+    lines,
     expression: temp
   }
 }
@@ -513,17 +634,20 @@ export function emitCNumberConversionValueExpression(
 export function emitCStringTrimValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_trim_string')
   const temp = nextCName(context, 'ccjs_value')
+  const lines: string[] = []
   registerOwnedValue(context, temp)
 
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_trim_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
+      context
+    )
+  )
+
   return {
-    lines: [
-      ...value.lines,
-      ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(
-        `ccjs_string_trim_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
-        context
-      )
-    ],
+    lines,
     expression: temp
   }
 }
@@ -536,33 +660,38 @@ export function emitCStringSliceValueExpression(expression: AnyNode, context: CF
   const startIndex = nextCName(context, 'ccjs_slice_start')
   const endRaw = nextCName(context, 'ccjs_slice_end_raw')
   const endIndex = nextCName(context, 'ccjs_slice_end')
-  const end =
-    expression.args[1] == null
-      ? {
-          lines: [],
-          expression: `((double)${lengthName})`
-        }
-      : stringDeps(context).emitPreparedNumberExpression(expression.args[1], context)
+  let end: PreparedExpression = {
+    lines: [],
+    expression: `((double)${lengthName})`
+  }
   const temp = nextCName(context, 'ccjs_value')
+  const lines: string[] = []
+
+  if (expression.args[1] != null) {
+    end = stringDeps(context).emitPreparedNumberExpression(expression.args[1], context)
+  }
+
   registerOwnedValue(context, temp)
 
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, start.lines)
+  lines.push(`size_t ${lengthName} = ccjs_string_code_point_length_parts(${value.bytes}, ${value.length});`)
+  pushAllLines(lines, end.lines)
+  lines.push(`double ${startRaw} = ${start.expression};`)
+  lines.push(`double ${endRaw} = ${end.expression};`)
+  pushAllLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_slice_start'))
+  pushAllLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'ccjs_slice_end'))
+  lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_slice_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${startIndex}, ${endIndex}, &${temp})`,
+      context
+    )
+  )
+
   return {
-    lines: [
-      ...value.lines,
-      ...start.lines,
-      `size_t ${lengthName} = ccjs_string_code_point_length_parts(${value.bytes}, ${value.length});`,
-      ...end.lines,
-      `double ${startRaw} = ${start.expression};`,
-      `double ${endRaw} = ${end.expression};`,
-      ...emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_slice_start'),
-      ...emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'ccjs_slice_end'),
-      `if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`,
-      ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(
-        `ccjs_string_slice_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${startIndex}, ${endIndex}, &${temp})`,
-        context
-      )
-    ],
+    lines,
     expression: temp
   }
 }
@@ -570,62 +699,106 @@ export function emitCStringSliceValueExpression(expression: AnyNode, context: CF
 export function emitCStringSplitValueExpression(
   expression: AnyNode,
   context: CFunctionContext
-): PreparedExpression & { elementType: string } {
+): PreparedStringSplitExpression {
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_split_string')
   const separator = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_split_separator')
   const temp = nextCName(context, 'ccjs_split_array')
+  const lines: string[] = []
   registerOwnedValue(context, temp)
 
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, separator.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_split_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${separator.bytes}, ${separator.length}, &${temp})`,
+      context
+    )
+  )
+  lines.push(emitRuntimeValueCheck(temp, 'CCJS_TAG_ARRAY', context))
+
   return {
-    lines: [
-      ...value.lines,
-      ...separator.lines,
-      ...emitPrepareOwnedValueWrite(temp),
-      emitStatusCheck(
-        `ccjs_string_split_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${separator.bytes}, ${separator.length}, &${temp})`,
-        context
-      ),
-      emitRuntimeValueCheck(temp, 'CCJS_TAG_ARRAY', context)
-    ],
+    lines,
     expression: temp,
     elementType: 'string'
   }
 }
 
 export function isStringConcatExpression(expression: AnyNode, context: CFunctionContext): boolean {
+  if (expression == null || expression.type !== 'BinaryExpression') {
+    return false
+  }
+
+  if (expression.operator !== '+') {
+    return false
+  }
+
   return (
-    expression?.type === 'BinaryExpression' &&
-    expression.operator === '+' &&
     stringDeps(context).inferExpressionType(expression.left, context) === 'string' &&
     stringDeps(context).inferExpressionType(expression.right, context) === 'string'
   )
 }
 
 export function isRuntimeProducedStringExpression(expression: AnyNode, context: CFunctionContext): boolean {
-  return (
-    (expression?.type === 'CallExpression' && stringDeps(context).inferExpressionType(expression, context) === 'string') ||
-    cOsRuntimeConstantName(expression) != null ||
-    cPathRuntimeConstantName(expression) != null ||
-    cProcessRuntimeStringPropertyName(expression) != null ||
-    cProcessRuntimeEnvName(expression) != null ||
-    (cProcessRuntimePropertyName(expression) === 'argv' && expression?.type === 'IndexExpression') ||
-    (expression?.type === 'AwaitExpression' && stringDeps(context).inferExpressionType(expression, context) === 'string') ||
-    isStringConcatExpression(expression, context) ||
-    (expression?.type === 'TemplateLiteral' && expression.raw.includes('${')) ||
-    (isNullishCoalescingExpression(expression) && stringDeps(context).canLowerCNullishCoalescingExpression(expression, context)) ||
-    stringDeps(context).isBoxedRuntimeStringReference(expression, context)
-  )
+  if (expression != null && expression.type === 'CallExpression' && stringDeps(context).inferExpressionType(expression, context) === 'string') {
+    return true
+  }
+
+  if (cOsRuntimeConstantName(expression) != null) {
+    return true
+  }
+
+  if (cPathRuntimeConstantName(expression) != null) {
+    return true
+  }
+
+  if (cProcessRuntimeStringPropertyName(expression) != null) {
+    return true
+  }
+
+  if (cProcessRuntimeEnvName(expression) != null) {
+    return true
+  }
+
+  if (cProcessRuntimePropertyName(expression) === 'argv' && expression != null && expression.type === 'IndexExpression') {
+    return true
+  }
+
+  if (expression != null && expression.type === 'AwaitExpression' && stringDeps(context).inferExpressionType(expression, context) === 'string') {
+    return true
+  }
+
+  if (isStringConcatExpression(expression, context)) {
+    return true
+  }
+
+  if (expression != null && expression.type === 'TemplateLiteral' && expression.raw.includes('${')) {
+    return true
+  }
+
+  if (isNullishCoalescingExpression(expression) && stringDeps(context).canLowerCNullishCoalescingExpression(expression, context)) {
+    return true
+  }
+
+  return stringDeps(context).isBoxedRuntimeStringReference(expression, context)
 }
 
 export function isRawStringLiteralExpression(expression: AnyNode): boolean {
-  return (
-    expression?.type === 'StringLiteral' || (expression?.type === 'TemplateLiteral' && !expression.raw.includes('${'))
-  )
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.type === 'StringLiteral') {
+    return true
+  }
+
+  return expression.type === 'TemplateLiteral' && !expression.raw.includes('${')
 }
 
 export function isStringConversionCall(expression: AnyNode, context: CFunctionContext): boolean {
   if (
-    expression?.type !== 'CallExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1 ||
     expression.callee.path[0] !== 'String' ||
@@ -634,12 +807,15 @@ export function isStringConversionCall(expression: AnyNode, context: CFunctionCo
     return false
   }
 
-  return ['boolean', 'null', 'number', 'string'].includes(stringDeps(context).inferExpressionType(expression.args[0], context))
+  const valueType = stringDeps(context).inferExpressionType(expression.args[0], context)
+
+  return valueType === 'boolean' || valueType === 'null' || valueType === 'number' || valueType === 'string'
 }
 
 export function isNumberConversionCall(expression: AnyNode, context: CFunctionContext): boolean {
   if (
-    expression?.type !== 'CallExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1 ||
     expression.callee.path[0] !== 'Number' ||
@@ -653,7 +829,8 @@ export function isNumberConversionCall(expression: AnyNode, context: CFunctionCo
 
 export function isStringTrimCall(expression: AnyNode, context: CFunctionContext): boolean {
   if (
-    expression?.type !== 'CallExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
     expression.callee.property !== 'trim' ||
     expression.args.length !== 0
@@ -666,7 +843,8 @@ export function isStringTrimCall(expression: AnyNode, context: CFunctionContext)
 
 export function isStringSliceCall(expression: AnyNode, context: CFunctionContext): boolean {
   if (
-    expression?.type !== 'CallExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
     expression.callee.property !== 'slice' ||
     expression.args.length < 1 ||
@@ -675,15 +853,23 @@ export function isStringSliceCall(expression: AnyNode, context: CFunctionContext
     return false
   }
 
-  return (
-    isStringLengthObject(expression.callee.object, context) &&
-    expression.args.every((arg: AnyNode) => stringDeps(context).inferExpressionType(arg, context) === 'number')
-  )
+  if (!isStringLengthObject(expression.callee.object, context)) {
+    return false
+  }
+
+  for (const arg of expression.args) {
+    if (stringDeps(context).inferExpressionType(arg, context) !== 'number') {
+      return false
+    }
+  }
+
+  return true
 }
 
 export function isStringSplitCall(expression: AnyNode, context: CFunctionContext): boolean {
   if (
-    expression?.type !== 'CallExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
     expression.callee.property !== 'split' ||
     expression.args.length !== 1
@@ -699,7 +885,8 @@ export function isStringSplitCall(expression: AnyNode, context: CFunctionContext
 
 export function isStringPredicateCall(expression: AnyNode, context: CFunctionContext): boolean {
   if (
-    expression?.type !== 'CallExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
     !isStringPredicateMethod(expression.callee.property) ||
     expression.args.length !== 1
@@ -751,29 +938,38 @@ function parseTemplateLiteralParts(raw: string, context: StringDiagnosticContext
   const parts: TemplateLiteralPart[] = []
   let text = ''
   let index = 1
-  const end = raw.endsWith('`') ? raw.length - 1 : raw.length
-  let line = loc?.line ?? 1
-  let column = (loc?.column ?? 1) + 1
+  let end = raw.length
+  let line = 1
+  let column = 2
+
+  if (raw.endsWith('`')) {
+    end = raw.length - 1
+  }
+
+  if (loc != null) {
+    line = loc.line
+    column = loc.column + 1
+  }
 
   while (index < end) {
     const char = raw[index]
 
     if (char === '\\') {
-      text += raw.slice(index, Math.min(index + 2, end))
+      text = text + raw.slice(index, Math.min(index + 2, end))
       advanceTemplateLocation(char)
 
       if (index + 1 < end) {
         advanceTemplateLocation(raw[index + 1])
       }
 
-      index += 2
+      index = index + 2
       continue
     }
 
     if (char === '$' && raw[index + 1] === '{') {
       if (text !== '') {
         parts.push({
-          type: 'text',
+          kind: 'text',
           value: text
         })
         text = ''
@@ -781,7 +977,7 @@ function parseTemplateLiteralParts(raw: string, context: StringDiagnosticContext
 
       advanceTemplateLocation('$')
       advanceTemplateLocation('{')
-      index += 2
+      index = index + 2
 
       const placeholderStart = index
       const placeholderLoc = currentTemplateLocation()
@@ -795,27 +991,27 @@ function parseTemplateLiteralParts(raw: string, context: StringDiagnosticContext
           advanceTemplateLocation(current)
 
           if (current === '\\' && index + 1 < end) {
-            index += 1
+            index = index + 1
             advanceTemplateLocation(raw[index])
           } else if (current === quote) {
             quote = null
           }
 
-          index += 1
+          index = index + 1
           continue
         }
 
         if (current === '"' || current === "'" || current === '`') {
           quote = current
           advanceTemplateLocation(current)
-          index += 1
+          index = index + 1
           continue
         }
 
         if (current === '{') {
-          depth += 1
+          depth = depth + 1
           advanceTemplateLocation(current)
-          index += 1
+          index = index + 1
           continue
         }
 
@@ -824,14 +1020,14 @@ function parseTemplateLiteralParts(raw: string, context: StringDiagnosticContext
             break
           }
 
-          depth -= 1
+          depth = depth - 1
           advanceTemplateLocation(current)
-          index += 1
+          index = index + 1
           continue
         }
 
         advanceTemplateLocation(current)
-        index += 1
+        index = index + 1
       }
 
       if (index >= end) {
@@ -844,76 +1040,89 @@ function parseTemplateLiteralParts(raw: string, context: StringDiagnosticContext
       const placeholder = trimTemplatePlaceholder(raw.slice(placeholderStart, index), placeholderLoc)
 
       parts.push({
-        type: 'placeholder',
+        kind: 'placeholder',
         value: placeholder.value,
         loc: placeholder.loc
       })
       advanceTemplateLocation('}')
-      index += 1
+      index = index + 1
       continue
     }
 
-    text += char
+    text = text + char
     advanceTemplateLocation(char)
-    index += 1
+    index = index + 1
   }
 
   if (text !== '') {
     parts.push({
-      type: 'text',
+      kind: 'text',
       value: text
     })
   }
 
   return parts
 
-  function currentTemplateLocation(): SourceLocation {
-    return {
-      ...(loc?.file == null ? {} : { file: loc.file }),
-      line,
-      column
-    }
+  function currentTemplateLocation() {
+    return sourceLocationWithFile(loc, line, column)
   }
 
-  function advanceTemplateLocation(char: string): void {
+  function advanceTemplateLocation(char) {
     if (char === '\n') {
-      line += 1
+      line = line + 1
       column = 1
       return
     }
 
-    column += 1
+    column = column + 1
   }
 }
 
-function trimTemplatePlaceholder(value: string, loc: SourceLocation): { value: string; loc: SourceLocation } {
+function trimTemplatePlaceholder(value: string, loc: SourceLocation): TrimmedTemplatePlaceholder {
   let index = 0
   let line = loc.line
   let column = loc.column
 
-  while (index < value.length && /\s/.test(value[index])) {
+  while (index < value.length && isTemplateWhitespace(value[index])) {
     if (value[index] === '\n') {
-      line += 1
+      line = line + 1
       column = 1
     } else {
-      column += 1
+      column = column + 1
     }
 
-    index += 1
+    index = index + 1
   }
 
   return {
-    value: value.slice(index).trimEnd(),
-    loc: {
-      ...(loc.file == null ? {} : { file: loc.file }),
-      line,
-      column
-    }
+    value: trimTemplateTrailingWhitespace(value.slice(index)),
+    loc: sourceLocationWithFile(loc, line, column)
   }
 }
 
+function trimTemplateTrailingWhitespace(value: string): string {
+  let end = value.length
+
+  while (end > 0 && isTemplateWhitespace(value[end - 1])) {
+    end = end - 1
+  }
+
+  return value.slice(0, end)
+}
+
+function isTemplateWhitespace(value: string): boolean {
+  return (
+    value === ' ' ||
+    value === '\n' ||
+    value === '\r' ||
+    value === '\t' ||
+    value === '\f' ||
+    value === '\v'
+  )
+}
+
 export function collectTemplatePlaceholderExpressions(expression: AnyNode): AnyNode[] {
-  if (expression?.type !== 'TemplateLiteral' || !expression.raw.includes('${')) {
+  if (expression == null || expression.type !== 'TemplateLiteral' || !expression.raw.includes('${')) {
     return []
   }
 
@@ -922,7 +1131,7 @@ export function collectTemplatePlaceholderExpressions(expression: AnyNode): AnyN
   const result: AnyNode[] = []
 
   for (const part of parts) {
-    if (part.type !== 'placeholder' || part.value === '') {
+    if (part.kind !== 'placeholder' || part.value === '' || part.loc == null) {
       continue
     }
 
@@ -940,9 +1149,13 @@ function parseTemplatePlaceholderCaptureExpression(value: string, loc: SourceLoc
   const prefix = 'const __ccjs_template = '
 
   try {
-    const program = parse(tokenize(`${prefix}${value}`, loc?.file == null ? {} : { file: loc.file }))
+    const program = parse(tokenize(`${prefix}${value}`, tokenizeLocationOptions(loc)))
     const statement = program.body[0]
-    const expression = statement?.type === 'VariableDeclaration' ? statement.init : null
+    let expression: AnyNode | null = null
+
+    if (statement != null && statement.type === 'VariableDeclaration') {
+      expression = statement.init
+    }
 
     if (program.body.length !== 1 || expression == null) {
       return null
@@ -952,7 +1165,9 @@ function parseTemplatePlaceholderCaptureExpression(value: string, loc: SourceLoc
 
     return expression
   } catch (error) {
-    if (error instanceof CompileError) {
+    const compileError = compileErrorOrNull(error)
+
+    if (compileError != null) {
       return null
     }
 
@@ -973,9 +1188,13 @@ function parseTemplatePlaceholderExpression(
   const prefix = 'const __ccjs_template = '
 
   try {
-    const program = parse(tokenize(`${prefix}${value}`, loc.file == null ? {} : { file: loc.file }))
+    const program = parse(tokenize(`${prefix}${value}`, tokenizeLocationOptions(loc)))
     const statement = program.body[0]
-    const expression = statement?.type === 'VariableDeclaration' ? statement.init : null
+    let expression: AnyNode | null = null
+
+    if (statement != null && statement.type === 'VariableDeclaration') {
+      expression = statement.init
+    }
 
     if (program.body.length !== 1 || expression == null) {
       context.diagnostics.push(
@@ -986,17 +1205,28 @@ function parseTemplatePlaceholderExpression(
 
     shiftTemplatePlaceholderExpressionLocations(expression, loc, prefix.length)
 
-    return validateTemplatePlaceholderExpressionReferences(expression, context) ? expression : null
+    if (validateTemplatePlaceholderExpressionReferences(expression, context)) {
+      return expression
+    }
+
+    return null
   } catch (error) {
-    if (error instanceof CompileError) {
-      const first = error.diagnostics[0]
+    const compileError = compileErrorOrNull(error)
+
+    if (compileError != null) {
+      const first = compileError.diagnostics[0]
+      let code = 'CCJS_C_STRING_EXPR'
+      let message = 'invalid template placeholder expression'
+
+      if (first != null) {
+        code = first.code
+        message = `invalid template placeholder expression: ${first.message}`
+      }
 
       context.diagnostics.push(
         diagnostic(
-          first?.code ?? 'CCJS_C_STRING_EXPR',
-          first == null
-            ? 'invalid template placeholder expression'
-            : `invalid template placeholder expression: ${first.message}`,
+          code,
+          message,
           loc
         )
       )
@@ -1009,14 +1239,14 @@ function parseTemplatePlaceholderExpression(
 }
 
 function validateTemplatePlaceholderExpressionReferences(expression: AnyNode, context: CFunctionContext): boolean {
-  const reported = new Set<string>()
+  const reported = new Set()
   let valid = true
 
   visit(expression, null, '')
 
   return valid
 
-  function visit(value: unknown, parent: AnyNode | null, key: string): void {
+  function visit(value, parent, key) {
     if (Array.isArray(value)) {
       for (const item of value) {
         visit(item, parent, key)
@@ -1025,17 +1255,25 @@ function validateTemplatePlaceholderExpressionReferences(expression: AnyNode, co
       return
     }
 
-    if (value == null || typeof value !== 'object') {
+    if (value == null) {
       return
     }
 
-    const node = value as AnyNode
+    const node = value
 
     if (node.type === 'Reference') {
       const name = node.path[0]
 
       if (!isKnownTemplatePlaceholderReference(node, parent, key, context)) {
-        const reportKey = `${name}:${node.loc?.line ?? 1}:${node.loc?.column ?? 1}`
+        let line = 1
+        let column = 1
+
+        if (node.loc != null) {
+          line = node.loc.line
+          column = node.loc.column
+        }
+
+        const reportKey = `${name}:${line}:${column}`
 
         if (!reported.has(reportKey)) {
           reported.add(reportKey)
@@ -1046,12 +1284,56 @@ function validateTemplatePlaceholderExpressionReferences(expression: AnyNode, co
       }
     }
 
-    for (const [childKey, child] of Object.entries(node)) {
-      if (childKey === 'loc' || childKey.endsWith('Loc')) {
-        continue
-      }
+    visitTemplatePlaceholderChildren(node, parent, key)
+  }
 
-      visit(child, node, childKey)
+  function visitTemplatePlaceholderChildren(node, parent, key) {
+    if (node.type === 'BinaryExpression') {
+      visit(node.left, node, 'left')
+      visit(node.right, node, 'right')
+      return
+    }
+
+    if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression' || node.type === 'NewExpression') {
+      visit(node.callee, node, 'callee')
+      visit(node.args, node, 'args')
+      return
+    }
+
+    if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
+      visit(node.object, node, 'object')
+      return
+    }
+
+    if (node.type === 'IndexExpression' || node.type === 'OptionalIndexExpression') {
+      visit(node.object, node, 'object')
+      visit(node.index, node, 'index')
+      return
+    }
+
+    if (
+      node.type === 'AwaitExpression' ||
+      node.type === 'UnaryExpression' ||
+      node.type === 'UpdateExpression' ||
+      node.type === 'TypeAssertionExpression'
+    ) {
+      visit(node.argument, node, 'argument')
+      visit(node.expression, node, 'expression')
+      return
+    }
+
+    if (node.type === 'ArrayLiteral') {
+      visit(node.elements, node, 'elements')
+      return
+    }
+
+    if (node.type === 'ObjectLiteral') {
+      visit(node.properties, node, 'properties')
+      return
+    }
+
+    if (node.type == null && node.value != null) {
+      visit(node.value, node, 'value')
     }
   }
 }
@@ -1064,20 +1346,31 @@ function isKnownTemplatePlaceholderReference(
 ): boolean {
   const name = expression.path[0]
 
-  return (
-    context.variables.has(expression.path.join('.')) ||
-    context.variables.has(name) ||
-    context.functionNames.has(name) ||
-    isCJsGlobalRoot(name, context) ||
-    (key === 'callee' &&
-      parent?.type === 'CallExpression' &&
-      expression.path.length === 1 &&
-      ['Number', 'String'].includes(name))
-  )
+  if (context.variables.has(expression.path.join('.'))) {
+    return true
+  }
+
+  if (context.variables.has(name)) {
+    return true
+  }
+
+  if (context.functionNames.has(name)) {
+    return true
+  }
+
+  if (isCJsGlobalRoot(name, context)) {
+    return true
+  }
+
+  if (key === 'callee' && parent != null && parent.type === 'CallExpression' && expression.path.length === 1) {
+    return name === 'Number' || name === 'String'
+  }
+
+  return false
 }
 
 function shiftTemplatePlaceholderExpressionLocations(
-  value: unknown,
+  value,
   loc: SourceLocation,
   prefixLength: number
 ): void {
@@ -1089,27 +1382,82 @@ function shiftTemplatePlaceholderExpressionLocations(
     return
   }
 
-  if (value == null || typeof value !== 'object') {
+  if (value == null) {
     return
   }
 
-  const record = value as { line?: number; column?: number; file?: string } & Record<string, unknown>
+  const node = value
 
-  if (typeof record.line === 'number' && typeof record.column === 'number') {
-    const lineOffset = record.line - 1
-
-    record.line = loc.line + lineOffset
-    record.column = lineOffset === 0 ? loc.column + record.column - prefixLength - 1 : record.column
-
-    if (loc.file == null) {
-      delete record.file
-    } else {
-      record.file = loc.file
-    }
+  if (node.loc != null) {
+    shiftTemplatePlaceholderLocation(node.loc, loc, prefixLength)
   }
 
-  for (const child of Object.values(record)) {
-    shiftTemplatePlaceholderExpressionLocations(child, loc, prefixLength)
+  shiftTemplatePlaceholderChildLocations(node, loc, prefixLength)
+}
+
+function shiftTemplatePlaceholderLocation(target, loc: SourceLocation, prefixLength: number): void {
+  const lineOffset = target.line - 1
+
+  target.line = loc.line + lineOffset
+
+  if (lineOffset === 0) {
+    target.column = loc.column + target.column - prefixLength - 1
+  }
+
+  if (loc.file == null) {
+    delete target.file
+  } else {
+    target.file = loc.file
+  }
+}
+
+function shiftTemplatePlaceholderChildLocations(node, loc: SourceLocation, prefixLength: number): void {
+  if (node.type === 'BinaryExpression') {
+    shiftTemplatePlaceholderExpressionLocations(node.left, loc, prefixLength)
+    shiftTemplatePlaceholderExpressionLocations(node.right, loc, prefixLength)
+    return
+  }
+
+  if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression' || node.type === 'NewExpression') {
+    shiftTemplatePlaceholderExpressionLocations(node.callee, loc, prefixLength)
+    shiftTemplatePlaceholderExpressionLocations(node.args, loc, prefixLength)
+    return
+  }
+
+  if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
+    shiftTemplatePlaceholderExpressionLocations(node.object, loc, prefixLength)
+    return
+  }
+
+  if (node.type === 'IndexExpression' || node.type === 'OptionalIndexExpression') {
+    shiftTemplatePlaceholderExpressionLocations(node.object, loc, prefixLength)
+    shiftTemplatePlaceholderExpressionLocations(node.index, loc, prefixLength)
+    return
+  }
+
+  if (
+    node.type === 'AwaitExpression' ||
+    node.type === 'UnaryExpression' ||
+    node.type === 'UpdateExpression' ||
+    node.type === 'TypeAssertionExpression'
+  ) {
+    shiftTemplatePlaceholderExpressionLocations(node.argument, loc, prefixLength)
+    shiftTemplatePlaceholderExpressionLocations(node.expression, loc, prefixLength)
+    return
+  }
+
+  if (node.type === 'ArrayLiteral') {
+    shiftTemplatePlaceholderExpressionLocations(node.elements, loc, prefixLength)
+    return
+  }
+
+  if (node.type === 'ObjectLiteral') {
+    shiftTemplatePlaceholderExpressionLocations(node.properties, loc, prefixLength)
+    return
+  }
+
+  if (node.type == null && node.value != null) {
+    shiftTemplatePlaceholderExpressionLocations(node.value, loc, prefixLength)
   }
 }
 
