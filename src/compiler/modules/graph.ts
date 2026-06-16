@@ -124,7 +124,10 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
             continue
           }
 
-          for (const declaration of createTypeImportDeclarations(specifier, importedModule.ast)) {
+          for (const declaration of createTypeImportDeclarations(
+            specifier,
+            importedModule.hir ?? importedModule.ast
+          )) {
             if (!typeNames.has(declaration.name)) {
               typeNames.add(declaration.name)
               types.push(declaration)

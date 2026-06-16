@@ -415,6 +415,51 @@ export function main(): void {
   }
 })
 
+test('carries transitive type-only imports through synthetic declarations', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-transitive-type-imports-'))
+
+  try {
+    await writeFile(
+      join(dir, 'host-types.ts'),
+      `export type Host = {
+  root: string
+}
+`
+    )
+    await writeFile(
+      join(dir, 'types.ts'),
+      `import type { Host } from './host-types.ts'
+
+export type Options = {
+  host?: Host
+  name: string
+}
+`
+    )
+    await writeFile(
+      join(dir, 'main.ts'),
+      `import type { Options } from './types.ts'
+
+export function main(): void {
+  const options: Options = { name: 'Ada' }
+  console.log(options.name)
+}
+`
+    )
+
+    const c = await compileFile(join(dir, 'main.ts'), {
+      target: 'c'
+    })
+
+    assert.match(c.code, /ccjs_object_get_known\(options, 1, &ccjs_log_value_\d+\)/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('resolves static ESM directory index imports', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-index-imports-'))
