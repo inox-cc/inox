@@ -23,7 +23,7 @@ test('lowers expression trees and infers array and binary value types', () => {
     }
   }
 
-  const lowered = lowerExpression(expression)
+  const lowered = lowerExpression(expression, createLowerContext({ type: 'Program', body: [] }))
 
   assert.equal(lowered.valueType, 'string')
   assert.equal(lowered.left.valueType, 'array')

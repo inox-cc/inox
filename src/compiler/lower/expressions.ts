@@ -9,23 +9,8 @@ export type LowerExpressionContext = LowerContext & {
   lowerStatement?: LowerStatementFn
 }
 
-export function lowerExpression(expression: LowerExpressionNode, context?: LowerExpressionContext): LowerExpressionNode {
-  let lowerContext = context
-
-  if (lowerContext == null) {
-    lowerContext = defaultLowerExpressionContext()
-  }
-
-  return lowerExpressionWithContext(expression, lowerContext)
-}
-
-function defaultLowerExpressionContext(): LowerExpressionContext {
-  return {
-    types: new Map(),
-    classNames: new Set(),
-    nextId: 0,
-    variables: new Map()
-  }
+export function lowerExpression(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode {
+  return lowerExpressionWithContext(expression, context)
 }
 
 function lowerExpressionWithContext(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode {
@@ -316,7 +301,7 @@ function cloneThisExpression(expression: LowerExpressionNode): LowerExpressionNo
 }
 
 function findReferenceVariable(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode | null {
-  if (expression.path.length !== 1 || context.variables == null) {
+  if (expression.path.length !== 1) {
     return null
   }
 

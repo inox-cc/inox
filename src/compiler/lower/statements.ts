@@ -586,20 +586,30 @@ function variableDeclarationValueType(
   statement: LowerNode,
   init: LowerNode | null
 ): string {
-  if (declared.valueType != null) {
-    return declared.valueType
+  const declaredValueType = declared.valueType
+
+  if (declaredValueType != null) {
+    return declaredValueType
   }
 
-  if (statement.valueType != null) {
-    return statement.valueType
+  const statementValueType = statement.valueType
+
+  if (statementValueType != null) {
+    return statementValueType
   }
 
-  if (statement.declaredType != null) {
-    return statement.declaredType
+  const statementDeclaredType = statement.declaredType
+
+  if (statementDeclaredType != null) {
+    return statementDeclaredType
   }
 
-  if (init != null && init.valueType != null) {
-    return init.valueType
+  if (init != null) {
+    const initValueType = init.valueType
+
+    if (initValueType != null) {
+      return initValueType
+    }
   }
 
   return 'unknown'
@@ -672,7 +682,7 @@ function lowerArrayMethodVariableDeclaration(
   }
 
   const expandedInit: LowerNode = {
-    type: init.type,
+    type: fallbackString(init.type, 'CallExpression'),
     callee: replaceMemberObject(init.callee, receiver.receiver),
     args: init.args,
     valueType: init.valueType,
@@ -1552,8 +1562,10 @@ function arrayMethodElementDeclaredType(
     return init.arrayElementDeclaredType
   }
 
-  if (receiverElement.declaredType != null) {
-    return receiverElement.declaredType
+  const receiverDeclaredType = receiverElement.declaredType
+
+  if (receiverDeclaredType != null) {
+    return receiverDeclaredType
   }
 
   return receiverElement.valueType
@@ -1830,8 +1842,10 @@ function receiverElementValueType(
     return callbackParam.valueType
   }
 
-  if (declared.valueType != null) {
-    return declared.valueType
+  const declaredValueType = declared.valueType
+
+  if (declaredValueType != null) {
+    return declaredValueType
   }
 
   return 'unknown'
@@ -2363,7 +2377,7 @@ function resolveSimpleArrowReturnExpression(callback: LowerNode): LowerNode | nu
 
   const statement = statements[0]
 
-  if (statement == null || statement.type !== 'ReturnStatement' || statement.argument == null) {
+  if (statement.type !== 'ReturnStatement' || statement.argument == null) {
     return null
   }
 
