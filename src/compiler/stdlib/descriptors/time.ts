@@ -1,18 +1,16 @@
-export type TimeRuntimeMethod = 'dateNow' | 'performanceNow'
-
 export type TimeRuntimeCapability = {
   key: 'monotonicClock' | 'wallClock'
   name: 'monotonic-clock' | 'wall-clock'
 }
 
 export type TimeRuntimeDescriptor = {
-  method: TimeRuntimeMethod
-  path: readonly string[]
-  cFunction: 'ccjs_date_now' | 'ccjs_performance_now'
+  method: string
+  path: string[]
+  cFunction: string
   capability: TimeRuntimeCapability
 }
 
-export const timeRuntimeDescriptors: readonly TimeRuntimeDescriptor[] = [
+export const timeRuntimeDescriptors: TimeRuntimeDescriptor[] = [
   {
     method: 'dateNow',
     path: ['Date', 'now'],
@@ -33,32 +31,66 @@ export const timeRuntimeDescriptors: readonly TimeRuntimeDescriptor[] = [
   }
 ]
 
-const timeRuntimeDescriptorByPath = new Map(timeRuntimeDescriptors.map((item) => [item.path.join('.'), item]))
+const timeRuntimeDescriptorByPath = createTimeRuntimeDescriptorMap(timeRuntimeDescriptors)
 
 export function timeRuntimeDescriptorFromPath(
-  path: readonly string[] | null | undefined
+  path: string[] | null | undefined
 ): TimeRuntimeDescriptor | null {
   if (path == null) {
     return null
   }
 
-  return timeRuntimeDescriptorByPath.get(path.join('.')) ?? null
+  const descriptor = timeRuntimeDescriptorByPath.get(path.join('.'))
+
+  if (descriptor != null) {
+    return descriptor
+  }
+
+  return null
 }
 
 export function timeRuntimeMethodNameFromPath(
-  path: readonly string[] | null | undefined
-): TimeRuntimeMethod | null {
-  return timeRuntimeDescriptorFromPath(path)?.method ?? null
+  path: string[] | null | undefined
+): string | null {
+  const descriptor = timeRuntimeDescriptorFromPath(path)
+
+  if (descriptor != null) {
+    return descriptor.method
+  }
+
+  return null
 }
 
 export function timeRuntimeCFunctionNameFromPath(
-  path: readonly string[] | null | undefined
-): TimeRuntimeDescriptor['cFunction'] | null {
-  return timeRuntimeDescriptorFromPath(path)?.cFunction ?? null
+  path: string[] | null | undefined
+): string | null {
+  const descriptor = timeRuntimeDescriptorFromPath(path)
+
+  if (descriptor != null) {
+    return descriptor.cFunction
+  }
+
+  return null
 }
 
 export function timeRuntimeCapabilityFromPath(
-  path: readonly string[] | null | undefined
+  path: string[] | null | undefined
 ): TimeRuntimeCapability | null {
-  return timeRuntimeDescriptorFromPath(path)?.capability ?? null
+  const descriptor = timeRuntimeDescriptorFromPath(path)
+
+  if (descriptor != null) {
+    return descriptor.capability
+  }
+
+  return null
+}
+
+function createTimeRuntimeDescriptorMap(descriptors: TimeRuntimeDescriptor[]): Map<string, TimeRuntimeDescriptor> {
+  const map: Map<string, TimeRuntimeDescriptor> = new Map()
+
+  for (const descriptor of descriptors) {
+    map.set(descriptor.path.join('.'), descriptor)
+  }
+
+  return map
 }
