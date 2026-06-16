@@ -1,17 +1,72 @@
-import type { CEmitContext, CFunctionContext } from '../context.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
   CCallbackContextWrapper,
+  CCallbackWrapper,
+  CFunctionParam,
+  CFunctionType,
   CObjectShape,
   CPromiseConstructorHandler,
   CPromiseChainWrapper,
   CRuntimeArrowCapture
 } from '../types.ts'
-import type { AnyNode, IrProgram } from '../../types.ts'
+import type { AnyNode, Diagnostic, IrProgram } from '../../types.ts'
 import type { CallbackLoweringDependencies, CallbackScope, CallbackScopeBinding } from './callbacks.ts'
 
-export function cPromiseRuntimeCallName(callee: AnyNode): string | null {
+type PromiseAnyNodeWrapperMap = Map<AnyNode, CPromiseChainWrapper>
+type PromiseBooleanMap = Map<string, boolean>
+type PromiseCallbackArrowWrapperMap = Map<AnyNode, CCallbackWrapper>
+type PromiseCallbackWrapperMap = Map<string, CCallbackWrapper>
+type PromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
+type PromiseFunctionParamMap = Map<string, CFunctionParam[]>
+type PromiseFunctionTypeMap = Map<string, CFunctionType>
+type PromiseMutableDeclarationSet = Set<AnyNode | null | undefined>
+type PromiseStringMap = Map<string, string>
+type PromiseStringNullableMap = Map<string, string | null>
+type PromiseStringSet = Set<string>
+
+type PromiseEmitContext = {
+  boxedMutableCaptureDeclarations: PromiseMutableDeclarationSet
+  callbackArrowWrappers: PromiseCallbackArrowWrapperMap
+  callbackWrappers: PromiseCallbackWrapperMap
+  diagnostics: Diagnostic[]
+  externalEventLoopFunctions: PromiseStringSet
+  functionAsyncFlags: PromiseBooleanMap
+  functionNames: PromiseStringMap
+  functionParams: PromiseFunctionParamMap
+  functionReturnPromiseValueTypes: PromiseStringNullableMap
+  functionReturnTypes: PromiseStringMap
+  jsGlobalRoots: PromiseStringSet
+  promiseChainArrowWrappers: PromiseAnyNodeWrapperMap
+  runtimeFunctionParams: PromiseFunctionTypeMap
+}
+
+type PromiseFunctionContext = PromiseEmitContext & {
+  boxedVariables: PromiseStringSet
+  cleanupEnabled: boolean
+  eventLoopUsed: boolean
+  externalEventLoop: boolean
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  nextId: number
+  ownedPromises: string[]
+  promiseConstructorHandlers: PromiseConstructorHandlerMap
+  promiseRejectionValueTypes: PromiseStringMap
+  promiseValueTypes: PromiseStringMap
+  returnType?: string
+  runtimeCallbackCleanupLabel?: string
+  runtimeCallbackReturnOut?: string
+  runtimeCallbackReturnShape?: CObjectShape | null
+  runtimeCallbackReturnType?: string
+  runtimeStrings: PromiseStringSet
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  usedRuntimeCallbackCleanupGoto?: boolean
+  variables: PromiseStringMap
+}
+
+export function cPromiseRuntimeCallName(callee: AnyNode | null | undefined): string | null {
   if (callee == null) {
     return null
   }
@@ -39,7 +94,7 @@ export function cPromiseRuntimeCallName(callee: AnyNode): string | null {
   return null
 }
 
-export function isPromiseConstructorExpression(expression: AnyNode): boolean {
+export function isPromiseConstructorExpression(expression: AnyNode | null | undefined): boolean {
   if (expression == null || expression.type !== 'NewExpression') {
     return false
   }
@@ -51,7 +106,7 @@ export function isPromiseConstructorExpression(expression: AnyNode): boolean {
   return expression.callee.path.length === 1 && expression.callee.path[0] === 'Promise'
 }
 
-export function isPromiseMethodAst(expression: AnyNode): boolean {
+export function isPromiseMethodAst(expression: AnyNode | null | undefined): boolean {
   if (expression == null || expression.type !== 'CallExpression') {
     return false
   }
@@ -77,7 +132,7 @@ export function functionTakesEventLoopParam(name: string, context: PromiseEventL
   return isPlainPromiseReturningFunctionName(name, context) || context.externalEventLoopFunctions.has(name)
 }
 
-export function isPromiseReturningFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
+export function isPromiseReturningFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEmitContext): boolean {
   if (callee == null || callee.type !== 'Reference') {
     return false
   }
@@ -85,7 +140,7 @@ export function isPromiseReturningFunctionCallee(callee: AnyNode, context: CEmit
   return callee.path.length === 1 && isPlainPromiseReturningFunctionName(callee.path[0], context)
 }
 
-export function isExternalEventLoopFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
+export function isExternalEventLoopFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEmitContext): boolean {
   if (callee == null || callee.type !== 'Reference') {
     return false
   }
@@ -93,8 +148,12 @@ export function isExternalEventLoopFunctionCallee(callee: AnyNode, context: CEmi
   return callee.path.length === 1 && context.externalEventLoopFunctions.has(callee.path[0])
 }
 
-export function resolvePromiseReturningFunctionValueType(callee: AnyNode, context: CEmitContext): string {
-  if (!isPromiseReturningFunctionCallee(callee, context)) {
+export function resolvePromiseReturningFunctionValueType(callee: AnyNode | null | undefined, context: PromiseEmitContext): string {
+  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
+    return 'unknown'
+  }
+
+  if (!isPlainPromiseReturningFunctionName(callee.path[0], context)) {
     return 'unknown'
   }
 
@@ -107,7 +166,10 @@ export function resolvePromiseReturningFunctionValueType(callee: AnyNode, contex
   return 'unknown'
 }
 
-export function resolvePromiseExpressionValueType(expression: AnyNode, context: CFunctionContext): string | null {
+export function resolvePromiseExpressionValueType(
+  expression: AnyNode | null | undefined,
+  context: PromiseFunctionContext
+): string | null {
   if (expression == null) {
     return null
   }
@@ -143,7 +205,19 @@ export function knownValueType(valueType: string | null | undefined): string | n
   return valueType
 }
 
-export function isAsyncFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
+function optionalString(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
+function optionalBoolean(value: boolean | null | undefined): boolean {
+  return value === true
+}
+
+export function isAsyncFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEmitContext): boolean {
   if (callee == null || callee.type !== 'Reference') {
     return false
   }
@@ -151,8 +225,15 @@ export function isAsyncFunctionCallee(callee: AnyNode, context: CEmitContext): b
   return callee.path.length === 1 && context.functionAsyncFlags.get(callee.path[0]) === true
 }
 
-export function resolveCAsyncFunctionAwaitValueType(callee: AnyNode, context: CEmitContext): string | null {
-  if (!isAsyncFunctionCallee(callee, context)) {
+export function resolveCAsyncFunctionAwaitValueType(
+  callee: AnyNode | null | undefined,
+  context: PromiseEmitContext
+): string | null {
+  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  if (context.functionAsyncFlags.get(callee.path[0]) !== true) {
     return null
   }
 
@@ -169,17 +250,9 @@ export function resolveCAsyncFunctionAwaitValueType(callee: AnyNode, context: CE
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import { diagnostic } from '../../diagnostics.ts'
 import {
-  createFunctionContext,
-  emitBoxedValueCleanup,
-  emitBoxedValueDeclarations,
   emitEventLoopReference,
-  emitErrorChannelDeclarations,
   emitFailureStatement,
-  emitLoopFlowDeclarations,
-  emitOwnedValueCleanup,
-  emitOwnedValueDeclarations,
   emitPrepareOwnedValueWrite,
-  emitReturnFlowDeclarations,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
@@ -194,18 +267,30 @@ export type PromiseChainLoweringDependencies = {
   collectArrowCaptures(
     expression: AnyNode,
     outerScopes: CallbackScope[],
-    context: CEmitContext,
+    context: PromiseEmitContext,
     deps: CallbackLoweringDependencies
   ): CRuntimeArrowCapture[]
-  emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  createFunctionContext(
+    baseContext: PromiseEmitContext,
+    returnType: string,
+    returnNullable: boolean
+  ): PromiseFunctionContext
+  emitBoxedValueCleanup(context: PromiseFunctionContext): string[]
+  emitBoxedValueDeclarations(context: PromiseFunctionContext): string[]
+  emitErrorChannelDeclarations(context: PromiseFunctionContext): string[]
+  emitLoopFlowDeclarations(context: PromiseFunctionContext): string[]
+  emitOwnedValueCleanup(context: PromiseFunctionContext): string[]
+  emitOwnedValueDeclarations(context: PromiseFunctionContext): string[]
+  emitPreparedNumberExpression(expression: AnyNode, context: PromiseFunctionContext): PreparedExpression
+  emitReturnFlowDeclarations(context: PromiseFunctionContext): string[]
   emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: CCallbackContextWrapper): string[]
   emitRuntimeArrowCallbackContextLocals(
     wrapper: CCallbackContextWrapper,
-    context: CFunctionContext,
+    context: PromiseFunctionContext,
     deps: CallbackLoweringDependencies
   ): string[]
-  emitRuntimeCallbackRuntimeValueReturnLines(argument: AnyNode, context: CFunctionContext): string[]
-  emitStatementList(statements: AnyNode[], context: CFunctionContext): string[]
+  emitRuntimeCallbackRuntimeValueReturnLines(argument: AnyNode, context: PromiseFunctionContext): string[]
+  emitStatementList(statements: AnyNode[], context: PromiseFunctionContext): string[]
   functionUsesExternalEventLoop(node: AnyNode, externalNames: Set<string>): boolean
   isPromiseChainCallbackWrapperWithContext(
     wrapper: CPromiseChainWrapper | null | undefined
@@ -213,31 +298,31 @@ export type PromiseChainLoweringDependencies = {
 }
 
 export type PromiseLoweringDependencies = {
-  emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCValueExpression(expression: AnyNode, context: PromiseFunctionContext): PreparedExpression
   emitPreparedAsyncFunctionPromiseCallExpression(
     expression: AnyNode,
-    context: CFunctionContext,
+    context: PromiseFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedCallExpression(expression: AnyNode, context: PromiseFunctionContext): PreparedExpression
   emitPreparedFetchCallExpression(
     expression: AnyNode,
-    context: CFunctionContext,
+    context: PromiseFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedFsCallExpression(
     expression: AnyNode,
-    context: CFunctionContext,
+    context: PromiseFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitRuntimeArrowCaptureStoreLines(
     capture: CRuntimeArrowCapture,
     contextName: string,
-    context: CFunctionContext
+    context: PromiseFunctionContext
   ): string[]
-  emitStatementList(statements: AnyNode[], context: CFunctionContext): string[]
-  inferExpressionType(expression: AnyNode, context: CFunctionContext): string
-  inferRejectedValueType(expression: AnyNode, context: CFunctionContext): string
+  emitStatementList(statements: AnyNode[], context: PromiseFunctionContext): string[]
+  inferExpressionType(expression: AnyNode, context: PromiseFunctionContext): string
+  inferRejectedValueType(expression: AnyNode, context: PromiseFunctionContext): string
   isPromiseChainCallbackWrapperWithContext(
     wrapper: CPromiseChainWrapper | null | undefined
   ): boolean
@@ -256,9 +341,41 @@ type PromiseCallbackContext = {
   finalizer: string
 }
 
+function promiseChainArrowBodyKind(body: PromiseChainArrowBody | null | undefined): string {
+  if (body == null) {
+    return ''
+  }
+
+  return body.kind
+}
+
+function promiseChainArrowBodyStatements(body: PromiseChainArrowBody | null | undefined): AnyNode[] {
+  if (body == null) {
+    return []
+  }
+
+  return body.statements
+}
+
+function promiseChainArrowBodyPrefixStatements(body: PromiseChainArrowBody | null | undefined): AnyNode[] {
+  if (body == null) {
+    return []
+  }
+
+  return body.prefixStatements
+}
+
+function promiseChainArrowBodyReturnExpression(body: PromiseChainArrowBody | null | undefined): AnyNode | null {
+  if (body == null) {
+    return null
+  }
+
+  return body.returnExpression
+}
+
 export function emitPreparedPromiseStaticExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -295,7 +412,7 @@ export function emitPreparedPromiseStaticExpression(
 
 export function emitPreparedPromiseConstructorExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -358,8 +475,8 @@ export function emitPreparedPromiseConstructorExpression(
 }
 
 export function emitPromiseConstructorSettlementCall(
-  expression: AnyNode,
-  context: CFunctionContext,
+  expression: AnyNode | null | undefined,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): string[] | null {
   if (expression == null || expression.type !== 'CallExpression') {
@@ -391,17 +508,17 @@ export function emitPromiseConstructorSettlementCall(
   }
 
   const value = emitPreparedPromiseArgumentValue(expression.args[0], context, dependencies)
-  const runtimeCall = promiseConstructorRuntimeCall(handler.kind)
+  const runtimeCall = promiseConstructorHandlerRuntimeCall(handler)
   const lines: string[] = []
   appendLines(lines, value.lines)
-  lines.push(emitStatusCheck(`${runtimeCall}(${handler.promise}, ${value.expression})`, context))
+  lines.push(emitStatusCheck(`${runtimeCall}(${promiseConstructorHandlerPromise(handler)}, ${value.expression})`, context))
 
   return lines
 }
 
 export function emitPreparedPromiseMethodExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -438,7 +555,7 @@ export function emitPreparedPromiseMethodExpression(
     }
   }
 
-  const receiver = emitPreparedPromiseExpression(expression.callee.object, context, dependencies)
+  const receiver = emitPreparedPromiseExpression(expression.callee.object, context, dependencies, {})
 
   if (receiver == null) {
     context.diagnostics.push(
@@ -469,7 +586,7 @@ export function emitPreparedPromiseMethodExpression(
   }
 
   const lines: string[] = []
-  appendLines(lines, receiver.lines)
+  appendLines(lines, preparedPromiseLines(receiver))
   appendLines(lines, callbackContext.lines)
   appendLines(lines, runtimeCallLines)
 
@@ -483,7 +600,7 @@ export function emitPreparedPromiseMethodExpression(
 
 export function emitPreparedPromiseExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -532,7 +649,7 @@ export function emitPreparedPromiseExpression(
     return promiseCall
   }
 
-  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 
     if (context.variables.get(name) === 'promise') {
@@ -549,8 +666,8 @@ export function emitPreparedPromiseExpression(
 }
 
 export function emitPreparedPromiseReturningCallExpression(
-  expression: AnyNode,
-  context: CFunctionContext,
+  expression: AnyNode | null | undefined,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -595,7 +712,7 @@ function appendIndentedLines(target: string[], values: string[], indent: string)
   }
 }
 
-function preparedPromiseOut(options: PreparedCallOptions, context: CFunctionContext, prefix: string): string {
+function preparedPromiseOut(options: PreparedCallOptions, context: PromiseFunctionContext, prefix: string): string {
   const out = options.out
 
   if (out != null) {
@@ -616,7 +733,7 @@ function expressionPromiseValueType(expression: AnyNode): string {
 function promiseStaticRejectionValueType(
   method: string | null,
   expression: AnyNode,
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): string {
   if (method === 'reject') {
@@ -636,7 +753,7 @@ function promiseStaticRuntimeCall(method: string | null): string {
 
 function emitPreparedPromiseArgumentValue(
   argument: AnyNode | null | undefined,
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): PreparedExpression {
   if (argument == null) {
@@ -699,10 +816,68 @@ function promiseConstructorRuntimeCall(kind: string): string {
   return 'ccjs_promise_reject'
 }
 
-function promiseMethodRejectionValueType(method: string, receiver: PreparedExpression): string {
+function promiseConstructorHandlerRuntimeCall(handler: CPromiseConstructorHandler | null | undefined): string {
+  if (handler == null) {
+    return 'ccjs_promise_resolve'
+  }
+
+  return promiseConstructorRuntimeCall(handler.kind)
+}
+
+function promiseConstructorHandlerPromise(handler: CPromiseConstructorHandler | null | undefined): string {
+  if (handler == null) {
+    return '0'
+  }
+
+  return handler.promise
+}
+
+function preparedPromiseLines(prepared: PreparedExpression | null | undefined): string[] {
+  if (prepared == null) {
+    return []
+  }
+
+  return prepared.lines
+}
+
+function preparedPromiseExpression(prepared: PreparedExpression | null | undefined): string {
+  if (prepared == null) {
+    return '0'
+  }
+
+  return prepared.expression
+}
+
+function preparedPromiseRejectionValueType(prepared: PreparedExpression | null | undefined): string {
+  if (prepared == null) {
+    return ''
+  }
+
+  return optionalString(prepared.rejectionValueType)
+}
+
+function promiseChainWrapperName(wrapper: CPromiseChainWrapper | null | undefined): string {
+  if (wrapper == null) {
+    return '0'
+  }
+
+  return wrapper.name
+}
+
+function promiseChainWrapperFinalizerName(wrapper: CPromiseChainWrapper | null | undefined): string {
+  if (wrapper == null) {
+    return '0'
+  }
+
+  return wrapper.finalizerName
+}
+
+function promiseMethodRejectionValueType(method: string, receiver: PreparedExpression | null | undefined): string {
   if (method === 'then') {
-    if (receiver.rejectionValueType != null) {
-      return receiver.rejectionValueType
+    const rejectionValueType = preparedPromiseRejectionValueType(receiver)
+
+    if (rejectionValueType !== '') {
+      return rejectionValueType
     }
   }
 
@@ -711,23 +886,26 @@ function promiseMethodRejectionValueType(method: string, receiver: PreparedExpre
 
 function promiseMethodRuntimeCall(
   method: string,
-  receiver: PreparedExpression,
-  wrapper: CPromiseChainWrapper,
+  receiver: PreparedExpression | null | undefined,
+  wrapper: CPromiseChainWrapper | null | undefined,
   callbackContext: PromiseCallbackContext,
   out: string
 ): string {
+  const receiverExpression = preparedPromiseExpression(receiver)
+  const wrapperName = promiseChainWrapperName(wrapper)
+
   if (method === 'then') {
-    return `ccjs_promise_chain(${receiver.expression}, ${wrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
+    return `ccjs_promise_chain(${receiverExpression}, ${wrapperName}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
   }
 
-  return `ccjs_promise_catch(${receiver.expression}, ${wrapper.name}, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
+  return `ccjs_promise_catch(${receiverExpression}, ${wrapperName}, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
 }
 
 function promiseMethodRuntimeCallLines(
   runtimeCall: string,
   callbackContext: PromiseCallbackContext,
-  wrapper: CPromiseChainWrapper,
-  context: CFunctionContext
+  wrapper: CPromiseChainWrapper | null | undefined,
+  context: PromiseFunctionContext
 ): string[] {
   if (callbackContext.expression === '0') {
     return [emitStatusCheck(runtimeCall, context)]
@@ -735,7 +913,7 @@ function promiseMethodRuntimeCallLines(
 
   return [
     `if (${runtimeCall} != CCJS_OK) {`,
-    `  ${wrapper.finalizerName}(${callbackContext.expression});`,
+    `  ${promiseChainWrapperFinalizerName(wrapper)}(${callbackContext.expression});`,
     `  ${emitFailureStatement(context)}`,
     '}'
   ]
@@ -748,12 +926,14 @@ function preparedPromiseWithValueType(prepared: PreparedExpression, valueType: s
     valueType
   }
 
-  if (prepared.nullable != null) {
-    result.nullable = prepared.nullable
+  if (optionalBoolean(prepared.nullable)) {
+    result.nullable = true
   }
 
-  if (prepared.rejectionValueType != null) {
-    result.rejectionValueType = prepared.rejectionValueType
+  const rejectionValueType = optionalString(prepared.rejectionValueType)
+
+  if (rejectionValueType !== '') {
+    result.rejectionValueType = rejectionValueType
   }
 
   return result
@@ -761,7 +941,7 @@ function preparedPromiseWithValueType(prepared: PreparedExpression, valueType: s
 
 function resolvedPromiseExpressionValueType(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   fallback: string | null | undefined
 ): string {
   const resolved = resolvePromiseExpressionValueType(expression, context)
@@ -777,7 +957,7 @@ function resolvedPromiseExpressionValueType(
   return 'unknown'
 }
 
-function promiseContextValueType(context: CFunctionContext, name: string): string {
+function promiseContextValueType(context: PromiseFunctionContext, name: string): string {
   const valueType = context.promiseValueTypes.get(name)
 
   if (valueType != null) {
@@ -787,7 +967,7 @@ function promiseContextValueType(context: CFunctionContext, name: string): strin
   return 'unknown'
 }
 
-function promiseContextRejectionValueType(context: CFunctionContext, name: string): string {
+function promiseContextRejectionValueType(context: PromiseFunctionContext, name: string): string {
   const valueType = context.promiseRejectionValueTypes.get(name)
 
   if (valueType != null) {
@@ -849,16 +1029,20 @@ function promiseChainCallbackBodyStatements(callback: AnyNode): AnyNode[] | null
   return null
 }
 
-function lastPromiseChainCallbackStatement(statements: AnyNode[]): AnyNode | null {
-  if (statements.length === 0) {
+function lastPromiseChainCallbackStatement(statements: AnyNode[] | null | undefined): AnyNode | null {
+  if (statements == null || statements.length === 0) {
     return null
   }
 
   return statements[statements.length - 1]
 }
 
-function promiseChainCallbackStatementsBeforeLast(statements: AnyNode[]): AnyNode[] {
+function promiseChainCallbackStatementsBeforeLast(statements: AnyNode[] | null | undefined): AnyNode[] {
   const result: AnyNode[] = []
+
+  if (statements == null) {
+    return result
+  }
 
   for (let index = 0; index < statements.length - 1; index = index + 1) {
     result.push(statements[index])
@@ -867,7 +1051,11 @@ function promiseChainCallbackStatementsBeforeLast(statements: AnyNode[]): AnyNod
   return result
 }
 
-function promiseReturnStatementArgument(statement: AnyNode): AnyNode | null {
+function promiseReturnStatementArgument(statement: AnyNode | null | undefined): AnyNode | null {
+  if (statement == null) {
+    return null
+  }
+
   if (statement.argument != null) {
     return statement.argument
   }
@@ -875,7 +1063,19 @@ function promiseReturnStatementArgument(statement: AnyNode): AnyNode | null {
   return null
 }
 
-function allStraightLinePromiseCallbackStatements(statements: AnyNode[]): boolean {
+function promiseStatementsOrEmpty(statements: AnyNode[] | null | undefined): AnyNode[] {
+  if (statements == null) {
+    return []
+  }
+
+  return statements
+}
+
+function allStraightLinePromiseCallbackStatements(statements: AnyNode[] | null | undefined): boolean {
+  if (statements == null) {
+    return false
+  }
+
   for (const statement of statements) {
     if (!isStraightLinePromiseCallbackStatement(statement)) {
       return false
@@ -885,7 +1085,11 @@ function allStraightLinePromiseCallbackStatements(statements: AnyNode[]): boolea
   return true
 }
 
-function allPromiseChainCallbackStatements(statements: AnyNode[]): boolean {
+function allPromiseChainCallbackStatements(statements: AnyNode[] | null | undefined): boolean {
+  if (statements == null) {
+    return false
+  }
+
   for (const statement of statements) {
     if (!isPromiseChainCallbackStatement(statement)) {
       return false
@@ -896,7 +1100,7 @@ function allPromiseChainCallbackStatements(statements: AnyNode[]): boolean {
 }
 
 function pushPromiseConstructorHandlers(
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   resolveName: string | null,
   rejectName: string | null,
   promise: string
@@ -922,17 +1126,17 @@ function pushPromiseConstructorHandlers(
 }
 
 function promiseConstructorRejectionValueType(
-  executor: AnyNode,
-  context: CFunctionContext,
+  executor: AnyNode | null | undefined,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): string {
   if (executor == null || executor.type !== 'ArrowFunctionExpression') {
     return 'unknown'
   }
 
-  const rejectName = promiseExecutorParamName(executor, 1)
+  const rejectName = optionalString(promiseExecutorParamName(executor, 1))
 
-  if (rejectName == null) {
+  if (rejectName === '') {
     return 'unknown'
   }
 
@@ -946,7 +1150,7 @@ function visitPromiseConstructorRejectionNode(
   node: AnyNode | AnyNode[] | null | undefined,
   rejectName: string,
   types: string[],
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): void {
   if (node == null) {
@@ -979,7 +1183,7 @@ function visitPromiseConstructorRejectionChildren(
   current: AnyNode,
   rejectName: string,
   types: string[],
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): void {
   if (current.type === 'BlockStatement') {
@@ -1100,11 +1304,11 @@ function visitPromiseConstructorRejectionChildren(
 }
 
 function uniqueValueTypes(types: string[]): string {
-  const first = types[0]
-
-  if (first == null) {
+  if (types.length === 0) {
     return 'unknown'
   }
+
+  const first = types[0]
 
   for (const valueType of types) {
     if (valueType !== first) {
@@ -1116,11 +1320,11 @@ function uniqueValueTypes(types: string[]): string {
 }
 
 function emitPromiseChainCallbackContext(
-  wrapper: CPromiseChainWrapper,
-  context: CFunctionContext,
+  wrapper: CPromiseChainWrapper | null | undefined,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): PromiseCallbackContext {
-  if (!dependencies.isPromiseChainCallbackWrapperWithContext(wrapper)) {
+  if (wrapper == null || !dependencies.isPromiseChainCallbackWrapperWithContext(wrapper)) {
     return {
       lines: [],
       expression: '0',
@@ -1176,8 +1380,8 @@ function emitPromiseChainCallbackContext(
 }
 
 function isPromiseMethodCallExpression(
-  expression: AnyNode,
-  context: CFunctionContext,
+  expression: AnyNode | null | undefined,
+  context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): boolean {
   if (expression == null || expression.type !== 'CallExpression') {
@@ -1197,7 +1401,7 @@ function isPromiseMethodCallExpression(
 
 export function collectPromiseChainWrappers(
   irPrograms: IrProgram[],
-  context: CEmitContext,
+  context: PromiseEmitContext,
   deps: PromiseChainLoweringDependencies
 ): Map<string, CPromiseChainWrapper> {
   const wrappers: Map<string, CPromiseChainWrapper> = new Map()
@@ -1305,7 +1509,7 @@ function registerPromiseChainExpression(
   expression: AnyNode,
   scopes: CallbackScope[],
   wrappers: Map<string, CPromiseChainWrapper>,
-  context: CEmitContext,
+  context: PromiseEmitContext,
   deps: PromiseChainLoweringDependencies
 ): void {
   if (!isPromiseMethodAst(expression)) {
@@ -1369,7 +1573,7 @@ function visitPromiseChainStatement(
   statement: AnyNode | null | undefined,
   scopes: CallbackScope[],
   wrappers: Map<string, CPromiseChainWrapper>,
-  context: CEmitContext,
+  context: PromiseEmitContext,
   deps: PromiseChainLoweringDependencies
 ): void {
   if (statement == null) {
@@ -1473,7 +1677,7 @@ function visitPromiseChainExpression(
   expression: AnyNode | null | undefined,
   scopes: CallbackScope[],
   wrappers: Map<string, CPromiseChainWrapper>,
-  context: CEmitContext,
+  context: PromiseEmitContext,
   deps: PromiseChainLoweringDependencies
 ): void {
   if (expression == null) {
@@ -1551,7 +1755,7 @@ export function emitPromiseChainCallbackWrapperHead(wrapper: CPromiseChainWrappe
 
 export function emitPromiseChainCallbackWrapperDeclaration(
   wrapper: CPromiseChainWrapper,
-  baseContext: CEmitContext,
+  baseContext: PromiseEmitContext,
   deps: PromiseChainLoweringDependencies
 ): string[] {
   const lines: string[] = []
@@ -1561,7 +1765,7 @@ export function emitPromiseChainCallbackWrapperDeclaration(
     lines.push('')
   }
 
-  const context = createFunctionContext(baseContext, 'void', false)
+  const context = deps.createFunctionContext(baseContext, 'void', false)
   context.cleanupEnabled = false
   context.statusReturn = true
   context.runtimeCallbackReturnType = wrapper.returnType
@@ -1584,26 +1788,26 @@ export function emitPromiseChainCallbackWrapperDeclaration(
   lines.push('  if (out == 0) return CCJS_ERR_TYPE;')
   lines.push('  *out = ccjs_undefined_value();')
   appendIndentedLines(lines, bodyLines, '  ')
-  appendIndentedLines(lines, emitLoopFlowDeclarations(context), '  ')
-  appendIndentedLines(lines, emitReturnFlowDeclarations(context), '  ')
-  appendIndentedLines(lines, emitOwnedValueDeclarations(context), '  ')
-  appendIndentedLines(lines, emitErrorChannelDeclarations(context), '  ')
-  appendIndentedLines(lines, emitBoxedValueDeclarations(context), '  ')
+  appendIndentedLines(lines, deps.emitLoopFlowDeclarations(context), '  ')
+  appendIndentedLines(lines, deps.emitReturnFlowDeclarations(context), '  ')
+  appendIndentedLines(lines, deps.emitOwnedValueDeclarations(context), '  ')
+  appendIndentedLines(lines, deps.emitErrorChannelDeclarations(context), '  ')
+  appendIndentedLines(lines, deps.emitBoxedValueDeclarations(context), '  ')
   appendIndentedLines(lines, statementLines, '  ')
 
   if (context.usedRuntimeCallbackCleanupGoto === true) {
     lines.push(`${context.runtimeCallbackCleanupLabel}:`)
   }
 
-  appendIndentedLines(lines, emitOwnedValueCleanup(context), '  ')
-  appendIndentedLines(lines, emitBoxedValueCleanup(context), '  ')
+  appendIndentedLines(lines, deps.emitOwnedValueCleanup(context), '  ')
+  appendIndentedLines(lines, deps.emitBoxedValueCleanup(context), '  ')
   lines.push('  return CCJS_OK;')
   lines.push('}')
 
   return lines
 }
 
-function emitPromiseChainCallbackParamPrelude(wrapper: CPromiseChainWrapper, context: CFunctionContext): string[] {
+function emitPromiseChainCallbackParamPrelude(wrapper: CPromiseChainWrapper, context: PromiseFunctionContext): string[] {
   const param = wrapper.expression.params[0]
 
   if (param == null) {
@@ -1648,7 +1852,7 @@ function emitPromiseChainCallbackParamPrelude(wrapper: CPromiseChainWrapper, con
 
 function emitPromiseChainCallbackStatementLines(
   wrapper: CPromiseChainWrapper,
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   deps: PromiseChainLoweringDependencies
 ): string[] {
   const body = resolvePromiseChainArrowBody(wrapper.expression)
@@ -1657,14 +1861,14 @@ function emitPromiseChainCallbackStatementLines(
     return []
   }
 
-  if (body.kind === 'statement-list') {
-    return deps.emitStatementList(body.statements, context)
+  if (promiseChainArrowBodyKind(body) === 'statement-list') {
+    return deps.emitStatementList(promiseChainArrowBodyStatements(body), context)
   }
 
-  const prefixLines = deps.emitStatementList(body.prefixStatements, context)
+  const prefixLines = deps.emitStatementList(promiseChainArrowBodyPrefixStatements(body), context)
   const lines: string[] = []
   appendLines(lines, prefixLines)
-  appendLines(lines, emitPromiseChainCallbackReturnLines(body.returnExpression, wrapper, context, deps))
+  appendLines(lines, emitPromiseChainCallbackReturnLines(promiseChainArrowBodyReturnExpression(body), wrapper, context, deps))
 
   return lines
 }
@@ -1672,7 +1876,7 @@ function emitPromiseChainCallbackStatementLines(
 function emitPromiseChainCallbackReturnLines(
   returnExpression: AnyNode | null,
   wrapper: CPromiseChainWrapper,
-  context: CFunctionContext,
+  context: PromiseFunctionContext,
   deps: PromiseChainLoweringDependencies
 ): string[] {
   if (returnExpression == null) {
@@ -1701,7 +1905,7 @@ function emitPromiseChainCallbackReturnLines(
   return []
 }
 
-export function resolvePromiseChainArrowBody(callback: AnyNode): PromiseChainArrowBody | null {
+export function resolvePromiseChainArrowBody(callback: AnyNode | null | undefined): PromiseChainArrowBody | null {
   if (callback == null || callback.type !== 'ArrowFunctionExpression') {
     return null
   }
@@ -1746,11 +1950,11 @@ export function resolvePromiseChainArrowBody(callback: AnyNode): PromiseChainArr
     kind: 'statement-list',
     prefixStatements: [],
     returnExpression: null,
-    statements
+    statements: promiseStatementsOrEmpty(statements)
   }
 }
 
-function isStraightLinePromiseCallbackStatement(statement: AnyNode): boolean {
+function isStraightLinePromiseCallbackStatement(statement: AnyNode | null | undefined): boolean {
   if (statement == null) {
     return false
   }
