@@ -29,6 +29,14 @@ export type CLoopFlowTarget = {
   throughFinally: boolean
 }
 
+export type CBooleanMap = Map<string, boolean>
+export type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
+export type CFunctionTypeMap = Map<string, CFunctionType>
+export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
+export type CStringMap = Map<string, string>
+export type CStringNullableMap = Map<string, string | null>
+export type CStringSet = Set<string>
+
 export type CEmitContext = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
@@ -39,42 +47,42 @@ export type CEmitContext = {
   classInfos: Map<string, CClassInfo>
   classLoweringDependencies: ClassLoweringDependencies
   collectionLoweringDependencies: CollectionLoweringDependencies
-  cryptoImportNames: Set<string>
+  cryptoImportNames: CStringSet
   diagnostics: Diagnostic[]
-  dgramCreateSocketNames: Set<string>
-  dgramImportNames: Set<string>
+  dgramCreateSocketNames: CStringSet
+  dgramImportNames: CStringSet
   dgramMessageHandlers: Map<AnyNode, CDgramMessageHandler>
-  externalEventLoopFunctions: Set<string>
-  functionAsyncFlags: Map<string, boolean>
-  functionNames: Map<string, string>
+  externalEventLoopFunctions: CStringSet
+  functionAsyncFlags: CBooleanMap
+  functionNames: CStringMap
   functionParams: Map<string, CFunctionParam[]>
-  functionReturnArrayElementDeclaredTypes: Map<string, string | null>
-  functionReturnArrayElementTypes: Map<string, string | null>
-  functionReturnMapTypes: Map<string, CFunctionReturnMapType>
-  functionReturnNullables: Map<string, boolean>
-  functionReturnPromiseValueTypes: Map<string, string | null>
-  functionReturnSetElementTypes: Map<string, string | null>
+  functionReturnArrayElementDeclaredTypes: CStringNullableMap
+  functionReturnArrayElementTypes: CStringNullableMap
+  functionReturnMapTypes: CFunctionReturnMapTypeMap
+  functionReturnNullables: CBooleanMap
+  functionReturnPromiseValueTypes: CStringNullableMap
+  functionReturnSetElementTypes: CStringNullableMap
   functionReturnShapes: Map<string, CObjectShape | null>
-  functionReturnTypes: Map<string, string>
+  functionReturnTypes: CStringMap
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
-  forceRuntimeStringDeclarations?: Set<string>
-  httpCreateServerNames: Set<string>
+  forceRuntimeStringDeclarations?: CStringSet
+  httpCreateServerNames: CStringSet
   httpHandlers: Map<AnyNode, CHttpHandler>
-  httpImportNames: Set<string>
-  jsGlobalRoots: Set<string>
-  netConnectNames: Set<string>
-  netCreateServerNames: Set<string>
+  httpImportNames: CStringSet
+  jsGlobalRoots: CStringSet
+  netConnectNames: CStringSet
+  netCreateServerNames: CStringSet
   netHandlers: Map<string, CNetHandler>
-  netImportNames: Set<string>
+  netImportNames: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
   promiseChainWrappers: Map<string, CPromiseChainWrapper>
   processRuntime: boolean
-  runtimeFunctionParams: Map<string, CFunctionType>
+  runtimeFunctionParams: CFunctionTypeMap
   statementLoweringDependencies: StatementLoweringDependencies
   stringLoweringDependencies: StringLoweringDependencies
-  throwingFunctions: Set<string>
+  throwingFunctions: CStringSet
   unhandledRejectionFlag: string | null
 }
 
@@ -104,27 +112,27 @@ export type COwnedValueContext = {
 
 export type COwnedPromiseContext = {
   ownedPromises: string[]
-  promiseRejectionValueTypes: Map<string, string>
-  promiseValueTypes: Map<string, string>
-  variables: Map<string, string>
+  promiseRejectionValueTypes: CStringMap
+  promiseValueTypes: CStringMap
+  variables: CStringMap
 }
 
 export type CFunctionContext = CEmitContext & {
   arrayShapes: Map<string, CArrayElementInfo[]>
   breakFlowUsed: boolean
   breakTargets: CLoopFlowTarget[]
-  boxedValueTypes: Map<string, string>
+  boxedValueTypes: CStringMap
   boxedValues: string[]
-  boxedVariables: Set<string>
-  classInstanceTypes: Map<string, string>
+  boxedVariables: CStringSet
+  classInstanceTypes: CStringMap
   cleanupEnabled: boolean
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
-  dgramBoundSockets: Set<string>
-  dgramMessageSockets: Set<string>
-  dgramReuseAddrSockets: Set<string>
+  dgramBoundSockets: CStringSet
+  dgramMessageSockets: CStringSet
+  dgramReuseAddrSockets: CStringSet
   errorChannelUsed: boolean
-  errorObjectNames: Set<string>
+  errorObjectNames: CStringSet
   errorTargets: string[]
   eventLoopUsed: boolean
   externalEventLoop: boolean
@@ -132,19 +140,19 @@ export type CFunctionContext = CEmitContext & {
   failureStatementUsed?: boolean
   functionErrorOut: string | null
   functionReturnOut: string | null
-  functionTypes: Map<string, CFunctionType>
-  mapTypes: Map<string, CFunctionReturnMapType>
-  narrowedNullableScalars: Set<string>
-  netReadingSockets: Set<string>
-  nullableVariables: Set<string>
+  functionTypes: CFunctionTypeMap
+  mapTypes: CFunctionReturnMapTypeMap
+  narrowedNullableScalars: CStringSet
+  netReadingSockets: CStringSet
+  nullableVariables: CStringSet
   ownedCryptoHashes: string[]
   ownedCryptoHmacs: string[]
   ownedPromises: string[]
   ownedValues: string[]
-  objectShapes: Map<string, CObjectShapeField[]>
+  objectShapes: CObjectShapeFieldMap
   promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
-  promiseRejectionValueTypes: Map<string, string>
-  promiseValueTypes: Map<string, string>
+  promiseRejectionValueTypes: CStringMap
+  promiseValueTypes: CStringMap
   returnNullable: boolean
   returnFlowUsed: boolean
   returnShape?: CObjectShape | null
@@ -154,40 +162,40 @@ export type CFunctionContext = CEmitContext & {
   runtimeCallbackReturnOut?: string
   runtimeCallbackReturnShape?: CObjectShape | null
   runtimeCallbackReturnType?: string
-  runtimeCallbacks: Set<string>
-  runtimeArrayElementTypes: Map<string, string>
-  runtimeStrings: Set<string>
-  setElementTypes: Map<string, string>
+  runtimeCallbacks: CStringSet
+  runtimeArrayElementTypes: CStringMap
+  runtimeStrings: CStringSet
+  setElementTypes: CStringMap
   statusReturn: boolean
   throwingFunction: boolean
   usedCleanupGoto: boolean
   usedRuntimeCallbackCleanupGoto?: boolean
-  variables: Map<string, string>
+  variables: CStringMap
 }
 
 export type CVariableScopeSnapshot = {
   arrayShapes: Map<string, CArrayElementInfo[]>
-  boxedVariables: Set<string>
-  classInstanceTypes: Map<string, string>
-  errorObjectNames: Set<string>
-  functionTypes: Map<string, CFunctionType>
-  mapTypes: Map<string, CFunctionReturnMapType>
-  narrowedNullableScalars: Set<string>
-  nullableVariables: Set<string>
-  objectShapes: Map<string, CObjectShapeField[]>
+  boxedVariables: CStringSet
+  classInstanceTypes: CStringMap
+  errorObjectNames: CStringSet
+  functionTypes: CFunctionTypeMap
+  mapTypes: CFunctionReturnMapTypeMap
+  narrowedNullableScalars: CStringSet
+  nullableVariables: CStringSet
+  objectShapes: CObjectShapeFieldMap
   promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
-  promiseRejectionValueTypes: Map<string, string>
-  promiseValueTypes: Map<string, string>
-  runtimeArrayElementTypes: Map<string, string>
-  runtimeCallbacks: Set<string>
-  runtimeStrings: Set<string>
-  setElementTypes: Map<string, string>
-  variables: Map<string, string>
+  promiseRejectionValueTypes: CStringMap
+  promiseValueTypes: CStringMap
+  runtimeArrayElementTypes: CStringMap
+  runtimeCallbacks: CStringSet
+  runtimeStrings: CStringSet
+  setElementTypes: CStringMap
+  variables: CStringMap
 }
 
 export type CNullableScalarNarrowingSnapshot = {
   active: boolean
-  narrowedNullableScalars: Set<string>
+  narrowedNullableScalars: CStringSet
 }
 
 export function createFunctionContext(
