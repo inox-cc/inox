@@ -1,62 +1,65 @@
-const builtinValueTypes = new Set([
-  'array',
-  'boolean',
-  'bytes',
-  'function',
-  'null',
-  'number',
-  'object',
-  'promise',
-  'string',
-  'void'
-])
-
 export type MapTypeNames = {
   key: string
   value: string
 }
 
 export function arrayElementTypeNameFromTypeName(name: string): string | null {
-  const match = /^array<(.+)>$/.exec(name)
-
-  return match?.[1] ?? null
+  return genericTypeInner(name, 'array')
 }
 
 export function nullableTypeNameFromTypeName(name: string): string | null {
-  const match = /^nullable<(.+)>$/.exec(name)
-
-  return match?.[1] ?? null
+  return genericTypeInner(name, 'nullable')
 }
 
 export function mapTypeNamesFromTypeName(name: string): MapTypeNames | null {
-  const match = /^map<(.+)>$/.exec(name)
+  const inner = genericTypeInner(name, 'map')
 
-  if (match == null) {
-    return null
+  if (inner != null) {
+    const args = splitGenericArgs(inner)
+
+    if (args.length !== 2) {
+      return null
+    }
+
+    return {
+      key: args[0],
+      value: args[1]
+    }
   }
 
-  const args = splitGenericArgs(match[1])
-
-  return args.length === 2
-    ? {
-        key: args[0],
-        value: args[1]
-      }
-    : null
+  return null
 }
 
 export function setElementTypeNameFromTypeName(name: string): string | null {
-  const match = /^set<(.+)>$/.exec(name)
-  const args = match == null ? [] : splitGenericArgs(match[1])
+  const inner = genericTypeInner(name, 'set')
 
-  return args.length === 1 ? args[0] : null
+  if (inner != null) {
+    const args = splitGenericArgs(inner)
+
+    if (args.length === 1) {
+      return args[0]
+    }
+
+    return null
+  }
+
+  return null
 }
 
 export function promiseValueTypeNameFromTypeName(name: string): string | null {
-  const match = /^promise<(.+)>$/.exec(name)
-  const args = match == null ? [] : splitGenericArgs(match[1])
+  const inner = genericTypeInner(name, 'promise')
 
-  return args.length === 1 ? args[0] : null
+  if (inner != null) {
+    const args = splitGenericArgs(inner)
+
+    if (args.length === 1) {
+      return args[0]
+    }
+
+    return null
+  }
+
+  return null
 }
 
 export function splitGenericArgs(value: string): string[] {
@@ -68,32 +71,110 @@ export function splitUnionArgs(value: string): string[] {
 }
 
 export function isBuiltinValueType(name: string): boolean {
-  return builtinValueTypes.has(name)
+  if (name === 'array') {
+    return true
+  }
+
+  if (name === 'boolean') {
+    return true
+  }
+
+  if (name === 'bytes') {
+    return true
+  }
+
+  if (name === 'function') {
+    return true
+  }
+
+  if (name === 'null') {
+    return true
+  }
+
+  if (name === 'number') {
+    return true
+  }
+
+  if (name === 'object') {
+    return true
+  }
+
+  if (name === 'promise') {
+    return true
+  }
+
+  if (name === 'string') {
+    return true
+  }
+
+  if (name === 'void') {
+    return true
+  }
+
+  return false
 }
 
 export function isBytesTypeName(name: string): boolean {
   return name === 'Buffer' || name === 'Uint8Array'
 }
 
-function splitDelimitedTypeArgs(value: string, delimiter: ',' | '|'): string[] {
+function genericTypeInner(name: string, wrapper: string): string | null {
+  const prefix = `${wrapper}<`
+
+  if (!name.startsWith(prefix)) {
+    return null
+  }
+
+  if (!name.endsWith('>')) {
+    return null
+  }
+
+  const inner = name.slice(prefix.length, name.length - 1)
+
+  if (inner.length === 0) {
+    return null
+  }
+
+  return inner
+}
+
+function splitDelimitedTypeArgs(value: string, delimiter: string): string[] {
   const args: string[] = []
   let depth = 0
   let start = 0
 
-  for (let index = 0; index < value.length; index += 1) {
+  let index = 0
+
+  while (index < value.length) {
     const char = value[index]
 
     if (char === '<') {
-      depth += 1
+      depth = depth + 1
     } else if (char === '>') {
-      depth -= 1
+      depth = depth - 1
     } else if (char === delimiter && depth === 0) {
       args.push(value.slice(start, index))
       start = index + 1
     }
+
+    index = index + 1
   }
 
   args.push(value.slice(start))
 
-  return args.map((arg) => arg.trim()).filter(Boolean)
+  return trimNonEmptyStrings(args)
+}
+
+function trimNonEmptyStrings(values: string[]): string[] {
+  const result: string[] = []
+
+  for (const value of values) {
+    const trimmed = value.trim()
+
+    if (trimmed.length > 0) {
+      result.push(trimmed)
+    }
+  }
+
+  return result
 }

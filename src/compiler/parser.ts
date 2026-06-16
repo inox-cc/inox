@@ -87,19 +87,19 @@ function stringArrayIncludes(values: string[], value: string): boolean {
 }
 
 function typeAnnotationOptionsOrEmpty(options: TypeAnnotationOptions | null): TypeAnnotationOptions {
-  if (options == null) {
-    return {}
+  if (options != null) {
+    return options
   }
 
-  return options
+  return {}
 }
 
 function stringArrayOrEmpty(values: string[] | null): string[] {
-  if (values == null) {
-    return []
+  if (values != null) {
+    return values
   }
 
-  return values
+  return []
 }
 
 class Parser {

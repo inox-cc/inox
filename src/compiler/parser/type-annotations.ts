@@ -76,11 +76,11 @@ export function readTypeAnnotation(
 }
 
 function typeAnnotationReadOptionsOrEmpty(options: TypeAnnotationReadOptions | null): TypeAnnotationReadOptions {
-  if (options == null) {
-    return {}
+  if (options != null) {
+    return options
   }
 
-  return options
+  return {}
 }
 
 function tokenAt(tokens: Token[], position: number): Token | null {
