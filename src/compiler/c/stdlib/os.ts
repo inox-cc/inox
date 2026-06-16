@@ -4,29 +4,34 @@ import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
   nextCName,
-  registerOwnedValue,
-  type CFunctionContext
+  registerOwnedValue
 } from '../context.ts'
+import type { CFunctionContext } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
-import type {
-  CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression
-} from '../types.ts'
+import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
 export function cOsRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression?.type !== 'CallExpression' || typeof expression.osRuntimeMethod !== 'string') {
+  if (expression.type !== 'CallExpression') {
     return null
   }
 
-  return expression.osRuntimeMethod
+  const method = expression.osRuntimeMethod
+
+  if (method != null) {
+    return method
+  }
+
+  return null
 }
 
 export function cOsRuntimeConstantName(expression: AnyNode): string | null {
-  if (typeof expression?.osRuntimeConstant !== 'string') {
-    return null
+  const constant = expression.osRuntimeConstant
+
+  if (constant != null) {
+    return constant
   }
 
-  return expression.osRuntimeConstant
+  return null
 }
 
 export function cOsRuntimeConstantValue(name: string): string | null {
@@ -42,7 +47,11 @@ export function emitPreparedOsConstantExpression(
   context: CFunctionContext
 ): PreparedExpression | null {
   const constant = cOsRuntimeConstantName(expression)
-  const value = constant == null ? null : cOsRuntimeConstantValue(constant)
+  let value: string | null = null
+
+  if (constant != null) {
+    value = cOsRuntimeConstantValue(constant)
+  }
 
   if (value == null) {
     return null
@@ -51,22 +60,23 @@ export function emitPreparedOsConstantExpression(
   const out = nextCName(context, 'ccjs_os_constant')
   registerOwnedValue(context, out)
 
+  const lines = emitPrepareOwnedValueWrite(out)
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
+      context
+    )
+  )
+
   return {
-    lines: [
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(
-        `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
-        context
-      )
-    ],
+    lines,
     expression: out
   }
 }
 
 export function emitPreparedOsStringCallExpression(
   expression: AnyNode,
-  context: CFunctionContext,
-  options: PreparedCallOptions = {}
+  context: CFunctionContext
 ): PreparedExpression | null {
   const method = cOsRuntimeMethodName(expression)
 
@@ -74,12 +84,9 @@ export function emitPreparedOsStringCallExpression(
     return null
   }
 
-  const out = options.out ?? nextCName(context, 'ccjs_os_value')
+  const out = nextCName(context, 'ccjs_os_value')
   const lines = emitPrepareOwnedValueWrite(out)
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
+  registerOwnedValue(context, out)
 
   lines.push(emitStatusCheck(`ccjs_os_${method}(&ccjs_default_allocator, &${out})`, context))
 
