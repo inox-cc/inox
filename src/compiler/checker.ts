@@ -169,6 +169,18 @@ type CheckProgramResult = {
   ast: ProgramNode
 }
 
+type UnsupportedEventStreamRuntimeExport = {
+  source: string
+  name: string
+  reason: string
+}
+
+type RuntimeCallInfo = {
+  method: string
+  label: string
+  unsupported: boolean
+}
+
 export function checkProgram(program: ProgramNode, options: CompileOptions = {}): CheckProgramResult {
   const checker = new Checker(program, options)
   checker.check()
@@ -2026,26 +2038,79 @@ class Checker {
       return mathType
     }
 
-    const calleeType = this.checkExpression(expression.callee)
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    this.checkExpression(expression.callee)
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
+
     const symbol = this.getCallableSymbol(expression.callee)
 
     if (symbol == null) {
-      return calleeType === 'function' ? 'unknown' : 'unknown'
+      return 'unknown'
     }
 
-    expression.valueType = symbol.returnType ?? 'unknown'
+    let returnType: ValueType = 'unknown'
+
+    if (symbol.returnType != null) {
+      returnType = symbol.returnType
+    }
+
+    let returnArrayElementType: ValueType | null = null
+
+    if (symbol.returnArrayElementType != null) {
+      returnArrayElementType = symbol.returnArrayElementType
+    }
+
+    let returnArrayElementDeclaredType: string | null = null
+
+    if (symbol.returnArrayElementDeclaredType != null) {
+      returnArrayElementDeclaredType = symbol.returnArrayElementDeclaredType
+    }
+
+    let returnMapKeyType: ValueType | null = null
+
+    if (symbol.returnMapKeyType != null) {
+      returnMapKeyType = symbol.returnMapKeyType
+    }
+
+    let returnMapValueType: ValueType | null = null
+
+    if (symbol.returnMapValueType != null) {
+      returnMapValueType = symbol.returnMapValueType
+    }
+
+    let returnPromiseValueType: ValueType | null = null
+
+    if (symbol.returnPromiseValueType != null) {
+      returnPromiseValueType = symbol.returnPromiseValueType
+    }
+
+    let returnSetElementType: ValueType | null = null
+
+    if (symbol.returnSetElementType != null) {
+      returnSetElementType = symbol.returnSetElementType
+    }
+
+    let returnShape: ObjectShapeInfo | null = null
+
+    if (symbol.returnShape != null) {
+      returnShape = symbol.returnShape
+    }
+
+    expression.valueType = returnType
     expression.nullable = symbol.returnNullable === true
-    expression.arrayElementType = symbol.returnArrayElementType ?? null
-    expression.arrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
-    expression.mapKeyType = symbol.returnMapKeyType ?? null
-    expression.mapValueType = symbol.returnMapValueType ?? null
-    expression.promiseValueType = symbol.returnPromiseValueType ?? null
-    expression.setElementType = symbol.returnSetElementType ?? null
-    expression.shape = symbol.returnShape ?? null
+    expression.arrayElementType = returnArrayElementType
+    expression.arrayElementDeclaredType = returnArrayElementDeclaredType
+    expression.mapKeyType = returnMapKeyType
+    expression.mapValueType = returnMapValueType
+    expression.promiseValueType = returnPromiseValueType
+    expression.setElementType = returnSetElementType
+    expression.shape = returnShape
 
     if (symbol.params == null) {
-      return symbol.returnType ?? 'unknown'
+      return returnType
     }
 
     if (!this.acceptsArgumentCount(symbol.params, expression.args.length)) {
@@ -2056,7 +2121,9 @@ class Checker {
       )
     }
 
-    for (const [index, param] of symbol.params.entries()) {
+    for (let index = 0; index < symbol.params.length; index++) {
+      const param = symbol.params[index]
+
       if (index < argTypes.length) {
         this.checkAssignableType(
           argTypes[index],
@@ -2068,7 +2135,7 @@ class Checker {
       }
     }
 
-    return symbol.returnType ?? 'unknown'
+    return returnType
   }
 
   checkBinaryCall(expression: AnyNode): ValueType | null {
@@ -2209,7 +2276,11 @@ class Checker {
         isNodeBufferImportSource(symbol.importSource) &&
         symbol.importedName === 'Buffer'
       ) {
-        return isBinaryStaticMethod(path[1]) ? path[1] : null
+        if (isBinaryStaticMethod(path[1])) {
+          return path[1]
+        }
+
+        return null
       }
 
       return null
@@ -2219,11 +2290,16 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeBufferImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'buffer')
       ) {
-        return isBinaryStaticMethod(path[2]) ? path[2] : null
+        if (isBinaryStaticMethod(path[2])) {
+          return path[2]
+        }
+
+        return null
       }
     }
 
@@ -2259,10 +2335,15 @@ class Checker {
 
     if (path.length === 1) {
       const symbol = this.scope.resolve(path[0])
-      const importedName = symbol?.importedName
+      let importedName: string | null = null
+
+      if (symbol != null && symbol.importedName != null) {
+        importedName = symbol.importedName
+      }
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeBufferImportSource(symbol.importSource) &&
         importedName != null &&
         isUnsupportedBufferRuntimeExport(importedName)
@@ -2275,7 +2356,8 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeBufferImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'buffer') &&
         isUnsupportedBufferRuntimeExport(path[1])
@@ -2331,16 +2413,20 @@ class Checker {
 
   resolveUnsupportedEventStreamRuntimeExport(
     path: readonly string[] | null | undefined
-  ): { source: 'node:events' | 'node:stream'; name: string; reason: string } | null {
+  ): UnsupportedEventStreamRuntimeExport | null {
     if (path == null) {
       return null
     }
 
     if (path.length === 1) {
       const symbol = this.scope.resolve(path[0])
-      const importedName = symbol?.importedName
+      let importedName: string | null = null
 
-      if (symbol?.kind === 'import' && importedName != null) {
+      if (symbol != null && symbol.importedName != null) {
+        importedName = symbol.importedName
+      }
+
+      if (symbol != null && symbol.kind === 'import' && importedName != null) {
         if (isNodeEventsImportSource(symbol.importSource) && isUnsupportedEventsRuntimeExport(importedName)) {
           return {
             source: 'node:events',
@@ -2363,7 +2449,8 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeEventsImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'events') &&
         isUnsupportedEventsRuntimeExport(path[1])
@@ -2376,7 +2463,8 @@ class Checker {
       }
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeStreamImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'stream') &&
         isUnsupportedStreamRuntimeExport(path[1])
@@ -2394,7 +2482,8 @@ class Checker {
       const exportName = `promises.${path[2]}`
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeStreamImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'stream') &&
         isUnsupportedStreamRuntimeExport(exportName)
@@ -2417,9 +2506,9 @@ class Checker {
       return
     }
 
-    const type = this.checkExpression(arg)
+    const argType = this.checkExpression(arg)
 
-    this.checkAssignableType(type, 'string', arg.loc, false, this.expressionCanBeNull(arg))
+    this.checkAssignableType(argType, 'string', arg.loc, false, this.expressionCanBeNull(arg))
 
     if (arg.type !== 'StringLiteral' || arg.value !== 'utf8') {
       this.report('CCJS_TYPE_MISMATCH', `${label} encoding must be 'utf8' in the MVP`, arg.loc)
@@ -2448,7 +2537,11 @@ class Checker {
     }
 
     const method = call.method
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
 
     if (method === 'getHashes') {
       expression.valueType = 'array'
@@ -2674,7 +2767,13 @@ class Checker {
       return 'boolean'
     }
 
-    expression.valueType = method === 'randomInt' ? 'number' : method === 'randomUUID' ? 'string' : 'bytes'
+    expression.valueType = 'bytes'
+
+    if (method === 'randomInt') {
+      expression.valueType = 'number'
+    } else if (method === 'randomUUID') {
+      expression.valueType = 'string'
+    }
     expression.cryptoRuntimeMethod = method
 
     if (method === 'getRandomValues') {
@@ -2730,7 +2829,9 @@ class Checker {
         this.expressionCanBeNull(expression.args[0])
       )
 
-      for (const [index, argType] of argTypes.entries()) {
+      for (let index = 0; index < argTypes.length; index++) {
+        const argType = argTypes[index]
+
         if (index > 0) {
           this.checkAssignableType(argType, 'number', expression.args[index].loc)
         }
@@ -2749,7 +2850,9 @@ class Checker {
         return 'number'
       }
 
-      for (const [index, argType] of argTypes.entries()) {
+      for (let index = 0; index < argTypes.length; index++) {
+        const argType = argTypes[index]
+
         this.checkAssignableType(argType, 'number', expression.args[index].loc)
       }
 
@@ -2784,7 +2887,11 @@ class Checker {
       return null
     }
 
-    const label = objectType === 'crypto-hmac' ? 'Hmac' : 'Hash'
+    let label = 'Hash'
+
+    if (objectType === 'crypto-hmac') {
+      label = 'Hmac'
+    }
 
     expression.cryptoRuntimeMethod = `${label}.${method}`
 
@@ -2924,16 +3031,28 @@ class Checker {
       }
 
       const second = expression.args[1]
-      const args = second?.type === 'ObjectLiteral' ? null : second
-      const options = second?.type === 'ObjectLiteral' ? second : expression.args[2]
+      let args: AnyNode | null = null
+      let options: AnyNode | null = null
+
+      if (second != null && second.type === 'ObjectLiteral') {
+        options = second
+      } else {
+        if (second != null) {
+          args = second
+        }
+
+        if (expression.args[2] != null) {
+          options = expression.args[2]
+        }
+      }
 
       if (args != null && args.type !== 'ArrayLiteral') {
         this.report(
           'CCJS_NOT_IMPLEMENTED',
           'node:child_process execFileSync currently expects a string[] literal args argument',
-          args?.loc ?? expression.loc
+          args.loc
         )
-      } else {
+      } else if (args != null) {
         for (const element of args.elements) {
           this.checkAssignableType(this.checkExpression(element), 'string', element.loc)
         }
@@ -2959,8 +3078,20 @@ class Checker {
     }
 
     const second = expression.args[1]
-    const args = second?.type === 'ObjectLiteral' ? null : second
-    const options = second?.type === 'ObjectLiteral' ? second : expression.args[2]
+    let args: AnyNode | null = null
+    let options: AnyNode | null = null
+
+    if (second != null && second.type === 'ObjectLiteral') {
+      options = second
+    } else {
+      if (second != null) {
+        args = second
+      }
+
+      if (expression.args[2] != null) {
+        options = expression.args[2]
+      }
+    }
 
     if (args != null && args.type !== 'ArrayLiteral') {
       this.report(
@@ -2968,7 +3099,7 @@ class Checker {
         'node:child_process spawnSync currently expects a string[] literal args argument',
         args.loc
       )
-    } else if (args?.type === 'ArrayLiteral') {
+    } else if (args != null && args.type === 'ArrayLiteral') {
       for (const element of args.elements) {
         this.checkAssignableType(this.checkExpression(element), 'string', element.loc)
       }
@@ -2982,7 +3113,7 @@ class Checker {
     return 'object'
   }
 
-  resolveChildProcessRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+  resolveChildProcessRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveChildProcessRuntimeMethod(path)
 
@@ -2990,9 +3121,15 @@ class Checker {
       return null
     }
 
+    let label = method
+
+    if (path != null) {
+      label = path.join('.')
+    }
+
     return {
       method,
-      label: path == null ? method : path.join('.'),
+      label,
       unsupported: !isChildProcessRuntimeMethod(method)
     }
   }
@@ -3004,12 +3141,18 @@ class Checker {
 
     if (path.length === 1) {
       const symbol = this.scope.resolve(path[0])
-      const importedName = symbol?.importedName
+      let importedName: string | null = null
 
-      if (symbol?.kind === 'import' && isNodeChildProcessImportSource(symbol.importSource) && importedName != null) {
-        return isChildProcessRuntimeMethod(importedName) || isUnsupportedChildProcessRuntimeMethod(importedName)
-          ? importedName
-          : null
+      if (symbol != null && symbol.importedName != null) {
+        importedName = symbol.importedName
+      }
+
+      if (symbol != null && symbol.kind === 'import' && isNodeChildProcessImportSource(symbol.importSource) && importedName != null) {
+        if (isChildProcessRuntimeMethod(importedName) || isUnsupportedChildProcessRuntimeMethod(importedName)) {
+          return importedName
+        }
+
+        return null
       }
     }
 
@@ -3017,11 +3160,16 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeChildProcessImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'childProcess')
       ) {
-        return isChildProcessRuntimeMethod(path[1]) || isUnsupportedChildProcessRuntimeMethod(path[1]) ? path[1] : null
+        if (isChildProcessRuntimeMethod(path[1]) || isUnsupportedChildProcessRuntimeMethod(path[1])) {
+          return path[1]
+        }
+
+        return null
       }
     }
 
@@ -3030,25 +3178,44 @@ class Checker {
 
   checkChildProcessSyncOptions(
     options: AnyNode | null | undefined,
-    loc: SourceLocation | undefined,
+    loc: SourceLocation,
     requireEncoding: boolean
   ): void {
-    if (options?.type !== 'ObjectLiteral') {
+    if (options == null || options.type !== 'ObjectLiteral') {
+      let reportLoc = loc
+
+      if (options != null) {
+        reportLoc = options.loc
+      }
+
       this.report(
         'CCJS_NOT_IMPLEMENTED',
         'node:child_process sync helpers currently require { encoding: "utf8" }',
-        options?.loc ?? loc
+        reportLoc
       )
       return
     }
 
-    const encoding = options.properties.find((property) => property.key === 'encoding')?.value
+    let encoding: AnyNode | null = null
 
-    if (requireEncoding && (encoding?.type !== 'StringLiteral' || encoding.value !== 'utf8')) {
+    for (const property of options.properties) {
+      if (property.key === 'encoding') {
+        encoding = property.value
+        break
+      }
+    }
+
+    if (requireEncoding && (encoding == null || encoding.type !== 'StringLiteral' || encoding.value !== 'utf8')) {
+      let reportLoc = options.loc
+
+      if (encoding != null) {
+        reportLoc = encoding.loc
+      }
+
       this.report(
         'CCJS_NOT_IMPLEMENTED',
         'node:child_process sync helpers currently support only { encoding: "utf8" }',
-        encoding?.loc ?? options.loc
+        reportLoc
       )
     }
 
@@ -3114,7 +3281,11 @@ class Checker {
       return null
     }
 
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
 
     if (call.unsupported) {
       this.report(
@@ -3140,7 +3311,7 @@ class Checker {
     return 'string'
   }
 
-  resolveOsRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+  resolveOsRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveOsRuntimeMethod(path)
 
@@ -3148,9 +3319,15 @@ class Checker {
       return null
     }
 
+    let label = method
+
+    if (path != null) {
+      label = path.join('.')
+    }
+
     return {
       method,
-      label: path == null ? method : path.join('.'),
+      label,
       unsupported: !isOsRuntimeMethod(method)
     }
   }
@@ -3162,10 +3339,18 @@ class Checker {
 
     if (path.length === 1) {
       const symbol = this.scope.resolve(path[0])
-      const importedName = symbol?.importedName
+      let importedName: string | null = null
 
-      if (symbol?.kind === 'import' && isNodeOsImportSource(symbol.importSource) && importedName != null) {
-        return isOsRuntimeMethod(importedName) || isUnsupportedOsRuntimeMethod(importedName) ? importedName : null
+      if (symbol != null && symbol.importedName != null) {
+        importedName = symbol.importedName
+      }
+
+      if (symbol != null && symbol.kind === 'import' && isNodeOsImportSource(symbol.importSource) && importedName != null) {
+        if (isOsRuntimeMethod(importedName) || isUnsupportedOsRuntimeMethod(importedName)) {
+          return importedName
+        }
+
+        return null
       }
     }
 
@@ -3173,11 +3358,16 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeOsImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'os')
       ) {
-        return isOsRuntimeMethod(path[1]) || isUnsupportedOsRuntimeMethod(path[1]) ? path[1] : null
+        if (isOsRuntimeMethod(path[1]) || isUnsupportedOsRuntimeMethod(path[1])) {
+          return path[1]
+        }
+
+        return null
       }
     }
 
@@ -3204,10 +3394,15 @@ class Checker {
 
     if (path.length === 1) {
       const symbol = this.scope.resolve(path[0])
-      const importedName = symbol?.importedName
+      let importedName: string | null = null
+
+      if (symbol != null && symbol.importedName != null) {
+        importedName = symbol.importedName
+      }
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeOsImportSource(symbol.importSource) &&
         importedName != null &&
         isOsRuntimeConstant(importedName)
@@ -3220,7 +3415,8 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeOsImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'os') &&
         isOsRuntimeConstant(path[1])
@@ -3239,7 +3435,11 @@ class Checker {
       return null
     }
 
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
 
     if (call.unsupported) {
       this.report(
@@ -3282,7 +3482,7 @@ class Checker {
     return 'void'
   }
 
-  resolveProcessRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+  resolveProcessRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveProcessRuntimeMethod(path)
 
@@ -3290,9 +3490,15 @@ class Checker {
       return null
     }
 
+    let label = method
+
+    if (path != null) {
+      label = path.join('.')
+    }
+
     return {
       method,
-      label: path == null ? method : path.join('.'),
+      label,
       unsupported: !isProcessRuntimeMethod(method)
     }
   }
@@ -3304,12 +3510,18 @@ class Checker {
 
     if (path.length === 1) {
       const symbol = this.scope.resolve(path[0])
-      const importedName = symbol?.importedName
+      let importedName: string | null = null
 
-      if (symbol?.kind === 'import' && isNodeProcessImportSource(symbol.importSource) && importedName != null) {
-        return isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)
-          ? importedName
-          : null
+      if (symbol != null && symbol.importedName != null) {
+        importedName = symbol.importedName
+      }
+
+      if (symbol != null && symbol.kind === 'import' && isNodeProcessImportSource(symbol.importSource) && importedName != null) {
+        if (isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)) {
+          return importedName
+        }
+
+        return null
       }
     }
 
@@ -3317,11 +3529,16 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeProcessImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'process')
       ) {
-        return isProcessRuntimeMethod(path[1]) || isUnsupportedProcessRuntimeMethod(path[1]) ? path[1] : null
+        if (isProcessRuntimeMethod(path[1]) || isUnsupportedProcessRuntimeMethod(path[1])) {
+          return path[1]
+        }
+
+        return null
       }
     }
 
@@ -3337,7 +3554,7 @@ class Checker {
 
     const root = this.scope.resolve(path[0])
 
-    if (root?.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
+    if (root == null || root.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
       return null
     }
 
@@ -3354,7 +3571,14 @@ class Checker {
 
       if (path.length === 2 && isProcessRuntimeProperty(path[1])) {
         expression.processRuntimeProperty = path[1]
-        expression.valueType = processRuntimePropertyValueType(path[1]) ?? 'unknown'
+        let valueType: ValueType = 'unknown'
+        const propertyValueType = processRuntimePropertyValueType(path[1])
+
+        if (propertyValueType != null) {
+          valueType = propertyValueType
+        }
+
+        expression.valueType = valueType
         return expression.valueType
       }
 
@@ -3369,7 +3593,14 @@ class Checker {
 
         if (isProcessRuntimeProperty(property)) {
           expression.processRuntimeProperty = property
-          expression.valueType = processRuntimePropertyValueType(property) ?? 'unknown'
+          let valueType: ValueType = 'unknown'
+          const propertyValueType = processRuntimePropertyValueType(property)
+
+          if (propertyValueType != null) {
+            valueType = propertyValueType
+          }
+
+          expression.valueType = valueType
           return expression.valueType
         }
       }
@@ -3388,7 +3619,14 @@ class Checker {
 
       if (isProcessRuntimeProperty(property)) {
         expression.processRuntimeProperty = property
-        expression.valueType = processRuntimePropertyValueType(property) ?? 'unknown'
+        let valueType: ValueType = 'unknown'
+        const propertyValueType = processRuntimePropertyValueType(property)
+
+        if (propertyValueType != null) {
+          valueType = propertyValueType
+        }
+
+        expression.valueType = valueType
         return expression.valueType
       }
     }
@@ -3406,7 +3644,8 @@ class Checker {
     const root = this.scope.resolve(path[0])
 
     if (
-      root?.kind !== 'import' ||
+      root == null ||
+      root.kind !== 'import' ||
       !isNodeProcessImportSource(root.importSource) ||
       (root.importedName !== 'default' && root.importedName !== 'process')
     ) {
@@ -3430,7 +3669,7 @@ class Checker {
 
     const root = this.scope.resolve(path[0])
 
-    if (root?.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
+    if (root == null || root.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
       return null
     }
 
@@ -3480,11 +3719,21 @@ class Checker {
     }
 
     if (expression.args[0] != null) {
-      if (call.method === 'fileURLToPath') {
-        const argType = argTypes[0] ?? 'unknown'
-        const shape = this.resolveExpressionShape(expression.args[0])
+      let argType: ValueType = 'unknown'
 
-        if (argType !== 'string' && !(argType === 'object' && shape?.builtin === 'url.URL')) {
+      if (argTypes[0] != null) {
+        argType = argTypes[0]
+      }
+
+      if (call.method === 'fileURLToPath') {
+        const shape = this.resolveExpressionShape(expression.args[0])
+        let isUrlObject = false
+
+        if (shape != null && shape.builtin === 'url.URL') {
+          isUrlObject = true
+        }
+
+        if (argType !== 'string' && !(argType === 'object' && isUrlObject)) {
           this.report(
             'CCJS_TYPE_MISMATCH',
             `function ${call.label} expects string or URL, got ${argType}`,
@@ -3493,7 +3742,7 @@ class Checker {
         }
       } else {
         this.checkAssignableType(
-          argTypes[0] ?? 'unknown',
+          argType,
           'string',
           expression.args[0].loc,
           false,
@@ -3522,12 +3771,18 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape?.builtin !== 'url.URLSearchParams') {
+    if (objectType !== 'object' || shape == null || shape.builtin !== 'url.URLSearchParams') {
       return null
     }
 
     const method = expression.callee.property
-    const expectedArgs = method === 'set' || method === 'append' ? 2 : method === 'toString' ? 0 : 1
+    let expectedArgs = 1
+
+    if (method === 'set' || method === 'append') {
+      expectedArgs = 2
+    } else if (method === 'toString') {
+      expectedArgs = 0
+    }
 
     if (expression.args.length !== expectedArgs) {
       this.report(
@@ -3559,7 +3814,7 @@ class Checker {
     return 'string'
   }
 
-  resolveUrlRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+  resolveUrlRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveUrlRuntimeMethod(path)
 
@@ -3567,9 +3822,15 @@ class Checker {
       return null
     }
 
+    let label = method
+
+    if (path != null) {
+      label = path.join('.')
+    }
+
     return {
       method,
-      label: path == null ? method : path.join('.'),
+      label,
       unsupported: !isUrlRuntimeMethod(method)
     }
   }
@@ -3581,10 +3842,18 @@ class Checker {
 
     if (path.length === 1) {
       const symbol = this.scope.resolve(path[0])
-      const importedName = symbol?.importedName
+      let importedName: string | null = null
 
-      if (symbol?.kind === 'import' && isNodeUrlImportSource(symbol.importSource) && importedName != null) {
-        return isUrlRuntimeMethod(importedName) || isUnsupportedUrlRuntimeMethod(importedName) ? importedName : null
+      if (symbol != null && symbol.importedName != null) {
+        importedName = symbol.importedName
+      }
+
+      if (symbol != null && symbol.kind === 'import' && isNodeUrlImportSource(symbol.importSource) && importedName != null) {
+        if (isUrlRuntimeMethod(importedName) || isUnsupportedUrlRuntimeMethod(importedName)) {
+          return importedName
+        }
+
+        return null
       }
     }
 
@@ -3592,18 +3861,23 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeUrlImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'url')
       ) {
-        return isUrlRuntimeMethod(path[1]) || isUnsupportedUrlRuntimeMethod(path[1]) ? path[1] : null
+        if (isUrlRuntimeMethod(path[1]) || isUnsupportedUrlRuntimeMethod(path[1])) {
+          return path[1]
+        }
+
+        return null
       }
     }
 
     return null
   }
 
-  resolveCryptoRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+  resolveCryptoRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveCryptoRuntimeMethod(path)
 
@@ -3611,9 +3885,15 @@ class Checker {
       return null
     }
 
+    let label = method
+
+    if (path != null) {
+      label = path.join('.')
+    }
+
     return {
       method,
-      label: path == null ? method : path.join('.'),
+      label,
       unsupported: !isCryptoRuntimeMethod(method)
     }
   }
@@ -3633,20 +3913,33 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodeCryptoImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'crypto')
       ) {
-        return isCryptoRuntimeMethod(path[1]) || isUnsupportedNodeCryptoMethod(path[1]) ? path[1] : null
+        if (isCryptoRuntimeMethod(path[1]) || isUnsupportedNodeCryptoMethod(path[1])) {
+          return path[1]
+        }
+
+        return null
       }
     }
 
     if (path.length === 1) {
       const symbol = this.scope.resolve(path[0])
-      const importedName = symbol?.importedName
+      let importedName: string | null = null
 
-      if (symbol?.kind === 'import' && isNodeCryptoImportSource(symbol.importSource) && importedName != null) {
-        return isCryptoRuntimeMethod(importedName) || isUnsupportedNodeCryptoMethod(importedName) ? importedName : null
+      if (symbol != null && symbol.importedName != null) {
+        importedName = symbol.importedName
+      }
+
+      if (symbol != null && symbol.kind === 'import' && isNodeCryptoImportSource(symbol.importSource) && importedName != null) {
+        if (isCryptoRuntimeMethod(importedName) || isUnsupportedNodeCryptoMethod(importedName)) {
+          return importedName
+        }
+
+        return null
       }
     }
 
@@ -3675,8 +3968,19 @@ class Checker {
     }
 
     const method = call.method
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
-    const returnType = method === 'isAbsolute' ? 'boolean' : method === 'parse' ? 'object' : 'string'
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
+
+    let returnType: ValueType = 'string'
+
+    if (method === 'isAbsolute') {
+      returnType = 'boolean'
+    } else if (method === 'parse') {
+      returnType = 'object'
+    }
 
     expression.valueType = returnType
     expression.pathRuntimeMethod = method
@@ -3727,7 +4031,9 @@ class Checker {
     }
 
     if (method === 'join' || method === 'resolve') {
-      for (const [index, argType] of argTypes.entries()) {
+      for (let index = 0; index < argTypes.length; index++) {
+        const argType = argTypes[index]
+
         this.checkAssignableType(
           argType,
           'string',
@@ -3749,7 +4055,9 @@ class Checker {
         )
       }
 
-      for (const [index, argType] of argTypes.entries()) {
+      for (let index = 0; index < argTypes.length; index++) {
+        const argType = argTypes[index]
+
         this.checkAssignableType(
           argType,
           'string',
@@ -3762,7 +4070,11 @@ class Checker {
       return 'string'
     }
 
-    const expectedArgs = method === 'relative' ? 2 : 1
+    let expectedArgs = 1
+
+    if (method === 'relative') {
+      expectedArgs = 2
+    }
 
     if (expression.args.length !== expectedArgs) {
       this.report(
@@ -3772,7 +4084,9 @@ class Checker {
       )
     }
 
-    for (const [index, argType] of argTypes.entries()) {
+    for (let index = 0; index < argTypes.length; index++) {
+      const argType = argTypes[index]
+
       this.checkAssignableType(
         argType,
         'string',
@@ -3785,7 +4099,7 @@ class Checker {
     return returnType
   }
 
-  resolvePathRuntimeCall(expression: AnyNode): { method: string; label: string; unsupported: boolean } | null {
+  resolvePathRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolvePathRuntimeMethod(path)
 
@@ -3793,9 +4107,15 @@ class Checker {
       return null
     }
 
+    let label = method
+
+    if (path != null) {
+      label = path.join('.')
+    }
+
     return {
       method,
-      label: path == null ? method : path.join('.'),
+      label,
       unsupported: !isPathRuntimeMethod(method)
     }
   }
@@ -3807,10 +4127,18 @@ class Checker {
 
     if (path.length === 1) {
       const symbol = this.scope.resolve(path[0])
-      const importedName = symbol?.importedName
+      let importedName: string | null = null
 
-      if (symbol?.kind === 'import' && isNodePathImportSource(symbol.importSource) && importedName != null) {
-        return isPathRuntimeMethod(importedName) || isUnsupportedPathRuntimeMethod(importedName) ? importedName : null
+      if (symbol != null && symbol.importedName != null) {
+        importedName = symbol.importedName
+      }
+
+      if (symbol != null && symbol.kind === 'import' && isNodePathImportSource(symbol.importSource) && importedName != null) {
+        if (isPathRuntimeMethod(importedName) || isUnsupportedPathRuntimeMethod(importedName)) {
+          return importedName
+        }
+
+        return null
       }
     }
 
@@ -3818,11 +4146,16 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'path' || symbol.importedName === 'posix')
       ) {
-        return isPathRuntimeMethod(path[1]) || isUnsupportedPathRuntimeMethod(path[1]) ? path[1] : null
+        if (isPathRuntimeMethod(path[1]) || isUnsupportedPathRuntimeMethod(path[1])) {
+          return path[1]
+        }
+
+        return null
       }
     }
 
@@ -3830,11 +4163,16 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'path')
       ) {
-        return isPathRuntimeMethod(path[2]) || isUnsupportedPathRuntimeMethod(path[2]) ? path[2] : null
+        if (isPathRuntimeMethod(path[2]) || isUnsupportedPathRuntimeMethod(path[2])) {
+          return path[2]
+        }
+
+        return null
       }
     }
 
@@ -3864,7 +4202,8 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'path' || symbol.importedName === 'posix') &&
         isPathRuntimeConstant(path[1])
@@ -3877,7 +4216,8 @@ class Checker {
       const symbol = this.scope.resolve(path[0])
 
       if (
-        symbol?.kind === 'import' &&
+        symbol != null &&
+        symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'path') &&
         isPathRuntimeConstant(path[2])
