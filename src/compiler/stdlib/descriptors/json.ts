@@ -1,17 +1,23 @@
-export type JsonRuntimeMethod = 'parse' | 'stringify'
+export const jsonRuntimeMethods: string[] = ['parse', 'stringify']
 
-export const jsonRuntimeMethods: readonly JsonRuntimeMethod[] = ['parse', 'stringify']
+const jsonRuntimeMethodSet = createStringSet(jsonRuntimeMethods)
 
-const jsonRuntimeMethodSet = new Set<string>(jsonRuntimeMethods)
-
-export function jsonRuntimeMethodNameFromPath(path: readonly string[] | null | undefined): JsonRuntimeMethod | null {
+export function jsonRuntimeMethodNameFromPath(path: string[] | null | undefined): string | null {
   if (path == null || path.length !== 2 || path[0] !== 'JSON') {
     return null
   }
 
-  return isJsonRuntimeMethod(path[1]) ? path[1] : null
+  if (isJsonRuntimeMethod(path[1])) {
+    return path[1]
+  }
+
+  return null
 }
 
-export function isJsonRuntimeMethod(method: string): method is JsonRuntimeMethod {
+export function isJsonRuntimeMethod(method: string): boolean {
   return jsonRuntimeMethodSet.has(method)
+}
+
+function createStringSet(values: string[]): Set<string> {
+  return new Set(values)
 }
