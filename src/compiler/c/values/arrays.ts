@@ -127,11 +127,11 @@ type ArrayCallbackBody =
 function arrayDeps(context: ArrayFunctionContext): ArrayLoweringDependencies {
   const deps = context.arrayLoweringDependencies
 
-  if (deps == null) {
-    throw new Error('array lowering dependencies are not configured')
+  if (deps != null) {
+    return deps
   }
 
-  return deps as ArrayLoweringDependencies
+  throw new Error('array lowering dependencies are not configured')
 }
 
 function optionalArrayDeps(context: ArrayFunctionContext): ArrayLoweringDependencies | null {
@@ -161,73 +161,79 @@ function appendPrefixedLines(out: string[], lines: string[], prefix: string): vo
 function ensureArrayShapes(context: ArrayFunctionContext): Map<string, CArrayElementInfo[]> {
   let shapes = context.arrayShapes
 
-  if (shapes == null) {
-    const nextShapes: Map<string, CArrayElementInfo[]> = new Map()
-    context.arrayShapes = nextShapes
-    return nextShapes
+  if (shapes != null) {
+    return shapes
   }
 
-  return shapes as Map<string, CArrayElementInfo[]>
+  const nextShapes: Map<string, CArrayElementInfo[]> = new Map()
+  context.arrayShapes = nextShapes
+
+  return nextShapes
 }
 
 function ensureClassInstanceTypes(context: ArrayFunctionContext): CStringMap {
   let classInstanceTypes = context.classInstanceTypes
 
-  if (classInstanceTypes == null) {
-    const nextClassInstanceTypes: CStringMap = new Map()
-    context.classInstanceTypes = nextClassInstanceTypes
-    return nextClassInstanceTypes
+  if (classInstanceTypes != null) {
+    return classInstanceTypes
   }
 
-  return classInstanceTypes as CStringMap
+  const nextClassInstanceTypes: CStringMap = new Map()
+  context.classInstanceTypes = nextClassInstanceTypes
+
+  return nextClassInstanceTypes
 }
 
 function ensureErrorObjectNames(context: ArrayFunctionContext): CStringSet {
   let errorObjectNames = context.errorObjectNames
 
-  if (errorObjectNames == null) {
-    const nextErrorObjectNames: CStringSet = new Set()
-    context.errorObjectNames = nextErrorObjectNames
-    return nextErrorObjectNames
+  if (errorObjectNames != null) {
+    return errorObjectNames
   }
 
-  return errorObjectNames as CStringSet
+  const nextErrorObjectNames: CStringSet = new Set()
+  context.errorObjectNames = nextErrorObjectNames
+
+  return nextErrorObjectNames
 }
 
 function ensurePromiseConstructorHandlers(context: ArrayFunctionContext): CPromiseConstructorHandlerMap {
   let promiseConstructorHandlers = context.promiseConstructorHandlers
 
-  if (promiseConstructorHandlers == null) {
-    const nextPromiseConstructorHandlers: CPromiseConstructorHandlerMap = new Map()
-    context.promiseConstructorHandlers = nextPromiseConstructorHandlers
-    return nextPromiseConstructorHandlers
+  if (promiseConstructorHandlers != null) {
+    return promiseConstructorHandlers
   }
 
-  return promiseConstructorHandlers as CPromiseConstructorHandlerMap
+  const nextPromiseConstructorHandlers: CPromiseConstructorHandlerMap = new Map()
+  context.promiseConstructorHandlers = nextPromiseConstructorHandlers
+
+  return nextPromiseConstructorHandlers
 }
 
 function ensurePromiseRejectionValueTypes(context: ArrayFunctionContext): CStringMap {
   let promiseRejectionValueTypes = context.promiseRejectionValueTypes
 
-  if (promiseRejectionValueTypes == null) {
-    const nextPromiseRejectionValueTypes: CStringMap = new Map()
-    context.promiseRejectionValueTypes = nextPromiseRejectionValueTypes
-    return nextPromiseRejectionValueTypes
+  if (promiseRejectionValueTypes != null) {
+    return promiseRejectionValueTypes
   }
 
-  return promiseRejectionValueTypes as CStringMap
+  const nextPromiseRejectionValueTypes: CStringMap = new Map()
+  context.promiseRejectionValueTypes = nextPromiseRejectionValueTypes
+
+  return nextPromiseRejectionValueTypes
 }
 
 function ensurePromiseValueTypes(context: ArrayFunctionContext): CStringMap {
   let promiseValueTypes = context.promiseValueTypes
 
-  if (promiseValueTypes == null) {
-    const nextPromiseValueTypes: CStringMap = new Map()
-    context.promiseValueTypes = nextPromiseValueTypes
-    return nextPromiseValueTypes
+  if (promiseValueTypes != null) {
+    return promiseValueTypes
   }
 
-  return promiseValueTypes as CStringMap
+  const nextPromiseValueTypes: CStringMap = new Map()
+  context.promiseValueTypes = nextPromiseValueTypes
+
+  return nextPromiseValueTypes
 }
 
 function maybeArrayShapes(context: ArrayFunctionContext): Map<string, CArrayElementInfo[]> | null {

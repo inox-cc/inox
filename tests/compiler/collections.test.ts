@@ -1001,8 +1001,8 @@ test('reports embedded heap capability diagnostics for array-producing methods',
       assert.deepEqual(
         error.diagnostics.map((item) => item.message),
         [
-          'embedded profile requires heap capability for Array.map',
-          'embedded profile requires heap capability for Array.filter'
+          'embedded profile requires heap capability for Array.filter',
+          'embedded profile requires heap capability for Array.map'
         ]
       )
       return true
@@ -1017,8 +1017,10 @@ test('reports embedded heap capability diagnostics for array-producing methods',
     }
   })
 
-  assert.match(enabled.code, /ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
-  assert.match(enabled.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value/)
+  assert.doesNotMatch(enabled.code, /ccjs_filter_array_\d+/)
+  assert.doesNotMatch(enabled.code, /ccjs_map_array_\d+/)
+  assert.match(enabled.code, /ccjs_array_push\(__ccjs_array_expr_\d+, ccjs_number_value/)
+  assert.match(enabled.code, /ccjs_array_push\(result, ccjs_number_value/)
 })
 
 
@@ -1308,6 +1310,62 @@ test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   assert.match(result.code, /ccjs_array_push\(presentNames, ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_array_push\(presentNumbers, ccjs_number_value\(__ccjs_filter_item_\d+\)\)/)
   assert.match(result.code, /ccjs_array_push\(presentFlags, ccjs_bool_value\(\(?__ccjs_filter_item_\d+\)?(?: != 0)?\)\)/)
+})
+
+
+test('lowers C Array.filter chains and return expressions to explicit loops', () => {
+  const result = compileSource(
+    `function selected(values: number[]): number[] {
+  return values.filter(value => value > 1)
+}
+
+function count(values: number[]): number {
+  return values.length
+}
+
+export function main(): void {
+  const values = [1, 2, 3]
+  const scaled = values.filter((value, index) => value > index).map(value => value * 10)
+  const inlineCount = count([0, 2, 3].filter(Boolean))
+  console.log(selected(values).length, scaled.length, inlineCount)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const selected = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'selected')
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+
+  assert.ok(selected)
+  assert.ok(main)
+  assert.equal(selected.body[0].type, 'VariableDeclaration')
+  assert.equal(selected.body[0].loweredArrayMethod, true)
+  assert.equal(selected.body[1].type, 'ForStatement')
+  assert.equal(selected.body[2].type, 'ReturnStatement')
+  assert.match(selected.body[2].argument.path[0], /^__ccjs_array_expr_\d+$/)
+
+  const scaled = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'scaled')
+  const inlineCount = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'inlineCount')
+  const chainTemp = main.body.find(
+    (item) => item.type === 'VariableDeclaration' && /^__ccjs_array_expr_\d+$/.test(item.name)
+  )
+  const inlineSource = main.body.find(
+    (item) => item.type === 'VariableDeclaration' && /^__ccjs_array_source_\d+$/.test(item.name)
+  )
+
+  assert.ok(scaled)
+  assert.ok(inlineCount)
+  assert.ok(chainTemp)
+  assert.ok(inlineSource)
+  assert.equal(scaled.loweredArrayMethod, true)
+  assert.equal(scaled.arrayElementType, 'number')
+  assert.equal(inlineCount.init.args[0].type, 'Reference')
+  assert.match(inlineCount.init.args[0].path[0], /^__ccjs_array_expr_\d+$/)
+  assert.doesNotMatch(result.code, /ccjs_filter_array_\d+/)
+  assert.doesNotMatch(result.code, /ccjs_map_array_\d+/)
+  assert.match(result.code, /ccjs_array_push\(__ccjs_array_expr_\d+, ccjs_number_value/)
+  assert.match(result.code, /ccjs_array_push\(scaled, ccjs_number_value/)
 })
 
 

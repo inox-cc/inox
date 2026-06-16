@@ -213,3 +213,85 @@ test('lowers simple Array.map variable declarations to for plus push', () => {
   assert.equal(lowered[1].body.body[1].expression.args[0].type, 'BinaryExpression')
   assert.notEqual(lowered[1].body.body[1].expression.args[0].right.path[0], 'index')
 })
+
+test('lowers chained Array.filter and Array.map declarations through temporary arrays', () => {
+  const values: AnyNode = {
+    type: 'Reference',
+    path: ['values'],
+    valueType: 'array',
+    arrayElementType: 'number',
+    arrayElementDeclaredType: 'number'
+  }
+  const filterCall: AnyNode = {
+    type: 'CallExpression',
+    valueType: 'array',
+    arrayElementType: 'number',
+    arrayElementDeclaredType: 'number',
+    callee: {
+      type: 'MemberExpression',
+      property: 'filter',
+      object: values
+    },
+    args: [
+      {
+        type: 'ArrowFunctionExpression',
+        expressionBody: true,
+        params: [{ type: 'Param', name: 'value', valueType: 'number', declaredType: 'number' }],
+        body: {
+          type: 'BinaryExpression',
+          operator: '>',
+          left: { type: 'Reference', path: ['value'], valueType: 'number' },
+          right: { type: 'NumberLiteral', value: '1', valueType: 'number' },
+          valueType: 'boolean'
+        }
+      }
+    ]
+  }
+  const statement: AnyNode = {
+    type: 'VariableDeclaration',
+    kind: 'const',
+    exported: false,
+    name: 'scaled',
+    valueType: 'array',
+    arrayElementType: 'number',
+    arrayElementDeclaredType: 'number',
+    init: {
+      type: 'CallExpression',
+      valueType: 'array',
+      arrayElementType: 'number',
+      arrayElementDeclaredType: 'number',
+      callee: {
+        type: 'MemberExpression',
+        property: 'map',
+        object: filterCall
+      },
+      args: [
+        {
+          type: 'ArrowFunctionExpression',
+          expressionBody: true,
+          params: [{ type: 'Param', name: 'value', valueType: 'number', declaredType: 'number' }],
+          body: {
+            type: 'BinaryExpression',
+            operator: '*',
+            left: { type: 'Reference', path: ['value'], valueType: 'number' },
+            right: { type: 'NumberLiteral', value: '10', valueType: 'number' },
+            valueType: 'number'
+          }
+        }
+      ]
+    }
+  }
+
+  const lowered = lowerStatementList([statement], createLowerContext({ type: 'Program', body: [] }))
+
+  assert.equal(lowered.length, 4)
+  assert.equal(lowered[0].type, 'VariableDeclaration')
+  assert.match(lowered[0].name, /^__ccjs_array_expr_\d+$/)
+  assert.equal(lowered[0].loweredArrayMethodName, 'filter')
+  assert.equal(lowered[1].type, 'ForStatement')
+  assert.equal(lowered[2].type, 'VariableDeclaration')
+  assert.equal(lowered[2].name, 'scaled')
+  assert.equal(lowered[2].loweredArrayMethodName, 'map')
+  assert.equal(lowered[3].type, 'ForStatement')
+  assert.equal(lowered[3].body.body[0].init.object.path[0], lowered[0].name)
+})

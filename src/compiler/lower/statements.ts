@@ -7,6 +7,16 @@ import type { LowerContext } from './type-resolution.ts'
 type LowerNode = AnyNode
 type LoweredStatement = LowerNode | LowerNode[]
 
+type ArrayMethodReceiverExpansion = {
+  statements: LowerNode[]
+  receiver: LowerNode
+}
+
+type ArrayExpressionHoist = {
+  statements: LowerNode[]
+  expression: LowerNode
+}
+
 export function lowerStatement(statement: LowerNode, context: LowerContext): LowerNode {
   return lowerStatementBody(statement, context)
 }
@@ -122,16 +132,47 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
   }
 
   if (statement.type === 'ExpressionStatement') {
+    const expression = lowerStatementExpression(statement.expression, context)
+    const hoisted = lowerArrayMethodSubexpressions(expression, context, false)
+
+    if (hoisted != null) {
+      declareLoweredTopLevelVariables(context, hoisted.statements)
+
+      return [
+        ...hoisted.statements,
+        {
+          type: 'ExpressionStatement',
+          expression: hoisted.expression
+        }
+      ]
+    }
+
     return {
       type: 'ExpressionStatement',
-      expression: lowerStatementExpression(statement.expression, context)
+      expression
     }
   }
 
   if (statement.type === 'ReturnStatement') {
+    const argument = statement.argument == null ? null : lowerStatementExpression(statement.argument, context)
+    const hoisted = argument == null ? null : lowerArrayMethodSubexpressions(argument, context)
+
+    if (hoisted != null) {
+      declareLoweredTopLevelVariables(context, hoisted.statements)
+
+      return [
+        ...hoisted.statements,
+        {
+          type: 'ReturnStatement',
+          argument: hoisted.expression,
+          loc: statement.loc
+        }
+      ]
+    }
+
     return {
       type: 'ReturnStatement',
-      argument: statement.argument == null ? null : lowerStatementExpression(statement.argument, context),
+      argument,
       loc: statement.loc
     }
   }
@@ -237,11 +278,25 @@ function lowerVariableDeclaration(
   const expanded = lowerArrayMethodVariableDeclaration(lowered, init, context)
 
   if (expanded == null) {
+    const hoisted = lowerArrayMethodSubexpressions(init, context)
+
+    if (hoisted != null) {
+      const declaration = {
+        ...lowered,
+        init: hoisted.expression
+      }
+
+      declareLoweredTopLevelVariables(context, hoisted.statements)
+      declareLowerVariable(context, declaration)
+
+      return [...hoisted.statements, declaration]
+    }
+
     declareLowerVariable(context, lowered)
     return lowered
   }
 
-  declareLowerVariable(context, expanded[0])
+  declareLoweredTopLevelVariables(context, expanded)
 
   return expanded
 }
@@ -266,26 +321,334 @@ function declareLowerVariable(context: LowerContext, statement: LowerNode): void
   })
 }
 
+function declareLoweredTopLevelVariables(context: LowerContext, statements: LowerNode[]): void {
+  for (const statement of statements) {
+    if (statement.type === 'VariableDeclaration') {
+      declareLowerVariable(context, statement)
+    }
+  }
+}
+
 function lowerArrayMethodVariableDeclaration(
   statement: LowerNode,
   init: LowerNode,
   context: LowerContext
 ): LowerNode[] | null {
-  if (
-    init.type !== 'CallExpression' ||
-    init.callee.type !== 'MemberExpression' ||
-    init.args.length !== 1 ||
-    (init.callee.property !== 'filter' && init.callee.property !== 'map') ||
-    !isStableArrayReceiver(init.callee.object)
-  ) {
+  if (!isArrayMethodExpansionCall(init)) {
     return null
   }
 
-  if (init.callee.property === 'filter') {
-    return lowerArrayFilterVariableDeclaration(statement, init, context)
+  const receiver = lowerArrayMethodReceiver(init.callee.object, context)
+
+  if (receiver == null) {
+    return null
   }
 
-  return lowerArrayMapVariableDeclaration(statement, init, context)
+  const expandedInit: LowerNode = {
+    ...init,
+    callee: {
+      ...init.callee,
+      object: receiver.receiver
+    }
+  }
+  let expanded: LowerNode[] | null = null
+
+  if (init.callee.property === 'filter') {
+    expanded = lowerArrayFilterVariableDeclaration(statement, expandedInit, context)
+  } else {
+    expanded = lowerArrayMapVariableDeclaration(statement, expandedInit, context)
+  }
+
+  if (expanded == null) {
+    return null
+  }
+
+  return [...receiver.statements, ...expanded]
+}
+
+function lowerArrayMethodExpressionToTemp(expression: LowerNode, context: LowerContext): ArrayExpressionHoist | null {
+  if (!isArrayMethodExpansionCall(expression)) {
+    return null
+  }
+
+  const name = nextLowerName(context, 'ccjs_array_expr')
+  const target = createArrayTempDeclaration(name, expression, expression.loc)
+  const statements = lowerArrayMethodVariableDeclaration(target, expression, context)
+
+  if (statements == null) {
+    return null
+  }
+
+  const output = findVariableDeclaration(statements, name)
+
+  if (output == null) {
+    return null
+  }
+
+  return {
+    statements,
+    expression: createArrayReferenceFromDeclaration(output, expression.loc)
+  }
+}
+
+function lowerArrayMethodReceiver(receiver: LowerNode, context: LowerContext): ArrayMethodReceiverExpansion | null {
+  if (isStableArrayReceiver(receiver)) {
+    return {
+      statements: [],
+      receiver
+    }
+  }
+
+  if (isArrayMethodExpansionCall(receiver)) {
+    const hoisted = lowerArrayMethodExpressionToTemp(receiver, context)
+
+    if (hoisted == null) {
+      return null
+    }
+
+    return {
+      statements: hoisted.statements,
+      receiver: hoisted.expression
+    }
+  }
+
+  if (receiver.type === 'ArrayLiteral') {
+    const name = nextLowerName(context, 'ccjs_array_source')
+    const declaration = createArrayTempDeclaration(name, receiver, receiver.loc)
+
+    return {
+      statements: [declaration],
+      receiver: createArrayReferenceFromDeclaration(declaration, receiver.loc)
+    }
+  }
+
+  return null
+}
+
+function lowerArrayMethodSubexpressions(
+  expression: LowerNode,
+  context: LowerContext,
+  allowRoot: boolean = true
+): ArrayExpressionHoist | null {
+  const root = allowRoot ? lowerArrayMethodExpressionToTemp(expression, context) : null
+
+  if (root != null) {
+    return root
+  }
+
+  if (expression.type === 'ArrowFunctionExpression') {
+    return null
+  }
+
+  if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression') {
+    const args = lowerArrayMethodExpressionList(expression.args, context)
+
+    if (args == null) {
+      return null
+    }
+
+    return {
+      statements: args.statements,
+      expression: {
+        ...expression,
+        args: args.expressions
+      }
+    }
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    const object = lowerArrayMethodSubexpressions(expression.object, context)
+
+    if (object == null) {
+      return null
+    }
+
+    return {
+      statements: object.statements,
+      expression: {
+        ...expression,
+        object: object.expression
+      }
+    }
+  }
+
+  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
+    const object = lowerArrayMethodSubexpressions(expression.object, context)
+    const index = lowerArrayMethodSubexpressions(expression.index, context)
+    const statements: LowerNode[] = []
+    let changed = false
+
+    if (object != null) {
+      appendLoweredHoistStatements(statements, object.statements)
+      changed = true
+    }
+
+    if (index != null) {
+      appendLoweredHoistStatements(statements, index.statements)
+      changed = true
+    }
+
+    if (!changed) {
+      return null
+    }
+
+    return {
+      statements,
+      expression: {
+        ...expression,
+        object: object == null ? expression.object : object.expression,
+        index: index == null ? expression.index : index.expression
+      }
+    }
+  }
+
+  if (expression.type === 'BinaryExpression') {
+    const left = lowerArrayMethodSubexpressions(expression.left, context)
+    const right = lowerArrayMethodSubexpressions(expression.right, context)
+    const statements: LowerNode[] = []
+    let changed = false
+
+    if (left != null) {
+      appendLoweredHoistStatements(statements, left.statements)
+      changed = true
+    }
+
+    if (right != null) {
+      appendLoweredHoistStatements(statements, right.statements)
+      changed = true
+    }
+
+    if (!changed) {
+      return null
+    }
+
+    return {
+      statements,
+      expression: {
+        ...expression,
+        left: left == null ? expression.left : left.expression,
+        right: right == null ? expression.right : right.expression
+      }
+    }
+  }
+
+  if (expression.type === 'UnaryExpression' || expression.type === 'TypeAssertionExpression') {
+    const operand = lowerArrayMethodSubexpressions(expression.argument ?? expression.expression, context)
+
+    if (operand == null) {
+      return null
+    }
+
+    return {
+      statements: operand.statements,
+      expression: {
+        ...expression,
+        argument: operand.expression,
+        expression: expression.expression == null ? expression.expression : operand.expression
+      }
+    }
+  }
+
+  if (expression.type === 'ArrayLiteral') {
+    const elements = lowerArrayMethodExpressionList(expression.elements, context)
+
+    if (elements == null) {
+      return null
+    }
+
+    return {
+      statements: elements.statements,
+      expression: {
+        ...expression,
+        elements: elements.expressions
+      }
+    }
+  }
+
+  if (expression.type === 'ObjectLiteral') {
+    const statements: LowerNode[] = []
+    const properties: LowerNode[] = []
+    let changed = false
+
+    for (const property of expression.properties) {
+      const hoisted = lowerArrayMethodSubexpressions(property.value, context)
+
+      if (hoisted == null) {
+        properties.push(property)
+        continue
+      }
+
+      appendLoweredHoistStatements(statements, hoisted.statements)
+      properties.push({
+        ...property,
+        value: hoisted.expression
+      })
+      changed = true
+    }
+
+    if (!changed) {
+      return null
+    }
+
+    return {
+      statements,
+      expression: {
+        ...expression,
+        properties
+      }
+    }
+  }
+
+  return null
+}
+
+function lowerArrayMethodExpressionList(
+  expressions: LowerNode[],
+  context: LowerContext
+): { statements: LowerNode[]; expressions: LowerNode[] } | null {
+  const statements: LowerNode[] = []
+  const lowered: LowerNode[] = []
+  let changed = false
+
+  for (const expression of expressions) {
+    const hoisted = lowerArrayMethodSubexpressions(expression, context)
+
+    if (hoisted == null) {
+      lowered.push(expression)
+      continue
+    }
+
+    appendLoweredHoistStatements(statements, hoisted.statements)
+    lowered.push(hoisted.expression)
+    changed = true
+  }
+
+  if (!changed) {
+    return null
+  }
+
+  return {
+    statements,
+    expressions: lowered
+  }
+}
+
+function appendLoweredHoistStatements(out: LowerNode[], statements: LowerNode[]): void {
+  for (const statement of statements) {
+    out.push(statement)
+  }
+}
+
+function isArrayMethodExpansionCall(expression: LowerNode): boolean {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.args.length !== 1
+  ) {
+    return false
+  }
+
+  return expression.callee.property === 'filter' || expression.callee.property === 'map'
 }
 
 function lowerArrayFilterVariableDeclaration(
@@ -325,10 +688,20 @@ function lowerArrayFilterVariableDeclaration(
     return null
   }
 
+  const output = {
+    ...statement,
+    loweredArrayMethodName: 'filter',
+    arrayElementType: statement.arrayElementType ?? init.arrayElementType ?? receiverElement.valueType,
+    arrayElementDeclaredType:
+      statement.arrayElementDeclaredType ??
+      init.arrayElementDeclaredType ??
+      receiverElement.declaredType ??
+      receiverElement.valueType
+  }
   const loweredPredicate = lowerStatementExpression(predicate, context)
   const pushValue = createReference(itemName, receiverElement, receiver.loc)
 
-  return createArrayLoopStatements(statement, receiver, receiverElement, indexName, itemName, [
+  return createArrayLoopStatements(output, receiver, receiverElement, indexName, itemName, [
     {
       type: 'IfStatement',
       condition: loweredPredicate,
@@ -382,6 +755,7 @@ function lowerArrayMapVariableDeclaration(
 
   const output = {
     ...statement,
+    loweredArrayMethodName: 'map',
     arrayElementType: mappedElementType,
     arrayElementDeclaredType: statement.arrayElementDeclaredType ?? init.arrayElementDeclaredType ?? mappedElementType
   }
@@ -512,6 +886,7 @@ function createArrayOutputDeclaration(statement: LowerNode): LowerNode {
     arrayElementType: elementType,
     arrayElementDeclaredType: elementDeclaredType,
     loweredArrayMethod: true,
+    loweredArrayMethodName: statement.loweredArrayMethodName ?? null,
     init: {
       type: 'ArrayLiteral',
       elements: [],
@@ -520,6 +895,31 @@ function createArrayOutputDeclaration(statement: LowerNode): LowerNode {
       arrayElementDeclaredType: elementDeclaredType,
       loc: statement.loc
     }
+  }
+}
+
+function createArrayTempDeclaration(name: string, init: LowerNode, loc: LowerNode['loc']): LowerNode {
+  const elementType = init.arrayElementType ?? inferArrayElementType(init) ?? 'unknown'
+  const elementDeclaredType = init.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init) ?? elementType
+
+  return {
+    type: 'VariableDeclaration',
+    kind: 'const',
+    exported: false,
+    name,
+    loc,
+    declaredType: null,
+    nullable: false,
+    shape: null,
+    functionType: null,
+    arrayElementType: elementType,
+    arrayElementDeclaredType: elementDeclaredType,
+    mapKeyType: null,
+    mapValueType: null,
+    promiseValueType: null,
+    setElementType: null,
+    valueType: 'array',
+    init
   }
 }
 
@@ -618,6 +1018,34 @@ function createArrayPushStatement(arrayName: string, arrayInfo: LowerNode, value
       loc
     }
   }
+}
+
+function createArrayReferenceFromDeclaration(declaration: LowerNode, loc: LowerNode['loc']): LowerNode {
+  return {
+    type: 'Reference',
+    path: [declaration.name],
+    valueType: 'array',
+    nullable: false,
+    arrayElementType: declaration.arrayElementType ?? null,
+    arrayElementDeclaredType: declaration.arrayElementDeclaredType ?? declaration.arrayElementType ?? null,
+    mapKeyType: null,
+    mapValueType: null,
+    promiseValueType: null,
+    setElementType: null,
+    functionType: null,
+    shape: null,
+    loc
+  }
+}
+
+function findVariableDeclaration(statements: LowerNode[], name: string): LowerNode | null {
+  for (const statement of statements) {
+    if (statement.type === 'VariableDeclaration' && statement.name === name) {
+      return statement
+    }
+  }
+
+  return null
 }
 
 function createCallbackReplacements(

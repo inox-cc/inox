@@ -212,6 +212,14 @@ function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapabil
 }
 
 function arrayProducingMethodName(expression: AnyNode): string | null {
+  if (expression.type === 'VariableDeclaration' && expression.loweredArrayMethod === true) {
+    const method = expression.loweredArrayMethodName
+
+    if (method === 'filter' || method === 'map') {
+      return method
+    }
+  }
+
   if (expression.type !== 'CallExpression' || expression.valueType !== 'array') {
     return null
   }

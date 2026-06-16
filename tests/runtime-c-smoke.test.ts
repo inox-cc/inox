@@ -5678,7 +5678,19 @@ console.log(truthyNumbers.length, truthyNumbers[0], truthyNumbers[1])
 const truthyFlags = [false, true, false].filter(Boolean)
 console.log(truthyFlags.length, truthyFlags[0])
 
-`,
+function pickLarge(values: number[]): number[] {
+  return values.filter(value => value > 2)
+}
+
+function countNumbers(values: number[]): number {
+  return values.length
+}
+
+const picked = pickLarge([1, 3, 4])
+const inlineCount = countNumbers([0, 2, 3].filter(Boolean))
+console.log(picked.length, picked[0], picked[1], inlineCount)
+
+	`,
       {
         target: 'c'
       }
@@ -5693,7 +5705,7 @@ console.log(truthyFlags.length, truthyFlags[0])
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '2 2 3\n2 1 2\n2 Ada Alan\n2 Ada Grace\n2 2 3\n1 1\n')
+    assert.equal(run.stdout, '2 2 3\n2 1 2\n2 Ada Alan\n2 Ada Grace\n2 2 3\n1 1\n2 3 4 2\n')
   } finally {
     await rm(dir, {
       recursive: true,
