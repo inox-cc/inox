@@ -60,15 +60,15 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
       async: item.async,
       name: item.name,
       loc: item.loc,
-      params: item.params.map((param) => lowerParam(param, context)),
+      params: lowerParamList(item.params, context),
       declaredReturnType: item.returnType,
-      returnType: returnType.valueType ?? item.returnType,
+      returnType: resolvedValueType(returnType.valueType, item.returnType),
       returnNullable: returnType.nullable,
       returnArrayElementType: returnType.arrayElementType,
       returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
       returnMapKeyType: returnType.mapKeyType,
       returnMapValueType: returnType.mapValueType,
-      returnPromiseValueType: returnType.promiseValueType ?? null,
+      returnPromiseValueType: nullableString(returnType.promiseValueType),
       returnSetElementType: returnType.setElementType,
       returnShape: returnType.shape,
       body: lowerStatementList(item.body, context)
@@ -81,43 +81,120 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
       exported: item.exported,
       name: item.name,
       loc: item.loc,
-      shape: item.shape ?? null,
-      fields: (item.fields ?? []).map((field) => ({
-        ...field,
-        declaredType: field.declaredType ?? field.valueType,
-        optional: field.optional === true,
-        valueType: field.valueType ?? 'unknown',
-        nullable: field.nullable === true,
-        arrayElementType: field.arrayElementType ?? null,
-        arrayElementDeclaredType: field.arrayElementDeclaredType ?? null,
-        mapKeyType: field.mapKeyType ?? null,
-        mapValueType: field.mapValueType ?? null,
-        promiseValueType: field.promiseValueType ?? null,
-        setElementType: field.setElementType ?? null,
-        shape: field.shape ?? null
-      })),
-      methods: item.methods.map((method) => {
-        const returnType = resolveDeclaredType(method.returnType, context)
-
-        return {
-          type: 'MethodDefinition',
-          name: method.name,
-          loc: method.loc,
-          params: method.params.map((param) => lowerParam(param, context)),
-          declaredReturnType: method.returnType,
-          returnType: returnType.valueType ?? method.returnType,
-          returnNullable: returnType.nullable,
-          returnArrayElementType: returnType.arrayElementType,
-          returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
-          returnMapKeyType: returnType.mapKeyType,
-          returnMapValueType: returnType.mapValueType,
-          returnPromiseValueType: returnType.promiseValueType ?? null,
-          returnSetElementType: returnType.setElementType,
-          body: lowerStatementList(method.body, context)
-        }
-      })
+      shape: nullableNode(item.shape),
+      fields: lowerClassFields(item.fields),
+      methods: lowerClassMethods(item.methods, context)
     }
   }
 
   return lowerStatementList([item], context)
+}
+
+function lowerParamList(params: AnyNode[], context: LowerContext): AnyNode[] {
+  const lowered: AnyNode[] = []
+
+  for (const param of params) {
+    lowered.push(lowerParam(param, context))
+  }
+
+  return lowered
+}
+
+function lowerClassFields(fields: AnyNode[] | null | undefined): AnyNode[] {
+  const lowered: AnyNode[] = []
+
+  if (fields == null) {
+    return lowered
+  }
+
+  for (const field of fields) {
+    lowered.push(lowerClassField(field))
+  }
+
+  return lowered
+}
+
+function lowerClassField(field: AnyNode): AnyNode {
+  return {
+    type: 'FieldDefinition',
+    name: field.name,
+    static: field.static === true,
+    staticLoc: nullableNode(field.staticLoc),
+    readonly: field.readonly === true,
+    ownership: nullableString(field.ownership),
+    weakLoc: nullableNode(field.weakLoc),
+    loc: field.loc,
+    declaredType: resolvedValueType(field.declaredType, field.valueType),
+    optional: field.optional === true,
+    valueType: resolvedValueType(field.valueType, 'unknown'),
+    nullable: field.nullable === true,
+    arrayElementType: nullableString(field.arrayElementType),
+    arrayElementDeclaredType: nullableString(field.arrayElementDeclaredType),
+    mapKeyType: nullableString(field.mapKeyType),
+    mapValueType: nullableString(field.mapValueType),
+    promiseValueType: nullableString(field.promiseValueType),
+    setElementType: nullableString(field.setElementType),
+    shape: nullableNode(field.shape),
+    functionType: nullableNode(field.functionType),
+    className: nullableString(field.className)
+  }
+}
+
+function lowerClassMethods(methods: AnyNode[] | null | undefined, context: LowerContext): AnyNode[] {
+  const lowered: AnyNode[] = []
+
+  if (methods == null) {
+    return lowered
+  }
+
+  for (const method of methods) {
+    lowered.push(lowerClassMethod(method, context))
+  }
+
+  return lowered
+}
+
+function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
+  const returnType = resolveDeclaredType(method.returnType, context)
+
+  return {
+    type: 'MethodDefinition',
+    name: method.name,
+    loc: method.loc,
+    params: lowerParamList(method.params, context),
+    declaredReturnType: method.returnType,
+    returnType: resolvedValueType(returnType.valueType, method.returnType),
+    returnNullable: returnType.nullable,
+    returnArrayElementType: returnType.arrayElementType,
+    returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
+    returnMapKeyType: returnType.mapKeyType,
+    returnMapValueType: returnType.mapValueType,
+    returnPromiseValueType: nullableString(returnType.promiseValueType),
+    returnSetElementType: returnType.setElementType,
+    body: lowerStatementList(method.body, context)
+  }
+}
+
+function resolvedValueType(value: string | null | undefined, fallback: string): string {
+  if (value != null) {
+    return value
+  }
+
+  return fallback
+}
+
+function nullableString(value: string | null | undefined): string | null {
+  if (value != null) {
+    return value
+  }
+
+  return null
+}
+
+function nullableNode(value: AnyNode | null | undefined): AnyNode | null {
+  if (value != null) {
+    return value
+  }
+
+  return null
 }
