@@ -4543,7 +4543,11 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   }
 }
 
-function resolveFunctionParams(callee: AnyNode, context: CEmitContext): CFunctionParam[] | null {
+type FunctionParamContext = {
+  functionParams: Map<string, CFunctionParam[]>
+}
+
+function resolveFunctionParams(callee: AnyNode, context: FunctionParamContext): CFunctionParam[] | null {
   if (callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }

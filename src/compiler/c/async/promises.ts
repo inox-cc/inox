@@ -135,7 +135,7 @@ export function functionTakesEventLoopParam(name: string, context: PromiseEventL
   return isPlainPromiseReturningFunctionName(name, context) || context.externalEventLoopFunctions.has(name)
 }
 
-export function isPromiseReturningFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEmitContext): boolean {
+export function isPromiseReturningFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEventLoopFunctionContext): boolean {
   if (callee == null || callee.type !== 'Reference') {
     return false
   }
@@ -143,7 +143,7 @@ export function isPromiseReturningFunctionCallee(callee: AnyNode | null | undefi
   return callee.path.length === 1 && isPlainPromiseReturningFunctionName(callee.path[0], context)
 }
 
-export function isExternalEventLoopFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEmitContext): boolean {
+export function isExternalEventLoopFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEventLoopFunctionContext): boolean {
   if (callee == null || callee.type !== 'Reference') {
     return false
   }

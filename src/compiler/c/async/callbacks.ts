@@ -66,6 +66,10 @@ type CallbackFunctionContext = CallbackEmitContext & {
   variables: CallbackStringMap
 }
 
+type RuntimeFunctionArgumentContext = {
+  runtimeFunctionParams: CallbackFunctionTypeMap
+}
+
 export type CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions(expression: AnyNode): AnyNode[]
   createFunctionContext(
@@ -466,7 +470,7 @@ export function resolveRuntimeFunctionArgumentType(
   callee: AnyNode | null | undefined,
   index: number,
   param: CFunctionParam | null | undefined,
-  context: CallbackEmitContext
+  context: RuntimeFunctionArgumentContext
 ): CFunctionType | null {
   if (param == null || param.valueType !== 'function') {
     return null

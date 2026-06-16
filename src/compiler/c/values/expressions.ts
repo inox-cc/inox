@@ -6,10 +6,8 @@ import {
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
-  pushNullableScalarNarrowing,
   registerEventLoop,
   registerOwnedValue,
-  restoreNullableScalarNarrowing
 } from '../context.ts'
 import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
@@ -37,19 +35,75 @@ import {
   isNullableScalarRuntimeExpression,
   resolveNullableScalarConditionNarrowing
 } from './nullable.ts'
+import type { NullableLoweringDependencies } from './nullable.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
-import type { CEmitContext, CFunctionContext } from '../context.ts'
 import type {
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
+  CFunctionReturnMapType,
   CFunctionParam,
   CFunctionType,
+  CObjectShapeField,
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
   CRuntimeArrayElement
 } from '../types.ts'
+
+type CBooleanMap = Map<string, boolean>
+type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
+type CFunctionTypeMap = Map<string, CFunctionType>
+type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
+type CStringMap = Map<string, string>
+type CStringNullableMap = Map<string, string | null>
+type CStringSet = Set<string>
+
+type CEmitContext = {
+  throwingFunctions: CStringSet
+}
+
+type CFunctionContext = CEmitContext & {
+  boxedVariables: CStringSet
+  cleanupEnabled: boolean
+  diagnostics: Diagnostic[]
+  eventLoopUsed: boolean
+  externalEventLoop: boolean
+  externalEventLoopFunctions: CStringSet
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  functionAsyncFlags: CBooleanMap
+  functionNames: CStringMap
+  functionParams: Map<string, CFunctionParam[]>
+  functionReturnArrayElementTypes: CStringNullableMap
+  functionReturnNullables: CBooleanMap
+  functionReturnPromiseValueTypes: CStringNullableMap
+  functionReturnTypes: CStringMap
+  functionTypes: CFunctionTypeMap
+  jsGlobalRoots: CStringSet
+  mapTypes: CFunctionReturnMapTypeMap
+  narrowedNullableScalars: CStringSet
+  nextId: number
+  nullableLoweringDependencies: NullableLoweringDependencies
+  nullableVariables: CStringSet
+  objectShapes: CObjectShapeFieldMap
+  ownedValues: string[]
+  returnType?: string
+  runtimeFunctionParams: CFunctionTypeMap
+  runtimeArrayElementTypes: CStringMap
+  runtimeCallbacks: CStringSet
+  runtimeStrings: CStringSet
+  setElementTypes: CStringMap
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  variables: CStringMap
+}
+
+type NullableScalarNarrowingSnapshot = {
+  active: boolean
+  narrowedNullableScalars: CStringSet
+}
 
 type PreparedUrlSearchParamsExpression = {
   lines: string[]
@@ -113,6 +167,16 @@ function runtimeBoolValueExpression(value: boolean): string {
   return 'false'
 }
 
+function functionParamAt(params: CFunctionParam[], expectedIndex: number): CFunctionParam | null {
+  for (let index = 0; index < params.length; index = index + 1) {
+    if (index === expectedIndex) {
+      return params[index]
+    }
+  }
+
+  return null
+}
+
 function wrappedCExpression(expression: string): string {
   if (isWrappedCExpression(expression)) {
     return expression
@@ -122,11 +186,41 @@ function wrappedCExpression(expression: string): string {
 }
 
 function expressionLocation(expression: AnyNode): SourceLocation | undefined {
-  if (expression == null) {
-    return undefined
+  return expression.loc
+}
+
+function pushNullableScalarNarrowing(
+  context: CFunctionContext,
+  names: string[]
+): NullableScalarNarrowingSnapshot {
+  const previous = context.narrowedNullableScalars
+
+  if (names.length === 0) {
+    return {
+      active: false,
+      narrowedNullableScalars: previous
+    }
   }
 
-  return expression.loc
+  context.narrowedNullableScalars = new Set(previous)
+
+  for (const name of names) {
+    context.narrowedNullableScalars.add(name)
+  }
+
+  return {
+    active: true,
+    narrowedNullableScalars: previous
+  }
+}
+
+function restoreNullableScalarNarrowing(
+  context: CFunctionContext,
+  snapshot: NullableScalarNarrowingSnapshot
+): void {
+  if (snapshot.active) {
+    context.narrowedNullableScalars = snapshot.narrowedNullableScalars
+  }
 }
 
 
@@ -465,46 +559,47 @@ export function emitPreparedCallArgs(
 
   for (let index = 0; index < expression.args.length; index = index + 1) {
     const arg = expression.args[index]
-    const param = params[index]
+    const param = functionParamAt(params, index)
 
-    if (isNullableScalarParam(param)) {
-      const value = deps.emitNullableScalarValueExpression(arg, context)
-
-      appendLines(lines, value.lines)
-      args.push(value.expression)
-    } else if (
-      param != null &&
-      deps.isNullableFunctionType(param.valueType, param.nullable)
-    ) {
-      const value = deps.emitNullableFunctionValueExpression(arg, param.functionType, context)
-
-      appendLines(lines, value.lines)
-      args.push(value.expression)
-    } else if (param != null && param.valueType === 'string') {
-      const value = deps.emitCValueExpression(arg, context)
-
-      appendLines(lines, value.lines)
-      args.push(value.expression)
-    } else if (param != null && param.valueType === 'object') {
-      const value = deps.emitCValueExpression(arg, context)
-
-      appendLines(lines, value.lines)
-      args.push(value.expression)
-    } else if (param != null && isManagedRuntimeReturnType(param.valueType)) {
-      const value = deps.emitCValueExpression(arg, context)
-
-      appendLines(lines, value.lines)
-      args.push(value.expression)
-    } else if (param != null && param.valueType === 'function') {
-      const runtimeFunctionType = deps.resolveRuntimeFunctionArgumentType(expression.callee, index, param, context)
-
-      if (runtimeFunctionType != null) {
-        const value = deps.emitRuntimeCallbackValue(arg, runtimeFunctionType, context)
+    if (param != null) {
+      if (isNullableScalarParam(param)) {
+        const value = deps.emitNullableScalarValueExpression(arg, context)
 
         appendLines(lines, value.lines)
         args.push(value.expression)
+      } else if (deps.isNullableFunctionType(param.valueType, param.nullable)) {
+        const value = deps.emitNullableFunctionValueExpression(arg, param.functionType, context)
+
+        appendLines(lines, value.lines)
+        args.push(value.expression)
+      } else if (param.valueType === 'string') {
+        const value = deps.emitCValueExpression(arg, context)
+
+        appendLines(lines, value.lines)
+        args.push(value.expression)
+      } else if (param.valueType === 'object') {
+        const value = deps.emitCValueExpression(arg, context)
+
+        appendLines(lines, value.lines)
+        args.push(value.expression)
+      } else if (isManagedRuntimeReturnType(param.valueType)) {
+        const value = deps.emitCValueExpression(arg, context)
+
+        appendLines(lines, value.lines)
+        args.push(value.expression)
+      } else if (param.valueType === 'function') {
+        const runtimeFunctionType = deps.resolveRuntimeFunctionArgumentType(expression.callee, index, param, context)
+
+        if (runtimeFunctionType != null) {
+          const value = deps.emitRuntimeCallbackValue(arg, runtimeFunctionType, context)
+
+          appendLines(lines, value.lines)
+          args.push(value.expression)
+        } else {
+          args.push(deps.emitFunctionValueExpression(arg, context))
+        }
       } else {
-        args.push(deps.emitFunctionValueExpression(arg, context))
+        args.push(deps.emitCExpression(arg, context))
       }
     } else {
       args.push(deps.emitCExpression(arg, context))
@@ -641,14 +736,10 @@ function emitThrowingCallStatusCheck(status: string, context: CFunctionContext, 
 }
 
 export function isThrowingFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
-  return callee != null && callee.type === 'Reference' && callee.path.length === 1 && isThrowingFunctionName(callee.path[0], context)
+  return callee.type === 'Reference' && callee.path.length === 1 && isThrowingFunctionName(callee.path[0], context)
 }
 
 export function isThrowingFunctionName(name: string, context: CEmitContext): boolean {
-  if (context.throwingFunctions == null) {
-    return false
-  }
-
   return context.throwingFunctions.has(name)
 }
 
@@ -782,7 +873,7 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression != null && expression.bufferRuntimeConstant === 'MAX_LENGTH') {
+  if (expression.bufferRuntimeConstant === 'MAX_LENGTH') {
     return {
       lines: [],
       expression: '((double)((size_t)-1))'
@@ -807,7 +898,7 @@ export function emitPreparedNumberExpression(
     return processNumber
   }
 
-  if (expression != null && expression.type === 'NumberLiteral') {
+  if (expression.type === 'NumberLiteral') {
     return {
       lines: [],
       expression: expression.value
@@ -844,14 +935,14 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression != null && expression.type === 'Reference') {
+  if (expression.type === 'Reference') {
     return {
       lines: [],
       expression: deps.emitReference(expression, context)
     }
   }
 
-  if (expression != null && expression.type === 'BooleanLiteral') {
+  if (expression.type === 'BooleanLiteral') {
     let value = '0'
 
     if (expression.value) {
@@ -864,7 +955,7 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression != null && expression.type === 'UnaryExpression') {
+  if (expression.type === 'UnaryExpression') {
     const argument = emitPreparedNumberExpression(expression.argument, context, deps)
 
     return {
@@ -873,11 +964,11 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression != null && expression.type === 'UpdateExpression') {
+  if (expression.type === 'UpdateExpression') {
     return emitPreparedUpdateExpression(expression, context, deps)
   }
 
-  if (expression != null && expression.type === 'BinaryExpression') {
+  if (expression.type === 'BinaryExpression') {
     const scalarNullish = emitPreparedScalarNullishCoalescingExpression(expression, context, deps)
 
     if (scalarNullish != null) {
@@ -944,7 +1035,7 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression != null && expression.type === 'AssignmentExpression') {
+  if (expression.type === 'AssignmentExpression') {
     const value = emitPreparedNumberExpression(expression.value, context, deps)
 
     return {
@@ -953,7 +1044,7 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression != null && expression.type === 'CallExpression') {
+  if (expression.type === 'CallExpression') {
     const jsonScalarParse = deps.emitPreparedJsonScalarParseExpression(expression, context)
 
     if (jsonScalarParse != null) {
@@ -1075,7 +1166,7 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression != null && expression.type === 'AwaitExpression') {
+  if (expression.type === 'AwaitExpression') {
     const valueType = deps.inferExpressionType(expression, context)
     const awaited = deps.emitCAwaitValueExpression(expression, context)
 
@@ -1207,12 +1298,12 @@ function emitPreparedNullableNullCompareExpression(
   let nullable = expression.left
   let maybeNull = expression.right
 
-  if (expression.left != null && expression.left.type === 'NullLiteral') {
+  if (expression.left.type === 'NullLiteral') {
     nullable = expression.right
     maybeNull = expression.left
   }
 
-  if (maybeNull == null || maybeNull.type !== 'NullLiteral' || !isNullableRuntimeExpression(nullable, context)) {
+  if (maybeNull.type !== 'NullLiteral' || !isNullableRuntimeExpression(nullable, context)) {
     return null
   }
 
@@ -1286,7 +1377,6 @@ function emitPreparedNumericCastExpression(
 
 function isNumericCastCall(expression: AnyNode, context: CFunctionContext, deps: CScalarExpressionDependencies): boolean {
   if (
-    expression == null ||
     expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1 ||
@@ -1447,7 +1537,7 @@ export function emitCValueExpression(
     return deps.emitCNullishCoalescingValueExpression(expression, context)
   }
 
-  if (expression != null && expression.type === 'AwaitExpression') {
+  if (expression.type === 'AwaitExpression') {
     return deps.emitCAwaitValueExpression(expression, context)
   }
 
@@ -1573,7 +1663,7 @@ export function emitCValueExpression(
     return deps.emitCClassObjectValueExpression(expression, context)
   }
 
-  if (expression != null && expression.type === 'OptionalCallExpression' && deps.isNullableRuntimeExpression(expression, context)) {
+  if (expression.type === 'OptionalCallExpression' && deps.isNullableRuntimeExpression(expression, context)) {
     return deps.emitOptionalRuntimeCallbackCallValueExpression(expression, context)
   }
 
@@ -1607,19 +1697,19 @@ export function emitCValueExpression(
     return deps.emitCStringConcatValueExpression(expression, context)
   }
 
-  if (expression != null && expression.type === 'TemplateLiteral') {
+  if (expression.type === 'TemplateLiteral') {
     return deps.emitCTemplateLiteralValueExpression(expression, context)
   }
 
-  if (expression != null && expression.type === 'ArrayLiteral') {
+  if (expression.type === 'ArrayLiteral') {
     return deps.emitCArrayLiteralValueExpression(expression, context)
   }
 
-  if (expression != null && expression.type === 'ObjectLiteral') {
+  if (expression.type === 'ObjectLiteral') {
     return deps.emitCObjectLiteralValueExpression(expression, context)
   }
 
-  if (expression != null && expression.type === 'StringLiteral') {
+  if (expression.type === 'StringLiteral') {
     const temp = nextCName(context, 'ccjs_value')
     registerOwnedValue(context, temp)
     const lines: string[] = []
@@ -1638,28 +1728,28 @@ export function emitCValueExpression(
     }
   }
 
-  if (expression != null && expression.type === 'NumberLiteral') {
+  if (expression.type === 'NumberLiteral') {
     return {
       lines: [],
       expression: `ccjs_number_value(${expression.value})`
     }
   }
 
-  if (expression != null && expression.type === 'BooleanLiteral') {
+  if (expression.type === 'BooleanLiteral') {
     return {
       lines: [],
       expression: `ccjs_bool_value(${runtimeBoolValueExpression(expression.value)})`
     }
   }
 
-  if (expression != null && expression.type === 'NullLiteral') {
+  if (expression.type === 'NullLiteral') {
     return {
       lines: [],
       expression: 'ccjs_null_value()'
     }
   }
 
-  if (expression != null && expression.type === 'Reference') {
+  if (expression.type === 'Reference') {
     const name = expression.path.join('_')
     const valueType = context.variables.get(name)
 
@@ -1725,11 +1815,11 @@ export function emitCValueExpression(
     }
   }
 
-  if (expression != null && expression.type === 'OptionalMemberExpression') {
+  if (expression.type === 'OptionalMemberExpression') {
     return deps.emitCOptionalMemberValueExpression(expression, context)
   }
 
-  if (expression != null && expression.type === 'OptionalIndexExpression') {
+  if (expression.type === 'OptionalIndexExpression') {
     return deps.emitCOptionalIndexValueExpression(expression, context)
   }
 
@@ -1761,7 +1851,7 @@ export function emitCValueExpression(
     }
   }
 
-  if (expression != null && expression.type === 'CallExpression' && isManagedRuntimeReturnType(deps.inferExpressionType(expression, context))) {
+  if (expression.type === 'CallExpression' && isManagedRuntimeReturnType(deps.inferExpressionType(expression, context))) {
     const valueType = deps.inferExpressionType(expression, context)
     const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
 
