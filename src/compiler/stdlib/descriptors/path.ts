@@ -1,4 +1,18 @@
-export const pathRuntimeMethods = [
+export type PathRuntimeMethod =
+  | 'basename'
+  | 'dirname'
+  | 'extname'
+  | 'isAbsolute'
+  | 'join'
+  | 'format'
+  | 'normalize'
+  | 'parse'
+  | 'relative'
+  | 'resolve'
+
+export type PathRuntimeConstant = 'delimiter' | 'sep'
+
+export const pathRuntimeMethods: PathRuntimeMethod[] = [
   'basename',
   'dirname',
   'extname',
@@ -9,37 +23,43 @@ export const pathRuntimeMethods = [
   'parse',
   'relative',
   'resolve'
-] as const
+]
 
-export const pathRuntimeConstants = ['delimiter', 'sep'] as const
-export const pathParseObjectFields = ['root', 'dir', 'base', 'ext', 'name'] as const
+export const pathRuntimeConstants: PathRuntimeConstant[] = ['delimiter', 'sep']
+export const pathParseObjectFields: string[] = ['root', 'dir', 'base', 'ext', 'name']
 
-export const unsupportedPathRuntimeMethods = ['matchesGlob', 'toNamespacedPath'] as const
-
-export type PathRuntimeMethod = (typeof pathRuntimeMethods)[number]
-export type PathRuntimeConstant = (typeof pathRuntimeConstants)[number]
-
-const nodePathImportSources = new Set(['node:path'])
-const pathRuntimeMethodSet = new Set<string>(pathRuntimeMethods)
-const pathRuntimeConstantSet = new Set<string>(pathRuntimeConstants)
-const unsupportedPathRuntimeMethodSet = new Set<string>(unsupportedPathRuntimeMethods)
+export const unsupportedPathRuntimeMethods: string[] = ['matchesGlob', 'toNamespacedPath']
 
 export function isNodePathImportSource(source: string | null | undefined): boolean {
-  return source != null && nodePathImportSources.has(source)
+  return source === 'node:path'
 }
 
-export function isPathRuntimeMethod(method: string): method is PathRuntimeMethod {
-  return pathRuntimeMethodSet.has(method)
+export function isPathRuntimeMethod(method: string): boolean {
+  return stringListHas(pathRuntimeMethods, method)
 }
 
-export function isPathRuntimeConstant(value: string): value is PathRuntimeConstant {
-  return pathRuntimeConstantSet.has(value)
+export function isPathRuntimeConstant(value: string): boolean {
+  return stringListHas(pathRuntimeConstants, value)
 }
 
 export function isUnsupportedPathRuntimeMethod(method: string): boolean {
-  return unsupportedPathRuntimeMethodSet.has(method)
+  return stringListHas(unsupportedPathRuntimeMethods, method)
 }
 
-export function pathRuntimeConstantValue(name: PathRuntimeConstant): string {
-  return name === 'delimiter' ? ':' : '/'
+export function pathRuntimeConstantValue(name: string): string {
+  if (name === 'delimiter') {
+    return ':'
+  }
+
+  return '/'
+}
+
+function stringListHas(values: string[], value: string): boolean {
+  for (const current of values) {
+    if (current === value) {
+      return true
+    }
+  }
+
+  return false
 }
