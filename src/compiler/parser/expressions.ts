@@ -40,12 +40,18 @@ export function createAwaitExpression(token: Token, argument: AnyNode): AnyNode 
 }
 
 export function createUpdateExpression(operator: Token, argument: AnyNode, prefix: boolean): AnyNode {
+  let loc = argument.loc
+
+  if (prefix) {
+    loc = locFromToken(operator)
+  }
+
   return {
     type: 'UpdateExpression',
     operator: operator.value,
     argument,
     prefix,
-    loc: prefix ? locFromToken(operator) : argument.loc
+    loc
   }
 }
 
@@ -113,10 +119,17 @@ export function createOptionalMemberExpression(object: AnyNode, property: Token)
 
 export function createCallExpression(callee: AnyNode, args: AnyNode[]): AnyNode {
   const optional = callee.type === 'OptionalCallTarget'
+  let expressionType = 'CallExpression'
+  let actualCallee = callee
+
+  if (optional) {
+    expressionType = 'OptionalCallExpression'
+    actualCallee = callee.callee
+  }
 
   return {
-    type: optional ? 'OptionalCallExpression' : 'CallExpression',
-    callee: optional ? callee.callee : callee,
+    type: expressionType,
+    callee: actualCallee,
     args,
     loc: callee.loc
   }
