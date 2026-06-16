@@ -1082,7 +1082,7 @@ const cValueExpressionDependencies: CValueExpressionDependencies = {
   emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies, undefined),
   emitPreparedProcessStringExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedProcessStringExpression(expression, context, processLoweringDependencies),
+    emitPreparedProcessStringExpression(expression, context, processLoweringDependencies, undefined),
   emitPreparedRuntimeArrayIndexValueExpression,
   emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies),

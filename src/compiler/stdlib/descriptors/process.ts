@@ -1,5 +1,32 @@
-export const processRuntimeMethods = ['cwd', 'exit'] as const
-export const processRuntimeProperties = [
+export type ProcessRuntimeMethod = 'cwd' | 'exit'
+
+export type ProcessRuntimeProperty =
+  | 'arch'
+  | 'argv'
+  | 'argv.length'
+  | 'argv0'
+  | 'env'
+  | 'execPath'
+  | 'exitCode'
+  | 'pid'
+  | 'platform'
+  | 'version'
+  | 'versions'
+  | 'versions.node'
+
+export type ProcessRuntimeStringProperty =
+  | 'arch'
+  | 'argv0'
+  | 'execPath'
+  | 'platform'
+  | 'version'
+  | 'versions.node'
+
+export type ProcessRuntimeNumberProperty = 'argv.length' | 'exitCode' | 'pid'
+export type ProcessRuntimeObjectProperty = 'argv' | 'env' | 'versions'
+
+export const processRuntimeMethods: ProcessRuntimeMethod[] = ['cwd', 'exit']
+export const processRuntimeProperties: ProcessRuntimeProperty[] = [
   'arch',
   'argv',
   'argv.length',
@@ -12,19 +39,19 @@ export const processRuntimeProperties = [
   'version',
   'versions',
   'versions.node'
-] as const
+]
 
-export const processRuntimeStringProperties = [
+export const processRuntimeStringProperties: ProcessRuntimeStringProperty[] = [
   'arch',
   'argv0',
   'execPath',
   'platform',
   'version',
   'versions.node'
-] as const
+]
 
-export const processRuntimeNumberProperties = ['argv.length', 'exitCode', 'pid'] as const
-export const processRuntimeObjectProperties = ['argv', 'env', 'versions'] as const
+export const processRuntimeNumberProperties: ProcessRuntimeNumberProperty[] = ['argv.length', 'exitCode', 'pid']
+export const processRuntimeObjectProperties: ProcessRuntimeObjectProperty[] = ['argv', 'env', 'versions']
 
 export const unsupportedProcessRuntimeMethods = [
   'abort',
@@ -42,47 +69,32 @@ export const unsupportedProcessRuntimeMethods = [
   'once',
   'removeListener',
   'uptime'
-] as const
+]
 
-export const unsupportedProcessRuntimeProperties = ['stderr', 'stdin', 'stdout'] as const
-
-export type ProcessRuntimeMethod = (typeof processRuntimeMethods)[number]
-export type ProcessRuntimeProperty = (typeof processRuntimeProperties)[number]
-export type ProcessRuntimeStringProperty = (typeof processRuntimeStringProperties)[number]
-export type ProcessRuntimeNumberProperty = (typeof processRuntimeNumberProperties)[number]
-export type ProcessRuntimeObjectProperty = (typeof processRuntimeObjectProperties)[number]
-
-const nodeProcessImportSources = new Set(['node:process'])
-const processRuntimeMethodSet = new Set<string>(processRuntimeMethods)
-const processRuntimePropertySet = new Set<string>(processRuntimeProperties)
-const processRuntimeStringPropertySet = new Set<string>(processRuntimeStringProperties)
-const processRuntimeNumberPropertySet = new Set<string>(processRuntimeNumberProperties)
-const processRuntimeObjectPropertySet = new Set<string>(processRuntimeObjectProperties)
-const unsupportedProcessRuntimeMethodSet = new Set<string>(unsupportedProcessRuntimeMethods)
-const unsupportedProcessRuntimePropertySet = new Set<string>(unsupportedProcessRuntimeProperties)
+export const unsupportedProcessRuntimeProperties: string[] = ['stderr', 'stdin', 'stdout']
 
 export function isNodeProcessImportSource(source: string | null | undefined): boolean {
-  return source != null && nodeProcessImportSources.has(source)
+  return source === 'node:process'
 }
 
-export function isProcessRuntimeMethod(method: string): method is ProcessRuntimeMethod {
-  return processRuntimeMethodSet.has(method)
+export function isProcessRuntimeMethod(method: string): boolean {
+  return stringListHas(processRuntimeMethods, method)
 }
 
-export function isProcessRuntimeProperty(property: string): property is ProcessRuntimeProperty {
-  return processRuntimePropertySet.has(property)
+export function isProcessRuntimeProperty(property: string): boolean {
+  return stringListHas(processRuntimeProperties, property)
 }
 
-export function isProcessRuntimeStringProperty(property: string): property is ProcessRuntimeStringProperty {
-  return processRuntimeStringPropertySet.has(property)
+export function isProcessRuntimeStringProperty(property: string): boolean {
+  return stringListHas(processRuntimeStringProperties, property)
 }
 
-export function isProcessRuntimeNumberProperty(property: string): property is ProcessRuntimeNumberProperty {
-  return processRuntimeNumberPropertySet.has(property)
+export function isProcessRuntimeNumberProperty(property: string): boolean {
+  return stringListHas(processRuntimeNumberProperties, property)
 }
 
-export function isProcessRuntimeObjectProperty(property: string): property is ProcessRuntimeObjectProperty {
-  return processRuntimeObjectPropertySet.has(property)
+export function isProcessRuntimeObjectProperty(property: string): boolean {
+  return stringListHas(processRuntimeObjectProperties, property)
 }
 
 export function processRuntimePropertyValueType(property: string): 'string' | 'number' | 'object' | null {
@@ -102,9 +114,19 @@ export function processRuntimePropertyValueType(property: string): 'string' | 'n
 }
 
 export function isUnsupportedProcessRuntimeMethod(method: string): boolean {
-  return unsupportedProcessRuntimeMethodSet.has(method)
+  return stringListHas(unsupportedProcessRuntimeMethods, method)
 }
 
 export function isUnsupportedProcessRuntimeProperty(property: string): boolean {
-  return unsupportedProcessRuntimePropertySet.has(property)
+  return stringListHas(unsupportedProcessRuntimeProperties, property)
+}
+
+function stringListHas(values: string[], value: string): boolean {
+  for (const current of values) {
+    if (current === value) {
+      return true
+    }
+  }
+
+  return false
 }
