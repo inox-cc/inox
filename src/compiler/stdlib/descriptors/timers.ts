@@ -1,48 +1,53 @@
-export type TimerRuntimeMethod =
-  | 'clearImmediate'
-  | 'clearInterval'
-  | 'clearTimeout'
-  | 'setImmediate'
-  | 'setInterval'
-  | 'setTimeout'
+export const timerStartMethods: string[] = ['setImmediate', 'setInterval', 'setTimeout']
+export const timerClearMethods: string[] = ['clearImmediate', 'clearInterval', 'clearTimeout']
+export const timerRuntimeMethods: string[] = [
+  'setImmediate',
+  'setInterval',
+  'setTimeout',
+  'clearImmediate',
+  'clearInterval',
+  'clearTimeout'
+]
+export const timerHandleMethods: string[] = ['ref', 'unref']
 
-export type TimerHandleMethod = 'ref' | 'unref'
-
-export const timerStartMethods: readonly TimerRuntimeMethod[] = ['setImmediate', 'setInterval', 'setTimeout']
-export const timerClearMethods: readonly TimerRuntimeMethod[] = ['clearImmediate', 'clearInterval', 'clearTimeout']
-export const timerRuntimeMethods: readonly TimerRuntimeMethod[] = [...timerStartMethods, ...timerClearMethods]
-export const timerHandleMethods: readonly TimerHandleMethod[] = ['ref', 'unref']
-
-const nodeTimerImportSources = new Set(['node:timers'])
-const timerRuntimeMethodSet = new Set(timerRuntimeMethods)
-const timerStartMethodSet = new Set(timerStartMethods)
-const timerClearMethodSet = new Set(timerClearMethods)
-const timerHandleMethodSet = new Set(timerHandleMethods)
+const nodeTimerImportSources = createStringSet(['node:timers'])
+const timerRuntimeMethodSet = createStringSet(timerRuntimeMethods)
+const timerStartMethodSet = createStringSet(timerStartMethods)
+const timerClearMethodSet = createStringSet(timerClearMethods)
+const timerHandleMethodSet = createStringSet(timerHandleMethods)
 
 export function isNodeTimerImportSource(source: string): boolean {
   return nodeTimerImportSources.has(source)
 }
 
-export function timerRuntimeMethodNameFromPath(path: readonly string[] | null | undefined): TimerRuntimeMethod | null {
+export function timerRuntimeMethodNameFromPath(path: string[] | null | undefined): string | null {
   if (path == null || path.length !== 1) {
     return null
   }
 
-  return isTimerRuntimeMethod(path[0]) ? path[0] : null
+  if (isTimerRuntimeMethod(path[0])) {
+    return path[0]
+  }
+
+  return null
 }
 
-export function isTimerRuntimeMethod(method: string): method is TimerRuntimeMethod {
-  return timerRuntimeMethodSet.has(method as TimerRuntimeMethod)
+export function isTimerRuntimeMethod(method: string): boolean {
+  return timerRuntimeMethodSet.has(method)
 }
 
-export function isTimerStartMethod(method: string): method is TimerRuntimeMethod {
-  return timerStartMethodSet.has(method as TimerRuntimeMethod)
+export function isTimerStartMethod(method: string): boolean {
+  return timerStartMethodSet.has(method)
 }
 
-export function isTimerClearMethod(method: string): method is TimerRuntimeMethod {
-  return timerClearMethodSet.has(method as TimerRuntimeMethod)
+export function isTimerClearMethod(method: string): boolean {
+  return timerClearMethodSet.has(method)
 }
 
-export function isTimerHandleMethod(method: string): method is TimerHandleMethod {
-  return timerHandleMethodSet.has(method as TimerHandleMethod)
+export function isTimerHandleMethod(method: string): boolean {
+  return timerHandleMethodSet.has(method)
+}
+
+function createStringSet(values: string[]): Set<string> {
+  return new Set(values)
 }
