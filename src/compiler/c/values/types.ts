@@ -57,6 +57,86 @@ export type CExpressionTypeDependencies = {
   resolveRuntimeArrayIndex: (expression: AnyNode, context: CFunctionContext) => CRuntimeArrayElement | null
 }
 
+function cValueTypeOrUnknown(expression: AnyNode): string {
+  if (expression.valueType != null) {
+    return expression.valueType
+  }
+
+  return 'unknown'
+}
+
+function cDottedPath(path: string[]): string {
+  let output = ''
+
+  for (let index = 0; index < path.length; index = index + 1) {
+    if (index === 0) {
+      output = path[index]
+    } else {
+      output = `${output}.${path[index]}`
+    }
+  }
+
+  return output
+}
+
+function isBooleanBinaryOperator(operator: string): boolean {
+  if (operator === '===') {
+    return true
+  }
+
+  if (operator === '!==') {
+    return true
+  }
+
+  if (operator === '==') {
+    return true
+  }
+
+  if (operator === '!=') {
+    return true
+  }
+
+  if (operator === '<') {
+    return true
+  }
+
+  if (operator === '<=') {
+    return true
+  }
+
+  if (operator === '>') {
+    return true
+  }
+
+  if (operator === '>=') {
+    return true
+  }
+
+  if (operator === '&&') {
+    return true
+  }
+
+  return operator === '||'
+}
+
+function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext): string {
+  const variableType = context.variables.get(cDottedPath(expression.path))
+
+  if (variableType != null) {
+    return variableType
+  }
+
+  if (context.functionNames.has(expression.path[0])) {
+    return 'function'
+  }
+
+  if (isCJsGlobalRoot(expression.path[0], context)) {
+    return 'js-global'
+  }
+
+  return 'number'
+}
+
 export function inferExpressionType(
   expression: AnyNode,
   context: CFunctionContext,
@@ -65,7 +145,11 @@ export function inferExpressionType(
   const childProcessMethod = deps.cChildProcessRuntimeMethodName(expression)
 
   if (childProcessMethod != null) {
-    return childProcessMethod === 'spawnSync' ? 'object' : 'string'
+    if (childProcessMethod === 'spawnSync') {
+      return 'object'
+    }
+
+    return 'string'
   }
 
   if (deps.cOsRuntimeConstantName(expression) != null || deps.cOsRuntimeMethodName(expression) != null) {
@@ -75,12 +159,16 @@ export function inferExpressionType(
   const processMethod = deps.cProcessRuntimeMethodName(expression)
 
   if (processMethod != null) {
-    return processMethod === 'cwd' ? 'string' : 'void'
+    if (processMethod === 'cwd') {
+      return 'string'
+    }
+
+    return 'void'
   }
 
   const processProperty = deps.cProcessRuntimePropertyName(expression)
 
-  if (processProperty === 'argv' && expression?.type === 'IndexExpression') {
+  if (processProperty === 'argv' && expression.type === 'IndexExpression') {
     return 'string'
   }
 
@@ -129,23 +217,51 @@ export function inferExpressionType(
   const pathMethod = deps.cPathRuntimeMethodName(expression)
 
   if (pathMethod != null) {
-    return pathMethod === 'isAbsolute' ? 'boolean' : pathMethod === 'parse' ? 'object' : 'string'
+    if (pathMethod === 'isAbsolute') {
+      return 'boolean'
+    }
+
+    if (pathMethod === 'parse') {
+      return 'object'
+    }
+
+    return 'string'
   }
 
-  if (expression?.type === 'CallExpression' && deps.cTimeRuntimeCallName(expression.callee) != null) {
+  if (expression.type === 'CallExpression' && deps.cTimeRuntimeCallName(expression.callee) != null) {
     return 'number'
   }
 
-  if (expression?.type === 'CallExpression' && deps.cFsRuntimeExpressionMethod(expression) != null) {
-    return expression.valueType === 'promise' ? 'promise' : (expression.valueType ?? 'unknown')
+  if (expression.type === 'CallExpression' && deps.cFsRuntimeExpressionMethod(expression) != null) {
+    if (expression.valueType === 'promise') {
+      return 'promise'
+    }
+
+    return cValueTypeOrUnknown(expression)
   }
 
-  if (expression?.type === 'CallExpression' && deps.cFetchRuntimeExpressionMethod(expression) != null) {
-    return expression.valueType === 'promise' ? 'promise' : (expression.valueType ?? 'unknown')
+  if (expression.type === 'CallExpression' && deps.cFetchRuntimeExpressionMethod(expression) != null) {
+    if (expression.valueType === 'promise') {
+      return 'promise'
+    }
+
+    return cValueTypeOrUnknown(expression)
   }
 
-  if (expression?.type === 'CallExpression' && deps.cJsonRuntimeCallName(expression.callee) != null) {
-    return expression.valueType ?? (deps.cJsonRuntimeCallName(expression.callee) === 'parse' ? 'object' : 'string')
+  if (expression.type === 'CallExpression') {
+    const jsonCall = deps.cJsonRuntimeCallName(expression.callee)
+
+    if (jsonCall != null) {
+      if (expression.valueType != null) {
+        return expression.valueType
+      }
+
+      if (jsonCall === 'parse') {
+        return 'object'
+      }
+
+      return 'string'
+    }
   }
 
   const cryptoMethod = deps.cryptoRuntimeMethodName(expression)
@@ -159,7 +275,7 @@ export function inferExpressionType(
   }
 
   if (cryptoMethod === 'Hash.digest' || cryptoMethod === 'Hmac.digest' || cryptoMethod === 'hash') {
-    return expression.valueType ?? 'unknown'
+    return cValueTypeOrUnknown(expression)
   }
 
   if (cryptoMethod === 'getHashes') {
@@ -187,7 +303,7 @@ export function inferExpressionType(
   }
 
   if (
-    expression?.type === 'CallExpression' &&
+    expression.type === 'CallExpression' &&
     deps.cPromiseRuntimeCallName(expression.callee) != null &&
     expression.valueType === 'promise'
   ) {
@@ -198,7 +314,7 @@ export function inferExpressionType(
     return 'promise'
   }
 
-  if (expression?.type === 'CallExpression' && deps.mathRuntimeMethodName(expression.callee) != null) {
+  if (expression.type === 'CallExpression' && deps.mathRuntimeMethodName(expression.callee) != null) {
     return 'number'
   }
 
@@ -214,11 +330,11 @@ export function inferExpressionType(
     return 'object'
   }
 
-  if (expression?.type === 'NewExpression' && deps.collectionConstructorName(expression) === 'Map') {
+  if (expression.type === 'NewExpression' && deps.collectionConstructorName(expression) === 'Map') {
     return 'map'
   }
 
-  if (expression?.type === 'NewExpression' && deps.collectionConstructorName(expression) === 'Set') {
+  if (expression.type === 'NewExpression' && deps.collectionConstructorName(expression) === 'Set') {
     return 'set'
   }
 
@@ -247,69 +363,80 @@ export function inferExpressionType(
   }
 
   if (deps.isBinaryRuntimeCall(expression)) {
-    return expression.valueType ?? deps.binaryRuntimeExpressionReturnType(expression) ?? 'bytes'
+    if (expression.valueType != null) {
+      return expression.valueType
+    }
+
+    const binaryReturnType = deps.binaryRuntimeExpressionReturnType(expression)
+
+    if (binaryReturnType != null) {
+      return binaryReturnType
+    }
+
+    return 'bytes'
   }
 
   if (deps.isBinaryConstructorExpression(expression)) {
     return 'bytes'
   }
 
-  if (expression?.type === 'CallExpression' && usesCJsGlobal(expression.callee, context)) {
+  if (expression.type === 'CallExpression' && usesCJsGlobal(expression.callee, context)) {
     return 'js-global'
   }
 
-  if (expression?.type === 'NewExpression' && usesCJsGlobal(expression.callee, context)) {
+  if (expression.type === 'NewExpression' && usesCJsGlobal(expression.callee, context)) {
     return 'js-global'
   }
 
-  if (expression?.valueType != null && expression.valueType !== 'unknown') {
+  if (expression.valueType != null && expression.valueType !== 'unknown') {
     return expression.valueType
   }
 
-  if (expression?.type === 'StringLiteral') {
+  if (expression.type === 'StringLiteral') {
     return 'string'
   }
 
-  if (expression?.type === 'TemplateLiteral') {
+  if (expression.type === 'TemplateLiteral') {
     return 'string'
   }
 
-  if (expression?.type === 'Reference') {
-    return (
-      context.variables.get(expression.path.join('.')) ??
-      (context.functionNames.has(expression.path[0])
-        ? 'function'
-        : isCJsGlobalRoot(expression.path[0], context)
-          ? 'js-global'
-          : 'number')
-    )
+  if (expression.type === 'Reference') {
+    return cReferenceExpressionType(expression, context)
   }
 
-  if (expression?.type === 'ArrowFunctionExpression') {
+  if (expression.type === 'ArrowFunctionExpression') {
     return 'function'
   }
 
-  if (expression?.type === 'BooleanLiteral') {
+  if (expression.type === 'BooleanLiteral') {
     return 'boolean'
   }
 
-  if (expression?.type === 'UnaryExpression') {
-    return expression.operator === '!' ? 'boolean' : 'number'
-  }
+  if (expression.type === 'UnaryExpression') {
+    if (expression.operator === '!') {
+      return 'boolean'
+    }
 
-  if (expression?.type === 'UpdateExpression') {
     return 'number'
   }
 
-  if (expression?.type === 'BinaryExpression') {
-    if (['===', '!==', '==', '!=', '<', '<=', '>', '>=', '&&', '||'].includes(expression.operator)) {
+  if (expression.type === 'UpdateExpression') {
+    return 'number'
+  }
+
+  if (expression.type === 'BinaryExpression') {
+    if (isBooleanBinaryOperator(expression.operator)) {
       return 'boolean'
     }
 
     if (expression.operator === '??') {
       const left = inferExpressionType(expression.left, context, deps)
 
-      return left === 'null' || left === 'unknown' ? inferExpressionType(expression.right, context, deps) : left
+      if (left === 'null' || left === 'unknown') {
+        return inferExpressionType(expression.right, context, deps)
+      }
+
+      return left
     }
 
     if (
@@ -323,11 +450,11 @@ export function inferExpressionType(
     return 'number'
   }
 
-  if (expression?.type === 'ArrayLiteral') {
+  if (expression.type === 'ArrayLiteral') {
     return 'array'
   }
 
-  if (expression?.type === 'ObjectLiteral') {
+  if (expression.type === 'ObjectLiteral') {
     return 'object'
   }
 
@@ -356,12 +483,16 @@ export function inferExpressionType(
       return member.valueType
     }
 
-    return expression.type === 'OptionalMemberExpression' ? 'optional' : 'number'
+    if (expression.type === 'OptionalMemberExpression') {
+      return 'optional'
+    }
+
+    return 'number'
   }
 
   if (deps.isIndexAccessExpression(expression)) {
     if (expression.collectionKind === 'map') {
-      return expression.valueType ?? 'unknown'
+      return cValueTypeOrUnknown(expression)
     }
 
     const element = deps.resolveKnownArrayIndex(expression, context)
@@ -380,28 +511,41 @@ export function inferExpressionType(
       return runtimeElement.valueType
     }
 
-    return expression.type === 'OptionalIndexExpression' ? 'optional' : 'number'
-  }
-
-  if (expression?.type === 'CallExpression') {
-    if (expression.valueType != null && expression.valueType !== 'unknown') {
-      return expression.valueType
-    }
-
-    if (expression.callee.type === 'Reference') {
-      return context.functionReturnTypes.get(expression.callee.path[0]) ?? 'number'
+    if (expression.type === 'OptionalIndexExpression') {
+      return 'optional'
     }
 
     return 'number'
   }
 
-  if (expression?.type === 'NewExpression') {
+  if (expression.type === 'CallExpression') {
+    if (expression.valueType != null && expression.valueType !== 'unknown') {
+      return expression.valueType
+    }
+
+    if (expression.callee.type === 'Reference') {
+      const returnType = context.functionReturnTypes.get(expression.callee.path[0])
+
+      if (returnType != null) {
+        return returnType
+      }
+
+      return 'number'
+    }
+
+    return 'number'
+  }
+
+  if (expression.type === 'NewExpression') {
     return 'class'
   }
 
-  if (expression?.type === 'AwaitExpression') {
-    const valueType =
-      deps.knownValueType(expression.valueType) ?? deps.resolvePromiseExpressionValueType(expression.argument, context)
+  if (expression.type === 'AwaitExpression') {
+    let valueType = deps.knownValueType(expression.valueType)
+
+    if (valueType == null) {
+      valueType = deps.resolvePromiseExpressionValueType(expression.argument, context)
+    }
 
     if (valueType != null) {
       return valueType
@@ -409,7 +553,11 @@ export function inferExpressionType(
 
     const argumentType = inferExpressionType(expression.argument, context, deps)
 
-    return argumentType === 'promise' ? 'unknown' : argumentType
+    if (argumentType === 'promise') {
+      return 'unknown'
+    }
+
+    return argumentType
   }
 
   if (isOptionalChainExpression(expression)) {
