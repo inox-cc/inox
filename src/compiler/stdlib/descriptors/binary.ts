@@ -1,8 +1,8 @@
-export const binaryStaticMethods = ['alloc', 'from', 'isBuffer'] as const
-export const binaryInstanceMethods = ['slice', 'toString'] as const
-export const binaryConstructors = ['Uint8Array'] as const
-export const bufferRuntimeConstants = ['MAX_LENGTH'] as const
-export const unsupportedBufferRuntimeExports = [
+export const binaryStaticMethods: string[] = ['alloc', 'from', 'isBuffer']
+export const binaryInstanceMethods: string[] = ['slice', 'toString']
+export const binaryConstructors: string[] = ['Uint8Array']
+export const bufferRuntimeConstants: string[] = ['MAX_LENGTH']
+export const unsupportedBufferRuntimeExports: string[] = [
   'Blob',
   'File',
   'atob',
@@ -14,60 +14,66 @@ export const unsupportedBufferRuntimeExports = [
   'kStringMaxLength',
   'resolveObjectURL',
   'transcode'
-] as const
+]
 
-export type BinaryStaticMethod = (typeof binaryStaticMethods)[number]
-export type BinaryInstanceMethod = (typeof binaryInstanceMethods)[number]
-export type BinaryRuntimeMethod = BinaryStaticMethod | BinaryInstanceMethod
-export type BinaryConstructorName = (typeof binaryConstructors)[number]
-export type BufferRuntimeConstant = (typeof bufferRuntimeConstants)[number]
-
-const nodeBufferImportSources = new Set(['node:buffer'])
-const binaryStaticMethodSet = new Set<string>(binaryStaticMethods)
-const binaryInstanceMethodSet = new Set<string>(binaryInstanceMethods)
-const binaryConstructorSet = new Set<string>(binaryConstructors)
-const bufferRuntimeConstantSet = new Set<string>(bufferRuntimeConstants)
-const unsupportedBufferRuntimeExportSet = new Set<string>(unsupportedBufferRuntimeExports)
+const nodeBufferImportSources = createStringSet(['node:buffer'])
+const binaryStaticMethodSet = createStringSet(binaryStaticMethods)
+const binaryInstanceMethodSet = createStringSet(binaryInstanceMethods)
+const binaryConstructorSet = createStringSet(binaryConstructors)
+const bufferRuntimeConstantSet = createStringSet(bufferRuntimeConstants)
+const unsupportedBufferRuntimeExportSet = createStringSet(unsupportedBufferRuntimeExports)
 
 export function isNodeBufferImportSource(source: string | null | undefined): boolean {
   return source != null && nodeBufferImportSources.has(source)
 }
 
 export function binaryStaticRuntimeMethodNameFromPath(
-  path: readonly string[] | null | undefined
-): BinaryStaticMethod | null {
+  path: string[] | null | undefined
+): string | null {
   if (path == null || path.length !== 2 || path[0] !== 'Buffer') {
     return null
   }
 
-  return isBinaryStaticMethod(path[1]) ? path[1] : null
+  if (isBinaryStaticMethod(path[1])) {
+    return path[1]
+  }
+
+  return null
 }
 
-export function binaryInstanceRuntimeMethodName(method: string): BinaryInstanceMethod | null {
-  return isBinaryInstanceMethod(method) ? method : null
+export function binaryInstanceRuntimeMethodName(method: string): string | null {
+  if (isBinaryInstanceMethod(method)) {
+    return method
+  }
+
+  return null
 }
 
-export function binaryConstructorNameFromPath(path: readonly string[] | null | undefined): BinaryConstructorName | null {
+export function binaryConstructorNameFromPath(path: string[] | null | undefined): string | null {
   if (path == null || path.length !== 1) {
     return null
   }
 
-  return isBinaryConstructorName(path[0]) ? path[0] : null
+  if (isBinaryConstructorName(path[0])) {
+    return path[0]
+  }
+
+  return null
 }
 
-export function isBinaryStaticMethod(method: string): method is BinaryStaticMethod {
+export function isBinaryStaticMethod(method: string): boolean {
   return binaryStaticMethodSet.has(method)
 }
 
-export function isBinaryInstanceMethod(method: string): method is BinaryInstanceMethod {
+export function isBinaryInstanceMethod(method: string): boolean {
   return binaryInstanceMethodSet.has(method)
 }
 
-export function isBinaryConstructorName(name: string): name is BinaryConstructorName {
+export function isBinaryConstructorName(name: string): boolean {
   return binaryConstructorSet.has(name)
 }
 
-export function isBufferRuntimeConstant(name: string): name is BufferRuntimeConstant {
+export function isBufferRuntimeConstant(name: string): boolean {
   return bufferRuntimeConstantSet.has(name)
 }
 
@@ -84,9 +90,17 @@ export function binaryRuntimeReturnType(method: string): 'bytes' | 'string' | nu
     return 'string'
   }
 
-  return isBinaryStaticMethod(method) || isBinaryInstanceMethod(method) ? 'bytes' : null
+  if (isBinaryStaticMethod(method) || isBinaryInstanceMethod(method)) {
+    return 'bytes'
+  }
+
+  return null
 }
 
-export function isBinaryGlobalUsagePath(path: readonly string[] | null | undefined): boolean {
+export function isBinaryGlobalUsagePath(path: string[] | null | undefined): boolean {
   return binaryStaticRuntimeMethodNameFromPath(path) != null || binaryConstructorNameFromPath(path) != null
+}
+
+function createStringSet(values: string[]): Set<string> {
+  return new Set(values)
 }
