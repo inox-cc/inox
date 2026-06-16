@@ -4,35 +4,61 @@ import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
   nextCName,
-  registerOwnedValue,
-  type CFunctionContext
+  registerOwnedValue
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type {
   CObjectShape,
+  CObjectShapeField,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 
+type PathVariableMap = {
+  set(name: string, valueType: string): void
+}
+
+type PathCContext = {
+  cleanupEnabled: boolean
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  nextId: number
+  objectShapes: Map<string, CObjectShapeField[]>
+  ownedValues: string[]
+  returnType?: string
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  variables: PathVariableMap
+}
+
 export type PathLoweringDependencies = {
-  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
+  emitCValueExpression(expression: AnyNode, context: PathCContext): PreparedExpression
+  registerObjectShape(context: PathCContext, name: string, shape: CObjectShape | null | undefined): void
 }
 
 export function cPathRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression?.type !== 'CallExpression' || typeof expression.pathRuntimeMethod !== 'string') {
+  if (expression.type !== 'CallExpression') {
     return null
   }
 
-  return expression.pathRuntimeMethod
+  const method = expression.pathRuntimeMethod
+
+  if (method != null) {
+    return method
+  }
+
+  return null
 }
 
 export function cPathRuntimeConstantName(expression: AnyNode): string | null {
-  if (typeof expression?.pathRuntimeConstant !== 'string') {
-    return null
+  const constant = expression.pathRuntimeConstant
+
+  if (constant != null) {
+    return constant
   }
 
-  return expression.pathRuntimeConstant
+  return null
 }
 
 export function cPathRuntimeConstantValue(name: string): string | null {
@@ -45,10 +71,14 @@ export function cPathRuntimeConstantValue(name: string): string | null {
 
 export function emitPreparedPathConstantExpression(
   expression: AnyNode,
-  context: CFunctionContext
+  context: PathCContext
 ): PreparedExpression | null {
   const constant = cPathRuntimeConstantName(expression)
-  const value = constant == null ? null : cPathRuntimeConstantValue(constant)
+  let value: string | null = null
+
+  if (constant != null) {
+    value = cPathRuntimeConstantValue(constant)
+  }
 
   if (value == null) {
     return null
@@ -57,34 +87,45 @@ export function emitPreparedPathConstantExpression(
   const out = nextCName(context, 'ccjs_path_constant')
   registerOwnedValue(context, out)
 
+  const lines = emitPrepareOwnedValueWrite(out)
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
+      context
+    )
+  )
+
   return {
-    lines: [
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(
-        `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
-        context
-      )
-    ],
+    lines,
     expression: out
   }
 }
 
 export function emitPreparedPathObjectCallExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: PathCContext,
   dependencies: PathLoweringDependencies,
-  options: PreparedCallOptions = {}
+  options: PreparedCallOptions | null | undefined
 ): PreparedExpression | null {
   if (cPathRuntimeMethodName(expression) !== 'parse') {
     return null
   }
 
-  const out = options.out ?? nextCName(context, 'ccjs_path_object')
+  let out = nextCName(context, 'ccjs_path_object')
+
+  if (options != null && options.out != null) {
+    out = options.out
+  }
+
   const input = dependencies.emitCValueExpression(expression.args[0], context)
   const shape = emitPathParseObjectShape(context)
-  const lines = [...input.lines, ...shape.lines, ...emitPrepareOwnedValueWrite(out)]
+  const lines: string[] = []
 
-  if (options.owned !== false) {
+  pushLines(lines, input.lines)
+  pushLines(lines, shape.lines)
+  pushLines(lines, emitPrepareOwnedValueWrite(out))
+
+  if (options == null || options.owned !== false) {
     registerOwnedValue(context, out)
   }
 
@@ -106,9 +147,9 @@ export function emitPreparedPathObjectCallExpression(
 
 export function emitPreparedPathStringCallExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: PathCContext,
   dependencies: PathLoweringDependencies,
-  options: PreparedCallOptions = {}
+  options: PreparedCallOptions | null | undefined
 ): PreparedExpression | null {
   const method = cPathRuntimeMethodName(expression)
 
@@ -116,25 +157,41 @@ export function emitPreparedPathStringCallExpression(
     return null
   }
 
-  const out = options.out ?? nextCName(context, 'ccjs_path_value')
+  let out = nextCName(context, 'ccjs_path_value')
   const lines: string[] = []
 
-  if (options.owned !== false) {
+  if (options != null && options.out != null) {
+    out = options.out
+  }
+
+  if (options == null || options.owned !== false) {
     registerOwnedValue(context, out)
   }
 
   if (method === 'join' || method === 'resolve') {
-    const args = expression.args.map((arg: AnyNode) => dependencies.emitCValueExpression(arg, context))
+    const args: PreparedExpression[] = []
 
-    lines.push(...args.flatMap((arg: PreparedExpression) => arg.lines))
-    lines.push(...emitPrepareOwnedValueWrite(out))
+    for (const arg of expression.args) {
+      args.push(dependencies.emitCValueExpression(arg, context))
+    }
+
+    for (const arg of args) {
+      pushLines(lines, arg.lines)
+    }
+
+    pushLines(lines, emitPrepareOwnedValueWrite(out))
 
     if (args.length === 0) {
       lines.push(emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, 0, 0, &${out})`, context))
     } else {
       const argArray = nextCName(context, 'ccjs_path_args')
+      const expressions: string[] = []
 
-      lines.push(`ccjs_value ${argArray}[] = { ${args.map((arg: PreparedExpression) => arg.expression).join(', ')} };`)
+      for (const arg of args) {
+        expressions.push(arg.expression)
+      }
+
+      lines.push(`ccjs_value ${argArray}[] = { ${joinStrings(expressions, ', ')} };`)
       lines.push(
         emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, ${argArray}, ${args.length}, &${out})`, context)
       )
@@ -149,8 +206,8 @@ export function emitPreparedPathStringCallExpression(
   if (method === 'format') {
     const object = dependencies.emitCValueExpression(expression.args[0], context)
 
-    lines.push(...object.lines)
-    lines.push(...emitPrepareOwnedValueWrite(out))
+    pushLines(lines, object.lines)
+    pushLines(lines, emitPrepareOwnedValueWrite(out))
     lines.push(emitStatusCheck(`ccjs_path_format(&ccjs_default_allocator, ${object.expression}, &${out})`, context))
 
     return {
@@ -161,19 +218,25 @@ export function emitPreparedPathStringCallExpression(
 
   const first = dependencies.emitCValueExpression(expression.args[0], context)
 
-  lines.push(...first.lines)
-  lines.push(...emitPrepareOwnedValueWrite(out))
+  pushLines(lines, first.lines)
+  pushLines(lines, emitPrepareOwnedValueWrite(out))
 
   if (method === 'basename') {
-    const suffix =
-      expression.args[1] == null
-        ? { lines: [] as string[], expression: 'ccjs_undefined_value()' }
-        : dependencies.emitCValueExpression(expression.args[1], context)
+    let suffix: PreparedExpression = {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+    let suffixPresent = '0'
 
-    lines.push(...suffix.lines)
+    if (expression.args[1] != null) {
+      suffix = dependencies.emitCValueExpression(expression.args[1], context)
+      suffixPresent = '1'
+    }
+
+    pushLines(lines, suffix.lines)
     lines.push(
       emitStatusCheck(
-        `ccjs_path_basename(&ccjs_default_allocator, ${first.expression}, ${suffix.expression}, ${expression.args[1] == null ? '0' : '1'}, &${out})`,
+        `ccjs_path_basename(&ccjs_default_allocator, ${first.expression}, ${suffix.expression}, ${suffixPresent}, &${out})`,
         context
       )
     )
@@ -187,7 +250,7 @@ export function emitPreparedPathStringCallExpression(
   if (method === 'relative') {
     const to = dependencies.emitCValueExpression(expression.args[1], context)
 
-    lines.push(...to.lines)
+    pushLines(lines, to.lines)
     lines.push(
       emitStatusCheck(
         `ccjs_path_relative(&ccjs_default_allocator, ${first.expression}, ${to.expression}, &${out})`,
@@ -211,7 +274,7 @@ export function emitPreparedPathStringCallExpression(
 
 export function emitPreparedPathBooleanCallExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: PathCContext,
   dependencies: PathLoweringDependencies
 ): PreparedExpression | null {
   if (cPathRuntimeMethodName(expression) !== 'isAbsolute') {
@@ -220,18 +283,19 @@ export function emitPreparedPathBooleanCallExpression(
 
   const value = dependencies.emitCValueExpression(expression.args[0], context)
   const out = nextCName(context, 'ccjs_path_is_absolute')
+  const lines: string[] = []
+
+  pushLines(lines, value.lines)
+  lines.push(`int ${out} = 0;`)
+  lines.push(emitStatusCheck(`ccjs_path_is_absolute(${value.expression}, &${out})`, context))
 
   return {
-    lines: [
-      ...value.lines,
-      `int ${out} = 0;`,
-      emitStatusCheck(`ccjs_path_is_absolute(${value.expression}, &${out})`, context)
-    ],
+    lines,
     expression: `(${out} ? 1 : 0)`
   }
 }
 
-function emitPathParseObjectShape(context: CFunctionContext): PreparedExpression {
+function emitPathParseObjectShape(context: PathCContext): PreparedExpression {
   const shapeName = nextCName(context, 'ccjs_shape_path_parse')
   const fieldsName = `${shapeName}_fields`
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
@@ -250,4 +314,24 @@ function emitPathParseObjectShape(context: CFunctionContext): PreparedExpression
     lines,
     expression: `&${shapeName}`
   }
+}
+
+function pushLines(target: string[], source: string[]): void {
+  for (const line of source) {
+    target.push(line)
+  }
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }

@@ -971,7 +971,7 @@ const cCallExpressionDependencies: CCallExpressionDependencies = {
   emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies),
   emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies),
+    emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies, undefined),
   emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPromiseMethodExpression(expression, context, promiseLoweringDependencies),
   emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -1078,9 +1078,9 @@ const cValueExpressionDependencies: CValueExpressionDependencies = {
   emitPreparedOsStringCallExpression,
   emitPreparedPathConstantExpression,
   emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies),
+    emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies, undefined),
   emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies),
+    emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies, undefined),
   emitPreparedProcessStringExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedProcessStringExpression(expression, context, processLoweringDependencies),
   emitPreparedRuntimeArrayIndexValueExpression,
