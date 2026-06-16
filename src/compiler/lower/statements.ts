@@ -1009,10 +1009,34 @@ function lowerArrayMethodSubexpressions(
 }
 
 function cloneCallExpressionWithArgs(expression: LowerNode, args: LowerNode[]): LowerNode {
+  return cloneCallExpressionWithCalleeAndArgs(expression, expression.callee, args)
+}
+
+function cloneCallExpressionWithCalleeAndArgs(expression: LowerNode, callee: LowerNode, args: LowerNode[]): LowerNode {
   return {
     type: expression.type,
-    callee: expression.callee,
+    callee,
     args,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
+function cloneAwaitExpressionWithArgument(expression: LowerNode, argument: LowerNode): LowerNode {
+  return {
+    type: 'AwaitExpression',
+    argument,
     valueType: expression.valueType,
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
@@ -1055,6 +1079,49 @@ function cloneIndexExpressionWithParts(expression: LowerNode, object: LowerNode,
     type: expression.type,
     object,
     index,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
+function cloneAssignmentExpressionWithParts(expression: LowerNode, target: LowerNode, value: LowerNode): LowerNode {
+  return {
+    type: 'AssignmentExpression',
+    target,
+    value,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+}
+
+function cloneUpdateExpressionWithArgument(expression: LowerNode, argument: LowerNode): LowerNode {
+  return {
+    type: 'UpdateExpression',
+    operator: expression.operator,
+    argument,
+    prefix: expression.prefix === true,
     valueType: expression.valueType,
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
@@ -1273,16 +1340,15 @@ function lowerArrayFilterVariableDeclaration(
   }
 
   const indexName = nextLowerName(context, 'ccjs_filter_index')
-  const valueParam = callback?.type === 'ArrowFunctionExpression' ? callback.params[0] : null
-  const indexParam = callback?.type === 'ArrowFunctionExpression' ? callback.params[1] : null
-  const itemName =
-    valueParam != null && valueParam.name !== statement.name ? valueParam.name : nextLowerName(context, 'ccjs_filter_item')
+  const valueParam = arrowCallbackParam(callback, 0)
+  const indexParam = arrowCallbackParam(callback, 1)
+  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'ccjs_filter_item')
   const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
   let predicate: LowerNode | null = null
 
   if (isBooleanFilterCallback(callback)) {
     predicate = createTruthyCondition(createReference(itemName, receiverElement, receiver.loc), receiverElement.valueType)
-  } else if (callback?.type === 'ArrowFunctionExpression' && callback.params.length <= 2) {
+  } else if (isArrowCallbackWithMaxParams(callback, 2)) {
     const returned = resolveSimpleArrowReturnExpression(callback)
 
     if (returned == null) {
@@ -1296,16 +1362,12 @@ function lowerArrayFilterVariableDeclaration(
     return null
   }
 
-  const output = {
-    ...statement,
-    loweredArrayMethodName: 'filter',
-    arrayElementType: statement.arrayElementType ?? init.arrayElementType ?? receiverElement.valueType,
-    arrayElementDeclaredType:
-      statement.arrayElementDeclaredType ??
-      init.arrayElementDeclaredType ??
-      receiverElement.declaredType ??
-      receiverElement.valueType
-  }
+  const output = createArrayMethodOutputDeclaration(
+    statement,
+    'filter',
+    arrayMethodElementType(statement, init, receiverElement.valueType),
+    arrayMethodElementDeclaredType(statement, init, receiverElement)
+  )
   const loweredPredicate = lowerStatementExpression(predicate, context)
   const pushValue = createReference(itemName, receiverElement, receiver.loc)
 
@@ -1338,16 +1400,15 @@ function lowerArrayFindVariableDeclaration(
   }
 
   const indexName = nextLowerName(context, 'ccjs_find_index')
-  const valueParam = callback?.type === 'ArrowFunctionExpression' ? callback.params[0] : null
-  const indexParam = callback?.type === 'ArrowFunctionExpression' ? callback.params[1] : null
-  const itemName =
-    valueParam != null && valueParam.name !== statement.name ? valueParam.name : nextLowerName(context, 'ccjs_find_item')
+  const valueParam = arrowCallbackParam(callback, 0)
+  const indexParam = arrowCallbackParam(callback, 1)
+  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'ccjs_find_item')
   const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
   let predicate: LowerNode | null = null
 
   if (isBooleanFilterCallback(callback)) {
     predicate = createTruthyCondition(createReference(itemName, receiverElement, receiver.loc), receiverElement.valueType)
-  } else if (callback?.type === 'ArrowFunctionExpression' && callback.params.length <= 2) {
+  } else if (isArrowCallbackWithMaxParams(callback, 2)) {
     const returned = resolveSimpleArrowReturnExpression(callback)
 
     if (returned == null) {
@@ -1392,7 +1453,7 @@ function lowerArrayMapVariableDeclaration(
 ): LowerNode[] | null {
   const callback = init.args[0]
 
-  if (callback?.type !== 'ArrowFunctionExpression' || callback.params.length > 2) {
+  if (!isArrowCallbackWithMaxParams(callback, 2)) {
     return null
   }
 
@@ -1412,26 +1473,147 @@ function lowerArrayMapVariableDeclaration(
   const indexName = nextLowerName(context, 'ccjs_map_index')
   const valueParam = callback.params[0]
   const indexParam = callback.params[1]
-  const itemName =
-    valueParam != null && valueParam.name !== statement.name ? valueParam.name : nextLowerName(context, 'ccjs_map_item')
+  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'ccjs_map_item')
   const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
   const mappedValue = lowerStatementExpression(replaceExpressionReferences(mapped, replacements), context)
-  const mappedElementType = statement.arrayElementType ?? init.arrayElementType ?? mappedValue.valueType ?? 'unknown'
+  const mappedElementType = arrayMapElementType(statement, init, mappedValue)
 
   if (mappedElementType === 'unknown' || mappedElementType === 'void') {
     return null
   }
 
-  const output = {
-    ...statement,
-    loweredArrayMethodName: 'map',
-    arrayElementType: mappedElementType,
-    arrayElementDeclaredType: statement.arrayElementDeclaredType ?? init.arrayElementDeclaredType ?? mappedElementType
-  }
+  const output = createArrayMethodOutputDeclaration(
+    statement,
+    'map',
+    mappedElementType,
+    arrayMapElementDeclaredType(statement, init, mappedElementType)
+  )
 
   return createArrayLoopStatements(output, receiver, receiverElement, indexName, itemName, [
     createArrayPushStatement(statement.name, output, mappedValue, init.loc)
   ])
+}
+
+function arrowCallbackParam(callback: LowerNode | null | undefined, index: number): LowerNode | null {
+  if (callback == null || callback.type !== 'ArrowFunctionExpression') {
+    return null
+  }
+
+  if (index >= callback.params.length) {
+    return null
+  }
+
+  return callback.params[index]
+}
+
+function isArrowCallbackWithMaxParams(callback: LowerNode | null | undefined, maxParams: number): boolean {
+  if (callback == null || callback.type !== 'ArrowFunctionExpression') {
+    return false
+  }
+
+  return callback.params.length <= maxParams
+}
+
+function arrayMethodItemName(
+  valueParam: LowerNode | null,
+  outputName: string,
+  context: LowerContext,
+  fallbackPrefix: string
+): string {
+  if (valueParam != null && valueParam.name !== outputName) {
+    return valueParam.name
+  }
+
+  return nextLowerName(context, fallbackPrefix)
+}
+
+function arrayMethodElementType(statement: LowerNode, init: LowerNode, fallback: string): string {
+  if (statement.arrayElementType != null) {
+    return statement.arrayElementType
+  }
+
+  if (init.arrayElementType != null) {
+    return init.arrayElementType
+  }
+
+  return fallback
+}
+
+function arrayMethodElementDeclaredType(
+  statement: LowerNode,
+  init: LowerNode,
+  receiverElement: ArrayElementInfo
+): string {
+  if (statement.arrayElementDeclaredType != null) {
+    return statement.arrayElementDeclaredType
+  }
+
+  if (init.arrayElementDeclaredType != null) {
+    return init.arrayElementDeclaredType
+  }
+
+  if (receiverElement.declaredType != null) {
+    return receiverElement.declaredType
+  }
+
+  return receiverElement.valueType
+}
+
+function arrayMapElementType(statement: LowerNode, init: LowerNode, mappedValue: LowerNode): string {
+  if (statement.arrayElementType != null) {
+    return statement.arrayElementType
+  }
+
+  if (init.arrayElementType != null) {
+    return init.arrayElementType
+  }
+
+  if (mappedValue.valueType != null) {
+    return mappedValue.valueType
+  }
+
+  return 'unknown'
+}
+
+function arrayMapElementDeclaredType(statement: LowerNode, init: LowerNode, mappedElementType: string): string {
+  if (statement.arrayElementDeclaredType != null) {
+    return statement.arrayElementDeclaredType
+  }
+
+  if (init.arrayElementDeclaredType != null) {
+    return init.arrayElementDeclaredType
+  }
+
+  return mappedElementType
+}
+
+function createArrayMethodOutputDeclaration(
+  statement: LowerNode,
+  loweredArrayMethodName: string,
+  arrayElementType: string,
+  arrayElementDeclaredType: string
+): LowerNode {
+  return {
+    type: 'VariableDeclaration',
+    kind: statement.kind,
+    exported: statement.exported,
+    name: statement.name,
+    loc: statement.loc,
+    declaredType: statement.declaredType,
+    nullable: statement.nullable === true,
+    shape: nullableNode(statement.shape),
+    functionType: nullableNode(statement.functionType),
+    arrayElementType,
+    arrayElementDeclaredType,
+    mapKeyType: nullableString(statement.mapKeyType),
+    mapValueType: nullableString(statement.mapValueType),
+    promiseValueType: nullableString(statement.promiseValueType),
+    setElementType: nullableString(statement.setElementType),
+    valueType: fallbackString(statement.valueType, 'array'),
+    className: nullableString(statement.className),
+    loweredArrayMethodName,
+    init: statement.init
+  }
 }
 
 function createArrayLoopStatements(
@@ -1596,37 +1778,121 @@ type Replacement = {
 }
 
 function resolveReceiverElementInfo(receiver: LowerNode, callback: LowerNode | null | undefined, context: LowerContext): ArrayElementInfo {
-  const callbackParam = callback?.type === 'ArrowFunctionExpression' ? callback.params[0] : null
-  const declaredType = receiver.arrayElementDeclaredType ?? receiver.arrayElementType ?? callbackParam?.declaredType ?? null
+  const callbackParam = arrowCallbackParam(callback, 0)
+  const declaredType = receiverElementDeclaredType(receiver, callbackParam)
   const declared = resolveDeclaredType(declaredType, context)
-  const valueType = receiver.arrayElementType ?? callbackParam?.valueType ?? declared.valueType ?? 'unknown'
+  const valueType = receiverElementValueType(receiver, callbackParam, declared)
 
   return {
     valueType,
     declaredType,
-    shape: callbackParam?.shape ?? declared.shape ?? null,
-    arrayElementType: callbackParam?.arrayElementType ?? declared.arrayElementType ?? null,
-    arrayElementDeclaredType: callbackParam?.arrayElementDeclaredType ?? declared.arrayElementDeclaredType ?? null,
-    mapKeyType: callbackParam?.mapKeyType ?? declared.mapKeyType ?? null,
-    mapValueType: callbackParam?.mapValueType ?? declared.mapValueType ?? null,
-    promiseValueType: callbackParam?.promiseValueType ?? declared.promiseValueType ?? null,
-    setElementType: callbackParam?.setElementType ?? declared.setElementType ?? null,
-    functionType: callbackParam?.functionType ?? declared.functionType ?? null
+    shape: receiverElementShape(callbackParam, declared),
+    arrayElementType: receiverElementNestedType(callbackParam, declared.arrayElementType, 'arrayElementType'),
+    arrayElementDeclaredType: receiverElementNestedType(
+      callbackParam,
+      declared.arrayElementDeclaredType,
+      'arrayElementDeclaredType'
+    ),
+    mapKeyType: receiverElementNestedType(callbackParam, declared.mapKeyType, 'mapKeyType'),
+    mapValueType: receiverElementNestedType(callbackParam, declared.mapValueType, 'mapValueType'),
+    promiseValueType: receiverElementNestedType(callbackParam, declared.promiseValueType, 'promiseValueType'),
+    setElementType: receiverElementNestedType(callbackParam, declared.setElementType, 'setElementType'),
+    functionType: receiverElementFunctionType(callbackParam, declared)
   }
 }
 
+function receiverElementDeclaredType(receiver: LowerNode, callbackParam: LowerNode | null): string | null {
+  if (receiver.arrayElementDeclaredType != null) {
+    return receiver.arrayElementDeclaredType
+  }
+
+  if (receiver.arrayElementType != null) {
+    return receiver.arrayElementType
+  }
+
+  if (callbackParam != null && callbackParam.declaredType != null) {
+    return callbackParam.declaredType
+  }
+
+  return null
+}
+
+function receiverElementValueType(
+  receiver: LowerNode,
+  callbackParam: LowerNode | null,
+  declared: LowerResolvedType
+): string {
+  if (receiver.arrayElementType != null) {
+    return receiver.arrayElementType
+  }
+
+  if (callbackParam != null && callbackParam.valueType != null) {
+    return callbackParam.valueType
+  }
+
+  if (declared.valueType != null) {
+    return declared.valueType
+  }
+
+  return 'unknown'
+}
+
+function receiverElementShape(callbackParam: LowerNode | null, declared: LowerResolvedType): LowerNode | null {
+  if (callbackParam != null && callbackParam.shape != null) {
+    return callbackParam.shape
+  }
+
+  return declared.shape
+}
+
+function receiverElementNestedType(
+  callbackParam: LowerNode | null,
+  declaredValue: string | null | undefined,
+  key: string
+): string | null {
+  if (callbackParam != null && callbackParam[key] != null) {
+    return callbackParam[key]
+  }
+
+  if (declaredValue != null) {
+    return declaredValue
+  }
+
+  return null
+}
+
+function receiverElementFunctionType(callbackParam: LowerNode | null, declared: LowerResolvedType): LowerNode | null {
+  if (callbackParam != null && callbackParam.functionType != null) {
+    return callbackParam.functionType
+  }
+
+  return declared.functionType
+}
+
 function createArrayOutputDeclaration(statement: LowerNode): LowerNode {
-  const elementType = statement.arrayElementType ?? 'unknown'
-  const elementDeclaredType = statement.arrayElementDeclaredType ?? elementType
+  const elementType = arrayOutputElementType(statement)
+  const elementDeclaredType = arrayOutputElementDeclaredType(statement, elementType)
 
   return {
-    ...statement,
+    type: 'VariableDeclaration',
+    kind: statement.kind,
+    exported: statement.exported,
+    name: statement.name,
+    loc: statement.loc,
+    declaredType: statement.declaredType,
     nullable: false,
+    shape: nullableNode(statement.shape),
+    functionType: nullableNode(statement.functionType),
     valueType: 'array',
     arrayElementType: elementType,
     arrayElementDeclaredType: elementDeclaredType,
+    mapKeyType: nullableString(statement.mapKeyType),
+    mapValueType: nullableString(statement.mapValueType),
+    promiseValueType: nullableString(statement.promiseValueType),
+    setElementType: nullableString(statement.setElementType),
+    className: nullableString(statement.className),
     loweredArrayMethod: true,
-    loweredArrayMethodName: statement.loweredArrayMethodName ?? null,
+    loweredArrayMethodName: nullableString(statement.loweredArrayMethodName),
     init: {
       type: 'ArrayLiteral',
       elements: [],
@@ -1638,10 +1904,30 @@ function createArrayOutputDeclaration(statement: LowerNode): LowerNode {
   }
 }
 
+function arrayOutputElementType(statement: LowerNode): string {
+  if (statement.arrayElementType != null) {
+    return statement.arrayElementType
+  }
+
+  return 'unknown'
+}
+
+function arrayOutputElementDeclaredType(statement: LowerNode, elementType: string): string {
+  if (statement.arrayElementDeclaredType != null) {
+    return statement.arrayElementDeclaredType
+  }
+
+  return elementType
+}
+
 function createArrayFindOutputDeclaration(statement: LowerNode, element: ArrayElementInfo): LowerNode {
   return {
-    ...statement,
+    type: 'VariableDeclaration',
     kind: 'let',
+    exported: statement.exported,
+    name: statement.name,
+    loc: statement.loc,
+    declaredType: statement.declaredType,
     nullable: true,
     valueType: element.valueType,
     shape: element.shape,
@@ -1652,6 +1938,7 @@ function createArrayFindOutputDeclaration(statement: LowerNode, element: ArrayEl
     mapValueType: element.mapValueType,
     promiseValueType: element.promiseValueType,
     setElementType: element.setElementType,
+    className: nullableString(statement.className),
     init: {
       type: 'NullLiteral',
       value: null,
@@ -1662,8 +1949,8 @@ function createArrayFindOutputDeclaration(statement: LowerNode, element: ArrayEl
 }
 
 function createArrayTempDeclaration(name: string, init: LowerNode, loc: LowerNode['loc']): LowerNode {
-  const elementType = init.arrayElementType ?? inferArrayElementType(init) ?? 'unknown'
-  const elementDeclaredType = init.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init) ?? elementType
+  const elementType = arrayTempElementType(init)
+  const elementDeclaredType = arrayTempElementDeclaredType(init, elementType)
 
   return {
     type: 'VariableDeclaration',
@@ -1686,6 +1973,34 @@ function createArrayTempDeclaration(name: string, init: LowerNode, loc: LowerNod
   }
 }
 
+function arrayTempElementType(init: LowerNode): string {
+  const inferred = inferArrayElementType(init)
+
+  if (init.arrayElementType != null) {
+    return init.arrayElementType
+  }
+
+  if (inferred != null) {
+    return inferred
+  }
+
+  return 'unknown'
+}
+
+function arrayTempElementDeclaredType(init: LowerNode, elementType: string): string {
+  const inferred = inferArrayElementDeclaredType(init)
+
+  if (init.arrayElementDeclaredType != null) {
+    return init.arrayElementDeclaredType
+  }
+
+  if (inferred != null) {
+    return inferred
+  }
+
+  return elementType
+}
+
 function createFindTempDeclaration(name: string, init: LowerNode, loc: LowerNode['loc']): LowerNode {
   return {
     type: 'VariableDeclaration',
@@ -1695,15 +2010,15 @@ function createFindTempDeclaration(name: string, init: LowerNode, loc: LowerNode
     loc,
     declaredType: null,
     nullable: true,
-    shape: init.shape ?? null,
-    functionType: init.functionType ?? null,
-    arrayElementType: init.arrayElementType ?? null,
-    arrayElementDeclaredType: init.arrayElementDeclaredType ?? null,
-    mapKeyType: init.mapKeyType ?? null,
-    mapValueType: init.mapValueType ?? null,
-    promiseValueType: init.promiseValueType ?? null,
-    setElementType: init.setElementType ?? null,
-    valueType: init.valueType ?? 'unknown',
+    shape: nullableNode(init.shape),
+    functionType: nullableNode(init.functionType),
+    arrayElementType: nullableString(init.arrayElementType),
+    arrayElementDeclaredType: nullableString(init.arrayElementDeclaredType),
+    mapKeyType: nullableString(init.mapKeyType),
+    mapValueType: nullableString(init.mapValueType),
+    promiseValueType: nullableString(init.promiseValueType),
+    setElementType: nullableString(init.setElementType),
+    valueType: fallbackString(init.valueType, 'unknown'),
     init
   }
 }
@@ -2038,7 +2353,7 @@ function resolveSimpleArrowReturnExpression(callback: LowerNode): LowerNode | nu
 
   if (Array.isArray(callback.body)) {
     statements = callback.body
-  } else if (callback.body?.type === 'BlockStatement') {
+  } else if (callback.body != null && callback.body.type === 'BlockStatement') {
     statements = callback.body.body
   }
 
@@ -2071,25 +2386,19 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
   }
 
   if (expression.type === 'MemberExpression') {
-    return {
-      ...expression,
-      object: replaceExpressionReferences(expression.object, replacements)
-    }
+    return cloneMemberExpressionWithObject(expression, replaceExpressionReferences(expression.object, replacements))
   }
 
   if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
-    return {
-      ...expression,
-      object: replaceExpressionReferences(expression.object, replacements),
-      index: replaceExpressionReferences(expression.index, replacements)
-    }
+    return cloneIndexExpressionWithParts(
+      expression,
+      replaceExpressionReferences(expression.object, replacements),
+      replaceExpressionReferences(expression.index, replacements)
+    )
   }
 
   if (expression.type === 'OptionalMemberExpression') {
-    return {
-      ...expression,
-      object: replaceExpressionReferences(expression.object, replacements)
-    }
+    return cloneMemberExpressionWithObject(expression, replaceExpressionReferences(expression.object, replacements))
   }
 
   if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression') {
@@ -2099,11 +2408,11 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
       args.push(replaceExpressionReferences(arg, replacements))
     }
 
-    return {
-      ...expression,
-      callee: replaceExpressionReferences(expression.callee, replacements),
+    return cloneCallExpressionWithCalleeAndArgs(
+      expression,
+      replaceExpressionReferences(expression.callee, replacements),
       args
-    }
+    )
   }
 
   if (expression.type === 'NewExpression') {
@@ -2113,43 +2422,42 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
       args.push(replaceExpressionReferences(arg, replacements))
     }
 
-    return {
-      ...expression,
-      callee: replaceExpressionReferences(expression.callee, replacements),
+    return cloneCallExpressionWithCalleeAndArgs(
+      expression,
+      replaceExpressionReferences(expression.callee, replacements),
       args
-    }
+    )
   }
 
-  if (expression.type === 'AwaitExpression' || expression.type === 'UnaryExpression' || expression.type === 'TypeAssertionExpression') {
-    return {
-      ...expression,
-      argument: replaceExpressionReferences(expression.argument ?? expression.expression, replacements),
-      expression:
-        expression.expression == null ? expression.expression : replaceExpressionReferences(expression.expression, replacements)
-    }
+  if (expression.type === 'AwaitExpression') {
+    return cloneAwaitExpressionWithArgument(expression, replaceExpressionReferences(expression.argument, replacements))
+  }
+
+  if (expression.type === 'UnaryExpression' || expression.type === 'TypeAssertionExpression') {
+    return cloneUnaryOrTypeAssertionExpressionWithOperand(
+      expression,
+      replaceExpressionReferences(unaryOrTypeAssertionOperand(expression), replacements)
+    )
   }
 
   if (expression.type === 'AssignmentExpression') {
-    return {
-      ...expression,
-      target: replaceExpressionReferences(expression.target, replacements),
-      value: replaceExpressionReferences(expression.value, replacements)
-    }
+    return cloneAssignmentExpressionWithParts(
+      expression,
+      replaceExpressionReferences(expression.target, replacements),
+      replaceExpressionReferences(expression.value, replacements)
+    )
   }
 
   if (expression.type === 'UpdateExpression') {
-    return {
-      ...expression,
-      argument: replaceExpressionReferences(expression.argument, replacements)
-    }
+    return cloneUpdateExpressionWithArgument(expression, replaceExpressionReferences(expression.argument, replacements))
   }
 
   if (expression.type === 'BinaryExpression') {
-    return {
-      ...expression,
-      left: replaceExpressionReferences(expression.left, replacements),
-      right: replaceExpressionReferences(expression.right, replacements)
-    }
+    return cloneBinaryExpressionWithParts(
+      expression,
+      replaceExpressionReferences(expression.left, replacements),
+      replaceExpressionReferences(expression.right, replacements)
+    )
   }
 
   if (expression.type === 'ArrayLiteral') {
@@ -2159,26 +2467,17 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
       elements.push(replaceExpressionReferences(element, replacements))
     }
 
-    return {
-      ...expression,
-      elements
-    }
+    return cloneArrayLiteralWithElements(expression, elements)
   }
 
   if (expression.type === 'ObjectLiteral') {
     const properties: LowerNode[] = []
 
     for (const property of expression.properties) {
-      properties.push({
-        ...property,
-        value: replaceExpressionReferences(property.value, replacements)
-      })
+      properties.push(cloneObjectPropertyWithValue(property, replaceExpressionReferences(property.value, replacements)))
     }
 
-    return {
-      ...expression,
-      properties
-    }
+    return cloneObjectLiteralWithProperties(expression, properties)
   }
 
   return expression
@@ -2195,7 +2494,7 @@ function findReplacement(name: string, replacements: Replacement[]): LowerNode |
 }
 
 function isBooleanFilterCallback(callback: LowerNode | null | undefined): boolean {
-  return callback?.type === 'Reference' && callback.path.length === 1 && callback.path[0] === 'Boolean'
+  return callback != null && callback.type === 'Reference' && callback.path.length === 1 && callback.path[0] === 'Boolean'
 }
 
 function isStableArrayReceiver(expression: LowerNode): boolean {
@@ -2215,7 +2514,7 @@ function isStableArrayReceiver(expression: LowerNode): boolean {
 }
 
 function nextLowerName(context: LowerContext, prefix: string): string {
-  context.nextId += 1
+  context.nextId = context.nextId + 1
 
   return `__${prefix}_${context.nextId}`
 }
@@ -2226,34 +2525,57 @@ function lowerStatementExpression(expression: LowerNode, context: LowerContext):
 
 function expressionContext(context: LowerContext): LowerExpressionContext {
   return {
-    ...context,
+    types: context.types,
+    classNames: context.classNames,
+    nextId: context.nextId,
+    variables: context.variables,
     lowerStatement
   }
 }
 
 function inferArrayElementType(expression: LowerNode | null): string | null {
-  return expression?.valueType === 'array' ? (expression.arrayElementType ?? null) : null
+  if (expression == null || expression.valueType !== 'array') {
+    return null
+  }
+
+  return nullableString(expression.arrayElementType)
 }
 
 function inferArrayElementDeclaredType(expression: LowerNode | null): string | null {
-  return expression?.valueType === 'array'
-    ? (expression.arrayElementDeclaredType ?? expression.arrayElementType ?? null)
-    : null
+  if (expression == null || expression.valueType !== 'array') {
+    return null
+  }
+
+  if (expression.arrayElementDeclaredType != null) {
+    return expression.arrayElementDeclaredType
+  }
+
+  return nullableString(expression.arrayElementType)
 }
 
 function inferMapType(expression: LowerNode | null): InferredMapType | null {
-  return expression?.valueType === 'map'
-    ? {
-        key: expression.mapKeyType ?? null,
-        value: expression.mapValueType ?? null
-      }
-    : null
+  if (expression == null || expression.valueType !== 'map') {
+    return null
+  }
+
+  return {
+    key: nullableString(expression.mapKeyType),
+    value: nullableString(expression.mapValueType)
+  }
 }
 
 function inferSetElementType(expression: LowerNode | null): string | null {
-  return expression?.valueType === 'set' ? (expression.setElementType ?? null) : null
+  if (expression == null || expression.valueType !== 'set') {
+    return null
+  }
+
+  return nullableString(expression.setElementType)
 }
 
 function inferPromiseValueType(expression: LowerNode | null): string | null {
-  return expression?.valueType === 'promise' ? (expression.promiseValueType ?? null) : null
+  if (expression == null || expression.valueType !== 'promise') {
+    return null
+  }
+
+  return nullableString(expression.promiseValueType)
 }
