@@ -2,7 +2,7 @@ import type { AnyNode } from '../types.ts'
 import { lowerExpression } from './expressions.ts'
 import type { LowerExpressionContext } from './expressions.ts'
 import { resolveDeclaredType } from './type-resolution.ts'
-import type { LowerContext } from './type-resolution.ts'
+import type { LowerContext, LowerResolvedType } from './type-resolution.ts'
 
 type LowerNode = AnyNode
 type LoweredStatement = LowerNode | LowerNode[]
@@ -15,6 +15,11 @@ type ArrayMethodReceiverExpansion = {
 type ArrayExpressionHoist = {
   statements: LowerNode[]
   expression: LowerNode
+}
+
+type InferredMapType = {
+  key: string | null
+  value: string | null
 }
 
 export function lowerStatement(statement: LowerNode, context: LowerContext): LowerNode {
@@ -44,7 +49,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
       type: 'IfStatement',
       condition: lowerStatementExpression(statement.condition, context),
       consequent: lowerStatementBody(statement.consequent, context),
-      alternate: statement.alternate == null ? null : lowerStatementBody(statement.alternate, context),
+      alternate: lowerOptionalStatementBody(statement.alternate, context),
       loc: statement.loc
     }
   }
@@ -61,9 +66,9 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
   if (statement.type === 'ForStatement') {
     return {
       type: 'ForStatement',
-      init: statement.init == null ? null : lowerForInitializer(statement.init, context),
-      test: statement.test == null ? null : lowerStatementExpression(statement.test, context),
-      update: statement.update == null ? null : lowerStatementExpression(statement.update, context),
+      init: lowerOptionalForInitializer(statement.init, context),
+      test: lowerOptionalStatementExpression(statement.test, context),
+      update: lowerOptionalStatementExpression(statement.update, context),
       body: lowerStatementBody(statement.body, context),
       loc: statement.loc
     }
@@ -78,14 +83,14 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
       inferredDeclaredType: statement.inferredDeclaredType,
       valueType: statement.valueType,
       nullable: statement.nullable === true,
-      arrayElementType: statement.arrayElementType ?? null,
-      arrayElementDeclaredType: statement.arrayElementDeclaredType ?? null,
-      mapKeyType: statement.mapKeyType ?? null,
-      mapValueType: statement.mapValueType ?? null,
-      promiseValueType: statement.promiseValueType ?? null,
-      setElementType: statement.setElementType ?? null,
-      functionType: statement.functionType ?? null,
-      shape: statement.shape ?? null,
+      arrayElementType: nullableString(statement.arrayElementType),
+      arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
+      mapKeyType: nullableString(statement.mapKeyType),
+      mapValueType: nullableString(statement.mapValueType),
+      promiseValueType: nullableString(statement.promiseValueType),
+      setElementType: nullableString(statement.setElementType),
+      functionType: nullableNode(statement.functionType),
+      shape: nullableNode(statement.shape),
       loc: statement.loc,
       nameLoc: statement.nameLoc,
       iterable: lowerStatementExpression(statement.iterable, context),
@@ -97,12 +102,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
     return {
       type: 'SwitchStatement',
       discriminant: lowerStatementExpression(statement.discriminant, context),
-      cases: statement.cases.map((item) => ({
-        type: 'SwitchCase',
-        test: item.test == null ? null : lowerStatementExpression(item.test, context),
-        consequent: lowerStatementList(item.consequent, context),
-        loc: item.loc
-      })),
+      cases: lowerSwitchCases(statement.cases, context),
       loc: statement.loc
     }
   }
@@ -112,7 +112,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
       type: 'TryStatement',
       block: lowerStatementBody(statement.block, context),
       handler: lowerCatchClause(statement.handler, context),
-      finalizer: statement.finalizer == null ? null : lowerStatementBody(statement.finalizer, context),
+      finalizer: lowerOptionalStatementBody(statement.finalizer, context),
       loc: statement.loc
     }
   }
@@ -132,13 +132,10 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
     if (hoisted != null) {
       declareLoweredTopLevelVariables(context, hoisted.statements)
 
-      return [
-        ...hoisted.statements,
-        {
-          type: 'ExpressionStatement',
-          expression: hoisted.expression
-        }
-      ]
+      return prependLoweredStatements(hoisted.statements, {
+        type: 'ExpressionStatement',
+        expression: hoisted.expression
+      })
     }
 
     return {
@@ -148,20 +145,21 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
   }
 
   if (statement.type === 'ReturnStatement') {
-    const argument = statement.argument == null ? null : lowerStatementExpression(statement.argument, context)
-    const hoisted = argument == null ? null : lowerArrayMethodSubexpressions(argument, context)
+    const argument = lowerOptionalStatementExpression(statement.argument, context)
+    let hoisted: ArrayExpressionHoist | null = null
+
+    if (argument != null) {
+      hoisted = lowerArrayMethodSubexpressions(argument, context)
+    }
 
     if (hoisted != null) {
       declareLoweredTopLevelVariables(context, hoisted.statements)
 
-      return [
-        ...hoisted.statements,
-        {
-          type: 'ReturnStatement',
-          argument: hoisted.expression,
-          loc: statement.loc
-        }
-      ]
+      return prependLoweredStatements(hoisted.statements, {
+        type: 'ReturnStatement',
+        argument: hoisted.expression,
+        loc: statement.loc
+      })
     }
 
     return {
@@ -182,20 +180,106 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
   return statement
 }
 
+function lowerOptionalStatementBody(
+  statement: LowerNode | null | undefined,
+  context: LowerContext
+): LowerNode | null {
+  if (statement == null) {
+    return null
+  }
+
+  return lowerStatementBody(statement, context)
+}
+
+function lowerOptionalStatementExpression(
+  expression: LowerNode | null | undefined,
+  context: LowerContext
+): LowerNode | null {
+  if (expression == null) {
+    return null
+  }
+
+  return lowerStatementExpression(expression, context)
+}
+
+function lowerOptionalForInitializer(
+  init: LowerNode | null | undefined,
+  context: LowerContext
+): LowerNode | null {
+  if (init == null) {
+    return null
+  }
+
+  return lowerForInitializer(init, context)
+}
+
+function lowerSwitchCases(cases: LowerNode[], context: LowerContext): LowerNode[] {
+  const lowered: LowerNode[] = []
+
+  for (const item of cases) {
+    lowered.push({
+      type: 'SwitchCase',
+      test: lowerOptionalStatementExpression(item.test, context),
+      consequent: lowerStatementList(item.consequent, context),
+      loc: item.loc
+    })
+  }
+
+  return lowered
+}
+
+function prependLoweredStatements(prefix: LowerNode[], statement: LowerNode): LowerNode[] {
+  const statements: LowerNode[] = []
+
+  for (const item of prefix) {
+    statements.push(item)
+  }
+
+  statements.push(statement)
+
+  return statements
+}
+
+function fallbackString(value: string | null | undefined, fallback: string): string {
+  if (value != null) {
+    return value
+  }
+
+  return fallback
+}
+
+function nullableString(value: string | null | undefined): string | null {
+  if (value != null) {
+    return value
+  }
+
+  return null
+}
+
+function nullableNode(value: LowerNode | null | undefined): LowerNode | null {
+  if (value != null) {
+    return value
+  }
+
+  return null
+}
+
 export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
   const declared = resolveDeclaredType(param.valueType, context)
+  const promiseValueType = nullableString(declared.promiseValueType)
 
   return {
-    ...param,
+    name: param.name,
+    loc: param.loc,
     declaredType: param.valueType,
     optional: param.optional === true,
-    valueType: declared.valueType ?? param.valueType,
+    valueType: fallbackString(declared.valueType, param.valueType),
     nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
-    promiseValueType: declared.promiseValueType ?? null,
+    promiseValueType,
     setElementType: declared.setElementType,
     functionType: declared.functionType,
     shape: declared.shape
@@ -261,7 +345,10 @@ function lowerCatchClause(handler: LowerNode | null | undefined, context: LowerC
   }
 
   return {
-    ...handler,
+    type: 'CatchClause',
+    param: nullableString(handler.param),
+    paramLoc: nullableNode(handler.paramLoc),
+    loc: handler.loc,
     body
   }
 }
@@ -282,9 +369,19 @@ function lowerVariableDeclaration(
   context: LowerContext,
   allowArrayMethodExpansion: boolean
 ): LoweredStatement {
-  const init = statement.init == null ? null : lowerStatementExpression(statement.init, context)
+  const init = lowerOptionalStatementExpression(statement.init, context)
   const declared = resolveDeclaredType(statement.declaredType, context)
   const inferredMapType = inferMapType(init)
+  const nullable = variableDeclarationNullable(declared, init)
+  const shape = variableDeclarationShape(declared, statement, init)
+  const functionType = variableDeclarationFunctionType(declared, statement, init)
+  const arrayElementType = variableDeclarationArrayElementType(declared, statement, init)
+  const arrayElementDeclaredType = variableDeclarationArrayElementDeclaredType(declared, statement, init)
+  const mapKeyType = variableDeclarationMapKeyType(declared, inferredMapType)
+  const mapValueType = variableDeclarationMapValueType(declared, inferredMapType)
+  const promiseValueType = variableDeclarationPromiseValueType(declared, statement, init)
+  const setElementType = variableDeclarationSetElementType(declared, statement, init)
+  const valueType = variableDeclarationValueType(declared, statement, init)
   const lowered: LowerNode = {
     type: 'VariableDeclaration',
     kind: statement.kind,
@@ -292,17 +389,16 @@ function lowerVariableDeclaration(
     name: statement.name,
     loc: statement.loc,
     declaredType: statement.declaredType,
-    nullable: declared.nullable || init?.nullable === true,
-    shape: declared.shape ?? statement.shape ?? init?.shape ?? null,
-    functionType: declared.functionType ?? statement.functionType ?? init?.functionType ?? null,
-    arrayElementType: declared.arrayElementType ?? statement.arrayElementType ?? inferArrayElementType(init),
-    arrayElementDeclaredType:
-      declared.arrayElementDeclaredType ?? statement.arrayElementDeclaredType ?? inferArrayElementDeclaredType(init),
-    mapKeyType: declared.mapKeyType ?? inferredMapType?.key ?? null,
-    mapValueType: declared.mapValueType ?? inferredMapType?.value ?? null,
-    promiseValueType: declared.promiseValueType ?? statement.promiseValueType ?? inferPromiseValueType(init),
-    setElementType: declared.setElementType ?? statement.setElementType ?? inferSetElementType(init),
-    valueType: declared.valueType ?? statement.valueType ?? statement.declaredType ?? init?.valueType ?? 'unknown',
+    nullable,
+    shape,
+    functionType,
+    arrayElementType,
+    arrayElementDeclaredType,
+    mapKeyType,
+    mapValueType,
+    promiseValueType,
+    setElementType,
+    valueType,
     init
   }
 
@@ -317,15 +413,12 @@ function lowerVariableDeclaration(
     const hoisted = lowerArrayMethodSubexpressions(init, context)
 
     if (hoisted != null) {
-      const declaration = {
-        ...lowered,
-        init: hoisted.expression
-      }
+      const declaration = cloneVariableDeclarationWithInit(lowered, hoisted.expression)
 
       declareLoweredTopLevelVariables(context, hoisted.statements)
       declareLowerVariable(context, declaration)
 
-      return [...hoisted.statements, declaration]
+      return prependLoweredStatements(hoisted.statements, declaration)
     }
 
     declareLowerVariable(context, lowered)
@@ -337,23 +430,216 @@ function lowerVariableDeclaration(
   return expanded
 }
 
+function variableDeclarationNullable(declared: LowerResolvedType, init: LowerNode | null): boolean {
+  if (declared.nullable) {
+    return true
+  }
+
+  if (init != null && init.nullable === true) {
+    return true
+  }
+
+  return false
+}
+
+function variableDeclarationShape(
+  declared: LowerResolvedType,
+  statement: LowerNode,
+  init: LowerNode | null
+): LowerNode | null {
+  if (declared.shape != null) {
+    return declared.shape
+  }
+
+  if (statement.shape != null) {
+    return statement.shape
+  }
+
+  if (init != null && init.shape != null) {
+    return init.shape
+  }
+
+  return null
+}
+
+function variableDeclarationFunctionType(
+  declared: LowerResolvedType,
+  statement: LowerNode,
+  init: LowerNode | null
+): LowerNode | null {
+  if (declared.functionType != null) {
+    return declared.functionType
+  }
+
+  if (statement.functionType != null) {
+    return statement.functionType
+  }
+
+  if (init != null && init.functionType != null) {
+    return init.functionType
+  }
+
+  return null
+}
+
+function variableDeclarationArrayElementType(
+  declared: LowerResolvedType,
+  statement: LowerNode,
+  init: LowerNode | null
+): string | null {
+  if (declared.arrayElementType != null) {
+    return declared.arrayElementType
+  }
+
+  if (statement.arrayElementType != null) {
+    return statement.arrayElementType
+  }
+
+  return inferArrayElementType(init)
+}
+
+function variableDeclarationArrayElementDeclaredType(
+  declared: LowerResolvedType,
+  statement: LowerNode,
+  init: LowerNode | null
+): string | null {
+  if (declared.arrayElementDeclaredType != null) {
+    return declared.arrayElementDeclaredType
+  }
+
+  if (statement.arrayElementDeclaredType != null) {
+    return statement.arrayElementDeclaredType
+  }
+
+  return inferArrayElementDeclaredType(init)
+}
+
+function variableDeclarationMapKeyType(
+  declared: LowerResolvedType,
+  inferredMapType: InferredMapType | null
+): string | null {
+  if (declared.mapKeyType != null) {
+    return declared.mapKeyType
+  }
+
+  if (inferredMapType != null && inferredMapType.key != null) {
+    return inferredMapType.key
+  }
+
+  return null
+}
+
+function variableDeclarationMapValueType(
+  declared: LowerResolvedType,
+  inferredMapType: InferredMapType | null
+): string | null {
+  if (declared.mapValueType != null) {
+    return declared.mapValueType
+  }
+
+  if (inferredMapType != null && inferredMapType.value != null) {
+    return inferredMapType.value
+  }
+
+  return null
+}
+
+function variableDeclarationPromiseValueType(
+  declared: LowerResolvedType,
+  statement: LowerNode,
+  init: LowerNode | null
+): string | null {
+  if (declared.promiseValueType != null) {
+    return declared.promiseValueType
+  }
+
+  if (statement.promiseValueType != null) {
+    return statement.promiseValueType
+  }
+
+  return inferPromiseValueType(init)
+}
+
+function variableDeclarationSetElementType(
+  declared: LowerResolvedType,
+  statement: LowerNode,
+  init: LowerNode | null
+): string | null {
+  if (declared.setElementType != null) {
+    return declared.setElementType
+  }
+
+  if (statement.setElementType != null) {
+    return statement.setElementType
+  }
+
+  return inferSetElementType(init)
+}
+
+function variableDeclarationValueType(
+  declared: LowerResolvedType,
+  statement: LowerNode,
+  init: LowerNode | null
+): string {
+  if (declared.valueType != null) {
+    return declared.valueType
+  }
+
+  if (statement.valueType != null) {
+    return statement.valueType
+  }
+
+  if (statement.declaredType != null) {
+    return statement.declaredType
+  }
+
+  if (init != null && init.valueType != null) {
+    return init.valueType
+  }
+
+  return 'unknown'
+}
+
+function cloneVariableDeclarationWithInit(statement: LowerNode, init: LowerNode): LowerNode {
+  return {
+    type: 'VariableDeclaration',
+    kind: statement.kind,
+    exported: statement.exported,
+    name: statement.name,
+    loc: statement.loc,
+    declaredType: statement.declaredType,
+    nullable: statement.nullable === true,
+    shape: nullableNode(statement.shape),
+    functionType: nullableNode(statement.functionType),
+    arrayElementType: nullableString(statement.arrayElementType),
+    arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
+    mapKeyType: nullableString(statement.mapKeyType),
+    mapValueType: nullableString(statement.mapValueType),
+    promiseValueType: nullableString(statement.promiseValueType),
+    setElementType: nullableString(statement.setElementType),
+    valueType: fallbackString(statement.valueType, 'unknown'),
+    className: nullableString(statement.className),
+    init
+  }
+}
+
 function declareLowerVariable(context: LowerContext, statement: LowerNode): void {
   if (statement.type !== 'VariableDeclaration') {
     return
   }
 
   context.variables.set(statement.name, {
-    valueType: statement.valueType ?? 'unknown',
+    valueType: fallbackString(statement.valueType, 'unknown'),
     nullable: statement.nullable === true,
-    arrayElementType: statement.arrayElementType ?? null,
-    arrayElementDeclaredType: statement.arrayElementDeclaredType ?? null,
-    mapKeyType: statement.mapKeyType ?? null,
-    mapValueType: statement.mapValueType ?? null,
-    promiseValueType: statement.promiseValueType ?? null,
-    setElementType: statement.setElementType ?? null,
-    functionType: statement.functionType ?? null,
-    shape: statement.shape ?? null,
-    className: statement.className ?? null
+    arrayElementType: nullableString(statement.arrayElementType),
+    arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
+    mapKeyType: nullableString(statement.mapKeyType),
+    mapValueType: nullableString(statement.mapValueType),
+    promiseValueType: nullableString(statement.promiseValueType),
+    setElementType: nullableString(statement.setElementType),
+    functionType: nullableNode(statement.functionType),
+    shape: nullableNode(statement.shape),
+    className: nullableString(statement.className)
   })
 }
 
@@ -381,11 +667,20 @@ function lowerArrayMethodVariableDeclaration(
   }
 
   const expandedInit: LowerNode = {
-    ...init,
-    callee: {
-      ...init.callee,
-      object: receiver.receiver
-    }
+    type: init.type,
+    callee: replaceMemberObject(init.callee, receiver.receiver),
+    args: init.args,
+    valueType: init.valueType,
+    nullable: init.nullable === true,
+    arrayElementType: nullableString(init.arrayElementType),
+    arrayElementDeclaredType: nullableString(init.arrayElementDeclaredType),
+    mapKeyType: nullableString(init.mapKeyType),
+    mapValueType: nullableString(init.mapValueType),
+    promiseValueType: nullableString(init.promiseValueType),
+    setElementType: nullableString(init.setElementType),
+    functionType: nullableNode(init.functionType),
+    shape: nullableNode(init.shape),
+    loc: init.loc
   }
   let expanded: LowerNode[] | null = null
 
@@ -401,7 +696,42 @@ function lowerArrayMethodVariableDeclaration(
     return null
   }
 
-  return [...receiver.statements, ...expanded]
+  return concatLoweredStatements(receiver.statements, expanded)
+}
+
+function replaceMemberObject(callee: LowerNode, object: LowerNode): LowerNode {
+  return {
+    type: callee.type,
+    object,
+    property: callee.property,
+    optional: callee.optional === true,
+    valueType: callee.valueType,
+    nullable: callee.nullable === true,
+    arrayElementType: nullableString(callee.arrayElementType),
+    arrayElementDeclaredType: nullableString(callee.arrayElementDeclaredType),
+    mapKeyType: nullableString(callee.mapKeyType),
+    mapValueType: nullableString(callee.mapValueType),
+    promiseValueType: nullableString(callee.promiseValueType),
+    setElementType: nullableString(callee.setElementType),
+    functionType: nullableNode(callee.functionType),
+    shape: nullableNode(callee.shape),
+    collectionKind: nullableString(callee.collectionKind),
+    loc: callee.loc
+  }
+}
+
+function concatLoweredStatements(first: LowerNode[], second: LowerNode[]): LowerNode[] {
+  const statements: LowerNode[] = []
+
+  for (const item of first) {
+    statements.push(item)
+  }
+
+  for (const item of second) {
+    statements.push(item)
+  }
+
+  return statements
 }
 
 function lowerArrayMethodExpressionToTemp(expression: LowerNode, context: LowerContext): ArrayExpressionHoist | null {
@@ -1724,7 +2054,7 @@ function inferArrayElementDeclaredType(expression: LowerNode | null): string | n
     : null
 }
 
-function inferMapType(expression: LowerNode | null): { key: string | null; value: string | null } | null {
+function inferMapType(expression: LowerNode | null): InferredMapType | null {
   return expression?.valueType === 'map'
     ? {
         key: expression.mapKeyType ?? null,
