@@ -1,9 +1,15 @@
 import type { SourceLocation } from '../types.ts'
 
 export function locFromToken(token: SourceLocation): SourceLocation {
-  return {
-    ...(token.file == null ? {} : { file: token.file }),
+  const file = token.file
+  const location: SourceLocation = {
     line: token.line,
     column: token.column
   }
+
+  if (file != null) {
+    location.file = file
+  }
+
+  return location
 }
