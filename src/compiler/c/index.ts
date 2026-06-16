@@ -260,6 +260,7 @@ import {
 } from './syntax.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
 import type {
+  CArrayElementInfo,
   CAsyncTaskWrapper,
   CCallbackWrapper,
   CClassInfo,
@@ -486,6 +487,12 @@ export type { CModuleOutputFile } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 type TempValueEmitter = (temp: string) => string
+
+type CErrorConstructorParts = {
+  message: AnyNode
+  code: AnyNode
+  cause: AnyNode
+}
 
 const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression,
@@ -1549,6 +1556,12 @@ function pushAll(target: string[], values: string[]): void {
   }
 }
 
+function pushIndented(target: string[], values: string[], indent: string): void {
+  for (const value of values) {
+    target.push(`${indent}${value}`)
+  }
+}
+
 function copyStringSet(source: Set<string>): Set<string> {
   const result: Set<string> = new Set()
 
@@ -2083,13 +2096,21 @@ function emitObjectMemberVariableDeclaration(
 
   const temp = nextCName(context, 'ccjs_field')
   registerOwnedValue(context, temp)
-  const constPrefix = statement.kind === 'const' ? 'const ' : ''
-  const runtimeValueExpression = member.valueType === 'boolean' ? `${temp}.as.boolean ? 1 : 0` : `${temp}.as.number`
-  const lines = [
-    ...emitPrepareOwnedValueWrite(temp),
-    emitStatusCheck(emitGetCall(temp), context),
-    `${constPrefix}double ${statement.name} = ${runtimeValueExpression};`
-  ]
+  let constPrefix = ''
+  let runtimeValueExpression = `${temp}.as.number`
+  const lines: string[] = []
+
+  if (statement.kind === 'const') {
+    constPrefix = 'const '
+  }
+
+  if (member.valueType === 'boolean') {
+    runtimeValueExpression = `${temp}.as.boolean ? 1 : 0`
+  }
+
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(emitGetCall(temp), context))
+  lines.push(`${constPrefix}double ${statement.name} = ${runtimeValueExpression};`)
 
   context.variables.set(statement.name, member.valueType)
 
@@ -2104,14 +2125,18 @@ function emitObjectArrayMemberVariableDeclaration(
 ): string[] {
   registerOwnedValue(context, statement.name)
 
-  const lines = [
-    ...emitPrepareOwnedValueWrite(statement.name),
-    emitStatusCheck(emitGetCall(statement.name), context),
-    emitRuntimeTypeCheck(`${statement.name}.tag != CCJS_TAG_ARRAY || ${statement.name}.as.ref == 0`, context)
-  ]
+  const lines: string[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(emitStatusCheck(emitGetCall(statement.name), context))
+  lines.push(emitRuntimeTypeCheck(`${statement.name}.tag != CCJS_TAG_ARRAY || ${statement.name}.as.ref == 0`, context))
 
   context.variables.set(statement.name, 'array')
-  context.runtimeArrayElementTypes.set(statement.name, member.arrayElementType ?? 'unknown')
+  if (member.arrayElementType == null) {
+    context.runtimeArrayElementTypes.set(statement.name, 'unknown')
+  } else {
+    context.runtimeArrayElementTypes.set(statement.name, member.arrayElementType)
+  }
 
   return lines
 }
@@ -2124,22 +2149,41 @@ function emitObjectCollectionMemberVariableDeclaration(
 ): string[] {
   registerOwnedValue(context, statement.name)
 
-  const tag = member.valueType === 'map' ? 'CCJS_TAG_MAP' : 'CCJS_TAG_SET'
-  const lines = [
-    ...emitPrepareOwnedValueWrite(statement.name),
-    emitStatusCheck(emitGetCall(statement.name), context),
-    emitRuntimeTypeCheck(`${statement.name}.tag != ${tag} || ${statement.name}.as.ref == 0`, context)
-  ]
+  let tag = 'CCJS_TAG_SET'
+  const lines: string[] = []
+
+  if (member.valueType === 'map') {
+    tag = 'CCJS_TAG_MAP'
+  }
+
+  pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(emitStatusCheck(emitGetCall(statement.name), context))
+  lines.push(emitRuntimeTypeCheck(`${statement.name}.tag != ${tag} || ${statement.name}.as.ref == 0`, context))
 
   context.variables.set(statement.name, member.valueType)
 
   if (member.valueType === 'map') {
+    let keyType = 'unknown'
+    let valueType = 'unknown'
+
+    if (member.mapKeyType != null) {
+      keyType = member.mapKeyType
+    }
+
+    if (member.mapValueType != null) {
+      valueType = member.mapValueType
+    }
+
     context.mapTypes.set(statement.name, {
-      key: member.mapKeyType ?? 'unknown',
-      value: member.mapValueType ?? 'unknown'
+      key: keyType,
+      value: valueType
     })
   } else {
-    context.setElementTypes.set(statement.name, member.setElementType ?? 'unknown')
+    if (member.setElementType == null) {
+      context.setElementTypes.set(statement.name, 'unknown')
+    } else {
+      context.setElementTypes.set(statement.name, member.setElementType)
+    }
   }
 
   return lines
@@ -2152,11 +2196,11 @@ function emitObjectBytesMemberVariableDeclaration(
   emitGetCall: TempValueEmitter
 ): string[] {
   registerOwnedValue(context, statement.name)
-  const lines = [
-    ...emitPrepareOwnedValueWrite(statement.name),
-    emitStatusCheck(emitGetCall(statement.name), context),
-    emitRuntimeTypeCheck(`${statement.name}.tag != CCJS_TAG_BYTES || ${statement.name}.as.ref == 0`, context)
-  ]
+  const lines: string[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(emitStatusCheck(emitGetCall(statement.name), context))
+  lines.push(emitRuntimeTypeCheck(`${statement.name}.tag != CCJS_TAG_BYTES || ${statement.name}.as.ref == 0`, context))
 
   context.variables.set(statement.name, member.valueType)
 
@@ -2170,11 +2214,11 @@ function emitObjectObjectMemberVariableDeclaration(
   emitGetCall: TempValueEmitter
 ): string[] {
   registerOwnedValue(context, statement.name)
-  const lines = [
-    ...emitPrepareOwnedValueWrite(statement.name),
-    emitStatusCheck(emitGetCall(statement.name), context),
-    emitRuntimeTypeCheck(`${statement.name}.tag != CCJS_TAG_OBJECT || ${statement.name}.as.ref == 0`, context)
-  ]
+  const lines: string[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(emitStatusCheck(emitGetCall(statement.name), context))
+  lines.push(emitRuntimeTypeCheck(`${statement.name}.tag != CCJS_TAG_OBJECT || ${statement.name}.as.ref == 0`, context))
 
   context.variables.set(statement.name, 'object')
 
@@ -2192,13 +2236,19 @@ function emitObjectStringMemberVariableDeclaration(
   emitGetCall: TempValueEmitter
 ): string[] {
   const temp = nextCName(context, 'ccjs_field')
+  let constPrefix = ''
+  const lines: string[] = []
+
   registerOwnedValue(context, temp)
-  const lines = [
-    ...emitPrepareOwnedValueWrite(temp),
-    emitStatusCheck(emitGetCall(temp), context),
-    emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context),
-    `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = (ccjs_string*)${temp}.as.ref;`
-  ]
+
+  if (statement.kind === 'const') {
+    constPrefix = 'const '
+  }
+
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(emitGetCall(temp), context))
+  lines.push(emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context))
+  lines.push(`${constPrefix}ccjs_string* ${statement.name} = (ccjs_string*)${temp}.as.ref;`)
 
   context.variables.set(statement.name, 'string')
   context.runtimeStrings.add(statement.name)
@@ -2213,16 +2263,19 @@ function emitKnownObjectMemberAssignment(
 ): string[] {
   const value = emitCValueExpression(expression.value, context)
   const valueType = inferExpressionType(expression.value, context)
+  const lines: string[] = []
 
   updateKnownObjectMemberValueType(member, valueType, context)
 
-  return [
-    ...value.lines,
+  pushAll(lines, value.lines)
+  lines.push(
     emitStatusCheck(
       `ccjs_object_set_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, ${value.expression})`,
       context
     )
-  ]
+  )
+
+  return lines
 }
 
 function emitDynamicObjectMemberAssignment(
@@ -2232,16 +2285,19 @@ function emitDynamicObjectMemberAssignment(
 ): string[] {
   const value = emitCValueExpression(expression.value, context)
   const valueType = inferExpressionType(expression.value, context)
+  const lines: string[] = []
 
   updateKnownObjectMemberValueType(member, valueType, context)
 
-  return [
-    ...value.lines,
+  pushAll(lines, value.lines)
+  lines.push(
     emitStatusCheck(
       `ccjs_object_set(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, ${value.expression})`,
       context
     )
-  ]
+  )
+
+  return lines
 }
 
 function emitKnownArrayIndexVariableDeclaration(
@@ -2257,9 +2313,7 @@ function emitKnownArrayIndexVariableDeclaration(
     context.diagnostics.push(
       diagnostic(
         cUnsupportedExpressionCode(element.valueType),
-        element.valueType === 'function'
-          ? 'stored callback array elements need delayed closure lifetime support and are not supported by the current C backend slice'
-          : 'this array element type is not supported by the current C backend slice',
+        unsupportedArrayElementMessage(element.valueType),
         statement.loc
       )
     )
@@ -2268,13 +2322,21 @@ function emitKnownArrayIndexVariableDeclaration(
 
   const temp = nextCName(context, 'ccjs_item')
   registerOwnedValue(context, temp)
-  const constPrefix = statement.kind === 'const' ? 'const ' : ''
-  const runtimeValueExpression = element.valueType === 'boolean' ? `${temp}.as.boolean ? 1 : 0` : `${temp}.as.number`
-  const lines = [
-    ...emitPrepareOwnedValueWrite(temp),
-    emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context),
-    `${constPrefix}double ${statement.name} = ${runtimeValueExpression};`
-  ]
+  let constPrefix = ''
+  let runtimeValueExpression = `${temp}.as.number`
+  const lines: string[] = []
+
+  if (statement.kind === 'const') {
+    constPrefix = 'const '
+  }
+
+  if (element.valueType === 'boolean') {
+    runtimeValueExpression = `${temp}.as.boolean ? 1 : 0`
+  }
+
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
+  lines.push(`${constPrefix}double ${statement.name} = ${runtimeValueExpression};`)
 
   context.variables.set(statement.name, element.valueType)
 
@@ -2287,13 +2349,19 @@ function emitKnownArrayStringIndexVariableDeclaration(
   context: CFunctionContext
 ): string[] {
   const temp = nextCName(context, 'ccjs_item')
+  let constPrefix = ''
+  const lines: string[] = []
+
   registerOwnedValue(context, temp)
-  const lines = [
-    ...emitPrepareOwnedValueWrite(temp),
-    emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context),
-    emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context),
-    `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = (ccjs_string*)${temp}.as.ref;`
-  ]
+
+  if (statement.kind === 'const') {
+    constPrefix = 'const '
+  }
+
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
+  lines.push(emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context))
+  lines.push(`${constPrefix}ccjs_string* ${statement.name} = (ccjs_string*)${temp}.as.ref;`)
 
   context.variables.set(statement.name, 'string')
   context.runtimeStrings.add(statement.name)
@@ -2308,40 +2376,54 @@ function emitKnownArrayIndexAssignment(
 ): string[] {
   const value = emitCValueExpression(expression.value, context)
   const valueType = inferExpressionType(expression.value, context)
+  const lines: string[] = []
 
   updateKnownArrayElementValueType(element, valueType, context)
 
-  return [
-    ...value.lines,
-    emitStatusCheck(`ccjs_array_set(${element.arrayName}, ${element.index}, ${value.expression})`, context)
-  ]
+  pushAll(lines, value.lines)
+  lines.push(emitStatusCheck(`ccjs_array_set(${element.arrayName}, ${element.index}, ${value.expression})`, context))
+
+  return lines
 }
 
 function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
-  const lines = [
-    ...emitPrepareOwnedValueWrite(statement.name),
+  const lines: string[] = []
+  const shapes: CArrayElementInfo[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(
     emitStatusCheck(
       `ccjs_array_new(&ccjs_default_allocator, ${statement.init.elements.length}, &${statement.name})`,
       context
     )
-  ]
+  )
 
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'array')
-  context.arrayShapes.set(
-    statement.name,
-    statement.init.elements.map((element: AnyNode) => ({
+  for (const element of statement.init.elements) {
+    shapes.push({
       valueType: inferExpressionType(element, context)
-    }))
-  )
+    })
+  }
+  context.arrayShapes.set(statement.name, shapes)
 
-  for (const [index, element] of statement.init.elements.entries()) {
+  for (let index = 0; index < statement.init.elements.length; index++) {
+    const element = statement.init.elements[index]
     const value = emitCValueExpression(element, context)
-    lines.push(...value.lines)
+
+    pushAll(lines, value.lines)
     lines.push(emitStatusCheck(`ccjs_array_set(${statement.name}, ${index}, ${value.expression})`, context))
   }
 
   return lines
+}
+
+function unsupportedArrayElementMessage(valueType: string): string {
+  if (valueType === 'function') {
+    return 'stored callback array elements need delayed closure lifetime support and are not supported by the current C backend slice'
+  }
+
+  return 'this array element type is not supported by the current C backend slice'
 }
 
 function emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
@@ -2378,11 +2460,15 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
   }
 
   const value = emitPreparedNumberExpression(expression, context)
+  let runtimeExpression = `ccjs_number_value(${value.expression})`
+
+  if (valueType === 'boolean') {
+    runtimeExpression = `ccjs_bool_value((${value.expression}) != 0)`
+  }
 
   return {
     lines: value.lines,
-    expression:
-      valueType === 'boolean' ? `ccjs_bool_value((${value.expression}) != 0)` : `ccjs_number_value(${value.expression})`
+    expression: runtimeExpression
   }
 }
 
@@ -2431,15 +2517,17 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     const expectedTag = cRuntimeValueTag(valueType)
     const call = emitPreparedCallExpression(expression, context)
     const temp = nextCName(context, 'ccjs_nullable_value')
+    const lines: string[] = []
+
     registerOwnedValue(context, temp)
 
+    pushAll(lines, call.lines)
+    pushAll(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(`${temp} = ${call.expression};`)
+    pushAll(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context))
+
     return {
-      lines: [
-        ...call.lines,
-        ...emitPrepareOwnedValueWrite(temp),
-        `${temp} = ${call.expression};`,
-        ...emitRuntimeNullableValueCheck(temp, expectedTag, context)
-      ],
+      lines,
       expression: temp
     }
   }
@@ -2487,15 +2575,18 @@ function emitNullableFunctionValueExpression(
 
 function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const temp = nextCName(context, 'ccjs_array')
-  registerOwnedValue(context, temp)
-  const lines = [
-    ...emitPrepareOwnedValueWrite(temp),
-    emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, ${expression.elements.length}, &${temp})`, context)
-  ]
+  const lines: string[] = []
 
-  for (const [index, element] of expression.elements.entries()) {
+  registerOwnedValue(context, temp)
+
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, ${expression.elements.length}, &${temp})`, context))
+
+  for (let index = 0; index < expression.elements.length; index++) {
+    const element = expression.elements[index]
     const value = emitCValueExpression(element, context)
-    lines.push(...value.lines)
+
+    pushAll(lines, value.lines)
     lines.push(emitStatusCheck(`ccjs_array_set(${temp}, ${index}, ${value.expression})`, context))
   }
 
@@ -2508,22 +2599,32 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
 function emitCObjectLiteralValueExpression(
   expression: AnyNode,
   context: CFunctionContext,
-  shape: AnyNode | null = null
+  shape: CObjectShape | null = null
 ): PreparedExpression {
   const temp = nextCName(context, 'ccjs_object')
   const shapeName = nextCName(context, 'ccjs_shape_value')
   const fieldsName = `${shapeName}_fields`
-  const fields =
-    shape?.fields ??
-    expression.properties.map((property: AnyNode) => ({
-      name: property.key,
-      readonly: false,
-      valueType: inferExpressionType(property.value, context)
-    }))
-  const properties: Map<string, AnyNode> = new Map(
-    expression.properties.map((property: AnyNode) => [property.key, property])
-  )
+  const fields: CObjectShapeField[] = []
+  const properties: Map<string, AnyNode> = new Map()
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+
+  if (shape != null && shape.fields != null) {
+    for (const field of shape.fields) {
+      fields.push(field)
+    }
+  } else {
+    for (const property of expression.properties) {
+      fields.push({
+        name: property.key,
+        readonly: false,
+        valueType: inferExpressionType(property.value, context)
+      })
+    }
+  }
+
+  for (const property of expression.properties) {
+    properties.set(property.key, property)
+  }
 
   for (const field of fields) {
     lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
@@ -2535,10 +2636,11 @@ function emitCObjectLiteralValueExpression(
   lines.push(`  ${fieldsName}`)
   lines.push('};')
   registerOwnedValue(context, temp)
-  lines.push(...emitPrepareOwnedValueWrite(temp))
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${temp})`, context))
 
-  for (const [index, field] of fields.entries()) {
+  for (let index = 0; index < fields.length; index++) {
+    const field = fields[index]
     const property = properties.get(field.name)
 
     if (property == null) {
@@ -2549,7 +2651,8 @@ function emitCObjectLiteralValueExpression(
     }
 
     const value = emitCValueExpression(property.value, context)
-    lines.push(...value.lines)
+
+    pushAll(lines, value.lines)
     lines.push(emitStatusCheck(`ccjs_object_init_known(${temp}, ${index}, ${value.expression})`, context))
   }
 
@@ -2585,35 +2688,36 @@ function emitCErrorObjectInitLines(target: string, expression: AnyNode, context:
   const message = emitCValueExpression(parts.message, context)
   const code = emitCValueExpression(parts.code, context)
   const cause = emitCValueExpression(parts.cause, context)
+  const lines: string[] = []
 
-  return [
-    `static const ccjs_field_info ${fieldsName}[] = {`,
-    `  { ${cStringLiteral('name')}, CCJS_FIELD_READONLY },`,
-    `  { ${cStringLiteral('message')}, CCJS_FIELD_READONLY },`,
-    `  { ${cStringLiteral('code')}, CCJS_FIELD_READONLY },`,
-    `  { ${cStringLiteral('cause')}, CCJS_FIELD_READONLY },`,
-    '};',
-    `static const ccjs_shape ${shapeName} = {`,
-    '  4,',
-    `  ${fieldsName}`,
-    '};',
-    ...emitPrepareOwnedValueWrite(target),
-    emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${target})`, context),
-    ...name.lines,
-    emitStatusCheck(`ccjs_object_init_known(${target}, 0, ${name.expression})`, context),
-    ...message.lines,
-    emitStatusCheck(`ccjs_object_init_known(${target}, 1, ${message.expression})`, context),
-    ...code.lines,
-    emitStatusCheck(`ccjs_object_init_known(${target}, 2, ${code.expression})`, context),
-    ...cause.lines,
-    emitStatusCheck(`ccjs_object_init_known(${target}, 3, ${cause.expression})`, context)
-  ]
+  lines.push(`static const ccjs_field_info ${fieldsName}[] = {`)
+  lines.push(`  { ${cStringLiteral('name')}, CCJS_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('message')}, CCJS_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('code')}, CCJS_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('cause')}, CCJS_FIELD_READONLY },`)
+  lines.push('};')
+  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push('  4,')
+  lines.push(`  ${fieldsName}`)
+  lines.push('};')
+  pushAll(lines, emitPrepareOwnedValueWrite(target))
+  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${target})`, context))
+  pushAll(lines, name.lines)
+  lines.push(emitStatusCheck(`ccjs_object_init_known(${target}, 0, ${name.expression})`, context))
+  pushAll(lines, message.lines)
+  lines.push(emitStatusCheck(`ccjs_object_init_known(${target}, 1, ${message.expression})`, context))
+  pushAll(lines, code.lines)
+  lines.push(emitStatusCheck(`ccjs_object_init_known(${target}, 2, ${code.expression})`, context))
+  pushAll(lines, cause.lines)
+  lines.push(emitStatusCheck(`ccjs_object_init_known(${target}, 3, ${cause.expression})`, context))
+
+  return lines
 }
 
 function errorConstructorExpressions(
   expression: AnyNode,
   context: CFunctionContext
-): { message: AnyNode; code: AnyNode; cause: AnyNode } {
+): CErrorConstructorParts {
   if (expression.args.length > 2) {
     context.diagnostics.push(
       diagnostic(
@@ -2624,17 +2728,27 @@ function errorConstructorExpressions(
     )
   }
 
-  const message = expression.args[0] ?? cStringLiteralNode('', expression.loc)
+  let message = cStringLiteralNode('', expression.loc)
   const options = expression.args[1]
   let code = cStringLiteralNode('', expression.loc)
   let cause = cNullLiteralNode(expression.loc)
 
+  if (expression.args[0] != null) {
+    message = expression.args[0]
+  }
+
   if (inferExpressionType(message, context) !== 'string') {
+    let loc = expression.loc
+
+    if (message.loc != null) {
+      loc = message.loc
+    }
+
     context.diagnostics.push(
       diagnostic(
         'CCJS_TYPE_MISMATCH',
         'Error message must be a string in the current C backend slice',
-        message.loc ?? expression.loc
+        loc
       )
     )
 
@@ -2654,11 +2768,17 @@ function errorConstructorExpressions(
   }
 
   if (options.type !== 'ObjectLiteral') {
+    let loc = expression.loc
+
+    if (options.loc != null) {
+      loc = options.loc
+    }
+
     context.diagnostics.push(
       diagnostic(
         'CCJS_TYPE_MISMATCH',
         'Error options must be an object literal in the current C backend slice',
-        options.loc ?? expression.loc
+        loc
       )
     )
 
@@ -2672,11 +2792,17 @@ function errorConstructorExpressions(
   for (const property of options.properties) {
     if (property.key === 'code') {
       if (inferExpressionType(property.value, context) !== 'string') {
+        let loc = property.loc
+
+        if (property.value.loc != null) {
+          loc = property.value.loc
+        }
+
         context.diagnostics.push(
           diagnostic(
             'CCJS_TYPE_MISMATCH',
             'Error code must be a string in the current C backend slice',
-            property.value.loc ?? property.loc
+            loc
           )
         )
       } else {
@@ -2686,17 +2812,29 @@ function errorConstructorExpressions(
       if (property.value.type === 'NullLiteral' || isErrorValueExpression(property.value, context)) {
         cause = property.value
       } else {
+        let loc = property.loc
+
+        if (property.value.loc != null) {
+          loc = property.value.loc
+        }
+
         context.diagnostics.push(
           diagnostic(
             'CCJS_TYPE_MISMATCH',
             'Error cause must be an Error object or null in the current C backend slice',
-            property.value.loc ?? property.loc
+            loc
           )
         )
       }
     } else {
+      let loc = options.loc
+
+      if (property.loc != null) {
+        loc = property.loc
+      }
+
       context.diagnostics.push(
-        diagnostic('CCJS_UNKNOWN_FIELD', `unknown Error option ${property.key}`, property.loc ?? options.loc)
+        diagnostic('CCJS_UNKNOWN_FIELD', `unknown Error option ${property.key}`, loc)
       )
     }
   }
@@ -2739,23 +2877,24 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
   const right = emitCValueExpression(expression.right, context)
   const temp = nextCName(context, 'ccjs_value')
   const expectedTag = cRuntimeValueTag(inferExpressionType(expression, context))
+  const lines: string[] = []
   registerOwnedValue(context, temp)
 
+  pushAll(lines, left.lines)
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(`if (${left.expression}.tag == CCJS_TAG_NULL) {`)
+  pushIndented(lines, right.lines, '  ')
+  lines.push(`  ${temp} = ${right.expression};`)
+  pushIndented(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
+  lines.push(`  ccjs_retain(${temp});`)
+  lines.push('} else {')
+  lines.push(`  ${temp} = ${left.expression};`)
+  pushIndented(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
+  lines.push(`  ccjs_retain(${temp});`)
+  lines.push('}')
+
   return {
-    lines: [
-      ...left.lines,
-      ...emitPrepareOwnedValueWrite(temp),
-      `if (${left.expression}.tag == CCJS_TAG_NULL) {`,
-      ...right.lines.map((line: string) => `  ${line}`),
-      `  ${temp} = ${right.expression};`,
-      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line: string) => `  ${line}`),
-      `  ccjs_retain(${temp});`,
-      '} else {',
-      `  ${temp} = ${left.expression};`,
-      ...emitRuntimeNullableValueCheck(temp, expectedTag, context).map((line: string) => `  ${line}`),
-      `  ccjs_retain(${temp});`,
-      '}'
-    ],
+    lines,
     expression: temp
   }
 }
@@ -2767,13 +2906,24 @@ type ConsoleLogValue = {
 }
 
 function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[] {
-  const stream = method === 'warn' || method === 'error' ? 'CCJS_CONSOLE_STDERR' : 'CCJS_CONSOLE_STDOUT'
+  let stream = 'CCJS_CONSOLE_STDOUT'
+
+  if (method === 'warn' || method === 'error') {
+    stream = 'CCJS_CONSOLE_STDERR'
+  }
+
   const isStdout = stream === 'CCJS_CONSOLE_STDOUT'
 
   if (args.length === 0) {
-    return isStdout
-      ? ['printf("\\n");']
-      : [`if (ccjs_console_printf(${stream}, "\\n") < 0) ${emitFailureStatement(context)}`]
+    const emptyLines: string[] = []
+
+    if (isStdout) {
+      emptyLines.push('printf("\\n");')
+    } else {
+      emptyLines.push(`if (ccjs_console_printf(${stream}, "\\n") < 0) ${emitFailureStatement(context)}`)
+    }
+
+    return emptyLines
   }
 
   const lines: string[] = []
@@ -2783,48 +2933,50 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
   for (const arg of args) {
     const value = emitConsoleLogValue(arg, context)
 
-    lines.push(...value.lines)
+    pushAll(lines, value.lines)
     parts.push(value.format)
-    values.push(...value.values)
+    pushAll(values, value.values)
   }
 
   const format = escapeCString(parts.join(' '))
 
   if (values.length === 0) {
-    lines.push(
-      isStdout
-        ? `printf("${format}\\n");`
-        : `if (ccjs_console_printf(${stream}, "${format}\\n") < 0) ${emitFailureStatement(context)}`
-    )
+    if (isStdout) {
+      lines.push(`printf("${format}\\n");`)
+    } else {
+      lines.push(`if (ccjs_console_printf(${stream}, "${format}\\n") < 0) ${emitFailureStatement(context)}`)
+    }
   } else {
-    lines.push(
-      isStdout
-        ? `printf("${format}\\n", ${values.join(', ')});`
-        : `if (ccjs_console_printf(${stream}, "${format}\\n", ${values.join(', ')}) < 0) ${emitFailureStatement(context)}`
-    )
+    if (isStdout) {
+      lines.push(`printf("${format}\\n", ${values.join(', ')});`)
+    } else {
+      lines.push(
+        `if (ccjs_console_printf(${stream}, "${format}\\n", ${values.join(', ')}) < 0) ${emitFailureStatement(context)}`
+      )
+    }
   }
 
   return lines
 }
 
 function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
-  const type = inferExpressionType(expression, context)
+  const valueType = inferExpressionType(expression, context)
 
-  if (type === 'string') {
+  if (valueType === 'string') {
     return emitStringLogValue(expression, context)
   }
 
-  if (type === 'number' || type === 'boolean') {
-    return emitNumberLogValue(expression, type, context)
+  if (valueType === 'number' || valueType === 'boolean') {
+    return emitNumberLogValue(expression, valueType, context)
   }
 
-  if (type === 'object' && isErrorValueExpression(expression, context)) {
+  if (valueType === 'object' && isErrorValueExpression(expression, context)) {
     return emitRuntimeErrorLogValue(expression, context)
   }
 
   context.diagnostics.push(
     diagnostic(
-      cUnsupportedExpressionCode(type),
+      cUnsupportedExpressionCode(valueType),
       'this console.log argument is not supported by the current C backend slice',
       expression.loc
     )
@@ -2878,7 +3030,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     const member = resolveKnownObjectMember(expression, context)
 
-    if (member?.valueType === 'string') {
+    if (member != null && member.valueType === 'string') {
       return emitRuntimeStringLogValue(
         (temp: string) =>
           `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
@@ -2890,7 +3042,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   if (isIndexAccessExpression(expression)) {
     const element = resolveKnownArrayIndex(expression, context)
 
-    if (element?.valueType === 'string') {
+    if (element != null && element.valueType === 'string') {
       return emitRuntimeStringLogValue(
         (temp: string) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
         context
@@ -2899,7 +3051,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     const field = resolveKnownObjectIndex(expression, context)
 
-    if (field?.valueType === 'string') {
+    if (field != null && field.valueType === 'string') {
       return emitRuntimeStringLogValue(
         (temp: string) =>
           `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
@@ -2909,19 +3061,22 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     const runtimeElement = resolveRuntimeArrayIndex(expression, context)
 
-    if (runtimeElement?.valueType === 'string') {
+    if (runtimeElement != null && runtimeElement.valueType === 'string') {
       const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_log_value')
       const string = nextCName(context, 'ccjs_log_string')
+      const lines: string[] = []
+
+      pushAll(lines, value.lines)
+      lines.push(
+        emitRuntimeTypeCheck(
+          `${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`,
+          context
+        )
+      )
+      lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
 
       return {
-        lines: [
-          ...value.lines,
-          emitRuntimeTypeCheck(
-            `${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`,
-            context
-          ),
-          `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`
-        ],
+        lines,
         format: '%.*s',
         values: [`(int)${string}->len`, `${string}->bytes`]
       }
@@ -2931,9 +3086,13 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   if (isRuntimeProducedStringExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
     const string = nextCName(context, 'ccjs_log_string')
+    const lines: string[] = []
+
+    pushAll(lines, value.lines)
+    lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
 
     return {
-      lines: [...value.lines, `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`],
+      lines,
       format: '%.*s',
       values: [`(int)${string}->len`, `${string}->bytes`]
     }
@@ -2942,9 +3101,13 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   if (isStringConcatExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
     const string = nextCName(context, 'ccjs_log_string')
+    const lines: string[] = []
+
+    pushAll(lines, value.lines)
+    lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
 
     return {
-      lines: [...value.lines, `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`],
+      lines,
       format: '%.*s',
       values: [`(int)${string}->len`, `${string}->bytes`]
     }
@@ -2953,13 +3116,14 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   if (isNullishCoalescingExpression(expression) && canLowerCNullishCoalescingExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
     const string = nextCName(context, 'ccjs_log_string')
+    const lines: string[] = []
+
+    pushAll(lines, value.lines)
+    lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+    lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
 
     return {
-      lines: [
-        ...value.lines,
-        emitRuntimeTypeCheck(`${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`, context),
-        `ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`
-      ],
+      lines,
       format: '%.*s',
       values: [`(int)${string}->len`, `${string}->bytes`]
     }
@@ -2972,7 +3136,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 }
 
-function emitNumberLogValue(expression: AnyNode, type: string, context: CFunctionContext): ConsoleLogValue {
+function emitNumberLogValue(expression: AnyNode, valueType: string, context: CFunctionContext): ConsoleLogValue {
   if (isMemberAccessExpression(expression)) {
     const stringLength = emitPreparedStringLengthExpression(expression, context)
 
@@ -3032,15 +3196,16 @@ function emitNumberLogValue(expression: AnyNode, type: string, context: CFunctio
 
     if (runtimeElement != null && ['number', 'boolean'].includes(runtimeElement.valueType)) {
       const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_log_value')
+      let formattedValue = `${value.expression}.as.number`
+
+      if (runtimeElement.valueType === 'boolean') {
+        formattedValue = `((double)(${value.expression}.as.boolean ? 1 : 0))`
+      }
 
       return {
         lines: value.lines,
         format: '%g',
-        values: [
-          runtimeElement.valueType === 'boolean'
-            ? `((double)(${value.expression}.as.boolean ? 1 : 0))`
-            : `${value.expression}.as.number`
-        ]
+        values: [formattedValue]
       }
     }
   }
@@ -3060,15 +3225,17 @@ function emitRuntimeStringLogValue(
 ): ConsoleLogValue {
   const value = nextCName(context, 'ccjs_log_value')
   const string = nextCName(context, 'ccjs_log_string')
+  const lines: string[] = []
+
   registerOwnedValue(context, value)
 
+  pushAll(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(emitStatusCheck(emitGetCall(value), context))
+  lines.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+  lines.push(`ccjs_string* ${string} = (ccjs_string*)${value}.as.ref;`)
+
   return {
-    lines: [
-      ...emitPrepareOwnedValueWrite(value),
-      emitStatusCheck(emitGetCall(value), context),
-      emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context),
-      `ccjs_string* ${string} = (ccjs_string*)${value}.as.ref;`
-    ],
+    lines,
     format: '%.*s',
     values: [`(int)${string}->len`, `${string}->bytes`]
   }
@@ -3080,12 +3247,22 @@ function emitRuntimeNumberLogValue(
   context: CFunctionContext
 ): ConsoleLogValue {
   const value = nextCName(context, 'ccjs_log_value')
+  const lines: string[] = []
+  let formattedValue = `${value}.as.number`
+
   registerOwnedValue(context, value)
 
+  if (valueType === 'boolean') {
+    formattedValue = `((double)(${value}.as.boolean ? 1 : 0))`
+  }
+
+  pushAll(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(emitStatusCheck(emitGetCall(value), context))
+
   return {
-    lines: [...emitPrepareOwnedValueWrite(value), emitStatusCheck(emitGetCall(value), context)],
+    lines,
     format: '%g',
-    values: [valueType === 'boolean' ? `((double)(${value}.as.boolean ? 1 : 0))` : `${value}.as.number`]
+    values: [formattedValue]
   }
 }
 
@@ -3095,21 +3272,23 @@ function emitRuntimeErrorLogValue(expression: AnyNode, context: CFunctionContext
   const messageValue = nextCName(context, 'ccjs_log_value')
   const nameString = nextCName(context, 'ccjs_log_string')
   const messageString = nextCName(context, 'ccjs_log_string')
+  const lines: string[] = []
+
   registerOwnedValue(context, nameValue)
   registerOwnedValue(context, messageValue)
 
+  pushAll(lines, object.lines)
+  pushAll(lines, emitPrepareOwnedValueWrite(nameValue))
+  pushAll(lines, emitPrepareOwnedValueWrite(messageValue))
+  lines.push(emitStatusCheck(`ccjs_object_get_known(${object.expression}, 0, &${nameValue})`, context))
+  lines.push(emitStatusCheck(`ccjs_object_get_known(${object.expression}, 1, &${messageValue})`, context))
+  lines.push(emitRuntimeTypeCheck(`${nameValue}.tag != CCJS_TAG_STRING || ${nameValue}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${messageValue}.tag != CCJS_TAG_STRING || ${messageValue}.as.ref == 0`, context))
+  lines.push(`ccjs_string* ${nameString} = (ccjs_string*)${nameValue}.as.ref;`)
+  lines.push(`ccjs_string* ${messageString} = (ccjs_string*)${messageValue}.as.ref;`)
+
   return {
-    lines: [
-      ...object.lines,
-      ...emitPrepareOwnedValueWrite(nameValue),
-      ...emitPrepareOwnedValueWrite(messageValue),
-      emitStatusCheck(`ccjs_object_get_known(${object.expression}, 0, &${nameValue})`, context),
-      emitStatusCheck(`ccjs_object_get_known(${object.expression}, 1, &${messageValue})`, context),
-      emitRuntimeTypeCheck(`${nameValue}.tag != CCJS_TAG_STRING || ${nameValue}.as.ref == 0`, context),
-      emitRuntimeTypeCheck(`${messageValue}.tag != CCJS_TAG_STRING || ${messageValue}.as.ref == 0`, context),
-      `ccjs_string* ${nameString} = (ccjs_string*)${nameValue}.as.ref;`,
-      `ccjs_string* ${messageString} = (ccjs_string*)${messageValue}.as.ref;`
-    ],
+    lines,
     format: '%.*s: %.*s',
     values: [`(int)${nameString}->len`, `${nameString}->bytes`, `(int)${messageString}->len`, `${messageString}->bytes`]
   }
@@ -3143,10 +3322,20 @@ function emitReference(expression: AnyNode, context: CFunctionContext): string {
     const name = expression.path.join('_')
 
     if (context.variables.has(name)) {
-      return context.boxedVariables.has(name) ? `(*${name})` : name
+      if (context.boxedVariables.has(name)) {
+        return `(*${name})`
+      }
+
+      return name
     }
 
-    return context.functionNames.get(name) ?? name
+    const functionName = context.functionNames.get(name)
+
+    if (functionName != null) {
+      return functionName
+    }
+
+    return name
   }
 
   context.diagnostics.push(
