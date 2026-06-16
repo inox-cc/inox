@@ -88,6 +88,27 @@ export type CFailureContext = {
   usedCleanupGoto: boolean
 }
 
+export type CNameContext = {
+  nextId: number
+}
+
+export type CEventLoopContext = {
+  eventLoopUsed: boolean
+  externalEventLoop: boolean
+  usedCleanupGoto: boolean
+}
+
+export type COwnedValueContext = {
+  ownedValues: string[]
+}
+
+export type COwnedPromiseContext = {
+  ownedPromises: string[]
+  promiseRejectionValueTypes: Map<string, string>
+  promiseValueTypes: Map<string, string>
+  variables: Map<string, string>
+}
+
 export type CFunctionContext = CEmitContext & {
   arrayShapes: Map<string, CArrayElementInfo[]>
   breakFlowUsed: boolean
@@ -304,14 +325,14 @@ export function emitFailureStatement(context: CFailureContext): string {
   return 'return 0;'
 }
 
-export function registerOwnedValue(context: CFunctionContext, name: string): void {
+export function registerOwnedValue(context: COwnedValueContext, name: string): void {
   if (!context.ownedValues.includes(name)) {
     context.ownedValues.push(name)
   }
 }
 
 export function registerOwnedPromise(
-  context: CFunctionContext,
+  context: COwnedPromiseContext,
   name: string,
   valueType: string = 'unknown',
   rejectionValueType: string = 'unknown'
@@ -341,7 +362,7 @@ export function registerOwnedCryptoHmac(context: CFunctionContext, name: string)
   context.variables.set(name, 'crypto-hmac')
 }
 
-export function registerEventLoop(context: CFunctionContext): void {
+export function registerEventLoop(context: CEventLoopContext): void {
   context.eventLoopUsed = true
   context.usedCleanupGoto = true
 }
@@ -569,7 +590,7 @@ export function emitEventLoopCleanup(context: CFunctionContext): string[] {
   return []
 }
 
-export function emitEventLoopReference(context: CFunctionContext): string {
+export function emitEventLoopReference(context: CEventLoopContext): string {
   if (context.externalEventLoop) {
     return 'ccjs_loop'
   }
@@ -665,7 +686,7 @@ export function emitThrowingFunctionCleanupReturn(context: CFunctionContext): st
   return lines
 }
 
-export function nextCName(context: CFunctionContext, prefix: string): string {
+export function nextCName(context: CNameContext, prefix: string): string {
   const name = `${prefix}_${context.nextId}`
   context.nextId = context.nextId + 1
 

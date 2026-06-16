@@ -10,7 +10,6 @@ import {
   registerOwnedPromise,
   registerOwnedValue
 } from '../context.ts'
-import type { CFunctionContext } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import type {
@@ -19,15 +18,33 @@ import type {
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
 
+type FetchFunctionContext = {
+  cleanupEnabled: boolean
+  eventLoopUsed: boolean
+  externalEventLoop: boolean
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  nextId: number
+  ownedPromises: string[]
+  ownedValues: string[]
+  promiseRejectionValueTypes: Map<string, string>
+  promiseValueTypes: Map<string, string>
+  returnType?: string
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  variables: Map<string, string>
+}
+
 export type FetchLoweringDependencies = {
-  emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCValueExpression(expression: AnyNode, context: FetchFunctionContext): PreparedExpression
   emitPreparedStringBytesOperand(
     expression: AnyNode,
-    context: CFunctionContext,
+    context: FetchFunctionContext,
     tempPrefix: string
   ): PreparedStringBytesOperand
   findObjectLiteralPropertyValue(expression: AnyNode, key: string): AnyNode | null
-  inferExpressionType(expression: AnyNode, context: CFunctionContext): string
+  inferExpressionType(expression: AnyNode, context: FetchFunctionContext): string
 }
 
 type FetchPromiseResultType = {
@@ -111,12 +128,28 @@ function findFetchHeadersCallDescriptor(method: string): FetchHeadersCallDescrip
   return null
 }
 
-function preparedCallOut(options: PreparedCallOptions, context: CFunctionContext, prefix: string): string {
-  if (options.out != null) {
-    return options.out
+function preparedCallOut(options: PreparedCallOptions, context: FetchFunctionContext, prefix: string): string {
+  const out = options.out
+
+  if (out != null) {
+    return out
   }
 
   return nextCName(context, prefix)
+}
+
+function resolveFetchPromiseValueType(expression: AnyNode, method: string): string {
+  if (expression.promiseValueType != null) {
+    return expression.promiseValueType
+  }
+
+  const valueType = findFetchPromiseResultType(method)
+
+  if (valueType != null) {
+    return valueType
+  }
+
+  return 'object'
 }
 
 function emptyStringBytesOperand(): PreparedStringBytesOperand {
@@ -139,104 +172,108 @@ export function isAsyncFetchRuntimeCallExpression(expression: AnyNode): boolean 
 
 export function emitFetchHeadersBooleanVariableDeclaration(
   statement: AnyNode,
-  context: CFunctionContext,
+  context: FetchFunctionContext,
   dependencies: FetchLoweringDependencies
 ): string[] | null {
   const fetchHeadersCall = emitPreparedFetchHeadersCallExpression(statement.init, context, dependencies, {
     out: statement.name
   })
 
-  if (fetchHeadersCall == null || statement.valueType !== 'boolean') {
-    return null
+  if (fetchHeadersCall != null) {
+    if (statement.valueType !== 'boolean') {
+      return null
+    }
+
+    context.variables.set(statement.name, 'boolean')
+
+    return fetchHeadersCall.lines
   }
 
-  context.variables.set(statement.name, 'boolean')
-
-  return fetchHeadersCall.lines
+  return null
 }
 
 export function emitPreparedFetchCallExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FetchFunctionContext,
   dependencies: FetchLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cFetchRuntimeExpressionMethod(expression)
 
-  if (method == null || expression.valueType !== 'promise') {
-    return null
-  }
-
-  registerEventLoop(context)
-
-  const out = preparedCallOut(options, context, 'ccjs_promise')
-  let valueType = expression.promiseValueType
-
-  if (valueType == null) {
-    valueType = findFetchPromiseResultType(method)
-  }
-
-  if (valueType == null) {
-    valueType = 'object'
-  }
-
-  if (options.owned !== false) {
-    registerOwnedPromise(context, out, valueType, 'error')
-  }
-
-  if (method === 'fetch') {
-    const url = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_url')
-    const init = emitPreparedFetchInitOperand(expression, context, dependencies)
-    let call = ''
-
-    if (init.expression === '0') {
-      call = `ccjs_fetch(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, &${out})`
-    } else {
-      call = `ccjs_fetch_with_init(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, ${init.expression}, &${out})`
+  if (method != null) {
+    if (expression.valueType !== 'promise') {
+      return null
     }
 
-    const lines: string[] = []
+    registerEventLoop(context)
 
-    appendLines(lines, url.lines)
-    appendLines(lines, init.lines)
-    lines.push(emitStatusCheck(call, context))
+    const out = preparedCallOut(options, context, 'ccjs_promise')
+    const valueType = resolveFetchPromiseValueType(expression, method)
 
-    return {
-      lines,
-      expression: out,
-      valueType,
-      rejectionValueType: 'error'
+    if (options.owned !== false) {
+      registerOwnedPromise(context, out, valueType, 'error')
+    }
+
+    if (method === 'fetch') {
+      const url = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_url')
+      const init = emitPreparedFetchInitOperand(expression, context, dependencies)
+      let call = ''
+
+      if (init.expression === '0') {
+        call = `ccjs_fetch(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, &${out})`
+      } else {
+        call = `ccjs_fetch_with_init(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, ${init.expression}, &${out})`
+      }
+
+      const lines: string[] = []
+
+      appendLines(lines, url.lines)
+      appendLines(lines, init.lines)
+      lines.push(emitStatusCheck(call, context))
+
+      return {
+        lines,
+        expression: out,
+        valueType,
+        rejectionValueType: 'error'
+      }
+    }
+
+    const descriptor = findFetchResponseCallDescriptor(method)
+
+    if (descriptor != null) {
+      const response = dependencies.emitCValueExpression(expression.callee.object, context)
+      const lines: string[] = []
+
+      appendLines(lines, response.lines)
+      lines.push(
+        emitRuntimeTypeCheck(
+          `${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`,
+          context
+        )
+      )
+      lines.push(
+        emitStatusCheck(
+          `${descriptor.callName}(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
+          context
+        )
+      )
+
+      return {
+        lines,
+        expression: out,
+        valueType: descriptor.valueType,
+        rejectionValueType: 'error'
+      }
     }
   }
 
-  const descriptor = findFetchResponseCallDescriptor(method)
-
-  if (descriptor == null) {
-    return null
-  }
-
-  const response = dependencies.emitCValueExpression(expression.callee.object, context)
-  const lines: string[] = []
-
-  appendLines(lines, response.lines)
-  lines.push(
-    emitRuntimeTypeCheck(`${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`, context)
-  )
-  lines.push(
-    emitStatusCheck(`${descriptor.callName}(${emitEventLoopReference(context)}, ${response.expression}, &${out})`, context)
-  )
-
-  return {
-    lines,
-    expression: out,
-    valueType: descriptor.valueType,
-    rejectionValueType: 'error'
-  }
+  return null
 }
 
 export function emitPreparedFetchHeadersCallExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FetchFunctionContext,
   dependencies: FetchLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
@@ -247,57 +284,59 @@ export function emitPreparedFetchHeadersCallExpression(
     descriptor = findFetchHeadersCallDescriptor(method)
   }
 
-  if (descriptor == null) {
-    return null
-  }
+  if (descriptor != null) {
+    const headers = dependencies.emitCValueExpression(expression.callee.object, context)
+    const name = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_header_name')
+    const lines: string[] = []
 
-  const headers = dependencies.emitCValueExpression(expression.callee.object, context)
-  const name = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_header_name')
-  const lines: string[] = []
-
-  appendLines(lines, headers.lines)
-  lines.push(emitRuntimeTypeCheck(`${headers.expression}.tag != CCJS_TAG_OBJECT || ${headers.expression}.as.ref == 0`, context))
-  appendLines(lines, name.lines)
-
-  if (descriptor.kind === 'boolean') {
-    const out = preparedCallOut(options, context, descriptor.tempPrefix)
-    lines.push(`int ${out} = 0;`)
+    appendLines(lines, headers.lines)
     lines.push(
-      emitStatusCheck(`${descriptor.callName}(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
+      emitRuntimeTypeCheck(`${headers.expression}.tag != CCJS_TAG_OBJECT || ${headers.expression}.as.ref == 0`, context)
+    )
+    appendLines(lines, name.lines)
+
+    if (descriptor.kind === 'boolean') {
+      const out = preparedCallOut(options, context, descriptor.tempPrefix)
+      lines.push(`int ${out} = 0;`)
+      lines.push(
+        emitStatusCheck(`${descriptor.callName}(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
+      )
+
+      return {
+        lines,
+        expression: out,
+        valueType: descriptor.valueType
+      }
+    }
+
+    const out = preparedCallOut(options, context, descriptor.tempPrefix)
+
+    if (options.owned !== false) {
+      registerOwnedValue(context, out)
+    }
+
+    appendLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(
+      emitStatusCheck(
+        `${descriptor.callName}(&ccjs_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
+        context
+      )
     )
 
     return {
       lines,
       expression: out,
-      valueType: descriptor.valueType
+      valueType: descriptor.valueType,
+      nullable: true
     }
   }
 
-  const out = preparedCallOut(options, context, descriptor.tempPrefix)
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
-  appendLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(
-    emitStatusCheck(
-      `${descriptor.callName}(&ccjs_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
-      context
-    )
-  )
-
-  return {
-    lines,
-    expression: out,
-    valueType: descriptor.valueType,
-    nullable: true
-  }
+  return null
 }
 
 export function emitPreparedFetchInitOperand(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FetchFunctionContext,
   dependencies: FetchLoweringDependencies
 ): PreparedExpression {
   const init = expression.args[1]
@@ -378,7 +417,7 @@ export function emitPreparedFetchInitOperand(
 
 export function emitPreparedFetchSignalOperand(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FetchFunctionContext,
   dependencies: FetchLoweringDependencies
 ): PreparedExpression {
   if (expression.type === 'MemberExpression' && expression.property === 'signal') {
@@ -414,7 +453,7 @@ export function emitPreparedFetchSignalOperand(
 
 export function emitPreparedFetchBodyOperand(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FetchFunctionContext,
   dependencies: FetchLoweringDependencies
 ): PreparedStringBytesOperand {
   if (dependencies.inferExpressionType(expression, context) === 'bytes') {
