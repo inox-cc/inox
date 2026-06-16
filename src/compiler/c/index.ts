@@ -966,7 +966,7 @@ const cCallExpressionDependencies: CCallExpressionDependencies = {
   emitPreparedFsStatsMethodExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFsStatsMethodExpression(expression, context, fsLoweringDependencies),
   emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies),
+    emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies, null),
   emitPreparedNumberExpression,
   emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies),
@@ -1068,7 +1068,7 @@ const cValueExpressionDependencies: CValueExpressionDependencies = {
   emitPreparedFsSyncValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFsSyncValueExpression(expression, context, fsLoweringDependencies),
   emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies),
+    emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies, null),
   emitPreparedKnownArrayIndexValueExpression,
   emitPreparedKnownObjectIndexValueExpression,
   emitPreparedKnownObjectMemberValueExpression,

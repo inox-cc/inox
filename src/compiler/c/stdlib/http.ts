@@ -659,11 +659,11 @@ function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context
     for (const item of expression.elements) {
       const value = emitHttpStaticJsonValue(item, context)
 
-      if (value == null) {
+      if (value != null) {
+        items.push(value)
+      } else {
         return null
       }
-
-      items.push(value)
     }
 
     return `[${items.join(',')}]`
