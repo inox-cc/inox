@@ -8,8 +8,7 @@ import {
   registerEventLoop,
   registerOwnedPromise,
   registerOwnedValue,
-  nextCName,
-  type CFunctionContext
+  nextCName
 } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
@@ -20,15 +19,33 @@ import type {
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
 
+type FsFunctionContext = {
+  cleanupEnabled: boolean
+  eventLoopUsed: boolean
+  externalEventLoop: boolean
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  nextId: number
+  ownedPromises: string[]
+  ownedValues: string[]
+  promiseRejectionValueTypes: Map<string, string>
+  promiseValueTypes: Map<string, string>
+  returnType?: string
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  variables: Map<string, string>
+}
+
 export type FsLoweringDependencies = {
-  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringBytesOperand: (
+  emitCValueExpression(expression: AnyNode, context: FsFunctionContext): PreparedExpression
+  emitPreparedNumberExpression(expression: AnyNode, context: FsFunctionContext): PreparedExpression
+  emitPreparedStringBytesOperand(
     expression: AnyNode,
-    context: CFunctionContext,
+    context: FsFunctionContext,
     tempPrefix?: string
-  ) => PreparedStringBytesOperand
-  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
+  ): PreparedStringBytesOperand
+  inferExpressionType(expression: AnyNode, context: FsFunctionContext): string
 }
 
 const fsPromiseResultTypes: Record<string, string> = {
@@ -53,11 +70,11 @@ const fsPromiseResultTypes: Record<string, string> = {
   writeFileBytes: 'void'
 }
 
-type FsAsyncCallDescriptor =
-  | { kind: 'path-out'; callName: string }
-  | { kind: 'bytes-value-out'; callName: string }
-  | { kind: 'path-arg-out'; callName: string; tempPrefix: string }
-  | { kind: 'string-bytes-out'; callName: string }
+type FsAsyncCallDescriptor = {
+  callName: string
+  kind: string
+  tempPrefix?: string
+}
 
 const fsAsyncCallDescriptors: Record<string, FsAsyncCallDescriptor> = {
   appendFile: { kind: 'string-bytes-out', callName: 'ccjs_fs_append_file' },
@@ -89,11 +106,11 @@ const fsSyncValueCallNames: Record<string, string> = {
   statSync: 'ccjs_fs_stat_sync'
 }
 
-type FsSyncStatementDescriptor =
-  | { kind: 'path'; callName: string }
-  | { kind: 'bytes-value'; callName: string }
-  | { kind: 'path-arg'; callName: string; tempPrefix: string }
-  | { kind: 'string-bytes'; callName: string }
+type FsSyncStatementDescriptor = {
+  callName: string
+  kind: string
+  tempPrefix?: string
+}
 
 const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
   appendFileBytesSync: { kind: 'bytes-value', callName: 'ccjs_fs_append_file_bytes_sync' },
@@ -107,17 +124,21 @@ const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
 }
 
 export function cFsRuntimeExpressionMethod(expression: AnyNode): string | null {
-  return expression?.fsRuntimeMethod ?? cFsRuntimeCallName(expression?.callee)
+  if (expression.fsRuntimeMethod != null) {
+    return expression.fsRuntimeMethod
+  }
+
+  return cFsRuntimeCallName(expression.callee)
 }
 
 export function isAsyncFsRuntimeCallExpression(expression: AnyNode): boolean {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  return method != null && expression?.valueType === 'promise' && isAsyncFsRuntimeMethod(method)
+  return method != null && expression.valueType === 'promise' && isAsyncFsRuntimeMethod(method)
 }
 
 export function cFsRuntimeConstantExpression(expression: AnyNode): string | null {
-  const name = expression?.fsRuntimeConstant
+  const name = expression.fsRuntimeConstant
 
   if (name === 'F_OK') {
     return 'CCJS_FS_F_OK'
@@ -160,29 +181,29 @@ function cFsRuntimeCallName(callee: AnyNode): string | null {
 
 export function emitPreparedFsCallExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FsFunctionContext,
   dependencies: FsLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (method == null || expression?.valueType !== 'promise') {
+  if (method == null) {
+    return null
+  }
+
+  if (expression.valueType !== 'promise') {
     return null
   }
 
   registerEventLoop(context)
 
-  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  const out = preparedFsCallOut(options, context, 'ccjs_promise')
   if (options.owned !== false) {
-    registerOwnedPromise(
-      context,
-      out,
-      expression.promiseValueType ?? fsPromiseResultTypes[method] ?? 'string',
-      'error'
-    )
+    registerOwnedPromise(context, out, fsPromiseValueType(expression, method), 'error')
   }
   const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
-  const lines = [...path.lines]
+  const lines: string[] = []
+  appendLines(lines, path.lines)
   const descriptor = fsAsyncCallDescriptors[method]
 
   if (descriptor != null) {
@@ -192,7 +213,7 @@ export function emitPreparedFsCallExpression(
   if (method === 'access') {
     const mode = emitPreparedFsAccessModeExpression(expression, context, dependencies)
 
-    lines.push(...mode.lines)
+    appendLines(lines, mode.lines)
     lines.push(
       emitStatusCheck(
         `ccjs_fs_access(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${mode.expression}, &${out})`,
@@ -242,7 +263,7 @@ export function emitPreparedFsCallExpression(
 
 function emitPreparedFsAsyncDescriptorExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FsFunctionContext,
   dependencies: FsLoweringDependencies,
   path: PreparedStringBytesOperand,
   lines: string[],
@@ -259,7 +280,7 @@ function emitPreparedFsAsyncDescriptorExpression(
   } else if (descriptor.kind === 'bytes-value-out') {
     const bytes = dependencies.emitCValueExpression(expression.args[1], context)
 
-    lines.push(...bytes.lines)
+    appendLines(lines, bytes.lines)
     lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
     lines.push(
       emitStatusCheck(
@@ -268,9 +289,13 @@ function emitPreparedFsAsyncDescriptorExpression(
       )
     )
   } else if (descriptor.kind === 'path-arg-out') {
-    const argumentPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, descriptor.tempPrefix)
+    const argumentPath = dependencies.emitPreparedStringBytesOperand(
+      expression.args[1],
+      context,
+      fsDescriptorTempPrefix(descriptor)
+    )
 
-    lines.push(...argumentPath.lines)
+    appendLines(lines, argumentPath.lines)
     lines.push(
       emitStatusCheck(
         `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${argumentPath.bytes}, ${argumentPath.length}, &${out})`,
@@ -280,7 +305,7 @@ function emitPreparedFsAsyncDescriptorExpression(
   } else {
     const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
 
-    lines.push(...bytes.lines)
+    appendLines(lines, bytes.lines)
     lines.push(
       emitStatusCheck(
         `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &${out})`,
@@ -298,12 +323,16 @@ function emitPreparedFsAsyncDescriptorExpression(
 
 export function emitPreparedFsSyncValueExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FsFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  const callName = method == null ? null : fsSyncValueCallNames[method]
+  let callName: string | null = null
+
+  if (method != null) {
+    callName = fsSyncValueCallNames[method]
+  }
 
   if (callName == null) {
     return null
@@ -320,25 +349,29 @@ export function emitPreparedFsSyncValueExpression(
   const out = nextCName(context, 'ccjs_fs_value')
   registerOwnedValue(context, out)
   const call = `${callName}(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+  const lines: string[] = []
+  appendLines(lines, path.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(emitStatusCheck(call, context))
+  lines.push(emitRuntimeValueCheck(out, expectedTag, context))
 
   return {
-    lines: [
-      ...path.lines,
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(call, context),
-      emitRuntimeValueCheck(out, expectedTag, context)
-    ],
+    lines,
     expression: out
   }
 }
 
 export function emitPreparedFsSyncStatementExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FsFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedStatement | null {
   const method = cFsRuntimeExpressionMethod(expression)
-  const descriptor = method == null ? null : fsSyncStatementDescriptors[method]
+  let descriptor: FsSyncStatementDescriptor | null = null
+
+  if (method != null) {
+    descriptor = fsSyncStatementDescriptors[method]
+  }
   const specialMethod = method === 'accessSync' || method === 'mkdirSync' || method === 'rmSync'
 
   if (method == null || (descriptor == null && !specialMethod)) {
@@ -346,7 +379,8 @@ export function emitPreparedFsSyncStatementExpression(
   }
 
   const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
-  const lines = [...path.lines]
+  const lines: string[] = []
+  appendLines(lines, path.lines)
 
   if (descriptor != null) {
     return emitPreparedFsSyncStatementDescriptor(expression, context, dependencies, path, lines, descriptor)
@@ -355,7 +389,7 @@ export function emitPreparedFsSyncStatementExpression(
   if (method === 'accessSync') {
     const mode = emitPreparedFsAccessModeExpression(expression, context, dependencies)
 
-    lines.push(...mode.lines)
+    appendLines(lines, mode.lines)
     lines.push(emitStatusCheck(`ccjs_fs_access_sync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
 
     return {
@@ -394,7 +428,7 @@ export function emitPreparedFsSyncStatementExpression(
 
 function emitPreparedFsSyncStatementDescriptor(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FsFunctionContext,
   dependencies: FsLoweringDependencies,
   path: PreparedStringBytesOperand,
   lines: string[],
@@ -405,13 +439,17 @@ function emitPreparedFsSyncStatementDescriptor(
   } else if (descriptor.kind === 'bytes-value') {
     const bytes = dependencies.emitCValueExpression(expression.args[1], context)
 
-    lines.push(...bytes.lines)
+    appendLines(lines, bytes.lines)
     lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
     lines.push(emitStatusCheck(`${descriptor.callName}(${path.bytes}, ${path.length}, ${bytes.expression})`, context))
   } else if (descriptor.kind === 'path-arg') {
-    const argumentPath = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, descriptor.tempPrefix)
+    const argumentPath = dependencies.emitPreparedStringBytesOperand(
+      expression.args[1],
+      context,
+      fsDescriptorTempPrefix(descriptor)
+    )
 
-    lines.push(...argumentPath.lines)
+    appendLines(lines, argumentPath.lines)
     lines.push(
       emitStatusCheck(
         `${descriptor.callName}(${path.bytes}, ${path.length}, ${argumentPath.bytes}, ${argumentPath.length})`,
@@ -421,7 +459,7 @@ function emitPreparedFsSyncStatementDescriptor(
   } else {
     const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
 
-    lines.push(...bytes.lines)
+    appendLines(lines, bytes.lines)
     lines.push(
       emitStatusCheck(
         `${descriptor.callName}(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`,
@@ -437,7 +475,7 @@ function emitPreparedFsSyncStatementDescriptor(
 
 export function emitPreparedFsAccessModeExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FsFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression {
   if (expression.args[1] == null) {
@@ -456,32 +494,100 @@ export function emitPreparedFsAccessModeExpression(
 }
 
 export function emitFsBooleanFlag(expression: AnyNode, field: string): string {
-  return expression?.[field] === true ? 'true' : 'false'
+  if (expression[field] === true) {
+    return 'true'
+  }
+
+  return 'false'
 }
 
 export function emitPreparedFsStatsMethodExpression(
   expression: AnyNode,
-  context: CFunctionContext,
+  context: FsFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (method == null || !['direntIsDirectory', 'direntIsFile', 'statsIsDirectory', 'statsIsFile'].includes(method)) {
+  if (method == null) {
+    return null
+  }
+
+  if (!isFsStatsRuntimeMethod(method)) {
     return null
   }
 
   const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
-  const helper =
-    method === 'statsIsFile'
-      ? 'ccjs_fs_stats_is_file'
-      : method === 'statsIsDirectory'
-        ? 'ccjs_fs_stats_is_directory'
-        : method === 'direntIsFile'
-          ? 'ccjs_fs_dirent_is_file'
-          : 'ccjs_fs_dirent_is_directory'
+  const helper = fsStatsRuntimeHelper(method)
 
   return {
     lines: receiver.lines,
     expression: `(${helper}(${receiver.expression}) ? 1 : 0)`
   }
+}
+
+function appendLines(target: string[], values: string[]): void {
+  for (const value of values) {
+    target.push(value)
+  }
+}
+
+function preparedFsCallOut(options: PreparedCallOptions, context: FsFunctionContext, prefix: string): string {
+  const out = options.out
+
+  if (out != null) {
+    return out
+  }
+
+  return nextCName(context, prefix)
+}
+
+function fsPromiseValueType(expression: AnyNode, method: string | null): string {
+  if (expression.promiseValueType != null) {
+    return expression.promiseValueType
+  }
+
+  if (method == null) {
+    return 'string'
+  }
+
+  const valueType = fsPromiseResultTypes[method]
+
+  if (valueType != null) {
+    return valueType
+  }
+
+  return 'string'
+}
+
+function fsDescriptorTempPrefix(descriptor: FsAsyncCallDescriptor | FsSyncStatementDescriptor): string {
+  if (descriptor.tempPrefix != null) {
+    return descriptor.tempPrefix
+  }
+
+  return 'ccjs_fs_path'
+}
+
+function isFsStatsRuntimeMethod(method: string | null): boolean {
+  return (
+    method === 'direntIsDirectory' ||
+    method === 'direntIsFile' ||
+    method === 'statsIsDirectory' ||
+    method === 'statsIsFile'
+  )
+}
+
+function fsStatsRuntimeHelper(method: string | null): string {
+  if (method === 'statsIsFile') {
+    return 'ccjs_fs_stats_is_file'
+  }
+
+  if (method === 'statsIsDirectory') {
+    return 'ccjs_fs_stats_is_directory'
+  }
+
+  if (method === 'direntIsFile') {
+    return 'ccjs_fs_dirent_is_file'
+  }
+
+  return 'ccjs_fs_dirent_is_directory'
 }
