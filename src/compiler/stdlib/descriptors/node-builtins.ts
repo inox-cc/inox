@@ -1,4 +1,4 @@
-export const implementedRuntimeBuiltinImportSources = [
+export const implementedRuntimeBuiltinImportSources: string[] = [
   'dgram',
   'fs',
   'http',
@@ -18,18 +18,28 @@ export const implementedRuntimeBuiltinImportSources = [
   'node:timers',
   'node:url',
   'node:process'
-] as const
+]
 
-export const unsupportedRuntimeBuiltinImportSources = [
+export const unsupportedRuntimeBuiltinImportSources: string[] = [
   'node:dns',
   'node:https',
   'node:timers/promises',
   'node:tls',
   'node:worker_threads',
   'node:zlib'
-] as const
+]
 
-const unsupportedRuntimeBuiltinImportSet = new Set<string>(unsupportedRuntimeBuiltinImportSources)
+const unsupportedRuntimeBuiltinImportSet = createUnsupportedRuntimeBuiltinImportSet()
+
+function createUnsupportedRuntimeBuiltinImportSet(): Set<string> {
+  const sources: Set<string> = new Set()
+
+  for (const source of unsupportedRuntimeBuiltinImportSources) {
+    sources.add(source)
+  }
+
+  return sources
+}
 
 export function unsupportedRuntimeBuiltinImportMessage(source: string): string | null {
   if (!unsupportedRuntimeBuiltinImportSet.has(source)) {

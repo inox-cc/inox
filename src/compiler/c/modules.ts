@@ -1,4 +1,4 @@
-import { CompileError, diagnostic } from '../diagnostics.ts'
+import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
 import { formatGeneratedC } from './format.ts'
 import { emitCIdentifier } from './identifiers.ts'
@@ -38,9 +38,7 @@ export function emitCModuleFilesFromGraph(
     pushCModuleOutputFiles(files, emitCModuleFiles(plan, plans, options, diagnostics, emitters))
   }
 
-  if (diagnostics.length > 0) {
-    throw new CompileError(diagnostics)
-  }
+  throwDiagnostics(diagnostics)
 
   return files
 }
@@ -49,7 +47,8 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
   const modulePaths: CModulePathSet = new Set()
   const modulePathList: string[] = []
   const host = options.host
-  let sourceRootInput: string
+  const configuredSourceRoot = options.sourceRoot
+  let sourceRootInput = ''
   const plans: CModulePlan[] = []
   const plansByPath: Map<string, CModulePlan> = new Map()
 
@@ -58,10 +57,10 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
     modulePathList.push(item.path)
   }
 
-  if (options.sourceRoot == null) {
+  if (configuredSourceRoot == null) {
     sourceRootInput = commonDirectory(modulePathList, host)
   } else {
-    sourceRootInput = options.sourceRoot
+    sourceRootInput = configuredSourceRoot
   }
 
   const sourceRoot = host.resolvePath(sourceRootInput)
@@ -118,7 +117,14 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
         }
       }
 
-      if (importedModule == null) {
+      if (importedModule != null) {
+        reportUnsupportedCModuleImports(declaration, importedModule, diagnostics)
+
+        imports.push({
+          declaration,
+          module: importedModule
+        })
+      } else {
         diagnostics.push(
           diagnostic(
             'CCJS_C_MODULE_IMPORT',
@@ -126,15 +132,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
             declaration.loc
           )
         )
-        continue
       }
-
-      reportUnsupportedCModuleImports(declaration, importedModule, diagnostics)
-
-      imports.push({
-        declaration,
-        module: importedModule
-      })
     }
 
     plan.imports = imports
