@@ -307,9 +307,11 @@ export function emitRuntimeTypeCheck(condition: string, context: CFailureContext
 }
 
 export function emitFailureStatement(context: CFailureContext): string {
-  if (context.failureStatement != null) {
+  const failureStatement = context.failureStatement
+
+  if (failureStatement != null) {
     context.failureStatementUsed = true
-    return context.failureStatement
+    return failureStatement
   }
 
   if (context.throwingFunction && context.cleanupEnabled) {
