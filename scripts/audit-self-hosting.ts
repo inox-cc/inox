@@ -67,7 +67,7 @@ const patterns: PatternInfo[] = [
     name: 'flatMap / map / filter / reduce / sort',
     decision: 'simplify/remove',
     pattern: /\.(flatMap|map|filter|reduce|sort)\s*\(/g,
-    note: 'Some array methods exist at runtime, but broad generic callback use is not self-hosting-ready.',
+    note: 'Compact Array.filter lowering is supported for known slices; broad generic callback chains are not self-hosting-ready.',
     maxAllowedMatches: 444
   },
   {

@@ -870,13 +870,19 @@ export function emitPreparedArrayFilterCallExpression(
   }
 
   const callback = expression.args[0]
-  const callbackBody = resolveArrayCallbackBody(callback)
+  const booleanCallback = isArrayFilterBooleanCallback(callback)
+  let callbackBody: ArrayCallbackBody | null = null
+
+  if (!booleanCallback) {
+    callbackBody = resolveArrayCallbackBody(callback)
+  }
 
   if (
     callback == null ||
-    callback.type !== 'ArrowFunctionExpression' ||
-    callbackBody == null ||
-    callback.params.length > 2
+    (!booleanCallback &&
+      (callback.type !== 'ArrowFunctionExpression' ||
+        callbackBody == null ||
+        callback.params.length > 2))
   ) {
     return null
   }
@@ -899,11 +905,19 @@ export function emitPreparedArrayFilterCallExpression(
   let body: string[] = []
 
   try {
-    const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
+    if (booleanCallback) {
+      appendLines(body, emitArrayFilterBooleanCallbackBodyLines(receiver.elementType, out, value, context))
+    } else {
+      if (callbackBody == null) {
+        return null
+      }
 
-    body = []
-    appendLines(body, input)
-    appendLines(body, emitArrayFilterCallbackBodyLines(callbackBody, out, value, context))
+      const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
+
+      body = []
+      appendLines(body, input)
+      appendLines(body, emitArrayFilterCallbackBodyLines(callbackBody, out, value, context))
+    }
   } finally {
     restoreVariableScope(context, bodyScope)
   }
@@ -928,6 +942,10 @@ export function emitPreparedArrayFilterCallExpression(
     expression: out,
     elementType: receiver.elementType
   }
+}
+
+function isArrayFilterBooleanCallback(callback: AnyNode): boolean {
+  return callback.type === 'Reference' && callback.path.length === 1 && callback.path[0] === 'Boolean'
 }
 
 function resolveArrowReturnExpression(callback: AnyNode): AnyNode | null {
@@ -1168,6 +1186,51 @@ function emitArrayFilterCallbackBodyLines(
   context: CFunctionContext
 ): string[] {
   return emitArrayCallbackBodyLines(body, 'filter', '', out, value, context)
+}
+
+function emitArrayFilterBooleanCallbackBodyLines(
+  elementType: string,
+  out: string,
+  value: string,
+  context: CFunctionContext
+): string[] {
+  const pushStatus = emitStatusCheck(`ccjs_array_push(${out}, ${value})`, context)
+  const lines: string[] = []
+
+  appendLines(lines, emitArrayFilterBooleanTypeCheckLines(elementType, value, context))
+  lines.push(`if ${emitCConditionClause(arrayFilterBooleanPredicateExpression(elementType, value))} {`)
+  lines.push(`  ${pushStatus}`)
+  lines.push('}')
+
+  return lines
+}
+
+function emitArrayFilterBooleanTypeCheckLines(
+  elementType: string,
+  value: string,
+  context: CFunctionContext
+): string[] {
+  if (elementType === 'string') {
+    return [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context)]
+  }
+
+  if (elementType === 'boolean') {
+    return [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context)]
+  }
+
+  return [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context)]
+}
+
+function arrayFilterBooleanPredicateExpression(elementType: string, value: string): string {
+  if (elementType === 'string') {
+    return `((ccjs_string*)${value}.as.ref)->len > 0`
+  }
+
+  if (elementType === 'boolean') {
+    return `${value}.as.boolean`
+  }
+
+  return `(${value}.as.number == ${value}.as.number && ${value}.as.number != 0)`
 }
 
 function emitArrayCallbackBodyLines(

@@ -5669,6 +5669,15 @@ const names = ['Ada', 'Grace', 'Alan']
 const aNames = names.filter(name => name.startsWith('A'))
 console.log(aNames.length, aNames[0], aNames[1])
 
+const truthyNames = ['', 'Ada', '', 'Grace'].filter(Boolean)
+console.log(truthyNames.length, truthyNames[0], truthyNames[1])
+
+const truthyNumbers = [0, 2, 3].filter(Boolean)
+console.log(truthyNumbers.length, truthyNumbers[0], truthyNumbers[1])
+
+const truthyFlags = [false, true, false].filter(Boolean)
+console.log(truthyFlags.length, truthyFlags[0])
+
 `,
       {
         target: 'c'
@@ -5684,7 +5693,7 @@ console.log(aNames.length, aNames[0], aNames[1])
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '2 2 3\n2 1 2\n2 Ada Alan\n')
+    assert.equal(run.stdout, '2 2 3\n2 1 2\n2 Ada Alan\n2 Ada Grace\n2 2 3\n1 1\n')
   } finally {
     await rm(dir, {
       recursive: true,

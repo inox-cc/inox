@@ -5714,14 +5714,16 @@ class Checker {
 
     if (expression.callee.property === 'filter') {
       if (expression.args[0] != null) {
-        this.checkArrayCallback(
-          expression.args[0],
-          [
-            { name: 'value', valueType: elementType },
-            { name: 'index', valueType: 'number' }
-          ],
-          'boolean'
-        )
+        if (!this.isBooleanReference(expression.args[0])) {
+          this.checkArrayCallback(
+            expression.args[0],
+            [
+              { name: 'value', valueType: elementType },
+              { name: 'index', valueType: 'number' }
+            ],
+            'boolean'
+          )
+        }
       }
 
       for (const arg of expression.args.slice(1)) {
@@ -5747,6 +5749,10 @@ class Checker {
     }
 
     return 'array'
+  }
+
+  isBooleanReference(expression: AnyNode): boolean {
+    return expression.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'Boolean'
   }
 
   checkArrayCallback(

@@ -1264,6 +1264,47 @@ test('checks Array sort filter map as typed chain calls', () => {
 })
 
 
+test('lowers C Array.filter Boolean callback to runtime array loop', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const names = ['', 'Ada', 'Grace']
+  const presentNames = names.filter(Boolean)
+  const numbers = [0, 2, 3]
+  const presentNumbers = numbers.filter(Boolean)
+  const flags = [false, true]
+  const presentFlags = flags.filter(Boolean)
+  console.log(presentNames.length, presentNumbers.length, presentFlags.length)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+
+  const presentNames = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'presentNames')
+  const presentNumbers = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'presentNumbers')
+  const presentFlags = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'presentFlags')
+
+  assert.ok(presentNames)
+  assert.ok(presentNumbers)
+  assert.ok(presentFlags)
+  assert.equal(presentNames.valueType, 'array')
+  assert.equal(presentNames.arrayElementType, 'string')
+  assert.equal(presentNumbers.arrayElementType, 'number')
+  assert.equal(presentFlags.arrayElementType, 'boolean')
+  assert.match(result.code, /if \(\(\(ccjs_string\*\)ccjs_filter_value_\d+\.as\.ref\)->len > 0\) \{/)
+  assert.match(
+    result.code,
+    /if \(ccjs_filter_value_\d+\.as\.number == ccjs_filter_value_\d+\.as\.number && ccjs_filter_value_\d+\.as\.number != 0\) \{/
+  )
+  assert.match(result.code, /if \(ccjs_filter_value_\d+\.as\.boolean\) \{/)
+  assert.match(result.code, /ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
+})
+
+
 test('checks Map and Set generic methods as typed chain calls', () => {
   const result = compileSource(
     `export function main(): void {
