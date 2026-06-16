@@ -3373,10 +3373,12 @@ function emitFetchAbortControllerVariableDeclaration(statement: AnyNode, context
   context.variables.set(statement.name, 'object')
   registerObjectShape(context, statement.name, statement.shape)
 
-  return [
-    ...emitPrepareOwnedValueWrite(statement.name),
-    emitStatusCheck(`ccjs_fetch_abort_controller_new(&ccjs_default_allocator, &${statement.name})`, context)
-  ]
+  const lines: string[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(emitStatusCheck(`ccjs_fetch_abort_controller_new(&ccjs_default_allocator, &${statement.name})`, context))
+
+  return lines
 }
 
 function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CFunctionContext): string[] | null {
@@ -3385,15 +3387,18 @@ function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CF
   }
 
   const controller = emitCValueExpression(expression.callee.object, context)
+  const lines: string[] = []
 
-  return [
-    ...controller.lines,
+  pushAll(lines, controller.lines)
+  lines.push(
     emitRuntimeTypeCheck(
       `${controller.expression}.tag != CCJS_TAG_OBJECT || ${controller.expression}.as.ref == 0`,
       context
-    ),
-    emitStatusCheck(`ccjs_fetch_abort_controller_abort(${controller.expression})`, context)
-  ]
+    )
+  )
+  lines.push(emitStatusCheck(`ccjs_fetch_abort_controller_abort(${controller.expression})`, context))
+
+  return lines
 }
 
 function emitPreparedDebugMemoryCallExpression(
@@ -3431,10 +3436,12 @@ function emitPreparedDebugMemoryCallExpression(
   lines.push('ccjs_debug_memory_ensure_allocator();')
   lines.push(`ccjs_debug_memory_snapshot(&${stats});`)
   registerOwnedValue(context, out)
-  lines.push(...emitPrepareOwnedValueWrite(out))
+  pushAll(lines, emitPrepareOwnedValueWrite(out))
   lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${out})`, context))
 
-  for (const [index, field] of debugMemoryStatsFields.entries()) {
+  for (let index = 0; index < debugMemoryStatsFields.length; index++) {
+    const field = debugMemoryStatsFields[index]
+
     lines.push(
       emitStatusCheck(
         `ccjs_object_init_known(${out}, ${index}, ccjs_number_value((ccjs_number)${stats}.${field.cField}))`,
@@ -3455,15 +3462,23 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   if (
-    expression?.type !== 'CallExpression' ||
+    expression == null ||
+    expression.type !== 'CallExpression' ||
     !isAsyncFunctionCallee(expression.callee, context) ||
     expression.valueType !== 'promise'
   ) {
     return null
   }
 
-  const valueType =
-    resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? expression.promiseValueType ?? 'unknown'
+  let valueType = 'unknown'
+  const awaitedValueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context)
+
+  if (awaitedValueType != null) {
+    valueType = awaitedValueType
+  } else if (expression.promiseValueType != null) {
+    valueType = expression.promiseValueType
+  }
+
   const taskCall = emitPreparedAsyncTaskPromiseCallExpression(expression, valueType, context, options)
 
   if (taskCall != null) {
@@ -3493,19 +3508,30 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
 
   registerEventLoop(context)
 
-  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  let out = nextCName(context, 'ccjs_promise')
+
+  if (options.out != null) {
+    out = options.out
+  }
+
   const call = emitPreparedCallExpression(expression, context)
-  const managedValue = isManagedRuntimeReturnType(valueType) ? nextCName(context, 'ccjs_async_value') : null
-  const value =
-    valueType === 'void'
-      ? 'ccjs_undefined_value()'
-      : valueType === 'boolean'
-        ? `ccjs_bool_value((${call.expression}) != 0)`
-        : valueType === 'number'
-          ? `ccjs_number_value(${call.expression})`
-          : managedValue
-  const valueCheck =
-    managedValue == null ? '' : emitRuntimeValueCheck(managedValue, cRuntimeValueTag(valueType), context)
+  let managedValue: string | null = null
+  let value = 'ccjs_undefined_value()'
+  let valueCheck = ''
+  const lines: string[] = []
+
+  if (isManagedRuntimeReturnType(valueType)) {
+    managedValue = nextCName(context, 'ccjs_async_value')
+    value = managedValue
+  } else if (valueType === 'boolean') {
+    value = `ccjs_bool_value((${call.expression}) != 0)`
+  } else if (valueType === 'number') {
+    value = `ccjs_number_value(${call.expression})`
+  }
+
+  if (managedValue != null) {
+    valueCheck = emitRuntimeValueCheck(managedValue, cRuntimeValueTag(valueType), context)
+  }
 
   if (managedValue != null) {
     registerOwnedValue(context, managedValue)
@@ -3515,21 +3541,24 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
     registerOwnedPromise(context, out, valueType, 'unknown')
   }
 
+  pushAll(lines, call.lines)
+
+  if (managedValue != null) {
+    pushAll(lines, emitPrepareOwnedValueWrite(managedValue))
+    lines.push(`${managedValue} = ${call.expression};`)
+
+    if (valueCheck !== '') {
+      lines.push(valueCheck)
+    }
+
+    lines.push(emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context))
+    pushAll(lines, emitPrepareOwnedValueWrite(managedValue))
+  } else {
+    lines.push(emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context))
+  }
+
   return {
-    lines:
-      managedValue == null
-        ? [
-            ...call.lines,
-            emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context)
-          ]
-        : [
-            ...call.lines,
-            ...emitPrepareOwnedValueWrite(managedValue),
-            `${managedValue} = ${call.expression};`,
-            ...(valueCheck === '' ? [] : [valueCheck]),
-            emitStatusCheck(`ccjs_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context),
-            ...emitPrepareOwnedValueWrite(managedValue)
-          ],
+    lines,
     expression: out,
     valueType,
     rejectionValueType: 'unknown'
@@ -3542,7 +3571,7 @@ function emitPreparedAsyncTaskPromiseCallExpression(
   context: CFunctionContext,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  if (expression.callee?.type !== 'Reference' || expression.callee.path.length !== 1) {
+  if (expression.callee == null || expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
     return null
   }
 
@@ -3554,16 +3583,28 @@ function emitPreparedAsyncTaskPromiseCallExpression(
 
   registerEventLoop(context)
 
-  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  let out = nextCName(context, 'ccjs_promise')
+
+  if (options.out != null) {
+    out = options.out
+  }
+
   const prepared = emitPreparedCallArgs(expression, wrapper.params, context)
-  const args = [emitEventLoopReference(context), ...prepared.args, `&${out}`]
+  const args: string[] = [emitEventLoopReference(context)]
+  const lines: string[] = []
+
+  pushAll(args, prepared.args)
+  args.push(`&${out}`)
 
   if (options.owned !== false) {
     registerOwnedPromise(context, out, valueType, 'unknown')
   }
 
+  pushAll(lines, prepared.lines)
+  lines.push(emitStatusCheck(`${wrapper.startName}(${args.join(', ')})`, context))
+
   return {
-    lines: [...prepared.lines, emitStatusCheck(`${wrapper.startName}(${args.join(', ')})`, context)],
+    lines,
     expression: out,
     valueType,
     rejectionValueType: 'unknown'
@@ -3615,14 +3656,26 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   registerEventLoop(context)
   registerErrorChannel(context)
 
-  const out = options.out ?? nextCName(context, 'ccjs_promise')
+  let out = nextCName(context, 'ccjs_promise')
+
+  if (options.out != null) {
+    out = options.out
+  }
+
   const prepared = emitPreparedCallArgs(expression, params, context)
-  const result = valueType === 'void' ? null : nextCName(context, 'ccjs_async_result')
+  let result: string | null = null
+  if (valueType !== 'void') {
+    result = nextCName(context, 'ccjs_async_result')
+  }
   const managedResult = result != null && isManagedRuntimeReturnType(valueType)
   const status = nextCName(context, 'ccjs_async_status')
-  const args = [...prepared.args]
+  const args: string[] = []
   const rejectionValueType = resolveCFunctionRejectionValueType(expression.callee, context)
   let fulfilledValue = 'ccjs_undefined_value()'
+  let valueCheck = ''
+
+  pushAll(args, prepared.args)
+
   if (result != null) {
     if (valueType === 'boolean') {
       fulfilledValue = `ccjs_bool_value((${result}) != 0)`
@@ -3632,7 +3685,10 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
       fulfilledValue = result
     }
   }
-  const valueCheck = managedResult ? emitRuntimeValueCheck(result, cRuntimeValueTag(valueType), context) : ''
+
+  if (managedResult && result != null) {
+    valueCheck = emitRuntimeValueCheck(result, cRuntimeValueTag(valueType), context)
+  }
 
   if (result != null) {
     args.push(`&${result}`)
@@ -3644,14 +3700,14 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
     registerOwnedPromise(context, out, valueType, rejectionValueType)
   }
 
-  if (managedResult) {
+  if (managedResult && result != null) {
     registerOwnedValue(context, result)
   }
 
   const resultPreparationLines: string[] = []
   if (result != null) {
     if (managedResult) {
-      resultPreparationLines.push(...emitPrepareOwnedValueWrite(result))
+      pushAll(resultPreparationLines, emitPrepareOwnedValueWrite(result))
     } else {
       resultPreparationLines.push(`double ${result} = 0;`)
     }
@@ -3666,24 +3722,29 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
 
   const rejectedCall = `ccjs_promise_rejected(${emitEventLoopReference(context)}, ccjs_error, &${out})`
   const resolvedCall = `ccjs_promise_resolved(${emitEventLoopReference(context)}, ${fulfilledValue}, &${out})`
+  const lines: string[] = []
+
+  pushAll(lines, prepared.lines)
+  pushAll(lines, emitPrepareOwnedValueWrite('ccjs_error'))
+  pushAll(lines, resultPreparationLines)
+  lines.push(`ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${args.join(', ')});`)
+  lines.push(`if (${status} == CCJS_ERR_THROW) {`)
+  lines.push(`  ${emitStatusCheck(rejectedCall, context)}`)
+  lines.push('  ccjs_release(ccjs_error);')
+  lines.push('  ccjs_error = ccjs_undefined_value();')
+  lines.push('} else {')
+  lines.push(`  if (${status} != CCJS_OK) ${emitFailureStatement(context)}`)
+
+  if (valueCheck !== '') {
+    lines.push(`  ${valueCheck}`)
+  }
+
+  lines.push(`  ${emitStatusCheck(resolvedCall, context)}`)
+  pushAll(lines, managedResultResetLines)
+  lines.push('}')
 
   return {
-    lines: [
-      ...prepared.lines,
-      ...emitPrepareOwnedValueWrite('ccjs_error'),
-      ...resultPreparationLines,
-      `ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${args.join(', ')});`,
-      `if (${status} == CCJS_ERR_THROW) {`,
-      `  ${emitStatusCheck(rejectedCall, context)}`,
-      '  ccjs_release(ccjs_error);',
-      '  ccjs_error = ccjs_undefined_value();',
-      '} else {',
-      `  if (${status} != CCJS_OK) ${emitFailureStatement(context)}`,
-      ...(valueCheck === '' ? [] : [`  ${valueCheck}`]),
-      `  ${emitStatusCheck(resolvedCall, context)}`,
-      ...managedResultResetLines,
-      '}'
-    ],
+    lines,
     expression: out,
     valueType,
     rejectionValueType
@@ -3697,11 +3758,16 @@ function isSupportedAsyncFunctionPromiseValueType(valueType: string): boolean {
 }
 
 function resolveCFunctionRejectionValueType(callee: AnyNode, context: CFunctionContext): string {
-  if (callee?.type !== 'Reference' || callee.path.length !== 1) {
+  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
     return 'unknown'
   }
 
-  const types = context.functionThrowValueTypes.get(callee.path[0]) ?? []
+  let types: IrThrowValueType[] = []
+  const storedTypes = context.functionThrowValueTypes.get(callee.path[0])
+
+  if (storedTypes != null) {
+    types = storedTypes
+  }
 
   if (types.length === 1 && types[0] === 'error') {
     return 'error'
@@ -3718,13 +3784,25 @@ function emitPreparedAwaitPromiseExpression(expression: AnyNode, context: CFunct
   const promiseExpression = emitPreparedPromiseExpression(expression, context, promiseLoweringDependencies)
 
   if (promiseExpression != null) {
+    let valueType = 'unknown'
+    const promisedValueType = knownValueType(promiseExpression.valueType)
+    const expressionPromiseValueType = knownValueType(expression.promiseValueType)
+    const resolvedValueType = resolvePromiseExpressionValueType(expression, context)
+
+    if (promisedValueType != null) {
+      valueType = promisedValueType
+    } else if (expressionPromiseValueType != null) {
+      valueType = expressionPromiseValueType
+    } else if (resolvedValueType != null) {
+      valueType = resolvedValueType
+    }
+
     return {
-      ...promiseExpression,
-      valueType:
-        knownValueType(promiseExpression.valueType) ??
-        knownValueType(expression.promiseValueType) ??
-        resolvePromiseExpressionValueType(expression, context) ??
-        'unknown'
+      lines: promiseExpression.lines,
+      expression: promiseExpression.expression,
+      nullable: promiseExpression.nullable,
+      rejectionValueType: promiseExpression.rejectionValueType,
+      valueType
     }
   }
 
@@ -3761,30 +3839,50 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
 
   registerEventLoop(context)
 
-  const valueType =
-    knownValueType(expression.valueType) ??
-    knownValueType(promise.valueType) ??
-    resolvePromiseExpressionValueType(expression.argument, context) ??
-    'unknown'
+  let valueType = 'unknown'
+  const expressionValueType = knownValueType(expression.valueType)
+  const promiseValueType = knownValueType(promise.valueType)
+  const resolvedValueType = resolvePromiseExpressionValueType(expression.argument, context)
+
+  if (expressionValueType != null) {
+    valueType = expressionValueType
+  } else if (promiseValueType != null) {
+    valueType = promiseValueType
+  } else if (resolvedValueType != null) {
+    valueType = resolvedValueType
+  }
+
   const value = nextCName(context, 'ccjs_await_value')
   const valueTag = cRuntimeValueTag(valueType)
   const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
   const pollCall = `ccjs_loop_poll(${emitEventLoopReference(context)}, ${emitEventLoopNextTimeExpression(context)})`
+  let rejectionValueType = 'unknown'
+  const lines: string[] = []
+
+  if (promise.rejectionValueType != null) {
+    rejectionValueType = promise.rejectionValueType
+  }
+
   registerOwnedValue(context, value)
 
+  pushAll(lines, promise.lines)
+  pushAll(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(
+    `while (ccjs_promise_get_state(${promise.expression}) == CCJS_PROMISE_PENDING && ccjs_loop_has_work(${emitEventLoopReference(context)})) {`
+  )
+  pushAll(lines, emitEventLoopSleepUntilNextTimerLines(context, '  '))
+  lines.push(`  ${emitStatusCheck(pollCall, context)}`)
+  lines.push('}')
+  pushAll(lines, emitAwaitRejectedPromiseLines(promise.expression, rejectionValueType, context))
+  lines.push(`if (ccjs_promise_get_state(${promise.expression}) != CCJS_PROMISE_FULFILLED) ${emitFailureStatement(context)}`)
+  lines.push(emitStatusCheck(`ccjs_promise_get_result(${promise.expression}, &${value})`, context))
+
+  if (valueCheck !== '') {
+    lines.push(valueCheck)
+  }
+
   return {
-    lines: [
-      ...promise.lines,
-      ...emitPrepareOwnedValueWrite(value),
-      `while (ccjs_promise_get_state(${promise.expression}) == CCJS_PROMISE_PENDING && ccjs_loop_has_work(${emitEventLoopReference(context)})) {`,
-      ...emitEventLoopSleepUntilNextTimerLines(context, '  '),
-      `  ${emitStatusCheck(pollCall, context)}`,
-      '}',
-      ...emitAwaitRejectedPromiseLines(promise.expression, promise.rejectionValueType ?? 'unknown', context),
-      `if (ccjs_promise_get_state(${promise.expression}) != CCJS_PROMISE_FULFILLED) ${emitFailureStatement(context)}`,
-      emitStatusCheck(`ccjs_promise_get_result(${promise.expression}, &${value})`, context),
-      ...(valueCheck === '' ? [] : [valueCheck])
-    ],
+    lines,
     expression: value
   }
 }
@@ -3795,35 +3893,48 @@ function emitAwaitRejectedPromiseLines(
   context: CFunctionContext
 ): string[] {
   const target = currentErrorTarget(context)
-  const rejectedTypeCheck =
-    rejectionValueType === 'error'
-      ? 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
-      : 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
+  let rejectedTypeCheck = 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
+
+  if (rejectionValueType === 'error') {
+    rejectedTypeCheck = 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
+  }
 
   if (target == null && !context.throwingFunction) {
-    return [
+    const failureLines: string[] = []
+
+    failureLines.push(
       `if (ccjs_promise_get_state(${promiseExpression}) == CCJS_PROMISE_REJECTED) ${emitFailureStatement(context)}`
-    ]
+    )
+
+    return failureLines
   }
 
   registerErrorChannel(context)
   const resultCall = `ccjs_promise_get_result(${promiseExpression}, &ccjs_error)`
+  const lines: string[] = []
 
-  return [
-    `if (ccjs_promise_get_state(${promiseExpression}) == CCJS_PROMISE_REJECTED) {`,
-    ...emitPrepareOwnedValueWrite('ccjs_error').map((line: string) => `  ${line}`),
-    `  ${emitStatusCheck(resultCall, context)}`,
-    `  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`,
-    '  ccjs_error_active = 1;',
-    ...(target == null ? ['  ccjs_status_result = CCJS_ERR_THROW;', '  goto ccjs_cleanup;'] : [`  goto ${target};`]),
-    '}'
-  ]
+  lines.push(`if (ccjs_promise_get_state(${promiseExpression}) == CCJS_PROMISE_REJECTED) {`)
+  pushIndented(lines, emitPrepareOwnedValueWrite('ccjs_error'), '  ')
+  lines.push(`  ${emitStatusCheck(resultCall, context)}`)
+  lines.push(`  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`)
+  lines.push('  ccjs_error_active = 1;')
+
+  if (target == null) {
+    lines.push('  ccjs_status_result = CCJS_ERR_THROW;')
+    lines.push('  goto ccjs_cleanup;')
+  } else {
+    lines.push(`  goto ${target};`)
+  }
+
+  lines.push('}')
+
+  return lines
 }
 
 function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
   const callExpression = expression.argument
 
-  if (callExpression?.type !== 'CallExpression' || !isAsyncFunctionCallee(callExpression.callee, context)) {
+  if (callExpression == null || callExpression.type !== 'CallExpression' || !isAsyncFunctionCallee(callExpression.callee, context)) {
     return null
   }
 
@@ -3831,15 +3942,26 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
     return null
   }
 
-  const valueType =
-    knownValueType(expression.valueType) ??
-    knownValueType(resolveCAsyncFunctionAwaitValueType(callExpression.callee, context)) ??
-    'unknown'
+  let valueType = 'unknown'
+  const expressionValueType = knownValueType(expression.valueType)
+  const awaitedValueType = knownValueType(resolveCAsyncFunctionAwaitValueType(callExpression.callee, context))
+
+  if (expressionValueType != null) {
+    valueType = expressionValueType
+  } else if (awaitedValueType != null) {
+    valueType = awaitedValueType
+  }
+
   const call = emitPreparedCallExpression(callExpression, context)
 
   if (valueType === 'void') {
+    const lines: string[] = []
+
+    pushAll(lines, call.lines)
+    lines.push(`${call.expression};`)
+
     return {
-      lines: [...call.lines, `${call.expression};`],
+      lines,
       expression: 'ccjs_undefined_value()'
     }
   }
@@ -3862,23 +3984,29 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
   }
 
   const value = nextCName(context, 'ccjs_await_value')
+  let resultExpression = call.expression
+  const lines: string[] = []
+
   registerOwnedValue(context, value)
 
-  const resultExpression =
-    valueType === 'boolean'
-      ? `ccjs_bool_value((${call.expression}) != 0)`
-      : valueType === 'number'
-        ? `ccjs_number_value(${call.expression})`
-        : call.expression
+  if (valueType === 'boolean') {
+    resultExpression = `ccjs_bool_value((${call.expression}) != 0)`
+  } else if (valueType === 'number') {
+    resultExpression = `ccjs_number_value(${call.expression})`
+  }
+
   const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
 
+  pushAll(lines, call.lines)
+  pushAll(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(`${value} = ${resultExpression};`)
+
+  if (valueCheck !== '') {
+    lines.push(valueCheck)
+  }
+
   return {
-    lines: [
-      ...call.lines,
-      ...emitPrepareOwnedValueWrite(value),
-      `${value} = ${resultExpression};`,
-      ...(valueCheck === '' ? [] : [valueCheck])
-    ],
+    lines,
     expression: value
   }
 }
