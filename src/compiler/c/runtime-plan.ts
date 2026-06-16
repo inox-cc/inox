@@ -49,7 +49,7 @@ export type CRuntimePreludeRequirementInput = {
 export function resolveCRuntimePreludeRequirements(
   input: CRuntimePreludeRequirementInput
 ): CRuntimePreludeRequirements {
-  const signatureRuntimeTypes = input.signatureRuntimeTypes ?? new Set<string>()
+  const signatureRuntimeTypes: Set<string> = input.signatureRuntimeTypes ?? new Set()
   const needsCallbackRuntime =
     input.hasRuntimeCallbackWrapper ||
     input.runtimeRequirements.has('callback-values') ||
@@ -63,7 +63,7 @@ export function resolveCRuntimePreludeRequirements(
   const needsJsonRuntime = input.runtimeRequirements.has('json')
   const needsTimerRuntime = input.runtimeRequirements.has('timers')
   const needsDebugMemoryRuntime = input.runtimeRequirements.has('debug-memory')
-  const needsFetchRuntime = input.globalUsages.some(isSupportedCFetchGlobalUsage)
+  const needsFetchRuntime = runtimePlanHasSupportedFetchGlobalUsage(input.globalUsages)
   const needsAsyncRuntime =
     input.runtimeRequirements.has('async-runtime') ||
     needsFetchRuntime ||
@@ -114,10 +114,10 @@ export function resolveCRuntimePreludeRequirements(
     needsFetchRuntime ||
     needsHttpRuntime ||
     needsNetRuntime
-  const needsMathRuntime = input.globalUsages.some(isSupportedCMathGlobalUsage)
+  const needsMathRuntime = runtimePlanHasSupportedMathGlobalUsage(input.globalUsages)
   const needsCryptoRuntime =
     input.runtimeRequirements.has('crypto') ||
-    input.globalUsages.some((usage) => isSupportedCCryptoGlobalUsage(usage, input.cryptoContext))
+    runtimePlanHasSupportedCryptoGlobalUsage(input.globalUsages, input.cryptoContext)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     input.runtimeRequirements.has('string-bytes') ||
@@ -158,4 +158,37 @@ export function resolveCRuntimePreludeRequirements(
     needsHttpRuntime,
     needsNetRuntime
   }
+}
+
+function runtimePlanHasSupportedFetchGlobalUsage(globalUsages: IrGlobalUsage[]): boolean {
+  for (const usage of globalUsages) {
+    if (isSupportedCFetchGlobalUsage(usage)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function runtimePlanHasSupportedMathGlobalUsage(globalUsages: IrGlobalUsage[]): boolean {
+  for (const usage of globalUsages) {
+    if (isSupportedCMathGlobalUsage(usage)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function runtimePlanHasSupportedCryptoGlobalUsage(
+  globalUsages: IrGlobalUsage[],
+  context: CGlobalUsageSupportContext
+): boolean {
+  for (const usage of globalUsages) {
+    if (isSupportedCCryptoGlobalUsage(usage, context)) {
+      return true
+    }
+  }
+
+  return false
 }
