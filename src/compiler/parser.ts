@@ -52,6 +52,56 @@ export function parse(tokens: Token[]): ProgramNode {
   return parser.parseProgram()
 }
 
+type FieldModifiers = {
+  readOnly: boolean
+  weakToken: Token | null
+}
+
+type TypeAnnotationOptions = {
+  stopAtLineBreak?: boolean
+  stopAtStatementBoundary?: boolean
+}
+
+function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
+  for (const node of source) {
+    target.push(node)
+  }
+}
+
+function ownershipFromWeakToken(weakToken: Token | null): string {
+  if (weakToken == null) {
+    return 'strong'
+  }
+
+  return 'weak'
+}
+
+function stringArrayIncludes(values: string[], value: string): boolean {
+  for (const item of values) {
+    if (item === value) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function typeAnnotationOptionsOrEmpty(options: TypeAnnotationOptions | null): TypeAnnotationOptions {
+  if (options == null) {
+    return {}
+  }
+
+  return options
+}
+
+function stringArrayOrEmpty(values: string[] | null): string[] {
+  if (values == null) {
+    return []
+  }
+
+  return values
+}
+
 class Parser {
   tokens: Token[]
   position: number
@@ -96,7 +146,7 @@ class Parser {
     }
 
     if (isAsync) {
-      this.report('CCJS_EXPECTED_FUNCTION', 'expected function after async')
+      this.report('CCJS_EXPECTED_FUNCTION', 'expected function after async', null)
     }
 
     if (this.matchKeyword('class')) {
@@ -124,14 +174,18 @@ class Parser {
     }
 
     if (exported) {
-      this.report('CCJS_EXPECTED_EXPORT', 'expected exported function or variable declaration')
+      this.report('CCJS_EXPECTED_EXPORT', 'expected exported function or variable declaration', null)
     }
 
     return this.parseStatement()
   }
 
   parseImportDeclaration(typeOnly: boolean): AnyNode {
-    const importTypeOnly = this.matchKeyword('type') ? true : typeOnly
+    let importTypeOnly = typeOnly
+
+    if (this.matchKeyword('type')) {
+      importTypeOnly = true
+    }
 
     const specifiers: AnyNode[] = []
 
@@ -144,11 +198,11 @@ class Parser {
     }
 
     if (this.matchValue('{')) {
-      specifiers.push(...this.parseNamedImportSpecifiers())
+      pushAllNodes(specifiers, this.parseNamedImportSpecifiers())
     }
 
     if (specifiers.length === 0) {
-      this.report('CCJS_UNSUPPORTED_IMPORT', 'expected ESM default or named import specifiers')
+      this.report('CCJS_UNSUPPORTED_IMPORT', 'expected ESM default or named import specifiers', null)
       this.skipStatement()
 
       return {
@@ -163,11 +217,15 @@ class Parser {
     return createImportDeclaration(importTypeOnly, specifiers, source)
   }
 
-  parseExportDeclaration(typeOnly: boolean) {
-    const specifiers = this.matchValue('{') ? this.parseNamedImportSpecifiers() : []
+  parseExportDeclaration(typeOnly: boolean): AnyNode {
+    const specifiers: AnyNode[] = []
+
+    if (this.matchValue('{')) {
+      pushAllNodes(specifiers, this.parseNamedImportSpecifiers())
+    }
 
     if (specifiers.length === 0) {
-      this.report('CCJS_UNSUPPORTED_EXPORT', 'expected named export specifiers')
+      this.report('CCJS_UNSUPPORTED_EXPORT', 'expected named export specifiers', null)
       this.skipStatement()
 
       return {
@@ -213,7 +271,7 @@ class Parser {
     return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected imported name')
   }
 
-  parseFunctionDeclaration(exported: boolean, isAsync = false): AnyNode {
+  parseFunctionDeclaration(exported: boolean, isAsync: boolean): AnyNode {
     const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected function name')
     const params: AnyNode[] = []
 
@@ -225,7 +283,7 @@ class Parser {
       let valueType = 'unknown'
 
       if (this.matchValue(':')) {
-        valueType = this.parseTypeAnnotation([',', ')'])
+        valueType = this.parseTypeAnnotation([',', ')'], null)
       }
 
       params.push(createParam(param, valueType, optional))
@@ -239,7 +297,7 @@ class Parser {
     let returnType = 'void'
 
     if (this.matchValue(':')) {
-      returnType = this.parseTypeAnnotation(['{'])
+      returnType = this.parseTypeAnnotation(['{'], null)
     }
 
     return createFunctionDeclaration({
@@ -265,7 +323,7 @@ class Parser {
     }
 
     if (this.isValue('{')) {
-      return createTypeAliasDeclaration(exported, name, this.parseObjectType())
+      return createTypeAliasDeclaration(exported, name, this.parseObjectType(null))
     }
 
     const valueType = this.parseTypeAnnotation([';'], {
@@ -285,7 +343,7 @@ class Parser {
       const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected function type parameter name')
       const optional = this.matchValue('?')
       this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after function type parameter name')
-      const valueType = this.parseTypeAnnotation([',', ')'])
+      const valueType = this.parseTypeAnnotation([',', ')'], null)
 
       params.push(createParam(name, valueType, optional))
 
@@ -324,7 +382,8 @@ class Parser {
     return createObjectType([], baseTypes, true)
   }
 
-  parseObjectType(baseTypes: string[] = []) {
+  parseObjectType(baseTypes: string[] | null): AnyNode {
+    const actualBaseTypes = stringArrayOrEmpty(baseTypes)
     const fields: AnyNode[] = []
     let dynamic = false
 
@@ -346,10 +405,10 @@ class Parser {
       if (this.isValue('(')) {
         const field = createObjectTypeField(
           name,
-          modifiers.readonly,
+          modifiers.readOnly,
           optional,
           'function',
-          modifiers.weakToken == null ? 'strong' : 'weak',
+          ownershipFromWeakToken(modifiers.weakToken),
           modifiers.weakToken
         )
         field.functionType = this.parseObjectTypeMethodSignature()
@@ -367,10 +426,10 @@ class Parser {
       fields.push(
         createObjectTypeField(
           name,
-          modifiers.readonly,
+          modifiers.readOnly,
           optional,
           valueType,
-          modifiers.weakToken == null ? 'strong' : 'weak',
+          ownershipFromWeakToken(modifiers.weakToken),
           modifiers.weakToken
         )
       )
@@ -382,7 +441,7 @@ class Parser {
     this.expectValue('}', 'CCJS_EXPECTED_TYPE', 'expected } after object type')
     this.matchValue(';')
 
-    return createObjectType(fields, baseTypes, dynamic)
+    return createObjectType(fields, actualBaseTypes, dynamic)
   }
 
   parseObjectTypeMethodSignature() {
@@ -394,7 +453,7 @@ class Parser {
       const name = this.expectTypeParameterName()
       const optional = this.matchValue('?')
       this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after method type parameter name')
-      const valueType = this.parseTypeAnnotation([',', ')'])
+      const valueType = this.parseTypeAnnotation([',', ')'], null)
 
       params.push(createParam(name, valueType, optional))
 
@@ -484,12 +543,12 @@ class Parser {
     const modifiers = this.parseFieldModifiers()
     const name = this.parseClassMemberName()
 
-    if (!modifiers.readonly && modifiers.weakToken == null && this.isValue('(')) {
+    if (!modifiers.readOnly && modifiers.weakToken == null && this.isValue('(')) {
       return this.parseClassMethod(name, staticToken)
     }
 
-    if ((modifiers.readonly || modifiers.weakToken != null) && this.isValue('(')) {
-      this.report('CCJS_EXPECTED_TYPE', 'class method ownership modifiers are not supported; use fields')
+    if ((modifiers.readOnly || modifiers.weakToken != null) && this.isValue('(')) {
+      this.report('CCJS_EXPECTED_TYPE', 'class method ownership modifiers are not supported; use fields', null)
     }
 
     this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after class field name')
@@ -501,23 +560,23 @@ class Parser {
     return createFieldDefinition({
       name,
       staticToken,
-      readonly: modifiers.readonly,
-      ownership: modifiers.weakToken == null ? 'strong' : 'weak',
+      readonly: modifiers.readOnly,
+      ownership: ownershipFromWeakToken(modifiers.weakToken),
       weakToken: modifiers.weakToken,
       valueType
     })
   }
 
-  parseFieldModifiers(): { readonly: boolean; weakToken: Token | null } {
-    let readonly = false
+  parseFieldModifiers(): FieldModifiers {
+    let readOnly = false
     let weakToken: Token | null = null
     let matched = true
 
     while (matched) {
       matched = false
 
-      if (!readonly && this.matchKeyword('readonly')) {
-        readonly = true
+      if (!readOnly && this.matchKeyword('readonly')) {
+        readOnly = true
         matched = true
         continue
       }
@@ -528,10 +587,10 @@ class Parser {
       }
     }
 
-    return { readonly, weakToken }
+    return { readOnly, weakToken }
   }
 
-  parseClassMethod(name: Token, staticToken: Token | null = null): AnyNode {
+  parseClassMethod(name: Token, staticToken: Token | null): AnyNode {
     const params: AnyNode[] = []
 
     this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after method name')
@@ -542,7 +601,7 @@ class Parser {
       let valueType = 'unknown'
 
       if (this.matchValue(':')) {
-        valueType = this.parseTypeAnnotation([',', ')'])
+        valueType = this.parseTypeAnnotation([',', ')'], null)
       }
 
       params.push(createParam(param, valueType, optional))
@@ -553,10 +612,14 @@ class Parser {
     }
 
     this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after method parameters')
-    let returnType = name.value === 'constructor' ? 'void' : 'unknown'
+    let returnType = 'unknown'
+
+    if (name.value === 'constructor') {
+      returnType = 'void'
+    }
 
     if (this.matchValue(':')) {
-      returnType = this.parseTypeAnnotation(['{'])
+      returnType = this.parseTypeAnnotation(['{'], null)
     }
 
     return createMethodDefinition({
@@ -583,11 +646,23 @@ class Parser {
 
     const next = this.peek(1)
 
-    if (next.type !== 'identifier' && !['constructor', 'readonly'].includes(next.value)) {
+    if (next.type !== 'identifier' && !this.isClassStaticKeywordFollower(next.value)) {
       return null
     }
 
     return this.advance()
+  }
+
+  isClassStaticKeywordFollower(value: string): boolean {
+    if (value === 'constructor') {
+      return true
+    }
+
+    if (value === 'readonly') {
+      return true
+    }
+
+    return false
   }
 
   parseBlock(): AnyNode[] {
@@ -613,7 +688,7 @@ class Parser {
     }
 
     if (this.matchKeyword('import')) {
-      this.report('CCJS_NO_DYNAMIC_IMPORT', 'dynamic import is not supported; use static ESM imports')
+      this.report('CCJS_NO_DYNAMIC_IMPORT', 'dynamic import is not supported; use static ESM imports', null)
       this.skipStatement()
 
       return {
@@ -682,7 +757,7 @@ class Parser {
     }
 
     if (this.matchKeyword('var')) {
-      this.report('CCJS_NO_VAR', '`var` is not supported; use `let` or `const`')
+      this.report('CCJS_NO_VAR', '`var` is not supported; use `let` or `const`', null)
       this.skipStatement()
 
       return {
@@ -692,7 +767,11 @@ class Parser {
 
     if (this.matchKeyword('return')) {
       const token = this.previous()
-      const argument = this.isValue('}') || this.isValue(';') ? null : this.parseExpression()
+      let argument: AnyNode | null = null
+
+      if (!this.isValue('}') && !this.isValue(';')) {
+        argument = this.parseExpression()
+      }
       this.matchValue(';')
 
       return {
@@ -816,9 +895,17 @@ class Parser {
     }
 
     const init = this.parseForInitializer()
-    const test = this.isValue(';') ? null : this.parseExpression()
+    let test: AnyNode | null = null
+
+    if (!this.isValue(';')) {
+      test = this.parseExpression()
+    }
     this.expectValue(';', 'CCJS_EXPECTED_SEMICOLON', 'expected ; after for condition')
-    const update = this.isValue(')') ? null : this.parseExpression()
+    let update: AnyNode | null = null
+
+    if (!this.isValue(')')) {
+      update = this.parseExpression()
+    }
     this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after for update')
 
     return {
@@ -834,7 +921,11 @@ class Parser {
   parseForOfStatement(start: Token): AnyNode {
     const kind = this.advance().value
     const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected for...of binding name')
-    const declaredType = this.matchValue(':') ? this.parseTypeAnnotation(['of']) : null
+    let declaredType: string | null = null
+
+    if (this.matchValue(':')) {
+      declaredType = this.parseTypeAnnotation(['of'], null)
+    }
     this.expectKeyword('of', 'CCJS_EXPECTED_OF', 'expected of in for...of statement')
     const iterable = this.parseExpression()
     this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after for...of iterable')
@@ -852,7 +943,7 @@ class Parser {
   }
 
   parseUnsupportedForInStatement(): AnyNode {
-    this.report('CCJS_NO_FOR_IN', 'for...in is not supported; use Object.keys/map helpers later')
+    this.report('CCJS_NO_FOR_IN', 'for...in is not supported; use Object.keys/map helpers later', null)
 
     while (!this.isValue(')') && !this.is('eof')) {
       this.advance()
@@ -922,7 +1013,7 @@ class Parser {
         continue
       }
 
-      this.report('CCJS_EXPECTED_SWITCH_CASE', 'expected case or default in switch')
+      this.report('CCJS_EXPECTED_SWITCH_CASE', 'expected case or default in switch', null)
       this.advance()
     }
 
@@ -951,10 +1042,14 @@ class Parser {
     let declaredType: string | null = null
 
     if (this.matchValue(':')) {
-      declaredType = this.parseTypeAnnotation(['=', ';', '}', ')'])
+      declaredType = this.parseTypeAnnotation(['=', ';', '}', ')'], null)
     }
 
-    const init = this.matchValue('=') ? this.parseExpression() : null
+    let init: AnyNode | null = null
+
+    if (this.matchValue('=')) {
+      init = this.parseExpression()
+    }
     this.matchValue(';')
 
     return createVariableDeclaration({
@@ -976,7 +1071,7 @@ class Parser {
     }
 
     if (this.isArrowFunctionStart()) {
-      return this.parseArrowFunction()
+      return this.parseArrowFunction(false)
     }
 
     const expression = this.parseTypeAssertion()
@@ -1001,7 +1096,7 @@ class Parser {
     return expression
   }
 
-  parseArrowFunction(isAsync = false): AnyNode {
+  parseArrowFunction(isAsync: boolean): AnyNode {
     const start = this.current()
 
     if (isAsync) {
@@ -1010,7 +1105,13 @@ class Parser {
 
     const params = this.parseArrowParameters()
     this.expectValue('=>', 'CCJS_EXPECTED_ARROW', 'expected => in arrow function')
-    const body = this.isValue('{') ? this.parseBlock() : this.parseExpression()
+
+    if (this.isValue('{')) {
+      const body = this.parseBlock()
+      return createArrowFunction(start, isAsync, params, body)
+    }
+
+    const body = this.parseExpression()
 
     return createArrowFunction(start, isAsync, params, body)
   }
@@ -1031,7 +1132,7 @@ class Parser {
       let valueType = 'unknown'
 
       if (this.matchValue(':')) {
-        valueType = this.parseTypeAnnotation([',', ')'])
+        valueType = this.parseTypeAnnotation([',', ')'], null)
       }
 
       params.push(createParam(param, valueType, optional))
@@ -1047,43 +1148,71 @@ class Parser {
   }
 
   parseNullish(): AnyNode {
-    return this.parseBinaryExpression(() => this.parseLogicalOr(), ['??'])
+    return this.parseBinaryExpression('logicalOr', ['??'])
   }
 
   parseLogicalOr(): AnyNode {
-    return this.parseBinaryExpression(() => this.parseLogicalAnd(), ['||'])
+    return this.parseBinaryExpression('logicalAnd', ['||'])
   }
 
   parseLogicalAnd(): AnyNode {
-    return this.parseBinaryExpression(() => this.parseEquality(), ['&&'])
+    return this.parseBinaryExpression('equality', ['&&'])
   }
 
   parseEquality(): AnyNode {
-    return this.parseBinaryExpression(() => this.parseComparison(), ['===', '!==', '==', '!='])
+    return this.parseBinaryExpression('comparison', ['===', '!==', '==', '!='])
   }
 
   parseComparison(): AnyNode {
-    return this.parseBinaryExpression(() => this.parseTerm(), ['<', '<=', '>', '>='])
+    return this.parseBinaryExpression('term', ['<', '<=', '>', '>='])
   }
 
   parseTerm(): AnyNode {
-    return this.parseBinaryExpression(() => this.parseFactor(), ['+', '-'])
+    return this.parseBinaryExpression('factor', ['+', '-'])
   }
 
   parseFactor(): AnyNode {
-    return this.parseBinaryExpression(() => this.parseUnary(), ['*', '/', '%'])
+    return this.parseBinaryExpression('unary', ['*', '/', '%'])
   }
 
-  parseBinaryExpression(parseOperand: () => AnyNode, operators: string[]): AnyNode {
-    let left = parseOperand()
+  parseBinaryExpression(operandKind: string, operators: string[]): AnyNode {
+    let left = this.parseBinaryOperand(operandKind)
 
-    while (operators.includes(this.current().value)) {
+    while (stringArrayIncludes(operators, this.current().value)) {
       const operator = this.advance()
-      const right = parseOperand()
+      const right = this.parseBinaryOperand(operandKind)
       left = createBinaryExpression(operator, left, right)
     }
 
     return left
+  }
+
+  parseBinaryOperand(operandKind: string): AnyNode {
+    if (operandKind === 'logicalOr') {
+      return this.parseLogicalOr()
+    }
+
+    if (operandKind === 'logicalAnd') {
+      return this.parseLogicalAnd()
+    }
+
+    if (operandKind === 'equality') {
+      return this.parseEquality()
+    }
+
+    if (operandKind === 'comparison') {
+      return this.parseComparison()
+    }
+
+    if (operandKind === 'term') {
+      return this.parseTerm()
+    }
+
+    if (operandKind === 'factor') {
+      return this.parseFactor()
+    }
+
+    return this.parseUnary()
   }
 
   parseUnary(): AnyNode {
@@ -1210,7 +1339,7 @@ class Parser {
 
   parsePrimary(): AnyNode {
     if (this.matchKeyword('import')) {
-      this.report('CCJS_NO_DYNAMIC_IMPORT', 'dynamic import is not supported; use static ESM imports')
+      this.report('CCJS_NO_DYNAMIC_IMPORT', 'dynamic import is not supported; use static ESM imports', null)
 
       if (this.matchValue('(')) {
         while (!this.isValue(')') && !this.is('eof')) {
@@ -1280,7 +1409,7 @@ class Parser {
     }
 
     const token = this.current()
-    this.report('CCJS_EXPECTED_EXPRESSION', `expected expression, got ${JSON.stringify(token.value)}`)
+    this.report('CCJS_EXPECTED_EXPRESSION', `expected expression, got ${JSON.stringify(token.value)}`, null)
     this.advance()
 
     return {
@@ -1311,17 +1440,16 @@ class Parser {
 
     while (!this.isValue('}') && !this.is('eof')) {
       const key = this.parseObjectKey()
-      let value: AnyNode
+      let value: AnyNode = {
+        type: 'InvalidExpression'
+      }
 
       if (this.matchValue(':')) {
         value = this.parseExpression()
       } else if (key.kind === 'identifier') {
         value = createReferenceFromName(key.name, key.loc)
       } else {
-        this.report('CCJS_EXPECTED_OBJECT_VALUE', 'expected : after object property key')
-        value = {
-          type: 'InvalidExpression'
-        }
+        this.report('CCJS_EXPECTED_OBJECT_VALUE', 'expected : after object property key', null)
       }
 
       properties.push(createObjectProperty(key, value))
@@ -1339,11 +1467,11 @@ class Parser {
   parseObjectKey(): AnyNode {
     if (this.is('identifier') || this.is('keyword')) {
       const token = this.advance()
+      const key = createObjectKey(token)
 
-      return {
-        ...createObjectKey(token),
-        kind: 'identifier'
-      }
+      key.kind = 'identifier'
+
+      return key
     }
 
     if (this.is('string') || this.is('number')) {
@@ -1372,16 +1500,14 @@ class Parser {
   }
 
   skipTypeUntil(values: string[]): void {
-    while (!this.is('eof') && !values.includes(this.current().value)) {
+    while (!this.is('eof') && !stringArrayIncludes(values, this.current().value)) {
       this.advance()
     }
   }
 
-  parseTypeAnnotation(
-    values: string[],
-    options: { stopAtLineBreak?: boolean; stopAtStatementBoundary?: boolean } = {}
-  ): string {
-    const result = readTypeAnnotation(this.tokens, this.position, values, options)
+  parseTypeAnnotation(values: string[], options: TypeAnnotationOptions | null): string {
+    const actualOptions = typeAnnotationOptionsOrEmpty(options)
+    const result = readTypeAnnotation(this.tokens, this.position, values, actualOptions)
     this.position = result.position
 
     return result.typeName
@@ -1405,9 +1531,9 @@ class Parser {
 
     while (!this.is('eof') && depth > 0) {
       if (this.isValue('{')) {
-        depth += 1
+        depth = depth + 1
       } else if (this.isValue('}')) {
-        depth -= 1
+        depth = depth - 1
       }
 
       this.advance()
@@ -1449,8 +1575,8 @@ class Parser {
     return false
   }
 
-  expect(type: string, code: string, message: string): Token {
-    if (this.is(type)) {
+  expect(tokenType: string, code: string, message: string): Token {
+    if (this.is(tokenType)) {
       return this.advance()
     }
 
@@ -1458,7 +1584,7 @@ class Parser {
     this.report(code, message, token)
 
     return {
-      type,
+      type: tokenType,
       value: '',
       line: token.line,
       column: token.column,
@@ -1471,7 +1597,7 @@ class Parser {
       return this.previous()
     }
 
-    this.report(code, message)
+    this.report(code, message, null)
 
     return this.current()
   }
@@ -1481,15 +1607,21 @@ class Parser {
       return
     }
 
-    this.report(code, message)
+    this.report(code, message, null)
   }
 
-  report(code: string, message: string, token = this.current()): void {
-    this.diagnostics.push(diagnostic(code, message, token))
+  report(code: string, message: string, token: Token | null): void {
+    let actualToken = this.current()
+
+    if (token != null) {
+      actualToken = token
+    }
+
+    this.diagnostics.push(diagnostic(code, message, actualToken))
   }
 
-  is(type: string): boolean {
-    return this.current().type === type
+  is(tokenType: string): boolean {
+    return this.current().type === tokenType
   }
 
   isKeywordValue(value: string): boolean {
@@ -1525,7 +1657,7 @@ class Parser {
   isForHeaderWithKeyword(keyword: string): boolean {
     if (
       this.current().type !== 'keyword' ||
-      !['const', 'let'].includes(this.current().value) ||
+      !this.isForHeaderDeclarationKeyword(this.current().value) ||
       this.peek(1).type !== 'identifier'
     ) {
       return false
@@ -1546,12 +1678,24 @@ class Parser {
       }
 
       if (token.value === '<') {
-        genericDepth += 1
+        genericDepth = genericDepth + 1
       } else if (token.value === '>' && genericDepth > 0) {
-        genericDepth -= 1
+        genericDepth = genericDepth - 1
       }
 
-      offset += 1
+      offset = offset + 1
+    }
+
+    return false
+  }
+
+  isForHeaderDeclarationKeyword(value: string): boolean {
+    if (value === 'const') {
+      return true
+    }
+
+    if (value === 'let') {
+      return true
     }
 
     return false
@@ -1568,18 +1712,22 @@ class Parser {
 
     let depth = 0
 
-    for (let offset = 0; this.peek(offset).type !== 'eof'; offset += 1) {
+    let offset = 0
+
+    while (this.peek(offset).type !== 'eof') {
       const token = this.peek(offset)
 
       if (token.value === '(') {
-        depth += 1
+        depth = depth + 1
       } else if (token.value === ')') {
-        depth -= 1
+        depth = depth - 1
 
         if (depth === 0) {
           return this.peek(offset + 1).value === '=>'
         }
       }
+
+      offset = offset + 1
     }
 
     return false
@@ -1600,18 +1748,22 @@ class Parser {
 
     let depth = 0
 
-    for (let offset = 1; this.peek(offset).type !== 'eof'; offset += 1) {
+    let offset = 1
+
+    while (this.peek(offset).type !== 'eof') {
       const token = this.peek(offset)
 
       if (token.value === '(') {
-        depth += 1
+        depth = depth + 1
       } else if (token.value === ')') {
-        depth -= 1
+        depth = depth - 1
 
         if (depth === 0) {
           return this.peek(offset + 1).value === '=>'
         }
       }
+
+      offset = offset + 1
     }
 
     return false
