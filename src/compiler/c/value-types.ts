@@ -1,6 +1,20 @@
-import type { CFunctionContext } from './context.ts'
+export type CValueTypeInput = string | null | undefined
 
-export function isManagedRuntimeReturnType(valueType: string | null | undefined): boolean {
+export type CReturnTypeContext = {
+  returnNullable: boolean
+  returnType: string
+}
+
+export type CNullableScalarParam = {
+  nullable?: boolean
+  valueType?: string
+}
+
+export type CNullableScalarParamInput = CNullableScalarParam | null | undefined
+
+export type CRuntimeValueTag = string | null
+
+export function isManagedRuntimeReturnType(valueType: CValueTypeInput): boolean {
   return (
     valueType === 'bytes' ||
     valueType === 'string' ||
@@ -11,74 +25,74 @@ export function isManagedRuntimeReturnType(valueType: string | null | undefined)
   )
 }
 
-export function isNullableScalarType(valueType: string | null | undefined): boolean {
+export function isNullableScalarType(valueType: CValueTypeInput): boolean {
   return valueType === 'number' || valueType === 'boolean'
 }
 
-export function emitCType(type: string | null | undefined): string {
-  if (type === 'void') {
+export function emitCType(valueType: CValueTypeInput): string {
+  if (valueType === 'void') {
     return 'void'
   }
 
-  if (isManagedRuntimeReturnType(type)) {
+  if (isManagedRuntimeReturnType(valueType)) {
     return 'ccjs_value'
   }
 
-  if (type === 'function') {
+  if (valueType === 'function') {
     return 'void*'
   }
 
-  if (type === 'promise') {
+  if (valueType === 'promise') {
     return 'ccjs_promise*'
   }
 
-  if (type === 'timer') {
+  if (valueType === 'timer') {
     return 'ccjs_timer_handle*'
   }
 
-  if (type === 'crypto-hash') {
+  if (valueType === 'crypto-hash') {
     return 'ccjs_crypto_hash*'
   }
 
-  if (type === 'crypto-hmac') {
+  if (valueType === 'crypto-hmac') {
     return 'ccjs_crypto_hmac*'
   }
 
   return 'double'
 }
 
-export function emitCReturnType(type: string | null | undefined, nullable = false): string {
-  if (nullable && isNullableScalarType(type)) {
+export function emitCReturnType(valueType: CValueTypeInput, nullable: boolean): string {
+  if (nullable && isNullableScalarType(valueType)) {
     return 'ccjs_value'
   }
 
-  if (isManagedRuntimeReturnType(type)) {
+  if (isManagedRuntimeReturnType(valueType)) {
     return 'ccjs_value'
   }
 
-  return emitCType(type)
+  return emitCType(valueType)
 }
 
-export function emitThrowingFunctionOutType(type: string | null | undefined, nullable = false): string {
-  if (nullable && isNullableScalarType(type)) {
+export function emitThrowingFunctionOutType(valueType: CValueTypeInput, nullable: boolean): string {
+  if (nullable && isNullableScalarType(valueType)) {
     return 'ccjs_value'
   }
 
-  if (isManagedRuntimeReturnType(type)) {
+  if (isManagedRuntimeReturnType(valueType)) {
     return 'ccjs_value'
   }
 
-  return emitCType(type)
+  return emitCType(valueType)
 }
 
-export function isThrowingFunctionRuntimeOut(context: CFunctionContext): boolean {
+export function isThrowingFunctionRuntimeOut(context: CReturnTypeContext): boolean {
   return (
     isManagedRuntimeReturnType(context.returnType) ||
     (context.returnNullable === true && isNullableScalarType(context.returnType))
   )
 }
 
-export function cRuntimeValueTag(valueType: string | null | undefined): string | null {
+export function cRuntimeValueTag(valueType: CValueTypeInput): CRuntimeValueTag {
   if (valueType === 'boolean') {
     return 'CCJS_TAG_BOOL'
   }
@@ -118,12 +132,16 @@ export function cRuntimeValueTag(valueType: string | null | undefined): string |
   return null
 }
 
-export function isRuntimeNullableType(valueType: string | null | undefined): boolean {
+export function isRuntimeNullableType(valueType: CValueTypeInput): boolean {
   return cRuntimeValueTag(valueType) != null
 }
 
-export function isNullableScalarParam(param: { nullable?: boolean; valueType?: string } | null | undefined): boolean {
-  return param?.nullable === true && isNullableScalarType(param.valueType)
+export function isNullableScalarParam(param: CNullableScalarParamInput): boolean {
+  if (param == null) {
+    return false
+  }
+
+  return param.nullable === true && isNullableScalarType(param.valueType)
 }
 
 export function emitCStringParamName(name: string): string {
