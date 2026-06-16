@@ -3,8 +3,9 @@ import {
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
+  pushVariableScope,
   registerOwnedValue,
-  withVariableScope,
+  restoreVariableScope,
   type CFunctionContext
 } from '../context.ts'
 import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
@@ -577,11 +578,14 @@ function emitPreparedArrayComparatorSortCallExpression(
   registerOwnedValue(context, left)
   registerOwnedValue(context, right)
 
-  const body = withVariableScope(context, () => {
+  const bodyScope = pushVariableScope(context)
+  let body: string[] = []
+
+  try {
     const input = emitPreparedArraySortComparatorInput(callback, receiver, left, right, context)
     const result = arrayDeps(context).emitPreparedNumberExpression(returnExpression, context)
 
-    return [
+    body = [
       ...input,
       ...result.lines,
       `double ${compare} = ${result.expression};`,
@@ -589,7 +593,9 @@ function emitPreparedArrayComparatorSortCallExpression(
       emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan} - 1, ${right})`, context),
       emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan}, ${left})`, context)
     ]
-  })
+  } finally {
+    restoreVariableScope(context, bodyScope)
+  }
 
   return {
     lines: [
@@ -648,18 +654,23 @@ export function emitPreparedArrayMapCallExpression(
   registerOwnedValue(context, out)
   registerOwnedValue(context, value)
 
-  const body = withVariableScope(context, () => {
+  const bodyScope = pushVariableScope(context)
+  let body: string[] | null = null
+
+  try {
     const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
 
     mappedElementType =
       mappedElementType === 'unknown' ? resolveArrayCallbackReturnType(callbackBody, context) : mappedElementType
 
     if (!['number', 'boolean', 'string'].includes(mappedElementType)) {
-      return null
+      body = null
+    } else {
+      body = [...input, ...emitArrayMapCallbackBodyLines(callbackBody, mappedElementType, out, context)]
     }
-
-    return [...input, ...emitArrayMapCallbackBodyLines(callbackBody, mappedElementType, out, context)]
-  })
+  } finally {
+    restoreVariableScope(context, bodyScope)
+  }
 
   if (body == null) {
     return null
@@ -718,11 +729,16 @@ export function emitPreparedArrayFilterCallExpression(
   registerOwnedValue(context, out)
   registerOwnedValue(context, value)
 
-  const body = withVariableScope(context, () => {
+  const bodyScope = pushVariableScope(context)
+  let body: string[] = []
+
+  try {
     const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
 
-    return [...input, ...emitArrayFilterCallbackBodyLines(callbackBody, out, value, context)]
-  })
+    body = [...input, ...emitArrayFilterCallbackBodyLines(callbackBody, out, value, context)]
+  } finally {
+    restoreVariableScope(context, bodyScope)
+  }
 
   return {
     lines: [

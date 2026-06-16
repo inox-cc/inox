@@ -6,9 +6,10 @@ import {
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
+  pushNullableScalarNarrowing,
   registerEventLoop,
   registerOwnedValue,
-  withNullableScalarNarrowing,
+  restoreNullableScalarNarrowing,
   type CEmitContext,
   type CFunctionContext
 } from '../context.ts'
@@ -979,9 +980,15 @@ function emitPreparedLogicalExpression(
   const left = emitPreparedNumberExpression(expression.left, context, deps)
   const leftNarrowing = resolveNullableScalarConditionNarrowing(expression.left, context)
   const rightNarrowed = expression.operator === '&&' ? leftNarrowing.trueNames : leftNarrowing.falseNames
-  const right = withNullableScalarNarrowing(context, rightNarrowed, () =>
-    emitPreparedNumberExpression(expression.right, context, deps)
-  )
+  const snapshot = pushNullableScalarNarrowing(context, rightNarrowed)
+  let right: PreparedExpression
+
+  try {
+    right = emitPreparedNumberExpression(expression.right, context, deps)
+  } finally {
+    restoreNullableScalarNarrowing(context, snapshot)
+  }
+
   const temp = nextCName(context, 'ccjs_logical')
 
   if (expression.operator === '&&') {

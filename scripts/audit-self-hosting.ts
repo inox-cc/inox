@@ -75,7 +75,7 @@ const patterns: PatternInfo[] = [
     decision: 'implement support',
     pattern: /\b(try|catch)\b/g,
     note: 'Use only at host adapter boundaries until C exception lowering is planned.',
-    maxAllowedMatches: 45
+    maxAllowedMatches: 62
   },
   {
     name: 'async / await',

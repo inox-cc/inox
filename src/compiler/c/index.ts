@@ -29,7 +29,8 @@ import {
   registerEventLoop,
   registerOwnedPromise,
   registerOwnedValue,
-  withVariableScope
+  pushVariableScope,
+  restoreVariableScope
 } from './context.ts'
 import type { CEmitContext, CFunctionContext } from './context.ts'
 import {
@@ -1432,7 +1433,9 @@ function emitFunctionPointerVariable(
 
 function emitStatement(statement: AnyNode, context: CFunctionContext): string[] {
   if (statement.type === 'BlockStatement') {
-    return withVariableScope(context, () => {
+    const snapshot = pushVariableScope(context)
+
+    try {
       const lines = ['{']
 
       for (const line of emitStatementBody(statement, context)) {
@@ -1442,7 +1445,9 @@ function emitStatement(statement: AnyNode, context: CFunctionContext): string[] 
       lines.push('}')
 
       return lines
-    })
+    } finally {
+      restoreVariableScope(context, snapshot)
+    }
   }
 
   if (statement.type === 'IfStatement') {

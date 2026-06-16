@@ -3,8 +3,9 @@ import {
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
+  pushNullableScalarNarrowing,
   registerOwnedValue,
-  withNullableScalarNarrowing,
+  restoreNullableScalarNarrowing,
   type CFunctionContext
 } from '../context.ts'
 import { diagnostic } from '../../diagnostics.ts'
@@ -72,9 +73,14 @@ export function resolveNullableScalarConditionNarrowing(
 
   if (expression.operator === '&&') {
     const left = resolveNullableScalarConditionNarrowing(expression.left, context)
-    const right = withNullableScalarNarrowing(context, left.trueNames, () =>
-      resolveNullableScalarConditionNarrowing(expression.right, context)
-    )
+    const snapshot = pushNullableScalarNarrowing(context, left.trueNames)
+    let right = emptyNullableScalarNarrowing()
+
+    try {
+      right = resolveNullableScalarConditionNarrowing(expression.right, context)
+    } finally {
+      restoreNullableScalarNarrowing(context, snapshot)
+    }
 
     return {
       trueNames: uniqueNames([...left.trueNames, ...right.trueNames]),
@@ -84,9 +90,14 @@ export function resolveNullableScalarConditionNarrowing(
 
   if (expression.operator === '||') {
     const left = resolveNullableScalarConditionNarrowing(expression.left, context)
-    const right = withNullableScalarNarrowing(context, left.falseNames, () =>
-      resolveNullableScalarConditionNarrowing(expression.right, context)
-    )
+    const snapshot = pushNullableScalarNarrowing(context, left.falseNames)
+    let right = emptyNullableScalarNarrowing()
+
+    try {
+      right = resolveNullableScalarConditionNarrowing(expression.right, context)
+    } finally {
+      restoreNullableScalarNarrowing(context, snapshot)
+    }
 
     return {
       trueNames: intersectNames(left.trueNames, uniqueNames([...left.falseNames, ...right.trueNames])),

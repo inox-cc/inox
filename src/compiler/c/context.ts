@@ -134,6 +134,31 @@ export type CFunctionContext = CEmitContext & {
   variables: Map<string, string>
 }
 
+export type CVariableScopeSnapshot = {
+  arrayShapes: Map<string, CArrayElementInfo[]>
+  boxedVariables: Set<string>
+  classInstanceTypes: Map<string, string>
+  errorObjectNames: Set<string>
+  functionTypes: Map<string, CFunctionType>
+  mapTypes: Map<string, CFunctionReturnMapType>
+  narrowedNullableScalars: Set<string>
+  nullableVariables: Set<string>
+  objectShapes: Map<string, CObjectShapeField[]>
+  promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
+  promiseRejectionValueTypes: Map<string, string>
+  promiseValueTypes: Map<string, string>
+  runtimeArrayElementTypes: Map<string, string>
+  runtimeCallbacks: Set<string>
+  runtimeStrings: Set<string>
+  setElementTypes: Map<string, string>
+  variables: Map<string, string>
+}
+
+export type CNullableScalarNarrowingSnapshot = {
+  active: boolean
+  narrowedNullableScalars: Set<string>
+}
+
 export function createFunctionContext(
   baseContext: CEmitContext,
   returnType: string,
@@ -637,8 +662,8 @@ export function nextCName(context: CFunctionContext, prefix: string): string {
   return name
 }
 
-export function withVariableScope<T>(context: CFunctionContext, callback: () => T): T {
-  const previous = context.variables
+export function pushVariableScope(context: CFunctionContext): CVariableScopeSnapshot {
+  const previousVariables = context.variables
   const previousArrayShapes = context.arrayShapes
   const previousBoxedVariables = context.boxedVariables
   const previousClassInstanceTypes = context.classInstanceTypes
@@ -655,7 +680,8 @@ export function withVariableScope<T>(context: CFunctionContext, callback: () => 
   const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
   const previousSetElementTypes = context.setElementTypes
   const previousRuntimeStrings = context.runtimeStrings
-  context.variables = new Map(previous)
+
+  context.variables = new Map(previousVariables)
   context.arrayShapes = new Map(previousArrayShapes)
   context.boxedVariables = new Set(previousBoxedVariables)
   context.classInstanceTypes = new Map(previousClassInstanceTypes)
@@ -673,45 +699,78 @@ export function withVariableScope<T>(context: CFunctionContext, callback: () => 
   context.setElementTypes = new Map(previousSetElementTypes)
   context.runtimeStrings = new Set(previousRuntimeStrings)
 
-  try {
-    return callback()
-  } finally {
-    context.variables = previous
-    context.arrayShapes = previousArrayShapes
-    context.boxedVariables = previousBoxedVariables
-    context.classInstanceTypes = previousClassInstanceTypes
-    context.errorObjectNames = previousErrorObjectNames
-    context.functionTypes = previousFunctionTypes
-    context.mapTypes = previousMapTypes
-    context.narrowedNullableScalars = previousNarrowedNullableScalars
-    context.nullableVariables = previousNullableVariables
-    context.objectShapes = previousObjectShapes
-    context.promiseConstructorHandlers = previousPromiseConstructorHandlers
-    context.promiseRejectionValueTypes = previousPromiseRejectionValueTypes
-    context.promiseValueTypes = previousPromiseValueTypes
-    context.runtimeCallbacks = previousRuntimeCallbacks
-    context.runtimeArrayElementTypes = previousRuntimeArrayElementTypes
-    context.setElementTypes = previousSetElementTypes
-    context.runtimeStrings = previousRuntimeStrings
+  return {
+    arrayShapes: previousArrayShapes,
+    boxedVariables: previousBoxedVariables,
+    classInstanceTypes: previousClassInstanceTypes,
+    errorObjectNames: previousErrorObjectNames,
+    functionTypes: previousFunctionTypes,
+    mapTypes: previousMapTypes,
+    narrowedNullableScalars: previousNarrowedNullableScalars,
+    nullableVariables: previousNullableVariables,
+    objectShapes: previousObjectShapes,
+    promiseConstructorHandlers: previousPromiseConstructorHandlers,
+    promiseRejectionValueTypes: previousPromiseRejectionValueTypes,
+    promiseValueTypes: previousPromiseValueTypes,
+    runtimeArrayElementTypes: previousRuntimeArrayElementTypes,
+    runtimeCallbacks: previousRuntimeCallbacks,
+    runtimeStrings: previousRuntimeStrings,
+    setElementTypes: previousSetElementTypes,
+    variables: previousVariables
   }
 }
 
-export function withNullableScalarNarrowing<T>(context: CFunctionContext, names: string[], callback: () => T): T {
+export function restoreVariableScope(context: CFunctionContext, snapshot: CVariableScopeSnapshot): void {
+  context.variables = snapshot.variables
+  context.arrayShapes = snapshot.arrayShapes
+  context.boxedVariables = snapshot.boxedVariables
+  context.classInstanceTypes = snapshot.classInstanceTypes
+  context.errorObjectNames = snapshot.errorObjectNames
+  context.functionTypes = snapshot.functionTypes
+  context.mapTypes = snapshot.mapTypes
+  context.narrowedNullableScalars = snapshot.narrowedNullableScalars
+  context.nullableVariables = snapshot.nullableVariables
+  context.objectShapes = snapshot.objectShapes
+  context.promiseConstructorHandlers = snapshot.promiseConstructorHandlers
+  context.promiseRejectionValueTypes = snapshot.promiseRejectionValueTypes
+  context.promiseValueTypes = snapshot.promiseValueTypes
+  context.runtimeCallbacks = snapshot.runtimeCallbacks
+  context.runtimeArrayElementTypes = snapshot.runtimeArrayElementTypes
+  context.setElementTypes = snapshot.setElementTypes
+  context.runtimeStrings = snapshot.runtimeStrings
+}
+
+export function pushNullableScalarNarrowing(
+  context: CFunctionContext,
+  names: string[]
+): CNullableScalarNarrowingSnapshot {
+  const previous = context.narrowedNullableScalars
+
   if (names.length === 0) {
-    return callback()
+    return {
+      active: false,
+      narrowedNullableScalars: previous
+    }
   }
 
-  const previous = context.narrowedNullableScalars
   context.narrowedNullableScalars = new Set(previous)
 
   for (const name of names) {
     context.narrowedNullableScalars.add(name)
   }
 
-  try {
-    return callback()
-  } finally {
-    context.narrowedNullableScalars = previous
+  return {
+    active: true,
+    narrowedNullableScalars: previous
+  }
+}
+
+export function restoreNullableScalarNarrowing(
+  context: CFunctionContext,
+  snapshot: CNullableScalarNarrowingSnapshot
+): void {
+  if (snapshot.active) {
+    context.narrowedNullableScalars = snapshot.narrowedNullableScalars
   }
 }
 

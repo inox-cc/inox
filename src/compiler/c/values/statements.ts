@@ -4,10 +4,12 @@ import {
   emitStatusCheck,
   narrowNullableScalars,
   nextCName,
+  pushNullableScalarNarrowing,
+  pushVariableScope,
   registerBoxedValue,
   registerOwnedValue,
-  withNullableScalarNarrowing,
-  withVariableScope,
+  restoreNullableScalarNarrowing,
+  restoreVariableScope,
   type CFunctionContext
 } from '../context.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
@@ -260,15 +262,39 @@ function statementDefinitelyReturns(statement) {
   return false
 }
 
+function emitScopedStatementBody(statement: AnyNode, context: CFunctionContext, narrowedNames: string[]): string[] {
+  const variableScope = pushVariableScope(context)
+
+  try {
+    const nullableScope = pushNullableScalarNarrowing(context, narrowedNames)
+
+    try {
+      return emitStatementBody(statement, context)
+    } finally {
+      restoreNullableScalarNarrowing(context, nullableScope)
+    }
+  } finally {
+    restoreVariableScope(context, variableScope)
+  }
+}
+
+function emitScopedStatementList(statements: AnyNode[], context: CFunctionContext): string[] {
+  const variableScope = pushVariableScope(context)
+
+  try {
+    return emitStatementList(statements, context)
+  } finally {
+    restoreVariableScope(context, variableScope)
+  }
+}
+
 export function emitIfStatement(statement, context: CFunctionContext) {
   const condition = statementDeps(context).emitPreparedNumberExpression(statement.condition, context)
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const lines = [
     ...condition.lines,
     `if ${emitCConditionClause(condition.expression)} {`,
-    ...withVariableScope(context, () =>
-      withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.consequent, context))
-    ).map((line) => `  ${line}`)
+    ...emitScopedStatementBody(statement.consequent, context, narrowing.trueNames).map((line) => `  ${line}`)
   ]
 
   if (statement.alternate == null) {
@@ -278,9 +304,7 @@ export function emitIfStatement(statement, context: CFunctionContext) {
 
   lines.push('} else {')
   lines.push(
-    ...withVariableScope(context, () =>
-      withNullableScalarNarrowing(context, narrowing.falseNames, () => emitStatementBody(statement.alternate, context))
-    ).map((line) => `  ${line}`)
+    ...emitScopedStatementBody(statement.alternate, context, narrowing.falseNames).map((line) => `  ${line}`)
   )
   lines.push('}')
 
@@ -294,9 +318,7 @@ export function emitWhileStatement(statement, context: CFunctionContext) {
   const continueLabel = nextCName(context, 'ccjs_continue')
   const body = withBreakTarget(context, breakLabel, false, () =>
     withContinueTarget(context, continueLabel, false, () =>
-      withVariableScope(context, () =>
-        withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context))
-      )
+      emitScopedStatementBody(statement.body, context, narrowing.trueNames)
     )
   )
 
@@ -322,7 +344,9 @@ export function emitWhileStatement(statement, context: CFunctionContext) {
 }
 
 export function emitForStatement(statement, context: CFunctionContext) {
-  return withVariableScope(context, () => {
+  const variableScope = pushVariableScope(context)
+
+  try {
     const init = emitPreparedForInitializer(statement.init, context)
     const test = emitPreparedForExpressionClause(statement.test, context)
     const update = emitPreparedForExpressionClause(statement.update, context)
@@ -331,9 +355,7 @@ export function emitForStatement(statement, context: CFunctionContext) {
     const continueLabel = nextCName(context, 'ccjs_continue')
     const body = withBreakTarget(context, breakLabel, false, () =>
       withContinueTarget(context, continueLabel, false, () =>
-        withVariableScope(context, () =>
-          withNullableScalarNarrowing(context, narrowing.trueNames, () => emitStatementBody(statement.body, context))
-        )
+        emitScopedStatementBody(statement.body, context, narrowing.trueNames)
       )
     )
     const needsPreparedLowering = init.lines.length > 0 || test.lines.length > 0 || update.lines.length > 0
@@ -376,7 +398,9 @@ export function emitForStatement(statement, context: CFunctionContext) {
     lines.push('}')
 
     return lines
-  })
+  } finally {
+    restoreVariableScope(context, variableScope)
+  }
 }
 
 export function emitRuntimeStringVariableDeclaration(statement, expression, context: CFunctionContext) {
@@ -1134,15 +1158,15 @@ export function emitForOfStatement(statement, context: CFunctionContext) {
 
   registerOwnedValue(context, value)
 
-  return withVariableScope(context, () => {
+  const variableScope = pushVariableScope(context)
+
+  try {
     context.variables.set(statement.name, elementType)
     if (elementType === 'string') {
       context.runtimeStrings.add(statement.name)
     }
     const body = withBreakTarget(context, breakLabel, false, () =>
-      withContinueTarget(context, continueLabel, false, () =>
-        withVariableScope(context, () => emitStatementBody(statement.body, context))
-      )
+      withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
     )
     const declaration =
       elementType === 'string'
@@ -1170,7 +1194,9 @@ export function emitForOfStatement(statement, context: CFunctionContext) {
       ...emitBreakTargetLabel(breakLabel, context),
       ...emitPrepareOwnedValueWrite(value)
     ]
-  })
+  } finally {
+    restoreVariableScope(context, variableScope)
+  }
 }
 
 function emitRuntimeMapForOfStatement(statement, runtimeMap, context: CFunctionContext) {
@@ -1209,13 +1235,13 @@ function emitRuntimeMapForOfStatement(statement, runtimeMap, context: CFunctionC
 
   registerOwnedValue(context, statement.name)
 
-  return withVariableScope(context, () => {
+  const variableScope = pushVariableScope(context)
+
+  try {
     context.variables.set(statement.name, 'object')
     context.objectShapes.set(statement.name, fields)
     const body = withBreakTarget(context, breakLabel, false, () =>
-      withContinueTarget(context, continueLabel, false, () =>
-        withVariableScope(context, () => emitStatementBody(statement.body, context))
-      )
+      withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
     )
 
     return [
@@ -1241,7 +1267,9 @@ function emitRuntimeMapForOfStatement(statement, runtimeMap, context: CFunctionC
       ...emitBreakTargetLabel(breakLabel, context),
       ...emitPrepareOwnedValueWrite(statement.name)
     ]
-  })
+  } finally {
+    restoreVariableScope(context, variableScope)
+  }
 }
 
 function emitRuntimeSetForOfStatement(statement, runtimeSet, context: CFunctionContext) {
@@ -1267,15 +1295,15 @@ function emitRuntimeSetForOfStatement(statement, runtimeSet, context: CFunctionC
 
   registerOwnedValue(context, value)
 
-  return withVariableScope(context, () => {
+  const variableScope = pushVariableScope(context)
+
+  try {
     context.variables.set(statement.name, elementType)
     if (elementType === 'string') {
       context.runtimeStrings.add(statement.name)
     }
     const body = withBreakTarget(context, breakLabel, false, () =>
-      withContinueTarget(context, continueLabel, false, () =>
-        withVariableScope(context, () => emitStatementBody(statement.body, context))
-      )
+      withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
     )
     const declaration =
       elementType === 'string'
@@ -1304,7 +1332,9 @@ function emitRuntimeSetForOfStatement(statement, runtimeSet, context: CFunctionC
       ...emitBreakTargetLabel(breakLabel, context),
       ...emitPrepareOwnedValueWrite(value)
     ]
-  })
+  } finally {
+    restoreVariableScope(context, variableScope)
+  }
 }
 
 export function emitSwitchStatement(statement, context: CFunctionContext) {
@@ -1316,7 +1346,7 @@ export function emitSwitchStatement(statement, context: CFunctionContext) {
     lines.push(item.test == null ? '  default: {' : `  case ${emitSwitchCaseLabel(item.test, context)}: {`)
     lines.push(
       ...withBreakTarget(context, breakLabel, false, () =>
-        withVariableScope(context, () => emitStatementList(item.consequent, context))
+        emitScopedStatementList(item.consequent, context)
       ).map((line) => `    ${line}`)
     )
     lines.push('  }')
@@ -1384,7 +1414,7 @@ export function emitTryStatement(statement, context: CFunctionContext) {
   const lines = ['{']
   const tryBody = withErrorTarget(context, throwTarget, () =>
     withFinallyFlowTarget(context, finallyLabel, () =>
-      withVariableScope(context, () => emitStatementBody(statement.block, context))
+      emitScopedStatementBody(statement.block, context, [])
     )
   )
 
@@ -1393,8 +1423,10 @@ export function emitTryStatement(statement, context: CFunctionContext) {
 
   if (statement.handler != null && catchLabel != null) {
     const catchValueType = statementDeps(context).inferCatchBindingValueType(statement, context)
-    const catchBody = withFinallyFlowTarget(context, finallyLabel, () =>
-      withVariableScope(context, () => {
+    const catchBody = withFinallyFlowTarget(context, finallyLabel, () => {
+      const variableScope = pushVariableScope(context)
+
+      try {
         const body: string[] = []
 
         if (statement.handler.param != null) {
@@ -1412,8 +1444,10 @@ export function emitTryStatement(statement, context: CFunctionContext) {
         body.push(...emitStatementBody(statement.handler.body, context))
 
         return body
-      })
-    )
+      } finally {
+        restoreVariableScope(context, variableScope)
+      }
+    })
 
     lines.push(`${catchLabel}:`)
     lines.push(
@@ -1436,7 +1470,7 @@ export function emitTryStatement(statement, context: CFunctionContext) {
             context,
             outerContinueTarget?.label ?? null,
             outerContinueTarget?.throughFinally === true,
-            () => withVariableScope(context, () => emitStatementBody(statement.finalizer, context))
+            () => emitScopedStatementBody(statement.finalizer, context, [])
           )
         )
       )

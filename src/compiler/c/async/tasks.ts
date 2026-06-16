@@ -6,7 +6,8 @@ import {
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   nextCName,
-  withVariableScope,
+  pushVariableScope,
+  restoreVariableScope,
   type CEmitContext,
   type CFunctionContext
 } from '../context.ts'
@@ -1447,14 +1448,21 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
       .map((local) => local.name)
   )
   context.failureStatement = 'goto ccjs_start_error;'
-  const prefixAndScheduleLines = withVariableScope(context, () => [
-    ...asyncTaskDeps(context).emitStatementList(wrapper.prefixStatements ?? [], context),
-    ...emitAsyncTaskStorePrefixLocalLines(wrapper),
-    ...emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
-      cleanup: 'start',
-      final: wrapper.awaits.length === 1
-    })
-  ])
+  const prefixScope = pushVariableScope(context)
+  let prefixAndScheduleLines: string[] = []
+
+  try {
+    prefixAndScheduleLines = [
+      ...asyncTaskDeps(context).emitStatementList(wrapper.prefixStatements ?? [], context),
+      ...emitAsyncTaskStorePrefixLocalLines(wrapper),
+      ...emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
+        cleanup: 'start',
+        final: wrapper.awaits.length === 1
+      })
+    ]
+  } finally {
+    restoreVariableScope(context, prefixScope)
+  }
   const lines = [
     `static ccjs_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`,
     '  if (ccjs_loop == 0 || ccjs_loop->allocator == 0 || out == 0) return CCJS_ERR_TYPE;',
@@ -2534,22 +2542,23 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(
 ): string[] {
   const visibleAwaitCount = item.index + 1
   const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, visibleAwaitCount)
-  const result = withVariableScope(context, () => {
-    const preludeLines = asyncTaskDeps(context).emitStatementList(collectAsyncTaskSuccessPhaseStatements(wrapper), context)
-    const returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
+  const resultScope = pushVariableScope(context)
+  let preludeLines: string[] = []
+  let returnValue: PreparedExpression = { lines: [], expression: '0' }
 
-    return {
-      preludeLines,
-      returnValue
-    }
-  })
+  try {
+    preludeLines = asyncTaskDeps(context).emitStatementList(collectAsyncTaskSuccessPhaseStatements(wrapper), context)
+    returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
+  } finally {
+    restoreVariableScope(context, resultScope)
+  }
 
   return [
     ...emitOwnedValueDeclarations(context),
-    ...result.preludeLines,
-    ...result.returnValue.lines,
+    ...preludeLines,
+    ...returnValue.lines,
     ...emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitCount),
-    `status = ccjs_promise_resolve(frame->promise, ${result.returnValue.expression});`,
+    `status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`,
     ...emitOwnedValueCleanup(context),
     'return status;'
   ]
@@ -2617,7 +2626,14 @@ function emitAsyncTaskTryStatementList(
   }
 
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', visibleAwaitCount)
-  const lines = withVariableScope(context, () => asyncTaskDeps(context).emitStatementList(statements, context))
+  const scope = pushVariableScope(context)
+  let lines: string[] = []
+
+  try {
+    lines = asyncTaskDeps(context).emitStatementList(statements, context)
+  } finally {
+    restoreVariableScope(context, scope)
+  }
 
   return [...emitOwnedValueDeclarations(context), ...lines, ...emitOwnedValueCleanup(context)]
 }
@@ -2732,22 +2748,23 @@ function emitAsyncTaskTryHandlerBodyAndReturnLines(
     context.runtimeStrings.add(handler.param)
   }
 
-  const result = withVariableScope(context, () => {
-    const handlerLines = asyncTaskDeps(context).emitStatementList(handler.statements ?? [], context)
-    const returnValue = emitPreparedAsyncTaskValueExpression(handler.returnExpression, wrapper.returnType, context)
+  const resultScope = pushVariableScope(context)
+  let handlerLines: string[] = []
+  let returnValue: PreparedExpression = { lines: [], expression: '0' }
 
-    return {
-      handlerLines,
-      returnValue
-    }
-  })
+  try {
+    handlerLines = asyncTaskDeps(context).emitStatementList(handler.statements ?? [], context)
+    returnValue = emitPreparedAsyncTaskValueExpression(handler.returnExpression, wrapper.returnType, context)
+  } finally {
+    restoreVariableScope(context, resultScope)
+  }
 
   return [
     ...emitOwnedValueDeclarations(context),
-    ...result.handlerLines,
-    ...result.returnValue.lines,
+    ...handlerLines,
+    ...returnValue.lines,
     ...emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount),
-    `status = ccjs_promise_resolve(frame->promise, ${result.returnValue.expression});`,
+    `status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`,
     ...emitOwnedValueCleanup(context),
     ...(item.index < wrapper.awaits.length - 1 ? [`${wrapper.finalizerName}(frame);`] : []),
     'return status;'
