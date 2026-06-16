@@ -4,33 +4,59 @@ import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
   nextCName,
-  registerOwnedValue,
-  type CFunctionContext
+  registerOwnedValue
 } from '../context.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
-import type { AnyNode } from '../../types.ts'
+import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type {
+  CFunctionReturnMapType,
   CObjectFieldInfo,
   CObjectIndexFieldInfo,
+  CObjectShapeField,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 
 type PreparedCollectionCall = PreparedExpression
+type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
+type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
+type CStringMap = Map<string, string>
+type CStringNullableMap = Map<string, string | null>
+
+type CollectionFunctionContext = {
+  boxedVariables: Set<string>
+  cleanupEnabled: boolean
+  collectionLoweringDependencies?: CollectionLoweringDependencies
+  diagnostics: Diagnostic[]
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  functionReturnMapTypes?: CFunctionReturnMapTypeMap
+  functionReturnSetElementTypes?: CStringNullableMap
+  mapTypes: CFunctionReturnMapTypeMap
+  nextId: number
+  objectShapes: CObjectShapeFieldMap
+  ownedValues: string[]
+  returnType?: string
+  setElementTypes: CStringMap
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  variables: CStringMap
+}
 
 export type CollectionLoweringDependencies = {
-  emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
-  isIndexAccessExpression: (expression: AnyNode) => boolean
-  isMemberAccessExpression: (expression: AnyNode) => boolean
-  reportCCollectionHashability: (
+  emitCValueExpression(expression: AnyNode, context: CollectionFunctionContext): PreparedExpression
+  inferExpressionType(expression: AnyNode, context: CollectionFunctionContext): string
+  isIndexAccessExpression(expression: AnyNode): boolean
+  isMemberAccessExpression(expression: AnyNode): boolean
+  reportCCollectionHashability(
     valueType: string,
     subject: string,
-    loc: AnyNode['loc'] | undefined,
-    context: CFunctionContext
-  ) => void
-  resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CObjectIndexFieldInfo | null
-  resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CObjectFieldInfo | null
+    loc: SourceLocation | null | undefined,
+    context: CollectionFunctionContext
+  ): void
+  resolveKnownObjectIndex(expression: AnyNode, context: CollectionFunctionContext): CObjectIndexFieldInfo | null
+  resolveKnownObjectMember(expression: AnyNode, context: CollectionFunctionContext): CObjectFieldInfo | null
 }
 
 type PreparedCollectionReceiver = {
@@ -47,6 +73,71 @@ type PreparedMapIndexReceiver = {
 type RuntimeMapType = {
   key: string
   value: string
+}
+
+type RuntimeForOfSet = {
+  name: string
+  elementType: string
+  lines: string[]
+}
+
+type RuntimeForOfMap = {
+  name: string
+  keyType: string
+  valueType: string
+  lines: string[]
+}
+
+function emitFallbackCollectionValueExpression(
+  _expression: AnyNode,
+  _context: CollectionFunctionContext
+): PreparedExpression {
+  return {
+    lines: [],
+    expression: 'ccjs_undefined_value()'
+  }
+}
+
+function inferFallbackCollectionExpressionType(
+  _expression: AnyNode,
+  _context: CollectionFunctionContext
+): string {
+  return 'unknown'
+}
+
+function isFallbackCollectionAccessExpression(_expression: AnyNode): boolean {
+  return false
+}
+
+function reportFallbackCollectionHashability(
+  _valueType: string,
+  _subject: string,
+  _loc: SourceLocation | null | undefined,
+  _context: CollectionFunctionContext
+): void {}
+
+function resolveFallbackCollectionObjectIndex(
+  _expression: AnyNode,
+  _context: CollectionFunctionContext
+): CObjectIndexFieldInfo | null {
+  return null
+}
+
+function resolveFallbackCollectionObjectMember(
+  _expression: AnyNode,
+  _context: CollectionFunctionContext
+): CObjectFieldInfo | null {
+  return null
+}
+
+const fallbackCollectionLoweringDependencies: CollectionLoweringDependencies = {
+  emitCValueExpression: emitFallbackCollectionValueExpression,
+  inferExpressionType: inferFallbackCollectionExpressionType,
+  isIndexAccessExpression: isFallbackCollectionAccessExpression,
+  isMemberAccessExpression: isFallbackCollectionAccessExpression,
+  reportCCollectionHashability: reportFallbackCollectionHashability,
+  resolveKnownObjectIndex: resolveFallbackCollectionObjectIndex,
+  resolveKnownObjectMember: resolveFallbackCollectionObjectMember
 }
 
 const mapMethodDescriptors = {
@@ -69,28 +160,98 @@ const collectionSizeDescriptors = {
   set: { callName: 'ccjs_set_size', tempPrefix: 'ccjs_set_size' }
 } as const
 
-function collectionDeps(context: CFunctionContext): CollectionLoweringDependencies {
-  return context.collectionLoweringDependencies
+function collectionDeps(context: CollectionFunctionContext): CollectionLoweringDependencies {
+  const deps = context.collectionLoweringDependencies
+
+  if (deps != null) {
+    return deps
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+
+  return fallbackCollectionLoweringDependencies
+}
+
+function pushAllLines(target: string[], source: string[]): void {
+  for (const line of source) {
+    target.push(line)
+  }
+}
+
+function nodeLocOrFallback(
+  node: AnyNode | null | undefined,
+  fallback: SourceLocation | null | undefined
+): SourceLocation | null | undefined {
+  if (node != null && node.loc != null) {
+    return node.loc
+  }
+
+  return fallback
+}
+
+function stringOrUnknown(value: string | null | undefined): string {
+  if (value != null) {
+    return value
+  }
+
+  return 'unknown'
+}
+
+function functionReturnMapType(
+  context: CollectionFunctionContext,
+  functionReturn: string
+): CFunctionReturnMapType | null {
+  const functionReturnMapTypes = context.functionReturnMapTypes
+
+  if (functionReturnMapTypes == null) {
+    return null
+  }
+
+  const mapType = functionReturnMapTypes.get(functionReturn)
+
+  if (mapType != null) {
+    return mapType
+  }
+
+  return null
+}
+
+function functionReturnSetElementType(context: CollectionFunctionContext, functionReturn: string): string | null {
+  const functionReturnSetElementTypes = context.functionReturnSetElementTypes
+
+  if (functionReturnSetElementTypes == null) {
+    return null
+  }
+
+  const elementType = functionReturnSetElementTypes.get(functionReturn)
+
+  if (elementType != null) {
+    return elementType
+  }
+
+  return null
 }
 
 export function emitPreparedCollectionReceiver(
   expression: AnyNode,
-  context: CFunctionContext
+  context: CollectionFunctionContext
 ): PreparedCollectionReceiver | null {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
-    const type = context.variables.get(name)
+    const receiverType = context.variables.get(name)
 
-    return type === 'map' || type === 'set'
-      ? {
-          type,
-          lines: [],
-          expression: name
-        }
-      : null
+    if (receiverType === 'map' || receiverType === 'set') {
+      return {
+        type: receiverType,
+        lines: [],
+        expression: name
+      }
+    }
+
+    return null
   }
 
-  if (expression?.type === 'CallExpression') {
+  if (expression.type === 'CallExpression') {
     const valueType = collectionDeps(context).inferExpressionType(expression, context)
 
     if (valueType !== 'map' && valueType !== 'set') {
@@ -141,7 +302,7 @@ export function isCollectionConstructorExpression(expression: AnyNode): boolean 
 
 export function collectionConstructorName(expression: AnyNode): string | null {
   if (
-    expression?.type !== 'NewExpression' ||
+    expression.type !== 'NewExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1
   ) {
@@ -153,30 +314,44 @@ export function collectionConstructorName(expression: AnyNode): string | null {
 
 export function emitPreparedCollectionCallExpression(
   expression: AnyNode,
-  context: CFunctionContext
+  context: CollectionFunctionContext
 ): PreparedCollectionCall | null {
-  if (expression?.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
+  if (expression.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
     return null
   }
 
   const receiver = emitPreparedCollectionReceiver(expression.callee.object, context)
 
-  if (receiver == null) {
-    return null
+  if (receiver != null) {
+    if (receiver.type === 'map') {
+      const call = emitPreparedMapMethodCall(receiver.expression, expression, context)
+
+      return createPreparedCollectionMethodCall(receiver, call)
+    }
+
+    const call = emitPreparedSetMethodCall(receiver.expression, expression, context)
+
+    return createPreparedCollectionMethodCall(receiver, call)
   }
 
-  const call =
-    receiver.type === 'map'
-      ? emitPreparedMapMethodCall(receiver.expression, expression, context)
-      : emitPreparedSetMethodCall(receiver.expression, expression, context)
+  return null
+}
+
+function createPreparedCollectionMethodCall(
+  receiver: PreparedCollectionReceiver,
+  call: PreparedExpression
+): PreparedCollectionCall {
+  const lines: string[] = []
+  pushAllLines(lines, receiver.lines)
+  pushAllLines(lines, call.lines)
 
   return {
-    lines: [...receiver.lines, ...call.lines],
+    lines,
     expression: call.expression
   }
 }
 
-function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: CFunctionContext): PreparedExpression {
+function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: CollectionFunctionContext): PreparedExpression {
   const method = expression.callee.property
   const descriptor = mapMethodDescriptors[method]
 
@@ -199,44 +374,46 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
   }
 
   if (descriptor.kind === 'set') {
+    const keyArg = expression.args[0]
+    const valueArg = expression.args[1]
     collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(expression.args[0], context),
+      collectionDeps(context).inferExpressionType(keyArg, context),
       descriptor.hashSubject,
-      expression.args[0]?.loc ?? expression.loc,
+      nodeLocOrFallback(keyArg, expression.loc),
       context
     )
-    const key = collectionDeps(context).emitCValueExpression(expression.args[0], context)
-    const value = collectionDeps(context).emitCValueExpression(expression.args[1], context)
+    const key = collectionDeps(context).emitCValueExpression(keyArg, context)
+    const value = collectionDeps(context).emitCValueExpression(valueArg, context)
+    const lines: string[] = []
+    pushAllLines(lines, key.lines)
+    pushAllLines(lines, value.lines)
+    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, ${value.expression})`, context))
 
     return {
-      lines: [
-        ...key.lines,
-        ...value.lines,
-        emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, ${value.expression})`, context)
-      ],
+      lines,
       expression: name
     }
   }
 
   if (descriptor.kind === 'get') {
+    const keyArg = expression.args[0]
     collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(expression.args[0], context),
+      collectionDeps(context).inferExpressionType(keyArg, context),
       descriptor.hashSubject,
-      expression.args[0]?.loc ?? expression.loc,
+      nodeLocOrFallback(keyArg, expression.loc),
       context
     )
-    const key = collectionDeps(context).emitCValueExpression(expression.args[0], context)
+    const key = collectionDeps(context).emitCValueExpression(keyArg, context)
     const valueType = collectionDeps(context).inferExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
     const out = nextCName(context, descriptor.tempPrefix)
     registerOwnedValue(context, out)
 
-    const lines = [
-      ...key.lines,
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, &${out})`, context),
-      ...emitRuntimeNullableValueCheck(out, expectedTag, context)
-    ]
+    const lines: string[] = []
+    pushAllLines(lines, key.lines)
+    pushAllLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, &${out})`, context))
+    pushAllLines(lines, emitRuntimeNullableValueCheck(out, expectedTag, context))
 
     return {
       lines,
@@ -245,21 +422,22 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
   }
 
   if (descriptor.kind === 'boolean') {
+    const keyArg = expression.args[0]
     collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(expression.args[0], context),
+      collectionDeps(context).inferExpressionType(keyArg, context),
       descriptor.hashSubject,
-      expression.args[0]?.loc ?? expression.loc,
+      nodeLocOrFallback(keyArg, expression.loc),
       context
     )
-    const key = collectionDeps(context).emitCValueExpression(expression.args[0], context)
+    const key = collectionDeps(context).emitCValueExpression(keyArg, context)
     const out = nextCName(context, descriptor.tempPrefix)
+    const lines: string[] = []
+    pushAllLines(lines, key.lines)
+    lines.push(`bool ${out} = false;`)
+    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, &${out})`, context))
 
     return {
-      lines: [
-        ...key.lines,
-        `bool ${out} = false;`,
-        emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, &${out})`, context)
-      ],
+      lines,
       expression: `(${out} ? 1 : 0)`
     }
   }
@@ -272,71 +450,78 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
 
 export function emitPreparedMapIndexGetExpression(
   expression: AnyNode,
-  context: CFunctionContext
+  context: CollectionFunctionContext
 ): PreparedExpression | null {
   const mapIndex = emitPreparedMapIndexReceiver(expression, context)
 
-  if (mapIndex == null) {
-    return null
+  if (mapIndex != null) {
+    collectionDeps(context).reportCCollectionHashability(
+      collectionDeps(context).inferExpressionType(mapIndex.key, context),
+      'Map keys',
+      nodeLocOrFallback(mapIndex.key, expression.loc),
+      context
+    )
+    const key = collectionDeps(context).emitCValueExpression(mapIndex.key, context)
+    const valueType = collectionDeps(context).inferExpressionType(expression, context)
+    const expectedTag = cRuntimeValueTag(valueType)
+    const out = nextCName(context, 'ccjs_map_value')
+    registerOwnedValue(context, out)
+
+    const lines: string[] = []
+    pushAllLines(lines, mapIndex.receiver.lines)
+    pushAllLines(lines, key.lines)
+    pushAllLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(`ccjs_map_get(${mapIndex.receiver.expression}, ${key.expression}, &${out})`, context))
+    pushAllLines(lines, emitRuntimeNullableValueCheck(out, expectedTag, context))
+
+    return {
+      lines,
+      expression: out
+    }
   }
 
-  collectionDeps(context).reportCCollectionHashability(
-    collectionDeps(context).inferExpressionType(mapIndex.key, context),
-    'Map keys',
-    mapIndex.key.loc ?? expression.loc,
-    context
-  )
-  const key = collectionDeps(context).emitCValueExpression(mapIndex.key, context)
-  const valueType = collectionDeps(context).inferExpressionType(expression, context)
-  const expectedTag = cRuntimeValueTag(valueType)
-  const out = nextCName(context, 'ccjs_map_value')
-  registerOwnedValue(context, out)
-
-  return {
-    lines: [
-      ...mapIndex.receiver.lines,
-      ...key.lines,
-      ...emitPrepareOwnedValueWrite(out),
-      emitStatusCheck(`ccjs_map_get(${mapIndex.receiver.expression}, ${key.expression}, &${out})`, context),
-      ...emitRuntimeNullableValueCheck(out, expectedTag, context)
-    ],
-    expression: out
-  }
+  return null
 }
 
-export function emitPreparedMapIndexAssignment(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
-  if (expression?.type !== 'AssignmentExpression') {
+export function emitPreparedMapIndexAssignment(
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): PreparedExpression | null {
+  if (expression.type !== 'AssignmentExpression') {
     return null
   }
 
   const mapIndex = emitPreparedMapIndexReceiver(expression.target, context)
 
-  if (mapIndex == null) {
-    return null
+  if (mapIndex != null) {
+    collectionDeps(context).reportCCollectionHashability(
+      collectionDeps(context).inferExpressionType(mapIndex.key, context),
+      'Map keys',
+      nodeLocOrFallback(mapIndex.key, expression.target.loc),
+      context
+    )
+    const key = collectionDeps(context).emitCValueExpression(mapIndex.key, context)
+    const value = collectionDeps(context).emitCValueExpression(expression.value, context)
+    const lines: string[] = []
+    pushAllLines(lines, mapIndex.receiver.lines)
+    pushAllLines(lines, key.lines)
+    pushAllLines(lines, value.lines)
+    lines.push(emitStatusCheck(`ccjs_map_set(${mapIndex.receiver.expression}, ${key.expression}, ${value.expression})`, context))
+
+    return {
+      lines,
+      expression: ''
+    }
   }
 
-  collectionDeps(context).reportCCollectionHashability(
-    collectionDeps(context).inferExpressionType(mapIndex.key, context),
-    'Map keys',
-    mapIndex.key.loc ?? expression.target.loc,
-    context
-  )
-  const key = collectionDeps(context).emitCValueExpression(mapIndex.key, context)
-  const value = collectionDeps(context).emitCValueExpression(expression.value, context)
-
-  return {
-    lines: [
-      ...mapIndex.receiver.lines,
-      ...key.lines,
-      ...value.lines,
-      emitStatusCheck(`ccjs_map_set(${mapIndex.receiver.expression}, ${key.expression}, ${value.expression})`, context)
-    ],
-    expression: ''
-  }
+  return null
 }
 
-function emitPreparedMapIndexReceiver(expression: AnyNode, context: CFunctionContext): PreparedMapIndexReceiver | null {
-  if (expression?.type !== 'IndexExpression' || expression.collectionKind !== 'map') {
+function emitPreparedMapIndexReceiver(
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): PreparedMapIndexReceiver | null {
+  if (expression.type !== 'IndexExpression' || expression.collectionKind !== 'map') {
     return null
   }
 
@@ -352,7 +537,7 @@ function emitPreparedMapIndexReceiver(expression: AnyNode, context: CFunctionCon
   }
 }
 
-function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: CFunctionContext): PreparedExpression {
+function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: CollectionFunctionContext): PreparedExpression {
   const method = expression.callee.property
   const descriptor = setMethodDescriptors[method]
 
@@ -375,36 +560,41 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
   }
 
   if (descriptor.kind === 'add') {
+    const valueArg = expression.args[0]
     collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(expression.args[0], context),
+      collectionDeps(context).inferExpressionType(valueArg, context),
       descriptor.hashSubject,
-      expression.args[0]?.loc ?? expression.loc,
+      nodeLocOrFallback(valueArg, expression.loc),
       context
     )
-    const value = collectionDeps(context).emitCValueExpression(expression.args[0], context)
+    const value = collectionDeps(context).emitCValueExpression(valueArg, context)
+    const lines: string[] = []
+    pushAllLines(lines, value.lines)
+    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${value.expression})`, context))
 
     return {
-      lines: [...value.lines, emitStatusCheck(`${descriptor.callName}(${name}, ${value.expression})`, context)],
+      lines,
       expression: name
     }
   }
 
   if (descriptor.kind === 'boolean') {
+    const valueArg = expression.args[0]
     collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(expression.args[0], context),
+      collectionDeps(context).inferExpressionType(valueArg, context),
       descriptor.hashSubject,
-      expression.args[0]?.loc ?? expression.loc,
+      nodeLocOrFallback(valueArg, expression.loc),
       context
     )
-    const value = collectionDeps(context).emitCValueExpression(expression.args[0], context)
+    const value = collectionDeps(context).emitCValueExpression(valueArg, context)
     const out = nextCName(context, descriptor.tempPrefix)
+    const lines: string[] = []
+    pushAllLines(lines, value.lines)
+    lines.push(`bool ${out} = false;`)
+    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${value.expression}, &${out})`, context))
 
     return {
-      lines: [
-        ...value.lines,
-        `bool ${out} = false;`,
-        emitStatusCheck(`${descriptor.callName}(${name}, ${value.expression}, &${out})`, context)
-      ],
+      lines,
       expression: `(${out} ? 1 : 0)`
     }
   }
@@ -417,120 +607,208 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
 
 export function emitPreparedCollectionSizeExpression(
   expression: AnyNode,
-  context: CFunctionContext
+  context: CollectionFunctionContext
 ): PreparedExpression | null {
-  if (expression?.type !== 'MemberExpression' || expression.property !== 'size') {
+  if (expression.type !== 'MemberExpression' || expression.property !== 'size') {
     return null
   }
 
   const receiver = emitPreparedCollectionReceiver(expression.object, context)
 
-  if (receiver == null) {
+  if (receiver != null) {
+    const descriptor = collectionSizeDescriptors[receiver.type]
+    const out = nextCName(context, descriptor.tempPrefix)
+    const lines: string[] = []
+    pushAllLines(lines, receiver.lines)
+    lines.push(`size_t ${out} = 0;`)
+    lines.push(emitStatusCheck(`${descriptor.callName}(${receiver.expression}, &${out})`, context))
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  return null
+}
+
+export function resolveRuntimeSetElementType(expression: AnyNode, context: CollectionFunctionContext): string | null {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const elementType = context.setElementTypes.get(expression.path[0])
+
+    if (elementType != null) {
+      return elementType
+    }
+
     return null
   }
 
-  const descriptor = collectionSizeDescriptors[receiver.type]
-  const out = nextCName(context, descriptor.tempPrefix)
+  if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+    let functionReturn: string | null = null
 
-  return {
-    lines: [
-      ...receiver.lines,
-      `size_t ${out} = 0;`,
-      emitStatusCheck(`${descriptor.callName}(${receiver.expression}, &${out})`, context)
-    ],
-    expression: out
-  }
-}
+    if (expression.type === 'CallExpression') {
+      functionReturn = resolveFunctionReturnNameFromCall(expression)
+    }
 
-export function resolveRuntimeSetElementType(expression: AnyNode, context: CFunctionContext): string | null {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return context.setElementTypes.get(expression.path[0]) ?? null
-  }
+    if (expression.valueType !== 'set') {
+      return null
+    }
 
-  if (expression?.type === 'CallExpression' || expression?.type === 'NewExpression') {
-    const functionReturn = expression.type === 'CallExpression' ? resolveFunctionReturnNameFromCall(expression) : null
+    if (expression.setElementType != null) {
+      return expression.setElementType
+    }
 
-    return expression.valueType === 'set'
-      ? (expression.setElementType ??
-          (functionReturn == null ? null : context.functionReturnSetElementTypes.get(functionReturn)) ??
-          'unknown')
-      : null
+    if (functionReturn != null) {
+      const returnSetElementType = functionReturnSetElementType(context, functionReturn)
+
+      if (returnSetElementType != null) {
+        return returnSetElementType
+      }
+    }
+
+    return 'unknown'
   }
 
-  if (expression?.type === 'MemberExpression') {
+  if (expression.type === 'MemberExpression') {
     const member = collectionDeps(context).resolveKnownObjectMember(expression, context)
 
-    return member?.valueType === 'set' ? (member.setElementType ?? 'unknown') : null
+    if (member != null && member.valueType === 'set') {
+      return stringOrUnknown(member.setElementType)
+    }
+
+    return null
   }
 
-  if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     const field = collectionDeps(context).resolveKnownObjectIndex(expression, context)
 
-    return field?.valueType === 'set' ? (field.setElementType ?? 'unknown') : null
+    if (field != null && field.valueType === 'set') {
+      return stringOrUnknown(field.setElementType)
+    }
+
+    return null
   }
 
   return null
 }
 
-export function resolveRuntimeMapType(expression: AnyNode, context: CFunctionContext): RuntimeMapType | null {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
-    const mapType = context.mapTypes.get(expression.path[0]) ?? null
+export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFunctionContext): RuntimeMapType | null {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const mapType = context.mapTypes.get(expression.path[0])
 
-    return mapType == null
-      ? null
-      : {
-          key: mapType.key ?? 'unknown',
-          value: mapType.value ?? 'unknown'
-        }
+    if (mapType != null) {
+      return {
+        key: stringOrUnknown(mapType.key),
+        value: stringOrUnknown(mapType.value)
+      }
+    }
+
+    return null
   }
 
-  if (expression?.type === 'CallExpression' || expression?.type === 'NewExpression') {
-    const functionReturn = expression.type === 'CallExpression' ? resolveFunctionReturnNameFromCall(expression) : null
-    const functionReturnMap =
-      functionReturn == null ? null : (context.functionReturnMapTypes.get(functionReturn) ?? null)
+  if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+    let functionReturn: string | null = null
+    let functionReturnMap: CFunctionReturnMapType | null = null
 
-    return expression.valueType === 'map'
-      ? {
-          key: expression.mapKeyType ?? functionReturnMap?.key ?? 'unknown',
-          value: expression.mapValueType ?? functionReturnMap?.value ?? 'unknown'
-        }
-      : null
+    if (expression.type === 'CallExpression') {
+      functionReturn = resolveFunctionReturnNameFromCall(expression)
+    }
+
+    if (functionReturn != null) {
+      const storedFunctionReturnMap = functionReturnMapType(context, functionReturn)
+
+      if (storedFunctionReturnMap != null) {
+        functionReturnMap = storedFunctionReturnMap
+      }
+    }
+
+    if (expression.valueType !== 'map') {
+      return null
+    }
+
+    return {
+      key: resolveRuntimeMapKeyType(expression, functionReturnMap),
+      value: resolveRuntimeMapValueType(expression, functionReturnMap)
+    }
   }
 
-  if (expression?.type === 'MemberExpression') {
+  if (expression.type === 'MemberExpression') {
     const member = collectionDeps(context).resolveKnownObjectMember(expression, context)
 
-    return member?.valueType === 'map'
-      ? {
-          key: member.mapKeyType ?? 'unknown',
-          value: member.mapValueType ?? 'unknown'
-        }
-      : null
+    if (member != null && member.valueType === 'map') {
+      return {
+        key: stringOrUnknown(member.mapKeyType),
+        value: stringOrUnknown(member.mapValueType)
+      }
+    }
+
+    return null
   }
 
-  if (expression?.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     const field = collectionDeps(context).resolveKnownObjectIndex(expression, context)
 
-    return field?.valueType === 'map'
-      ? {
-          key: field.mapKeyType ?? 'unknown',
-          value: field.mapValueType ?? 'unknown'
-        }
-      : null
+    if (field != null && field.valueType === 'map') {
+      return {
+        key: stringOrUnknown(field.mapKeyType),
+        value: stringOrUnknown(field.mapValueType)
+      }
+    }
+
+    return null
   }
 
   return null
+}
+
+function resolveRuntimeMapKeyType(expression: AnyNode, functionReturnMap: CFunctionReturnMapType | null): string {
+  if (expression.mapKeyType != null) {
+    return expression.mapKeyType
+  }
+
+  if (functionReturnMap != null) {
+    const key = functionReturnMap.key
+
+    if (key != null) {
+      return key
+    }
+  }
+
+  return 'unknown'
+}
+
+function resolveRuntimeMapValueType(expression: AnyNode, functionReturnMap: CFunctionReturnMapType | null): string {
+  if (expression.mapValueType != null) {
+    return expression.mapValueType
+  }
+
+  if (functionReturnMap != null) {
+    const value = functionReturnMap.value
+
+    if (value != null) {
+      return value
+    }
+  }
+
+  return 'unknown'
 }
 
 function resolveFunctionReturnNameFromCall(expression: AnyNode): string | null {
-  return expression?.type === 'CallExpression' &&
+  if (
+    expression.type === 'CallExpression' &&
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1
-    ? expression.callee.path[0]
-    : null
+  ) {
+    return expression.callee.path[0]
+  }
+
+  return null
 }
 
-export function resolveRuntimeForOfSet(expression: AnyNode, context: CFunctionContext) {
+export function resolveRuntimeForOfSet(
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): RuntimeForOfSet | null {
   const elementType = resolveRuntimeSetElementType(expression, context)
 
   if (elementType == null) {
@@ -539,34 +817,42 @@ export function resolveRuntimeForOfSet(expression: AnyNode, context: CFunctionCo
 
   const receiver = emitPreparedCollectionReceiver(expression, context)
 
-  if (receiver == null || receiver.type !== 'set') {
-    return null
+  if (receiver != null) {
+    if (receiver.type === 'set') {
+      return {
+        name: receiver.expression,
+        elementType,
+        lines: receiver.lines
+      }
+    }
   }
 
-  return {
-    name: receiver.expression,
-    elementType,
-    lines: receiver.lines
-  }
+  return null
 }
 
-export function resolveRuntimeForOfMap(expression: AnyNode, context: CFunctionContext) {
+export function resolveRuntimeForOfMap(
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): RuntimeForOfMap | null {
   const mapType = resolveRuntimeMapType(expression, context)
 
-  if (mapType == null) {
-    return null
+  if (mapType != null) {
+    const keyType = mapType.key
+    const valueType = mapType.value
+
+    const receiver = emitPreparedCollectionReceiver(expression, context)
+
+    if (receiver != null) {
+      if (receiver.type === 'map') {
+        return {
+          name: receiver.expression,
+          keyType,
+          valueType,
+          lines: receiver.lines
+        }
+      }
+    }
   }
 
-  const receiver = emitPreparedCollectionReceiver(expression, context)
-
-  if (receiver == null || receiver.type !== 'map') {
-    return null
-  }
-
-  return {
-    name: receiver.expression,
-    keyType: mapType.key,
-    valueType: mapType.value,
-    lines: receiver.lines
-  }
+  return null
 }

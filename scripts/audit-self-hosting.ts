@@ -53,21 +53,21 @@ const patterns: PatternInfo[] = [
     name: 'Object.entries / Object.keys / Object.values',
     decision: 'simplify/remove',
     pattern: /\bObject\.(entries|keys|values)\s*\(/g,
-    note: 'Prefer explicit loops over known arrays of records in compiler-core.',
+    note: 'Required language features; prefer explicit loops over known arrays of records in compiler-core until lowering lands.',
     maxAllowedMatches: 16
   },
   {
     name: 'Array.from',
     decision: 'simplify/remove',
     pattern: /\bArray\.from\s*\(/g,
-    note: 'Usually replaceable with direct array accumulation.',
+    note: 'Required language feature; compiler-core can usually use direct array accumulation until lowering lands.',
     maxAllowedMatches: 0
   },
   {
     name: 'flatMap / map / filter / reduce / sort',
     decision: 'simplify/remove',
     pattern: /\.(flatMap|map|filter|reduce|sort)\s*\(/g,
-    note: 'Compact Array.filter/find/map lowering is supported for known slices; broad generic callback chains are not self-hosting-ready.',
+    note: 'Compact Array.filter/find/map lowering is supported for known slices; Array.reduce is required and should lower to explicit loops, but compiler-core should avoid reduce.',
     maxAllowedMatches: 444
   },
   {
