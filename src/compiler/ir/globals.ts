@@ -1,7 +1,49 @@
 import { fsGlobalUsagePathForRuntimeMethod } from '../stdlib/descriptors/fs.ts'
 import type { AnyNode, IrGlobalUsage, ProgramNode } from '../types.ts'
 
-const jsStdGlobalRoots = new Set([
+type NodeList = AnyNode[]
+
+type IrProgramWithGlobalUsages = {
+  globalUsages: IrGlobalUsage[]
+}
+
+type StringSet = Set<string>
+
+const NODE_CHILD_KEYS = [
+  'body',
+  'params',
+  'fields',
+  'methods',
+  'init',
+  'condition',
+  'consequent',
+  'alternate',
+  'test',
+  'update',
+  'iterable',
+  'discriminant',
+  'cases',
+  'block',
+  'handler',
+  'finalizer',
+  'argument',
+  'args',
+  'callee',
+  'object',
+  'index',
+  'target',
+  'value',
+  'valueType',
+  'functionType',
+  'returnShape',
+  'left',
+  'right',
+  'elements',
+  'properties',
+  'expression'
+]
+
+const jsStdGlobalRootNames = [
   'Array',
   'Buffer',
   'ccjs',
@@ -29,7 +71,9 @@ const jsStdGlobalRoots = new Set([
   'setTimeout',
   'setInterval',
   'setImmediate'
-])
+]
+
+const jsStdGlobalRoots = createStringSet(jsStdGlobalRootNames)
 
 export function collectGlobalUsages(program: ProgramNode): IrGlobalUsage[] {
   const usages: IrGlobalUsage[] = []
@@ -39,15 +83,29 @@ export function collectGlobalUsages(program: ProgramNode): IrGlobalUsage[] {
   return usages
 }
 
-export function collectIrGlobalUsages(programs: Array<{ globalUsages: IrGlobalUsage[] }>): IrGlobalUsage[] {
-  return programs.flatMap((program) => program.globalUsages)
+export function collectIrGlobalUsages(programs: IrProgramWithGlobalUsages[]): IrGlobalUsage[] {
+  const usages: IrGlobalUsage[] = []
+
+  for (const program of programs) {
+    for (const usage of program.globalUsages) {
+      usages.push(usage)
+    }
+  }
+
+  return usages
 }
 
-export function collectIrGlobalRoots(programs: Array<{ globalUsages: IrGlobalUsage[] }>): string[] {
-  return [...new Set(collectIrGlobalUsages(programs).map((usage) => usage.root))].sort()
+export function collectIrGlobalRoots(programs: IrProgramWithGlobalUsages[]): string[] {
+  const roots = createStringSet([])
+
+  for (const usage of collectIrGlobalUsages(programs)) {
+    roots.add(usage.root)
+  }
+
+  return sortedStringSet(roots)
 }
 
-function visitGlobalUsage(node: unknown, usages: IrGlobalUsage[]): void {
+function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: IrGlobalUsage[]): void {
   if (node == null) {
     return
   }
@@ -59,24 +117,18 @@ function visitGlobalUsage(node: unknown, usages: IrGlobalUsage[]): void {
     return
   }
 
-  if (typeof node !== 'object') {
-    return
-  }
-
-  const item = node as AnyNode
+  const item = node
 
   if (item.type === 'CallExpression' && item.fsRuntimeMethod != null) {
     const path = fsGlobalUsagePathForRuntimeMethod(item.fsRuntimeMethod)
 
     if (path != null) {
-      usages.push({
-        root: 'fs',
-        path,
-        loc: item.loc
-      })
+      pushGlobalUsage(usages, path, item)
 
-      for (const arg of item.args ?? []) {
-        visitGlobalUsage(arg, usages)
+      if (item.args != null) {
+        for (const arg of item.args) {
+          visitGlobalUsage(arg, usages)
+        }
       }
 
       return
@@ -87,11 +139,7 @@ function visitGlobalUsage(node: unknown, usages: IrGlobalUsage[]): void {
     const path = globalUsagePath(item)
 
     if (path != null) {
-      usages.push({
-        root: path[0],
-        path,
-        loc: item.loc
-      })
+      pushGlobalUsage(usages, path, item)
       return
     }
   }
@@ -100,43 +148,115 @@ function visitGlobalUsage(node: unknown, usages: IrGlobalUsage[]): void {
     const path = globalUsagePath(item.object)
 
     if (path != null) {
-      usages.push({
-        root: path[0],
-        path,
-        loc: item.loc
-      })
+      pushGlobalUsage(usages, path, item)
       visitGlobalUsage(item.index, usages)
       return
     }
   }
 
-  if (item.type === 'Reference' && item.path.length > 0 && jsStdGlobalRoots.has(item.path[0])) {
-    usages.push({
-      root: item.path[0],
-      path: item.path,
-      loc: item.loc
-    })
+  if (item.type === 'Reference') {
+    const root = firstString(item.path)
+
+    if (root != null && jsStdGlobalRoots.has(root)) {
+      usages.push({
+        root,
+        path: item.path,
+        loc: item.loc
+      })
+      return
+    }
   }
 
-  for (const [key, value] of Object.entries(item)) {
-    if (key === 'loc' || key === 'shape') {
-      continue
-    }
+  visitGlobalUsageChildren(item, usages)
+}
 
-    visitGlobalUsage(value, usages)
+function visitGlobalUsageChildren(item: AnyNode, usages: IrGlobalUsage[]): void {
+  for (const key of NODE_CHILD_KEYS) {
+    const value = item[key]
+
+    if (value != null) {
+      visitGlobalUsage(value, usages)
+    }
   }
 }
 
 function globalUsagePath(expression: AnyNode | null | undefined): string[] | null {
-  if (expression?.type === 'Reference' && expression.path.length > 0 && jsStdGlobalRoots.has(expression.path[0])) {
-    return expression.path
+  if (expression == null) {
+    return null
   }
 
-  if (expression?.type === 'MemberExpression' || expression?.type === 'OptionalMemberExpression') {
+  if (expression.type === 'Reference') {
+    const root = firstString(expression.path)
+
+    if (root != null && jsStdGlobalRoots.has(root)) {
+      return expression.path
+    }
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     const objectPath = globalUsagePath(expression.object)
 
-    return objectPath == null ? null : [...objectPath, expression.property]
+    if (objectPath != null) {
+      return appendString(objectPath, expression.property)
+    }
   }
 
   return null
+}
+
+function pushGlobalUsage(usages: IrGlobalUsage[], path: string[], item: AnyNode): void {
+  const root = firstString(path)
+
+  if (root != null) {
+    usages.push({
+      root,
+      path,
+      loc: item.loc
+    })
+  }
+}
+
+function firstString(values: string[]): string | null {
+  if (values.length === 0) {
+    return null
+  }
+
+  return values[0]
+}
+
+function appendString(values: string[], value: string): string[] {
+  const result = copyStrings(values)
+  result.push(value)
+  return result
+}
+
+function copyStrings(values: string[]): string[] {
+  const result: string[] = []
+
+  for (const value of values) {
+    result.push(value)
+  }
+
+  return result
+}
+
+function createStringSet(values: string[]): StringSet {
+  const set: StringSet = new Set()
+
+  for (const value of values) {
+    set.add(value)
+  }
+
+  return set
+}
+
+function sortedStringSet(values: StringSet): string[] {
+  const result: string[] = []
+
+  for (const value of values) {
+    result.push(value)
+  }
+
+  result.sort()
+  return result
 }
