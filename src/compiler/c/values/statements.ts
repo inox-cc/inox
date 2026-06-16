@@ -1223,12 +1223,12 @@ function emitRuntimeMapForOfStatement(statement, runtimeMap, context: CFunctionC
   const fields = [
     {
       name: 'key',
-      readonly: true,
+      readonlyField: true,
       valueType: keyType
     },
     {
       name: 'value',
-      readonly: true,
+      readonlyField: true,
       valueType
     }
   ]

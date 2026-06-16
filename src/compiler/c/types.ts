@@ -48,7 +48,15 @@ export type CObjectShapeField = CShapeValueMetadata & {
   name: string
   optional?: boolean
   ownership?: string
-  readonly?: boolean
+  readonlyField?: boolean
+}
+
+export function isReadonlyCObjectShapeField(field: AnyNode): boolean {
+  if (field.readonlyField === true) {
+    return true
+  }
+
+  return field.readonly === true
 }
 
 export type CObjectShape = {

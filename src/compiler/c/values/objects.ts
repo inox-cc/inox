@@ -8,6 +8,7 @@ import {
 import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
+import { isReadonlyCObjectShapeField } from '../types.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
 import type {
   CKnownObjectField,
@@ -251,6 +252,7 @@ export function registerObjectShape(
       name: field.name,
       optional: field.optional,
       ownership: field.ownership ?? 'strong',
+      readonlyField: isReadonlyCObjectShapeField(field),
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
@@ -271,7 +273,7 @@ export function emitObjectVariableDeclaration(
     statement.shape?.fields ??
     statement.init.properties.map((property: AnyNode) => ({
       name: property.key,
-      readonly: false,
+      readonlyField: false,
       valueType: dependencies.inferExpressionType(property.value, context)
     }))
   const properties = new Map<string, AnyNode>(
@@ -298,6 +300,7 @@ export function emitObjectVariableDeclaration(
     fields.map((field) => ({
       name: field.name,
       ownership: field.ownership ?? 'strong',
+      readonlyField: isReadonlyCObjectShapeField(field),
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,

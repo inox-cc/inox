@@ -260,6 +260,7 @@ import {
   isOptionalChainExpression
 } from './syntax.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir.ts'
+import { isReadonlyCObjectShapeField } from './types.ts'
 import type {
   CArrayElementInfo,
   CAsyncTaskWrapper,
@@ -1205,7 +1206,7 @@ function createThrowingFunctionInfo(
 function emitCFieldFlags(field: AnyNode): string {
   const flags: string[] = []
 
-  if (field.readonly === true) {
+  if (isReadonlyCObjectShapeField(field)) {
     flags.push('CCJS_FIELD_READONLY')
   }
 
@@ -1966,7 +1967,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     statement.shape?.fields ??
     statement.init.properties.map((property: AnyNode) => ({
       name: property.key,
-      readonly: false,
+      readonlyField: false,
       valueType: inferExpressionType(property.value, context)
     }))
   const properties: Map<string, AnyNode> = new Map(
@@ -1992,6 +1993,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       name: field.name,
       optional: field.optional,
       ownership: field.ownership ?? 'strong',
+      readonlyField: isReadonlyCObjectShapeField(field),
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
@@ -2621,7 +2623,7 @@ function emitCObjectLiteralValueExpression(
     for (const property of expression.properties) {
       fields.push({
         name: property.key,
-        readonly: false,
+        readonlyField: false,
         valueType: inferExpressionType(property.value, context)
       })
     }

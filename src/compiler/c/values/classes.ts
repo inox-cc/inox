@@ -9,6 +9,7 @@ import {
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
+import { isReadonlyCObjectShapeField } from '../types.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
@@ -118,7 +119,7 @@ function resolveClassFields(classNode: AnyNode, constructor: AnyNode | null, ass
   if (shapeFields != null) {
     return shapeFields.map((field) => ({
       name: field.name,
-      readonly: field.readonly === true,
+      readonlyField: isReadonlyCObjectShapeField(field),
       ownership: field.ownership ?? 'strong',
       valueType: field.valueType ?? 'unknown',
       arrayElementType: field.arrayElementType,
@@ -139,7 +140,7 @@ function resolveClassFields(classNode: AnyNode, constructor: AnyNode | null, ass
     seen.add(assignment.field)
     fields.push({
       name: assignment.field,
-      readonly: false,
+      readonlyField: false,
       ownership: 'strong',
       valueType: inferClassConstructorFieldType(assignment.value, constructor)
     })
@@ -298,6 +299,7 @@ export function registerClassObjectShape(context: CFunctionContext, name: string
     info.fields.map((field) => ({
       name: field.name,
       ownership: field.ownership ?? 'strong',
+      readonlyField: isReadonlyCObjectShapeField(field),
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
