@@ -3664,6 +3664,59 @@ console.log('ok')
 })
 
 
+test('generated C object literal scalar expression boxing compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-scalar-boxing-'))
+  const source = join(dir, 'object-scalar-boxing.c')
+  const output = join(dir, 'object-scalar-boxing')
+
+  try {
+    const result = compileSource(
+      `type Meta = {
+  optional: boolean
+  total: number
+}
+
+function meta(node: object): Meta {
+  const min = 1
+  const max = 3
+  return { optional: node.optional === true, total: min + max }
+}
+
+const result = meta({ optional: true })
+console.log(result.optional, result.total)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 4\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C early return runs through cleanup label with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

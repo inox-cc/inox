@@ -178,6 +178,35 @@ test('lowers C object literals to runtime calls', () => {
 })
 
 
+test('boxes prepared scalar expressions in C object literals', () => {
+  const result = compileSource(
+    `type Meta = {
+  optional: boolean
+  total: number
+}
+
+function meta(node: object): Meta {
+  const min = 1
+  const max = 3
+  return { optional: node.optional === true, total: min + max }
+}
+
+export function main(): void {
+  const result = meta({ optional: true })
+  console.log(result.optional, result.total)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "optional", 8, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_init_known\(ccjs_object_\d+, 0, ccjs_bool_value\(\(\(ccjs_value_\d+\.tag == CCJS_TAG_BOOL && ccjs_value_\d+\.as\.boolean == true\)\) != 0\)\)/)
+  assert.match(result.code, /ccjs_object_init_known\(ccjs_object_\d+, 1, ccjs_number_value\(\(min \+ max\)\)\)/)
+})
+
+
 test('lowers synthetic C main wrapper through cleanup when runtime values are owned', () => {
   const result = compileSource(
     `const user = { name: 'Ada' }

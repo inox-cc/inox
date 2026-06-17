@@ -1207,6 +1207,7 @@ const cValueExpressionDependencies = {
   emitPreparedKnownObjectMemberValueExpression,
   emitPreparedMapIndexGetExpression,
   emitPreparedNullableScalarRuntimeValueExpression,
+  emitPreparedNumberExpression,
   emitPreparedDynamicObjectIndexValueExpression: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
     emitPreparedDynamicObjectIndexValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedDynamicObjectMemberValueExpression: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>

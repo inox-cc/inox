@@ -160,6 +160,14 @@ function scalarRuntimeValueExpression(value: string, valueType: string): string 
   return `${value}.as.number`
 }
 
+function boxedScalarRuntimeValueExpression(value: string, valueType: string): string {
+  if (valueType === 'boolean') {
+    return `ccjs_bool_value((${value}) != 0)`
+  }
+
+  return `ccjs_number_value(${value})`
+}
+
 function runtimeBoolValueExpression(value: boolean): string {
   if (value) {
     return 'true'
@@ -299,7 +307,7 @@ export type CCallExpressionDependencies = {
   emitPreparedFsCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFsStatsMethodExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedPathBooleanCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathStringCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPromiseMethodExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
@@ -1720,6 +1728,7 @@ export type CValueExpressionDependencies = {
   emitPreparedNullableScalarRuntimeValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitPreparedDynamicObjectIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedDynamicObjectMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitPreparedObjectExpressionIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedObjectExpressionMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedOsConstantExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
@@ -2095,6 +2104,12 @@ export function emitCValueExpression(
     }
   }
 
+  const scalarValue = emitPreparedScalarRuntimeValueExpression(expression, context, deps)
+
+  if (scalarValue != null) {
+    return scalarValue
+  }
+
   if (expression.type === 'CallExpression' && isManagedRuntimeReturnType(deps.inferExpressionType(expression, context))) {
     const valueType = deps.inferExpressionType(expression, context)
     const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
@@ -2144,6 +2159,25 @@ export function emitCValueExpression(
   return {
     lines: [],
     expression: 'ccjs_undefined_value()'
+  }
+}
+
+function emitPreparedScalarRuntimeValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CValueExpressionDependencies
+): PreparedExpression | null {
+  const valueType = deps.inferExpressionType(expression, context)
+
+  if (valueType !== 'number' && valueType !== 'boolean') {
+    return null
+  }
+
+  const value = deps.emitPreparedNumberExpression(expression, context)
+
+  return {
+    lines: value.lines,
+    expression: boxedScalarRuntimeValueExpression(value.expression, valueType)
   }
 }
 
