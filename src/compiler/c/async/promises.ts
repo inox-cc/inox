@@ -14,6 +14,7 @@ import type {
 import type { AnyNode, Diagnostic, IrProgram } from '../../types.ts'
 import type { CallbackLoweringDependencies, CallbackScope, CallbackScopeBinding } from './callbacks.ts'
 
+type PromiseNode = AnyNode
 type PromiseAnyNodeWrapperMap = Map<AnyNode, CPromiseChainWrapper>
 type PromiseBooleanMap = Map<string, boolean>
 type PromiseCallbackArrowWrapperMap = Map<AnyNode, CCallbackWrapper>
@@ -338,15 +339,42 @@ export type PromiseLoweringDependencies = {
 
 type PromiseChainArrowBody = {
   kind: string
-  prefixStatements: AnyNode[]
-  returnExpression: AnyNode | null
-  statements: AnyNode[]
+  prefixStatements: PromiseNode[]
+  returnExpression: PromiseNode | null
+  statements: PromiseNode[]
 }
 
 type PromiseCallbackContext = {
   lines: string[]
   expression: string
   finalizer: string
+}
+
+function promiseNodeAt(values: PromiseNode[], index: number): PromiseNode {
+  return values[index]
+}
+
+function promiseProgramAt(values: IrProgram[], index: number): IrProgram {
+  return values[index]
+}
+
+function promiseCallbackScopeAt(values: CallbackScope[], index: number): CallbackScope {
+  return values[index]
+}
+
+function promiseHandlerSnapshotAt(
+  values: PromiseConstructorHandlerSnapshot[],
+  index: number
+): PromiseConstructorHandlerSnapshot {
+  return values[index]
+}
+
+function promiseRuntimeArrowCaptureAt(values: CRuntimeArrowCapture[], index: number): CRuntimeArrowCapture {
+  return values[index]
+}
+
+function promiseStringAt(values: string[], index: number): string {
+  return values[index]
 }
 
 function promiseChainArrowBodyKind(body: PromiseChainArrowBody | null | undefined): string {
@@ -357,7 +385,7 @@ function promiseChainArrowBodyKind(body: PromiseChainArrowBody | null | undefine
   return body.kind
 }
 
-function promiseChainArrowBodyStatements(body: PromiseChainArrowBody | null | undefined): AnyNode[] {
+function promiseChainArrowBodyStatements(body: PromiseChainArrowBody | null | undefined): PromiseNode[] {
   if (body == null) {
     return []
   }
@@ -365,7 +393,7 @@ function promiseChainArrowBodyStatements(body: PromiseChainArrowBody | null | un
   return body.statements
 }
 
-function promiseChainArrowBodyPrefixStatements(body: PromiseChainArrowBody | null | undefined): AnyNode[] {
+function promiseChainArrowBodyPrefixStatements(body: PromiseChainArrowBody | null | undefined): PromiseNode[] {
   if (body == null) {
     return []
   }
@@ -373,7 +401,7 @@ function promiseChainArrowBodyPrefixStatements(body: PromiseChainArrowBody | nul
   return body.prefixStatements
 }
 
-function promiseChainArrowBodyReturnExpression(body: PromiseChainArrowBody | null | undefined): AnyNode | null {
+function promiseChainArrowBodyReturnExpression(body: PromiseChainArrowBody | null | undefined): PromiseNode | null {
   if (body == null) {
     return null
   }
@@ -996,7 +1024,9 @@ function promiseContextRejectionValueType(context: PromiseFunctionContext, name:
 function appendCallbackScope(scopes: CallbackScope[], scope: CallbackScope): CallbackScope[] {
   const result: CallbackScope[] = []
 
-  for (const item of scopes) {
+  for (let index = 0; index < scopes.length; index = index + 1) {
+    const item = promiseCallbackScopeAt(scopes, index)
+
     result.push(item)
   }
 
@@ -1033,7 +1063,7 @@ function callbackParamValueType(param: AnyNode): string {
   return 'unknown'
 }
 
-function promiseChainCallbackBodyStatements(callback: AnyNode): AnyNode[] | null {
+function promiseChainCallbackBodyStatements(callback: PromiseNode): PromiseNode[] | null {
   if (Array.isArray(callback.body)) {
     return callback.body
   }
@@ -1045,7 +1075,7 @@ function promiseChainCallbackBodyStatements(callback: AnyNode): AnyNode[] | null
   return null
 }
 
-function lastPromiseChainCallbackStatement(statements: AnyNode[] | null | undefined): AnyNode | null {
+function lastPromiseChainCallbackStatement(statements: PromiseNode[] | null | undefined): PromiseNode | null {
   if (statements == null || statements.length === 0) {
     return null
   }
@@ -1053,8 +1083,8 @@ function lastPromiseChainCallbackStatement(statements: AnyNode[] | null | undefi
   return statements[statements.length - 1]
 }
 
-function promiseChainCallbackStatementsBeforeLast(statements: AnyNode[] | null | undefined): AnyNode[] {
-  const result: AnyNode[] = []
+function promiseChainCallbackStatementsBeforeLast(statements: PromiseNode[] | null | undefined): PromiseNode[] {
+  const result: PromiseNode[] = []
 
   if (statements == null) {
     return result
@@ -1067,7 +1097,7 @@ function promiseChainCallbackStatementsBeforeLast(statements: AnyNode[] | null |
   return result
 }
 
-function promiseReturnStatementArgument(statement: AnyNode | null | undefined): AnyNode | null {
+function promiseReturnStatementArgument(statement: PromiseNode | null | undefined): PromiseNode | null {
   if (statement == null) {
     return null
   }
@@ -1079,7 +1109,7 @@ function promiseReturnStatementArgument(statement: AnyNode | null | undefined): 
   return null
 }
 
-function promiseStatementsOrEmpty(statements: AnyNode[] | null | undefined): AnyNode[] {
+function promiseStatementsOrEmpty(statements: PromiseNode[] | null | undefined): PromiseNode[] {
   if (statements == null) {
     return []
   }
@@ -1087,12 +1117,14 @@ function promiseStatementsOrEmpty(statements: AnyNode[] | null | undefined): Any
   return statements
 }
 
-function allStraightLinePromiseCallbackStatements(statements: AnyNode[] | null | undefined): boolean {
+function allStraightLinePromiseCallbackStatements(statements: PromiseNode[] | null | undefined): boolean {
   if (statements == null) {
     return false
   }
 
-  for (const statement of statements) {
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const statement = promiseNodeAt(statements, index)
+
     if (!isStraightLinePromiseCallbackStatement(statement)) {
       return false
     }
@@ -1101,12 +1133,14 @@ function allStraightLinePromiseCallbackStatements(statements: AnyNode[] | null |
   return true
 }
 
-function allPromiseChainCallbackStatements(statements: AnyNode[] | null | undefined): boolean {
+function allPromiseChainCallbackStatements(statements: PromiseNode[] | null | undefined): boolean {
   if (statements == null) {
     return false
   }
 
-  for (const statement of statements) {
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const statement = promiseNodeAt(statements, index)
+
     if (!isPromiseChainCallbackStatement(statement)) {
       return false
     }
@@ -1152,11 +1186,14 @@ function restorePromiseConstructorHandlers(
   context: PromiseFunctionContext,
   snapshots: PromiseConstructorHandlerSnapshot[]
 ): void {
-  for (const snapshot of snapshots) {
-    if (snapshot.previous == null) {
+  for (let index = 0; index < snapshots.length; index = index + 1) {
+    const snapshot = promiseHandlerSnapshotAt(snapshots, index)
+    const previous = snapshot.previous
+
+    if (previous == null) {
       context.promiseConstructorHandlers.delete(snapshot.name)
     } else {
-      context.promiseConstructorHandlers.set(snapshot.name, snapshot.previous)
+      context.promiseConstructorHandlers.set(snapshot.name, previous)
     }
   }
 }
@@ -1204,7 +1241,9 @@ function visitPromiseConstructorRejectionNode(
   }
 
   if (Array.isArray(node)) {
-    for (const item of node) {
+    for (let index = 0; index < node.length; index = index + 1) {
+      const item = promiseNodeAt(node, index)
+
       visitPromiseConstructorRejectionNode(item, rejectName, types, context, dependencies)
     }
     return
@@ -1295,7 +1334,9 @@ function visitPromiseConstructorRejectionChildren(
   }
 
   if (current.type === 'ObjectLiteral') {
-    for (const property of current.properties) {
+    for (let index = 0; index < current.properties.length; index = index + 1) {
+      const property = promiseNodeAt(current.properties, index)
+
       visitPromiseConstructorRejectionNode(property.value, rejectName, types, context, dependencies)
     }
     return
@@ -1331,7 +1372,9 @@ function visitPromiseConstructorRejectionChildren(
   if (current.type === 'SwitchStatement') {
     visitPromiseConstructorRejectionNode(current.discriminant, rejectName, types, context, dependencies)
 
-    for (const item of current.cases) {
+    for (let index = 0; index < current.cases.length; index = index + 1) {
+      const item = promiseNodeAt(current.cases, index)
+
       visitPromiseConstructorRejectionNode(item.test, rejectName, types, context, dependencies)
       visitPromiseConstructorRejectionNode(item.consequent, rejectName, types, context, dependencies)
     }
@@ -1356,7 +1399,9 @@ function uniqueValueTypes(types: string[]): string {
 
   const first = types[0]
 
-  for (const valueType of types) {
+  for (let index = 0; index < types.length; index = index + 1) {
+    const valueType = promiseStringAt(types, index)
+
     if (valueType !== first) {
       return 'unknown'
     }
@@ -1452,16 +1497,22 @@ export function collectPromiseChainWrappers(
 ): Map<string, CPromiseChainWrapper> {
   const wrappers: Map<string, CPromiseChainWrapper> = new Map()
 
-  for (const ir of irPrograms) {
+  for (let irIndex = 0; irIndex < irPrograms.length; irIndex = irIndex + 1) {
+    const ir = promiseProgramAt(irPrograms, irIndex)
     const topLevelScope: CallbackScope = new Map()
+    const entries = collectIrTopLevelNodeEntries(ir)
 
-    for (const item of collectIrTopLevelNodeEntries(ir)) {
+    for (let entryIndex = 0; entryIndex < entries.length; entryIndex = entryIndex + 1) {
+      const item = entries[entryIndex]
+
       if (item.kind === 'function') {
         const scope: CallbackScope = new Map()
         declarePromiseCallbackParams(scope, item.node.params)
         const functionScopes: CallbackScope[] = [topLevelScope, scope]
 
-        for (const statement of item.node.body) {
+        for (let statementIndex = 0; statementIndex < item.node.body.length; statementIndex = statementIndex + 1) {
+          const statement = promiseNodeAt(item.node.body, statementIndex)
+
           visitPromiseChainStatement(statement, functionScopes, wrappers, context, deps)
         }
       } else if (item.kind === 'statement') {
@@ -1478,7 +1529,9 @@ function declarePromiseCallbackBinding(scope: CallbackScope, name: string, info:
 }
 
 function declarePromiseCallbackParams(scope: CallbackScope, params: AnyNode[]): void {
-  for (const param of params) {
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = promiseNodeAt(params, index)
+
     declarePromiseCallbackBinding(scope, param.name, {
       name: param.name,
       valueType: param.valueType,
@@ -1588,13 +1641,16 @@ function registerPromiseChainExpression(
   const key = `promise-chain-arrow:${index}`
   const captures = deps.collectArrowCaptures(callback, scopes, context, deps.callbackLoweringDependencies)
 
-  for (const capture of captures) {
+  for (let captureIndex = 0; captureIndex < captures.length; captureIndex = captureIndex + 1) {
+    const capture = promiseRuntimeArrowCaptureAt(captures, captureIndex)
+    const declaration = capture.declaration
+
     if (
       capture.mutable &&
       isPromiseRuntimeManagedOrScalarCapture(capture.valueType) &&
-      capture.declaration != null
+      declaration != null
     ) {
-      context.boxedMutableCaptureDeclarations.add(capture.declaration)
+      context.boxedMutableCaptureDeclarations.add(declaration)
     }
   }
 
@@ -1650,7 +1706,9 @@ function visitPromiseChainStatement(
     const scope: CallbackScope = new Map()
     const blockScopes = appendCallbackScope(scopes, scope)
 
-    for (const item of statement.body) {
+    for (let index = 0; index < statement.body.length; index = index + 1) {
+      const item = promiseNodeAt(statement.body, index)
+
       visitPromiseChainStatement(item, blockScopes, wrappers, context, deps)
     }
     return
@@ -1700,12 +1758,16 @@ function visitPromiseChainStatement(
   if (statement.type === 'SwitchStatement') {
     visitPromiseChainExpression(statement.discriminant, scopes, wrappers, context, deps)
 
-    for (const item of statement.cases) {
+    for (let index = 0; index < statement.cases.length; index = index + 1) {
+      const item = promiseNodeAt(statement.cases, index)
+
       visitPromiseChainExpression(item.test, scopes, wrappers, context, deps)
       const scope: CallbackScope = new Map()
       const caseScopes = appendCallbackScope(scopes, scope)
 
-      for (const caseStatement of item.consequent) {
+      for (let consequentIndex = 0; consequentIndex < item.consequent.length; consequentIndex = consequentIndex + 1) {
+        const caseStatement = promiseNodeAt(item.consequent, consequentIndex)
+
         visitPromiseChainStatement(caseStatement, caseScopes, wrappers, context, deps)
       }
     }
@@ -1738,7 +1800,9 @@ function visitPromiseChainExpression(
     registerPromiseChainExpression(expression, scopes, wrappers, context, deps)
     visitPromiseChainExpression(expression.callee, scopes, wrappers, context, deps)
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = promiseNodeAt(expression.args, index)
+
       visitPromiseChainExpression(arg, scopes, wrappers, context, deps)
     }
     return
@@ -1747,7 +1811,9 @@ function visitPromiseChainExpression(
   if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
     visitPromiseChainExpression(expression.callee, scopes, wrappers, context, deps)
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = promiseNodeAt(expression.args, index)
+
       visitPromiseChainExpression(arg, scopes, wrappers, context, deps)
     }
     return
@@ -1786,14 +1852,18 @@ function visitPromiseChainExpression(
   }
 
   if (expression.type === 'ArrayLiteral') {
-    for (const element of expression.elements) {
+    for (let index = 0; index < expression.elements.length; index = index + 1) {
+      const element = promiseNodeAt(expression.elements, index)
+
       visitPromiseChainExpression(element, scopes, wrappers, context, deps)
     }
     return
   }
 
   if (expression.type === 'ObjectLiteral') {
-    for (const property of expression.properties) {
+    for (let index = 0; index < expression.properties.length; index = index + 1) {
+      const property = promiseNodeAt(expression.properties, index)
+
       visitPromiseChainExpression(property.value, scopes, wrappers, context, deps)
     }
   }
@@ -2058,7 +2128,9 @@ function isPromiseChainCallbackStatement(statement: AnyNode | null | undefined):
 }
 
 function isPromiseChainCallbackSwitchStatement(statement: AnyNode): boolean {
-  for (const item of statement.cases) {
+  for (let index = 0; index < statement.cases.length; index = index + 1) {
+    const item = promiseNodeAt(statement.cases, index)
+
     if (!allPromiseChainCallbackStatements(item.consequent)) {
       return false
     }
