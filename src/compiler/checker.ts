@@ -1489,8 +1489,12 @@ class Checker {
     return valueType
   }
 
-  expressionCanBeNull(expression: AnyNode): boolean {
-    return expression?.type === 'NullLiteral' || expression?.nullable === true
+  expressionCanBeNull(expression: AnyNode | null): boolean {
+    if (expression == null) {
+      return false
+    }
+
+    return expression.type === 'NullLiteral' || expression.nullable === true
   }
 
   checkMemberExpression(expression: AnyNode): ValueType {

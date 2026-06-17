@@ -1977,8 +1977,8 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
       shape = awaitStatement.shape
     } else if (awaitStatement.init.shape != null) {
       shape = awaitStatement.init.shape
-    } else if (awaitedPromiseExpression?.shape != null) {
-      shape = awaitedPromiseExpression?.shape ?? null
+    } else if (awaitedPromiseExpression.shape != null) {
+      shape = awaitedPromiseExpression.shape
     } else {
       shape = null
     }
@@ -1989,7 +1989,7 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
   } else if (awaitStatement.init.arrayElementType != null) {
     arrayElementType = awaitStatement.init.arrayElementType
   } else {
-    arrayElementType = awaitedPromiseExpression?.arrayElementType ?? null
+    arrayElementType = awaitedPromiseExpression.arrayElementType ?? null
   }
 
   if (awaitedType === 'map') {
@@ -1997,8 +1997,8 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
       mapKeyType = awaitStatement.mapKeyType
     } else if (awaitStatement.init.mapKeyType != null) {
       mapKeyType = awaitStatement.init.mapKeyType
-    } else if (awaitedPromiseExpression?.mapKeyType != null) {
-      mapKeyType = awaitedPromiseExpression?.mapKeyType ?? null
+    } else if (awaitedPromiseExpression.mapKeyType != null) {
+      mapKeyType = awaitedPromiseExpression.mapKeyType
     } else {
       mapKeyType = 'unknown'
     }
@@ -2007,8 +2007,8 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
       mapValueType = awaitStatement.mapValueType
     } else if (awaitStatement.init.mapValueType != null) {
       mapValueType = awaitStatement.init.mapValueType
-    } else if (awaitedPromiseExpression?.mapValueType != null) {
-      mapValueType = awaitedPromiseExpression?.mapValueType ?? null
+    } else if (awaitedPromiseExpression.mapValueType != null) {
+      mapValueType = awaitedPromiseExpression.mapValueType
     } else {
       mapValueType = 'unknown'
     }
@@ -2019,8 +2019,8 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
       setElementType = awaitStatement.setElementType
     } else if (awaitStatement.init.setElementType != null) {
       setElementType = awaitStatement.init.setElementType
-    } else if (awaitedPromiseExpression?.setElementType != null) {
-      setElementType = awaitedPromiseExpression?.setElementType ?? null
+    } else if (awaitedPromiseExpression.setElementType != null) {
+      setElementType = awaitedPromiseExpression.setElementType
     } else {
       setElementType = 'unknown'
     }
@@ -3335,16 +3335,25 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
 ): PreparedExpression {
   const awaitedExpression = item.awaitedExpression
 
-  if (
-    awaitedExpression == null ||
-    awaitedExpression?.type !== 'CallExpression' ||
-    cPromiseRuntimeCallName(awaitedExpression?.callee) !== 'resolve'
-  ) {
+  if (awaitedExpression == null) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_ASYNC',
+        'async task state-machine slice currently supports await Promise.resolve(...) only',
+        null
+      )
+    )
+
+    return {
+      lines: ['status = CCJS_ERR_TYPE;'],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
+  if (awaitedExpression.type !== 'CallExpression' || cPromiseRuntimeCallName(awaitedExpression.callee) !== 'resolve') {
     let loc: SourceLocation | null = null
 
-    if (awaitedExpression != null) {
-      loc = awaitedExpression.loc
-    }
+    loc = awaitedExpression.loc
 
     context.diagnostics.push(
       diagnostic(
@@ -3360,7 +3369,13 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
     }
   }
 
-  return emitPreparedAsyncTaskValueExpression(awaitedExpression?.args[0] ?? null, item.type, context)
+  let awaitedValueExpression: AnyNode | null = null
+
+  if (awaitedExpression.args.length > 0) {
+    awaitedValueExpression = awaitedExpression.args[0]
+  }
+
+  return emitPreparedAsyncTaskValueExpression(awaitedValueExpression, item.type, context)
 }
 
 function emitPreparedAsyncTaskValueExpression(

@@ -2285,7 +2285,7 @@ function isBoxedRuntimeStringName(name: string, context: CFunctionContext): bool
 
 function isBoxedRuntimeStringReference(expression: AnyNode, context: CFunctionContext): boolean {
   return (
-    expression?.type === 'Reference' &&
+    expression.type === 'Reference' &&
     expression.path.length === 1 &&
     isBoxedRuntimeStringName(expression.path[0], context)
   )
@@ -2294,13 +2294,20 @@ function isBoxedRuntimeStringReference(expression: AnyNode, context: CFunctionCo
 function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
   const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
   const fieldsName = `${shapeName}_fields`
-  const fields =
-    statement.shape?.fields ??
-    statement.init.properties.map((property: AnyNode) => ({
-      name: property.key,
-      readonlyField: false,
-      valueType: inferExpressionType(property.value, context)
-    }))
+  let fields: CObjectShapeField[] = []
+
+  if (statement.shape != null) {
+    fields = statement.shape.fields
+  } else {
+    for (const property of statement.init.properties) {
+      fields.push({
+        name: property.key,
+        readonlyField: false,
+        valueType: inferExpressionType(property.value, context)
+      })
+    }
+  }
+
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
@@ -2315,9 +2322,10 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   registerBoxedValue(context, statement.name, 'object')
   context.boxedVariables.add(statement.name)
   context.variables.set(statement.name, 'object')
-  context.objectShapes.set(
-    statement.name,
-    fields.map((field: CObjectShapeField) => ({
+  const objectShapeFields: CObjectShapeField[] = []
+
+  for (const field of fields) {
+    const objectShapeField: CObjectShapeField = {
       name: field.name,
       optional: field.optional,
       ownership: field.ownership ?? 'strong',
@@ -2327,8 +2335,12 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       mapKeyType: field.mapKeyType,
       mapValueType: field.mapValueType,
       setElementType: field.setElementType
-    }))
-  )
+    }
+
+    objectShapeFields.push(objectShapeField)
+  }
+
+  context.objectShapes.set(statement.name, objectShapeFields)
   lines.push(`${statement.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`)
   lines.push(`if (${statement.name} == 0) ${emitFailureStatement(context)}`)
   lines.push(`*${statement.name} = ccjs_undefined_value();`)
@@ -2783,7 +2795,7 @@ function emitCValueExpression(expression: AnyNode, context: CFunctionContext): P
 }
 
 function emitNullableScalarValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  if (expression?.type === 'NullLiteral') {
+  if (expression.type === 'NullLiteral') {
     return {
       lines: [],
       expression: 'ccjs_null_value()'
@@ -2801,7 +2813,7 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
       diagnostic(
         'CCJS_C_NULLISH',
         'nullable scalar values currently support only number, boolean and null values in C',
-        expression?.loc
+        expression.loc
       )
     )
 
@@ -2888,7 +2900,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     diagnostic(
       'CCJS_C_NULLISH',
       'this nullable scalar expression is not supported by the current C backend slice',
-      expression?.loc
+      expression.loc
     )
   )
 
@@ -3695,7 +3707,7 @@ function emitReference(expression: AnyNode, context: CFunctionContext): string {
     diagnostic(
       'CCJS_C_ASSIGNMENT_TARGET',
       'this assignment target is not supported by the current C backend slice',
-      expression?.loc
+      expression.loc
     )
   )
   return '_'

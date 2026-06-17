@@ -49,7 +49,7 @@ export function emitRuntimeFieldValueCheck(
   expression: AnyNode,
   context: RuntimeValueCheckContext
 ): string[] {
-  if (expression?.nullable === true) {
+  if (expression.nullable === true) {
     return emitRuntimeNullableValueCheck(value, expectedTag, context)
   }
 
