@@ -11,17 +11,21 @@ if (await hasSslHeader()) {
   process.exit(0)
 }
 
-const result = await runCommand('git', ['submodule', 'update', '--init', '--recursive', '--depth', '1', submodulePath])
+console.log(`Initializing ${submodulePath}`)
+
+const result = await runCommand(
+  'git',
+  ['submodule', 'update', '--init', '--recursive', '--depth', '1', '--progress', submodulePath],
+  {
+    env: {
+      GIT_TERMINAL_PROMPT: '0'
+    },
+    stdout: process.stdout,
+    stderr: process.stderr
+  }
+)
 
 if (result.code !== 0) {
-  if (result.stdout.length > 0) {
-    process.stdout.write(result.stdout)
-  }
-
-  if (result.stderr.length > 0) {
-    process.stderr.write(result.stderr)
-  }
-
   process.stderr.write(`Failed to initialize ${submodulePath}\n`)
   process.exitCode = result.code
 } else {

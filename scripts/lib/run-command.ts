@@ -7,10 +7,24 @@ export type CommandResult = {
   stderr: string
 }
 
-export function runCommand(command: string, args: string[], cwd = rootDir): Promise<CommandResult> {
+export type RunCommandOptions = {
+  cwd?: string
+  env?: NodeJS.ProcessEnv
+  stdout?: NodeJS.WritableStream
+  stderr?: NodeJS.WritableStream
+}
+
+export function runCommand(
+  command: string,
+  args: string[],
+  cwdOrOptions: string | RunCommandOptions = rootDir
+): Promise<CommandResult> {
+  const options = typeof cwdOrOptions === 'string' ? { cwd: cwdOrOptions } : cwdOrOptions
+
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd,
+      cwd: options.cwd ?? rootDir,
+      env: options.env == null ? undefined : { ...process.env, ...options.env },
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let stdout = ''
@@ -18,9 +32,11 @@ export function runCommand(command: string, args: string[], cwd = rootDir): Prom
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk
+      options.stdout?.write(chunk)
     })
     child.stderr.on('data', (chunk) => {
       stderr += chunk
+      options.stderr?.write(chunk)
     })
     child.on('error', reject)
     child.on('exit', (code) => {
