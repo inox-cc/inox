@@ -405,6 +405,31 @@ export function main(): void {
 })
 
 
+test('lowers C dynamic object field null comparisons through runtime lookup', () => {
+  const result = compileSource(
+    `function hasInit(node: object): boolean {
+  return node.init != null
+}
+
+function missingInit(node: object): boolean {
+  return null == node['init']
+}
+
+export function main(): void {
+  console.log(hasInit({ init: { type: 'StringLiteral' } }), hasInit({ init: null }), missingInit({ init: null }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "init", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /!\(ccjs_value_\d+\.tag == CCJS_TAG_NULL\)/)
+  assert.match(result.code, /ccjs_value_\d+\.tag == CCJS_TAG_NULL/)
+})
+
+
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
     `type Point = {

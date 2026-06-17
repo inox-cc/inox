@@ -1001,6 +1001,12 @@ export function emitPreparedNumberExpression(
       return nullableNullCompare
     }
 
+    const dynamicObjectNullCompare = emitPreparedDynamicObjectNullCompareExpression(expression, context, deps)
+
+    if (dynamicObjectNullCompare != null) {
+      return dynamicObjectNullCompare
+    }
+
     if (isEqualityOperator(expression.operator) && leftType === 'string' && rightType === 'string') {
       return deps.emitPreparedStringCompareExpression(expression, context)
     }
@@ -1424,6 +1430,57 @@ function emitPreparedNullableNullCompareExpression(
     lines: value.lines,
     expression: result
   }
+}
+
+function emitPreparedDynamicObjectNullCompareExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (!isEqualityOperator(expression.operator)) {
+    return null
+  }
+
+  let valueExpression = expression.left
+  let maybeNull = expression.right
+
+  if (expression.left.type === 'NullLiteral') {
+    valueExpression = expression.right
+    maybeNull = expression.left
+  }
+
+  if (maybeNull.type !== 'NullLiteral' || !isDynamicObjectFieldValueExpression(valueExpression, context, deps)) {
+    return null
+  }
+
+  const value = deps.emitCValueExpression(valueExpression, context)
+  const equals = `(${value.expression}.tag == CCJS_TAG_NULL)`
+  let result = `(!${equals})`
+
+  if (isPositiveEqualityOperator(expression.operator)) {
+    result = equals
+  }
+
+  return {
+    lines: value.lines,
+    expression: result
+  }
+}
+
+function isDynamicObjectFieldValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): boolean {
+  if (expression.type === 'MemberExpression') {
+    return deps.inferExpressionType(expression.object, context) === 'object'
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    return deps.inferExpressionType(expression.object, context) === 'object'
+  }
+
+  return false
 }
 
 function emitPreparedNumericCastExpression(
