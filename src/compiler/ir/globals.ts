@@ -1,7 +1,18 @@
 import { fsGlobalUsagePathForRuntimeMethod } from '../stdlib/descriptors/fs.ts'
-import type { AnyNode, IrGlobalUsage, ProgramNode } from '../types.ts'
+import type { AnyNode, IrGlobalUsage, ProgramNode, SourceLocation } from '../types.ts'
 
 type NodeList = AnyNode[]
+
+type GlobalUsageNode = AnyNode & {
+  args?: AnyNode[] | null
+  fsRuntimeMethod?: string | null
+  index?: AnyNode | null
+  loc?: SourceLocation
+  object?: AnyNode | null
+  path?: string[]
+  property?: string | null
+  type?: string | null
+}
 
 type IrProgramWithGlobalUsages = {
   globalUsages: IrGlobalUsage[]
@@ -86,8 +97,12 @@ export function collectGlobalUsages(program: ProgramNode): IrGlobalUsage[] {
 export function collectIrGlobalUsages(programs: IrProgramWithGlobalUsages[]): IrGlobalUsage[] {
   const usages: IrGlobalUsage[] = []
 
-  for (const program of programs) {
-    for (const usage of program.globalUsages) {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = programs[programIndex]
+    const globalUsages = program.globalUsages
+
+    for (let usageIndex = 0; usageIndex < globalUsages.length; usageIndex = usageIndex + 1) {
+      const usage = globalUsages[usageIndex]
       usages.push(usage)
     }
   }
@@ -97,8 +112,10 @@ export function collectIrGlobalUsages(programs: IrProgramWithGlobalUsages[]): Ir
 
 export function collectIrGlobalRoots(programs: IrProgramWithGlobalUsages[]): string[] {
   const roots = createStringSet([])
+  const usages = collectIrGlobalUsages(programs)
 
-  for (const usage of collectIrGlobalUsages(programs)) {
+  for (let index = 0; index < usages.length; index = index + 1) {
+    const usage = usages[index]
     roots.add(usage.root)
   }
 
@@ -111,13 +128,11 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   }
 
   if (Array.isArray(node)) {
-    for (const item of node) {
-      visitGlobalUsage(item, usages)
-    }
+    visitGlobalUsageList(node, usages)
     return
   }
 
-  const item = node
+  const item: GlobalUsageNode = node
 
   if (item.type === 'CallExpression' && item.fsRuntimeMethod != null) {
     const path = fsGlobalUsagePathForRuntimeMethod(item.fsRuntimeMethod)
@@ -125,11 +140,7 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
     if (path != null) {
       pushGlobalUsage(usages, path, item)
 
-      if (item.args != null) {
-        for (const arg of item.args) {
-          visitGlobalUsage(arg, usages)
-        }
-      }
+      visitOptionalGlobalUsageList(item.args, usages)
 
       return
     }
@@ -145,24 +156,31 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   }
 
   if (item.type === 'IndexExpression' || item.type === 'OptionalIndexExpression') {
-    const path = globalUsagePath(item.object)
+    const objectNode = item.object
 
-    if (path != null) {
-      pushGlobalUsage(usages, path, item)
-      visitGlobalUsage(item.index, usages)
-      return
+    if (objectNode != null) {
+      const path = globalUsagePath(objectNode)
+
+      if (path != null) {
+        pushGlobalUsage(usages, path, item)
+        visitGlobalUsage(item.index, usages)
+        return
+      }
     }
   }
 
   if (item.type === 'Reference') {
-    const root = firstString(item.path)
+    const path = item.path
+
+    if (path == null) {
+      visitGlobalUsageChildren(item, usages)
+      return
+    }
+
+    const root = firstString(path)
 
     if (root != null && jsStdGlobalRoots.has(root)) {
-      usages.push({
-        root,
-        path: item.path,
-        loc: item.loc
-      })
+      pushGlobalUsage(usages, path, item)
       return
     }
   }
@@ -170,8 +188,24 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   visitGlobalUsageChildren(item, usages)
 }
 
-function visitGlobalUsageChildren(item: AnyNode, usages: IrGlobalUsage[]): void {
-  for (const key of NODE_CHILD_KEYS) {
+function visitGlobalUsageList(nodes: NodeList, usages: IrGlobalUsage[]): void {
+  for (let index = 0; index < nodes.length; index = index + 1) {
+    const item = nodes[index]
+    visitGlobalUsage(item, usages)
+  }
+}
+
+function visitOptionalGlobalUsageList(nodes: NodeList | null | undefined, usages: IrGlobalUsage[]): void {
+  if (nodes == null) {
+    return
+  }
+
+  visitGlobalUsageList(nodes, usages)
+}
+
+function visitGlobalUsageChildren(item: GlobalUsageNode, usages: IrGlobalUsage[]): void {
+  for (let index = 0; index < NODE_CHILD_KEYS.length; index = index + 1) {
+    const key = NODE_CHILD_KEYS[index]
     const value = item[key]
 
     if (value != null) {
@@ -180,39 +214,62 @@ function visitGlobalUsageChildren(item: AnyNode, usages: IrGlobalUsage[]): void 
   }
 }
 
-function globalUsagePath(expression: AnyNode | null | undefined): string[] | null {
+function globalUsagePath(expression: GlobalUsageNode | null | undefined): string[] | null {
   if (expression == null) {
     return null
   }
 
   if (expression.type === 'Reference') {
-    const root = firstString(expression.path)
+    const path = expression.path
+
+    if (path == null) {
+      return null
+    }
+
+    const root = firstString(path)
 
     if (root != null && jsStdGlobalRoots.has(root)) {
-      return expression.path
+      return path
     }
   }
 
   if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
-    const objectPath = globalUsagePath(expression.object)
+    const objectNode = expression.object
 
-    if (objectPath != null) {
-      return appendString(objectPath, expression.property)
+    if (objectNode != null) {
+      const objectPath = globalUsagePath(objectNode)
+
+      if (objectPath != null) {
+        const property = expression.property
+
+        if (property != null) {
+          return appendString(objectPath, property)
+        }
+      }
     }
   }
 
   return null
 }
 
-function pushGlobalUsage(usages: IrGlobalUsage[], path: string[], item: AnyNode): void {
+function pushGlobalUsage(usages: IrGlobalUsage[], path: string[], item: GlobalUsageNode): void {
   const root = firstString(path)
 
   if (root != null) {
-    usages.push({
-      root,
-      path,
-      loc: item.loc
-    })
+    const loc = item.loc
+
+    if (loc != null) {
+      usages.push({
+        root,
+        path,
+        loc
+      })
+    } else {
+      usages.push({
+        root,
+        path
+      })
+    }
   }
 }
 
@@ -233,7 +290,8 @@ function appendString(values: string[], value: string): string[] {
 function copyStrings(values: string[]): string[] {
   const result: string[] = []
 
-  for (const value of values) {
+  for (let index = 0; index < values.length; index = index + 1) {
+    const value = values[index]
     result.push(value)
   }
 
@@ -243,7 +301,8 @@ function copyStrings(values: string[]): string[] {
 function createStringSet(values: string[]): StringSet {
   const set: StringSet = new Set()
 
-  for (const value of values) {
+  for (let index = 0; index < values.length; index = index + 1) {
+    const value = values[index]
     set.add(value)
   }
 
