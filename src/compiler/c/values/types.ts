@@ -543,7 +543,15 @@ export function inferExpressionType(
         return returnType
       }
 
+      if (expression.valueType === 'unknown') {
+        return 'unknown'
+      }
+
       return 'number'
+    }
+
+    if (expression.valueType === 'unknown') {
+      return 'unknown'
     }
 
     return 'number'

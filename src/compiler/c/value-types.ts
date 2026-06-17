@@ -125,6 +125,7 @@ export function emitThrowingFunctionOutType(valueType: CValueTypeInput, nullable
 
 export function isThrowingFunctionRuntimeOut(context: CReturnTypeContext): boolean {
   return (
+    context.returnType === 'unknown' ||
     isManagedRuntimeReturnType(context.returnType) ||
     isOpaqueRuntimeValueType(context.returnType) ||
     (context.returnNullable === true && isNullableScalarType(context.returnType))

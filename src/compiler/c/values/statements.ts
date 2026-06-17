@@ -16,7 +16,13 @@ import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks
 import { diagnostic } from '../../diagnostics.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
-import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType, isRuntimeNullableType } from '../value-types.ts'
+import {
+  cRuntimeValueTag,
+  isManagedRuntimeReturnType,
+  isNullableScalarType,
+  isOpaqueRuntimeValueType,
+  isRuntimeNullableType
+} from '../value-types.ts'
 import { resolveRuntimeArrayElementType } from './arrays.ts'
 import { resolveRuntimeForOfMapKeys, resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
@@ -893,13 +899,7 @@ function resolveRuntimeSetMetadataElementType(
 export function isRuntimeValueLocalExpression(expression: StatementNode, context: CFunctionContext): boolean {
   const valueType = statementDeps(context).inferExpressionType(expression, context)
 
-  return (
-    valueType === 'bytes' ||
-    valueType === 'object' ||
-    valueType === 'array' ||
-    valueType === 'map' ||
-    valueType === 'set'
-  )
+  return isRuntimeValueDeclarationValueType(valueType)
 }
 
 export function emitBoxedScalarVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] {
@@ -2222,7 +2222,7 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
     return emitNullableScalarReturnStatement(returnStatement, context)
   }
 
-  if (isManagedRuntimeReturnType(context.returnType)) {
+  if (isRuntimeValueReturnType(context.returnType)) {
     return emitRuntimeValueReturnStatement(returnStatement, context)
   }
 
@@ -2594,6 +2594,7 @@ function isDynamicRuntimeValueDeclaration(statement: StatementNode, context: CFu
 function isRuntimeValueDeclarationValueType(valueType: string | null | undefined): boolean {
   return (
     valueType === 'unknown' ||
+    isOpaqueRuntimeValueType(valueType) ||
     valueType === 'bytes' ||
     valueType === 'object' ||
     valueType === 'array' ||
@@ -2922,8 +2923,12 @@ function isRuntimeCallbackReturnContext(context: CFunctionContext): boolean {
   return (
     context.statusReturn === true &&
     returnType != null &&
-    (returnType === 'void' || isNullableScalarType(returnType) || isManagedRuntimeReturnType(returnType))
+    (returnType === 'void' || isNullableScalarType(returnType) || isRuntimeValueReturnType(returnType))
   )
+}
+
+function isRuntimeValueReturnType(valueType: string | null | undefined): boolean {
+  return valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)
 }
 
 function emitPromiseReturnStatement(statement: StatementNode, context: CFunctionContext): string[] {
@@ -2957,7 +2962,7 @@ function emitRuntimeCallbackReturnStatement(statement: StatementNode, context: C
 
   const lines: string[] = []
 
-  if (isManagedRuntimeReturnType(context.runtimeCallbackReturnType)) {
+  if (isRuntimeValueReturnType(context.runtimeCallbackReturnType)) {
     pushAllLines(lines, emitRuntimeCallbackRuntimeValueReturnLines(statement.argument, context))
   } else {
     pushAllLines(lines, emitRuntimeCallbackScalarReturnLines(statement.argument, context))

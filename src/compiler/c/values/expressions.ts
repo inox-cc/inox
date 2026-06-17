@@ -816,6 +816,7 @@ function emitPreparedThrowingCallExpression(
 
   if (returnType !== 'void') {
     if (
+      returnType === 'unknown' ||
       isManagedRuntimeReturnType(returnType) ||
       isOpaqueRuntimeValueType(returnType) ||
       (returnNullable && isNullableScalarType(returnType))
@@ -2836,8 +2837,13 @@ export function emitCValueExpression(
     return scalarValue
   }
 
-  if (expression.type === 'CallExpression' && isManagedRuntimeReturnType(deps.inferExpressionType(expression, context))) {
+  if (expression.type === 'CallExpression') {
     const valueType = deps.inferExpressionType(expression, context)
+
+    if (valueType !== 'unknown' && !isManagedRuntimeReturnType(valueType) && !isOpaqueRuntimeValueType(valueType)) {
+      return emitUnsupportedCValueExpression(expression, context, deps)
+    }
+
     const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
 
     if (collectionCall != null) {
@@ -2867,6 +2873,14 @@ export function emitCValueExpression(
     }
   }
 
+  return emitUnsupportedCValueExpression(expression, context, deps)
+}
+
+function emitUnsupportedCValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CValueExpressionDependencies
+): PreparedExpression {
   const unsupportedType = deps.inferExpressionType(expression, context)
   let unsupportedMessage = 'this object field expression is not supported by the current C backend slice'
 

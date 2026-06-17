@@ -824,6 +824,32 @@ export function main(): void {
   assert.match(result.code, /ccjs_object_get\(value, "name", 4, &ccjs_value_\d+\)/)
 })
 
+test('lowers C unknown call results as runtime value locals', () => {
+  const result = compileSource(
+    `function passthrough(value: unknown): unknown {
+  return value
+}
+
+export function main(): void {
+  const value = passthrough({ count: 1 })
+  value.count = 2
+  console.log(value.count)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_value passthrough\(ccjs_value value\) \{/)
+  assert.match(result.code, /ccjs_value ccjs_return = ccjs_undefined_value\(\);/)
+  assert.match(result.code, /ccjs_value value = ccjs_undefined_value\(\);/)
+  assert.match(result.code, /ccjs_value_\d+ = passthrough\(ccjs_object_\d+\);/)
+  assert.match(result.code, /value = ccjs_value_\d+;/)
+  assert.match(result.code, /ccjs_retain\(value\);/)
+  assert.match(result.code, /ccjs_object_set\(value, "count", 5, ccjs_number_value\(2\)\)/)
+})
+
 
 test('lowers C dynamic runtime value comparisons against string literals', () => {
   const result = compileSource(

@@ -7608,6 +7608,52 @@ console.log(read(extra))
   }
 })
 
+test('generated C unknown call result field assignment compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-unknown-call-result-field-assignment-'))
+  const source = join(dir, 'unknown-call-result-field-assignment.c')
+  const output = join(dir, 'unknown-call-result-field-assignment')
+
+  try {
+    const result = compileSource(
+      `function passthrough(value: unknown): unknown {
+  return value
+}
+
+const value = passthrough({ count: 1 })
+value.count = 2
+console.log(value.count)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('generated C dynamic object field null comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])

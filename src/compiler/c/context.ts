@@ -501,7 +501,11 @@ export function emitReturnValueDeclarations(context: CFunctionContext): string[]
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
 
-  if (isManagedRuntimeReturnType(context.returnType) || isOpaqueRuntimeValueType(context.returnType)) {
+  if (
+    context.returnType === 'unknown' ||
+    isManagedRuntimeReturnType(context.returnType) ||
+    isOpaqueRuntimeValueType(context.returnType)
+  ) {
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
 
