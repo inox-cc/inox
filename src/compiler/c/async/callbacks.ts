@@ -174,18 +174,24 @@ function visitExternalEventLoopNode(value: AnyNode | AnyNode[] | null | undefine
     return
   }
 
-  if (
-    value.type === 'CallExpression' &&
-    value.callee != null &&
-    value.callee.type === 'Reference' &&
-    value.callee.path.length === 1 &&
-    state.externalNames.has(value.callee.path[0])
-  ) {
-    state.found = true
-    return
+  if (value.type === 'CallExpression') {
+    const calleeName = callbackReferenceNameOrNull(value.callee)
+
+    if (calleeName != null && state.externalNames.has(calleeName)) {
+      state.found = true
+      return
+    }
   }
 
   visitExternalEventLoopChildren(value, state)
+}
+
+function callbackReferenceNameOrNull(value: AnyNode | null | undefined): string | null {
+  if (value == null || value.type !== 'Reference' || value.path.length !== 1) {
+    return null
+  }
+
+  return value.path[0]
 }
 
 function visitExternalEventLoopChildren(current: AnyNode, state: ExternalEventLoopScanState): void {
@@ -862,8 +868,10 @@ function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScop
     return false
   }
 
-  if (statement.init != null && statement.init.type === 'Reference' && statement.init.path.length === 1) {
-    const binding = lookupCallbackBinding(statement.init.path[0], scopes)
+  const initName = callbackReferenceNameOrNull(statement.init)
+
+  if (initName != null) {
+    const binding = lookupCallbackBinding(initName, scopes)
 
     if (binding != null && binding.runtimeManaged === true) {
       return true
