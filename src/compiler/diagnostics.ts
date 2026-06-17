@@ -1,5 +1,9 @@
 import type { Diagnostic, SourceLocation } from './types.ts'
 
+export function quoteDiagnosticString(value: string): string {
+  return `"${value}"`
+}
+
 export class CompileError {
   name: string
   message: string

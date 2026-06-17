@@ -1,4 +1,4 @@
-import { diagnostic, throwDiagnostics } from './diagnostics.ts'
+import { diagnostic, quoteDiagnosticString, throwDiagnostics } from './diagnostics.ts'
 import type { Diagnostic, SourceLocation, Token } from './types.ts'
 
 type TokenizeOptions = {
@@ -143,7 +143,7 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
     }
 
     state.diagnostics.push(
-      diagnostic('CCJS_UNKNOWN_CHAR', `unknown character ${JSON.stringify(char)}`, lexerLocation(state, state.line, state.column))
+      diagnostic('CCJS_UNKNOWN_CHAR', `unknown character ${quoteDiagnosticString(char)}`, lexerLocation(state, state.line, state.column))
     )
     advanceLexer(state, char)
   }

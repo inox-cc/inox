@@ -1,4 +1,4 @@
-import { diagnostic, throwDiagnostics } from './diagnostics.ts'
+import { diagnostic, quoteDiagnosticString, throwDiagnostics } from './diagnostics.ts'
 import {
   createClassDeclaration,
   createFieldDefinition,
@@ -1409,7 +1409,7 @@ class Parser {
     }
 
     const token = this.current()
-    this.report('CCJS_EXPECTED_EXPRESSION', `expected expression, got ${JSON.stringify(token.value)}`, null)
+    this.report('CCJS_EXPECTED_EXPRESSION', `expected expression, got ${quoteDiagnosticString(token.value)}`, null)
     this.advance()
 
     return {

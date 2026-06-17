@@ -1,3 +1,4 @@
+import { quoteDiagnosticString } from '../diagnostics.ts'
 import type { RandomOptions } from '../types.ts'
 import type { CEmitOptions } from './types.ts'
 
@@ -411,7 +412,7 @@ function emitRandomSeedLiteral(random: RandomOptions = {}): string {
 
   if (backend != null) {
     if (isSupportedCRandomBackend(backend) === false) {
-      throw new Error(`unsupported random backend ${JSON.stringify(backend)}`)
+      throw new Error(`unsupported random backend ${quoteDiagnosticString(backend)}`)
     }
   }
 
