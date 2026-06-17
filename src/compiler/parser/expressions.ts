@@ -10,13 +10,19 @@ export function createAssignmentExpression(target: AnyNode, value: AnyNode): Any
   }
 }
 
-export function createArrowFunction(start: Token, isAsync: boolean, params: AnyNode[], body: AnyNode | AnyNode[]): AnyNode {
+export function createArrowFunction(
+  start: Token,
+  isAsync: boolean,
+  params: AnyNode[],
+  body: AnyNode | AnyNode[],
+  expressionBody: boolean
+): AnyNode {
   return {
     type: 'ArrowFunctionExpression',
     async: isAsync,
     params,
     body,
-    expressionBody: !Array.isArray(body),
+    expressionBody,
     loc: locFromToken(start)
   }
 }

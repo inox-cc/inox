@@ -68,7 +68,7 @@ test('builds parser expression nodes and optional call shapes', () => {
   const call = createCallExpression(optionalTarget, [createStringLiteral(token('string', 'ok'))])
 
   assert.deepEqual(locFromToken(start), { line: 1, column: 1 })
-  assert.equal(createArrowFunction(start, false, [], reference).expressionBody, true)
+  assert.equal(createArrowFunction(start, false, [], reference, true).expressionBody, true)
   assert.equal(call.type, 'OptionalCallExpression')
   assert.equal(call.callee, reference)
   assert.deepEqual(createReferenceFromName('shorthand', { line: 2, column: 3 }).path, ['shorthand'])

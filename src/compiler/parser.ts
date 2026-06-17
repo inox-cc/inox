@@ -1108,12 +1108,12 @@ class Parser {
 
     if (this.isValue('{')) {
       const body = this.parseBlock()
-      return createArrowFunction(start, isAsync, params, body)
+      return createArrowFunction(start, isAsync, params, body, false)
     }
 
     const body = this.parseExpression()
 
-    return createArrowFunction(start, isAsync, params, body)
+    return createArrowFunction(start, isAsync, params, body, true)
   }
 
   parseArrowParameters(): AnyNode[] {
