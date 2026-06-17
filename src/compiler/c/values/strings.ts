@@ -85,6 +85,19 @@ type TemplateReferenceValidationState = {
   valid: boolean
 }
 
+type StringMethodNode = {
+  loc?: SourceLocation | null
+  path?: string[]
+  property?: string
+  type?: string
+  valueType?: string | null
+}
+
+type StringMethodCallParts = {
+  args: StringMethodNode[]
+  object: StringMethodNode
+}
+
 export type StringLoweringDependencies = {
   canLowerCNullishCoalescingExpression(expression: AnyNode, context: StringCContext): boolean
   emitCallExpression(expression: AnyNode, context: StringCContext): string
@@ -322,22 +335,22 @@ export function emitPreparedStringCharCodeAtExpression(
     return null
   }
 
-  const callee = expression.callee
+  const call = resolveStringMethodCallParts(expression, 'charCodeAt')
 
-  if (!isNodeCandidate(callee) || callee.type !== 'MemberExpression' || callee.property !== 'charCodeAt') {
+  if (call == null) {
     return null
   }
 
-  const object = callee.object
-  const args = expression.args
+  const object = call.object
+  const args = call.args
 
-  if (!isNodeCandidate(object) || args == null || args.length !== 1 || !isNodeCandidate(args[0])) {
+  if (!isNodeCandidate(object) || args.length !== 1 || !isNodeCandidate(args[0])) {
     return null
   }
 
   const indexArgument = args[0]
 
-  if (!isStringLengthObject(object, context) || stringDeps(context).inferExpressionType(indexArgument, context) !== 'number') {
+  if (stringDeps(context).inferExpressionType(indexArgument, context) !== 'number') {
     return null
   }
 
@@ -354,6 +367,36 @@ export function emitPreparedStringCharCodeAtExpression(
     lines,
     expression: `((${offset} < ${value.length}) ? (double)((unsigned char)${value.bytes}[${offset}]) : 0)`
   }
+}
+
+function resolveStringMethodCallParts(expression: any, method: string): StringMethodCallParts | null {
+  const callee = expression.callee
+  const args = expression.args
+
+  if (!isNodeCandidate(callee) || args == null) {
+    return null
+  }
+
+  if (callee.type === 'MemberExpression' && callee.property === method) {
+    return {
+      args,
+      object: callee.object
+    }
+  }
+
+  if (callee.type === 'Reference' && callee.path.length >= 2 && callee.path[callee.path.length - 1] === method) {
+    return {
+      args,
+      object: {
+        loc: callee.loc,
+        path: callee.path.slice(0, callee.path.length - 1),
+        type: 'Reference',
+        valueType: callee.valueType
+      }
+    }
+  }
+
+  return null
 }
 
 function isNodeCandidate(value: any): boolean {

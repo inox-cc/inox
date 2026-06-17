@@ -2571,6 +2571,12 @@ class Checker {
       return numericCastType
     }
 
+    const stringCharCodeAtType = this.checkStringCharCodeAtCall(expression)
+
+    if (stringCharCodeAtType != null) {
+      return stringCharCodeAtType
+    }
+
     const stringTrimType = this.checkStringTrimCall(expression)
 
     if (stringTrimType != null) {
@@ -7879,6 +7885,43 @@ class Checker {
         `${expression.callee.path[0]} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
+      return 'number'
+    }
+
+    this.checkAssignableType(
+      argTypes[0],
+      'number',
+      expression.args[0].loc,
+      false,
+      this.expressionCanBeNull(expression.args[0])
+    )
+
+    return 'number'
+  }
+
+  checkStringCharCodeAtCall(expression: CheckerNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'charCodeAt') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const argTypes: ValueType[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      argTypes.push(this.checkExpression(arg))
+    }
+
+    if (objectType !== 'string') {
+      return null
+    }
+
+    expression.valueType = 'number'
+    expression.stringRuntimeMethod = 'charCodeAt'
+
+    if (expression.args.length !== 1) {
+      this.report('CCJS_ARG_COUNT', `string.charCodeAt expects 1 argument(s), got ${expression.args.length}`, expression.loc)
       return 'number'
     }
 

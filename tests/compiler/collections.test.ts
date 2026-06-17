@@ -395,8 +395,17 @@ test('lowers C string charCodeAt calls to byte reads', () => {
   return code >= 97 && code <= 122
 }
 
+function sumCodes(value: string): number {
+  let total = 0
+  for (let index = 0; index < value.length; index = index + 1) {
+    const code = value.charCodeAt(index)
+    total = total + code
+  }
+  return total
+}
+
 export function main(): void {
-  console.log(isLower('m'), isLower('M'))
+  console.log(isLower('m'), isLower('M'), sumCodes('AZ'))
 }
 `,
     {
@@ -407,6 +416,8 @@ export function main(): void {
   assert.match(result.code, /size_t ccjs_string_char_code_index_\d+ = \(size_t\)\(0\);/)
   assert.match(result.code, /\(double\)\(\(unsigned char\)ch->bytes\[ccjs_string_char_code_index_\d+\]\)/)
   assert.match(result.code, /const double code = \(\(ccjs_string_char_code_index_\d+ < ch->len\)/)
+  assert.match(result.code, /size_t ccjs_string_char_code_index_\d+ = \(size_t\)\(index\);/)
+  assert.match(result.code, /\(double\)\(\(unsigned char\)value->bytes\[ccjs_string_char_code_index_\d+\]\)/)
 })
 
 

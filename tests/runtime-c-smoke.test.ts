@@ -5474,7 +5474,16 @@ test('generated C string charCodeAt calls compile and run with runtime sources',
   return code >= 97 && code <= 122
 }
 
-console.log(isLower('m'), isLower('M'))
+function sumCodes(value: string): number {
+  let total = 0
+  for (let index = 0; index < value.length; index = index + 1) {
+    const code = value.charCodeAt(index)
+    total = total + code
+  }
+  return total
+}
+
+console.log(isLower('m'), isLower('M'), sumCodes('AZ'))
 
 `,
       {
@@ -5491,7 +5500,7 @@ console.log(isLower('m'), isLower('M'))
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '1 0\n')
+    assert.equal(run.stdout, '1 0 155\n')
   } finally {
     await rm(dir, {
       recursive: true,
