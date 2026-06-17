@@ -81,7 +81,7 @@ import {
   isNodeCryptoImportSource,
   isUnsupportedNodeCryptoMethod
 } from './stdlib/descriptors/crypto.ts'
-import { debugRuntimeMethodNameFromPath } from './stdlib/descriptors/debug.ts'
+import { debugRuntimeMethodNameFromKnownPath, isDebugRuntimeMethodPath } from './stdlib/descriptors/debug.ts'
 import {
   isNodeEventsImportSource,
   isUnsupportedEventsRuntimeExport,
@@ -4739,11 +4739,13 @@ class Checker {
   }
 
   checkDebugMemoryCall(expression: AnyNode): ValueType | null {
-    const method = debugRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+    const path = memberExpressionPath(expression.callee)
 
-    if (method == null) {
+    if (!isDebugRuntimeMethodPath(path)) {
       return null
     }
+
+    const method = debugRuntimeMethodNameFromKnownPath(path)
 
     expression.valueType = 'object'
     expression.shape = debugMemoryStatsObjectShape

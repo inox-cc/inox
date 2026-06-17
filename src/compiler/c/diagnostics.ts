@@ -2,7 +2,7 @@ import { diagnostic } from '../diagnostics.ts'
 import { isBinaryGlobalUsagePath } from '../stdlib/descriptors/binary.ts'
 import { isCollectionConstructorGlobalUsagePath } from '../stdlib/descriptors/collections.ts'
 import { cryptoRuntimeMethodNameFromPath, isCryptoRuntimeMethod } from '../stdlib/descriptors/crypto.ts'
-import { debugRuntimeMethodNameFromPath } from '../stdlib/descriptors/debug.ts'
+import { isDebugRuntimeMethodPath } from '../stdlib/descriptors/debug.ts'
 import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
@@ -145,7 +145,7 @@ export function isSupportedCCryptoGlobalUsage(
 }
 
 export function isSupportedCDebugGlobalUsage(usage: IrGlobalUsage): boolean {
-  return debugRuntimeMethodNameFromPath(usage.path) != null
+  return isDebugRuntimeMethodPath(usage.path)
 }
 
 export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {

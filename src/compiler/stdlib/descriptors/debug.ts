@@ -50,13 +50,21 @@ export const debugMemoryStatsFields = [
 ]
 
 export function debugRuntimeMethodNameFromPath(path: string[]): string | null {
-  if (path.length !== 3 || path[0] !== 'ccjs' || path[1] !== '__debug') {
+  if (!isDebugRuntimeMethodPath(path)) {
     return null
   }
 
-  if (path[2] === 'memory') {
-    return 'memory'
+  return debugRuntimeMethodNameFromKnownPath(path)
+}
+
+export function debugRuntimeMethodNameFromKnownPath(_path: string[]): string {
+  return 'memory'
+}
+
+export function isDebugRuntimeMethodPath(path: string[]): boolean {
+  if (path.length !== 3 || path[0] !== 'ccjs' || path[1] !== '__debug') {
+    return false
   }
 
-  return null
+  return path[2] === 'memory'
 }

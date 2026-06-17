@@ -1,5 +1,9 @@
 import test from 'node:test'
 import { assert, assertDiagnostic, compileSource } from '../helpers/compiler-smoke.ts'
+import {
+  debugRuntimeMethodNameFromKnownPath,
+  isDebugRuntimeMethodPath
+} from '../../src/compiler/stdlib/descriptors/debug.ts'
 
 test('lowers ccjs.__debug.memory to C debug memory snapshots', () => {
   const result = compileSource(
@@ -22,4 +26,10 @@ console.log(stats.liveBytes, stats.liveWeakCells)
 
 test('checks ccjs.__debug.memory argument count', () => {
   assertDiagnostic('ccjs.__debug.memory(1)', 'CCJS_ARG_COUNT')
+})
+
+test('recognizes debug runtime method paths', () => {
+  assert.equal(isDebugRuntimeMethodPath(['ccjs', '__debug', 'memory']), true)
+  assert.equal(debugRuntimeMethodNameFromKnownPath(['ccjs', '__debug', 'memory']), 'memory')
+  assert.equal(isDebugRuntimeMethodPath(['ccjs', '__debug', 'gc']), false)
 })
