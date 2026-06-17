@@ -47,85 +47,10 @@ export type FetchLoweringDependencies = {
   inferExpressionType(expression: AnyNode, context: FetchFunctionContext): string
 }
 
-type FetchPromiseResultType = {
-  method: string
-  valueType: string
-}
-
-type FetchResponseCallDescriptor = {
-  callName: string
-  method: string
-  valueType: string
-}
-
-type FetchHeadersCallDescriptor = {
-  callName: string
-  kind: string
-  method: string
-  tempPrefix: string
-  valueType: string
-}
-
-const fetchPromiseResultTypes: FetchPromiseResultType[] = [
-  { method: 'fetch', valueType: 'object' },
-  { method: 'text', valueType: 'string' }
-]
-
-const fetchResponseCallDescriptors: FetchResponseCallDescriptor[] = [
-  { method: 'text', callName: 'ccjs_fetch_response_text', valueType: 'string' }
-]
-
-const fetchHeadersCallDescriptors: FetchHeadersCallDescriptor[] = [
-  {
-    method: 'headersGet',
-    kind: 'nullable-string',
-    callName: 'ccjs_fetch_headers_get',
-    tempPrefix: 'ccjs_fetch_header_value',
-    valueType: 'string'
-  },
-  {
-    method: 'headersHas',
-    kind: 'boolean',
-    callName: 'ccjs_fetch_headers_has',
-    tempPrefix: 'ccjs_fetch_header_has',
-    valueType: 'boolean'
-  }
-]
-
 function appendLines(target: string[], values: string[]): void {
   for (const value of values) {
     target.push(value)
   }
-}
-
-function findFetchPromiseResultType(method: string): string | null {
-  for (const descriptor of fetchPromiseResultTypes) {
-    if (descriptor.method === method) {
-      return descriptor.valueType
-    }
-  }
-
-  return null
-}
-
-function findFetchResponseCallDescriptor(method: string): FetchResponseCallDescriptor | null {
-  for (const descriptor of fetchResponseCallDescriptors) {
-    if (descriptor.method === method) {
-      return descriptor
-    }
-  }
-
-  return null
-}
-
-function findFetchHeadersCallDescriptor(method: string): FetchHeadersCallDescriptor | null {
-  for (const descriptor of fetchHeadersCallDescriptors) {
-    if (descriptor.method === method) {
-      return descriptor
-    }
-  }
-
-  return null
 }
 
 function preparedCallOut(options: PreparedCallOptions, context: FetchFunctionContext, prefix: string): string {
@@ -143,10 +68,8 @@ function resolveFetchPromiseValueType(expression: AnyNode, method: string): stri
     return expression.promiseValueType
   }
 
-  const valueType = findFetchPromiseResultType(method)
-
-  if (valueType != null) {
-    return valueType
+  if (method === 'text') {
+    return 'string'
   }
 
   return 'object'
@@ -247,9 +170,7 @@ export function emitPreparedFetchCallExpression(
       }
     }
 
-    const descriptor = findFetchResponseCallDescriptor(method)
-
-    if (descriptor != null) {
+    if (method === 'text') {
       const response = dependencies.emitCValueExpression(expression.callee.object, context)
       const lines: string[] = []
 
@@ -262,7 +183,7 @@ export function emitPreparedFetchCallExpression(
       )
       lines.push(
         emitStatusCheck(
-          `${descriptor.callName}(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
+          `ccjs_fetch_response_text(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
           context
         )
       )
@@ -270,7 +191,7 @@ export function emitPreparedFetchCallExpression(
       return {
         lines,
         expression: out,
-        valueType: descriptor.valueType,
+        valueType: 'string',
         rejectionValueType: 'error'
       }
     }
@@ -286,13 +207,8 @@ export function emitPreparedFetchHeadersCallExpression(
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const method = cFetchRuntimeExpressionMethod(expression)
-  let descriptor: FetchHeadersCallDescriptor | null = null
 
-  if (method != null) {
-    descriptor = findFetchHeadersCallDescriptor(method)
-  }
-
-  if (descriptor != null) {
+  if (method === 'headersGet' || method === 'headersHas') {
     const headers = dependencies.emitCValueExpression(expression.callee.object, context)
     const name = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_header_name')
     const lines: string[] = []
@@ -303,21 +219,21 @@ export function emitPreparedFetchHeadersCallExpression(
     )
     appendLines(lines, name.lines)
 
-    if (descriptor.kind === 'boolean') {
-      const out = preparedCallOut(options, context, descriptor.tempPrefix)
+    if (method === 'headersHas') {
+      const out = preparedCallOut(options, context, 'ccjs_fetch_header_has')
       lines.push(`int ${out} = 0;`)
       lines.push(
-        emitStatusCheck(`${descriptor.callName}(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
+        emitStatusCheck(`ccjs_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
       )
 
       return {
         lines,
         expression: out,
-        valueType: descriptor.valueType
+        valueType: 'boolean'
       }
     }
 
-    const out = preparedCallOut(options, context, descriptor.tempPrefix)
+    const out = preparedCallOut(options, context, 'ccjs_fetch_header_value')
 
     if (options.owned !== false) {
       registerOwnedValue(context, out)
@@ -326,7 +242,7 @@ export function emitPreparedFetchHeadersCallExpression(
     appendLines(lines, emitPrepareOwnedValueWrite(out))
     lines.push(
       emitStatusCheck(
-        `${descriptor.callName}(&ccjs_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
+        `ccjs_fetch_headers_get(&ccjs_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
         context
       )
     )
@@ -334,7 +250,7 @@ export function emitPreparedFetchHeadersCallExpression(
     return {
       lines,
       expression: out,
-      valueType: descriptor.valueType,
+      valueType: 'string',
       nullable: true
     }
   }
