@@ -155,11 +155,21 @@ function splitGeneratedCLines(code: string): GeneratedCLineSet {
 }
 
 function joinGeneratedCLines(lines: string[], hasTrailingNewline: boolean): string {
-  if (hasTrailingNewline) {
-    return `${lines.join('\n')}\n`
+  let result = ''
+
+  for (let index = 0; index < lines.length; index = index + 1) {
+    if (index > 0) {
+      result = `${result}\n`
+    }
+
+    result = `${result}${lines[index]}`
   }
 
-  return lines.join('\n')
+  if (hasTrailingNewline) {
+    return `${result}\n`
+  }
+
+  return result
 }
 
 function pushGeneratedCLines(target: string[], source: string[]): void {

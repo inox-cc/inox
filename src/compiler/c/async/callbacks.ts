@@ -1618,7 +1618,7 @@ function runtimeCallbackWrapperKey(target: string, functionType: CFunctionType):
     paramTypes.push(param.valueType)
   }
 
-  return `${target}:${functionType.returnType}(${paramTypes.join(',')})`
+  return `${target}:${functionType.returnType}(${joinStrings(paramTypes, ',')})`
 }
 
 export function runtimeCallbackWrapperFor(
@@ -1662,7 +1662,7 @@ function emitPlainArrowCallbackParams(wrapper: CPlainArrowCallbackWrapper): stri
     index = index + 1
   }
 
-  return emitted.join(', ')
+  return joinStrings(emitted, ', ')
 }
 
 export function emitPlainArrowCallbackWrapperDeclaration(
@@ -1737,6 +1737,20 @@ function pushIndentedLines(target: string[], lines: string[]): void {
   }
 }
 
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
+}
+
 function emitIndentedRuntimeArgCountCheck(paramCount: number): string {
   let argsCheck = ''
 
@@ -1792,7 +1806,7 @@ export function emitRuntimeCallbackWrapperDeclaration(
     functionName = emitCFunctionName(wrapper.target)
   }
 
-  const call = `${functionName}(${callArgs.join(', ')})`
+  const call = `${functionName}(${joinStrings(callArgs, ', ')})`
 
   if (wrapper.functionType.returnType === 'number') {
     lines.push(`  *out = ccjs_number_value(${call});`)
@@ -2217,5 +2231,5 @@ export function emitFunctionPointerParams(functionType: CFunctionType | null | u
     params.push(emitCType(param.valueType))
   }
 
-  return params.join(', ')
+  return joinStrings(params, ', ')
 }

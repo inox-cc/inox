@@ -1401,6 +1401,20 @@ function createThrowingFunctionInfo(
   }
 }
 
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
+}
+
 function emitCFieldFlags(field: AnyNode): string {
   const flags: string[] = []
 
@@ -1416,7 +1430,7 @@ function emitCFieldFlags(field: AnyNode): string {
     return '0'
   }
 
-  return flags.join(' | ')
+  return joinStrings(flags, ' | ')
 }
 
 function createBaseContext(
@@ -3382,7 +3396,7 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
     pushAll(values, value.values)
   }
 
-  const format = escapeCString(parts.join(' '))
+  const format = escapeCString(joinStrings(parts, ' '))
 
   if (values.length === 0) {
     if (isStdout) {
@@ -3392,10 +3406,10 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
     }
   } else {
     if (isStdout) {
-      lines.push(`printf("${format}\\n", ${values.join(', ')});`)
+      lines.push(`printf("${format}\\n", ${joinStrings(values, ', ')});`)
     } else {
       lines.push(
-        `if (ccjs_console_printf(${stream}, "${format}\\n", ${values.join(', ')}) < 0) ${emitFailureStatement(context)}`
+        `if (ccjs_console_printf(${stream}, "${format}\\n", ${joinStrings(values, ', ')}) < 0) ${emitFailureStatement(context)}`
       )
     }
   }
@@ -3435,7 +3449,7 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
 
 function emitStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   if (expression?.type === 'Reference') {
-    const name = expression.path.join('_')
+    const name = joinStrings(expression.path, '_')
 
     if (isBoxedRuntimeStringName(name, context)) {
       const string = nextCName(context, 'ccjs_log_string')
@@ -3763,7 +3777,7 @@ function emitPreparedUpdateExpression(expression: AnyNode, context: CFunctionCon
 
 function emitReference(expression: AnyNode, context: CFunctionContext): string {
   if (expression?.type === 'Reference') {
-    const name = expression.path.join('_')
+    const name = joinStrings(expression.path, '_')
 
     if (context.variables.has(name)) {
       const moduleValueName = context.moduleValueNames.get(name)
@@ -4053,7 +4067,7 @@ function emitPreparedAsyncTaskPromiseCallExpression(
   }
 
   pushAll(lines, prepared.lines)
-  lines.push(emitStatusCheck(`${wrapper.startName}(${args.join(', ')})`, context))
+  lines.push(emitStatusCheck(`${wrapper.startName}(${joinStrings(args, ', ')})`, context))
 
   return {
     lines,
@@ -4181,7 +4195,7 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   pushAll(lines, prepared.lines)
   pushAll(lines, emitPrepareOwnedValueWrite('ccjs_error'))
   pushAll(lines, resultPreparationLines)
-  lines.push(`ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${args.join(', ')});`)
+  lines.push(`ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')});`)
   lines.push(`if (${status} == CCJS_ERR_THROW) {`)
   lines.push(`  ${emitStatusCheck(rejectedCall, context)}`)
   lines.push('  ccjs_release(ccjs_error);')
@@ -4832,7 +4846,7 @@ function emitRuntimeCallbackCall(
   } else {
     const argArray = nextCName(context, 'ccjs_callback_args')
 
-    lines.push(`ccjs_value ${argArray}[] = { ${args.join(', ')} };`)
+    lines.push(`ccjs_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
     lines.push(
       emitStatusCheck(
         `ccjs_callback_call(${emitReference(expression.callee, context)}, ${argArray}, ${args.length}, &${out})`,
@@ -4887,7 +4901,7 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
     const argArray = nextCName(context, 'ccjs_callback_args')
     const call = `ccjs_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`
 
-    lines.push(`  ccjs_value ${argArray}[] = { ${args.join(', ')} };`)
+    lines.push(`  ccjs_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
     lines.push(`  ${emitStatusCheck(call, context)}`)
   }
 
@@ -4947,7 +4961,7 @@ function emitOptionalRuntimeCallbackCallValueExpression(
     const argArray = nextCName(context, 'ccjs_callback_args')
     const call = `ccjs_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`
 
-    lines.push(`  ccjs_value ${argArray}[] = { ${args.join(', ')} };`)
+    lines.push(`  ccjs_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
     lines.push(`  ${emitStatusCheck(call, context)}`)
   }
 

@@ -726,6 +726,20 @@ function appendIndentedAsyncTaskLines(target: string[], source: string[], indent
   }
 }
 
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
+}
+
 function appendAsyncTaskFrameLocals(
   target: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>,
   source: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>
@@ -2358,7 +2372,7 @@ function emitAsyncTaskStartParams(wrapper: CAsyncTaskWrapper): string {
 
   params.push('ccjs_promise** out')
 
-  return params.join(', ')
+  return joinStrings(params, ', ')
 }
 
 function registerAsyncTaskParams(wrapper: CAsyncTaskWrapper, context: AsyncTaskFunctionContext): void {
@@ -3036,7 +3050,7 @@ function emitPreparedAsyncTaskSourceCallExpression(
 
     args.push('&frame->awaited')
     appendAsyncTaskLines(lines, prepared.lines)
-    lines.push(`status = ${target.startName}(${args.join(', ')});`)
+    lines.push(`status = ${target.startName}(${joinStrings(args, ', ')});`)
     appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
     return {
@@ -3139,7 +3153,7 @@ function emitPreparedPlainPromiseSourceCallExpression(
   }
 
   appendAsyncTaskLines(lines, prepared.lines)
-  lines.push(`frame->awaited = ${asyncTaskDeps(context).emitCallee(expression.callee, context)}(${args.join(', ')});`)
+  lines.push(`frame->awaited = ${asyncTaskDeps(context).emitCallee(expression.callee, context)}(${joinStrings(args, ', ')});`)
   lines.push('status = frame->awaited == 0 ? CCJS_ERR_TYPE : CCJS_OK;')
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 

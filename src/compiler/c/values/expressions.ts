@@ -147,6 +147,20 @@ function appendPrefixedLines(out: string[], lines: string[], prefix: string): vo
   }
 }
 
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
+}
+
 function isNumberOrBooleanValueType(valueType: string): boolean {
   return valueType === 'number' || valueType === 'boolean'
 }
@@ -354,7 +368,7 @@ export function emitCallExpression(expression: AnyNode, context: CFunctionContex
     args.push(deps.emitCExpression(arg, context))
   }
 
-  return `${emitCallee(expression.callee, context)}(${args.join(', ')})`
+  return `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
 }
 
 export function emitPreparedCallExpression(
@@ -522,7 +536,7 @@ export function emitPreparedCallExpression(
 
     return {
       lines,
-      expression: `${emitCallee(expression.callee, context)}(${callArgs.join(', ')})`
+      expression: `${emitCallee(expression.callee, context)}(${joinStrings(callArgs, ', ')})`
     }
   }
 
@@ -535,13 +549,13 @@ export function emitPreparedCallExpression(
 
     return {
       lines,
-      expression: `${emitCallee(expression.callee, context)}(${callArgs.join(', ')})`
+      expression: `${emitCallee(expression.callee, context)}(${joinStrings(callArgs, ', ')})`
     }
   }
 
   return {
     lines,
-    expression: `${emitCallee(expression.callee, context)}(${args.join(', ')})`
+    expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
   }
 }
 
@@ -568,7 +582,7 @@ function emitPreparedMathCallExpression(
 
   return {
     lines,
-    expression: `ccjs_math_${method}(${expressions.join(', ')})`
+    expression: `ccjs_math_${method}(${joinStrings(expressions, ', ')})`
   }
 }
 
@@ -703,7 +717,7 @@ function emitPreparedThrowingCallExpression(
 
   const status = nextCName(context, 'ccjs_call_status')
 
-  lines.push(`ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${callArgs.join(', ')});`)
+  lines.push(`ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(callArgs, ', ')});`)
   appendLines(lines, emitThrowingCallStatusCheck(status, context, deps))
 
   return {
@@ -2435,7 +2449,7 @@ export function emitCValueExpression(
   }
 
   if (expression.type === 'Reference') {
-    const name = expression.path.join('_')
+    const name = joinStrings(expression.path, '_')
     const valueType = context.variables.get(name)
 
     if (context.nullableVariables.has(name)) {

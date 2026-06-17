@@ -666,7 +666,7 @@ function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context
       }
     }
 
-    return `[${items.join(',')}]`
+    return `[${joinStrings(items, ',')}]`
   }
 
   if (expression.type === 'ObjectLiteral') {
@@ -682,10 +682,24 @@ function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context
       fields.push(`${JSON.stringify(property.key)}:${value}`)
     }
 
-    return `{${fields.join(',')}}`
+    return `{${joinStrings(fields, ',')}}`
   }
 
   return null
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 function emitHttpStatusCodeExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {

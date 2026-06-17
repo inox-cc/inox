@@ -40,7 +40,7 @@ export function reportUnsupportedCGlobalUsages(
 }
 
 function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
-  const path = usage.path.join('.')
+  const path = joinStrings(usage.path, '.')
 
   return (
     timeRuntimeMethodNameFromPath(usage.path) != null ||
@@ -99,6 +99,20 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
     isSupportedCDebugGlobalUsage(usage) ||
     isSupportedCMathGlobalUsage(usage)
   )
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 export function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {

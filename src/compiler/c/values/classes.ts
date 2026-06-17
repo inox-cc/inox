@@ -128,6 +128,20 @@ function pushAllLines(target: string[], source: string[]): void {
   }
 }
 
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
+}
+
 function classFieldOwnership(field: CObjectShapeField): string {
   const ownership = field.ownership
 
@@ -810,7 +824,7 @@ function emitClassMethodCallExpression(call: ClassMethodCallInfo, method: AnyNod
     args.push(arg)
   }
 
-  return `${emitCClassMethodName(call.info.name, method.name)}(${args.join(', ')})`
+  return `${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(args, ', ')})`
 }
 
 function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFunctionContext): ClassMethodCallInfo | null {

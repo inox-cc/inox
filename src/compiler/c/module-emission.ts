@@ -273,7 +273,7 @@ export function emitCModuleSource(
     pushCModuleLines(lines, emitCModuleMainFunction(plan, context, deps))
   }
 
-  return `${lines.join('\n')}\n`
+  return joinCModuleLines(lines)
 }
 
 export function emitCModuleHeader(
@@ -310,7 +310,21 @@ export function emitCModuleHeader(
   lines.push('')
   lines.push(`#endif`)
 
-  return `${lines.join('\n')}\n`
+  return joinCModuleLines(lines)
+}
+
+function joinCModuleLines(lines: string[]): string {
+  let result = ''
+
+  for (let index = 0; index < lines.length; index = index + 1) {
+    if (index > 0) {
+      result = `${result}\n`
+    }
+
+    result = `${result}${lines[index]}`
+  }
+
+  return `${result}\n`
 }
 
 function emitCModuleDeclarations(

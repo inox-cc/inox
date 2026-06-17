@@ -1490,7 +1490,7 @@ function isKnownTemplatePlaceholderReference(
 ): boolean {
   const name = expression.path[0]
 
-  if (context.variables.has(expression.path.join('.'))) {
+  if (context.variables.has(joinStrings(expression.path, '.'))) {
     return true
   }
 
@@ -1511,6 +1511,20 @@ function isKnownTemplatePlaceholderReference(
   }
 
   return false
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 function shiftTemplatePlaceholderExpressionLocations(
