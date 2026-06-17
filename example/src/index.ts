@@ -9,7 +9,9 @@ console.log('hello world')
 //   console.log('#error:', error)
 // }
 
-const foo = [{ '1': 2 }, { '3': 4, '5': 6 }]
+const foo = JSON.parse('[{"1":2},{"3":4,"5":6}]')
+
+console.log(foo)
 
 for (const a of foo) {
   console.log(a)

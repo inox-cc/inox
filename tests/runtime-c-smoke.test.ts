@@ -142,18 +142,14 @@ test('generated C Object.values compiles and runs with runtime sources', async (
 
   try {
     const result = compileSource(
-      `const foo = [{ '1': 2 }, { '3': 4 }]
+      `const records = [{ left: 2, right: 5 }, { left: 7, right: 11 }]
 
-for (const a of foo) {
-  console.log(a)
-  const b = Object.values(a)
-  console.log(b)
-  const c = Object.values(a)[0]
-  console.log(c)
-  const d = Object.entries(a)
-  console.log(d)
-  const e = Object.entries(a)[0]
-  console.log(e)
+for (const record of records) {
+  const values = Object.values(record)
+  const left = values[0]
+  const right = values[1]
+  const entry = Object.entries(record)[1]
+  console.log(left, right, entry)
 }
 
 `,
@@ -171,7 +167,55 @@ for (const a of foo) {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '{ 1: 2 }\n[2]\n2\n[[1, 2]]\n[1, 2]\n{ 3: 4 }\n[4]\n4\n[[3, 4]]\n[3, 4]\n')
+    assert.equal(run.stdout, '2 5 [right, 5]\n7 11 [right, 11]\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C JSON.parse object arrays feed Object.values and Object.entries', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-object-array-'))
+  const source = join(dir, 'json-object-array.c')
+  const output = join(dir, 'json-object-array')
+
+  try {
+    const result = compileSource(
+      `const rows = JSON.parse('[{"first":10,"second":20},{"first":30,"second":40}]')
+console.log(rows)
+
+for (const row of rows) {
+  const values = Object.values(row)
+  const second = values[1]
+  const entry = Object.entries(row)[0]
+  console.log(second, entry)
+}
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '[{ first: 10, second: 20 }, { first: 30, second: 40 }]\n20 [first, 10]\n40 [first, 30]\n')
   } finally {
     await rm(dir, {
       recursive: true,

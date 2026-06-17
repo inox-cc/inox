@@ -218,6 +218,12 @@ type CheckerMapType = {
   value: ValueType | null
 }
 
+type JsonParseLiteralTypeInfo = {
+  valueType: ValueType
+  arrayElementType: ValueType | null
+  arrayElementDeclaredType: string | null
+}
+
 type NullableConditionNarrowing = {
   trueNames: string[]
   falseNames: string[]
@@ -6599,10 +6605,13 @@ class Checker {
     if (method === 'parse') {
       this.checkJsonStringArg(expression, 0)
 
+      const literalType = this.inferJsonParseLiteralType(expression)
       let valueType: ValueType = 'object'
 
       if (declared != null && isJsonParseDeclaredType(declared.valueType)) {
         valueType = declared.valueType
+      } else if (literalType != null) {
+        valueType = literalType.valueType
       }
 
       expression.valueType = valueType
@@ -6630,6 +6639,9 @@ class Checker {
         if (valueType === 'object') {
           expression.shape = declared.shape
         }
+      } else if (literalType != null) {
+        expression.arrayElementType = literalType.arrayElementType
+        expression.arrayElementDeclaredType = literalType.arrayElementDeclaredType
       }
 
       return valueType
@@ -6652,6 +6664,76 @@ class Checker {
     }
 
     this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
+  }
+
+  inferJsonParseLiteralType(expression: AnyNode): JsonParseLiteralTypeInfo | null {
+    const arg = expression.args[0]
+
+    if (arg == null || arg.type !== 'StringLiteral') {
+      return null
+    }
+
+    try {
+      return this.inferJsonLiteralType(JSON.parse(arg.value))
+    } catch {
+      return null
+    }
+  }
+
+  inferJsonLiteralType(value: unknown): JsonParseLiteralTypeInfo {
+    if (Array.isArray(value)) {
+      const elementTypes: ValueType[] = []
+
+      for (const element of value) {
+        elementTypes.push(this.inferJsonLiteralType(element).valueType)
+      }
+
+      const arrayElementType = commonArrayElementType(elementTypes)
+
+      return {
+        valueType: 'array',
+        arrayElementType,
+        arrayElementDeclaredType: arrayElementType === 'unknown' ? null : arrayElementType
+      }
+    }
+
+    if (value != null && typeof value === 'object') {
+      return {
+        valueType: 'object',
+        arrayElementType: null,
+        arrayElementDeclaredType: null
+      }
+    }
+
+    if (typeof value === 'number') {
+      return {
+        valueType: 'number',
+        arrayElementType: null,
+        arrayElementDeclaredType: null
+      }
+    }
+
+    if (typeof value === 'boolean') {
+      return {
+        valueType: 'boolean',
+        arrayElementType: null,
+        arrayElementDeclaredType: null
+      }
+    }
+
+    if (typeof value === 'string') {
+      return {
+        valueType: 'string',
+        arrayElementType: null,
+        arrayElementDeclaredType: null
+      }
+    }
+
+    return {
+      valueType: 'unknown',
+      arrayElementType: null,
+      arrayElementDeclaredType: null
+    }
   }
 
   checkPromiseStaticCall(expression: AnyNode): ValueType | null {

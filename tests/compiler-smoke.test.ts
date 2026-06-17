@@ -208,6 +208,68 @@ test('lowers Object.values calls to C object value arrays', () => {
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, firstEntry, &ccjs_log_value_\d+\)/)
 })
 
+test('lowers Object.values and Object.entries inside C for-of object arrays', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const records = [{ left: 2, right: 5 }, { left: 7, right: 11 }]
+
+  for (const record of records) {
+    const values = Object.values(record)
+    const left = values[0]
+    const right = values[1]
+    const entry = Object.entries(record)[1]
+    console.log(left, right, entry)
+  }
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.deepEqual(
+    result.ir.globalUsages.map((usage) => usage.path.join('.')),
+    ['Object.values', 'Object.entries']
+  )
+  assert.match(result.code, /for \(size_t ccjs_for_index_\d+ = 0; ccjs_for_index_\d+ < 2; ccjs_for_index_\d+ \+= 1\) \{/)
+  assert.match(result.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
+  assert.match(result.code, /ccjs_value record = ccjs_for_value_\d+;/)
+  assert.match(result.code, /ccjs_object_values\(&ccjs_default_allocator, record, &ccjs_object_values_\d+\)/)
+  assert.match(result.code, /ccjs_object_entries\(&ccjs_default_allocator, record, &ccjs_object_entries_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(values, 1, &ccjs_value_\d+\)/)
+})
+
+test('infers JSON.parse literal arrays for C for-of object iteration', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const rows = JSON.parse('[{"first":10,"second":20},{"first":30,"second":40}]')
+
+  for (const row of rows) {
+    const values = Object.values(row)
+    const second = values[1]
+    const entry = Object.entries(row)[0]
+    console.log(second, entry)
+  }
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.deepEqual(
+    result.ir.globalUsages.map((usage) => usage.path.join('.')),
+    ['JSON.parse', 'Object.values', 'Object.entries']
+  )
+  assert.match(result.code, /ccjs_json_parse\(&ccjs_default_allocator, "\[\{\\"first\\":10,\\"second\\":20\},\{\\"first\\":30,\\"second\\":40\}\]"/)
+  assert.match(result.code, /rows\.tag != CCJS_TAG_ARRAY/)
+  assert.match(result.code, /ccjs_array_len\(rows, &ccjs_for_length_\d+\)/)
+  assert.match(result.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
+  assert.match(result.code, /ccjs_object_values\(&ccjs_default_allocator, row, &ccjs_object_values_\d+\)/)
+  assert.match(result.code, /ccjs_object_entries\(&ccjs_default_allocator, row, &ccjs_object_entries_\d+\)/)
+})
+
 test('erases TypeScript as expressions before C emission', () => {
   const result = compileSource(
     `export function main(): void {
