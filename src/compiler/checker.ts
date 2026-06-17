@@ -9640,7 +9640,13 @@ class Checker {
           continue
         }
 
-        graph.get(owner)?.push({
+        const edges = graph.get(owner)
+
+        if (edges == null) {
+          continue
+        }
+
+        edges.push({
           from: owner,
           to: target,
           field: field.name,
