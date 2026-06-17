@@ -10,52 +10,44 @@ export type TimeRuntimeDescriptor = {
   capability: TimeRuntimeCapability
 }
 
-export const timeRuntimeDescriptors: TimeRuntimeDescriptor[] = [
-  {
-    method: 'dateNow',
-    path: ['Date', 'now'],
-    cFunction: 'ccjs_date_now',
-    capability: {
-      key: 'wallClock',
-      name: 'wall-clock'
-    }
-  },
-  {
-    method: 'performanceNow',
-    path: ['performance', 'now'],
-    cFunction: 'ccjs_performance_now',
-    capability: {
-      key: 'monotonicClock',
-      name: 'monotonic-clock'
-    }
-  }
-]
-
-const timeRuntimeDescriptorByPath = createTimeRuntimeDescriptorMap(timeRuntimeDescriptors)
-
-export function timeRuntimeDescriptorFromPath(
-  path: string[] | null | undefined
-): TimeRuntimeDescriptor | null {
-  if (path == null) {
-    return null
-  }
-
-  const descriptor = timeRuntimeDescriptorByPath.get(path.join('.'))
-
-  if (descriptor != null) {
-    return descriptor
-  }
-
-  return null
+const wallClockTimeRuntimeCapability: TimeRuntimeCapability = {
+  key: 'wallClock',
+  name: 'wall-clock'
 }
+
+const monotonicClockTimeRuntimeCapability: TimeRuntimeCapability = {
+  key: 'monotonicClock',
+  name: 'monotonic-clock'
+}
+
+const dateNowRuntimeDescriptor: TimeRuntimeDescriptor = {
+  method: 'dateNow',
+  path: ['Date', 'now'],
+  cFunction: 'ccjs_date_now',
+  capability: wallClockTimeRuntimeCapability
+}
+
+const performanceNowRuntimeDescriptor: TimeRuntimeDescriptor = {
+  method: 'performanceNow',
+  path: ['performance', 'now'],
+  cFunction: 'ccjs_performance_now',
+  capability: monotonicClockTimeRuntimeCapability
+}
+
+export const timeRuntimeDescriptors: TimeRuntimeDescriptor[] = [
+  dateNowRuntimeDescriptor,
+  performanceNowRuntimeDescriptor
+]
 
 export function timeRuntimeMethodNameFromPath(
   path: string[] | null | undefined
 ): string | null {
-  const descriptor = timeRuntimeDescriptorFromPath(path)
+  if (isDateNowRuntimePath(path)) {
+    return 'dateNow'
+  }
 
-  if (descriptor != null) {
-    return descriptor.method
+  if (isPerformanceNowRuntimePath(path)) {
+    return 'performanceNow'
   }
 
   return null
@@ -64,10 +56,12 @@ export function timeRuntimeMethodNameFromPath(
 export function timeRuntimeCFunctionNameFromPath(
   path: string[] | null | undefined
 ): string | null {
-  const descriptor = timeRuntimeDescriptorFromPath(path)
+  if (isDateNowRuntimePath(path)) {
+    return 'ccjs_date_now'
+  }
 
-  if (descriptor != null) {
-    return descriptor.cFunction
+  if (isPerformanceNowRuntimePath(path)) {
+    return 'ccjs_performance_now'
   }
 
   return null
@@ -76,21 +70,21 @@ export function timeRuntimeCFunctionNameFromPath(
 export function timeRuntimeCapabilityFromPath(
   path: string[] | null | undefined
 ): TimeRuntimeCapability | null {
-  const descriptor = timeRuntimeDescriptorFromPath(path)
+  if (isDateNowRuntimePath(path)) {
+    return wallClockTimeRuntimeCapability
+  }
 
-  if (descriptor != null) {
-    return descriptor.capability
+  if (isPerformanceNowRuntimePath(path)) {
+    return monotonicClockTimeRuntimeCapability
   }
 
   return null
 }
 
-function createTimeRuntimeDescriptorMap(descriptors: TimeRuntimeDescriptor[]): Map<string, TimeRuntimeDescriptor> {
-  const map: Map<string, TimeRuntimeDescriptor> = new Map()
+function isDateNowRuntimePath(path: string[] | null | undefined): boolean {
+  return path != null && path.length === 2 && path[0] === 'Date' && path[1] === 'now'
+}
 
-  for (const descriptor of descriptors) {
-    map.set(descriptor.path.join('.'), descriptor)
-  }
-
-  return map
+function isPerformanceNowRuntimePath(path: string[] | null | undefined): boolean {
+  return path != null && path.length === 2 && path[0] === 'performance' && path[1] === 'now'
 }
