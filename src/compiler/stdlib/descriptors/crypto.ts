@@ -16,7 +16,6 @@ export const cryptoRuntimeMethods = [
 export type CryptoRuntimeMethod = string
 
 const cryptoGlobalRuntimeMethods: string[] = ['getRandomValues']
-const nodeCryptoImportSources: string[] = ['node:crypto']
 
 export const unsupportedNodeCryptoMethods = [
   'argon2',
@@ -90,7 +89,11 @@ export function isCryptoRuntimeMethod(method: string): boolean {
 }
 
 export function isNodeCryptoImportSource(source: string | null | undefined): boolean {
-  return source != null && stringListIncludes(nodeCryptoImportSources, source)
+  if (source !== 'node:crypto') {
+    return false
+  }
+
+  return true
 }
 
 export function isUnsupportedNodeCryptoMethod(method: string): boolean {

@@ -13,10 +13,12 @@ export const unsupportedStreamRuntimeExports: string[] = [
   'promises.pipeline'
 ]
 
-const nodeStreamImportSources: string[] = ['node:stream']
-
 export function isNodeStreamImportSource(source: string | null | undefined): boolean {
-  return source != null && stringListIncludes(nodeStreamImportSources, source)
+  if (source !== 'node:stream') {
+    return false
+  }
+
+  return true
 }
 
 export function isUnsupportedStreamRuntimeExport(name: string): boolean {

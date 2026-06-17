@@ -6,10 +6,12 @@ export const unsupportedChildProcessRuntimeMethods: string[] = ['exec', 'execFil
 
 export type ChildProcessRuntimeMethod = string
 
-const nodeChildProcessImportSources: string[] = ['node:child_process']
-
 export function isNodeChildProcessImportSource(source: string | null | undefined): boolean {
-  return source != null && stringListIncludes(nodeChildProcessImportSources, source)
+  if (source !== 'node:child_process') {
+    return false
+  }
+
+  return true
 }
 
 export function isChildProcessRuntimeMethod(method: string): boolean {

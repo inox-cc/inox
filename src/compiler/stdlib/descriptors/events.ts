@@ -15,10 +15,12 @@ export const unsupportedEventsRuntimeExports: string[] = [
   'setMaxListeners'
 ]
 
-const nodeEventsImportSources: string[] = ['node:events']
-
 export function isNodeEventsImportSource(source: string | null | undefined): boolean {
-  return source != null && stringListIncludes(nodeEventsImportSources, source)
+  if (source !== 'node:events') {
+    return false
+  }
+
+  return true
 }
 
 export function isUnsupportedEventsRuntimeExport(name: string): boolean {

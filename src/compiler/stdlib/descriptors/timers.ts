@@ -12,10 +12,12 @@ export const timerRuntimeMethods: string[] = [
 ]
 export const timerHandleMethods: string[] = ['ref', 'unref']
 
-const nodeTimerImportSources: string[] = ['node:timers']
-
 export function isNodeTimerImportSource(source: string): boolean {
-  return stringListIncludes(nodeTimerImportSources, source)
+  if (source !== 'node:timers') {
+    return false
+  }
+
+  return true
 }
 
 export function timerRuntimeMethodNameFromPath(path: string[]): string | null {

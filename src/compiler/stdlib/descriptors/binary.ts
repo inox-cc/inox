@@ -18,10 +18,12 @@ export const unsupportedBufferRuntimeExports: string[] = [
   'transcode'
 ]
 
-const nodeBufferImportSources: string[] = ['node:buffer']
-
 export function isNodeBufferImportSource(source: string | null | undefined): boolean {
-  return source != null && stringListIncludes(nodeBufferImportSources, source)
+  if (source !== 'node:buffer') {
+    return false
+  }
+
+  return true
 }
 
 export function binaryStaticRuntimeMethodNameFromPath(
