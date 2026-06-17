@@ -1,5 +1,13 @@
 import type { AnyNode } from '../types.ts'
 
+type VariableDeclarationCodeNode = {
+  init?: VariableDeclarationInitNode | null
+}
+
+type VariableDeclarationInitNode = {
+  type?: string | null
+}
+
 const NODE_CHILD_KEYS = [
   'body',
   'params',
@@ -75,7 +83,10 @@ export function cUnsupportedExpressionCode(valueType: string): string {
 }
 
 export function cUnsupportedVariableDeclarationCode(statement: AnyNode, valueType: string): string {
-  if (statement.init != null && statement.init.type === 'AwaitExpression') {
+  const declaration = statement as VariableDeclarationCodeNode
+  const init = declaration.init
+
+  if (init != null && init.type === 'AwaitExpression') {
     return 'CCJS_C_ASYNC'
   }
 
