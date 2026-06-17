@@ -13,7 +13,7 @@ export function checkCCompileBudgets(programs: IrProgram[], options: CompileOpti
     if (budgets.maxFeatures != null) {
       const maxFeatures = budgets.maxFeatures
 
-      if (exceedsBudget(features, maxFeatures)) {
+      if (exceedsFeatureBudget(features, maxFeatures)) {
         diagnostics.push(
           diagnostic(
             'CCJS_BUDGET',
@@ -26,7 +26,7 @@ export function checkCCompileBudgets(programs: IrProgram[], options: CompileOpti
     if (budgets.maxRuntimeRequirements != null) {
       const maxRuntimeRequirements = budgets.maxRuntimeRequirements
 
-      if (exceedsBudget(runtimeRequirements, maxRuntimeRequirements)) {
+      if (exceedsRuntimeBudget(runtimeRequirements, maxRuntimeRequirements)) {
         diagnostics.push(
           diagnostic(
             'CCJS_BUDGET',
@@ -40,8 +40,19 @@ export function checkCCompileBudgets(programs: IrProgram[], options: CompileOpti
   throwDiagnostics(diagnostics)
 }
 
-function exceedsBudget(
-  items: IrFeature[] | IrRuntimeRequirement[],
+function exceedsFeatureBudget(
+  items: IrFeature[],
+  max: number | undefined
+): boolean {
+  if (max == null) {
+    return false
+  }
+
+  return items.length > max
+}
+
+function exceedsRuntimeBudget(
+  items: IrRuntimeRequirement[],
   max: number | undefined
 ): boolean {
   if (max == null) {
