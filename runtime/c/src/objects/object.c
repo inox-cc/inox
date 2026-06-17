@@ -246,6 +246,45 @@ static ccjs_status ccjs_array_object_values(ccjs_allocator* allocator, ccjs_valu
   return CCJS_OK;
 }
 
+static ccjs_status ccjs_array_object_keys(ccjs_allocator* allocator, ccjs_value array, ccjs_value* out) {
+  if (allocator == 0 || out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  ccjs_status status = ccjs_array_new(allocator, instance->len, out);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  for (size_t index = 0; index < instance->len; index += 1) {
+    char key_bytes[64];
+    int key_len = snprintf(key_bytes, sizeof(key_bytes), "%zu", index);
+    ccjs_value key = ccjs_undefined_value();
+
+    if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
+      status = CCJS_ERR_TYPE;
+    } else {
+      status = ccjs_string_from_literal(allocator, key_bytes, (size_t)key_len, &key);
+    }
+
+    if (status == CCJS_OK) {
+      status = ccjs_array_set(*out, index, key);
+    }
+
+    ccjs_release(key);
+
+    if (status != CCJS_OK) {
+      ccjs_release(*out);
+      *out = ccjs_undefined_value();
+      return status;
+    }
+  }
+
+  return CCJS_OK;
+}
+
 static ccjs_status ccjs_array_object_entries(ccjs_allocator* allocator, ccjs_value array, ccjs_value* out) {
   if (allocator == 0 || out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
     return CCJS_ERR_TYPE;
@@ -294,6 +333,48 @@ static ccjs_status ccjs_array_object_entries(ccjs_allocator* allocator, ccjs_val
     ccjs_release(value);
     ccjs_release(key);
     ccjs_release(pair);
+
+    if (status != CCJS_OK) {
+      ccjs_release(*out);
+      *out = ccjs_undefined_value();
+      return status;
+    }
+  }
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_object_keys(ccjs_allocator* allocator, ccjs_value object, ccjs_value* out) {
+  if (allocator == 0 || out == 0 || object.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (object.tag == CCJS_TAG_ARRAY) {
+    return ccjs_array_object_keys(allocator, object, out);
+  }
+
+  if (object.tag != CCJS_TAG_OBJECT) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_object* instance = (ccjs_object*)object.as.ref;
+  ccjs_status status = ccjs_array_new(allocator, instance->shape->field_count, out);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  for (uint32_t index = 0; index < instance->shape->field_count; index += 1) {
+    const char* name = instance->shape->fields[index].name == 0 ? "" : instance->shape->fields[index].name;
+    ccjs_value key = ccjs_undefined_value();
+
+    status = ccjs_string_from_literal(allocator, name, strlen(name), &key);
+
+    if (status == CCJS_OK) {
+      status = ccjs_array_set(*out, index, key);
+    }
+
+    ccjs_release(key);
 
     if (status != CCJS_OK) {
       ccjs_release(*out);

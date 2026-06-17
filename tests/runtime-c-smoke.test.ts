@@ -128,7 +128,7 @@ int main(void) {
   }
 })
 
-test('generated C Object.values compiles and runs with runtime sources', async (t) => {
+test('generated C Object.keys and Object.values compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -136,13 +136,16 @@ test('generated C Object.values compiles and runs with runtime sources', async (
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-values-'))
-  const source = join(dir, 'object-values.c')
-  const output = join(dir, 'object-values')
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-keys-values-'))
+  const source = join(dir, 'object-keys-values.c')
+  const output = join(dir, 'object-keys-values')
 
   try {
     const result = compileSource(
       `const records = [{ left: 2, right: 5 }, { left: 7, right: 11 }]
+const recordKeys = Object.keys(records[0])
+const arrayKeys = Object.keys(records)
+console.log(recordKeys, arrayKeys)
 
 for (const record of records) {
   const values = Object.values(record)
@@ -167,7 +170,7 @@ for (const record of records) {
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '2 5 [right, 5]\n7 11 [right, 11]\n')
+    assert.equal(run.stdout, '[left, right] [0, 1]\n2 5 [right, 5]\n7 11 [right, 11]\n')
   } finally {
     await rm(dir, {
       recursive: true,

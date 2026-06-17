@@ -1228,6 +1228,10 @@ class Parser {
       return this.parseNewExpression(this.previous())
     }
 
+    if (this.matchKeyword('typeof')) {
+      return createUnaryExpression(this.previous(), this.parseUnary())
+    }
+
     if (this.isValue('++') || this.isValue('--')) {
       const operator = this.advance()
 

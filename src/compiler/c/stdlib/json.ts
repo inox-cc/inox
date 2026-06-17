@@ -86,7 +86,7 @@ function stringValueAt(values: string[], index: number): string {
 function currentJsonErrorTarget(context: CFunctionContext): string | null {
   const targets = context.errorTargets
 
-  if (targets == null || targets.length === 0) {
+  if (targets.length === 0) {
     return null
   }
 

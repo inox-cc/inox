@@ -178,6 +178,109 @@ function isPositiveEqualityOperator(operator: string): boolean {
   return operator === '===' || operator === '=='
 }
 
+function typeofRuntimeTagCheck(value: string, typeName: string): string | null {
+  if (typeName === 'undefined') {
+    return `${value}.tag == CCJS_TAG_UNDEFINED`
+  }
+
+  if (typeName === 'object') {
+    return (
+      `(${value}.tag == CCJS_TAG_NULL || ${value}.tag == CCJS_TAG_OBJECT || ${value}.tag == CCJS_TAG_ARRAY || ` +
+      `${value}.tag == CCJS_TAG_BYTES || ${value}.tag == CCJS_TAG_MAP || ${value}.tag == CCJS_TAG_SET)`
+    )
+  }
+
+  if (typeName === 'boolean') {
+    return `${value}.tag == CCJS_TAG_BOOL`
+  }
+
+  if (typeName === 'number') {
+    return `${value}.tag == CCJS_TAG_NUMBER`
+  }
+
+  if (typeName === 'string') {
+    return `${value}.tag == CCJS_TAG_STRING`
+  }
+
+  if (typeName === 'function') {
+    return `${value}.tag == CCJS_TAG_FUNCTION`
+  }
+
+  return null
+}
+
+function emitPreparedTypeofArgumentValue(
+  expression: AnyNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression {
+  const valueType = deps.inferExpressionType(expression, context)
+
+  if (
+    expression.type === 'Reference' &&
+    expression.path.length === 1 &&
+    (valueType === 'unknown' || isManagedRuntimeReturnType(valueType))
+  ) {
+    return {
+      lines: [],
+      expression: deps.emitReference(expression, context)
+    }
+  }
+
+  return deps.emitCValueExpression(expression, context)
+}
+
+function emitPreparedTypeofCompareExpression(
+  expression: AnyNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (!isEqualityOperator(expression.operator)) {
+    return null
+  }
+
+  let argument: AnyNode | null = null
+  let typeName: string | null = null
+
+  if (
+    expression.left.type === 'UnaryExpression' &&
+    expression.left.operator === 'typeof' &&
+    expression.right.type === 'StringLiteral'
+  ) {
+    argument = expression.left.argument
+    typeName = expression.right.value
+  } else if (
+    expression.right.type === 'UnaryExpression' &&
+    expression.right.operator === 'typeof' &&
+    expression.left.type === 'StringLiteral'
+  ) {
+    argument = expression.right.argument
+    typeName = expression.left.value
+  }
+
+  if (argument == null || typeName == null) {
+    return null
+  }
+
+  const value = emitPreparedTypeofArgumentValue(argument, context, deps)
+  const check = typeofRuntimeTagCheck(value.expression, typeName)
+
+  if (check == null) {
+    return null
+  }
+
+  let result = `(${check})`
+
+  if (!isPositiveEqualityOperator(expression.operator)) {
+    result = `(!${result})`
+  }
+
+  return {
+    lines: value.lines,
+    expression: result
+  }
+}
+
 function scalarRuntimeValueExpression(value: string, valueType: string): string {
   if (valueType === 'boolean') {
     return `(${value}.as.boolean ? 1 : 0)`
@@ -614,6 +717,11 @@ export function emitPreparedCallArgs(
 
         appendLines(lines, value.lines)
         args.push(value.expression)
+      } else if (param.valueType === 'unknown') {
+        const value = deps.emitCValueExpression(arg, context)
+
+        appendLines(lines, value.lines)
+        args.push(value.expression)
       } else if (param.valueType === 'string') {
         const value = deps.emitCValueExpression(arg, context)
 
@@ -667,7 +775,7 @@ function emitDefaultOptionalArg(param: CFunctionParam): string {
     return 'ccjs_null_value()'
   }
 
-  if (isManagedRuntimeReturnType(param.valueType)) {
+  if (param.valueType === 'unknown' || isManagedRuntimeReturnType(param.valueType)) {
     return 'ccjs_undefined_value()'
   }
 
@@ -1075,6 +1183,12 @@ export function emitPreparedNumberExpression(
 
     if (dynamicObjectBooleanLiteralCompare != null) {
       return dynamicObjectBooleanLiteralCompare
+    }
+
+    const typeofCompare = emitPreparedTypeofCompareExpression(expression, context, deps)
+
+    if (typeofCompare != null) {
+      return typeofCompare
     }
 
     if (isEqualityOperator(expression.operator) && leftType === 'string' && rightType === 'string') {

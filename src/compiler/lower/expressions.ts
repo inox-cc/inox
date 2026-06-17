@@ -720,6 +720,10 @@ function cloneUnaryExpression(expression: LowerExpressionNode, argument: LowerEx
 }
 
 function unaryExpressionValueType(expression: LowerExpressionNode): string {
+  if (expression.operator === 'typeof') {
+    return 'string'
+  }
+
   if (expression.operator === '!') {
     return 'boolean'
   }

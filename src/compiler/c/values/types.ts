@@ -422,6 +422,10 @@ export function inferExpressionType(
   }
 
   if (expression.type === 'UnaryExpression') {
+    if (expression.operator === 'typeof') {
+      return 'string'
+    }
+
     if (expression.operator === '!') {
       return 'boolean'
     }

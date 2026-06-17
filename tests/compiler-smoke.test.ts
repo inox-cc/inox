@@ -177,15 +177,17 @@ test('lowers Array.isArray calls to C runtime tag checks', () => {
   assert.match(result.code, /\(ccjs_number_value\(7\)\.tag == CCJS_TAG_ARRAY\)/)
 })
 
-test('lowers Object.values calls to C object value arrays', () => {
+test('lowers Object.keys and Object.values calls to C object arrays', () => {
   const result = compileSource(
     `export function main(): void {
   const user = { score: 7 }
+  const keys = Object.keys(user)
+  const firstKey = Object.keys(user)[0]
   const values = Object.values(user)
   const first = Object.values(user)[0]
   const entries = Object.entries(user)
   const firstEntry = Object.entries(user)[0]
-  console.log(user, values, first, entries, firstEntry)
+  console.log(user, keys, firstKey, values, first, entries, firstEntry)
 }
 `,
     {
@@ -195,17 +197,55 @@ test('lowers Object.values calls to C object value arrays', () => {
 
   assert.deepEqual(
     result.ir.globalUsages.map((usage) => usage.path.join('.')),
-    ['Object.values', 'Object.values', 'Object.entries', 'Object.entries']
+    ['Object.keys', 'Object.keys', 'Object.values', 'Object.values', 'Object.entries', 'Object.entries']
   )
+  assert.match(result.code, /ccjs_object_keys\(&ccjs_default_allocator, user, &ccjs_object_keys_\d+\)/)
   assert.match(result.code, /ccjs_object_values\(&ccjs_default_allocator, user, &ccjs_object_values_\d+\)/)
   assert.match(result.code, /ccjs_object_entries\(&ccjs_default_allocator, user, &ccjs_object_entries_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_object_keys_\d+, 0, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_array_get\(ccjs_object_values_\d+, 0, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_array_get\(ccjs_object_entries_\d+, 0, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, user, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, keys, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /const ccjs_string\* firstKey = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, values, &ccjs_log_value_\d+\)/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, first, &ccjs_log_value_\d+\)/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, entries, &ccjs_log_value_\d+\)/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, firstEntry, &ccjs_log_value_\d+\)/)
+})
+
+test('lowers typeof equality guards to C runtime tag checks', () => {
+  const result = compileSource(
+    `function classify(value: unknown): void {
+  if (typeof value === 'number') {
+    console.log('number')
+  }
+  if (typeof value !== 'string') {
+    console.log('not string')
+  }
+  if (typeof value === 'object') {
+    console.log('object')
+  }
+}
+
+export function main(): void {
+  classify(7)
+  classify('Ada')
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /void classify\(ccjs_value value\)/)
+  assert.match(result.code, /value\.tag == CCJS_TAG_NUMBER/)
+  assert.match(result.code, /!\(value\.tag == CCJS_TAG_STRING\)/)
+  assert.match(
+    result.code,
+    /value\.tag == CCJS_TAG_NULL \|\| value\.tag == CCJS_TAG_OBJECT \|\| value\.tag == CCJS_TAG_ARRAY/
+  )
+  assert.match(result.code, /classify\(ccjs_number_value\(7\)\)/)
 })
 
 test('lowers Object.values and Object.entries inside C for-of object arrays', () => {

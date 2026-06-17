@@ -43,6 +43,10 @@ export function emitCType(valueType: CValueTypeInput): string {
     return 'ccjs_value'
   }
 
+  if (valueType === 'unknown') {
+    return 'ccjs_value'
+  }
+
   if (valueType === 'function') {
     return 'void*'
   }

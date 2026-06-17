@@ -46,6 +46,7 @@ const keywords = new Set([
   'this',
   'true',
   'throw',
+  'typeof',
   'type',
   'try',
   'var',

@@ -225,6 +225,10 @@ type JsonParseLiteralTypeInfo = {
   arrayElementDeclaredType: string | null
 }
 
+type JsonLiteralObject = {
+  [key: string]: unknown
+}
+
 type NullableConditionNarrowing = {
   trueNames: string[]
   falseNames: string[]
@@ -1761,10 +1765,17 @@ class Checker {
 
     if (expression.type === 'UnaryExpression') {
       this.checkExpression(expression.argument)
+      if (expression.operator === 'typeof') {
+        expression.valueType = 'string'
+        return 'string'
+      }
+
       if (expression.operator === '!') {
+        expression.valueType = 'boolean'
         return 'boolean'
       }
 
+      expression.valueType = 'number'
       return 'number'
     }
 
@@ -5221,7 +5232,12 @@ class Checker {
   checkObjectStaticCall(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.callee)
 
-    if (path == null || path.length !== 2 || path[0] !== 'Object' || (path[1] !== 'values' && path[1] !== 'entries')) {
+    if (
+      path == null ||
+      path.length !== 2 ||
+      path[0] !== 'Object' ||
+      (path[1] !== 'values' && path[1] !== 'entries' && path[1] !== 'keys')
+    ) {
       return null
     }
 
@@ -5233,7 +5249,15 @@ class Checker {
 
     expression.objectRuntimeMethod = method
     expression.valueType = 'array'
-    expression.arrayElementType = method === 'entries' ? 'array' : 'unknown'
+    expression.arrayElementType = 'unknown'
+    expression.arrayElementDeclaredType = null
+
+    if (method === 'entries') {
+      expression.arrayElementType = 'array'
+    } else if (method === 'keys') {
+      expression.arrayElementType = 'string'
+      expression.arrayElementDeclaredType = 'string'
+    }
 
     if (expression.args.length !== 1) {
       this.report(
@@ -6701,19 +6725,29 @@ class Checker {
       }
 
       const arrayElementType = commonArrayElementType(elementTypes)
+      let arrayElementDeclaredType: string | null = null
+
+      if (arrayElementType !== 'unknown') {
+        arrayElementDeclaredType = arrayElementType
+      }
 
       return {
         valueType: 'array',
         shape: null,
         arrayElementType,
-        arrayElementDeclaredType: arrayElementType === 'unknown' ? null : arrayElementType
+        arrayElementDeclaredType
       }
     }
 
     if (value != null && typeof value === 'object') {
       const fields: AnyNode[] = []
 
-      for (const [name, fieldValue] of Object.entries(value)) {
+      const record = value as JsonLiteralObject
+      const names = Object.keys(record)
+
+      for (let index = 0; index < names.length; index = index + 1) {
+        const name = names[index]
+        const fieldValue = record[name]
         const fieldType = this.inferJsonLiteralType(fieldValue)
 
         fields.push({

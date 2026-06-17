@@ -5068,6 +5068,10 @@ function cObjectRuntimeCallName(expression: AnyNode): string | null {
     return 'entries'
   }
 
+  if (expression.objectRuntimeMethod === 'keys') {
+    return 'keys'
+  }
+
   return null
 }
 
