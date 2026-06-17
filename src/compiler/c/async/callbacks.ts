@@ -546,7 +546,8 @@ export function collectCallbackWrappers(
 function appendCallbackScope(scopes: CallbackScope[], scope: CallbackScope): CallbackScope[] {
   const result: CallbackScope[] = []
 
-  for (const item of scopes) {
+  for (let index = 0; index < scopes.length; index = index + 1) {
+    const item = scopes[index]
     result.push(item)
   }
 
