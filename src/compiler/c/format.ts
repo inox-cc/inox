@@ -272,7 +272,7 @@ function hasGeneratedCFunctionNamePrefix(prefix: string): boolean {
 function isGeneratedCCallCallee(callee: string): boolean {
   let start = 0
 
-  if (callee.startsWith('!')) {
+  if (generatedCStringStartsWithAt(callee, '!', 0)) {
     start = 1
   }
 
@@ -298,7 +298,7 @@ function startsWithGeneratedCControlKeyword(value: string): boolean {
 }
 
 function startsWithGeneratedCKeyword(value: string, keyword: string): boolean {
-  if (!value.startsWith(keyword)) {
+  if (!generatedCStringStartsWithAt(value, keyword, 0)) {
     return false
   }
 
@@ -371,9 +371,9 @@ function parseGeneratedCFunctionHead(line: string): GeneratedCFunctionHead | nul
   const trimmed = line.trim()
 
   if (
-    trimmed.startsWith('#') ||
-    trimmed.startsWith('typedef ') ||
-    trimmed.startsWith('return ') ||
+    generatedCStringStartsWithAt(trimmed, '#', 0) ||
+    generatedCStringStartsWithAt(trimmed, 'typedef ', 0) ||
+    generatedCStringStartsWithAt(trimmed, 'return ', 0) ||
     isGeneratedCControlStart(trimmed)
   ) {
     return null
@@ -515,7 +515,12 @@ function parseGeneratedCSingleLineControl(line: string): GeneratedCSingleLineCon
     const condition = line.slice(conditionStart, conditionEnd + 1)
     const rest = line.slice(conditionEnd + 1).trim()
 
-    if (rest === '' || rest.startsWith('{') || rest.startsWith(';') || rest.startsWith('/*')) {
+    if (
+      rest === '' ||
+      generatedCStringStartsWithAt(rest, '{', 0) ||
+      generatedCStringStartsWithAt(rest, ';', 0) ||
+      generatedCStringStartsWithAt(rest, '/*', 0)
+    ) {
       return null
     }
 
@@ -721,7 +726,7 @@ function markBlankBefore(lines: string[], index: number, blankBefore: Set<number
   if (
     previousTrimmed.endsWith('{') ||
     isGeneratedCGotoLabel(previousTrimmed) ||
-    previousTrimmed.startsWith('case ') ||
+    generatedCStringStartsWithAt(previousTrimmed, 'case ', 0) ||
     previousTrimmed === 'default:'
   ) {
     return
@@ -741,9 +746,9 @@ function markBlankAfter(lines: string[], index: number, blankAfter: Set<number>)
 
   if (
     nextTrimmed === '}' ||
-    nextTrimmed.startsWith('} ') ||
-    nextTrimmed.startsWith('else') ||
-    nextTrimmed.startsWith('case ') ||
+    generatedCStringStartsWithAt(nextTrimmed, '} ', 0) ||
+    generatedCStringStartsWithAt(nextTrimmed, 'else', 0) ||
+    generatedCStringStartsWithAt(nextTrimmed, 'case ', 0) ||
     nextTrimmed === 'default:'
   ) {
     return
@@ -795,7 +800,7 @@ function isGeneratedCControlStart(line: string): boolean {
 function isGeneratedCGotoLabel(line: string): boolean {
   const trimmed = line.trim()
 
-  if (!trimmed.startsWith('ccjs_')) {
+  if (!generatedCStringStartsWithAt(trimmed, 'ccjs_', 0)) {
     return false
   }
 
@@ -819,7 +824,11 @@ function isGeneratedCGotoLabel(line: string): boolean {
 function isGeneratedCCommentOnlyLine(line: string): boolean {
   const trimmed = line.trimStart()
 
-  return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')
+  return (
+    generatedCStringStartsWithAt(trimmed, '//', 0) ||
+    generatedCStringStartsWithAt(trimmed, '/*', 0) ||
+    generatedCStringStartsWithAt(trimmed, '*', 0)
+  )
 }
 
 function findGeneratedCControlEnd(lines: string[], start: number): number | null {
