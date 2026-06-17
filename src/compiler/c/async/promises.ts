@@ -303,18 +303,18 @@ export type PromiseChainLoweringDependencies = {
 export type PromiseLoweringDependencies = {
   emitCValueExpression(expression: AnyNode, context: PromiseFunctionContext): PreparedExpression
   emitPreparedAsyncFunctionPromiseCallExpression(
-    expression: AnyNode,
+    expression: AnyNode | null | undefined,
     context: PromiseFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedCallExpression(expression: AnyNode, context: PromiseFunctionContext): PreparedExpression
   emitPreparedFetchCallExpression(
-    expression: AnyNode,
+    expression: AnyNode | null | undefined,
     context: PromiseFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedFsCallExpression(
-    expression: AnyNode,
+    expression: AnyNode | null | undefined,
     context: PromiseFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
@@ -377,11 +377,15 @@ function promiseChainArrowBodyReturnExpression(body: PromiseChainArrowBody | nul
 }
 
 export function emitPreparedPromiseStaticExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
+  if (expression == null) {
+    return null
+  }
+
   const method = cPromiseRuntimeCallName(expression.callee)
 
   if (method == null) {
@@ -414,12 +418,12 @@ export function emitPreparedPromiseStaticExpression(
 }
 
 export function emitPreparedPromiseConstructorExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  if (!isPromiseConstructorExpression(expression)) {
+  if (expression == null || !isPromiseConstructorExpression(expression)) {
     return null
   }
 
@@ -520,12 +524,12 @@ export function emitPromiseConstructorSettlementCall(
 }
 
 export function emitPreparedPromiseMethodExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  if (!isPromiseMethodCallExpression(expression, context, dependencies)) {
+  if (expression == null || !isPromiseMethodCallExpression(expression, context, dependencies)) {
     return null
   }
 
@@ -602,11 +606,15 @@ export function emitPreparedPromiseMethodExpression(
 }
 
 export function emitPreparedPromiseExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
+  if (expression == null) {
+    return null
+  }
+
   const fetchCall = dependencies.emitPreparedFetchCallExpression(expression, context, options)
 
   if (fetchCall != null) {
@@ -650,6 +658,10 @@ export function emitPreparedPromiseExpression(
 
   if (promiseCall != null) {
     return promiseCall
+  }
+
+  if (expression == null) {
+    return null
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {

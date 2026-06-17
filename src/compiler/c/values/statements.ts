@@ -2043,6 +2043,10 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return fetchAbortController
   }
 
+  if (statement.init == null) {
+    return deps.emitScalarVariableDeclaration(statement, context)
+  }
+
   const childProcessObject = deps.emitPreparedChildProcessCallExpression(statement.init, context, {
     out: statement.name
   })

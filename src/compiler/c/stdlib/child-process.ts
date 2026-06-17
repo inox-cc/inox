@@ -37,8 +37,8 @@ function emitChildProcessArgumentArray(args: PreparedExpression[]): string {
   return output
 }
 
-export function cChildProcessRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression.type !== 'CallExpression' || expression.childProcessRuntimeMethod == null) {
+export function cChildProcessRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'CallExpression' || expression.childProcessRuntimeMethod == null) {
     return null
   }
 

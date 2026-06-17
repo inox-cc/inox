@@ -156,7 +156,11 @@ function emptyStringBytesOperand(): PreparedStringBytesOperand {
   return { lines: [], bytes: '0', length: '0' }
 }
 
-export function cFetchRuntimeExpressionMethod(expression: AnyNode): string | null {
+export function cFetchRuntimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
   if (expression.fetchRuntimeMethod == null) {
     return null
   }
@@ -164,10 +168,10 @@ export function cFetchRuntimeExpressionMethod(expression: AnyNode): string | nul
   return expression.fetchRuntimeMethod
 }
 
-export function isAsyncFetchRuntimeCallExpression(expression: AnyNode): boolean {
+export function isAsyncFetchRuntimeCallExpression(expression: AnyNode | null | undefined): boolean {
   const method = cFetchRuntimeExpressionMethod(expression)
 
-  return expression.valueType === 'promise' && isAsyncFetchRuntimeMethod(method)
+  return expression != null && expression.valueType === 'promise' && isAsyncFetchRuntimeMethod(method)
 }
 
 export function emitFetchHeadersBooleanVariableDeclaration(
@@ -193,7 +197,7 @@ export function emitFetchHeadersBooleanVariableDeclaration(
 }
 
 export function emitPreparedFetchCallExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   context: FetchFunctionContext,
   dependencies: FetchLoweringDependencies,
   options: PreparedCallOptions = {}
@@ -201,6 +205,10 @@ export function emitPreparedFetchCallExpression(
   const method = cFetchRuntimeExpressionMethod(expression)
 
   if (method != null) {
+    if (expression == null) {
+      return null
+    }
+
     if (expression.valueType !== 'promise') {
       return null
     }

@@ -32,8 +32,8 @@ export type ProcessLoweringDependencies = {
   emitPreparedNumberExpression(expression: AnyNode, context: ProcessCContext): PreparedExpression
 }
 
-export function cProcessRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression.type !== 'CallExpression') {
+export function cProcessRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -46,7 +46,11 @@ export function cProcessRuntimeMethodName(expression: AnyNode): string | null {
   return null
 }
 
-export function cProcessRuntimePropertyName(expression: AnyNode): string | null {
+export function cProcessRuntimePropertyName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
   const property = expression.processRuntimeProperty
 
   if (property != null) {
@@ -56,7 +60,7 @@ export function cProcessRuntimePropertyName(expression: AnyNode): string | null 
   return null
 }
 
-export function cProcessRuntimePropertyValueType(expression: AnyNode): 'string' | 'number' | 'object' | null {
+export function cProcessRuntimePropertyValueType(expression: AnyNode | null | undefined): 'string' | 'number' | 'object' | null {
   const property = cProcessRuntimePropertyName(expression)
 
   if (property != null) {
@@ -66,7 +70,7 @@ export function cProcessRuntimePropertyValueType(expression: AnyNode): 'string' 
   return null
 }
 
-export function cProcessRuntimeStringPropertyName(expression: AnyNode): string | null {
+export function cProcessRuntimeStringPropertyName(expression: AnyNode | null | undefined): string | null {
   const property = cProcessRuntimePropertyName(expression)
 
   if (property != null && isProcessRuntimeStringProperty(property)) {
@@ -76,7 +80,7 @@ export function cProcessRuntimeStringPropertyName(expression: AnyNode): string |
   return null
 }
 
-export function cProcessRuntimeNumberPropertyName(expression: AnyNode): string | null {
+export function cProcessRuntimeNumberPropertyName(expression: AnyNode | null | undefined): string | null {
   const property = cProcessRuntimePropertyName(expression)
 
   if (property != null && isProcessRuntimeNumberProperty(property)) {
@@ -98,7 +102,11 @@ export function cProcessRuntimeStringFunctionName(property: string): string | nu
   return null
 }
 
-export function cProcessRuntimeEnvName(expression: AnyNode): string | null {
+export function cProcessRuntimeEnvName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
   const name = expression.processRuntimeEnvName
 
   if (name != null) {

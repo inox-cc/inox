@@ -61,16 +61,16 @@ export function binaryRuntimeMethodName(callee: AnyNode): string | null {
   return binaryInstanceRuntimeMethodName(callee.property)
 }
 
-export function isBinaryRuntimeCall(expression: AnyNode): boolean {
-  return expression.type === 'CallExpression' && expression.binaryRuntimeMethod != null
+export function isBinaryRuntimeCall(expression: AnyNode | null | undefined): boolean {
+  return expression != null && expression.type === 'CallExpression' && expression.binaryRuntimeMethod != null
 }
 
-export function isBufferFromCall(expression: AnyNode): boolean {
-  return isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'from'
+export function isBufferFromCall(expression: AnyNode | null | undefined): boolean {
+  return expression != null && isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'from'
 }
 
-export function isBufferAllocCall(expression: AnyNode): boolean {
-  return isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'alloc'
+export function isBufferAllocCall(expression: AnyNode | null | undefined): boolean {
+  return expression != null && isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'alloc'
 }
 
 export function isBinaryConstructorExpression(expression: AnyNode): boolean {
@@ -82,7 +82,11 @@ export function isBinaryConstructorExpression(expression: AnyNode): boolean {
   )
 }
 
-export function binaryRuntimeExpressionReturnType(expression: AnyNode): 'bytes' | 'string' | null {
+export function binaryRuntimeExpressionReturnType(expression: AnyNode | null | undefined): 'bytes' | 'string' | null {
+  if (expression == null) {
+    return null
+  }
+
   if (expression.binaryRuntimeMethod != null) {
     return binaryRuntimeReturnType(expression.binaryRuntimeMethod)
   }

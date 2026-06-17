@@ -1,35 +1,80 @@
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readFile as readNodeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, normalize, posix, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { CompilerHost } from './host.ts'
+import type { CompilerHost, CompilerHostPosixPath } from './host.ts'
 
 export function createNodeCompilerHost(): CompilerHost {
-  return {
-    pathSeparator: sep,
-    posixPath: {
-      basename: posix.basename,
-      dirname: posix.dirname,
-      extname: posix.extname,
-      relative: posix.relative
-    },
-    dirname,
-    extname,
-    isAbsolutePath: isAbsolute,
-    joinPath(left: string, right: string): string {
-      return join(left, right)
-    },
-    normalizePath: normalize,
-    pathToFileUrl(path: string): string {
-      return pathToFileURL(path).href
-    },
-    readFile(path: string): Promise<string> {
-      return readFile(path, 'utf8')
-    },
-    relativePath: relative,
-    resolvePath: resolve,
-    shortHash(value: string): string {
-      return createHash('sha256').update(value).digest('hex').slice(0, 8)
+  return new NodeCompilerHost()
+}
+
+class NodeCompilerHost {
+  pathSeparator: string
+  posixPath: CompilerHostPosixPath
+
+  constructor() {
+    this.pathSeparator = sep
+    this.posixPath = {
+      basename: basenameNodePosixPath,
+      dirname: dirnameNodePosixPath,
+      extname: extnameNodePosixPath,
+      relative: relativeNodePosixPath
     }
   }
+
+  dirname(path: string): string {
+    return dirname(path)
+  }
+
+  extname(path: string): string {
+    return extname(path)
+  }
+
+  isAbsolutePath(path: string): boolean {
+    return isAbsolute(path)
+  }
+
+  joinPath(left: string, right: string): string {
+    return join(left, right)
+  }
+
+  normalizePath(path: string): string {
+    return normalize(path)
+  }
+
+  pathToFileUrl(path: string): string {
+    return pathToFileURL(path).href
+  }
+
+  readFile(path: string): Promise<string> {
+    return readNodeFile(path, 'utf8')
+  }
+
+  relativePath(fromPath: string, toPath: string): string {
+    return relative(fromPath, toPath)
+  }
+
+  resolvePath(path: string): string {
+    return resolve(path)
+  }
+
+  shortHash(value: string): string {
+    return createHash('sha256').update(value).digest('hex').slice(0, 8)
+  }
+}
+
+function basenameNodePosixPath(path: string): string {
+  return posix.basename(path)
+}
+
+function dirnameNodePosixPath(path: string): string {
+  return posix.dirname(path)
+}
+
+function extnameNodePosixPath(path: string): string {
+  return posix.extname(path)
+}
+
+function relativeNodePosixPath(fromPath: string, toPath: string): string {
+  return posix.relative(fromPath, toPath)
 }

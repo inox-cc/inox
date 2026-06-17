@@ -37,8 +37,8 @@ export type PathLoweringDependencies = {
   registerObjectShape(context: PathCContext, name: string, shape: CObjectShape | null | undefined): void
 }
 
-export function cPathRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression.type !== 'CallExpression') {
+export function cPathRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -51,7 +51,11 @@ export function cPathRuntimeMethodName(expression: AnyNode): string | null {
   return null
 }
 
-export function cPathRuntimeConstantName(expression: AnyNode): string | null {
+export function cPathRuntimeConstantName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
   const constant = expression.pathRuntimeConstant
 
   if (constant != null) {

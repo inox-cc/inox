@@ -123,7 +123,11 @@ const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
   writeFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_write_file_sync' }
 }
 
-export function cFsRuntimeExpressionMethod(expression: AnyNode): string | null {
+export function cFsRuntimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
   if (expression.fsRuntimeMethod != null) {
     return expression.fsRuntimeMethod
   }
@@ -131,13 +135,17 @@ export function cFsRuntimeExpressionMethod(expression: AnyNode): string | null {
   return cFsRuntimeCallName(expression.callee)
 }
 
-export function isAsyncFsRuntimeCallExpression(expression: AnyNode): boolean {
+export function isAsyncFsRuntimeCallExpression(expression: AnyNode | null | undefined): boolean {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  return method != null && expression.valueType === 'promise' && isAsyncFsRuntimeMethod(method)
+  return expression != null && method != null && expression.valueType === 'promise' && isAsyncFsRuntimeMethod(method)
 }
 
-export function cFsRuntimeConstantExpression(expression: AnyNode): string | null {
+export function cFsRuntimeConstantExpression(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
   const name = expression.fsRuntimeConstant
 
   if (name === 'F_OK') {

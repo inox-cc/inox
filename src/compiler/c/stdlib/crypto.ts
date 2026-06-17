@@ -68,8 +68,8 @@ function cryptoResultExpression(options: PreparedCallOptions, value: string): st
   return value
 }
 
-export function cryptoRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression.type !== 'CallExpression' || expression.cryptoRuntimeMethod == null) {
+export function cryptoRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'CallExpression' || expression.cryptoRuntimeMethod == null) {
     return null
   }
 

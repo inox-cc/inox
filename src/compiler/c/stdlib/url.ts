@@ -109,8 +109,8 @@ function isMutableUrlObjectField(field: string): boolean {
   return false
 }
 
-export function cUrlRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression.type !== 'CallExpression' && expression.type !== 'NewExpression') {
+export function cUrlRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null || (expression.type !== 'CallExpression' && expression.type !== 'NewExpression')) {
     return null
   }
 

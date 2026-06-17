@@ -2,8 +2,8 @@ import { debugRuntimeMethodNameFromPath } from '../../stdlib/descriptors/debug.t
 import { memberExpressionPath } from '../../member-paths.ts'
 import type { AnyNode } from '../../types.ts'
 
-export function cDebugRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression.type !== 'CallExpression' || expression.debugRuntimeMethod == null) {
+export function cDebugRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'CallExpression' || expression.debugRuntimeMethod == null) {
     return null
   }
 

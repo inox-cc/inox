@@ -94,6 +94,56 @@ export function main(): void {
   }
 })
 
+test('module graph allows static ESM import cycles', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-cycles-'))
+
+  try {
+    await writeFile(
+      join(dir, 'a.ts'),
+      `import { b } from './b'
+
+export const a: number = 1
+`
+    )
+    await writeFile(
+      join(dir, 'b.ts'),
+      `import { a } from './a'
+
+export const b: number = 2
+`
+    )
+    await writeFile(
+      join(dir, 'main.ts'),
+      `import { a } from './a'
+import { b } from './b'
+
+export function main(): void {
+  console.log(a + b)
+}
+`
+    )
+
+    const result = await compileFile(join(dir, 'main.ts'), {
+      target: 'c'
+    })
+
+    assert.equal(
+      result.graph.modules.some((module) => module.path.endsWith('/a.ts')),
+      true
+    )
+    assert.equal(
+      result.graph.modules.some((module) => module.path.endsWith('/b.ts')),
+      true
+    )
+    assert.match(result.code, /ccjs_main/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('module graph resolves named re-exports', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-reexports-'))
 

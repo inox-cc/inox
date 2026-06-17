@@ -21,8 +21,8 @@ type OsCContext = {
   usedCleanupGoto: boolean
 }
 
-export function cOsRuntimeMethodName(expression: AnyNode): string | null {
-  if (expression.type !== 'CallExpression') {
+export function cOsRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -35,7 +35,11 @@ export function cOsRuntimeMethodName(expression: AnyNode): string | null {
   return null
 }
 
-export function cOsRuntimeConstantName(expression: AnyNode): string | null {
+export function cOsRuntimeConstantName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
   const constant = expression.osRuntimeConstant
 
   if (constant != null) {

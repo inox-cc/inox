@@ -155,7 +155,11 @@ function timerStartCallRequiresHandle(method: string | null): boolean {
   return false
 }
 
-function timerRuntimeMethodForExpression(expression: AnyNode): string | null {
+function timerRuntimeMethodForExpression(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
   if (expression.timerRuntimeMethod != null) {
     return expression.timerRuntimeMethod
   }
@@ -163,7 +167,11 @@ function timerRuntimeMethodForExpression(expression: AnyNode): string | null {
   return cTimerRuntimeCallName(expression.callee)
 }
 
-function timerRuntimeMethodStartsWithSet(expression: AnyNode): boolean {
+function timerRuntimeMethodStartsWithSet(expression: AnyNode | null | undefined): boolean {
+  if (expression == null) {
+    return false
+  }
+
   if (expression.timerRuntimeMethod == null) {
     return false
   }

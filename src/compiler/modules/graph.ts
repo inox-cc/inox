@@ -50,13 +50,12 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
 async function visitModuleGraphFile(context: ModuleGraphContext, file: string): Promise<boolean> {
   const path = await resolveExistingSource(file, context.host)
 
-  if (context.visiting.has(path)) {
-    context.diagnostics.push(diagnostic('CCJS_CIRCULAR_IMPORT', `circular import involving ${path}`))
-    return false
-  }
-
   if (context.modules.has(path)) {
     return true
+  }
+
+  if (context.visiting.has(path)) {
+    return false
   }
 
   context.visiting.add(path)

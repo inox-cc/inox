@@ -296,12 +296,13 @@ export function emitPreparedCollectionReceiver(
   return null
 }
 
-export function isCollectionConstructorExpression(expression: AnyNode): boolean {
+export function isCollectionConstructorExpression(expression: AnyNode | null | undefined): boolean {
   return collectionConstructorName(expression) != null
 }
 
-export function collectionConstructorName(expression: AnyNode): string | null {
+export function collectionConstructorName(expression: AnyNode | null | undefined): string | null {
   if (
+    expression == null ||
     expression.type !== 'NewExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1
@@ -313,10 +314,10 @@ export function collectionConstructorName(expression: AnyNode): string | null {
 }
 
 export function emitPreparedCollectionCallExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   context: CollectionFunctionContext
 ): PreparedCollectionCall | null {
-  if (expression.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
+  if (expression == null || expression.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
     return null
   }
 

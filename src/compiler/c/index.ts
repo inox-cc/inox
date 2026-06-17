@@ -1,4 +1,4 @@
-import { CompileError, diagnostic } from '../diagnostics.ts'
+import { diagnostic } from '../diagnostics.ts'
 import {
   collectIrFunctionDeclarations,
   collectIrFunctionNodeEntries,
@@ -1976,6 +1976,10 @@ function inferRejectedValueTypeWithErrors(
 }
 
 function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
+  if (statement.init == null) {
+    return emitUninitializedScalarVariableDeclaration(statement, context)
+  }
+
   if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
     return emitNullableRuntimeValueVariableDeclaration(statement, context)
   }
@@ -2051,6 +2055,57 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
   }
 
   return emitNumberBooleanScalarVariableDeclaration(statement, context, inferred)
+}
+
+function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
+  let inferred = knownValueType(statement.valueType)
+
+  if (inferred == null) {
+    inferred = 'unknown'
+  }
+
+  context.variables.set(statement.name, inferred)
+
+  const prefix = uninitializedDeclarationPrefix(statement)
+
+  if (inferred === 'string') {
+    return [`${prefix}char* ${statement.name} = "";`]
+  }
+
+  if (isManagedRuntimeReturnType(inferred)) {
+    registerOwnedValue(context, statement.name)
+    return [`${prefix}ccjs_value ${statement.name} = ccjs_undefined_value();`]
+  }
+
+  if (inferred === 'promise') {
+    return [`${prefix}ccjs_promise* ${statement.name} = 0;`]
+  }
+
+  if (inferred === 'timer') {
+    return [`${prefix}ccjs_timer_handle* ${statement.name} = 0;`]
+  }
+
+  if (inferred === 'crypto-hash') {
+    return [`${prefix}ccjs_crypto_hash* ${statement.name} = 0;`]
+  }
+
+  if (inferred === 'crypto-hmac') {
+    return [`${prefix}ccjs_crypto_hmac* ${statement.name} = 0;`]
+  }
+
+  if (inferred === 'function') {
+    return [`${prefix}void* ${statement.name} = 0;`]
+  }
+
+  return [`${prefix}double ${statement.name} = 0;`]
+}
+
+function uninitializedDeclarationPrefix(statement: AnyNode): string {
+  if (statement.kind === 'const') {
+    return 'const '
+  }
+
+  return ''
 }
 
 function isBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): boolean {
@@ -3679,11 +3734,12 @@ function emitPreparedDebugMemoryCallExpression(
 }
 
 function emitPreparedAsyncFunctionPromiseCallExpression(
-  expression: AnyNode,
+  expression: AnyNode | null | undefined,
   context: CFunctionContext,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   if (
+    expression == null ||
     expression.type !== 'CallExpression' ||
     !isAsyncFunctionCallee(expression.callee, context) ||
     expression.valueType !== 'promise'
