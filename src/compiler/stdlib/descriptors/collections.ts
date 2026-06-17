@@ -82,7 +82,7 @@ export function isStringRuntimeMethod(method: string): boolean {
   return stringListIncludes(stringRuntimeMethods, method)
 }
 
-export function stringRuntimeReturnType(method: string): 'array' | 'boolean' | 'string' | null {
+export function stringRuntimeReturnType(method: string): string | null {
   if (method === 'split') {
     return 'array'
   }

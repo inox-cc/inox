@@ -78,7 +78,7 @@ export function isUnsupportedBufferRuntimeExport(name: string): boolean {
   return stringListIncludes(unsupportedBufferRuntimeExports, name)
 }
 
-export function binaryRuntimeReturnType(method: string): 'bytes' | 'string' | null {
+export function binaryRuntimeReturnType(method: string): string | null {
   if (method === 'isBuffer') {
     return null
   }

@@ -82,7 +82,7 @@ export function isBinaryConstructorExpression(expression: AnyNode): boolean {
   )
 }
 
-export function binaryRuntimeExpressionReturnType(expression: AnyNode | null | undefined): 'bytes' | 'string' | null {
+export function binaryRuntimeExpressionReturnType(expression: AnyNode | null | undefined): string | null {
   if (expression == null) {
     return null
   }

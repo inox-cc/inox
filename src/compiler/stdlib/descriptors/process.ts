@@ -97,7 +97,7 @@ export function isProcessRuntimeObjectProperty(property: string): boolean {
   return stringListHas(processRuntimeObjectProperties, property)
 }
 
-export function processRuntimePropertyValueType(property: string): 'string' | 'number' | 'object' | null {
+export function processRuntimePropertyValueType(property: string): string | null {
   if (isProcessRuntimeStringProperty(property)) {
     return 'string'
   }

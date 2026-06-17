@@ -60,7 +60,7 @@ export function cProcessRuntimePropertyName(expression: AnyNode | null | undefin
   return null
 }
 
-export function cProcessRuntimePropertyValueType(expression: AnyNode | null | undefined): 'string' | 'number' | 'object' | null {
+export function cProcessRuntimePropertyValueType(expression: AnyNode | null | undefined): string | null {
   const property = cProcessRuntimePropertyName(expression)
 
   if (property != null) {
