@@ -206,7 +206,7 @@ export function removedFsRuntimeMethodInfoFromPath(
   return {
     path,
     root: path[0],
-    message: `function ${path.join('.')} is not part of Node fs; ${replacement}`
+    message: `function ${joinStrings(path, '.')} is not part of Node fs; ${replacement}`
   }
 }
 
@@ -220,10 +220,24 @@ export function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promi
   }
 
   if (info.mode === 'callback' && !promisesApi) {
-    return `Node ${info.path.join('.')} callback API is not supported yet; use fs.promises.${info.method}`
+    return `Node ${joinStrings(info.path, '.')} callback API is not supported yet; use fs.promises.${info.method}`
   }
 
   return null
+}
+
+function joinStrings(values: readonly string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 function promiseFsRuntimeMethodForNodeName(nodeName: string): string | null {

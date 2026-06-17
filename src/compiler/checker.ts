@@ -3736,7 +3736,7 @@ class Checker {
     let label = method
 
     if (path != null) {
-      label = path.join('.')
+      label = joinStrings(path, '.')
     }
 
     return {
@@ -3936,7 +3936,7 @@ class Checker {
     let label = method
 
     if (path != null) {
-      label = path.join('.')
+      label = joinStrings(path, '.')
     }
 
     return {
@@ -4111,7 +4111,7 @@ class Checker {
     let label = method
 
     if (path != null) {
-      label = path.join('.')
+      label = joinStrings(path, '.')
     }
 
     return {
@@ -4435,7 +4435,7 @@ class Checker {
     let label = method
 
     if (path != null) {
-      label = path.join('.')
+      label = joinStrings(path, '.')
     }
 
     return {
@@ -4500,7 +4500,7 @@ class Checker {
     let label = method
 
     if (path != null) {
-      label = path.join('.')
+      label = joinStrings(path, '.')
     }
 
     return {
@@ -4722,7 +4722,7 @@ class Checker {
     let label = method
 
     if (path != null) {
-      label = path.join('.')
+      label = joinStrings(path, '.')
     }
 
     return {
@@ -5638,7 +5638,7 @@ class Checker {
 
     const method = info.method
     const promisesApi = info.viaPromises || this.isFsPromisesImportRoot(info.root)
-    const label = info.path.join('.')
+    const label = joinStrings(info.path, '.')
     const unsupportedMessage = unsupportedFsRuntimeMethodMessage(info, promisesApi)
 
     if (unsupportedMessage != null) {
@@ -10997,7 +10997,7 @@ class Checker {
   }
 }
 
-function joinStrings(values: string[], separator: string): string {
+function joinStrings(values: readonly string[], separator: string): string {
   let result = ''
 
   for (let index = 0; index < values.length; index = index + 1) {
