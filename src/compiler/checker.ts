@@ -351,13 +351,7 @@ function stringSetFromArray(values: string[]): Set<string> {
 }
 
 function cloneStringSet(values: Set<string>): Set<string> {
-  const result: Set<string> = new Set()
-
-  for (const value of values) {
-    result.add(value)
-  }
-
-  return result
+  return new Set(values)
 }
 
 class Scope {
@@ -1551,7 +1545,9 @@ class Checker {
       this.checkExpression(expression.callee)
       const argTypes: ValueType[] = []
 
-      for (const arg of expression.args) {
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
         argTypes.push(this.checkExpression(arg))
       }
 
@@ -1710,7 +1706,9 @@ class Checker {
     if (expression.type === 'ArrayLiteral') {
       const elementTypes: ValueType[] = []
 
-      for (const element of expression.elements) {
+      for (let index = 0; index < expression.elements.length; index = index + 1) {
+        const element = checkerNodeAt(expression.elements, index)
+
         elementTypes.push(this.checkExpression(element))
       }
 
@@ -2674,7 +2672,9 @@ class Checker {
     this.checkExpression(expression.callee)
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -2871,7 +2871,9 @@ class Checker {
         )
       }
 
-      for (const arg of expression.args) {
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
         this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, false)
       }
 
@@ -2958,7 +2960,9 @@ class Checker {
       return null
     }
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       this.checkExpression(arg)
     }
 
@@ -3022,7 +3026,9 @@ class Checker {
       return null
     }
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       this.checkExpression(arg)
     }
 
@@ -3172,7 +3178,9 @@ class Checker {
     }
 
     if (call.unsupported) {
-      for (const arg of expression.args) {
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
         this.checkExpression(arg)
       }
 
@@ -3188,7 +3196,9 @@ class Checker {
     const method = call.method
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -3633,7 +3643,9 @@ class Checker {
     }
 
     if (call.unsupported) {
-      for (const arg of expression.args) {
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
         this.checkExpression(arg)
       }
 
@@ -3702,7 +3714,9 @@ class Checker {
           args.loc
         )
       } else if (args != null) {
-        for (const element of args.elements) {
+        for (let index = 0; index < args.elements.length; index = index + 1) {
+          const element = checkerNodeAt(args.elements, index)
+
           this.checkAssignableType(this.checkExpression(element), 'string', element.loc, false, false)
         }
       }
@@ -3749,7 +3763,9 @@ class Checker {
         args.loc
       )
     } else if (args != null && args.type === 'ArrayLiteral') {
-      for (const element of args.elements) {
+      for (let index = 0; index < args.elements.length; index = index + 1) {
+        const element = checkerNodeAt(args.elements, index)
+
         this.checkAssignableType(this.checkExpression(element), 'string', element.loc, false, false)
       }
     }
@@ -3934,7 +3950,9 @@ class Checker {
 
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -4092,7 +4110,9 @@ class Checker {
 
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -4345,7 +4365,9 @@ class Checker {
 
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -4439,7 +4461,9 @@ class Checker {
       )
     }
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
     }
 
@@ -4603,7 +4627,9 @@ class Checker {
     }
 
     if (call.unsupported) {
-      for (const arg of expression.args) {
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
         this.checkExpression(arg)
       }
 
@@ -4619,7 +4645,9 @@ class Checker {
     const method = call.method
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -4979,18 +5007,26 @@ class Checker {
     const classSymbol = this.scope.resolve(className)
     let method: AnyNode | null = null
 
-    if (classSymbol != null && classSymbol.classMethods != null) {
-      for (const item of classSymbol.classMethods) {
-        if (item.name === expression.callee.property) {
-          method = item
-          break
+    if (classSymbol != null) {
+      const classMethods = classSymbol.classMethods
+
+      if (classMethods != null) {
+        for (let index = 0; index < classMethods.length; index = index + 1) {
+          const item = checkerNodeAt(classMethods, index)
+
+          if (item.name === expression.callee.property) {
+            method = item
+            break
+          }
         }
       }
     }
 
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -5002,7 +5038,9 @@ class Checker {
 
     const params: AnyNode[] = []
 
-    for (const param of method.params) {
+    for (let index = 0; index < method.params.length; index = index + 1) {
+      const param = checkerNodeAt(method.params, index)
+
       params.push(this.resolveParam(param))
     }
 
@@ -5072,7 +5110,9 @@ class Checker {
       )
     }
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, false)
     }
 
@@ -6511,7 +6551,9 @@ class Checker {
 
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -6729,7 +6771,9 @@ class Checker {
       return null
     }
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       this.checkExpression(arg)
     }
 
@@ -6779,7 +6823,9 @@ class Checker {
           )
         }
 
-        for (const arg of expression.args.slice(1)) {
+        for (let index = 1; index < expression.args.length; index = index + 1) {
+          const arg = checkerNodeAt(expression.args, index)
+
           this.checkExpression(arg)
         }
 
@@ -6815,7 +6861,9 @@ class Checker {
         )
       }
 
-      for (const arg of expression.args.slice(2)) {
+      for (let index = 2; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
         this.checkExpression(arg)
       }
 
@@ -6849,7 +6897,9 @@ class Checker {
         )
       }
 
-      for (const arg of expression.args.slice(1)) {
+      for (let index = 1; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
         this.checkExpression(arg)
       }
 
@@ -7122,7 +7172,9 @@ class Checker {
         this.report('CCJS_ARG_COUNT', `array.pop expects 0 argument(s), got ${expression.args.length}`, expression.loc)
       }
 
-      for (const arg of expression.args) {
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
         this.checkExpression(arg)
       }
 
@@ -7464,7 +7516,9 @@ class Checker {
 
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -7491,7 +7545,9 @@ class Checker {
 
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -7525,7 +7581,9 @@ class Checker {
 
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -7565,7 +7623,9 @@ class Checker {
 
     const objectType = this.checkExpression(expression.callee.object)
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       this.checkExpression(arg)
     }
 
@@ -7597,7 +7657,9 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -7639,7 +7701,9 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -7677,7 +7741,9 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -7718,7 +7784,9 @@ class Checker {
 
     const argTypes: ValueType[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
       argTypes.push(this.checkExpression(arg))
     }
 
@@ -8705,7 +8773,9 @@ class Checker {
           method.loc
         )
 
-        for (const param of method.params) {
+        for (let index = 0; index < method.params.length; index = index + 1) {
+          const param = checkerNodeAt(method.params, index)
+
           const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
           this.declare(
             param.name,
