@@ -76,9 +76,23 @@ export function readTypeAnnotation(
   }
 
   return {
-    typeName: normalizeTypeName(parts.join('')),
+    typeName: normalizeTypeName(joinStrings(parts, '')),
     position
   }
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 function typeAnnotationReadOptionsOrEmpty(options: TypeAnnotationReadOptions | null): TypeAnnotationReadOptions {
