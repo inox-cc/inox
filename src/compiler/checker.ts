@@ -5286,7 +5286,7 @@ class Checker {
   }
 
   isFetchHttpsLiteral(expression: AnyNode): boolean {
-    return expression.type === 'StringLiteral' && expression.value.toLowerCase().startsWith('https://')
+    return expression.type === 'StringLiteral' && startsWithHttpsScheme(expression.value)
   }
 
   supportsFetchHttps(): boolean {
@@ -11027,6 +11027,33 @@ function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
   for (let index = 0; index < source.length; index = index + 1) {
     target.push(source[index])
   }
+}
+
+function startsWithHttpsScheme(value: string): boolean {
+  if (value.length < 8) {
+    return false
+  }
+
+  return (
+    asciiLowerCharCode(value, 0) === 104 &&
+    asciiLowerCharCode(value, 1) === 116 &&
+    asciiLowerCharCode(value, 2) === 116 &&
+    asciiLowerCharCode(value, 3) === 112 &&
+    asciiLowerCharCode(value, 4) === 115 &&
+    value.charCodeAt(5) === 58 &&
+    value.charCodeAt(6) === 47 &&
+    value.charCodeAt(7) === 47
+  )
+}
+
+function asciiLowerCharCode(value: string, index: number): number {
+  const code = value.charCodeAt(index)
+
+  if (code >= 65 && code <= 90) {
+    return code + 32
+  }
+
+  return code
 }
 
 function isPromiseMethod(name: string): boolean {

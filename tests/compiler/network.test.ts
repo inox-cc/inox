@@ -554,6 +554,14 @@ console.log(response.status)
   )
 
   assertDiagnostic(
+    `const response = await fetch('HTTPS://example.test/hello')
+console.log(response.status)
+`,
+    'CCJS_FETCH',
+    cLibuvOptions
+  )
+
+  assertDiagnostic(
     `const response = await fetch('http://127.0.0.1:9000/hello', { redirect: 'same-origin' })
 console.log(response.status)
 `,
