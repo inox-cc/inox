@@ -1719,6 +1719,51 @@ export function main(): void {
 })
 
 
+test('checks Map and Set copy constructors as typed collection values', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+  const copy = new Map(scores)
+  const assigned: Map<string, number> = new Map(copy)
+  const names: Set<string> = new Set(['Ada', 'Grace'])
+  const namesCopy = new Set(names)
+  const assignedNames: Set<string> = new Set(namesCopy)
+  console.log(assigned.get('Ada') ?? 0, assignedNames.has('Grace'))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  assert.ok(main)
+
+  const copy = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'copy')
+  const assigned = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'assigned')
+  const namesCopy = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'namesCopy')
+  const assignedNames = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'assignedNames')
+  assert.ok(copy)
+  assert.ok(assigned)
+  assert.ok(namesCopy)
+  assert.ok(assignedNames)
+
+  assert.equal(copy.valueType, 'map')
+  assert.equal(copy.mapKeyType, 'string')
+  assert.equal(copy.mapValueType, 'number')
+  assert.equal(assigned.mapKeyType, 'string')
+  assert.equal(assigned.mapValueType, 'number')
+  assert.equal(namesCopy.valueType, 'set')
+  assert.equal(namesCopy.setElementType, 'string')
+  assert.equal(assignedNames.setElementType, 'string')
+  assert.match(result.code, /ccjs_map\* ccjs_map_source_\d+ = \(ccjs_map\*\)scores\.as\.ref;/)
+  assert.match(result.code, /ccjs_map_set\(\s*ccjs_map_\d+,\s*ccjs_map_source_\d+->entries\[ccjs_map_source_index_\d+\]\.key,\s*ccjs_map_source_\d+->entries\[ccjs_map_source_index_\d+\]\.value\s*\)/)
+  assert.match(result.code, /copy = ccjs_map_\d+;/)
+  assert.match(result.code, /ccjs_set\* ccjs_set_source_\d+ = \(ccjs_set\*\)names\.as\.ref;/)
+  assert.match(result.code, /ccjs_set_add\(ccjs_set_\d+, ccjs_set_source_\d+->entries\[ccjs_set_source_index_\d+\]\.value\)/)
+  assert.match(result.code, /namesCopy = ccjs_set_\d+;/)
+})
+
+
 test('compiles C collection values across function boundaries', () => {
   const result = compileSource(
     `function makeNums(): number[] {

@@ -323,14 +323,20 @@ export function emitPreparedCollectionReceiver(
     return null
   }
 
-  if (expression.type === 'CallExpression') {
+  if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
     const valueType = inferCollectionExpressionType(expression, context)
 
     if (valueType !== 'map' && valueType !== 'set') {
       return null
     }
 
-    const call = emitPreparedCollectionCallExpression(expression, context)
+    let call: PreparedExpression | null = null
+
+    if (expression.type === 'CallExpression') {
+      call = emitPreparedCollectionCallExpression(expression, context)
+    } else {
+      call = emitPreparedCollectionConstructorValueExpression(expression, context)
+    }
 
     if (call != null && call.expression !== '') {
       return {
@@ -456,10 +462,16 @@ function emitMapConstructorValueEntries(
   }
 
   if (expression.type !== 'ArrayLiteral') {
+    const source = emitPreparedCollectionReceiver(expression, context)
+
+    if (source != null && source.type === 'map') {
+      return emitMapConstructorCopiedEntries(name, source, context)
+    }
+
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_COLLECTION',
-        'C Map constructor currently supports only array literal entries',
+        'C Map constructor currently supports only array literal entries or Map copy sources',
         nodeLocOrFallback(expression, loc)
       )
     )
@@ -500,6 +512,29 @@ function emitMapConstructorValueEntries(
   return lines
 }
 
+function emitMapConstructorCopiedEntries(
+  name: string,
+  source: PreparedCollectionReceiver,
+  context: CollectionFunctionContext
+): string[] {
+  const sourceMap = nextCName(context, 'ccjs_map_source')
+  const index = nextCName(context, 'ccjs_map_source_index')
+  const sourceExpression = source.expression
+  const setCall = `ccjs_map_set(${name}, ${sourceMap}->entries[${index}].key, ${sourceMap}->entries[${index}].value)`
+  const lines: string[] = []
+
+  pushAllLines(lines, source.lines)
+  lines.push(`ccjs_map* ${sourceMap} = (ccjs_map*)${sourceExpression}.as.ref;`)
+  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceMap}->cap; ${index} += 1) {`)
+  lines.push(`  if (${sourceMap}->entries[${index}].state != CCJS_MAP_SLOT_OCCUPIED) {`)
+  lines.push('    continue;')
+  lines.push('  }')
+  lines.push(`  ${emitStatusCheck(setCall, context)}`)
+  lines.push('}')
+
+  return lines
+}
+
 function emitSetConstructorValueElements(
   name: string,
   expression: CollectionNode | null | undefined,
@@ -511,10 +546,16 @@ function emitSetConstructorValueElements(
   }
 
   if (expression.type !== 'ArrayLiteral') {
+    const source = emitPreparedCollectionReceiver(expression, context)
+
+    if (source != null && source.type === 'set') {
+      return emitSetConstructorCopiedElements(name, source, context)
+    }
+
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_COLLECTION',
-        'C Set constructor currently supports only array literal values',
+        'C Set constructor currently supports only array literal values or Set copy sources',
         nodeLocOrFallback(expression, loc)
       )
     )
@@ -536,6 +577,29 @@ function emitSetConstructorValueElements(
     pushAllLines(lines, value.lines)
     lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
   }
+
+  return lines
+}
+
+function emitSetConstructorCopiedElements(
+  name: string,
+  source: PreparedCollectionReceiver,
+  context: CollectionFunctionContext
+): string[] {
+  const sourceSet = nextCName(context, 'ccjs_set_source')
+  const index = nextCName(context, 'ccjs_set_source_index')
+  const sourceExpression = source.expression
+  const addCall = `ccjs_set_add(${name}, ${sourceSet}->entries[${index}].value)`
+  const lines: string[] = []
+
+  pushAllLines(lines, source.lines)
+  lines.push(`ccjs_set* ${sourceSet} = (ccjs_set*)${sourceExpression}.as.ref;`)
+  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceSet}->cap; ${index} += 1) {`)
+  lines.push(`  if (${sourceSet}->entries[${index}].state != CCJS_SET_SLOT_OCCUPIED) {`)
+  lines.push('    continue;')
+  lines.push('  }')
+  lines.push(`  ${emitStatusCheck(addCall, context)}`)
+  lines.push('}')
 
   return lines
 }

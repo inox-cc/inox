@@ -7708,12 +7708,36 @@ class Checker {
       expression.valueType = 'map'
       expression.mapKeyType = 'unknown'
       expression.mapValueType = 'unknown'
+
+      if (argTypes[0] === 'map') {
+        const mapType = this.resolveExpressionMapType(expression.args[0])
+
+        if (mapType != null) {
+          if (mapType.key != null) {
+            expression.mapKeyType = mapType.key
+          }
+
+          if (mapType.value != null) {
+            expression.mapValueType = mapType.value
+          }
+        }
+      }
+
       return 'map'
     }
 
     if (collectionConstructor === 'Set') {
       expression.valueType = 'set'
       expression.setElementType = 'unknown'
+
+      if (argTypes[0] === 'set') {
+        const elementType = this.resolveExpressionSetElementType(expression.args[0])
+
+        if (elementType != null) {
+          expression.setElementType = elementType
+        }
+      }
+
       return 'set'
     }
 

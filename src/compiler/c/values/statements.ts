@@ -999,6 +999,12 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
     })
     reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
 
+    const copied = emitCollectionVariableCopyConstructor(statement, context)
+
+    if (copied != null) {
+      return copied
+    }
+
     const lines: string[] = []
     pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
     lines.push(emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context))
@@ -1012,11 +1018,35 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   context.setElementTypes.set(statement.name, stringOrUnknown(statement.setElementType))
   reportCCollectionHashability(statement.setElementType, 'Set values', statement.loc, context)
 
+  const copied = emitCollectionVariableCopyConstructor(statement, context)
+
+  if (copied != null) {
+    return copied
+  }
+
   const lines: string[] = []
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context))
 
   pushAllLines(lines, emitSetConstructorValues(statement.name, statement.init.args[0], context, statement.init.loc))
+
+  return lines
+}
+
+function emitCollectionVariableCopyConstructor(statement: StatementNode, context: CFunctionContext): string[] | null {
+  const expression = statement.init.args[0]
+
+  if (expression == null || expression.type === 'ArrayLiteral') {
+    return null
+  }
+
+  const value = statementDeps(context).emitCValueExpression(statement.init, context)
+  const lines: string[] = []
+
+  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
+  pushAllLines(lines, value.lines)
+  lines.push(`${statement.name} = ${value.expression};`)
+  lines.push(`ccjs_retain(${statement.name});`)
 
   return lines
 }
@@ -1034,13 +1064,14 @@ function emitMapConstructorEntries(
   }
 
   if (expression.type !== 'ArrayLiteral') {
-    pushDiagnostic(context,
+    pushDiagnostic(
+      context,
       diagnostic(
-	        'CCJS_C_COLLECTION',
-	        'C Map constructor currently supports only array literal entries',
-	        nodeLocOrFallback(expression, loc)
-	      )
-	    )
+        'CCJS_C_COLLECTION',
+        'C Map constructor currently supports only array literal entries or Map copy sources',
+        nodeLocOrFallback(expression, loc)
+      )
+    )
     return []
   }
 
@@ -1061,15 +1092,15 @@ function emitMapConstructorEntries(
     const key = deps.emitCValueExpression(entry.elements[0], context)
     const value = deps.emitCValueExpression(entry.elements[1], context)
     reportCCollectionHashability(
-	      deps.inferExpressionType(entry.elements[0], context),
-	      'Map keys',
-	      nodeLocOrFallback(entry.elements[0], nodeLocOrFallback(entry, loc)),
-	      context
-	    )
+      deps.inferExpressionType(entry.elements[0], context),
+      'Map keys',
+      nodeLocOrFallback(entry.elements[0], nodeLocOrFallback(entry, loc)),
+      context
+    )
 
-	    pushAllLines(lines, key.lines)
-	    pushAllLines(lines, value.lines)
-	    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+    pushAllLines(lines, key.lines)
+    pushAllLines(lines, value.lines)
+    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
   }
 
   return lines
@@ -1088,25 +1119,26 @@ function emitSetConstructorValues(
   }
 
   if (expression.type !== 'ArrayLiteral') {
-    pushDiagnostic(context,
+    pushDiagnostic(
+      context,
       diagnostic(
-	        'CCJS_C_COLLECTION',
-	        'C Set constructor currently supports only array literal values',
-	        nodeLocOrFallback(expression, loc)
-	      )
-	    )
+        'CCJS_C_COLLECTION',
+        'C Set constructor currently supports only array literal values or Set copy sources',
+        nodeLocOrFallback(expression, loc)
+      )
+    )
     return []
   }
 
   const lines: string[] = []
 
-	  for (const element of expression.elements) {
-	    const value = deps.emitCValueExpression(element, context)
-	    reportCCollectionHashability(deps.inferExpressionType(element, context), 'Set values', nodeLocOrFallback(element, loc), context)
+  for (const element of expression.elements) {
+    const value = deps.emitCValueExpression(element, context)
+    reportCCollectionHashability(deps.inferExpressionType(element, context), 'Set values', nodeLocOrFallback(element, loc), context)
 
-	    pushAllLines(lines, value.lines)
-	    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
-	  }
+    pushAllLines(lines, value.lines)
+    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
+  }
 
   return lines
 }

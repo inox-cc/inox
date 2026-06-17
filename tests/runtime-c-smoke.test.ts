@@ -9817,6 +9817,70 @@ console.log(adaScore, graceScore, names.has('Ada'), names.has('Grace'), scores.s
 })
 
 
+test('generated C Map and Set copy constructors compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-copy-constructors-'))
+  const source = join(dir, 'collection-copy-constructors.c')
+  const output = join(dir, 'collection-copy-constructors')
+
+  try {
+    const result = compileSource(
+      `function cloneScores(scores: Map<string, number>): Map<string, number> {
+  return new Map(scores)
+}
+
+function cloneNames(names: Set<string>): Set<string> {
+  return new Set(names)
+}
+
+const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+const copy = cloneScores(scores)
+const copyAgain: Map<string, number> = new Map(copy)
+const copyFromCall: Map<string, number> = new Map(cloneScores(scores))
+scores.set('Alan', 5)
+
+const names: Set<string> = new Set(['Ada', 'Grace'])
+const namesCopy = cloneNames(names)
+const namesCopyAgain: Set<string> = new Set(namesCopy)
+const namesFromCall: Set<string> = new Set(cloneNames(names))
+names.add('Alan')
+
+console.log(copyAgain.get('Ada') ?? 0, copyAgain.has('Alan'), copyAgain.size)
+console.log(copyFromCall.get('Grace') ?? 0, copyFromCall.has('Alan'), copyFromCall.size)
+console.log(namesCopyAgain.has('Ada'), namesCopyAgain.has('Alan'), namesCopyAgain.size)
+console.log(namesFromCall.has('Grace'), namesFromCall.has('Alan'), namesFromCall.size)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7 0 2\n9 0 2\n1 0 2\n1 0 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C Map and Set object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
