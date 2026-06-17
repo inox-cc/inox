@@ -255,6 +255,14 @@ function stringOrUnknown(value: string | null | undefined): string {
   return 'unknown'
 }
 
+function collectionNodeAt(nodes: CollectionNode[], index: number): CollectionNode {
+  return nodes[index]
+}
+
+function collectionStringAt(values: string[], index: number): string {
+  return values[index]
+}
+
 function functionReturnMapType(
   context: CollectionFunctionContext,
   functionReturn: string
@@ -295,7 +303,7 @@ export function emitPreparedCollectionReceiver(
   context: CollectionFunctionContext
 ): PreparedCollectionReceiver | null {
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
+    const name = collectionStringAt(expression.path, 0)
     const receiverType = context.variables.get(name)
 
     if (receiverType === 'map' || receiverType === 'set') {
@@ -413,7 +421,7 @@ export function emitPreparedCollectionConstructorValueExpression(
   if (collectionConstructor === 'Map') {
     reportCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
     lines.push(emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${temp})`, context))
-    pushAllLines(lines, emitMapConstructorValueEntries(temp, expression.args[0], context, expression.loc))
+    pushAllLines(lines, emitMapConstructorValueEntries(temp, collectionNodeAt(expression.args, 0), context, expression.loc))
 
     return {
       lines,
@@ -423,7 +431,7 @@ export function emitPreparedCollectionConstructorValueExpression(
 
   reportCollectionHashability(expression.setElementType, 'Set values', expression.loc, context)
   lines.push(emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${temp})`, context))
-  pushAllLines(lines, emitSetConstructorValueElements(temp, expression.args[0], context, expression.loc))
+  pushAllLines(lines, emitSetConstructorValueElements(temp, collectionNodeAt(expression.args, 0), context, expression.loc))
 
   return {
     lines,
@@ -466,8 +474,8 @@ function emitMapConstructorValueEntries(
       continue
     }
 
-    const keyNode = entry.elements[0]
-    const valueNode = entry.elements[1]
+    const keyNode = collectionNodeAt(entry.elements, 0)
+    const valueNode = collectionNodeAt(entry.elements, 1)
     const key = emitCollectionValueExpression(keyNode, context)
     const value = emitCollectionValueExpression(valueNode, context)
 
@@ -576,8 +584,8 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
   }
 
   if (method === 'set') {
-    const keyArg = expression.args[0]
-    const valueArg = expression.args[1]
+    const keyArg = collectionNodeAt(expression.args, 0)
+    const valueArg = collectionNodeAt(expression.args, 1)
     reportCollectionHashability(
       inferCollectionExpressionType(keyArg, context),
       'Map keys',
@@ -598,7 +606,7 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
   }
 
   if (method === 'get') {
-    const keyArg = expression.args[0]
+    const keyArg = collectionNodeAt(expression.args, 0)
     reportCollectionHashability(
       inferCollectionExpressionType(keyArg, context),
       'Map keys',
@@ -632,7 +640,7 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
       tempPrefix = 'ccjs_map_delete'
     }
 
-    const keyArg = expression.args[0]
+    const keyArg = collectionNodeAt(expression.args, 0)
     reportCollectionHashability(
       inferCollectionExpressionType(keyArg, context),
       'Map keys',
@@ -762,7 +770,7 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
   }
 
   if (method === 'add') {
-    const valueArg = expression.args[0]
+    const valueArg = collectionNodeAt(expression.args, 0)
     reportCollectionHashability(
       inferCollectionExpressionType(valueArg, context),
       'Set values',
@@ -789,7 +797,7 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
       tempPrefix = 'ccjs_set_delete'
     }
 
-    const valueArg = expression.args[0]
+    const valueArg = collectionNodeAt(expression.args, 0)
     reportCollectionHashability(
       inferCollectionExpressionType(valueArg, context),
       'Set values',
@@ -855,7 +863,7 @@ export function emitPreparedCollectionSizeExpression(
 
 export function resolveRuntimeSetElementType(expression: AnyNode, context: CollectionFunctionContext): string | null {
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const elementType = context.setElementTypes.get(expression.path[0])
+    const elementType = context.setElementTypes.get(collectionStringAt(expression.path, 0))
 
     if (elementType != null) {
       return elementType
@@ -915,7 +923,7 @@ export function resolveRuntimeSetElementType(expression: AnyNode, context: Colle
 
 export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFunctionContext): RuntimeMapType | null {
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const mapType = context.mapTypes.get(expression.path[0])
+    const mapType = context.mapTypes.get(collectionStringAt(expression.path, 0))
 
     if (mapType != null) {
       return {
@@ -1020,7 +1028,7 @@ function resolveFunctionReturnNameFromCall(expression: AnyNode): string | null {
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1
   ) {
-    return expression.callee.path[0]
+    return collectionStringAt(expression.callee.path, 0)
   }
 
   return null
