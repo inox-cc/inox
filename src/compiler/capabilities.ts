@@ -15,6 +15,26 @@ import type {
 
 type NodeList = AnyNode[]
 
+type CapabilityNode = AnyNode & {
+  callee?: CapabilityMemberNode | null
+  loc?: SourceLocation
+  osRuntimeConstant?: string | null
+  osRuntimeMethod?: string | null
+  timerRuntimeMethod?: string | null
+  type?: string | null
+  valueType?: string | null
+}
+
+type CapabilityArrayDeclarationNode = {
+  loweredArrayMethod: boolean
+  loweredArrayMethodName?: string | null
+}
+
+type CapabilityMemberNode = AnyNode & {
+  property?: string | null
+  type?: string | null
+}
+
 type RuntimeCapabilityKey =
   | 'entropy'
   | 'fs'
@@ -143,17 +163,20 @@ function visitCapabilityNode(node: AnyNode | NodeList | null | undefined, usages
   }
 
   if (Array.isArray(node)) {
-    for (const item of node) {
+    for (let index = 0; index < node.length; index = index + 1) {
+      const item = node[index]
       visitCapabilityNode(item, usages)
     }
     return
   }
 
-  recordNodeCapabilityUsages(node, usages)
-  visitCapabilityChildren(node, usages)
+  const item = node as CapabilityNode
+
+  recordNodeCapabilityUsages(item, usages)
+  visitCapabilityChildren(item, usages)
 }
 
-function visitCapabilityChildren(item: AnyNode, usages: CapabilityUsage[]): void {
+function visitCapabilityChildren(item: CapabilityNode, usages: CapabilityUsage[]): void {
   for (const key of NODE_CHILD_KEYS) {
     const value = item[key]
 
@@ -163,26 +186,27 @@ function visitCapabilityChildren(item: AnyNode, usages: CapabilityUsage[]): void
   }
 }
 
-function recordNodeCapabilityUsages(expression: AnyNode, usages: CapabilityUsage[]): void {
+function recordNodeCapabilityUsages(expression: CapabilityNode, usages: CapabilityUsage[]): void {
   const osMethod = expression.osRuntimeMethod
   const osConstant = expression.osRuntimeConstant
+  const loc = expression.loc
 
   if (osMethod != null) {
-    pushCapability(usages, 'os', 'os', `os.${osMethod}`, expression.loc)
+    pushCapability(usages, 'os', 'os', `os.${osMethod}`, loc)
   } else if (osConstant != null) {
-    pushCapability(usages, 'os', 'os', `os.${osConstant}`, expression.loc)
+    pushCapability(usages, 'os', 'os', `os.${osConstant}`, loc)
   }
 
   const timerMethod = expression.timerRuntimeMethod
 
   if (timerMethod != null) {
-    pushCapability(usages, 'timers', 'timers', timerMethod, expression.loc)
+    pushCapability(usages, 'timers', 'timers', timerMethod, loc)
   }
 
   const arrayMethod = arrayProducingMethodName(expression)
 
   if (arrayMethod != null) {
-    pushCapability(usages, 'heap', 'heap', `Array.${arrayMethod}`, expression.loc)
+    pushCapability(usages, 'heap', 'heap', `Array.${arrayMethod}`, loc)
   }
 }
 
@@ -211,25 +235,38 @@ function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapabil
   return null
 }
 
-function arrayProducingMethodName(expression: AnyNode): string | null {
-  if (expression.type === 'VariableDeclaration' && expression.loweredArrayMethod === true) {
-    const method = expression.loweredArrayMethodName
+function arrayProducingMethodName(expression: CapabilityNode): string | null {
+  const expressionType = expression.type
+
+  if (expressionType === 'VariableDeclaration') {
+    const declaration = expression as CapabilityArrayDeclarationNode
+    const isLoweredArrayMethod = declaration.loweredArrayMethod
+
+    if (isLoweredArrayMethod !== true) {
+      return null
+    }
+
+    const method = declaration.loweredArrayMethodName
 
     if (method === 'filter' || method === 'map') {
       return method
     }
   }
 
-  if (expression.type !== 'CallExpression' || expression.valueType !== 'array') {
+  if (expressionType !== 'CallExpression' || expression.valueType !== 'array') {
     return null
   }
 
-  if (expression.callee == null || expression.callee.type !== 'MemberExpression') {
+  const callee = expression.callee
+
+  if (callee == null || callee.type !== 'MemberExpression') {
     return null
   }
 
-  if (expression.callee.property === 'filter' || expression.callee.property === 'map') {
-    return expression.callee.property
+  const property = callee.property
+
+  if (property === 'filter' || property === 'map') {
+    return property
   }
 
   return null
