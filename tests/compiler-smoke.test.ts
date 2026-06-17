@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { emitPreparedNumberExpression } from '../src/compiler/c/values/expressions.ts'
 import {
   assert,
   assertDiagnostic,
@@ -113,6 +114,45 @@ test('emits C for numeric operators', () => {
 
   assert.match(result.code, /const double value = \(1 \+ \(2 \* 3\)\);/)
   assert.match(result.code, /printf\("%g %g\\n", \(\(double\)value\), \(\(double\)\(value == 7\)\)\);/)
+})
+
+test('lowers C null literals in prepared scalar expressions', () => {
+  const nullableLoweringDependencies = {
+    emitCObjectLiteralValueExpression: () => ({ lines: [], expression: 'ccjs_undefined_value()' }),
+    emitCValueExpression: () => ({ lines: [], expression: 'ccjs_undefined_value()' }),
+    emitNullableFunctionValueExpression: () => ({ lines: [], expression: 'ccjs_undefined_value()' }),
+    emitNullableScalarValueExpression: () => ({ lines: [], expression: 'ccjs_null_value()' }),
+    inferExpressionType: () => 'null',
+    isNumberConversionCall: () => false,
+    resolveRuntimeCallbackCalleeType: () => null
+  }
+  const context = {
+    functionReturnNullables: new Map(),
+    narrowedNullableScalars: new Set(),
+    nullableLoweringDependencies,
+    nullableVariables: new Set(),
+    variables: new Map()
+  }
+  const deps = {
+    cFsRuntimeConstantExpression: () => null,
+    emitPreparedClassMethodCallExpression: () => null,
+    emitPreparedPathBooleanCallExpression: () => null,
+    emitPreparedProcessNumberExpression: () => null,
+    emitPreparedUrlSearchParamsCallExpression: () => null
+  }
+
+  const result = emitPreparedNumberExpression(
+    {
+      type: 'NullLiteral'
+    },
+    context as never,
+    deps as never
+  )
+
+  assert.deepEqual(result, {
+    lines: [],
+    expression: '0'
+  })
 })
 
 test('erases TypeScript as expressions before C emission', () => {

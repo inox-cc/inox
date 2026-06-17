@@ -993,16 +993,16 @@ class Checker {
           kind: statement.kind,
           mutable: statement.kind === 'let',
           valueType,
-          nullable: declared?.nullable === true || statement.init?.nullable === true,
+          nullable,
           arrayElementType,
           arrayElementDeclaredType,
-          mapKeyType: mapType?.key ?? null,
-          mapValueType: mapType?.value ?? null,
+          mapKeyType,
+          mapValueType,
           promiseValueType,
           setElementType,
-          functionType: declared?.functionType ?? null,
+          functionType,
           className: statement.className,
-          shape: declared?.shape ?? statement.init?.shape ?? null,
+          shape,
           loc: statement.loc
         },
         statement.loc
@@ -1029,13 +1029,20 @@ class Checker {
 
         if (declared.valueType === 'map') {
           const actual = this.resolveExpressionMapType(statement.init)
+          let actualKey: ValueType | null = null
+          let actualValue: ValueType | null = null
+
+          if (actual != null) {
+            actualKey = actual.key
+            actualValue = actual.value
+          }
 
           if (declared.mapKeyType != null) {
-            this.checkAssignableType(actual?.key, declared.mapKeyType, statement.loc, false, false)
+            this.checkAssignableType(actualKey, declared.mapKeyType, statement.loc, false, false)
           }
 
           if (declared.mapValueType != null) {
-            this.checkAssignableType(actual?.value, declared.mapValueType, statement.loc, false, false)
+            this.checkAssignableType(actualValue, declared.mapValueType, statement.loc, false, false)
           }
         }
 
@@ -1167,18 +1174,55 @@ class Checker {
 
     if (expression.type === 'TypeAssertionExpression') {
       const valueType = this.checkExpression(expression.expression)
+      const asserted = expression.expression
 
-      expression.nullable = expression.expression.nullable === true
+      expression.nullable = asserted.nullable === true
       expression.valueType = valueType
-      expression.arrayElementType = expression.expression.arrayElementType ?? null
-      expression.arrayElementDeclaredType = expression.expression.arrayElementDeclaredType ?? null
-      expression.mapKeyType = expression.expression.mapKeyType ?? null
-      expression.mapValueType = expression.expression.mapValueType ?? null
-      expression.promiseValueType = expression.expression.promiseValueType ?? null
-      expression.setElementType = expression.expression.setElementType ?? null
-      expression.functionType = expression.expression.functionType ?? null
-      expression.shape = expression.expression.shape ?? null
-      expression.className = expression.expression.className ?? null
+      expression.arrayElementType = null
+      expression.arrayElementDeclaredType = null
+      expression.mapKeyType = null
+      expression.mapValueType = null
+      expression.promiseValueType = null
+      expression.setElementType = null
+      expression.functionType = null
+      expression.shape = null
+      expression.className = null
+
+      if (asserted.arrayElementType != null) {
+        expression.arrayElementType = asserted.arrayElementType
+      }
+
+      if (asserted.arrayElementDeclaredType != null) {
+        expression.arrayElementDeclaredType = asserted.arrayElementDeclaredType
+      }
+
+      if (asserted.mapKeyType != null) {
+        expression.mapKeyType = asserted.mapKeyType
+      }
+
+      if (asserted.mapValueType != null) {
+        expression.mapValueType = asserted.mapValueType
+      }
+
+      if (asserted.promiseValueType != null) {
+        expression.promiseValueType = asserted.promiseValueType
+      }
+
+      if (asserted.setElementType != null) {
+        expression.setElementType = asserted.setElementType
+      }
+
+      if (asserted.functionType != null) {
+        expression.functionType = asserted.functionType
+      }
+
+      if (asserted.shape != null) {
+        expression.shape = asserted.shape
+      }
+
+      if (asserted.className != null) {
+        expression.className = asserted.className
+      }
 
       return valueType
     }
@@ -1189,28 +1233,87 @@ class Checker {
         path: ['this'],
         loc: expression.loc
       })
+      let valueType: ValueType = 'unknown'
 
-      expression.nullable = symbol?.nullable === true
-      expression.valueType = symbol?.valueType ?? 'unknown'
-      expression.shape = symbol?.shape ?? null
-      expression.className = symbol?.className ?? null
+      expression.nullable = false
+      expression.valueType = valueType
+      expression.shape = null
+      expression.className = null
 
-      return symbol?.valueType ?? 'unknown'
+      if (symbol != null) {
+        valueType = symbol.valueType
+        expression.nullable = symbol.nullable === true
+        expression.valueType = valueType
+
+        if (symbol.shape != null) {
+          expression.shape = symbol.shape
+        }
+
+        if (symbol.className != null) {
+          expression.className = symbol.className
+        }
+      }
+
+      return valueType
     }
 
     if (expression.type === 'Reference') {
       const symbol = this.resolveReference(expression)
-      expression.nullable = symbol?.nullable === true && !this.narrowedNullableNames.has(expression.path[0])
-      expression.valueType = symbol?.valueType ?? 'unknown'
-      expression.arrayElementType = symbol?.arrayElementType ?? null
-      expression.arrayElementDeclaredType = symbol?.arrayElementDeclaredType ?? null
-      expression.mapKeyType = symbol?.mapKeyType ?? null
-      expression.mapValueType = symbol?.mapValueType ?? null
-      expression.promiseValueType = symbol?.promiseValueType ?? null
-      expression.setElementType = symbol?.setElementType ?? null
-      expression.functionType = symbol?.functionType ?? null
-      expression.shape = symbol?.shape ?? null
-      expression.className = symbol?.className ?? null
+      let valueType: ValueType = 'unknown'
+
+      expression.nullable = false
+      expression.valueType = valueType
+      expression.arrayElementType = null
+      expression.arrayElementDeclaredType = null
+      expression.mapKeyType = null
+      expression.mapValueType = null
+      expression.promiseValueType = null
+      expression.setElementType = null
+      expression.functionType = null
+      expression.shape = null
+      expression.className = null
+
+      if (symbol != null) {
+        valueType = symbol.valueType
+        expression.nullable = symbol.nullable === true && !this.narrowedNullableNames.has(expression.path[0])
+        expression.valueType = valueType
+
+        if (symbol.arrayElementType != null) {
+          expression.arrayElementType = symbol.arrayElementType
+        }
+
+        if (symbol.arrayElementDeclaredType != null) {
+          expression.arrayElementDeclaredType = symbol.arrayElementDeclaredType
+        }
+
+        if (symbol.mapKeyType != null) {
+          expression.mapKeyType = symbol.mapKeyType
+        }
+
+        if (symbol.mapValueType != null) {
+          expression.mapValueType = symbol.mapValueType
+        }
+
+        if (symbol.promiseValueType != null) {
+          expression.promiseValueType = symbol.promiseValueType
+        }
+
+        if (symbol.setElementType != null) {
+          expression.setElementType = symbol.setElementType
+        }
+
+        if (symbol.functionType != null) {
+          expression.functionType = symbol.functionType
+        }
+
+        if (symbol.shape != null) {
+          expression.shape = symbol.shape
+        }
+
+        if (symbol.className != null) {
+          expression.className = symbol.className
+        }
+      }
 
       if (symbol != null && symbol.kind === 'import') {
         const importSource = symbol.importSource
@@ -1234,7 +1337,7 @@ class Checker {
         }
       }
 
-      return symbol?.valueType ?? 'unknown'
+      return valueType
     }
 
     if (expression.type === 'MemberExpression') {
@@ -1270,17 +1373,49 @@ class Checker {
         return expression.valueType
       }
 
-      expression.valueType = symbol?.returnType ?? 'unknown'
+      expression.valueType = 'unknown'
       expression.nullable = true
-      expression.arrayElementType = symbol?.returnArrayElementType ?? null
-      expression.arrayElementDeclaredType = symbol?.returnArrayElementDeclaredType ?? null
-      expression.mapKeyType = symbol?.returnMapKeyType ?? null
-      expression.mapValueType = symbol?.returnMapValueType ?? null
-      expression.promiseValueType = symbol?.returnPromiseValueType ?? null
-      expression.setElementType = symbol?.returnSetElementType ?? null
-      expression.shape = symbol?.returnShape ?? null
+      expression.arrayElementType = null
+      expression.arrayElementDeclaredType = null
+      expression.mapKeyType = null
+      expression.mapValueType = null
+      expression.promiseValueType = null
+      expression.setElementType = null
+      expression.shape = null
 
-      const params = symbol?.params ?? null
+      if (symbol.returnType != null) {
+        expression.valueType = symbol.returnType
+      }
+
+      if (symbol.returnArrayElementType != null) {
+        expression.arrayElementType = symbol.returnArrayElementType
+      }
+
+      if (symbol.returnArrayElementDeclaredType != null) {
+        expression.arrayElementDeclaredType = symbol.returnArrayElementDeclaredType
+      }
+
+      if (symbol.returnMapKeyType != null) {
+        expression.mapKeyType = symbol.returnMapKeyType
+      }
+
+      if (symbol.returnMapValueType != null) {
+        expression.mapValueType = symbol.returnMapValueType
+      }
+
+      if (symbol.returnPromiseValueType != null) {
+        expression.promiseValueType = symbol.returnPromiseValueType
+      }
+
+      if (symbol.returnSetElementType != null) {
+        expression.setElementType = symbol.returnSetElementType
+      }
+
+      if (symbol.returnShape != null) {
+        expression.shape = symbol.returnShape
+      }
+
+      const params = symbol.params
 
       if (params != null) {
         if (!this.acceptsArgumentCount(params, expression.args.length)) {

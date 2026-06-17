@@ -966,6 +966,13 @@ export function emitPreparedNumberExpression(
     }
   }
 
+  if (expression.type === 'NullLiteral') {
+    return {
+      lines: [],
+      expression: '0'
+    }
+  }
+
   if (expression.type === 'UnaryExpression') {
     const argument = emitPreparedNumberExpression(expression.argument, context, deps)
 
