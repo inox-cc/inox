@@ -45,7 +45,10 @@ import {
   setElementTypeNameFromKnownTypeName
 } from './type-names.ts'
 import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
-import { unsupportedRuntimeBuiltinImportMessage } from './stdlib/descriptors/node-builtins.ts'
+import {
+  isUnsupportedRuntimeBuiltinImportSource,
+  unsupportedRuntimeBuiltinImportMessageFromKnownSource
+} from './stdlib/descriptors/node-builtins.ts'
 import {
   fetchHeadersRuntimeMethod,
   isFetchAbortControllerMethod,
@@ -5220,9 +5223,9 @@ class Checker {
       return
     }
 
-    const unsupportedMessage = unsupportedRuntimeBuiltinImportMessage(statement.source)
+    if (isUnsupportedRuntimeBuiltinImportSource(statement.source)) {
+      const unsupportedMessage = unsupportedRuntimeBuiltinImportMessageFromKnownSource(statement.source)
 
-    if (unsupportedMessage != null) {
       this.report('CCJS_NOT_IMPLEMENTED', unsupportedMessage, statement.loc)
       return
     }

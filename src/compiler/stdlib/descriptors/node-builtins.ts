@@ -34,10 +34,14 @@ export function unsupportedRuntimeBuiltinImportMessage(source: string): string |
     return null
   }
 
+  return unsupportedRuntimeBuiltinImportMessageFromKnownSource(source)
+}
+
+export function unsupportedRuntimeBuiltinImportMessageFromKnownSource(source: string): string {
   return `${source} is recognized but not implemented by the current C backend`
 }
 
-function isUnsupportedRuntimeBuiltinImportSource(source: string): boolean {
+export function isUnsupportedRuntimeBuiltinImportSource(source: string): boolean {
   if (source === 'node:dns') {
     return true
   }

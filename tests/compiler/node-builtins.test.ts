@@ -1,6 +1,7 @@
 import test from 'node:test'
 import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
 import {
+  isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessage,
   unsupportedRuntimeBuiltinImportSources
 } from '../../src/compiler/stdlib/descriptors/node-builtins.ts'
@@ -42,4 +43,6 @@ console.log(builtin)
 test('does not classify unknown package imports as runtime builtins', () => {
   assert.equal(unsupportedRuntimeBuiltinImportMessage('left-pad'), null)
   assert.equal(unsupportedRuntimeBuiltinImportMessage('./node:path'), null)
+  assert.equal(isUnsupportedRuntimeBuiltinImportSource('node:https'), true)
+  assert.equal(isUnsupportedRuntimeBuiltinImportSource('node:path'), false)
 })
