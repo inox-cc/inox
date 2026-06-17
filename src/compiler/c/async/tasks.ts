@@ -2294,20 +2294,17 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   const prefixScope = asyncTaskDeps(context).pushVariableScope(context)
   let prefixAndScheduleLines: string[] = []
 
-  try {
-    prefixAndScheduleLines = []
-    appendAsyncTaskLines(prefixAndScheduleLines, asyncTaskDeps(context).emitStatementList(wrapper.prefixStatements, context))
-    appendAsyncTaskLines(prefixAndScheduleLines, emitAsyncTaskStorePrefixLocalLines(wrapper))
-    appendAsyncTaskLines(
-      prefixAndScheduleLines,
-      emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
-        cleanup: 'start',
-        final: wrapper.awaits.length === 1
-      })
-    )
-  } finally {
-    asyncTaskDeps(context).restoreVariableScope(context, prefixScope)
-  }
+  prefixAndScheduleLines = []
+  appendAsyncTaskLines(prefixAndScheduleLines, asyncTaskDeps(context).emitStatementList(wrapper.prefixStatements, context))
+  appendAsyncTaskLines(prefixAndScheduleLines, emitAsyncTaskStorePrefixLocalLines(wrapper))
+  appendAsyncTaskLines(
+    prefixAndScheduleLines,
+    emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
+      cleanup: 'start',
+      final: wrapper.awaits.length === 1
+    })
+  )
+  asyncTaskDeps(context).restoreVariableScope(context, prefixScope)
 
   const lines: string[] = []
 
@@ -3701,12 +3698,9 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(
   let preludeLines: string[] = []
   let returnValue: PreparedExpression = { lines: [], expression: '0' }
 
-  try {
-    preludeLines = asyncTaskDeps(context).emitStatementList(collectAsyncTaskSuccessPhaseStatements(wrapper, null), context)
-    returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
-  } finally {
-    asyncTaskDeps(context).restoreVariableScope(context, resultScope)
-  }
+  preludeLines = asyncTaskDeps(context).emitStatementList(collectAsyncTaskSuccessPhaseStatements(wrapper, null), context)
+  returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
+  asyncTaskDeps(context).restoreVariableScope(context, resultScope)
 
   const lines: string[] = []
 
@@ -3786,11 +3780,8 @@ function emitAsyncTaskTryStatementList(
   const scope = asyncTaskDeps(context).pushVariableScope(context)
   let lines: string[] = []
 
-  try {
-    lines = asyncTaskDeps(context).emitStatementList(statements, context)
-  } finally {
-    asyncTaskDeps(context).restoreVariableScope(context, scope)
-  }
+  lines = asyncTaskDeps(context).emitStatementList(statements, context)
+  asyncTaskDeps(context).restoreVariableScope(context, scope)
 
   const result: string[] = []
 
@@ -3949,12 +3940,9 @@ function emitAsyncTaskTryHandlerBodyAndReturnLines(
   let handlerLines: string[] = []
   let returnValue: PreparedExpression = { lines: [], expression: '0' }
 
-  try {
-    handlerLines = asyncTaskDeps(context).emitStatementList(handler.statements, context)
-    returnValue = emitPreparedAsyncTaskValueExpression(handler.returnExpression, wrapper.returnType, context)
-  } finally {
-    asyncTaskDeps(context).restoreVariableScope(context, resultScope)
-  }
+  handlerLines = asyncTaskDeps(context).emitStatementList(handler.statements, context)
+  returnValue = emitPreparedAsyncTaskValueExpression(handler.returnExpression, wrapper.returnType, context)
+  asyncTaskDeps(context).restoreVariableScope(context, resultScope)
 
   const lines: string[] = []
 

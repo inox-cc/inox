@@ -467,11 +467,8 @@ export function emitPreparedPromiseConstructorExpression(
 
   const previousHandlers = pushPromiseConstructorHandlers(context, resolveName, rejectName, out)
 
-  try {
-    appendLines(lines, dependencies.emitStatementList(statements, context))
-  } finally {
-    context.promiseConstructorHandlers = previousHandlers
-  }
+  appendLines(lines, dependencies.emitStatementList(statements, context))
+  context.promiseConstructorHandlers = previousHandlers
 
   return {
     lines,

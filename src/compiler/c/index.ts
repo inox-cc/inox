@@ -1561,20 +1561,16 @@ function emitFunctionPointerVariable(
 function emitStatement(statement: AnyNode, context: CFunctionContext): string[] {
   if (statement.type === 'BlockStatement') {
     const snapshot = pushVariableScope(context)
+    const lines = ['{']
 
-    try {
-      const lines = ['{']
-
-      for (const line of emitStatementBody(statement, context)) {
-        lines.push(`  ${line}`)
-      }
-
-      lines.push('}')
-
-      return lines
-    } finally {
-      restoreVariableScope(context, snapshot)
+    for (const line of emitStatementBody(statement, context)) {
+      lines.push(`  ${line}`)
     }
+
+    lines.push('}')
+    restoreVariableScope(context, snapshot)
+
+    return lines
   }
 
   if (statement.type === 'IfStatement') {
