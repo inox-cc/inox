@@ -2101,11 +2101,11 @@ function runtimeArrowCallbackParamName(wrapper: CRuntimeArrowCallbackWrapper, in
 
 export function emitRuntimeArrowCaptureCType(capture: CRuntimeArrowCapture): string {
   if (capture.mutable) {
-    if (['number', 'boolean'].includes(capture.valueType)) {
+    if (isPlainCallbackParamValueType(capture.valueType)) {
       return 'double*'
     }
 
-    if (['string', 'object'].includes(capture.valueType)) {
+    if (isManagedRuntimeCallbackParamValueType(capture.valueType)) {
       return 'ccjs_value*'
     }
   }
@@ -2134,7 +2134,11 @@ export function emitRuntimeArrowCaptureField(capture: CRuntimeArrowCapture): str
 }
 
 export function isRetainedRuntimeArrowCapture(capture: CRuntimeArrowCapture): boolean {
-  return capture.runtimeManaged === true && ['string', 'object'].includes(capture.valueType) && !capture.mutable
+  return (
+    capture.runtimeManaged === true &&
+    isManagedRuntimeCallbackParamValueType(capture.valueType) &&
+    !capture.mutable
+  )
 }
 
 export function isPromiseSettlementRuntimeArrowCapture(capture: CRuntimeArrowCapture): boolean {
@@ -2149,7 +2153,7 @@ export function isSupportedMutableRuntimeArrowCapture(
     return false
   }
 
-  if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
+  if (!isSupportedRuntimeCallbackParamValueType(capture.valueType)) {
     return false
   }
 

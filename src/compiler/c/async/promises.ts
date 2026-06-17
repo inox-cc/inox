@@ -1356,7 +1356,7 @@ function emitPromiseChainCallbackContext(
       )
     }
 
-    if (!['number', 'boolean', 'string', 'object'].includes(capture.valueType)) {
+    if (!isSupportedPromiseCaptureValueType(capture.valueType)) {
       context.diagnostics.push(
         diagnostic(
           'CCJS_C_ASYNC',
@@ -1471,6 +1471,10 @@ function lookupPromiseCallbackBinding(name: string, scopes: CallbackScope[]): Ca
 
 function isPromiseRuntimeManagedValueType(valueType: string): boolean {
   return valueType === 'string' || valueType === 'object'
+}
+
+function isSupportedPromiseCaptureValueType(valueType: string): boolean {
+  return valueType === 'number' || valueType === 'boolean' || isPromiseRuntimeManagedValueType(valueType)
 }
 
 function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScope[], valueType: string): boolean {
