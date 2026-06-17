@@ -1998,6 +1998,9 @@ class Checker {
         key: 'unknown',
         value: 'unknown'
       }
+      const mapValueType = resolvedConcreteValueTypeMetadata(mapType.value, 'unknown')
+      const mapKeyType = resolvedStringMetadata(mapType.key, null)
+      const mapValueMetadata = resolvedStringMetadata(mapType.value, null)
 
       this.checkAssignableType(
         indexType,
@@ -2009,11 +2012,11 @@ class Checker {
 
       expression.collectionKind = 'map'
       expression.nullable = true
-      expression.valueType = mapType.value ?? 'unknown'
-      expression.mapKeyType = mapType.key ?? null
-      expression.mapValueType = mapType.value ?? null
+      expression.valueType = mapValueType
+      expression.mapKeyType = mapKeyType
+      expression.mapValueType = mapValueMetadata
 
-      return mapType.value ?? 'unknown'
+      return mapValueType
     }
 
     if (expression.index.type !== 'StringLiteral') {
@@ -2153,6 +2156,9 @@ class Checker {
         key: 'unknown',
         value: 'unknown'
       }
+      const mapValueType = resolvedConcreteValueTypeMetadata(mapType.value, 'unknown')
+      const mapKeyType = resolvedStringMetadata(mapType.key, null)
+      const mapValueMetadata = resolvedStringMetadata(mapType.value, null)
 
       this.checkAssignableType(
         indexType,
@@ -2170,9 +2176,9 @@ class Checker {
       )
 
       expression.target.collectionKind = 'map'
-      expression.target.valueType = mapType.value ?? 'unknown'
-      expression.target.mapKeyType = mapType.key ?? null
-      expression.target.mapValueType = mapType.value ?? null
+      expression.target.valueType = mapValueType
+      expression.target.mapKeyType = mapKeyType
+      expression.target.mapValueType = mapValueMetadata
 
       return valueType
     }
@@ -6561,6 +6567,7 @@ class Checker {
         key: 'unknown',
         value: 'unknown'
       }
+      const mapValueType = resolvedConcreteValueTypeMetadata(mapType.value, 'unknown')
 
       if (mapMethod === 'clear') {
         this.checkCollectionArgCount(expression, 'map.clear', 0)
@@ -6586,9 +6593,9 @@ class Checker {
         }
 
         if (mapMethod === 'get') {
-          expression.valueType = mapType.value ?? 'unknown'
+          expression.valueType = mapValueType
           expression.nullable = true
-          return mapType.value ?? 'unknown'
+          return mapValueType
         }
 
         expression.valueType = 'boolean'
