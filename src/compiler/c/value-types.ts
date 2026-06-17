@@ -12,6 +12,11 @@ export type CNullableScalarParam = {
 
 export type CNullableScalarParamInput = CNullableScalarParam | null | undefined
 
+type CPresentNullableScalarParam = {
+  nullable: boolean
+  valueType?: string
+}
+
 export type CRuntimeValueTag = string | null
 
 export function isManagedRuntimeReturnType(valueType: CValueTypeInput): boolean {
@@ -141,6 +146,10 @@ export function isNullableScalarParam(param: CNullableScalarParamInput): boolean
     return false
   }
 
+  return isPresentNullableScalarParam(param as CPresentNullableScalarParam)
+}
+
+function isPresentNullableScalarParam(param: CPresentNullableScalarParam): boolean {
   return param.nullable === true && isNullableScalarType(param.valueType)
 }
 
