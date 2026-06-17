@@ -58,6 +58,7 @@ type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CStringMap = Map<string, string>
 type CStringNullableMap = Map<string, string | null>
 type CStringSet = Set<string>
+type CDynamicObjectFieldNode = AnyNode
 
 type CEmitContext = {
   throwingFunctions: CStringSet
@@ -1526,6 +1527,8 @@ export type CValueExpressionDependencies = {
   emitPreparedKnownObjectMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedMapIndexGetExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNullableScalarRuntimeValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedDynamicObjectIndexValueExpression(expression: CDynamicObjectFieldNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedDynamicObjectMemberValueExpression(expression: CDynamicObjectFieldNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedObjectExpressionIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedObjectExpressionMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedOsConstantExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
@@ -1861,6 +1864,12 @@ export function emitCValueExpression(
     if (objectMemberValue != null) {
       return objectMemberValue
     }
+
+    const dynamicMemberValue = deps.emitPreparedDynamicObjectMemberValueExpression(expression, context)
+
+    if (dynamicMemberValue != null) {
+      return dynamicMemberValue
+    }
   }
 
   if (deps.isIndexAccessExpression(expression)) {
@@ -1886,6 +1895,12 @@ export function emitCValueExpression(
 
     if (objectExpressionValue != null) {
       return objectExpressionValue
+    }
+
+    const dynamicObjectValue = deps.emitPreparedDynamicObjectIndexValueExpression(expression, context)
+
+    if (dynamicObjectValue != null) {
+      return dynamicObjectValue
     }
   }
 

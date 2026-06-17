@@ -330,6 +330,8 @@ import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
   emitObjectVariableDeclaration,
   emitObjectValueReference,
+  emitPreparedDynamicObjectIndexValueExpression,
+  emitPreparedDynamicObjectMemberValueExpression,
   emitPreparedObjectExpressionIndexValueExpression,
   emitPreparedObjectExpressionMemberValueExpression,
   emitPreparedObjectExpressionScalarIndexValueExpression,
@@ -501,6 +503,7 @@ import type {
 export type { CModuleOutputFile } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
+type CDynamicObjectFieldNode = AnyNode
 type TempValueEmitter = (temp: string) => string
 
 type CThrowingFunctionInfo = {
@@ -521,7 +524,8 @@ let objectVariableDeclarationDependencies = {
 }
 
 let objectExpressionFieldDependencies = {
-  emitCValueExpression
+  emitCValueExpression,
+  inferExpressionType
 }
 
 let jsonDeclarationDependencies = {
@@ -1200,6 +1204,10 @@ const cValueExpressionDependencies = {
   emitPreparedKnownObjectMemberValueExpression,
   emitPreparedMapIndexGetExpression,
   emitPreparedNullableScalarRuntimeValueExpression,
+  emitPreparedDynamicObjectIndexValueExpression: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
+    emitPreparedDynamicObjectIndexValueExpression(expression, context, objectExpressionFieldDependencies),
+  emitPreparedDynamicObjectMemberValueExpression: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
+    emitPreparedDynamicObjectMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectExpressionIndexValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionIndexValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectExpressionMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>

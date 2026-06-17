@@ -43,6 +43,8 @@ type ObjectFunctionContext = ObjectShapeContext & ObjectNameContext & {
   usedCleanupGoto: boolean
 }
 
+type ObjectFieldNode = AnyNode
+
 export type ObjectVariableDeclarationDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
   emitCValueExpression(expression: AnyNode, context: ObjectFunctionContext): PreparedExpression
@@ -50,7 +52,8 @@ export type ObjectVariableDeclarationDependencies = {
 }
 
 export type ObjectExpressionFieldDependencies = {
-  emitCValueExpression(expression: AnyNode, context: ObjectFunctionContext): PreparedExpression
+  emitCValueExpression(expression: ObjectFieldNode, context: ObjectFunctionContext): PreparedExpression
+  inferExpressionType(expression: ObjectFieldNode, context: ObjectFunctionContext): string
 }
 
 type KnownObjectFieldReadAccess = {
@@ -410,6 +413,42 @@ export function emitPreparedObjectExpressionIndexValueExpression(
   return null
 }
 
+export function emitPreparedDynamicObjectMemberValueExpression(
+  expression: ObjectFieldNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  if (!isMemberAccessExpression(expression)) {
+    return null
+  }
+
+  return emitPreparedDynamicObjectFieldValueExpression(
+    expression,
+    expression.object,
+    expression.property,
+    context,
+    dependencies
+  )
+}
+
+export function emitPreparedDynamicObjectIndexValueExpression(
+  expression: ObjectFieldNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
+    return null
+  }
+
+  return emitPreparedDynamicObjectFieldValueExpression(
+    expression,
+    expression.object,
+    expression.index.value,
+    context,
+    dependencies
+  )
+}
+
 export function emitPreparedObjectExpressionScalarIndexValueExpression(
   expression: AnyNode,
   context: ObjectFunctionContext,
@@ -477,6 +516,36 @@ function emitPreparedObjectExpressionFieldValueExpression(
     lines,
     expression: temp,
     valueType: field.valueType
+  }
+}
+
+function emitPreparedDynamicObjectFieldValueExpression(
+  expression: ObjectFieldNode,
+  objectExpression: ObjectFieldNode,
+  key: string,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  if (dependencies.inferExpressionType(objectExpression, context) !== 'object') {
+    return null
+  }
+
+  const object = dependencies.emitCValueExpression(objectExpression, context)
+  const temp = nextCName(context, 'ccjs_value')
+  const tag = cRuntimeValueTag(expression.valueType)
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+
+  appendLines(lines, object.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(`ccjs_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`, context))
+  appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+
+  return {
+    lines,
+    expression: temp,
+    valueType: expression.valueType
   }
 }
 

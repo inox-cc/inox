@@ -6622,6 +6622,56 @@ console.log(score, active)
 })
 
 
+test('generated C dynamic object field access lowering compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-field-'))
+  const source = join(dir, 'dynamic-object-field.c')
+  const output = join(dir, 'dynamic-object-field')
+
+  try {
+    const result = compileSource(
+      `type Child = {
+  value: number
+}
+
+function read(extra: object): Child {
+  return extra.child
+}
+
+const child = read({ child: { value: 42 } })
+console.log(child.value)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
