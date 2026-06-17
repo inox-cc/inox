@@ -1,4 +1,4 @@
-import { debugRuntimeMethodNameFromPath } from '../../stdlib/descriptors/debug.ts'
+import { isDebugRuntimeMethodPath } from '../../stdlib/descriptors/debug.ts'
 import { memberExpressionPath } from '../../member-paths.ts'
 import type { AnyNode } from '../../types.ts'
 
@@ -7,9 +7,7 @@ export function cDebugRuntimeMethodName(expression: AnyNode | null | undefined):
     return null
   }
 
-  const expected = debugRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
-
-  if (expected !== expression.debugRuntimeMethod) {
+  if (!isDebugRuntimeMethodPath(memberExpressionPath(expression.callee))) {
     return null
   }
 
