@@ -333,7 +333,7 @@ class Checker {
             kind: 'function',
             mutable: false,
             valueType: 'function',
-            params: item.params.map((param) => this.resolveParam(param)),
+            params: this.resolveParams(item.params),
             returnType: returnInfo.valueType,
             returnNullable: returnInfo.nullable,
             returnArrayElementType: returnInfo.arrayElementType,
@@ -351,10 +351,13 @@ class Checker {
       }
 
       if (item.type === 'ClassDeclaration') {
-        const constructorParams =
-          item.methods
-            .find((method) => method.name === 'constructor')
-            ?.params.map((param) => this.resolveParam(param)) ?? []
+        const constructorMethod = item.methods.find((method) => method.name === 'constructor')
+        let constructorParams: AnyNode[] = []
+
+        if (constructorMethod != null) {
+          constructorParams = this.resolveParams(constructorMethod.params)
+        }
+
         const shape = this.resolveClassInstanceShape(item, constructorParams)
 
         item.shape = shape
@@ -374,6 +377,17 @@ class Checker {
         )
       }
     }
+  }
+
+  resolveParams(params: AnyNode[]): AnyNode[] {
+    const resolved: AnyNode[] = []
+
+    for (let index = 0; index < params.length; index = index + 1) {
+      const param = params[index]
+      resolved.push(this.resolveParam(param))
+    }
+
+    return resolved
   }
 
   resolveParam(param: AnyNode): AnyNode {

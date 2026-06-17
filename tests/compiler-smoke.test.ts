@@ -268,6 +268,36 @@ test('lowers known C object field access to runtime calls', () => {
 })
 
 
+test('lowers C object expression field access through known shape runtime reads', () => {
+  const result = compileSource(
+    `type Pair = {
+  score: number
+  active: boolean
+}
+
+function pair(): Pair {
+  return { score: 42, active: true }
+}
+
+export function main(): void {
+  const score = pair().score
+  const active = pair().active
+  console.log(score, active)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_value_\d+ = pair\(\);/)
+  assert.match(result.code, /ccjs_object_get_known\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /const double score = ccjs_value_\d+\.as\.number;/)
+  assert.match(result.code, /ccjs_object_get_known\(ccjs_value_\d+, 1, &ccjs_value_\d+\)/)
+  assert.match(result.code, /const double active = \(ccjs_value_\d+\.as\.boolean \? 1 : 0\);/)
+})
+
+
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
     `type Point = {

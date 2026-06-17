@@ -6570,6 +6570,58 @@ console.log(score, active)
 })
 
 
+test('generated C object expression field access lowering compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-expression-field-'))
+  const source = join(dir, 'object-expression-field.c')
+  const output = join(dir, 'object-expression-field')
+
+  try {
+    const result = compileSource(
+      `type Pair = {
+  score: number
+  active: boolean
+}
+
+function pair(): Pair {
+  return { score: 42, active: true }
+}
+
+const score = pair().score
+const active = pair().active
+console.log(score, active)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

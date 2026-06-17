@@ -49,6 +49,10 @@ export type ObjectVariableDeclarationDependencies = {
   inferExpressionType(expression: AnyNode, context: ObjectFunctionContext): string
 }
 
+export type ObjectExpressionFieldDependencies = {
+  emitCValueExpression(expression: AnyNode, context: ObjectFunctionContext): PreparedExpression
+}
+
 type KnownObjectFieldReadAccess = {
   index: number
   key: string
@@ -364,6 +368,62 @@ export function emitPreparedKnownObjectIndexValueExpression(
   return null
 }
 
+export function emitPreparedObjectExpressionMemberValueExpression(
+  expression: AnyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  const member = resolveObjectExpressionMember(expression)
+
+  if (member != null) {
+    return emitPreparedObjectExpressionFieldValueExpression(member, expression, expression.object, context, dependencies)
+  }
+
+  return null
+}
+
+export function emitPreparedObjectExpressionScalarMemberValueExpression(
+  expression: AnyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  const member = resolveObjectExpressionMember(expression)
+
+  if (member != null && isScalarObjectFieldValueType(member.valueType)) {
+    return emitPreparedObjectExpressionFieldValueExpression(member, expression, expression.object, context, dependencies)
+  }
+
+  return null
+}
+
+export function emitPreparedObjectExpressionIndexValueExpression(
+  expression: AnyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  const field = resolveObjectExpressionIndex(expression)
+
+  if (field != null) {
+    return emitPreparedObjectExpressionFieldValueExpression(field, expression, expression.object, context, dependencies)
+  }
+
+  return null
+}
+
+export function emitPreparedObjectExpressionScalarIndexValueExpression(
+  expression: AnyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  const field = resolveObjectExpressionIndex(expression)
+
+  if (field != null && isScalarObjectFieldValueType(field.valueType)) {
+    return emitPreparedObjectExpressionFieldValueExpression(field, expression, expression.object, context, dependencies)
+  }
+
+  return null
+}
+
 function emitPreparedKnownObjectFieldValueExpression(
   field: CKnownObjectField,
   expression: AnyNode,
@@ -388,6 +448,40 @@ function emitPreparedKnownObjectFieldValueExpression(
     lines,
     expression: temp
   }
+}
+
+function emitPreparedObjectExpressionFieldValueExpression(
+  field: CObjectFieldInfo,
+  expression: AnyNode,
+  objectExpression: AnyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  if (!isManagedObjectFieldValueType(field.valueType)) {
+    return null
+  }
+
+  const object = dependencies.emitCValueExpression(objectExpression, context)
+  const temp = nextCName(context, 'ccjs_value')
+  const tag = cRuntimeValueTag(field.valueType)
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+
+  appendLines(lines, object.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(`ccjs_object_get_known(${object.expression}, ${field.index}, &${temp})`, context))
+  appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+
+  return {
+    lines,
+    expression: temp,
+    valueType: field.valueType
+  }
+}
+
+function isScalarObjectFieldValueType(valueType: string): boolean {
+  return valueType === 'number' || valueType === 'boolean'
 }
 
 function isManagedObjectFieldValueType(valueType: string): boolean {

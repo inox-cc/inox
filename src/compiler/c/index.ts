@@ -330,6 +330,10 @@ import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
   emitObjectVariableDeclaration,
   emitObjectValueReference,
+  emitPreparedObjectExpressionIndexValueExpression,
+  emitPreparedObjectExpressionMemberValueExpression,
+  emitPreparedObjectExpressionScalarIndexValueExpression,
+  emitPreparedObjectExpressionScalarMemberValueExpression,
   emitPreparedKnownObjectIndexValueExpression,
   emitPreparedKnownObjectMemberValueExpression,
   isIndexAccessExpression,
@@ -514,6 +518,10 @@ let objectVariableDeclarationDependencies = {
   emitCFieldFlags,
   emitCValueExpression,
   inferExpressionType
+}
+
+let objectExpressionFieldDependencies = {
+  emitCValueExpression
 }
 
 let jsonDeclarationDependencies = {
@@ -1127,6 +1135,10 @@ const cScalarExpressionDependencies = {
   emitPreparedJsonScalarParseExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonScalarParseExpression(expression, context, jsonDeclarationDependencies),
   emitPreparedNetAddressPortExpression,
+  emitPreparedObjectExpressionScalarIndexValueExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedObjectExpressionScalarIndexValueExpression(expression, context, objectExpressionFieldDependencies),
+  emitPreparedObjectExpressionScalarMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedObjectExpressionScalarMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies),
   emitPreparedProcessNumberExpression,
@@ -1188,6 +1200,10 @@ const cValueExpressionDependencies = {
   emitPreparedKnownObjectMemberValueExpression,
   emitPreparedMapIndexGetExpression,
   emitPreparedNullableScalarRuntimeValueExpression,
+  emitPreparedObjectExpressionIndexValueExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedObjectExpressionIndexValueExpression(expression, context, objectExpressionFieldDependencies),
+  emitPreparedObjectExpressionMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedOsConstantExpression,
   emitPreparedOsStringCallExpression,
   emitPreparedPathConstantExpression,

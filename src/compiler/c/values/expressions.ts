@@ -241,6 +241,8 @@ export type CScalarExpressionDependencies = {
   emitPreparedDgramAddressPortExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonScalarParseExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNetAddressPortExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedObjectExpressionScalarIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedObjectExpressionScalarMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathBooleanCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedProcessNumberExpression(expression: AnyNode): PreparedExpression | null
   emitPreparedRuntimeArrayIndexValue(
@@ -1127,6 +1129,15 @@ export function emitPreparedNumberExpression(
 
       return emitPreparedRuntimeNumberValue(member.valueType, value, getCall, context)
     }
+
+    const objectMember = deps.emitPreparedObjectExpressionScalarMemberValueExpression(expression, context)
+
+    if (objectMember != null) {
+      return {
+        lines: objectMember.lines,
+        expression: scalarRuntimeValueExpression(objectMember.expression, objectMember.valueType ?? 'number')
+      }
+    }
   }
 
   if (deps.isIndexAccessExpression(expression)) {
@@ -1146,6 +1157,15 @@ export function emitPreparedNumberExpression(
       const getCall = `ccjs_object_get(${deps.emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
 
       return emitPreparedRuntimeNumberValue(field.valueType, value, getCall, context)
+    }
+
+    const objectField = deps.emitPreparedObjectExpressionScalarIndexValueExpression(expression, context)
+
+    if (objectField != null) {
+      return {
+        lines: objectField.lines,
+        expression: scalarRuntimeValueExpression(objectField.expression, objectField.valueType ?? 'number')
+      }
     }
 
     const runtimeElement = deps.resolveRuntimeArrayIndex(expression, context)
@@ -1506,6 +1526,8 @@ export type CValueExpressionDependencies = {
   emitPreparedKnownObjectMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedMapIndexGetExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNullableScalarRuntimeValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedObjectExpressionIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedObjectExpressionMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedOsConstantExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedOsStringCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathConstantExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
@@ -1833,6 +1855,12 @@ export function emitCValueExpression(
     if (memberValue != null) {
       return memberValue
     }
+
+    const objectMemberValue = deps.emitPreparedObjectExpressionMemberValueExpression(expression, context)
+
+    if (objectMemberValue != null) {
+      return objectMemberValue
+    }
   }
 
   if (deps.isIndexAccessExpression(expression)) {
@@ -1852,6 +1880,12 @@ export function emitCValueExpression(
 
     if (objectValue != null) {
       return objectValue
+    }
+
+    const objectExpressionValue = deps.emitPreparedObjectExpressionIndexValueExpression(expression, context)
+
+    if (objectExpressionValue != null) {
+      return objectExpressionValue
     }
   }
 
