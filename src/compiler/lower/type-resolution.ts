@@ -198,7 +198,8 @@ function resolveObjectShape(shape: LowerTypeNode, context: LowerContext): LowerT
   const fields = concatFields(bases.fields, shape.fields)
   const resolvedFields: LowerTypeNode[] = []
 
-  for (const field of fields) {
+  for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
+    const field = fields[fieldIndex]
     resolvedFields.push(resolveObjectShapeField(field, fields, context))
   }
 
@@ -323,7 +324,8 @@ function resolveWeakTargetObjectShape(shape: LowerTypeNode, context: LowerContex
   const fields = concatFields(bases.fields, shape.fields)
   const resolvedFields: LowerTypeNode[] = []
 
-  for (const field of fields) {
+  for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
+    const field = fields[fieldIndex]
     resolvedFields.push(resolveWeakTargetObjectShapeField(field, context))
   }
 
@@ -468,7 +470,8 @@ function collectObjectTypeFields(fields: LowerTypeNode[] | null | undefined): Lo
     return collected
   }
 
-  for (const field of fields) {
+  for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
+    const field = fields[fieldIndex]
     collected.push({
       name: field.name,
       optional: field.optional === true,
@@ -499,7 +502,8 @@ function collectFunctionParams(params: LowerTypeNode[] | null | undefined): Lowe
     return collected
   }
 
-  for (const param of params) {
+  for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
+    const param = params[paramIndex]
     collected.push({
       name: param.name,
       optional: param.optional === true,
@@ -514,7 +518,8 @@ function collectFunctionParams(params: LowerTypeNode[] | null | undefined): Lowe
 function collectClassNames(ast: ProgramNode): Set<string> {
   const classNames: Set<string> = new Set()
 
-  for (const item of ast.body) {
+  for (let itemIndex = 0; itemIndex < ast.body.length; itemIndex = itemIndex + 1) {
+    const item = ast.body[itemIndex]
     if (item.type === 'ClassDeclaration') {
       classNames.add(item.name)
     }
@@ -682,7 +687,8 @@ function copyStringArray(values: string[] | null | undefined): string[] {
 function concatFields(left: LowerTypeNode[], right: LowerTypeNode[] | null | undefined): LowerTypeNode[] {
   const fields: LowerTypeNode[] = []
 
-  for (const field of left) {
+  for (let fieldIndex = 0; fieldIndex < left.length; fieldIndex = fieldIndex + 1) {
+    const field = left[fieldIndex]
     fields.push(field)
   }
 
@@ -690,7 +696,8 @@ function concatFields(left: LowerTypeNode[], right: LowerTypeNode[] | null | und
     return fields
   }
 
-  for (const field of right) {
+  for (let fieldIndex = 0; fieldIndex < right.length; fieldIndex = fieldIndex + 1) {
+    const field = right[fieldIndex]
     fields.push(field)
   }
 
