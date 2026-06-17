@@ -215,6 +215,39 @@ export function main(): void {
 })
 
 
+test('lowers C for of over runtime object array expressions', () => {
+  const result = compileSource(
+    `type Item = {
+  score: number
+}
+
+type Box = {
+  items: Item[]
+}
+
+export function main(): void {
+  const box: Box = { items: [{ score: 7 }, { score: 9 }] }
+  let count = 0
+
+  for (const item of box.items) {
+    count = count + 1
+  }
+
+  console.log(count)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_for_length_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
+  assert.match(result.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
+  assert.match(result.code, /ccjs_value item = ccjs_for_value_\d+;/)
+})
+
+
 test('lowers C array methods over runtime array object fields', () => {
   const result = compileSource(
     `type Box = {

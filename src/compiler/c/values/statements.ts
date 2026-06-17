@@ -934,6 +934,10 @@ function isCCollectionHashableType(valueType: string): boolean {
   return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
 }
 
+function isCForOfArrayElementType(valueType: string): boolean {
+  return isCCollectionHashableType(valueType) || valueType === 'object'
+}
+
 function emitCollectionVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] {
   const deps = statementDeps(context)
   const collectionConstructor = deps.collectionConstructorName(statement.init)
@@ -1502,7 +1506,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     elementType = statementDeps(context).resolveForOfElementType(array.elements)
   }
 
-  if (!isCCollectionHashableType(elementType)) {
+  if (!isCForOfArrayElementType(elementType)) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FOR_OF',
@@ -1542,6 +1546,8 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     context.variables.set(statement.name, elementType)
     if (elementType === 'string') {
       context.runtimeStrings.add(statement.name)
+    } else if (elementType === 'object') {
+      registerObjectShape(context, statement.name, statement.shape)
     }
     const body = withBreakTarget(context, breakLabel, false, () =>
       withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
@@ -1552,6 +1558,9 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     if (elementType === 'string') {
       declaration = `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
       checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+    } else if (elementType === 'object') {
+      declaration = `ccjs_value ${statement.name} = ${value};`
+      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_OBJECT || ${value}.as.ref == 0`, context))
     }
 
     const getElementStatus = emitStatusCheck(`ccjs_array_get(${arrayName}, ${index}, &${value})`, context)
