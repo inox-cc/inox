@@ -2207,16 +2207,16 @@ function createCallbackReplacements(
 
 function paramElementInfo(param: LowerNode): ArrayElementInfo {
   return {
-    valueType: param.valueType ?? 'unknown',
-    declaredType: param.declaredType ?? null,
-    shape: param.shape ?? null,
-    arrayElementType: param.arrayElementType ?? null,
-    arrayElementDeclaredType: param.arrayElementDeclaredType ?? null,
-    mapKeyType: param.mapKeyType ?? null,
-    mapValueType: param.mapValueType ?? null,
-    promiseValueType: param.promiseValueType ?? null,
-    setElementType: param.setElementType ?? null,
-    functionType: param.functionType ?? null
+    valueType: fallbackString(param.valueType, 'unknown'),
+    declaredType: nullableString(param.declaredType),
+    shape: nullableNode(param.shape),
+    arrayElementType: nullableString(param.arrayElementType),
+    arrayElementDeclaredType: nullableString(param.arrayElementDeclaredType),
+    mapKeyType: nullableString(param.mapKeyType),
+    mapValueType: nullableString(param.mapValueType),
+    promiseValueType: nullableString(param.promiseValueType),
+    setElementType: nullableString(param.setElementType),
+    functionType: nullableNode(param.functionType)
   }
 }
 
