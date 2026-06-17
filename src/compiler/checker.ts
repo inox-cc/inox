@@ -1767,12 +1767,10 @@ class Checker {
       if (objectType === 'array') {
         this.checkAssignableType(indexType, 'number', expression.index.loc)
         const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
+        const declaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
         expression.valueType = valueType
-        expression.arrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
-
-        if (expression.arrayElementDeclaredType === 'fs.Dirent') {
-          expression.shape = fsDirentObjectShape
-        }
+        expression.arrayElementDeclaredType = declaredType
+        expression.shape = this.resolveArrayElementObjectShape(valueType, declaredType, expression.loc)
 
         return valueType
       }
@@ -1822,14 +1820,12 @@ class Checker {
       if (objectType === 'array') {
         this.checkAssignableType(indexType, 'number', expression.index.loc)
         const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
+        const declaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
 
         expression.nullable = true
         expression.valueType = valueType
-        expression.arrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
-
-        if (expression.arrayElementDeclaredType === 'fs.Dirent') {
-          expression.shape = fsDirentObjectShape
-        }
+        expression.arrayElementDeclaredType = declaredType
+        expression.shape = this.resolveArrayElementObjectShape(valueType, declaredType, expression.loc)
 
         return valueType
       }
@@ -8279,11 +8275,31 @@ class Checker {
       return symbolShape
     }
 
-    if (symbol != null && symbol.valueType === 'object' && symbol.arrayElementDeclaredType === 'fs.Dirent') {
-      return fsDirentObjectShape
+    if (symbol != null && symbol.valueType === 'object') {
+      const elementShape = this.resolveArrayElementObjectShape(symbol.valueType, symbol.arrayElementDeclaredType, expression.loc)
+
+      if (elementShape != null) {
+        return elementShape
+      }
     }
 
     return expression.shape ?? null
+  }
+
+  resolveArrayElementObjectShape(
+    valueType: ValueType,
+    declaredType: string | null | undefined,
+    loc: SourceLocation
+  ): ObjectShapeInfo | null {
+    if (valueType !== 'object' || declaredType == null) {
+      return null
+    }
+
+    if (declaredType === 'fs.Dirent') {
+      return fsDirentObjectShape
+    }
+
+    return this.resolveDeclaredType(declaredType, loc).shape
   }
 
   isThisExpression(expression: AnyNode): boolean {
@@ -8980,10 +8996,7 @@ class Checker {
           let cycleLoc = edge.loc
 
           const firstCycleEdge = cycle[0]
-
-          if (firstCycleEdge.loc != null) {
-            cycleLoc = firstCycleEdge.loc
-          }
+          cycleLoc = firstCycleEdge.loc
 
           this.report(
             'CCJS_OWNERSHIP_CYCLE',

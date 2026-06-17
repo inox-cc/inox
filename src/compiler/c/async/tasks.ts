@@ -531,13 +531,15 @@ function collectAsyncTaskLiveAcrossSuspensionNames(input: AsyncTaskLiveAcrossSus
 
   for (let index = 1; index < input.awaits.length; index = index + 1) {
     const item = input.awaits[index]
+    const awaitedExpression = item.awaitedExpression
+    const awaitedPromiseExpression = item.awaitedPromiseExpression
 
-    if (item.awaitedExpression != null) {
-      nodes.push(item.awaitedExpression)
+    if (awaitedExpression != null) {
+      nodes.push(awaitedExpression)
     }
 
-    if (item.awaitedPromiseExpression != null) {
-      nodes.push(item.awaitedPromiseExpression)
+    if (awaitedPromiseExpression != null) {
+      nodes.push(awaitedPromiseExpression)
     }
   }
 

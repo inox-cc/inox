@@ -268,6 +268,63 @@ test('lowers known C object field access to runtime calls', () => {
 })
 
 
+test('lowers known numeric object fields as runtime values in object assignments', () => {
+  const result = compileSource(
+    `type Point = {
+  x: number
+  y: number
+  active: boolean
+}
+
+export function main(): void {
+  const source: Point = { x: 1, y: 2, active: true }
+  const target: Point = { x: 0, y: 0, active: false }
+  target.x = source.x
+  target.active = source.active
+  console.log(target.x, target.active)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get_known\(source, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_set_known\(target, 0, ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(source, 2, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_set_known\(target, 2, ccjs_value_\d+\)/)
+})
+
+
+test('preserves object shapes for typed runtime array index locals', () => {
+  const result = compileSource(
+    `type DiagnosticLike = {
+  file?: string
+  line: number
+  column: number
+}
+
+export function main(): void {
+  const diagnostics: DiagnosticLike[] = [{ line: 3, column: 9, file: 'input.ts' }]
+  const index = 0
+  const item = diagnostics[index]
+  const total = item.line + item.column
+  console.log(total)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_array_get\(diagnostics, \(size_t\)\(index\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /item = ccjs_value_\d+;/)
+  assert.match(result.code, /ccjs_object_get_known\(item, 1, &ccjs_expr_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(item, 2, &ccjs_expr_value_\d+\)/)
+  assert.match(result.code, /const double total = \(ccjs_expr_value_\d+\.as\.number \+ ccjs_expr_value_\d+\.as\.number\);/)
+})
+
+
 test('lowers known C string object field access to runtime strings', () => {
   const result = compileSource(
     `export function main(): void {

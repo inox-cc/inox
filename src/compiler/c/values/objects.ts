@@ -392,6 +392,8 @@ function emitPreparedKnownObjectFieldValueExpression(
 
 function isManagedObjectFieldValueType(valueType: string): boolean {
   return (
+    valueType === 'number' ||
+    valueType === 'boolean' ||
     valueType === 'bytes' ||
     valueType === 'array' ||
     valueType === 'map' ||
