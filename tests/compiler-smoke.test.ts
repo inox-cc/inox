@@ -456,6 +456,32 @@ export function main(): void {
 })
 
 
+test('lowers C dynamic object array length through runtime lookup', () => {
+  const result = compileSource(
+    `function hasOnePath(node: object): boolean {
+  return node.path.length === 1
+}
+
+function hasFields(node: object): boolean {
+  return node['fields'].length > 0
+}
+
+export function main(): void {
+  console.log(hasOnePath({ path: ['type'] }), hasFields({ fields: [1, 2] }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "path", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(node, "fields", 6, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
+})
+
+
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
     `type Point = {

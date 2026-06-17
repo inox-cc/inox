@@ -825,11 +825,16 @@ export function emitPreparedArrayLengthExpression(
     }
   }
 
-  if (arrayDeps(context).inferExpressionType(expression.object, context) !== 'array') {
+  const deps = arrayDeps(context)
+
+  if (
+    deps.inferExpressionType(expression.object, context) !== 'array' &&
+    !isDynamicObjectArrayLengthReceiver(expression.object, context, deps)
+  ) {
     return null
   }
 
-  const value = arrayDeps(context).emitCValueExpression(expression.object, context)
+  const value = deps.emitCValueExpression(expression.object, context)
   const temp = nextCName(context, 'ccjs_array_len')
   const lines: string[] = []
 
@@ -841,6 +846,38 @@ export function emitPreparedArrayLengthExpression(
     lines,
     expression: temp
   }
+}
+
+function isDynamicObjectArrayLengthReceiver(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext,
+  deps: ArrayLoweringDependencies
+): boolean {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.type === 'MemberExpression') {
+    const member = deps.resolveKnownObjectMember(expression, context)
+
+    if (member != null) {
+      return false
+    }
+
+    return deps.inferExpressionType(expression.object, context) === 'object'
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    const field = deps.resolveKnownObjectIndex(expression, context)
+
+    if (field != null) {
+      return false
+    }
+
+    return deps.inferExpressionType(expression.object, context) === 'object'
+  }
+
+  return false
 }
 
 export function resolveKnownForOfArray(
