@@ -200,10 +200,11 @@ export function emitCUnit(
     new Set(['net', 'node:net']),
     'createServer'
   )
-  baseContext.netConnectNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'connect')
-  for (const name of collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createConnection')) {
-    baseContext.netConnectNames.add(name)
-  }
+  baseContext.netConnectNames = collectRuntimeImportNames(
+    irPrograms,
+    new Set(['net', 'node:net']),
+    new Set(['connect', 'createConnection'])
+  )
   baseContext.classInfos = createClassInfos(classes, diagnostics)
   baseContext.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext, deps.callbackLoweringDependencies)

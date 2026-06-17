@@ -9,7 +9,7 @@ import {
   collectIrTopLevelNodes
 } from '../ir.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrRuntimeRequirement } from '../types.ts'
-import type { CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
+import type { CFunctionParam, CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
 import {
   collectCallbackWrappers,
   emitPlainArrowCallbackWrapperDeclaration,
@@ -83,7 +83,7 @@ import {
   emitNetHandlerHead
 } from './stdlib/net.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
-import type { CClassInfo, CClassMethod, CModuleEmitOptions, CModulePlan } from './types.ts'
+import type { CClassInfo, CClassMethod, CModuleEmitOptions, CModuleImportPlan, CModulePlan } from './types.ts'
 import { emitCType, isManagedRuntimeReturnType } from './value-types.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
 
@@ -91,6 +91,13 @@ type CModuleValueDeclaration = {
   name: string
   symbolName: string
   valueType: string
+}
+
+type CModuleNode = AnyNode
+
+type CModuleFunctionEntry = {
+  declaration: IrFunctionDeclaration
+  node: CModuleNode
 }
 
 function pushCModuleLines(target: string[], source: string[]): void {
@@ -111,6 +118,58 @@ function pushIrFunctionDeclaration(target: IrFunctionDeclaration[], declaration:
 
 function pushIrFunctionEffect(target: IrFunctionEffect[], effect: IrFunctionEffect): void {
   target.push(effect)
+}
+
+function cModuleClassMethodAt(values: CClassMethod[], index: number): CClassMethod {
+  return values[index]
+}
+
+function cModuleFunctionDeclarationAt(
+  values: IrFunctionDeclaration[],
+  index: number
+): IrFunctionDeclaration {
+  return values[index]
+}
+
+function cModuleFunctionEffectAt(values: IrFunctionEffect[], index: number): IrFunctionEffect {
+  return values[index]
+}
+
+function cModuleFunctionEntryAt(values: CModuleFunctionEntry[], index: number): CModuleFunctionEntry {
+  return values[index]
+}
+
+function cModuleFunctionParamAt(values: CFunctionParam[], index: number): CFunctionParam {
+  return values[index]
+}
+
+function cModuleImportPlanAt(values: CModuleImportPlan[], index: number): CModuleImportPlan {
+  return values[index]
+}
+
+function cModuleNodeAt(values: CModuleNode[], index: number): CModuleNode {
+  return values[index]
+}
+
+function cModuleValueDeclarationAt(
+  values: CModuleValueDeclaration[],
+  index: number
+): CModuleValueDeclaration {
+  return values[index]
+}
+
+function cModulePromiseChainWrapperAt(
+  values: CPromiseChainWrapper[],
+  index: number
+): CPromiseChainWrapper {
+  return values[index]
+}
+
+function cModuleRuntimeArrowWrapperAt(
+  values: CRuntimeArrowCallbackWrapper[],
+  index: number
+): CRuntimeArrowCallbackWrapper {
+  return values[index]
 }
 
 function irRuntimeRequirementAt(values: IrRuntimeRequirement[], index: number): IrRuntimeRequirement {
@@ -201,7 +260,9 @@ export function emitCModuleSource(
   })
   const classMethods = collectClassMethods(context)
 
-  for (const entry of functionEntries) {
+  for (let entryIndex = 0; entryIndex < functionEntries.length; entryIndex = entryIndex + 1) {
+    const entry = cModuleFunctionEntryAt(functionEntries, entryIndex)
+
     functions.push(entry.node)
   }
 
@@ -217,9 +278,18 @@ export function emitCModuleSource(
   const lines: string[] = []
   lines.push(`#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`)
 
-  for (const item of uniqueCModuleImports(plan.imports)) {
-    if (item.module.headerPath !== plan.headerPath) {
-      lines.push(`#include "${relativeCIncludePath(plan.sourcePath, item.module.headerPath, options.host)}"`)
+  const imports = uniqueCModuleImports(plan.imports)
+
+  for (let importIndex = 0; importIndex < imports.length; importIndex = importIndex + 1) {
+    const item = cModuleImportPlanAt(imports, importIndex)
+    const importedModule = item.module
+
+    if (importedModule == null) {
+      continue
+    }
+
+    if (importedModule.headerPath !== plan.headerPath) {
+      lines.push(`#include "${relativeCIncludePath(plan.sourcePath, importedModule.headerPath, options.host)}"`)
     }
   }
 
@@ -293,12 +363,16 @@ export function emitCModuleSource(
     lines.push('')
   }
 
-  for (const item of functions) {
+  for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
+    const item = cModuleNodeAt(functions, functionIndex)
+
     pushCModuleLines(lines, deps.emitFunctionDeclaration(item, context))
     lines.push('')
   }
 
-  for (const item of classMethods) {
+  for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
+    const item = cModuleClassMethodAt(classMethods, methodIndex)
+
     pushCModuleLines(lines, deps.emitClassMethodDeclaration(item.info, item.method, context))
     lines.push('')
   }
@@ -335,11 +409,15 @@ export function emitCModuleHeader(
     lines.push(`void ${plan.initName}(void);`)
   }
 
-  for (const item of exportedFunctions) {
+  for (let functionIndex = 0; functionIndex < exportedFunctions.length; functionIndex = functionIndex + 1) {
+    const item = cModuleNodeAt(exportedFunctions, functionIndex)
+
     lines.push(`${deps.emitFunctionHead(item, context)};`)
   }
 
-  for (const item of exportedValues) {
+  for (let valueIndex = 0; valueIndex < exportedValues.length; valueIndex = valueIndex + 1) {
+    const item = cModuleValueDeclarationAt(exportedValues, valueIndex)
+
     lines.push(`extern ${cModuleValueCType(item.valueType)} ${item.symbolName};`)
   }
 
@@ -390,12 +468,20 @@ function emitCModuleDeclarations(
     lines.push('')
   }
 
-  for (const wrapper of arrowCallbackWrappers) {
+  for (let wrapperIndex = 0; wrapperIndex < arrowCallbackWrappers.length; wrapperIndex = wrapperIndex + 1) {
+    const wrapper = cModuleRuntimeArrowWrapperAt(arrowCallbackWrappers, wrapperIndex)
+
     pushCModuleLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
   }
 
-  for (const wrapper of promiseChainCallbackWrappers) {
+  for (
+    let wrapperIndex = 0;
+    wrapperIndex < promiseChainCallbackWrappers.length;
+    wrapperIndex = wrapperIndex + 1
+  ) {
+    const wrapper = cModulePromiseChainWrapperAt(promiseChainCallbackWrappers, wrapperIndex)
+
     pushCModuleLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
   }
@@ -405,11 +491,15 @@ function emitCModuleDeclarations(
     lines.push('')
   }
 
-  for (const item of functions) {
+  for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
+    const item = cModuleNodeAt(functions, functionIndex)
+
     lines.push(`${deps.emitFunctionHead(item, context)};`)
   }
 
-  for (const item of classMethods) {
+  for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
+    const item = cModuleClassMethodAt(classMethods, methodIndex)
+
     lines.push(`${deps.emitClassMethodHead(item.info, item.method, context)};`)
   }
 
@@ -479,15 +569,27 @@ function createCModuleBaseContext(
   const globalRoots = collectIrGlobalRoots(irPrograms)
   const jsGlobalRoots = stringSetFromArray(globalRoots)
 
-  for (const entry of functionEntries) {
+  for (let entryIndex = 0; entryIndex < functionEntries.length; entryIndex = entryIndex + 1) {
+    const entry = cModuleFunctionEntryAt(functionEntries, entryIndex)
+
     functions.push(entry.node)
   }
 
-  for (const declaration of importedDeclarations) {
+  for (
+    let declarationIndex = 0;
+    declarationIndex < importedDeclarations.length;
+    declarationIndex = declarationIndex + 1
+  ) {
+    const declaration = cModuleFunctionDeclarationAt(importedDeclarations, declarationIndex)
+
     pushIrFunctionDeclaration(functionDeclarations, declaration)
   }
 
-  for (const effect of collectImportedCModuleFunctionEffects(plan)) {
+  const importedEffects = collectImportedCModuleFunctionEffects(plan)
+
+  for (let effectIndex = 0; effectIndex < importedEffects.length; effectIndex = effectIndex + 1) {
+    const effect = cModuleFunctionEffectAt(importedEffects, effectIndex)
+
     pushIrFunctionEffect(functionEffects, effect)
   }
 
@@ -523,10 +625,11 @@ function createCModuleBaseContext(
     new Set(['net', 'node:net']),
     'createServer'
   )
-  context.netConnectNames = collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'connect')
-  for (const name of collectRuntimeNamedImportNames(irPrograms, new Set(['net', 'node:net']), 'createConnection')) {
-    context.netConnectNames.add(name)
-  }
+  context.netConnectNames = collectRuntimeImportNames(
+    irPrograms,
+    new Set(['net', 'node:net']),
+    new Set(['connect', 'createConnection'])
+  )
   context.functionNames = createCModuleFunctionNames(plan)
   context.classInfos = createClassInfos(collectIrTopLevelNodes(plan.ir, 'class'), diagnostics)
   context.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
@@ -550,7 +653,9 @@ function collectCModuleContextRuntimeTypes(context: CEmitContext): Set<string> {
   }
 
   for (const params of context.functionParams.values()) {
-    for (const param of params) {
+    for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
+      const param = cModuleFunctionParamAt(params, paramIndex)
+
       if (isManagedRuntimeReturnType(param.valueType) || param.valueType === 'promise') {
         types.add(param.valueType)
       }
@@ -561,22 +666,36 @@ function collectCModuleContextRuntimeTypes(context: CEmitContext): Set<string> {
 }
 
 function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePlan): void {
-  for (const item of collectCModuleExportedValueDeclarations(plan)) {
+  const values = collectCModuleExportedValueDeclarations(plan)
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = cModuleValueDeclarationAt(values, index)
+
     context.moduleValueNames.set(item.name, item.symbolName)
     context.moduleValueTypes.set(item.name, item.valueType)
   }
 }
 
 function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: CModulePlan): void {
-  for (const item of plan.imports) {
-    for (const specifier of item.declaration.specifiers) {
-      const exported = item.module.record.exports.get(specifier.imported)
+  for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
+    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const importedModule = item.module
+
+    if (importedModule == null) {
+      continue
+    }
+
+    const specifiers = item.declaration.specifiers
+
+    for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
+      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const exported = importedModule.record.exports.get(specifier.imported)
 
       if (exported == null || exported.type !== 'VariableDeclaration') {
         continue
       }
 
-      context.moduleValueNames.set(specifier.local, emitCModuleValueName(item.module, specifier.imported))
+      context.moduleValueNames.set(specifier.local, emitCModuleValueName(importedModule, specifier.imported))
       context.moduleValueTypes.set(specifier.local, cModuleValueType(exported))
     }
   }
@@ -584,8 +703,11 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
 
 function collectCModuleExportedValueDeclarations(plan: CModulePlan): CModuleValueDeclaration[] {
   const values: CModuleValueDeclaration[] = []
+  const statements = collectIrTopLevelNodes(plan.ir, 'statement')
 
-  for (const item of collectIrTopLevelNodes(plan.ir, 'statement')) {
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const item = cModuleNodeAt(statements, index)
+
     if (item.type !== 'VariableDeclaration' || item.exported !== true) {
       continue
     }
@@ -605,7 +727,8 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
     return
   }
 
-  for (const item of values) {
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = cModuleValueDeclarationAt(values, index)
     const cType = cModuleValueCType(item.valueType)
     const initializer = cModuleValueGlobalInitializer(item.valueType)
 
@@ -745,9 +868,16 @@ function emitCModuleMainFunction(
 function emitCModuleImportInitCalls(plan: CModulePlan): string[] {
   const calls: string[] = []
 
-  for (const item of plan.imports) {
-    if (item.module.initName != null) {
-      calls.push(`${item.module.initName}();`)
+  for (let index = 0; index < plan.imports.length; index = index + 1) {
+    const item = cModuleImportPlanAt(plan.imports, index)
+    const importedModule = item.module
+
+    if (importedModule == null) {
+      continue
+    }
+
+    if (importedModule.initName != null) {
+      calls.push(`${importedModule.initName}();`)
     }
   }
 
@@ -758,13 +888,23 @@ function collectCModuleExportedFunctions(plan: CModulePlan): AnyNode[] {
   const exportedNames: Set<string> = new Set()
   const functions: AnyNode[] = []
 
-  for (const declaration of plan.ir.functionDeclarations) {
+  for (
+    let declarationIndex = 0;
+    declarationIndex < plan.ir.functionDeclarations.length;
+    declarationIndex = declarationIndex + 1
+  ) {
+    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+
     if (declaration.exported) {
       exportedNames.add(declaration.name)
     }
   }
 
-  for (const item of collectIrTopLevelNodes(plan.ir, 'function')) {
+  const nodes = collectIrTopLevelNodes(plan.ir, 'function')
+
+  for (let index = 0; index < nodes.length; index = index + 1) {
+    const item = cModuleNodeAt(nodes, index)
+
     if (exportedNames.has(item.name)) {
       functions.push(item)
     }
@@ -776,10 +916,20 @@ function collectCModuleExportedFunctions(plan: CModulePlan): AnyNode[] {
 function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFunctionDeclaration[] {
   const declarations: IrFunctionDeclaration[] = []
 
-  for (const item of plan.imports) {
-    for (const specifier of item.declaration.specifiers) {
+  for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
+    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const importedModule = item.module
+
+    if (importedModule == null) {
+      continue
+    }
+
+    const specifiers = item.declaration.specifiers
+
+    for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
+      const specifier = cModuleNodeAt(specifiers, specifierIndex)
       const declaration = findCModuleExportedFunctionDeclaration(
-        item.module.ir.functionDeclarations,
+        importedModule.ir.functionDeclarations,
         specifier.imported
       )
 
@@ -795,9 +945,23 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
 function collectImportedCModuleFunctionEffects(plan: CModulePlan): IrFunctionEffect[] {
   const effects: IrFunctionEffect[] = []
 
-  for (const item of plan.imports) {
-    for (const specifier of item.declaration.specifiers) {
-      for (const effect of item.module.ir.functionEffects) {
+  for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
+    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const importedModule = item.module
+
+    if (importedModule == null) {
+      continue
+    }
+
+    const specifiers = item.declaration.specifiers
+
+    for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
+      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const sourceEffects = importedModule.ir.functionEffects
+
+      for (let effectIndex = 0; effectIndex < sourceEffects.length; effectIndex = effectIndex + 1) {
+        const effect = cModuleFunctionEffectAt(sourceEffects, effectIndex)
+
         if (effect.name === specifier.imported) {
           effects.push(cloneImportedCModuleFunctionEffect(effect, specifier.local))
         }
@@ -812,7 +976,9 @@ function findCModuleExportedFunctionDeclaration(
   declarations: IrFunctionDeclaration[],
   name: string
 ): IrFunctionDeclaration | null {
-  for (const declaration of declarations) {
+  for (let index = 0; index < declarations.length; index = index + 1) {
+    const declaration = cModuleFunctionDeclarationAt(declarations, index)
+
     if (declaration.name === name && declaration.exported) {
       return declaration
     }
@@ -855,20 +1021,43 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
   const names: Map<string, string> = new Map()
   const localNames: Set<string> = new Set()
 
-  for (const declaration of plan.ir.functionDeclarations) {
+  for (
+    let declarationIndex = 0;
+    declarationIndex < plan.ir.functionDeclarations.length;
+    declarationIndex = declarationIndex + 1
+  ) {
+    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+
     localNames.add(declaration.name)
   }
 
-  for (const declaration of plan.ir.functionDeclarations) {
+  for (
+    let declarationIndex = 0;
+    declarationIndex < plan.ir.functionDeclarations.length;
+    declarationIndex = declarationIndex + 1
+  ) {
+    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+
     names.set(declaration.name, emitCModuleFunctionName(plan, declaration.name))
   }
 
-  for (const item of plan.imports) {
-    for (const specifier of item.declaration.specifiers) {
-      names.set(specifier.imported, emitCModuleFunctionName(item.module, specifier.imported))
+  for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
+    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const importedModule = item.module
+
+    if (importedModule == null) {
+      continue
+    }
+
+    const specifiers = item.declaration.specifiers
+
+    for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
+      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+
+      names.set(specifier.imported, emitCModuleFunctionName(importedModule, specifier.imported))
 
       if (!localNames.has(specifier.local)) {
-        names.set(specifier.local, emitCModuleFunctionName(item.module, specifier.imported))
+        names.set(specifier.local, emitCModuleFunctionName(importedModule, specifier.imported))
       }
     }
   }
