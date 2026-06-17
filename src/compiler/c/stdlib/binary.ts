@@ -173,7 +173,7 @@ function emitCBytesAllocValueExpression(
       pushBinaryLines(lines, value.lines)
       lines.push(
         emitStatusCheck(
-          `${binaryRuntimeCallDescriptors.set.callName}(${temp}, ${index}, (uint8_t)(${value.expression}))`,
+          `ccjs_bytes_set(${temp}, ${index}, (uint8_t)(${value.expression}))`,
           context
         )
       )
@@ -253,7 +253,7 @@ function emitCBytesSliceValueExpression(
   pushBinaryLines(lines, endLines)
 
   lines.push(`size_t ${lengthName} = 0;`)
-  lines.push(emitStatusCheck(`${binaryRuntimeCallDescriptors.length.callName}(${receiver.expression}, &${lengthName})`, context))
+  lines.push(emitStatusCheck(`ccjs_bytes_len(${receiver.expression}, &${lengthName})`, context))
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${endExpression};`)
   pushBinaryLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_bytes_start'))
