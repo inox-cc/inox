@@ -45,6 +45,16 @@ export function pushDiagnostic(context: CDiagnosticContext, item: Diagnostic): v
   context.diagnostics.push(item)
 }
 
+function cloneCStringSet(values: CStringSet): CStringSet {
+  const result: CStringSet = new Set()
+
+  for (const value of values) {
+    result.add(value)
+  }
+
+  return result
+}
+
 export type CEmitContext = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
@@ -816,7 +826,7 @@ export function pushNullableScalarNarrowing(
     }
   }
 
-  context.narrowedNullableScalars = new Set(previous)
+  context.narrowedNullableScalars = cloneCStringSet(previous)
 
   for (const name of names) {
     context.narrowedNullableScalars.add(name)
