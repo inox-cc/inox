@@ -13,9 +13,9 @@ export async function resolveExistingSource(path: string, host: CompilerHost): P
   const candidates: string[] = []
 
   if (host.extname(normalized) === '') {
-    for (const ext of sourceExtensions) {
-      candidates.push(`${normalized}${ext}`)
-    }
+    candidates.push(normalized)
+    candidates.push(`${normalized}.ts`)
+    candidates.push(`${normalized}.js`)
 
     for (const ext of sourceExtensions) {
       candidates.push(host.joinPath(normalized, `index${ext}`))
