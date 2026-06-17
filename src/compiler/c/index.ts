@@ -349,7 +349,7 @@ import {
   resolveObjectExpressionMember,
   updateKnownObjectMemberValueType
 } from './values/objects.ts'
-import type { ObjectVariableDeclarationDependencies } from './values/objects.ts'
+import type { ObjectExpressionFieldDependencies, ObjectVariableDeclarationDependencies } from './values/objects.ts'
 import {
   collectionConstructorName,
   emitPreparedCollectionCallExpression,
@@ -522,118 +522,25 @@ type CErrorConstructorParts = {
   cause: AnyNode
 }
 
-let objectVariableDeclarationDependencies = {
-  emitCFieldFlags,
+let objectVariableDeclarationDependencies = {} as ObjectVariableDeclarationDependencies
+let objectExpressionFieldDependencies: ObjectExpressionFieldDependencies = {
   emitCValueExpression,
   inferExpressionType
 }
-
-let objectExpressionFieldDependencies = {
-  emitCValueExpression,
-  inferExpressionType
-}
-
-let jsonDeclarationDependencies = {
-  emitCFieldFlags,
-  emitCValueExpression,
-  emitPreparedStringBytesOperand,
-  inferExpressionType,
-  registerObjectShape
-}
-
-let timerLoweringDependencies = {
-  emitPreparedNumberExpression,
-  emitReference,
-  emitRuntimeCallbackValue
-}
-
-let fetchLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedStringBytesOperand,
-  findObjectLiteralPropertyValue,
-  inferExpressionType
-}
-
-let fsLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  inferExpressionType
-}
-
-let binaryLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  inferExpressionType
-}
-
-let childProcessLoweringDependencies = {
-  emitCValueExpression,
-  registerObjectShape
-}
-
-let pathLoweringDependencies = {
-  emitCValueExpression,
-  registerObjectShape
-}
-
-let processLoweringDependencies = {
-  emitPreparedNumberExpression
-}
-
-let urlLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedStringBytesOperand,
-  registerObjectShape
-}
-
-let promiseLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedAsyncFunctionPromiseCallExpression,
-  emitPreparedCallExpression,
-  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedFsCallExpression(expression, context, fsLoweringDependencies, options),
-  emitRuntimeArrowCaptureStoreLines,
-  emitStatementList,
-  inferExpressionType,
-  inferRejectedValueType,
-  isPromiseChainCallbackWrapperWithContext
-}
-
-let cryptoLoweringDependencies = {
-  cStringLiteralNode,
-  emitCValueExpression,
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  inferExpressionType
-}
-
-let dgramLoweringDependencies = {
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  emitReference,
-  emitStatementList,
-  findObjectLiteralPropertyValue,
-  staticObjectBooleanPropertyValue,
-  staticObjectStringPropertyValue
-}
-
-let httpLoweringDependencies = {
-  emitPreparedNumberExpression,
-  emitStatementList
-}
-
-let netLoweringDependencies = {
-  createFunctionContext,
-  emitConsoleLogStatement,
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  emitStatementList,
-  findObjectLiteralPropertyValue
-}
+let jsonDeclarationDependencies = {} as JsonDeclarationDependencies
+let timerLoweringDependencies = {} as TimerLoweringDependencies
+let fetchLoweringDependencies = {} as FetchLoweringDependencies
+let fsLoweringDependencies = {} as FsLoweringDependencies
+let binaryLoweringDependencies = {} as BinaryLoweringDependencies
+let childProcessLoweringDependencies = {} as ChildProcessLoweringDependencies
+let pathLoweringDependencies = {} as PathLoweringDependencies
+let processLoweringDependencies = {} as ProcessLoweringDependencies
+let urlLoweringDependencies = {} as UrlLoweringDependencies
+let promiseLoweringDependencies = {} as PromiseLoweringDependencies
+let cryptoLoweringDependencies = {} as CryptoLoweringDependencies
+let dgramLoweringDependencies = {} as DgramLoweringDependencies
+let httpLoweringDependencies = {} as HttpLoweringDependencies
+let netLoweringDependencies = {} as NetLoweringDependencies
 
 const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression,
