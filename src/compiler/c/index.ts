@@ -328,6 +328,7 @@ import {
 } from './values/classes.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
+  emitDynamicObjectFieldAssignment,
   emitObjectVariableDeclaration,
   emitObjectValueReference,
   emitPreparedDynamicObjectIndexValueExpression,
@@ -661,6 +662,8 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     emitDgramSocketCallStatement(expression, context, dgramLoweringDependencies),
   emitDynamicObjectMemberVariableDeclaration,
   emitDynamicObjectMemberAssignment,
+  emitDynamicObjectFieldAssignment: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
+    emitDynamicObjectFieldAssignment(expression, context, objectExpressionFieldDependencies),
   emitErrorObjectVariableDeclaration,
   emitFailureStatement,
   emitFetchAbortControllerVariableDeclaration,

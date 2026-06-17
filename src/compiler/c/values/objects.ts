@@ -449,6 +449,40 @@ export function emitPreparedDynamicObjectIndexValueExpression(
   )
 }
 
+export function emitDynamicObjectFieldAssignment(
+  expression: ObjectFieldNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): string[] | null {
+  if (expression.type !== 'AssignmentExpression') {
+    return null
+  }
+
+  const target = expression.target
+
+  if (target.type === 'MemberExpression') {
+    return emitDynamicObjectFieldAssignmentLines(
+      expression,
+      target.object,
+      target.property,
+      context,
+      dependencies
+    )
+  }
+
+  if (target.type === 'IndexExpression' && target.index.type === 'StringLiteral') {
+    return emitDynamicObjectFieldAssignmentLines(
+      expression,
+      target.object,
+      target.index.value,
+      context,
+      dependencies
+    )
+  }
+
+  return null
+}
+
 export function emitPreparedObjectExpressionScalarIndexValueExpression(
   expression: AnyNode,
   context: ObjectFunctionContext,
@@ -547,6 +581,33 @@ function emitPreparedDynamicObjectFieldValueExpression(
     expression: temp,
     valueType: expression.valueType
   }
+}
+
+function emitDynamicObjectFieldAssignmentLines(
+  expression: ObjectFieldNode,
+  objectExpression: ObjectFieldNode,
+  key: string,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): string[] | null {
+  if (dependencies.inferExpressionType(objectExpression, context) !== 'object') {
+    return null
+  }
+
+  const object = dependencies.emitCValueExpression(objectExpression, context)
+  const value = dependencies.emitCValueExpression(expression.value, context)
+  const lines: string[] = []
+
+  appendLines(lines, object.lines)
+  appendLines(lines, value.lines)
+  lines.push(
+    emitStatusCheck(
+      `ccjs_object_set(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${value.expression})`,
+      context
+    )
+  )
+
+  return lines
 }
 
 function isScalarObjectFieldValueType(valueType: string): boolean {

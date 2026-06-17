@@ -112,6 +112,7 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext
   ): string[]
   emitDynamicObjectMemberAssignment(expression: StatementNode, member: CKnownObjectIndexField, context: CFunctionContext): string[]
+  emitDynamicObjectFieldAssignment(expression: StatementNode, context: CFunctionContext): string[] | null
   emitErrorObjectVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
   emitFailureStatement(context: CFunctionContext): string
   emitFetchAbortControllerVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
@@ -2526,6 +2527,12 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       if (field != null) {
         return deps.emitDynamicObjectMemberAssignment(statement.expression, field, context)
       }
+    }
+
+    const dynamicObjectFieldAssignment = deps.emitDynamicObjectFieldAssignment(statement.expression, context)
+
+    if (dynamicObjectFieldAssignment != null) {
+      return dynamicObjectFieldAssignment
     }
 
     const valueType = deps.inferExpressionType(statement.expression.value, context)

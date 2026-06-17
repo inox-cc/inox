@@ -323,6 +323,37 @@ export function main(): void {
 })
 
 
+test('lowers C dynamic object field assignments through runtime lookup', () => {
+  const result = compileSource(
+    `type Child = {
+  value: number
+}
+
+function update(extra: object): void {
+  extra.child = { value: 7 }
+}
+
+function read(extra: object): Child {
+  return extra.child
+}
+
+export function main(): void {
+  const extra = { child: { value: 1 } }
+  update(extra)
+  const child = read(extra)
+  console.log(child.value)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_set\(extra, "child", 5, ccjs_(?:value|object)_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(extra, "child", 5, &ccjs_value_\d+\)/)
+})
+
+
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
     `type Point = {
