@@ -794,17 +794,25 @@ function singleReferenceName(expression: EffectChildNode | null | undefined): st
     return null
   }
 
-  if (expression.type !== 'Reference') {
+  const reference = expression as EffectNode
+
+  if (reference.type !== 'Reference') {
     return null
   }
 
-  const path = expression.path
+  return singleStringPathName(reference.path)
+}
 
+function singleStringPathName(path: string[] | null | undefined): string | null {
   if (path == null || path.length !== 1) {
     return null
   }
 
-  return path[0]
+  return stringValueAt(path, 0)
+}
+
+function stringValueAt(values: string[], index: number): string {
+  return values[index]
 }
 
 function createFunctionThrowValueTypeMap(): ThrowValueTypeMap {
