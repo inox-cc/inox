@@ -430,6 +430,32 @@ export function main(): void {
 })
 
 
+test('lowers C dynamic object field boolean literal comparisons through runtime lookup', () => {
+  const result = compileSource(
+    `function isOptional(node: object): boolean {
+  return node.optional === true
+}
+
+function isNotReadonly(node: object): boolean {
+  return node['readonly'] !== false
+}
+
+export function main(): void {
+  console.log(isOptional({ optional: true }), isOptional({ optional: 1 }), isNotReadonly({ readonly: false }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "optional", 8, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value_\d+\.tag == CCJS_TAG_BOOL && ccjs_value_\d+\.as\.boolean == true/)
+  assert.match(result.code, /ccjs_object_get\(node, "readonly", 8, &ccjs_value_\d+\)/)
+  assert.match(result.code, /!\(ccjs_value_\d+\.tag == CCJS_TAG_BOOL && ccjs_value_\d+\.as\.boolean == false\)/)
+})
+
+
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
     `type Point = {

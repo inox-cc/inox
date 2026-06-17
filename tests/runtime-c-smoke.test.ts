@@ -6880,6 +6880,62 @@ console.log(hasInit({ init: { type: 'StringLiteral' } }), hasInit({ init: null }
 })
 
 
+test('generated C dynamic object field boolean literal comparisons compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-bool-compare-'))
+  const source = join(dir, 'dynamic-object-bool-compare.c')
+  const output = join(dir, 'dynamic-object-bool-compare')
+
+  try {
+    const result = compileSource(
+      `function isOptional(node: object): boolean {
+  return node.optional === true
+}
+
+function isNotReadonly(node: object): boolean {
+  return node['readonly'] !== false
+}
+
+console.log(
+  isOptional({ optional: true }),
+  isOptional({ optional: false }),
+  isOptional({ optional: 1 }),
+  isNotReadonly({ readonly: false }),
+  isNotReadonly({ readonly: true }),
+  isNotReadonly({ readonly: 'no' })
+)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 0 0 0 1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

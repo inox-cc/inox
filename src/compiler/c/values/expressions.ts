@@ -1007,6 +1007,16 @@ export function emitPreparedNumberExpression(
       return dynamicObjectNullCompare
     }
 
+    const dynamicObjectBooleanLiteralCompare = emitPreparedDynamicObjectBooleanLiteralCompareExpression(
+      expression,
+      context,
+      deps
+    )
+
+    if (dynamicObjectBooleanLiteralCompare != null) {
+      return dynamicObjectBooleanLiteralCompare
+    }
+
     if (isEqualityOperator(expression.operator) && leftType === 'string' && rightType === 'string') {
       return deps.emitPreparedStringCompareExpression(expression, context)
     }
@@ -1465,6 +1475,50 @@ function emitPreparedDynamicObjectNullCompareExpression(
     lines: value.lines,
     expression: result
   }
+}
+
+function emitPreparedDynamicObjectBooleanLiteralCompareExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (!isEqualityOperator(expression.operator)) {
+    return null
+  }
+
+  let valueExpression = expression.left
+  let literal = booleanLiteralValue(expression.right)
+
+  if (literal == null) {
+    valueExpression = expression.right
+    literal = booleanLiteralValue(expression.left)
+  }
+
+  if (literal == null || !isDynamicObjectFieldValueExpression(valueExpression, context, deps)) {
+    return null
+  }
+
+  const value = deps.emitCValueExpression(valueExpression, context)
+  const expected = runtimeBoolValueExpression(literal)
+  const equals = `(${value.expression}.tag == CCJS_TAG_BOOL && ${value.expression}.as.boolean == ${expected})`
+  let result = `(!${equals})`
+
+  if (isPositiveEqualityOperator(expression.operator)) {
+    result = equals
+  }
+
+  return {
+    lines: value.lines,
+    expression: result
+  }
+}
+
+function booleanLiteralValue(expression: CValueNode): boolean | null {
+  if (expression.type !== 'BooleanLiteral') {
+    return null
+  }
+
+  return expression.value
 }
 
 function isDynamicObjectFieldValueExpression(
