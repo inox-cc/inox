@@ -18,74 +18,77 @@ export function lowerProgram(ast: ProgramNode): ProgramNode {
   }
 }
 
-type LoweredTopLevelItem = AnyNode | AnyNode[]
+type LoweredTopLevelItem = AnyNode[]
 
-function appendLoweredTopLevelItem(out: AnyNode[], item: LoweredTopLevelItem): void {
-  if (Array.isArray(item)) {
-    for (const child of item) {
-      out.push(child)
-    }
-    return
+function appendLoweredTopLevelItem(out: AnyNode[], items: LoweredTopLevelItem): void {
+  for (const item of items) {
+    out.push(item)
   }
-
-  out.push(item)
 }
 
 function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLevelItem {
   if (item.type === 'ImportDeclaration') {
-    return {
-      type: 'ImportDeclaration',
-      typeOnly: item.typeOnly,
-      specifiers: item.specifiers,
-      source: item.source,
-      loc: item.loc
-    }
+    return [
+      {
+        type: 'ImportDeclaration',
+        typeOnly: item.typeOnly,
+        specifiers: item.specifiers,
+        source: item.source,
+        loc: item.loc
+      }
+    ]
   }
 
   if (item.type === 'ExportDeclaration') {
-    return {
-      type: 'ExportDeclaration',
-      typeOnly: item.typeOnly,
-      specifiers: item.specifiers,
-      source: item.source,
-      loc: item.loc
-    }
+    return [
+      {
+        type: 'ExportDeclaration',
+        typeOnly: item.typeOnly,
+        specifiers: item.specifiers,
+        source: item.source,
+        loc: item.loc
+      }
+    ]
   }
 
   if (item.type === 'FunctionDeclaration') {
     const returnType = resolveDeclaredType(item.returnType, context)
 
-    return {
-      type: 'FunctionDeclaration',
-      exported: item.exported,
-      async: item.async,
-      name: item.name,
-      loc: item.loc,
-      params: lowerParamList(item.params, context),
-      declaredReturnType: item.returnType,
-      returnType: resolvedValueType(returnType.valueType, item.returnType),
-      returnNullable: returnType.nullable,
-      returnArrayElementType: returnType.arrayElementType,
-      returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
-      returnMapKeyType: returnType.mapKeyType,
-      returnMapValueType: returnType.mapValueType,
-      returnPromiseValueType: nullableString(returnType.promiseValueType),
-      returnSetElementType: returnType.setElementType,
-      returnShape: returnType.shape,
-      body: lowerStatementList(item.body, context)
-    }
+    return [
+      {
+        type: 'FunctionDeclaration',
+        exported: item.exported,
+        async: item.async,
+        name: item.name,
+        loc: item.loc,
+        params: lowerParamList(item.params, context),
+        declaredReturnType: item.returnType,
+        returnType: resolvedValueType(returnType.valueType, item.returnType),
+        returnNullable: returnType.nullable,
+        returnArrayElementType: returnType.arrayElementType,
+        returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
+        returnMapKeyType: returnType.mapKeyType,
+        returnMapValueType: returnType.mapValueType,
+        returnPromiseValueType: nullableString(returnType.promiseValueType),
+        returnSetElementType: returnType.setElementType,
+        returnShape: returnType.shape,
+        body: lowerStatementList(item.body, context)
+      }
+    ]
   }
 
   if (item.type === 'ClassDeclaration') {
-    return {
-      type: 'ClassDeclaration',
-      exported: item.exported,
-      name: item.name,
-      loc: item.loc,
-      shape: nullableNode(item.shape),
-      fields: lowerClassFields(item.fields),
-      methods: lowerClassMethods(item.methods, context)
-    }
+    return [
+      {
+        type: 'ClassDeclaration',
+        exported: item.exported,
+        name: item.name,
+        loc: item.loc,
+        shape: nullableNode(item.shape),
+        fields: lowerClassFields(item.fields),
+        methods: lowerClassMethods(item.methods, context)
+      }
+    ]
   }
 
   return lowerStatementList([item], context)
