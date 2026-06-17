@@ -113,8 +113,12 @@ function sourceLocationWithFile(loc: SourceLocation | undefined, line: number, c
     column
   }
 
-  if (loc != null && loc.file != null) {
-    result.file = loc.file
+  if (loc != null) {
+    const file = loc.file
+
+    if (file != null) {
+      result.file = file
+    }
   }
 
   return result
@@ -123,8 +127,12 @@ function sourceLocationWithFile(loc: SourceLocation | undefined, line: number, c
 function tokenizeLocationOptions(loc: SourceLocation | undefined): TokenizeLocationOptions {
   const options: TokenizeLocationOptions = {}
 
-  if (loc != null && loc.file != null) {
-    options.file = loc.file
+  if (loc != null) {
+    const file = loc.file
+
+    if (file != null) {
+      options.file = file
+    }
   }
 
   return options

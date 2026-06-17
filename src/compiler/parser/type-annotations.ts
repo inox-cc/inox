@@ -57,6 +57,12 @@ export function readTypeAnnotation(
       genericDepth = genericDepth - 1
     }
 
+    if (token.value === 'readonly') {
+      position = position + 1
+      currentToken = tokenAt(tokens, position)
+      continue
+    }
+
     if (token.type === 'string') {
       parts.push('string')
     } else if (token.type === 'number') {
@@ -114,14 +120,14 @@ export function normalizeTypeName(name: string): string {
 
   if (unionArgs.length > 1) {
     const normalized: string[] = []
-    const withoutNull: string[] = []
+    const withoutNullish: string[] = []
 
     for (const arg of unionArgs) {
       const normalizedArg = normalizeTypeName(arg)
       normalized.push(normalizedArg)
 
-      if (normalizedArg !== 'null') {
-        withoutNull.push(normalizedArg)
+      if (!isNullishTypeName(normalizedArg)) {
+        withoutNullish.push(normalizedArg)
       }
     }
 
@@ -129,8 +135,8 @@ export function normalizeTypeName(name: string): string {
       return normalized[0]
     }
 
-    if (normalized.length === 2 && withoutNull.length === 1) {
-      return `nullable<${withoutNull[0]}>`
+    if (withoutNullish.length === 1 && normalized.length > withoutNullish.length) {
+      return `nullable<${withoutNullish[0]}>`
     }
 
     return 'unknown'
@@ -231,6 +237,10 @@ function allStringsSame(values: string[]): boolean {
   }
 
   return true
+}
+
+function isNullishTypeName(name: string): boolean {
+  return name === 'null' || name === 'undefined'
 }
 
 function genericTypeInner(name: string, wrapper: string): string | null {

@@ -420,11 +420,17 @@ export function registerObjectShape(
   name: string,
   shape: CObjectShape | null | undefined
 ): void {
-  if (shape == null || shape.fields == null) {
+  if (shape == null) {
     return
   }
 
-  context.objectShapes.set(name, normalizeObjectShapeFields(shape.fields))
+  const fields = shape.fields
+
+  if (fields == null) {
+    return
+  }
+
+  context.objectShapes.set(name, normalizeObjectShapeFields(fields))
 }
 
 export function emitObjectVariableDeclaration(

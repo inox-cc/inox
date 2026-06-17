@@ -660,10 +660,6 @@ export function emitPreparedPromiseExpression(
     return promiseCall
   }
 
-  if (expression == null) {
-    return null
-  }
-
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 

@@ -1681,12 +1681,12 @@ function emitSwitchCaseLabel(expression: StatementNode | null | undefined, conte
     return `(int)${expression.value ? '1' : '0'}`
   }
 
-  if (
-    expression?.type === 'UnaryExpression' &&
-    expression.argument.type === 'NumberLiteral' &&
-    ['+', '-'].includes(expression.operator)
-  ) {
-    return `(int)(${expression.operator}${expression.argument.value})`
+  if (expression != null && expression.type === 'UnaryExpression') {
+    const argument = expression.argument
+
+    if (argument.type === 'NumberLiteral' && isSwitchCaseUnaryOperator(expression.operator)) {
+      return `(int)(${expression.operator}${argument.value})`
+    }
   }
 
   context.diagnostics.push(
@@ -1698,6 +1698,10 @@ function emitSwitchCaseLabel(expression: StatementNode | null | undefined, conte
   )
 
   return '0'
+}
+
+function isSwitchCaseUnaryOperator(operator: string): boolean {
+  return operator === '+' || operator === '-'
 }
 
 export function emitTryStatement(statement: StatementNode, context: CFunctionContext): string[] {
