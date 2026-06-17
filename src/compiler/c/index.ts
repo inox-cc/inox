@@ -353,6 +353,7 @@ import type { ObjectVariableDeclarationDependencies } from './values/objects.ts'
 import {
   collectionConstructorName,
   emitPreparedCollectionCallExpression,
+  emitPreparedCollectionConstructorValueExpression,
   emitPreparedCollectionReceiver,
   emitPreparedCollectionSizeExpression,
   emitPreparedMapIndexAssignment,
@@ -1193,6 +1194,7 @@ const cValueExpressionDependencies = {
     emitPreparedChildProcessCallExpression(expression, context, childProcessLoweringDependencies),
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
+  emitPreparedCollectionConstructorValueExpression,
   emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedDebugMemoryCallExpression,

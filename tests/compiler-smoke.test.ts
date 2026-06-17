@@ -207,6 +207,34 @@ export function main(): void {
 })
 
 
+test('lowers C collection constructors in object literal value fields', () => {
+  const result = compileSource(
+    `type Bag = {
+  scores: Map<string, number>
+  names: Set<string>
+}
+
+export function main(): void {
+  const bag: Bag = { scores: new Map(), names: new Set() }
+  bag.scores.set('Ada', 7)
+  bag.names.add('Ada')
+  console.log(bag.scores.size, bag.names.has('Ada'))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_map_new\(&ccjs_default_allocator, &ccjs_map_\d+\)/)
+  assert.match(result.code, /ccjs_set_new\(&ccjs_default_allocator, &ccjs_set_\d+\)/)
+  assert.match(result.code, /ccjs_object_init_known\(bag, 0, ccjs_map_\d+\)/)
+  assert.match(result.code, /ccjs_object_init_known\(bag, 1, ccjs_set_\d+\)/)
+  assert.match(result.code, /ccjs_map_set\(ccjs_value_\d+, ccjs_value_\d+, ccjs_number_value\(7\)\)/)
+  assert.match(result.code, /ccjs_set_add\(ccjs_value_\d+, ccjs_value_\d+\)/)
+})
+
+
 test('lowers synthetic C main wrapper through cleanup when runtime values are owned', () => {
   const result = compileSource(
     `const user = { name: 'Ada' }

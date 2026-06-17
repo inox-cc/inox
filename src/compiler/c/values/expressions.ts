@@ -1716,6 +1716,7 @@ export type CValueExpressionDependencies = {
   emitPreparedChildProcessCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedClassMethodCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCollectionConstructorValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCryptoCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedDebugMemoryCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFetchHeadersCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
@@ -1882,6 +1883,12 @@ export function emitCValueExpression(
 
   if (mapIndexGet != null) {
     return mapIndexGet
+  }
+
+  const collectionConstructor = deps.emitPreparedCollectionConstructorValueExpression(expression, context)
+
+  if (collectionConstructor != null) {
+    return collectionConstructor
   }
 
   if (deps.isErrorConstructorExpression(expression)) {

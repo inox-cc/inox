@@ -18,6 +18,7 @@ import type {
 } from '../types.ts'
 
 type PreparedCollectionCall = PreparedExpression
+type CollectionNode = AnyNode
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CStringMap = Map<string, string>
@@ -311,6 +312,160 @@ export function collectionConstructorName(expression: AnyNode | null | undefined
   }
 
   return collectionConstructorNameFromPath(expression.callee.path)
+}
+
+export function emitPreparedCollectionConstructorValueExpression(
+  expression: CollectionNode | null | undefined,
+  context: CollectionFunctionContext
+): PreparedExpression | null {
+  if (expression == null) {
+    return null
+  }
+
+  const collectionConstructor = collectionConstructorName(expression)
+
+  if (collectionConstructor == null) {
+    return null
+  }
+
+  if (expression.args.length > 1) {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_COLLECTION',
+        'C collection constructors currently support at most one array literal iterable',
+        expression.loc
+      )
+    )
+  }
+
+  let tempPrefix = 'ccjs_set'
+
+  if (collectionConstructor === 'Map') {
+    tempPrefix = 'ccjs_map'
+  }
+
+  const temp = nextCName(context, tempPrefix)
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+
+  if (collectionConstructor === 'Map') {
+    collectionDeps(context).reportCCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
+    lines.push(emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${temp})`, context))
+    pushAllLines(lines, emitMapConstructorValueEntries(temp, expression.args[0], context, expression.loc))
+
+    return {
+      lines,
+      expression: temp
+    }
+  }
+
+  collectionDeps(context).reportCCollectionHashability(expression.setElementType, 'Set values', expression.loc, context)
+  lines.push(emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${temp})`, context))
+  pushAllLines(lines, emitSetConstructorValueElements(temp, expression.args[0], context, expression.loc))
+
+  return {
+    lines,
+    expression: temp
+  }
+}
+
+function emitMapConstructorValueEntries(
+  name: string,
+  expression: CollectionNode | null | undefined,
+  context: CollectionFunctionContext,
+  loc: SourceLocation | null | undefined
+): string[] {
+  if (expression == null) {
+    return []
+  }
+
+  if (expression.type !== 'ArrayLiteral') {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_COLLECTION',
+        'C Map constructor currently supports only array literal entries',
+        nodeLocOrFallback(expression, loc)
+      )
+    )
+    return []
+  }
+
+  const lines: string[] = []
+
+  for (const entry of expression.elements) {
+    if (entry.type !== 'ArrayLiteral' || entry.elements.length !== 2) {
+      context.diagnostics.push(
+        diagnostic(
+          'CCJS_C_COLLECTION',
+          'C Map constructor entries must be [key, value] array literals',
+          nodeLocOrFallback(entry, loc)
+        )
+      )
+      continue
+    }
+
+    const deps = collectionDeps(context)
+    const keyNode = entry.elements[0]
+    const valueNode = entry.elements[1]
+    const key = deps.emitCValueExpression(keyNode, context)
+    const value = deps.emitCValueExpression(valueNode, context)
+
+    deps.reportCCollectionHashability(
+      deps.inferExpressionType(keyNode, context),
+      'Map keys',
+      nodeLocOrFallback(keyNode, nodeLocOrFallback(entry, loc)),
+      context
+    )
+
+    pushAllLines(lines, key.lines)
+    pushAllLines(lines, value.lines)
+    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+  }
+
+  return lines
+}
+
+function emitSetConstructorValueElements(
+  name: string,
+  expression: CollectionNode | null | undefined,
+  context: CollectionFunctionContext,
+  loc: SourceLocation | null | undefined
+): string[] {
+  if (expression == null) {
+    return []
+  }
+
+  if (expression.type !== 'ArrayLiteral') {
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_COLLECTION',
+        'C Set constructor currently supports only array literal values',
+        nodeLocOrFallback(expression, loc)
+      )
+    )
+    return []
+  }
+
+  const deps = collectionDeps(context)
+  const lines: string[] = []
+
+  for (const element of expression.elements) {
+    const value = deps.emitCValueExpression(element, context)
+
+    deps.reportCCollectionHashability(
+      deps.inferExpressionType(element, context),
+      'Set values',
+      nodeLocOrFallback(element, loc),
+      context
+    )
+
+    pushAllLines(lines, value.lines)
+    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
+  }
+
+  return lines
 }
 
 export function emitPreparedCollectionCallExpression(

@@ -3717,6 +3717,56 @@ console.log(result.optional, result.total)
 })
 
 
+test('generated C object literal collection constructors compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-collection-constructors-'))
+  const source = join(dir, 'object-collection-constructors.c')
+  const output = join(dir, 'object-collection-constructors')
+
+  try {
+    const result = compileSource(
+      `type Bag = {
+  scores: Map<string, number>
+  names: Set<string>
+}
+
+const bag: Bag = { scores: new Map(), names: new Set() }
+bag.scores.set('Ada', 7)
+bag.scores.set('Grace', 9)
+bag.names.add('Ada')
+console.log(bag.scores.size, bag.names.has('Ada'), bag.scores.get('Grace') ?? 0)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2 1 9\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C early return runs through cleanup label with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
