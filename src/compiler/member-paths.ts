@@ -3,7 +3,7 @@ import type { AnyNode } from './types.ts'
 type MemberPathNode = AnyNode & {
   object?: AnyNode | null
   path?: string[]
-  property?: string
+  property?: string | null
 }
 
 export function memberExpressionPath(expression: MemberPathNode | null | undefined): string[] {

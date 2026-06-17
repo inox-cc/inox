@@ -23,10 +23,20 @@ type FeatureFunctionType = AnyNode & {
   returnType?: string | null
 }
 
+type FeatureChildNode = AnyNode & {
+  collectionKind?: string | null
+  elements?: AnyNode[]
+  path?: string[]
+  property?: string | null
+  shape?: FeatureShape | null
+  type?: string
+  valueType?: string | null
+}
+
 type FeatureNode = AnyNode & {
-  args?: AnyNode[]
+  args?: FeatureChildNode[]
   binaryRuntimeMethod?: string | null
-  callee?: AnyNode | null
+  callee?: FeatureChildNode | null
   childProcessRuntimeMethod?: string | null
   collectionKind?: string | null
   cryptoRuntimeMethod?: string | null
@@ -34,9 +44,9 @@ type FeatureNode = AnyNode & {
   fsRuntimeMethod?: string | null
   fsRuntimeConstant?: string | null
   functionType?: FeatureFunctionType | null
-  left?: AnyNode | null
+  left?: FeatureChildNode | null
   nullable?: boolean
-  object?: AnyNode | null
+  object?: FeatureChildNode | null
   operator?: string | null
   osRuntimeConstant?: string | null
   osRuntimeMethod?: string | null
@@ -52,9 +62,9 @@ type FeatureNode = AnyNode & {
   raw?: string | null
   returnNullable?: boolean
   returnType?: string | null
-  right?: AnyNode | null
+  right?: FeatureChildNode | null
   shape?: FeatureShape | null
-  target?: AnyNode | null
+  target?: FeatureChildNode | null
   timerRuntimeMethod?: string | null
   type?: string
   urlRuntimeMethod?: string | null
@@ -270,7 +280,7 @@ function visitSyntaxFeatureUsage(node: AnyNode | null, usages: IrSyntaxFeatureUs
       return
     }
 
-    const item = node
+    const item: FeatureNode = node
 
     if (item.type === 'ClassDeclaration') {
       usages.push({
