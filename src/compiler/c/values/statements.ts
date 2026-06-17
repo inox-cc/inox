@@ -604,7 +604,7 @@ export function emitNumberBooleanScalarVariableDeclaration(statement: StatementN
     return emitBoxedScalarVariableDeclaration(statement, context)
   }
 
-  if (!['number', 'boolean'].includes(inferred)) {
+  if (!isNullableScalarType(inferred)) {
     context.diagnostics.push(
       diagnostic(
         cUnsupportedExpressionCode(inferred),
@@ -1378,7 +1378,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  if (!['number', 'boolean'].includes(inferred)) {
+  if (!isNullableScalarType(inferred)) {
     context.diagnostics.push(
       diagnostic(
         cUnsupportedVariableDeclarationCode(statement, inferred),
@@ -1498,7 +1498,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     elementType = statementDeps(context).resolveForOfElementType(array.elements)
   }
 
-  if (!['number', 'boolean', 'string'].includes(elementType)) {
+  if (!isCCollectionHashableType(elementType)) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FOR_OF',
@@ -1585,7 +1585,7 @@ function emitRuntimeMapForOfStatement(
   const keyType = stringOrUnknown(runtimeMap.keyType)
   const valueType = stringOrUnknown(runtimeMap.valueType)
 
-  if (!['number', 'boolean', 'string'].includes(keyType) || !['number', 'boolean', 'string'].includes(valueType)) {
+  if (!isCCollectionHashableType(keyType) || !isCCollectionHashableType(valueType)) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FOR_OF',
@@ -1674,7 +1674,7 @@ function emitRuntimeSetForOfStatement(
 ): string[] {
   const elementType = runtimeSet.elementType
 
-  if (!['number', 'boolean', 'string'].includes(elementType)) {
+  if (!isCCollectionHashableType(elementType)) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FOR_OF',
@@ -2729,7 +2729,7 @@ function isRuntimeCallbackReturnContext(context: CFunctionContext): boolean {
   return (
     context.statusReturn === true &&
     returnType != null &&
-    (returnType === 'void' || ['number', 'boolean'].includes(returnType) || isManagedRuntimeReturnType(returnType))
+    (returnType === 'void' || isNullableScalarType(returnType) || isManagedRuntimeReturnType(returnType))
   )
 }
 
