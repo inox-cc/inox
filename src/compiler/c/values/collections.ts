@@ -131,21 +131,6 @@ function resolveFallbackCollectionObjectMember(
   return null
 }
 
-const mapMethodDescriptors = {
-  clear: { kind: 'clear', callName: 'ccjs_map_clear' },
-  delete: { kind: 'boolean', callName: 'ccjs_map_delete', tempPrefix: 'ccjs_map_delete', hashSubject: 'Map keys' },
-  get: { kind: 'get', callName: 'ccjs_map_get', tempPrefix: 'ccjs_map_value', hashSubject: 'Map keys' },
-  has: { kind: 'boolean', callName: 'ccjs_map_has', tempPrefix: 'ccjs_map_has', hashSubject: 'Map keys' },
-  set: { kind: 'set', callName: 'ccjs_map_set', hashSubject: 'Map keys' }
-} as const
-
-const setMethodDescriptors = {
-  add: { kind: 'add', callName: 'ccjs_set_add', hashSubject: 'Set values' },
-  clear: { kind: 'clear', callName: 'ccjs_set_clear' },
-  delete: { kind: 'boolean', callName: 'ccjs_set_delete', tempPrefix: 'ccjs_set_delete', hashSubject: 'Set values' },
-  has: { kind: 'boolean', callName: 'ccjs_set_has', tempPrefix: 'ccjs_set_has', hashSubject: 'Set values' }
-} as const
-
 function emitCollectionValueExpression(
   expression: CollectionNode,
   context: CollectionFunctionContext
@@ -582,32 +567,20 @@ function createPreparedCollectionMethodCall(
 
 function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: CollectionFunctionContext): PreparedExpression {
   const method = expression.callee.property
-  const descriptor = mapMethodDescriptors[method]
 
-  if (descriptor == null) {
-    context.diagnostics.push(
-      diagnostic('CCJS_C_COLLECTION', `Map.${method} is not supported by the current C backend slice`, expression.loc)
-    )
-
+  if (method === 'clear') {
     return {
-      lines: [],
-      expression: '0'
-    }
-  }
-
-  if (descriptor.kind === 'clear') {
-    return {
-      lines: [emitStatusCheck(`${descriptor.callName}(${name})`, context)],
+      lines: [emitStatusCheck(`ccjs_map_clear(${name})`, context)],
       expression: ''
     }
   }
 
-  if (descriptor.kind === 'set') {
+  if (method === 'set') {
     const keyArg = expression.args[0]
     const valueArg = expression.args[1]
     reportCollectionHashability(
       inferCollectionExpressionType(keyArg, context),
-      descriptor.hashSubject,
+      'Map keys',
       nodeLocOrFallback(keyArg, expression.loc),
       context
     )
@@ -616,7 +589,7 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
     const lines: string[] = []
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
 
     return {
       lines,
@@ -624,24 +597,24 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
     }
   }
 
-  if (descriptor.kind === 'get') {
+  if (method === 'get') {
     const keyArg = expression.args[0]
     reportCollectionHashability(
       inferCollectionExpressionType(keyArg, context),
-      descriptor.hashSubject,
+      'Map keys',
       nodeLocOrFallback(keyArg, expression.loc),
       context
     )
     const key = emitCollectionValueExpression(keyArg, context)
     const valueType = inferCollectionExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
-    const out = nextCName(context, descriptor.tempPrefix)
+    const out = nextCName(context, 'ccjs_map_value')
     registerOwnedValue(context, out)
 
     const lines: string[] = []
     pushAllLines(lines, key.lines)
     pushAllLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, &${out})`, context))
+    lines.push(emitStatusCheck(`ccjs_map_get(${name}, ${key.expression}, &${out})`, context))
     pushAllLines(lines, emitRuntimeNullableValueCheck(out, expectedTag, context))
 
     return {
@@ -650,26 +623,38 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
     }
   }
 
-  if (descriptor.kind === 'boolean') {
+  if (method === 'delete' || method === 'has') {
+    let callName = 'ccjs_map_has'
+    let tempPrefix = 'ccjs_map_has'
+
+    if (method === 'delete') {
+      callName = 'ccjs_map_delete'
+      tempPrefix = 'ccjs_map_delete'
+    }
+
     const keyArg = expression.args[0]
     reportCollectionHashability(
       inferCollectionExpressionType(keyArg, context),
-      descriptor.hashSubject,
+      'Map keys',
       nodeLocOrFallback(keyArg, expression.loc),
       context
     )
     const key = emitCollectionValueExpression(keyArg, context)
-    const out = nextCName(context, descriptor.tempPrefix)
+    const out = nextCName(context, tempPrefix)
     const lines: string[] = []
     pushAllLines(lines, key.lines)
     lines.push(`bool ${out} = false;`)
-    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${key.expression}, &${out})`, context))
+    lines.push(emitStatusCheck(`${callName}(${name}, ${key.expression}, &${out})`, context))
 
     return {
       lines,
       expression: `(${out} ? 1 : 0)`
     }
   }
+
+  context.diagnostics.push(
+    diagnostic('CCJS_C_COLLECTION', `Map.${method} is not supported by the current C backend slice`, expression.loc)
+  )
 
   return {
     lines: [],
@@ -768,38 +753,26 @@ function emitPreparedMapIndexReceiver(
 
 function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: CollectionFunctionContext): PreparedExpression {
   const method = expression.callee.property
-  const descriptor = setMethodDescriptors[method]
 
-  if (descriptor == null) {
-    context.diagnostics.push(
-      diagnostic('CCJS_C_COLLECTION', `Set.${method} is not supported by the current C backend slice`, expression.loc)
-    )
-
+  if (method === 'clear') {
     return {
-      lines: [],
-      expression: '0'
-    }
-  }
-
-  if (descriptor.kind === 'clear') {
-    return {
-      lines: [emitStatusCheck(`${descriptor.callName}(${name})`, context)],
+      lines: [emitStatusCheck(`ccjs_set_clear(${name})`, context)],
       expression: ''
     }
   }
 
-  if (descriptor.kind === 'add') {
+  if (method === 'add') {
     const valueArg = expression.args[0]
     reportCollectionHashability(
       inferCollectionExpressionType(valueArg, context),
-      descriptor.hashSubject,
+      'Set values',
       nodeLocOrFallback(valueArg, expression.loc),
       context
     )
     const value = emitCollectionValueExpression(valueArg, context)
     const lines: string[] = []
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
 
     return {
       lines,
@@ -807,26 +780,38 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
     }
   }
 
-  if (descriptor.kind === 'boolean') {
+  if (method === 'delete' || method === 'has') {
+    let callName = 'ccjs_set_has'
+    let tempPrefix = 'ccjs_set_has'
+
+    if (method === 'delete') {
+      callName = 'ccjs_set_delete'
+      tempPrefix = 'ccjs_set_delete'
+    }
+
     const valueArg = expression.args[0]
     reportCollectionHashability(
       inferCollectionExpressionType(valueArg, context),
-      descriptor.hashSubject,
+      'Set values',
       nodeLocOrFallback(valueArg, expression.loc),
       context
     )
     const value = emitCollectionValueExpression(valueArg, context)
-    const out = nextCName(context, descriptor.tempPrefix)
+    const out = nextCName(context, tempPrefix)
     const lines: string[] = []
     pushAllLines(lines, value.lines)
     lines.push(`bool ${out} = false;`)
-    lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${value.expression}, &${out})`, context))
+    lines.push(emitStatusCheck(`${callName}(${name}, ${value.expression}, &${out})`, context))
 
     return {
       lines,
       expression: `(${out} ? 1 : 0)`
     }
   }
+
+  context.diagnostics.push(
+    diagnostic('CCJS_C_COLLECTION', `Set.${method} is not supported by the current C backend slice`, expression.loc)
+  )
 
   return {
     lines: [],
