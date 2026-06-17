@@ -1834,11 +1834,7 @@ class Checker {
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
-    let valueType = field.valueType
-
-    if (valueType == null) {
-      valueType = fieldType.valueType
-    }
+    const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
     expression.nullable = true
     expression.valueType = valueType
@@ -5406,7 +5402,8 @@ class Checker {
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
-      const symbol = this.scope.resolve(expression.path[0])
+      const name = firstPathSegment(expression.path)
+      const symbol = this.scope.resolve(name)
 
       if (symbol != null && symbol.className != null) {
         return symbol.className
@@ -8580,7 +8577,8 @@ class Checker {
       return expression.shape ?? null
     }
 
-    const symbol = this.scope.resolve(expression.path[0])
+    const name = firstPathSegment(expression.path)
+    const symbol = this.scope.resolve(name)
     const symbolShape = symbol?.shape ?? null
 
     if (symbolShape != null) {
@@ -8654,10 +8652,11 @@ class Checker {
       return null
     }
 
-    let symbol = this.scope.resolve(callee.path[0])
+    const calleeName = firstPathSegment(callee.path)
+    let symbol = this.scope.resolve(calleeName)
 
     if (symbol == null) {
-      const globalSymbol = globals.get(callee.path[0])
+      const globalSymbol = globals.get(calleeName)
 
       if (globalSymbol != null) {
         symbol = globalSymbol
@@ -9125,7 +9124,8 @@ class Checker {
 
   inferNullableAccessValueType(expression: AnyNode): ValueType | null {
     if (expression.type === 'Reference' && expression.path.length === 1) {
-      const symbol = this.scope.resolve(expression.path[0])
+      const name = firstPathSegment(expression.path)
+      const symbol = this.scope.resolve(name)
       const valueType = symbol?.valueType ?? null
 
       if (valueType != null) {
@@ -10203,7 +10203,8 @@ class Checker {
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
-      const symbol = this.scope.resolve(expression.path[0])
+      const name = firstPathSegment(expression.path)
+      const symbol = this.scope.resolve(name)
 
       if (symbol != null && symbol.arrayElementType != null) {
         return symbol.arrayElementType
@@ -10275,7 +10276,8 @@ class Checker {
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
-      const symbol = this.scope.resolve(expression.path[0])
+      const name = firstPathSegment(expression.path)
+      const symbol = this.scope.resolve(name)
 
       if (symbol != null && symbol.arrayElementDeclaredType != null) {
         return symbol.arrayElementDeclaredType
@@ -10357,7 +10359,8 @@ class Checker {
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
-      const symbol = this.scope.resolve(expression.path[0])
+      const name = firstPathSegment(expression.path)
+      const symbol = this.scope.resolve(name)
 
       if (symbol != null && symbol.valueType === 'map') {
         let key: ValueType | null = null
@@ -10455,7 +10458,8 @@ class Checker {
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
-      const symbol = this.scope.resolve(expression.path[0])
+      const name = firstPathSegment(expression.path)
+      const symbol = this.scope.resolve(name)
 
       if (symbol != null && symbol.valueType === 'set' && symbol.setElementType != null) {
         return symbol.setElementType
@@ -10511,7 +10515,8 @@ class Checker {
     }
 
     if (expression.type === 'Reference' && expression.path.length === 1) {
-      const symbol = this.scope.resolve(expression.path[0])
+      const name = firstPathSegment(expression.path)
+      const symbol = this.scope.resolve(name)
 
       if (symbol != null && symbol.valueType === 'promise' && symbol.promiseValueType != null) {
         return symbol.promiseValueType
