@@ -27,6 +27,11 @@ type PromiseStringMap = Map<string, string>
 type PromiseStringNullableMap = Map<string, string | null>
 type PromiseStringSet = Set<string>
 
+type PromiseConstructorHandlerSnapshot = {
+  name: string
+  previous: CPromiseConstructorHandler | null
+}
+
 type PromiseEmitContext = {
   boxedMutableCaptureDeclarations: PromiseMutableDeclarationSet
   callbackArrowWrappers: PromiseCallbackArrowWrapperMap
@@ -465,10 +470,13 @@ export function emitPreparedPromiseConstructorExpression(
   const rejectName = promiseExecutorParamName(executor, 1)
   const statements = promiseExecutorStatements(executor)
 
-  const previousHandlers = pushPromiseConstructorHandlers(context, resolveName, rejectName, out)
+  const handlerSnapshots = pushPromiseConstructorHandlers(context, resolveName, rejectName, out)
 
-  appendLines(lines, dependencies.emitStatementList(statements, context))
-  context.promiseConstructorHandlers = previousHandlers
+  try {
+    appendLines(lines, dependencies.emitStatementList(statements, context))
+  } finally {
+    restorePromiseConstructorHandlers(context, handlerSnapshots)
+  }
 
   return {
     lines,
@@ -1112,11 +1120,14 @@ function pushPromiseConstructorHandlers(
   resolveName: string | null,
   rejectName: string | null,
   promise: string
-): Map<string, CPromiseConstructorHandler> {
-  const previous = context.promiseConstructorHandlers
-  context.promiseConstructorHandlers = new Map(previous)
+): PromiseConstructorHandlerSnapshot[] {
+  const snapshots: PromiseConstructorHandlerSnapshot[] = []
 
   if (resolveName != null) {
+    snapshots.push({
+      name: resolveName,
+      previous: promiseConstructorHandlerOrNull(context.promiseConstructorHandlers.get(resolveName))
+    })
     context.promiseConstructorHandlers.set(resolveName, {
       kind: 'resolve',
       promise: promise
@@ -1124,13 +1135,40 @@ function pushPromiseConstructorHandlers(
   }
 
   if (rejectName != null) {
+    snapshots.push({
+      name: rejectName,
+      previous: promiseConstructorHandlerOrNull(context.promiseConstructorHandlers.get(rejectName))
+    })
     context.promiseConstructorHandlers.set(rejectName, {
       kind: 'reject',
       promise: promise
     })
   }
 
-  return previous
+  return snapshots
+}
+
+function restorePromiseConstructorHandlers(
+  context: PromiseFunctionContext,
+  snapshots: PromiseConstructorHandlerSnapshot[]
+): void {
+  for (const snapshot of snapshots) {
+    if (snapshot.previous == null) {
+      context.promiseConstructorHandlers.delete(snapshot.name)
+    } else {
+      context.promiseConstructorHandlers.set(snapshot.name, snapshot.previous)
+    }
+  }
+}
+
+function promiseConstructorHandlerOrNull(
+  value: CPromiseConstructorHandler | null | undefined
+): CPromiseConstructorHandler | null {
+  if (value == null) {
+    return null
+  }
+
+  return value
 }
 
 function promiseConstructorRejectionValueType(
