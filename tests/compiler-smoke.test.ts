@@ -769,6 +769,35 @@ export function main(): void {
   assert.match(result.code, /ccjs_object_get\(extra, "child", 5, &ccjs_value_\d+\)/)
 })
 
+test('lowers C nested dynamic object field assignments through runtime lookup', () => {
+  const result = compileSource(
+    `type Child = {
+  name: string
+}
+
+function update(extra: object): void {
+  extra.child.name = "next"
+}
+
+function read(extra: object): string {
+  return extra.child.name
+}
+
+export function main(): void {
+  const extra = { child: { name: "first" } }
+  update(extra)
+  console.log(read(extra))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(extra, "child", 5, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_set\(ccjs_value_\d+, "name", 4, ccjs_value_\d+\)/)
+})
+
 
 test('lowers C dynamic runtime value comparisons against string literals', () => {
   const result = compileSource(

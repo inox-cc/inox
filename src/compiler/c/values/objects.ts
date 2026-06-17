@@ -1,5 +1,6 @@
 import {
   emitPrepareOwnedValueWrite,
+  emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
   registerOwnedValue
@@ -68,6 +69,11 @@ type KnownObjectNameField = {
 }
 
 type KnownObjectIndexKeyField = {
+  key: string
+}
+
+type CDynamicObjectFieldAccess = {
+  object: ObjectFieldNode
   key: string
 }
 
@@ -461,7 +467,19 @@ export function emitDynamicObjectFieldAssignment(
   const target = expression.target
 
   if (target.type === 'MemberExpression') {
-    return emitDynamicObjectFieldAssignmentLines(
+    const assignment = emitDynamicObjectFieldAssignmentLines(
+      expression,
+      target.object,
+      target.property,
+      context,
+      dependencies
+    )
+
+    if (assignment != null) {
+      return assignment
+    }
+
+    return emitDynamicRuntimeObjectFieldAssignmentLines(
       expression,
       target.object,
       target.property,
@@ -471,7 +489,19 @@ export function emitDynamicObjectFieldAssignment(
   }
 
   if (target.type === 'IndexExpression' && target.index.type === 'StringLiteral') {
-    return emitDynamicObjectFieldAssignmentLines(
+    const assignment = emitDynamicObjectFieldAssignmentLines(
+      expression,
+      target.object,
+      target.index.value,
+      context,
+      dependencies
+    )
+
+    if (assignment != null) {
+      return assignment
+    }
+
+    return emitDynamicRuntimeObjectFieldAssignmentLines(
       expression,
       target.object,
       target.index.value,
@@ -608,6 +638,119 @@ function emitDynamicObjectFieldAssignmentLines(
   )
 
   return lines
+}
+
+function emitDynamicRuntimeObjectFieldAssignmentLines(
+  expression: ObjectFieldNode,
+  objectExpression: ObjectFieldNode,
+  key: string,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): string[] | null {
+  if (!isDynamicRuntimeObjectValueExpression(objectExpression, context, dependencies)) {
+    return null
+  }
+
+  const object = dependencies.emitCValueExpression(objectExpression, context)
+  const value = dependencies.emitCValueExpression(expression.value, context)
+  const lines: string[] = []
+
+  appendLines(lines, object.lines)
+  lines.push(emitRuntimeTypeCheck(`${object.expression}.tag != CCJS_TAG_OBJECT || ${object.expression}.as.ref == 0`, context))
+  appendLines(lines, value.lines)
+  lines.push(
+    emitStatusCheck(
+      `ccjs_object_set(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${value.expression})`,
+      context
+    )
+  )
+
+  return lines
+}
+
+function isDynamicRuntimeObjectValueExpression(
+  expression: ObjectFieldNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): boolean {
+  if (isRuntimeValueReferenceExpression(expression, context)) {
+    return true
+  }
+
+  if (isDynamicObjectFieldValueExpression(expression, context, dependencies)) {
+    return true
+  }
+
+  return isDynamicRuntimeObjectFieldValueExpression(expression, context, dependencies)
+}
+
+function isRuntimeValueReferenceExpression(expression: ObjectFieldNode, context: ObjectFunctionContext): boolean {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return false
+  }
+
+  const name = expression.path[0]
+  const valueType = context.variables.get(name)
+
+  if (valueType !== 'unknown' && valueType !== 'object') {
+    return false
+  }
+
+  for (const value of context.ownedValues) {
+    if (value === name) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function isDynamicObjectFieldValueExpression(
+  expression: ObjectFieldNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): boolean {
+  if (expression.type === 'MemberExpression') {
+    return dependencies.inferExpressionType(expression.object, context) === 'object'
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    return dependencies.inferExpressionType(expression.object, context) === 'object'
+  }
+
+  return false
+}
+
+function isDynamicRuntimeObjectFieldValueExpression(
+  expression: ObjectFieldNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): boolean {
+  const access = dynamicRuntimeObjectFieldAccess(expression)
+
+  if (access == null) {
+    return false
+  }
+
+  return isDynamicRuntimeObjectValueExpression(access.object, context, dependencies)
+}
+
+function dynamicRuntimeObjectFieldAccess(expression: ObjectFieldNode): CDynamicObjectFieldAccess | null {
+  if (expression.type === 'MemberExpression') {
+    return {
+      object: expression.object,
+      key: expression.property
+    }
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    return {
+      object: expression.object,
+      key: expression.index.value
+    }
+  }
+
+  return null
 }
 
 function isScalarObjectFieldValueType(valueType: string): boolean {

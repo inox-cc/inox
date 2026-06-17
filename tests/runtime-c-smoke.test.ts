@@ -7504,6 +7504,60 @@ console.log(
   }
 })
 
+test('generated C nested dynamic object field assignment lowering compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nested-dynamic-object-field-assignment-'))
+  const source = join(dir, 'nested-dynamic-object-field-assignment.c')
+  const output = join(dir, 'nested-dynamic-object-field-assignment')
+
+  try {
+    const result = compileSource(
+      `type Child = {
+  name: string
+}
+
+function update(extra: object): void {
+  extra.child.name = "next"
+}
+
+function read(extra: object): string {
+  return extra.child.name
+}
+
+const extra = { child: { name: "first" } }
+update(extra)
+console.log(read(extra))
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'next\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('generated C dynamic object field null comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
