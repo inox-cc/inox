@@ -8939,6 +8939,53 @@ console.log(objectName, arrayName)
 })
 
 
+test('generated C runtime string local assignments from dynamic object fields compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-field-assignment-'))
+  const source = join(dir, 'runtime-string-field-assignment.c')
+  const output = join(dir, 'runtime-string-field-assignment')
+
+  try {
+    const result = compileSource(
+      `function readType(symbol: object): string {
+  let valueType = 'unknown'
+  valueType = symbol.valueType
+  return valueType
+}
+
+console.log(readType({ valueType: 'number' }))
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'number\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string-returning assignment calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

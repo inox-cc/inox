@@ -874,6 +874,32 @@ test('propagates C runtime strings through local declarations', () => {
 })
 
 
+test('lowers C runtime string local assignments from dynamic object fields', () => {
+  const result = compileSource(
+    `function readType(symbol: object): string {
+  let valueType = 'unknown'
+  valueType = symbol.valueType
+  return valueType
+}
+
+export function main(): void {
+  console.log(readType({ valueType: 'number' }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "unknown", 7, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(symbol, "valueType", 9, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_value_\d+\.as\.ref == 0/)
+  assert.match(result.code, /valueType = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /ccjs_string\* ccjs_log_string_\d+ = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /printf\("%\.\*s\\n", \(int\)ccjs_log_string_\d+->len, ccjs_log_string_\d+->bytes\);/)
+})
+
+
 test('lowers C runtime string parameters', () => {
   const result = compileSource(
     `function greet(name: string): void {
@@ -1210,7 +1236,8 @@ test('compiles if else blocks to C', () => {
   })
 
   assert.match(c.code, /if \(1 < 2\) \{/)
-  assert.match(c.code, /text = "yes";/)
+  assert.match(c.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "yes", 3, &ccjs_value_\d+\)/)
+  assert.match(c.code, /text = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
 })
 
 

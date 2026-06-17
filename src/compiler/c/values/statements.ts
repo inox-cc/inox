@@ -544,6 +544,10 @@ export function emitStringScalarVariableDeclaration(statement: StatementNode, co
     }
   }
 
+  if (statement.kind !== 'const' && isRawStringLiteralExpression(statement.init)) {
+    return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
+  }
+
   if (deps.isRuntimeProducedStringExpression(statement.init, context)) {
     return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
   }
@@ -2356,6 +2360,36 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   return deps.emitScalarVariableDeclaration(statement, context)
 }
 
+function emitRuntimeStringAssignment(expression: StatementNode, context: CFunctionContext): string[] | null {
+  if (expression.target.type !== 'Reference' || expression.target.path.length !== 1) {
+    return null
+  }
+
+  const target = expression.target.path[0]
+
+  if (!context.runtimeStrings.has(target)) {
+    return null
+  }
+
+  const deps = statementDeps(context)
+
+  if (
+    deps.inferExpressionType(expression.value, context) !== 'string' &&
+    !deps.isDynamicRuntimeValueExpression(expression.value, context)
+  ) {
+    return null
+  }
+
+  const value = deps.emitCValueExpression(expression.value, context)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(emitRuntimeValueCheck(value.expression, 'CCJS_TAG_STRING', context))
+  lines.push(`${target} = (ccjs_string*)${value.expression}.as.ref;`)
+
+  return lines
+}
+
 function isDynamicRuntimeValueDeclaration(statement: StatementNode, context: CFunctionContext): boolean {
   if (!isRuntimeValueDeclarationValueType(statement.valueType)) {
     return false
@@ -2639,6 +2673,12 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (deps.isBoxedRuntimeValueAssignment(statement.expression, context)) {
       return deps.emitBoxedRuntimeValueAssignment(statement.expression, context)
+    }
+
+    const runtimeStringAssignment = emitRuntimeStringAssignment(statement.expression, context)
+
+    if (runtimeStringAssignment != null) {
+      return runtimeStringAssignment
     }
 
     if (valueType === 'number' || valueType === 'boolean') {
