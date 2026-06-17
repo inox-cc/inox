@@ -34,7 +34,8 @@ export function emitCModuleFilesFromGraph(
   const plans = createCModulePlans(graph, options, diagnostics)
   const files: CModuleOutputFile[] = []
 
-  for (const plan of plans) {
+  for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
+    const plan = plans[planIndex]
     pushCModuleOutputFiles(files, emitCModuleFiles(plan, plans, options, diagnostics, emitters))
   }
 
@@ -52,7 +53,10 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
   const plans: CModulePlan[] = []
   const plansByPath: Map<string, CModulePlan> = new Map()
 
-  for (const item of graph.modules) {
+  const graphModules = graph.modules
+
+  for (let moduleIndex = 0; moduleIndex < graphModules.length; moduleIndex = moduleIndex + 1) {
+    const item = graphModules[moduleIndex]
     modulePaths.add(item.path)
     modulePathList.push(item.path)
   }
@@ -65,7 +69,9 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
 
   const sourceRoot = host.resolvePath(sourceRootInput)
 
-  for (const record of graph.modules) {
+  for (let moduleIndex = 0; moduleIndex < graphModules.length; moduleIndex = moduleIndex + 1) {
+    const record = graphModules[moduleIndex]
+
     if (record.ir == null) {
       continue
     }
@@ -94,11 +100,13 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
     })
   }
 
-  for (const plan of plans) {
+  for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
+    const plan = plans[planIndex]
     plansByPath.set(plan.record.path, plan)
   }
 
-  for (const plan of plans) {
+  for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
+    const plan = plans[planIndex]
     const imports: CModuleImportPlan[] = []
 
     for (const declaration of plan.record.imports) {
