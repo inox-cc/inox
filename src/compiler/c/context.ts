@@ -340,7 +340,7 @@ export function emitFailureStatement(context: CFailureContext): string {
 }
 
 export function registerOwnedValue(context: COwnedValueContext, name: string): void {
-  if (!context.ownedValues.includes(name)) {
+  if (!stringArrayHas(context.ownedValues, name)) {
     context.ownedValues.push(name)
   }
 }
@@ -351,7 +351,7 @@ export function registerOwnedPromise(
   valueType: string = 'unknown',
   rejectionValueType: string = 'unknown'
 ): void {
-  if (!context.ownedPromises.includes(name)) {
+  if (!stringArrayHas(context.ownedPromises, name)) {
     context.ownedPromises.push(name)
   }
 
@@ -361,7 +361,7 @@ export function registerOwnedPromise(
 }
 
 export function registerOwnedCryptoHash(context: CFunctionContext, name: string): void {
-  if (!context.ownedCryptoHashes.includes(name)) {
+  if (!stringArrayHas(context.ownedCryptoHashes, name)) {
     context.ownedCryptoHashes.push(name)
   }
 
@@ -369,7 +369,7 @@ export function registerOwnedCryptoHash(context: CFunctionContext, name: string)
 }
 
 export function registerOwnedCryptoHmac(context: CFunctionContext, name: string): void {
-  if (!context.ownedCryptoHmacs.includes(name)) {
+  if (!stringArrayHas(context.ownedCryptoHmacs, name)) {
     context.ownedCryptoHmacs.push(name)
   }
 
@@ -382,11 +382,21 @@ export function registerEventLoop(context: CEventLoopContext): void {
 }
 
 export function registerBoxedValue(context: CFunctionContext, name: string, valueType: string = 'number'): void {
-  if (!context.boxedValues.includes(name)) {
+  if (!stringArrayHas(context.boxedValues, name)) {
     context.boxedValues.push(name)
   }
 
   context.boxedValueTypes.set(name, valueType)
+}
+
+function stringArrayHas(values: string[], needle: string): boolean {
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (values[index] === needle) {
+      return true
+    }
+  }
+
+  return false
 }
 
 export function emitPrepareOwnedValueWrite(name: string): string[] {
