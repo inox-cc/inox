@@ -8,7 +8,7 @@ import {
   collectIrSyntaxFeatureUsages,
   collectIrTopLevelNodes
 } from '../ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect } from '../types.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrRuntimeRequirement } from '../types.ts'
 import type { CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
 import {
   collectCallbackWrappers,
@@ -113,6 +113,34 @@ function pushIrFunctionEffect(target: IrFunctionEffect[], effect: IrFunctionEffe
   target.push(effect)
 }
 
+function irRuntimeRequirementAt(values: IrRuntimeRequirement[], index: number): IrRuntimeRequirement {
+  return values[index]
+}
+
+function stringAt(values: string[], index: number): string {
+  return values[index]
+}
+
+function runtimeRequirementSetFromArray(values: IrRuntimeRequirement[]): Set<IrRuntimeRequirement> {
+  const result: Set<IrRuntimeRequirement> = new Set()
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    result.add(irRuntimeRequirementAt(values, index))
+  }
+
+  return result
+}
+
+function stringSetFromArray(values: string[]): Set<string> {
+  const result: Set<string> = new Set()
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    result.add(stringAt(values, index))
+  }
+
+  return result
+}
+
 function cModuleHasRuntimeCallbackWrapper(context: CEmitContext): boolean {
   for (const wrapper of context.callbackWrappers.values()) {
     if (isRuntimeCallbackWrapper(wrapper)) {
@@ -156,7 +184,7 @@ export function emitCModuleSource(
   const functionEntries = collectIrFunctionNodeEntries(irPrograms)
   const functions: AnyNode[] = []
   const context = createCModuleBaseContext(plan, plans, diagnostics, deps)
-  const runtimeRequirements = new Set(collectIrRuntimeRequirements(irPrograms))
+  const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
@@ -449,7 +477,7 @@ function createCModuleBaseContext(
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
   const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalRoots = collectIrGlobalRoots(irPrograms)
-  const jsGlobalRoots = new Set(globalRoots)
+  const jsGlobalRoots = stringSetFromArray(globalRoots)
 
   for (const entry of functionEntries) {
     functions.push(entry.node)
