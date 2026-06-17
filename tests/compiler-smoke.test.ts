@@ -2400,6 +2400,56 @@ export function main(): void {
 })
 
 
+test('lowers C nullable scalar truthiness conditions', () => {
+  const result = compileSource(
+    `type Capture = {
+  mutable: boolean | null
+}
+
+function print(score: number | null, active: boolean | null, capture: Capture): void {
+  if (!active) {
+    console.log(2)
+  }
+
+  if (!capture.mutable) {
+    console.log(3)
+  }
+
+  const missing = !score
+  const fieldMissing = !capture['mutable']
+  console.log(missing, fieldMissing)
+}
+
+export function main(): void {
+  print(1, null, { mutable: null })
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /if \(!\(ccjs_value_truthy\(active\) \? 1 : 0\)\) \{/)
+  assert.match(result.code, /ccjs_object_get_known\(capture, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /if \(!\(ccjs_value_truthy\(ccjs_value_\d+\) \? 1 : 0\)\) \{/)
+  assert.match(result.code, /const double missing = \(!\(ccjs_value_truthy\(score\) \? 1 : 0\)\);/)
+  assert.match(result.code, /ccjs_object_get\(capture, "mutable", 7, &ccjs_value_\d+\)/)
+  assert.match(result.code, /const double fieldMissing = \(!\(ccjs_value_truthy\(ccjs_value_\d+\) \? 1 : 0\)\);/)
+
+  assertDiagnostic(
+    `export function main(): void {
+  const score: number | null = 1
+  console.log(score)
+}
+`,
+    'CCJS_C_NULLISH',
+    {
+      target: 'c'
+    }
+  )
+})
+
+
 test('lowers C nullable scalar function params and returns', () => {
   const result = compileSource(
     `function maybeScore(seed: number): number | null {

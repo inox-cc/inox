@@ -8151,6 +8151,93 @@ console.log(maybeValues?.[0] ?? 5, emptyValues?.[0] ?? 5)
 })
 
 
+test('generated C nullable scalar truthiness compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-truthiness-'))
+  const source = join(dir, 'nullable-scalar-truthiness.c')
+  const output = join(dir, 'nullable-scalar-truthiness')
+
+  try {
+    const result = compileSource(
+      `function scoreValue(value: number | null): number {
+  let total = 0
+
+  if (!value) {
+    total = total + 10
+  }
+
+  const missing = !value
+
+  if (missing) {
+    total = total + 100
+  }
+
+  return total
+}
+
+function activeValue(value: boolean | null): number {
+  if (!value) {
+    return 1
+  }
+
+  return 0
+}
+
+type Capture = {
+  mutable: boolean | null
+}
+
+function captureValue(capture: Capture): number {
+  let total = 0
+
+  if (!capture.mutable) {
+    total = total + 1
+  }
+
+  const inactive = !capture['mutable']
+
+  if (inactive) {
+    total = total + 10
+  }
+
+  return total
+}
+
+console.log(scoreValue(null), scoreValue(0), scoreValue(2))
+console.log(activeValue(null), activeValue(false), activeValue(true))
+console.log(captureValue({ mutable: null }), captureValue({ mutable: false }), captureValue({ mutable: true }))
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '110 110 0\n1 1 0\n11 11 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C nullable scalar function ABI compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

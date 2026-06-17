@@ -1061,6 +1061,7 @@ const cScalarExpressionDependencies = {
   emitPreparedJsonScalarParseExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonScalarParseExpression(expression, context, jsonDeclarationDependencies),
   emitPreparedNetAddressPortExpression,
+  emitPreparedNullableScalarRuntimeValueExpression,
   emitPreparedObjectExpressionScalarIndexValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionScalarIndexValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectExpressionScalarMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -1081,6 +1082,7 @@ const cScalarExpressionDependencies = {
   inferExpressionType,
   isIndexAccessExpression,
   isMemberAccessExpression,
+  isNullableScalarRuntimeExpression,
   isStringPredicateCall,
   reportCJsGlobalDiagnostic,
   resolveKnownArrayIndex,
@@ -2870,6 +2872,12 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
   }
 
+  const fieldValue = emitPreparedNullableScalarFieldValueExpression(expression, context)
+
+  if (fieldValue != null) {
+    return fieldValue
+  }
+
   const numberConversion = emitCNumberConversionValueExpression(expression, context)
 
   if (numberConversion != null) {
@@ -2914,6 +2922,59 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     lines: [],
     expression: 'ccjs_null_value()'
   }
+}
+
+function emitPreparedNullableScalarFieldValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (expression.type === 'MemberExpression') {
+    const knownMember = emitPreparedKnownObjectMemberValueExpression(expression, context)
+
+    if (knownMember != null) {
+      return knownMember
+    }
+
+    const objectMember = emitPreparedObjectExpressionMemberValueExpression(
+      expression,
+      context,
+      objectExpressionFieldDependencies
+    )
+
+    if (objectMember != null) {
+      return objectMember
+    }
+
+    return emitPreparedDynamicObjectMemberValueExpression(expression, context, objectExpressionFieldDependencies)
+  }
+
+  if (expression.type === 'IndexExpression') {
+    const knownIndex = emitPreparedKnownObjectIndexValueExpression(expression, context)
+
+    if (knownIndex != null) {
+      return knownIndex
+    }
+
+    const objectIndex = emitPreparedObjectExpressionIndexValueExpression(
+      expression,
+      context,
+      objectExpressionFieldDependencies
+    )
+
+    if (objectIndex != null) {
+      return objectIndex
+    }
+
+    const dynamicIndex = emitPreparedDynamicObjectIndexValueExpression(expression, context, objectExpressionFieldDependencies)
+
+    if (dynamicIndex != null) {
+      return dynamicIndex
+    }
+
+    return emitPreparedRuntimeArrayIndexValueExpression(expression, context)
+  }
+
+  return null
 }
 
 function emitNullableFunctionValueExpression(

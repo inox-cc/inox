@@ -277,6 +277,7 @@ export type CScalarExpressionDependencies = {
   emitPreparedDgramAddressPortExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonScalarParseExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNetAddressPortExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedNullableScalarRuntimeValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitPreparedObjectExpressionScalarIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedObjectExpressionScalarMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathBooleanCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
@@ -298,6 +299,7 @@ export type CScalarExpressionDependencies = {
   inferExpressionType(expression: AnyNode, context: CFunctionContext): string
   isIndexAccessExpression(expression: AnyNode): boolean
   isMemberAccessExpression(expression: AnyNode): boolean
+  isNullableScalarRuntimeExpression(expression: AnyNode, context: CFunctionContext): boolean
   isStringPredicateCall(expression: AnyNode, context: CFunctionContext): boolean
   reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | undefined): void
   resolveKnownArrayIndex(expression: AnyNode, context: CFunctionContext): CKnownArrayElement | null
@@ -1332,6 +1334,15 @@ export function emitPreparedRuntimeTruthinessExpression(
     return {
       lines: argument.lines,
       expression: `(!(${argument.expression}))`
+    }
+  }
+
+  if (deps.isNullableScalarRuntimeExpression(expression, context)) {
+    const value = deps.emitPreparedNullableScalarRuntimeValueExpression(expression, context)
+
+    return {
+      lines: value.lines,
+      expression: `ccjs_value_truthy(${value.expression}) ? 1 : 0`
     }
   }
 
