@@ -321,15 +321,15 @@ function cloneReferenceExpression(expression: LowerExpressionNode, variable: Low
       path: expression.path,
       valueType: referenceValueType(expression, variable),
       nullable: expression.nullable === true || referenceVariableNullable(variable),
-      arrayElementType: referenceStringMetadata(expression, variable, 'arrayElementType'),
-      arrayElementDeclaredType: referenceStringMetadata(expression, variable, 'arrayElementDeclaredType'),
-      mapKeyType: referenceStringMetadata(expression, variable, 'mapKeyType'),
-      mapValueType: referenceStringMetadata(expression, variable, 'mapValueType'),
-      promiseValueType: referenceStringMetadata(expression, variable, 'promiseValueType'),
-      setElementType: referenceStringMetadata(expression, variable, 'setElementType'),
-      functionType: referenceNodeMetadata(expression, variable, 'functionType'),
-      shape: referenceNodeMetadata(expression, variable, 'shape'),
-      className: referenceStringMetadata(expression, variable, 'className'),
+      arrayElementType: referenceArrayElementType(expression, variable),
+      arrayElementDeclaredType: referenceArrayElementDeclaredType(expression, variable),
+      mapKeyType: referenceMapKeyType(expression, variable),
+      mapValueType: referenceMapValueType(expression, variable),
+      promiseValueType: referencePromiseValueType(expression, variable),
+      setElementType: referenceSetElementType(expression, variable),
+      functionType: referenceFunctionType(expression, variable),
+      shape: referenceShape(expression, variable),
+      className: referenceClassName(expression, variable),
       loc: expression.loc
     },
     expression
@@ -354,25 +354,133 @@ function referenceVariableNullable(variable: LowerExpressionNode | null): boolea
   return variable != null && variable.nullable === true
 }
 
-function referenceStringMetadata(expression: LowerExpressionNode, variable: LowerExpressionNode | null, key: string): string | null {
-  if (expression[key] != null) {
-    return expression[key]
+function referenceArrayElementType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
+  if (expression.arrayElementType != null) {
+    return expression.arrayElementType
   }
 
-  if (variable != null && variable[key] != null) {
-    return variable[key]
+  if (variable != null) {
+    if (variable.arrayElementType != null) {
+      return variable.arrayElementType
+    }
   }
 
   return null
 }
 
-function referenceNodeMetadata(expression: LowerExpressionNode, variable: LowerExpressionNode | null, key: string): LowerExpressionNode | null {
-  if (expression[key] != null) {
-    return expression[key]
+function referenceArrayElementDeclaredType(
+  expression: LowerExpressionNode,
+  variable: LowerExpressionNode | null
+): string | null {
+  if (expression.arrayElementDeclaredType != null) {
+    return expression.arrayElementDeclaredType
   }
 
-  if (variable != null && variable[key] != null) {
-    return variable[key]
+  if (variable != null) {
+    if (variable.arrayElementDeclaredType != null) {
+      return variable.arrayElementDeclaredType
+    }
+  }
+
+  return null
+}
+
+function referenceMapKeyType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
+  if (expression.mapKeyType != null) {
+    return expression.mapKeyType
+  }
+
+  if (variable != null) {
+    if (variable.mapKeyType != null) {
+      return variable.mapKeyType
+    }
+  }
+
+  return null
+}
+
+function referenceMapValueType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
+  if (expression.mapValueType != null) {
+    return expression.mapValueType
+  }
+
+  if (variable != null) {
+    if (variable.mapValueType != null) {
+      return variable.mapValueType
+    }
+  }
+
+  return null
+}
+
+function referencePromiseValueType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
+  if (expression.promiseValueType != null) {
+    return expression.promiseValueType
+  }
+
+  if (variable != null) {
+    if (variable.promiseValueType != null) {
+      return variable.promiseValueType
+    }
+  }
+
+  return null
+}
+
+function referenceSetElementType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
+  if (expression.setElementType != null) {
+    return expression.setElementType
+  }
+
+  if (variable != null) {
+    if (variable.setElementType != null) {
+      return variable.setElementType
+    }
+  }
+
+  return null
+}
+
+function referenceClassName(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
+  if (expression.className != null) {
+    return expression.className
+  }
+
+  if (variable != null) {
+    if (variable.className != null) {
+      return variable.className
+    }
+  }
+
+  return null
+}
+
+function referenceFunctionType(
+  expression: LowerExpressionNode,
+  variable: LowerExpressionNode | null
+): LowerExpressionNode | null {
+  if (expression.functionType != null) {
+    return expression.functionType
+  }
+
+  if (variable != null) {
+    if (variable.functionType != null) {
+      return variable.functionType
+    }
+  }
+
+  return null
+}
+
+function referenceShape(expression: LowerExpressionNode, variable: LowerExpressionNode | null): LowerExpressionNode | null {
+  if (expression.shape != null) {
+    return expression.shape
+  }
+
+  if (variable != null) {
+    if (variable.shape != null) {
+      return variable.shape
+    }
   }
 
   return null
