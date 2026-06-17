@@ -1252,9 +1252,15 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
 
     if (runtimeString != null) {
       context.runtimeStrings.add(statement.name)
+      let constPrefix = ''
+
+      if (statement.kind === 'const') {
+        constPrefix = 'const '
+      }
+
       return {
         lines: [],
-        expression: `${statement.kind === 'const' ? 'const ' : ''}ccjs_string* ${statement.name} = ${runtimeString}`
+        expression: `${constPrefix}ccjs_string* ${statement.name} = ${runtimeString}`
       }
     }
 
@@ -1265,9 +1271,15 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
       }
     }
 
+    let constPrefix = ''
+
+    if (statement.kind === 'const') {
+      constPrefix = 'const '
+    }
+
     return {
       lines: [],
-      expression: `${statement.kind === 'const' ? 'const ' : ''}char* ${statement.name} = ${deps.emitStringExpression(
+      expression: `${constPrefix}char* ${statement.name} = ${deps.emitStringExpression(
         statement.init,
         context
       )}`
@@ -1314,10 +1326,15 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   }
 
   const value = deps.emitPreparedNumberExpression(statement.init, context)
+  let constPrefix = ''
+
+  if (statement.kind === 'const') {
+    constPrefix = 'const '
+  }
 
   return {
     lines: value.lines,
-    expression: `${statement.kind === 'const' ? 'const ' : ''}double ${statement.name} = ${value.expression}`
+    expression: `${constPrefix}double ${statement.name} = ${value.expression}`
   }
 }
 
@@ -1673,12 +1690,16 @@ export function emitSwitchStatement(statement: StatementNode, context: CFunction
 }
 
 function emitSwitchCaseLabel(expression: StatementNode | null | undefined, context: CFunctionContext): string {
-  if (expression?.type === 'NumberLiteral') {
+  if (expression != null && expression.type === 'NumberLiteral') {
     return `(int)${expression.value}`
   }
 
-  if (expression?.type === 'BooleanLiteral') {
-    return `(int)${expression.value ? '1' : '0'}`
+  if (expression != null && expression.type === 'BooleanLiteral') {
+    if (expression.value) {
+      return '(int)1'
+    }
+
+    return '(int)0'
   }
 
   if (expression != null && expression.type === 'UnaryExpression') {

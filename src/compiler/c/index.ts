@@ -1576,8 +1576,13 @@ function emitFunctionPointerVariable(
   loc: CSourceLocation
 ): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
+  let constPrefix = ''
 
-  return `${emitFunctionPointerReturnType(functionType)} (*${isConst ? 'const ' : ''}${name})(${emitFunctionPointerParams(functionType)}) = ${emitFunctionValueExpression(init, context)}`
+  if (isConst) {
+    constPrefix = 'const '
+  }
+
+  return `${emitFunctionPointerReturnType(functionType)} (*${constPrefix}${name})(${emitFunctionPointerParams(functionType)}) = ${emitFunctionValueExpression(init, context)}`
 }
 
 function emitStatement(statement: AnyNode, context: CFunctionContext): string[] {
