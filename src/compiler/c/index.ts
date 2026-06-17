@@ -2508,7 +2508,7 @@ function emitObjectMemberVariableDeclaration(
     return emitObjectStringMemberVariableDeclaration(statement, member, context, emitGetCall)
   }
 
-  if (!['number', 'boolean'].includes(member.valueType)) {
+  if (!isNullableScalarType(member.valueType)) {
     let message = 'this object field type is not supported by the current C backend slice'
 
     if (member.valueType === 'function') {
@@ -2750,7 +2750,7 @@ function emitKnownArrayIndexVariableDeclaration(
     return emitKnownArrayStringIndexVariableDeclaration(statement, element, context)
   }
 
-  if (!['number', 'boolean'].includes(element.valueType)) {
+  if (!isNullableScalarType(element.valueType)) {
     context.diagnostics.push(
       diagnostic(
         cUnsupportedExpressionCode(element.valueType),
@@ -3604,7 +3604,7 @@ function emitNumberLogValue(expression: AnyNode, valueType: string, context: CFu
 
     const member = resolveKnownObjectMember(expression, context)
 
-    if (member != null && ['number', 'boolean'].includes(member.valueType)) {
+    if (member != null && isNullableScalarType(member.valueType)) {
       return emitRuntimeNumberLogValue(
         member.valueType,
         (temp: string) =>
@@ -3617,7 +3617,7 @@ function emitNumberLogValue(expression: AnyNode, valueType: string, context: CFu
   if (isIndexAccessExpression(expression)) {
     const element = resolveKnownArrayIndex(expression, context)
 
-    if (element != null && ['number', 'boolean'].includes(element.valueType)) {
+    if (element != null && isNullableScalarType(element.valueType)) {
       return emitRuntimeNumberLogValue(
         element.valueType,
         (temp: string) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
@@ -3627,7 +3627,7 @@ function emitNumberLogValue(expression: AnyNode, valueType: string, context: CFu
 
     const field = resolveKnownObjectIndex(expression, context)
 
-    if (field != null && ['number', 'boolean'].includes(field.valueType)) {
+    if (field != null && isNullableScalarType(field.valueType)) {
       return emitRuntimeNumberLogValue(
         field.valueType,
         (temp: string) =>
@@ -3638,7 +3638,7 @@ function emitNumberLogValue(expression: AnyNode, valueType: string, context: CFu
 
     const runtimeElement = resolveRuntimeArrayIndex(expression, context)
 
-    if (runtimeElement != null && ['number', 'boolean'].includes(runtimeElement.valueType)) {
+    if (runtimeElement != null && isNullableScalarType(runtimeElement.valueType)) {
       const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_log_value')
       let formattedValue = `${value.expression}.as.number`
 
@@ -4683,6 +4683,16 @@ function emitUndefinedRuntimeCallbackValueInto(out: string): string[] {
   return lines
 }
 
+function isSupportedRuntimeArrowCaptureValueType(valueType: string): boolean {
+  return (
+    isNullableScalarType(valueType) ||
+    valueType === 'string' ||
+    valueType === 'object' ||
+    valueType === 'timer' ||
+    valueType === 'promise-settlement'
+  )
+}
+
 function emitRuntimeArrowCallbackValueInto(
   wrapper: CRuntimeArrowCallbackWrapper,
   out: string,
@@ -4703,7 +4713,7 @@ function emitRuntimeArrowCallbackValueInto(
       )
     }
 
-    if (!['number', 'boolean', 'string', 'object', 'timer', 'promise-settlement'].includes(capture.valueType)) {
+    if (!isSupportedRuntimeArrowCaptureValueType(capture.valueType)) {
       context.diagnostics.push(
         diagnostic(
           'CCJS_C_FUNCTION_VALUE',
