@@ -1382,7 +1382,23 @@ function emitPreparedRuntimeValueStringLiteralCompare(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
+  const dynamicValue = emitPreparedDynamicRuntimeValueExpression(valueExpression, context, deps)
+
+  if (dynamicValue != null) {
+    return emitPreparedRuntimePreparedValueStringLiteralCompare(dynamicValue, literal, operator, context)
+  }
+
   const value = deps.emitCValueExpression(valueExpression, context)
+
+  return emitPreparedRuntimePreparedValueStringLiteralCompare(value, literal, operator, context)
+}
+
+function emitPreparedRuntimePreparedValueStringLiteralCompare(
+  value: PreparedExpression,
+  literal: string,
+  operator: string,
+  context: CFunctionContext
+): PreparedExpression {
   const temp = nextCName(context, 'ccjs_string_cmp_value')
   const literalLength = utf8ByteLength(literal)
   const string = `((ccjs_string*)${temp}.as.ref)`
@@ -1648,7 +1664,52 @@ function emitPreparedDynamicRuntimeValueExpression(
     return deps.emitCValueExpression(expression, context)
   }
 
-  return emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
+  const arrayIndexValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
+
+  if (arrayIndexValue != null) {
+    return arrayIndexValue
+  }
+
+  return emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
+}
+
+function emitPreparedDynamicRuntimeObjectFieldValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): PreparedExpression | null {
+  const access = dynamicRuntimeObjectFieldAccess(expression)
+
+  if (access == null) {
+    return null
+  }
+
+  const object = emitPreparedDynamicObjectArrayIndexValueExpression(access.object, context, deps)
+
+  if (object == null) {
+    return null
+  }
+
+  const value = nextCName(context, 'ccjs_value')
+  const status = nextCName(context, 'ccjs_field_status')
+  const lines: string[] = []
+
+  registerOwnedValue(context, value)
+  appendLines(lines, object.lines)
+  lines.push(emitRuntimeTypeCheck(`${object.expression}.tag != CCJS_TAG_OBJECT || ${object.expression}.as.ref == 0`, context))
+  appendLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(
+    `ccjs_status ${status} = ccjs_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value});`
+  )
+  lines.push(`if (${status} == CCJS_ERR_FIELD) {`)
+  lines.push(`  ${value} = ccjs_undefined_value();`)
+  lines.push('}')
+  lines.push(`if (${status} != CCJS_OK && ${status} != CCJS_ERR_FIELD) ${emitFailureStatement(context)}`)
+
+  return {
+    lines,
+    expression: value
+  }
 }
 
 function emitPreparedDynamicObjectArrayIndexValueExpression(
@@ -1764,6 +1825,24 @@ function dynamicObjectFieldAccess(
     expression.index.type === 'StringLiteral' &&
     deps.inferExpressionType(expression.object, context) === 'object'
   ) {
+    return {
+      object: expression.object,
+      key: expression.index.value
+    }
+  }
+
+  return null
+}
+
+function dynamicRuntimeObjectFieldAccess(expression: CValueNode): CDynamicObjectFieldAccess | null {
+  if (expression.type === 'MemberExpression') {
+    return {
+      object: expression.object,
+      key: expression.property
+    }
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     return {
       object: expression.object,
       key: expression.index.value
@@ -2306,6 +2385,12 @@ export function emitCValueExpression(
     if (dynamicMemberValue != null) {
       return dynamicMemberValue
     }
+
+    const dynamicRuntimeMemberValue = emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
+
+    if (dynamicRuntimeMemberValue != null) {
+      return dynamicRuntimeMemberValue
+    }
   }
 
   if (deps.isIndexAccessExpression(expression)) {
@@ -2343,6 +2428,12 @@ export function emitCValueExpression(
 
     if (dynamicObjectValue != null) {
       return dynamicObjectValue
+    }
+
+    const dynamicRuntimeIndexValue = emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
+
+    if (dynamicRuntimeIndexValue != null) {
+      return dynamicRuntimeIndexValue
     }
   }
 

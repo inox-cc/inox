@@ -629,6 +629,32 @@ export function main(): void {
 })
 
 
+test('lowers C dynamic object array item field comparisons through runtime lookup', () => {
+  const result = compileSource(
+    `function isLiteral(node: object): boolean {
+  if (node.args[0] != null) {
+    return node.args[0].type === 'Literal'
+  }
+
+  return false
+}
+
+export function main(): void {
+  console.log(isLiteral({ args: [{ type: 'Literal' }] }), isLiteral({ args: [] }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "args", 4, &ccjs_array_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_array_value_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(ccjs_value_\d+, "type", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /memcmp\(\(\(ccjs_string\*\)ccjs_string_cmp_value_\d+\.as\.ref\)->bytes, "Literal", 7\)/)
+})
+
+
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
     `type Point = {

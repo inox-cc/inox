@@ -7213,6 +7213,59 @@ console.log(hasFirst({ args: [{ type: 'Literal' }] }), hasFirst({ args: [] }))
 })
 
 
+test('generated C dynamic object array item field comparisons compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-array-item-field-'))
+  const source = join(dir, 'dynamic-object-array-item-field.c')
+  const output = join(dir, 'dynamic-object-array-item-field')
+
+  try {
+    const result = compileSource(
+      `function isLiteral(node: object): boolean {
+  if (node.args[0] != null) {
+    return node.args[0].type === 'Literal'
+  }
+
+  return false
+}
+
+console.log(
+  isLiteral({ args: [{ type: 'Literal' }] }),
+  isLiteral({ args: [{ type: 'Other' }] }),
+  isLiteral({ args: [] })
+)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 0 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
