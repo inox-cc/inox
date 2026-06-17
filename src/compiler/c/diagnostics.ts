@@ -1,7 +1,7 @@
 import { diagnostic } from '../diagnostics.ts'
 import { isBinaryGlobalUsagePath } from '../stdlib/descriptors/binary.ts'
 import { isCollectionConstructorGlobalUsagePath } from '../stdlib/descriptors/collections.ts'
-import { cryptoRuntimeMethodNameFromPath, isCryptoRuntimeMethod } from '../stdlib/descriptors/crypto.ts'
+import { isCryptoRuntimeMethod, isCryptoRuntimeMethodPath } from '../stdlib/descriptors/crypto.ts'
 import { isDebugRuntimeMethodPath } from '../stdlib/descriptors/debug.ts'
 import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
@@ -137,7 +137,7 @@ export function isSupportedCCryptoGlobalUsage(
   context?: CGlobalUsageSupportContext
 ): boolean {
   return (
-    cryptoRuntimeMethodNameFromPath(usage.path) != null ||
+    isCryptoRuntimeMethodPath(usage.path) ||
     (usage.path.length === 2 &&
       context?.cryptoImportNames?.has(usage.root) === true &&
       isCryptoRuntimeMethod(usage.path[1]))

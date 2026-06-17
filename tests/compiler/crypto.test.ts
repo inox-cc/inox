@@ -1,5 +1,9 @@
 import test from 'node:test'
 import { assert, cLibuvOptions, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
+import {
+  cryptoRuntimeMethodNameFromKnownPath,
+  isCryptoRuntimeMethodPath
+} from '../../src/compiler/stdlib/descriptors/crypto.ts'
 
 test('lowers default node:crypto random methods to the C crypto runtime', () => {
   const result = compileSource(
@@ -42,6 +46,12 @@ export function main(): void {
   assert.match(result.code, /ccjs_crypto_random_fill\(bytes, 0, 0, 0\)/)
   assert.match(result.code, /ccjs_crypto_random_int\(0, 10, &ccjs_crypto_int_\d+\)/)
   assert.match(result.code, /ccjs_crypto_random_uuid\(&ccjs_default_allocator, &ccjs_crypto_uuid_\d+\)/)
+})
+
+test('recognizes crypto runtime global method paths', () => {
+  assert.equal(isCryptoRuntimeMethodPath(['crypto', 'getRandomValues']), true)
+  assert.equal(cryptoRuntimeMethodNameFromKnownPath(['crypto', 'getRandomValues']), 'getRandomValues')
+  assert.equal(isCryptoRuntimeMethodPath(['crypto', 'randomBytes']), false)
 })
 
 test('lowers node:crypto createHash sha256 hex digest to the C crypto runtime', () => {

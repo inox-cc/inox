@@ -76,8 +76,9 @@ import {
   stringRuntimeMethodName
 } from './stdlib/descriptors/collections.ts'
 import {
-  cryptoRuntimeMethodNameFromPath,
+  cryptoRuntimeMethodNameFromKnownPath,
   isCryptoRuntimeMethod,
+  isCryptoRuntimeMethodPath,
   isNodeCryptoImportSource,
   isUnsupportedNodeCryptoMethod
 } from './stdlib/descriptors/crypto.ts'
@@ -4349,10 +4350,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const globalMethod = cryptoRuntimeMethodNameFromPath(path)
-
-      if (globalMethod != null) {
-        return globalMethod
+      if (isCryptoRuntimeMethodPath(path)) {
+        return cryptoRuntimeMethodNameFromKnownPath(path)
       }
 
       const rootName = firstPathSegment(path)

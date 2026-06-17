@@ -66,20 +66,23 @@ export const unsupportedNodeCryptoMethods = [
 export function cryptoRuntimeMethodNameFromPath(
   path: string[]
 ): CryptoRuntimeMethod | null {
-  if (path.length !== 2) {
+  if (!isCryptoRuntimeMethodPath(path)) {
     return null
   }
 
-  const root = pathSegment(path, 0)
-  const method = pathSegment(path, 1)
+  return cryptoRuntimeMethodNameFromKnownPath(path)
+}
 
-  if (root === 'crypto' && method != null) {
-    if (isCryptoRuntimeMethod(method) && method === 'getRandomValues') {
-      return method
-    }
+export function cryptoRuntimeMethodNameFromKnownPath(_path: string[]): CryptoRuntimeMethod {
+  return 'getRandomValues'
+}
+
+export function isCryptoRuntimeMethodPath(path: string[]): boolean {
+  if (path.length !== 2 || path[0] !== 'crypto') {
+    return false
   }
 
-  return null
+  return path[1] === 'getRandomValues'
 }
 
 export function isCryptoRuntimeMethod(method: string): boolean {
@@ -96,12 +99,4 @@ export function isNodeCryptoImportSource(source: string | null | undefined): boo
 
 export function isUnsupportedNodeCryptoMethod(method: string): boolean {
   return stringListIncludes(unsupportedNodeCryptoMethods, method)
-}
-
-function pathSegment(path: string[], index: number): string | null {
-  if (index < 0 || index >= path.length) {
-    return null
-  }
-
-  return path[index]
 }
