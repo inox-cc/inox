@@ -14,7 +14,15 @@ export function removedFsRuntimeMethodInfo(callee: AnyNode): RemovedFsRuntimeMet
 export function isFsRuntimeImportSymbol(symbol: SymbolInfo): boolean {
   return (
     symbol.kind === 'import' &&
-    ['fs', 'node:fs', 'node:fs/promises'].includes(symbol.importSource ?? '') &&
-    ['default', 'fs', 'promises'].includes(symbol.importedName ?? '')
+    isFsRuntimeImportSource(symbol.importSource) &&
+    isFsRuntimeImportedName(symbol.importedName)
   )
+}
+
+function isFsRuntimeImportSource(source: string | null | undefined): boolean {
+  return source === 'fs' || source === 'node:fs' || source === 'node:fs/promises'
+}
+
+function isFsRuntimeImportedName(name: string | null | undefined): boolean {
+  return name === 'default' || name === 'fs' || name === 'promises'
 }

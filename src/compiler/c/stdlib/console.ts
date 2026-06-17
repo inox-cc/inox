@@ -41,8 +41,12 @@ export function isConsoleLog(expression: AnyNode): boolean {
     expression.callee.object.type === 'Reference' &&
     expression.callee.object.path.length === 1 &&
     expression.callee.object.path[0] === 'console' &&
-    ['log', 'info', 'warn', 'error'].includes(expression.callee.property)
+    isConsoleRuntimeProperty(expression.callee.property)
   )
+}
+
+function isConsoleRuntimeProperty(property: string | null | undefined): boolean {
+  return property === 'log' || property === 'info' || property === 'warn' || property === 'error'
 }
 
 export function irProgramsUseConsoleRuntime(programs: IrProgram[]): boolean {
