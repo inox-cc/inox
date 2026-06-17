@@ -427,6 +427,7 @@ import {
   emitPreparedCallArgs as emitPreparedCallArgsWithDependencies,
   emitPreparedCallExpression as emitPreparedCallExpressionWithDependencies,
   emitPreparedNumberExpression as emitPreparedNumberExpressionWithDependencies,
+  emitPreparedRuntimeTruthinessExpression as emitPreparedRuntimeTruthinessExpressionWithDependencies,
   emitPreparedUpdateExpression as emitPreparedUpdateExpressionWithDependencies,
   isThrowingFunctionCallee as isThrowingFunctionCalleeFromExpressions,
   isThrowingFunctionName as isThrowingFunctionNameFromExpressions
@@ -727,6 +728,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     emitPreparedFsSyncStatementExpression(expression, context, fsLoweringDependencies),
   emitPreparedMapIndexAssignment,
   emitPreparedNumberExpression,
+  emitPreparedRuntimeTruthinessExpression: emitPreparedStatementRuntimeTruthinessExpression,
   emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies, options),
   emitPreparedPromiseConstructorExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
@@ -1167,6 +1169,13 @@ const cScalarExpressionDependencies = {
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
   resolveRuntimeArrayIndex
+}
+
+function emitPreparedStatementRuntimeTruthinessExpression(
+  expression: CDynamicObjectFieldNode,
+  context: CFunctionContext
+) {
+  return emitPreparedRuntimeTruthinessExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
 const cValueExpressionDependencies = {

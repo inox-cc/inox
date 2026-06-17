@@ -8,10 +8,31 @@
 #include "ccjs/map.h"
 #include "ccjs/object.h"
 #include "ccjs/set.h"
+#include "ccjs/string.h"
 #include "ccjs/value.h"
 #ifdef CCJS_ENABLE_WEAK
 #include "ccjs/weak.h"
 #endif
+
+bool ccjs_value_truthy(ccjs_value value) {
+  if (value.tag == CCJS_TAG_UNDEFINED || value.tag == CCJS_TAG_NULL) {
+    return false;
+  }
+
+  if (value.tag == CCJS_TAG_BOOL) {
+    return value.as.boolean;
+  }
+
+  if (value.tag == CCJS_TAG_NUMBER) {
+    return value.as.number != 0 && value.as.number == value.as.number;
+  }
+
+  if (value.tag == CCJS_TAG_STRING) {
+    return value.as.ref != 0 && ((ccjs_string*)value.as.ref)->len != 0;
+  }
+
+  return value.as.ref != 0;
+}
 
 void ccjs_retain(ccjs_value value) {
   if (ccjs_is_ref_value(value) && value.as.ref != 0) {

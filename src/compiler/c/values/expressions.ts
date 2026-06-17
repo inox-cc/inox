@@ -1262,6 +1262,71 @@ export function emitPreparedNumberExpression(
   }
 }
 
+export function emitPreparedRuntimeTruthinessExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression, context, deps)
+
+  if (value == null) {
+    return null
+  }
+
+  return {
+    lines: value.lines,
+    expression: `ccjs_value_truthy(${value.expression}) ? 1 : 0`
+  }
+}
+
+function emitPreparedOptionalDynamicObjectFieldValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (expression.type === 'MemberExpression') {
+    return emitPreparedOptionalRuntimeObjectFieldValueExpression(expression.object, expression.property, context, deps)
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    return emitPreparedOptionalRuntimeObjectFieldValueExpression(expression.object, expression.index.value, context, deps)
+  }
+
+  return null
+}
+
+function emitPreparedOptionalRuntimeObjectFieldValueExpression(
+  objectExpression: CValueNode,
+  key: string,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (deps.inferExpressionType(objectExpression, context) !== 'object') {
+    return null
+  }
+
+  const object = deps.emitCValueExpression(objectExpression, context)
+  const value = nextCName(context, 'ccjs_value')
+  const status = nextCName(context, 'ccjs_field_status')
+  const lines: string[] = []
+
+  registerOwnedValue(context, value)
+  appendLines(lines, object.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(
+    `ccjs_status ${status} = ccjs_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${value});`
+  )
+  lines.push(`if (${status} == CCJS_ERR_FIELD) {`)
+  lines.push(`  ${value} = ccjs_undefined_value();`)
+  lines.push('}')
+  lines.push(`if (${status} != CCJS_OK && ${status} != CCJS_ERR_FIELD) ${emitFailureStatement(context)}`)
+
+  return {
+    lines,
+    expression: value
+  }
+}
+
 function emitPreparedRuntimeStringLiteralCompareExpression(
   expression: CValueNode,
   context: CFunctionContext,

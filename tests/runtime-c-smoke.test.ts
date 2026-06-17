@@ -6822,6 +6822,81 @@ read({ score: 42, active: true })
 })
 
 
+test('generated C dynamic object field truthiness conditions compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-truthiness-'))
+  const source = join(dir, 'dynamic-object-truthiness.c')
+  const output = join(dir, 'dynamic-object-truthiness')
+
+  try {
+    const result = compileSource(
+      `function score(extra: object): number {
+  let total = 0
+
+  if (extra.name) {
+    total = total + 1
+  }
+
+  if (extra.empty) {
+    total = total + 10
+  }
+
+  if (extra.count) {
+    total = total + 100
+  }
+
+  if (extra.ok) {
+    total = total + 1000
+  }
+
+  if (extra.nope) {
+    total = total + 10000
+  }
+
+  if (extra.child) {
+    total = total + 100000
+  }
+
+  if (extra.missing) {
+    total = total + 1000000
+  }
+
+  return total
+}
+
+console.log(score({ name: 'Ada', empty: '', count: 0, ok: true, nope: false, child: { value: 1 } }))
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '101001\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C dynamic object field assignment lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

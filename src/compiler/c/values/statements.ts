@@ -183,6 +183,7 @@ export type StatementLoweringDependencies = {
   emitPreparedFsSyncStatementExpression(expression: StatementNode, context: CFunctionContext): PreparedStatement | null
   emitPreparedMapIndexAssignment(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
+  emitPreparedRuntimeTruthinessExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathObjectCallExpression(expression: StatementNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
   emitPreparedPromiseConstructorExpression(expression: StatementNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
   emitPreparedPromiseExpression(expression: StatementNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
@@ -385,7 +386,7 @@ function emitScopedStatementList(statements: StatementNode[], context: CFunction
 }
 
 export function emitIfStatement(statement: StatementNode, context: CFunctionContext): string[] {
-  const condition = statementDeps(context).emitPreparedNumberExpression(statement.condition, context)
+  const condition = emitPreparedConditionExpression(statement.condition, context)
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const lines: string[] = []
   pushAllLines(lines, condition.lines)
@@ -405,7 +406,7 @@ export function emitIfStatement(statement: StatementNode, context: CFunctionCont
 }
 
 export function emitWhileStatement(statement: StatementNode, context: CFunctionContext): string[] {
-  const condition = statementDeps(context).emitPreparedNumberExpression(statement.condition, context)
+  const condition = emitPreparedConditionExpression(statement.condition, context)
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const breakLabel = nextCName(context, 'ccjs_break')
   const continueLabel = nextCName(context, 'ccjs_continue')
@@ -1403,6 +1404,16 @@ function emitPreparedForExpressionClause(
       lines: [],
       expression: ''
     }
+  }
+
+  return emitPreparedConditionExpression(expression, context)
+}
+
+function emitPreparedConditionExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression {
+  const truthiness = statementDeps(context).emitPreparedRuntimeTruthinessExpression(expression, context)
+
+  if (truthiness != null) {
+    return truthiness
   }
 
   return statementDeps(context).emitPreparedNumberExpression(expression, context)

@@ -95,6 +95,8 @@ static inline bool ccjs_is_ref_value(ccjs_value value) {
          value.tag == CCJS_TAG_BYTES || value.tag == CCJS_TAG_FUNCTION || value.tag == CCJS_TAG_MAP || value.tag == CCJS_TAG_SET;
 }
 
+bool ccjs_value_truthy(ccjs_value value);
+
 static inline void ccjs_ref_init_weak(ccjs_ref* ref) {
 #ifdef CCJS_ENABLE_WEAK
   if (ref != 0) {

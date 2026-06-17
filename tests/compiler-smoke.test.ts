@@ -446,6 +446,33 @@ export function main(): void {
 })
 
 
+test('lowers C dynamic object field truthiness conditions through runtime lookup', () => {
+  const result = compileSource(
+    `function read(extra: object): void {
+  if (extra.name) {
+    console.log(1)
+  }
+
+  if (extra['active']) {
+    console.log(2)
+  }
+}
+
+export function main(): void {
+  read({ name: 'Ada', active: true })
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(extra, "name", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /if \(ccjs_value_truthy\(ccjs_value_\d+\) \? 1 : 0\) \{/)
+  assert.match(result.code, /ccjs_object_get\(extra, "active", 6, &ccjs_value_\d+\)/)
+})
+
+
 test('lowers C dynamic object field assignments through runtime lookup', () => {
   const result = compileSource(
     `type Child = {
