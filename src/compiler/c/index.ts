@@ -1768,13 +1768,7 @@ function copyStringSet(source: Set<string>): Set<string> {
 }
 
 function copyStringMap(source: Map<string, string>): Map<string, string> {
-  const result: Map<string, string> = new Map()
-
-  for (const entry of source) {
-    result.set(entry[0], entry[1])
-  }
-
-  return result
+  return new Map(source)
 }
 
 function collectLocalAwaitRejectionValueTypes(

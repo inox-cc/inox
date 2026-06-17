@@ -58,13 +58,7 @@ export function cloneCStringSet(values: CStringSet): CStringSet {
 }
 
 export function cloneCStringMap(values: CStringMap): CStringMap {
-  const result: CStringMap = new Map()
-
-  for (const entry of values) {
-    result.set(entry[0], entry[1])
-  }
-
-  return result
+  return new Map(values)
 }
 
 export function cloneCArrayShapeMap(values: CArrayShapeMap | null | undefined): CArrayShapeMap {
@@ -74,11 +68,7 @@ export function cloneCArrayShapeMap(values: CArrayShapeMap | null | undefined): 
     return result
   }
 
-  for (const entry of values) {
-    result.set(entry[0], entry[1])
-  }
-
-  return result
+  return new Map(values)
 }
 
 export function cloneCFunctionTypeMap(values: CFunctionTypeMap | null | undefined): CFunctionTypeMap {
@@ -88,11 +78,7 @@ export function cloneCFunctionTypeMap(values: CFunctionTypeMap | null | undefine
     return result
   }
 
-  for (const entry of values) {
-    result.set(entry[0], entry[1])
-  }
-
-  return result
+  return new Map(values)
 }
 
 export function cloneCFunctionReturnMapTypeMap(
@@ -104,11 +90,7 @@ export function cloneCFunctionReturnMapTypeMap(
     return result
   }
 
-  for (const entry of values) {
-    result.set(entry[0], entry[1])
-  }
-
-  return result
+  return new Map(values)
 }
 
 export function cloneCObjectShapeFieldMap(
@@ -120,11 +102,7 @@ export function cloneCObjectShapeFieldMap(
     return result
   }
 
-  for (const entry of values) {
-    result.set(entry[0], entry[1])
-  }
-
-  return result
+  return new Map(values)
 }
 
 export function cloneCPromiseConstructorHandlerMap(
@@ -136,11 +114,7 @@ export function cloneCPromiseConstructorHandlerMap(
     return result
   }
 
-  for (const entry of values) {
-    result.set(entry[0], entry[1])
-  }
-
-  return result
+  return new Map(values)
 }
 
 export type CEmitContext = {
