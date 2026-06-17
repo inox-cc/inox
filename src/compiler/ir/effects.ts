@@ -6,8 +6,56 @@ type IrLocalThrowValueTypeOptions = {
   functionThrowValueTypes?: any
 }
 
-type NodeList = AnyNode[]
-type MaybeNode = AnyNode | null | undefined
+type EffectChildNode = AnyNode
+type EffectChildList = EffectChildNode[]
+
+type EffectCaseNode = EffectChildNode & {
+  consequent?: EffectChildList
+  test?: EffectChildNode | null
+}
+
+type EffectPropertyNode = EffectChildNode & {
+  value?: EffectChildNode | null
+}
+
+type EffectHandlerNode = EffectChildNode & {
+  body?: EffectChildNode | null
+}
+
+type EffectNode = EffectChildNode & {
+  alternate?: EffectChildNode | null
+  argument?: EffectChildNode | null
+  args?: EffectChildList
+  block?: EffectChildNode | null
+  body?: any
+  callee?: EffectChildNode | null
+  cases?: EffectCaseNode[]
+  condition?: EffectChildNode | null
+  consequent?: EffectChildNode | null
+  discriminant?: EffectChildNode | null
+  elements?: EffectChildList
+  expression?: EffectChildNode | null
+  finalizer?: EffectChildNode | null
+  handler?: EffectHandlerNode | null
+  index?: EffectChildNode | null
+  init?: EffectChildNode | null
+  iterable?: EffectChildNode | null
+  left?: EffectChildNode | null
+  name?: string | null
+  object?: EffectChildNode | null
+  path?: string[]
+  properties?: EffectPropertyNode[]
+  right?: EffectChildNode | null
+  target?: EffectChildNode | null
+  test?: EffectChildNode | null
+  type?: string | null
+  update?: EffectChildNode | null
+  value?: EffectChildNode | null
+  valueType?: string | null
+}
+
+type NodeList = EffectChildList
+type MaybeNode = EffectNode | null | undefined
 type ThrowValueTypeMap = Map<string, IrThrowValueType[]>
 type ThrowValueTypeSet = Set<IrThrowValueType>
 type StringSet = Set<string>
@@ -22,7 +70,8 @@ type StoredFunctionEffectProgram = {
 export function collectIrFunctionEffects(programs: FunctionEffectProgram[]): IrFunctionEffect[] {
   const functions: NodeList = []
 
-  for (const program of programs) {
+  for (let index = 0; index < programs.length; index = index + 1) {
+    const program = programs[index]
     pushNodes(functions, collectIrTopLevelNodes(program, 'function'))
   }
 
@@ -32,8 +81,12 @@ export function collectIrFunctionEffects(programs: FunctionEffectProgram[]): IrF
 export function collectIrStoredFunctionEffects(programs: StoredFunctionEffectProgram[]): IrFunctionEffect[] {
   const effects: IrFunctionEffect[] = []
 
-  for (const program of programs) {
-    for (const effect of program.functionEffects) {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = programs[programIndex]
+    const functionEffects = program.functionEffects
+
+    for (let effectIndex = 0; effectIndex < functionEffects.length; effectIndex = effectIndex + 1) {
+      const effect = functionEffects[effectIndex]
       effects.push(effect)
     }
   }
@@ -65,28 +118,32 @@ function collectFunctionEffects(functions: NodeList): IrFunctionEffect[] {
   const functionThrowValueTypes = createFunctionThrowValueTypeMap()
   let changed = true
 
-  for (const item of functions) {
-    functionNames.add(item.name)
-    functionThrowValueTypes.set(item.name, [])
+  for (let index = 0; index < functions.length; index = index + 1) {
+    const item: EffectNode = functions[index]
+    const name = nodeName(item)
+    functionNames.add(name)
+    functionThrowValueTypes.set(name, [])
   }
 
   while (changed) {
     changed = false
 
-    for (const item of functions) {
+    for (let index = 0; index < functions.length; index = index + 1) {
+      const item: EffectNode = functions[index]
+      const name = nodeName(item)
       const types = uniqueThrowValueTypes(
         collectEscapingThrowValueTypesFromStatements(
-          item.body,
+          nodeList(item.body),
           functionThrowValueTypes,
           functionNames,
           createStringSet(),
           false
         )
       )
-      const previous = functionThrowValueTypes.get(item.name) ?? []
+      const previous = functionThrowValueTypes.get(name) ?? []
 
       if (!sameThrowValueTypes(previous, types)) {
-        functionThrowValueTypes.set(item.name, types)
+        functionThrowValueTypes.set(name, types)
         changed = true
       }
     }
@@ -94,11 +151,13 @@ function collectFunctionEffects(functions: NodeList): IrFunctionEffect[] {
 
   const effects: IrFunctionEffect[] = []
 
-  for (const item of functions) {
-    const throwValueTypes = functionThrowValueTypes.get(item.name) ?? []
+  for (let index = 0; index < functions.length; index = index + 1) {
+    const item: EffectNode = functions[index]
+    const name = nodeName(item)
+    const throwValueTypes = functionThrowValueTypes.get(name) ?? []
 
     effects.push({
-      name: item.name,
+      name,
       throws: throwValueTypes.length > 0,
       throwValueTypes
     })
@@ -116,7 +175,8 @@ function collectEscapingThrowValueTypesFromStatements(
 ): IrThrowValueType[] {
   const types: IrThrowValueType[] = []
 
-  for (const statement of statements) {
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const statement = statements[index]
     pushThrowValueTypes(
       types,
       collectEscapingThrowValueTypesFromStatement(
@@ -166,7 +226,11 @@ function collectEscapingThrowValueTypesFromStatement(
     )
 
     if (isErrorValueExpressionForAnalysis(statement.init, errorObjectNames)) {
-      errorObjectNames.add(statement.name)
+      const name = nodeName(statement)
+
+      if (name !== '') {
+        errorObjectNames.add(name)
+      }
     }
 
     return types
@@ -194,7 +258,7 @@ function collectEscapingThrowValueTypesFromStatement(
 
   if (statement.type === 'BlockStatement') {
     return collectEscapingThrowValueTypesFromStatements(
-      statement.body,
+      nodeList(statement.body),
       functionThrowValueTypes,
       functionNames,
       cloneStringSet(errorObjectNames),
@@ -263,11 +327,13 @@ function collectEscapingThrowValueTypesFromStatement(
   }
 
   if (statement.type === 'ForStatement') {
-    if (statement.init != null && statement.init.type === 'VariableDeclaration') {
+    const init = statement.init
+
+    if (init != null && init.type === 'VariableDeclaration') {
       pushThrowValueTypes(
         types,
         collectEscapingThrowValueTypesFromStatement(
-          statement.init,
+          init,
           functionThrowValueTypes,
           functionNames,
           cloneStringSet(errorObjectNames),
@@ -278,7 +344,7 @@ function collectEscapingThrowValueTypesFromStatement(
       pushThrowValueTypes(
         types,
         collectEscapingThrowValueTypesFromExpression(
-          statement.init,
+          init,
           functionThrowValueTypes,
           functionNames,
           errorObjectNames,
@@ -358,7 +424,10 @@ function collectEscapingThrowValueTypesFromStatement(
       )
     )
 
-    for (const item of statement.cases) {
+    const cases = caseList(statement.cases)
+
+    for (let index = 0; index < cases.length; index = index + 1) {
+      const item = cases[index]
       pushThrowValueTypes(
         types,
         collectEscapingThrowValueTypesFromExpression(
@@ -372,7 +441,7 @@ function collectEscapingThrowValueTypesFromStatement(
       pushThrowValueTypes(
         types,
         collectEscapingThrowValueTypesFromStatements(
-          item.consequent,
+          nodeList(item.consequent),
           functionThrowValueTypes,
           functionNames,
           cloneStringSet(errorObjectNames),
@@ -402,11 +471,13 @@ function collectEscapingThrowValueTypesFromStatement(
       )
     )
 
-    if (statement.handler != null) {
+    const handler = statement.handler
+
+    if (handler != null) {
       pushThrowValueTypes(
         types,
         collectEscapingThrowValueTypesFromStatement(
-          statement.handler.body,
+          handler.body,
           functionThrowValueTypes,
           functionNames,
           cloneStringSet(errorObjectNames),
@@ -446,13 +517,11 @@ function collectEscapingThrowValueTypesFromExpression(
   }
 
   if (expression.type === 'CallExpression') {
-    if (
-      !hasErrorTarget &&
-      expression.callee.type === 'Reference' &&
-      expression.callee.path.length === 1 &&
-      functionNames.has(expression.callee.path[0])
-    ) {
-      pushThrowValueTypes(types, functionThrowValueTypes.get(expression.callee.path[0]) ?? [])
+    const callee = expression.callee
+    const functionName = singleReferenceName(callee)
+
+    if (!hasErrorTarget && functionName != null && functionNames.has(functionName)) {
+      pushThrowValueTypes(types, functionThrowValueTypes.get(functionName) ?? [])
     }
 
     pushThrowValueTypes(
@@ -467,7 +536,7 @@ function collectEscapingThrowValueTypesFromExpression(
     )
     pushExpressionListThrowValueTypes(
       types,
-      expression.args,
+      nodeList(expression.args),
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
@@ -490,7 +559,7 @@ function collectEscapingThrowValueTypesFromExpression(
     )
     pushExpressionListThrowValueTypes(
       types,
-      expression.args,
+      nodeList(expression.args),
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
@@ -602,7 +671,7 @@ function collectEscapingThrowValueTypesFromExpression(
   if (expression.type === 'ArrayLiteral') {
     pushExpressionListThrowValueTypes(
       types,
-      expression.elements,
+      nodeList(expression.elements),
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
@@ -613,7 +682,10 @@ function collectEscapingThrowValueTypesFromExpression(
   }
 
   if (expression.type === 'ObjectLiteral') {
-    for (const property of expression.properties) {
+    const properties = propertyList(expression.properties)
+
+    for (let index = 0; index < properties.length; index = index + 1) {
+      const property = properties[index]
       pushThrowValueTypes(
         types,
         collectEscapingThrowValueTypesFromExpression(
@@ -656,7 +728,11 @@ function isErrorValueExpressionForAnalysis(
   }
 
   if (expression != null) {
-    return expression.type === 'Reference' && expression.path.length === 1 && errorObjectNames.has(expression.path[0])
+    const name = singleReferenceName(expression)
+
+    if (name != null) {
+      return errorObjectNames.has(name)
+    }
   }
 
   return false
@@ -675,11 +751,60 @@ function isErrorConstructorExpression(expression: MaybeNode): boolean {
     return false
   }
 
-  return (
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    expression.callee.path[0] === 'Error'
-  )
+  const name = singleReferenceName(expression.callee)
+  return name === 'Error'
+}
+
+function nodeName(node: EffectNode): string {
+  const name = node.name
+
+  if (name == null) {
+    return ''
+  }
+
+  return name
+}
+
+function nodeList(values: EffectChildList | null | undefined): NodeList {
+  if (values == null) {
+    return []
+  }
+
+  return values
+}
+
+function caseList(values: EffectCaseNode[] | null | undefined): EffectCaseNode[] {
+  if (values == null) {
+    return []
+  }
+
+  return values
+}
+
+function propertyList(values: EffectPropertyNode[] | null | undefined): EffectPropertyNode[] {
+  if (values == null) {
+    return []
+  }
+
+  return values
+}
+
+function singleReferenceName(expression: EffectChildNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
+  if (expression.type !== 'Reference') {
+    return null
+  }
+
+  const path = expression.path
+
+  if (path == null || path.length !== 1) {
+    return null
+  }
+
+  return path[0]
 }
 
 function createFunctionThrowValueTypeMap(): ThrowValueTypeMap {
@@ -752,7 +877,8 @@ function cloneStringSet(source: StringSet): StringSet {
 }
 
 function pushNodes(target: NodeList, values: NodeList): void {
-  for (const value of values) {
+  for (let index = 0; index < values.length; index = index + 1) {
+    const value = values[index]
     target.push(value)
   }
 }
@@ -765,7 +891,8 @@ function pushExpressionListThrowValueTypes(
   errorObjectNames: StringSet,
   hasErrorTarget: boolean
 ): void {
-  for (const expression of expressions) {
+  for (let index = 0; index < expressions.length; index = index + 1) {
+    const expression = expressions[index]
     pushThrowValueTypes(
       target,
       collectEscapingThrowValueTypesFromExpression(
@@ -780,7 +907,8 @@ function pushExpressionListThrowValueTypes(
 }
 
 function pushThrowValueTypes(target: IrThrowValueType[], values: IrThrowValueType[]): void {
-  for (const value of values) {
+  for (let index = 0; index < values.length; index = index + 1) {
+    const value = values[index]
     target.push(value)
   }
 }
@@ -789,7 +917,8 @@ function uniqueThrowValueTypes(types: IrThrowValueType[]): IrThrowValueType[] {
   const seen = createThrowValueTypeSet()
   const result: IrThrowValueType[] = []
 
-  for (const throwType of types) {
+  for (let index = 0; index < types.length; index = index + 1) {
+    const throwType = types[index]
     if (!seen.has(throwType)) {
       seen.add(throwType)
       result.push(throwType)
@@ -804,11 +933,23 @@ function sameThrowValueTypes(left: IrThrowValueType[], right: IrThrowValueType[]
     return false
   }
 
-  for (const item of left) {
-    if (!right.includes(item)) {
+  for (let index = 0; index < left.length; index = index + 1) {
+    const item = left[index]
+
+    if (!throwValueTypesInclude(right, item)) {
       return false
     }
   }
 
   return true
+}
+
+function throwValueTypesInclude(values: IrThrowValueType[], item: IrThrowValueType): boolean {
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (values[index] === item) {
+      return true
+    }
+  }
+
+  return false
 }
