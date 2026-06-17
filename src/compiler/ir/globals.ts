@@ -14,6 +14,20 @@ type GlobalUsageNode = AnyNode & {
   type?: string | null
 }
 
+type GlobalUsageCallNode = {
+  args?: NodeList | null
+  fsRuntimeMethod?: string | null
+}
+
+type GlobalUsageIndexNode = {
+  index?: GlobalUsageNode | null
+  object?: GlobalUsageNode | null
+}
+
+type GlobalUsageReferenceNode = {
+  path?: string[] | null
+}
+
 type IrProgramWithGlobalUsages = {
   globalUsages: IrGlobalUsage[]
 }
@@ -131,20 +145,25 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   }
 
   const item: GlobalUsageNode = node
+  const itemType = item.type
 
-  if (item.type === 'CallExpression' && item.fsRuntimeMethod != null) {
-    const path = fsGlobalUsagePathForRuntimeMethod(item.fsRuntimeMethod)
+  const callItem = item as GlobalUsageCallNode
+  const fsRuntimeMethod = callItem.fsRuntimeMethod
+
+  if (itemType === 'CallExpression' && fsRuntimeMethod != null) {
+    const path = fsGlobalUsagePathForRuntimeMethod(fsRuntimeMethod)
 
     if (path != null) {
       pushGlobalUsage(usages, path, item)
 
-      visitOptionalGlobalUsageList(item.args, usages)
+      const args = callItem.args
+      visitOptionalGlobalUsageList(args, usages)
 
       return
     }
   }
 
-  if (item.type === 'MemberExpression' || item.type === 'OptionalMemberExpression') {
+  if (itemType === 'MemberExpression' || itemType === 'OptionalMemberExpression') {
     const path = globalUsagePath(item)
 
     if (path != null) {
@@ -153,22 +172,25 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
     }
   }
 
-  if (item.type === 'IndexExpression' || item.type === 'OptionalIndexExpression') {
-    const objectNode = item.object
+  if (itemType === 'IndexExpression' || itemType === 'OptionalIndexExpression') {
+    const indexItem = item as GlobalUsageIndexNode
+    const objectNode = indexItem.object
 
     if (objectNode != null) {
       const path = globalUsagePath(objectNode)
 
       if (path != null) {
         pushGlobalUsage(usages, path, item)
-        visitGlobalUsage(item.index, usages)
+        const indexNode = indexItem.index
+        visitGlobalUsage(indexNode, usages)
         return
       }
     }
   }
 
-  if (item.type === 'Reference') {
-    const path = item.path
+  if (itemType === 'Reference') {
+    const referenceItem = item as GlobalUsageReferenceNode
+    const path = referenceItem.path
 
     if (path == null) {
       visitGlobalUsageChildren(item, usages)
