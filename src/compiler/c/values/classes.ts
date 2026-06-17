@@ -38,6 +38,7 @@ type CConstructorArgMap = Map<string, AnyNode>
 type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CStringMap = Map<string, string>
 type CStringSet = Set<string>
+type ClassExpressionNode = AnyNode
 type ClassMaybeNode = AnyNode | null | undefined
 
 type ClassEmitContext = {
@@ -68,7 +69,7 @@ function emitFallbackClassFieldFlags(_field: CObjectShapeField): string {
 }
 
 function emitFallbackClassValueExpression(
-  _expression: AnyNode,
+  _expression: ClassExpressionNode,
   _context: ClassFunctionContext
 ): PreparedExpression {
   return {
@@ -78,7 +79,7 @@ function emitFallbackClassValueExpression(
 }
 
 function emitFallbackPreparedClassCallArgs(
-  _expression: AnyNode,
+  _expression: ClassExpressionNode,
   _params: CFunctionParam[],
   _context: ClassFunctionContext
 ): PreparedCallArgs {
@@ -88,22 +89,47 @@ function emitFallbackPreparedClassCallArgs(
   }
 }
 
-const fallbackClassLoweringDependencies: ClassLoweringDependencies = {
-  emitCFieldFlags: emitFallbackClassFieldFlags,
-  emitCValueExpression: emitFallbackClassValueExpression,
-  emitPreparedCallArgs: emitFallbackPreparedClassCallArgs
-}
-
-function classDeps(context: ClassFunctionContext): ClassLoweringDependencies {
+function emitClassFieldFlags(context: ClassFunctionContext, field: CObjectShapeField): string {
   const deps = context.classLoweringDependencies
 
   if (deps != null) {
-    return deps
+    return deps.emitCFieldFlags(field)
   }
 
   context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'class lowering dependencies are not configured'))
 
-  return fallbackClassLoweringDependencies
+  return emitFallbackClassFieldFlags(field)
+}
+
+function emitClassValueExpression(
+  context: ClassFunctionContext,
+  expression: ClassExpressionNode
+): PreparedExpression {
+  const deps = context.classLoweringDependencies
+
+  if (deps != null) {
+    return deps.emitCValueExpression(expression, context)
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'class lowering dependencies are not configured'))
+
+  return emitFallbackClassValueExpression(expression, context)
+}
+
+function emitPreparedClassCallArgs(
+  context: ClassFunctionContext,
+  expression: ClassExpressionNode,
+  params: CFunctionParam[]
+): PreparedCallArgs {
+  const deps = context.classLoweringDependencies
+
+  if (deps != null) {
+    return deps.emitPreparedCallArgs(expression, params, context)
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'class lowering dependencies are not configured'))
+
+  return emitFallbackPreparedClassCallArgs(expression, params, context)
 }
 
 function createClassInfoMap(): CClassInfoMap {
@@ -488,7 +514,7 @@ function emitCClassObjectInitLines(
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
   for (const field of info.fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${classDeps(context).emitCFieldFlags(field)} },`)
+    lines.push(`  { ${cStringLiteral(field.name)}, ${emitClassFieldFlags(context, field)} },`)
   }
 
   lines.push('};')
@@ -512,7 +538,7 @@ function emitCClassObjectInitLines(
     }
 
     const valueExpression = substituteClassConstructorParams(assignment.value, constructorArgs)
-    const value = classDeps(context).emitCValueExpression(valueExpression, context)
+    const value = emitClassValueExpression(context, valueExpression)
     pushAllLines(lines, value.lines)
     lines.push(emitStatusCheck(`ccjs_object_init_known(${target}, ${fieldIndex}, ${value.expression})`, context))
   }
@@ -786,7 +812,7 @@ function emitKnownPreparedClassMethodCallExpression(
     )
   }
 
-  const prepared = classDeps(context).emitPreparedCallArgs(expression, method.params, context)
+  const prepared = emitPreparedClassCallArgs(context, expression, method.params)
   const callExpression = emitClassMethodCallExpression(call, method, prepared)
 
   if (isManagedRuntimeReturnType(method.returnType)) {

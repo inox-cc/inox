@@ -90,7 +90,7 @@ type RuntimeForOfMap = {
 }
 
 function emitFallbackCollectionValueExpression(
-  _expression: AnyNode,
+  _expression: CollectionNode,
   _context: CollectionFunctionContext
 ): PreparedExpression {
   return {
@@ -100,13 +100,13 @@ function emitFallbackCollectionValueExpression(
 }
 
 function inferFallbackCollectionExpressionType(
-  _expression: AnyNode,
+  _expression: CollectionNode,
   _context: CollectionFunctionContext
 ): string {
   return 'unknown'
 }
 
-function isFallbackCollectionAccessExpression(_expression: AnyNode): boolean {
+function isFallbackCollectionAccessExpression(_expression: CollectionNode): boolean {
   return false
 }
 
@@ -118,27 +118,17 @@ function reportFallbackCollectionHashability(
 ): void {}
 
 function resolveFallbackCollectionObjectIndex(
-  _expression: AnyNode,
+  _expression: CollectionNode,
   _context: CollectionFunctionContext
 ): CObjectIndexFieldInfo | null {
   return null
 }
 
 function resolveFallbackCollectionObjectMember(
-  _expression: AnyNode,
+  _expression: CollectionNode,
   _context: CollectionFunctionContext
 ): CObjectFieldInfo | null {
   return null
-}
-
-const fallbackCollectionLoweringDependencies: CollectionLoweringDependencies = {
-  emitCValueExpression: emitFallbackCollectionValueExpression,
-  inferExpressionType: inferFallbackCollectionExpressionType,
-  isIndexAccessExpression: isFallbackCollectionAccessExpression,
-  isMemberAccessExpression: isFallbackCollectionAccessExpression,
-  reportCCollectionHashability: reportFallbackCollectionHashability,
-  resolveKnownObjectIndex: resolveFallbackCollectionObjectIndex,
-  resolveKnownObjectMember: resolveFallbackCollectionObjectMember
 }
 
 const mapMethodDescriptors = {
@@ -161,16 +151,103 @@ const collectionSizeDescriptors = {
   set: { callName: 'ccjs_set_size', tempPrefix: 'ccjs_set_size' }
 } as const
 
-function collectionDeps(context: CollectionFunctionContext): CollectionLoweringDependencies {
+function emitCollectionValueExpression(
+  expression: CollectionNode,
+  context: CollectionFunctionContext
+): PreparedExpression {
   const deps = context.collectionLoweringDependencies
 
   if (deps != null) {
-    return deps
+    return deps.emitCValueExpression(expression, context)
   }
 
   context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
 
-  return fallbackCollectionLoweringDependencies
+  return emitFallbackCollectionValueExpression(expression, context)
+}
+
+function inferCollectionExpressionType(expression: CollectionNode, context: CollectionFunctionContext): string {
+  const deps = context.collectionLoweringDependencies
+
+  if (deps != null) {
+    return deps.inferExpressionType(expression, context)
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+
+  return inferFallbackCollectionExpressionType(expression, context)
+}
+
+function isCollectionIndexAccessExpression(expression: CollectionNode, context: CollectionFunctionContext): boolean {
+  const deps = context.collectionLoweringDependencies
+
+  if (deps != null) {
+    return deps.isIndexAccessExpression(expression)
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+
+  return isFallbackCollectionAccessExpression(expression)
+}
+
+function isCollectionMemberAccessExpression(expression: CollectionNode, context: CollectionFunctionContext): boolean {
+  const deps = context.collectionLoweringDependencies
+
+  if (deps != null) {
+    return deps.isMemberAccessExpression(expression)
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+
+  return isFallbackCollectionAccessExpression(expression)
+}
+
+function reportCollectionHashability(
+  valueType: string,
+  subject: string,
+  loc: SourceLocation | null | undefined,
+  context: CollectionFunctionContext
+): void {
+  const deps = context.collectionLoweringDependencies
+
+  if (deps != null) {
+    deps.reportCCollectionHashability(valueType, subject, loc, context)
+    return
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+
+  reportFallbackCollectionHashability(valueType, subject, loc, context)
+}
+
+function resolveKnownCollectionObjectIndex(
+  expression: CollectionNode,
+  context: CollectionFunctionContext
+): CObjectIndexFieldInfo | null {
+  const deps = context.collectionLoweringDependencies
+
+  if (deps != null) {
+    return deps.resolveKnownObjectIndex(expression, context)
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+
+  return resolveFallbackCollectionObjectIndex(expression, context)
+}
+
+function resolveKnownCollectionObjectMember(
+  expression: CollectionNode,
+  context: CollectionFunctionContext
+): CObjectFieldInfo | null {
+  const deps = context.collectionLoweringDependencies
+
+  if (deps != null) {
+    return deps.resolveKnownObjectMember(expression, context)
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+
+  return resolveFallbackCollectionObjectMember(expression, context)
 }
 
 function pushAllLines(target: string[], source: string[]): void {
@@ -253,7 +330,7 @@ export function emitPreparedCollectionReceiver(
   }
 
   if (expression.type === 'CallExpression') {
-    const valueType = collectionDeps(context).inferExpressionType(expression, context)
+    const valueType = inferCollectionExpressionType(expression, context)
 
     if (valueType !== 'map' && valueType !== 'set') {
       return null
@@ -269,7 +346,7 @@ export function emitPreparedCollectionReceiver(
       }
     }
 
-    const value = collectionDeps(context).emitCValueExpression(expression, context)
+    const value = emitCollectionValueExpression(expression, context)
 
     return {
       type: valueType,
@@ -278,14 +355,17 @@ export function emitPreparedCollectionReceiver(
     }
   }
 
-  if (collectionDeps(context).isMemberAccessExpression(expression) || collectionDeps(context).isIndexAccessExpression(expression)) {
-    const valueType = collectionDeps(context).inferExpressionType(expression, context)
+  if (
+    isCollectionMemberAccessExpression(expression, context) ||
+    isCollectionIndexAccessExpression(expression, context)
+  ) {
+    const valueType = inferCollectionExpressionType(expression, context)
 
     if (valueType !== 'map' && valueType !== 'set') {
       return null
     }
 
-    const value = collectionDeps(context).emitCValueExpression(expression, context)
+    const value = emitCollectionValueExpression(expression, context)
 
     return {
       type: valueType,
@@ -351,7 +431,7 @@ export function emitPreparedCollectionConstructorValueExpression(
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
 
   if (collectionConstructor === 'Map') {
-    collectionDeps(context).reportCCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
+    reportCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
     lines.push(emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${temp})`, context))
     pushAllLines(lines, emitMapConstructorValueEntries(temp, expression.args[0], context, expression.loc))
 
@@ -361,7 +441,7 @@ export function emitPreparedCollectionConstructorValueExpression(
     }
   }
 
-  collectionDeps(context).reportCCollectionHashability(expression.setElementType, 'Set values', expression.loc, context)
+  reportCollectionHashability(expression.setElementType, 'Set values', expression.loc, context)
   lines.push(emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${temp})`, context))
   pushAllLines(lines, emitSetConstructorValueElements(temp, expression.args[0], context, expression.loc))
 
@@ -406,14 +486,13 @@ function emitMapConstructorValueEntries(
       continue
     }
 
-    const deps = collectionDeps(context)
     const keyNode = entry.elements[0]
     const valueNode = entry.elements[1]
-    const key = deps.emitCValueExpression(keyNode, context)
-    const value = deps.emitCValueExpression(valueNode, context)
+    const key = emitCollectionValueExpression(keyNode, context)
+    const value = emitCollectionValueExpression(valueNode, context)
 
-    deps.reportCCollectionHashability(
-      deps.inferExpressionType(keyNode, context),
+    reportCollectionHashability(
+      inferCollectionExpressionType(keyNode, context),
       'Map keys',
       nodeLocOrFallback(keyNode, nodeLocOrFallback(entry, loc)),
       context
@@ -448,14 +527,13 @@ function emitSetConstructorValueElements(
     return []
   }
 
-  const deps = collectionDeps(context)
   const lines: string[] = []
 
   for (const element of expression.elements) {
-    const value = deps.emitCValueExpression(element, context)
+    const value = emitCollectionValueExpression(element, context)
 
-    deps.reportCCollectionHashability(
-      deps.inferExpressionType(element, context),
+    reportCollectionHashability(
+      inferCollectionExpressionType(element, context),
       'Set values',
       nodeLocOrFallback(element, loc),
       context
@@ -532,14 +610,14 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
   if (descriptor.kind === 'set') {
     const keyArg = expression.args[0]
     const valueArg = expression.args[1]
-    collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(keyArg, context),
+    reportCollectionHashability(
+      inferCollectionExpressionType(keyArg, context),
       descriptor.hashSubject,
       nodeLocOrFallback(keyArg, expression.loc),
       context
     )
-    const key = collectionDeps(context).emitCValueExpression(keyArg, context)
-    const value = collectionDeps(context).emitCValueExpression(valueArg, context)
+    const key = emitCollectionValueExpression(keyArg, context)
+    const value = emitCollectionValueExpression(valueArg, context)
     const lines: string[] = []
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
@@ -553,14 +631,14 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
 
   if (descriptor.kind === 'get') {
     const keyArg = expression.args[0]
-    collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(keyArg, context),
+    reportCollectionHashability(
+      inferCollectionExpressionType(keyArg, context),
       descriptor.hashSubject,
       nodeLocOrFallback(keyArg, expression.loc),
       context
     )
-    const key = collectionDeps(context).emitCValueExpression(keyArg, context)
-    const valueType = collectionDeps(context).inferExpressionType(expression, context)
+    const key = emitCollectionValueExpression(keyArg, context)
+    const valueType = inferCollectionExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
     const out = nextCName(context, descriptor.tempPrefix)
     registerOwnedValue(context, out)
@@ -579,13 +657,13 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
 
   if (descriptor.kind === 'boolean') {
     const keyArg = expression.args[0]
-    collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(keyArg, context),
+    reportCollectionHashability(
+      inferCollectionExpressionType(keyArg, context),
       descriptor.hashSubject,
       nodeLocOrFallback(keyArg, expression.loc),
       context
     )
-    const key = collectionDeps(context).emitCValueExpression(keyArg, context)
+    const key = emitCollectionValueExpression(keyArg, context)
     const out = nextCName(context, descriptor.tempPrefix)
     const lines: string[] = []
     pushAllLines(lines, key.lines)
@@ -611,14 +689,14 @@ export function emitPreparedMapIndexGetExpression(
   const mapIndex = emitPreparedMapIndexReceiver(expression, context)
 
   if (mapIndex != null) {
-    collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(mapIndex.key, context),
+    reportCollectionHashability(
+      inferCollectionExpressionType(mapIndex.key, context),
       'Map keys',
       nodeLocOrFallback(mapIndex.key, expression.loc),
       context
     )
-    const key = collectionDeps(context).emitCValueExpression(mapIndex.key, context)
-    const valueType = collectionDeps(context).inferExpressionType(expression, context)
+    const key = emitCollectionValueExpression(mapIndex.key, context)
+    const valueType = inferCollectionExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
     const out = nextCName(context, 'ccjs_map_value')
     registerOwnedValue(context, out)
@@ -650,14 +728,14 @@ export function emitPreparedMapIndexAssignment(
   const mapIndex = emitPreparedMapIndexReceiver(expression.target, context)
 
   if (mapIndex != null) {
-    collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(mapIndex.key, context),
+    reportCollectionHashability(
+      inferCollectionExpressionType(mapIndex.key, context),
       'Map keys',
       nodeLocOrFallback(mapIndex.key, expression.target.loc),
       context
     )
-    const key = collectionDeps(context).emitCValueExpression(mapIndex.key, context)
-    const value = collectionDeps(context).emitCValueExpression(expression.value, context)
+    const key = emitCollectionValueExpression(mapIndex.key, context)
+    const value = emitCollectionValueExpression(expression.value, context)
     const lines: string[] = []
     pushAllLines(lines, mapIndex.receiver.lines)
     pushAllLines(lines, key.lines)
@@ -717,13 +795,13 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
 
   if (descriptor.kind === 'add') {
     const valueArg = expression.args[0]
-    collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(valueArg, context),
+    reportCollectionHashability(
+      inferCollectionExpressionType(valueArg, context),
       descriptor.hashSubject,
       nodeLocOrFallback(valueArg, expression.loc),
       context
     )
-    const value = collectionDeps(context).emitCValueExpression(valueArg, context)
+    const value = emitCollectionValueExpression(valueArg, context)
     const lines: string[] = []
     pushAllLines(lines, value.lines)
     lines.push(emitStatusCheck(`${descriptor.callName}(${name}, ${value.expression})`, context))
@@ -736,13 +814,13 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
 
   if (descriptor.kind === 'boolean') {
     const valueArg = expression.args[0]
-    collectionDeps(context).reportCCollectionHashability(
-      collectionDeps(context).inferExpressionType(valueArg, context),
+    reportCollectionHashability(
+      inferCollectionExpressionType(valueArg, context),
       descriptor.hashSubject,
       nodeLocOrFallback(valueArg, expression.loc),
       context
     )
-    const value = collectionDeps(context).emitCValueExpression(valueArg, context)
+    const value = emitCollectionValueExpression(valueArg, context)
     const out = nextCName(context, descriptor.tempPrefix)
     const lines: string[] = []
     pushAllLines(lines, value.lines)
@@ -826,7 +904,7 @@ export function resolveRuntimeSetElementType(expression: AnyNode, context: Colle
   }
 
   if (expression.type === 'MemberExpression') {
-    const member = collectionDeps(context).resolveKnownObjectMember(expression, context)
+    const member = resolveKnownCollectionObjectMember(expression, context)
 
     if (member != null && member.valueType === 'set') {
       return stringOrUnknown(member.setElementType)
@@ -836,7 +914,7 @@ export function resolveRuntimeSetElementType(expression: AnyNode, context: Colle
   }
 
   if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    const field = collectionDeps(context).resolveKnownObjectIndex(expression, context)
+    const field = resolveKnownCollectionObjectIndex(expression, context)
 
     if (field != null && field.valueType === 'set') {
       return stringOrUnknown(field.setElementType)
@@ -889,7 +967,7 @@ export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFu
   }
 
   if (expression.type === 'MemberExpression') {
-    const member = collectionDeps(context).resolveKnownObjectMember(expression, context)
+    const member = resolveKnownCollectionObjectMember(expression, context)
 
     if (member != null && member.valueType === 'map') {
       return {
@@ -902,7 +980,7 @@ export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFu
   }
 
   if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    const field = collectionDeps(context).resolveKnownObjectIndex(expression, context)
+    const field = resolveKnownCollectionObjectIndex(expression, context)
 
     if (field != null && field.valueType === 'map') {
       return {
