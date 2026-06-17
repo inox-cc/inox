@@ -996,7 +996,9 @@ class Checker {
           this.checkAssignableType(
             this.resolveExpressionArrayElementType(statement.init),
             declared.arrayElementType,
-            statement.loc
+            statement.loc,
+            false,
+            false
           )
         }
 
@@ -1004,11 +1006,11 @@ class Checker {
           const actual = this.resolveExpressionMapType(statement.init)
 
           if (declared.mapKeyType != null) {
-            this.checkAssignableType(actual?.key, declared.mapKeyType, statement.loc)
+            this.checkAssignableType(actual?.key, declared.mapKeyType, statement.loc, false, false)
           }
 
           if (declared.mapValueType != null) {
-            this.checkAssignableType(actual?.value, declared.mapValueType, statement.loc)
+            this.checkAssignableType(actual?.value, declared.mapValueType, statement.loc, false, false)
           }
         }
 
@@ -1016,7 +1018,9 @@ class Checker {
           this.checkAssignableType(
             this.resolveExpressionSetElementType(statement.init),
             declared.setElementType,
-            statement.loc
+            statement.loc,
+            false,
+            false
           )
         }
 
@@ -1024,7 +1028,9 @@ class Checker {
           this.checkAssignableType(
             this.resolveExpressionPromiseValueType(statement.init),
             declared.promiseValueType,
-            statement.loc
+            statement.loc,
+            false,
+            false
           )
         }
       }
@@ -1053,7 +1059,9 @@ class Checker {
           this.checkAssignableType(
             this.resolveExpressionPromiseValueType(statement.argument),
             this.currentReturnPromiseValueType,
-            statement.loc
+            statement.loc,
+            false,
+            false
           )
         } else {
           this.checkAssignableType(
@@ -1080,7 +1088,9 @@ class Checker {
         this.checkAssignableType(
           this.resolveExpressionPromiseValueType(statement.argument),
           this.currentReturnPromiseValueType,
-          statement.loc
+          statement.loc,
+          false,
+          false
         )
       }
     }
@@ -1312,7 +1322,7 @@ class Checker {
     }
 
     if (expression.type === 'ArrowFunctionExpression') {
-      this.checkArrowFunctionExpression(expression)
+      this.checkArrowFunctionExpression(expression, null)
       return 'function'
     }
 
@@ -1400,7 +1410,9 @@ class Checker {
         this.checkAssignableType(
           this.resolveExpressionPromiseValueType(expression.value),
           symbol.promiseValueType,
-          expression.value.loc
+          expression.value.loc,
+          false,
+          false
         )
       }
 
@@ -1415,7 +1427,7 @@ class Checker {
   checkUpdateExpression(expression: AnyNode): ValueType {
     const targetType = this.checkExpression(expression.argument)
 
-    this.checkAssignableType(targetType, 'number', expression.argument.loc)
+    this.checkAssignableType(targetType, 'number', expression.argument.loc, false, false)
 
     if (expression.argument.type === 'Reference') {
       const symbol = this.resolveReference(expression.argument)
@@ -1687,7 +1699,9 @@ class Checker {
       this.checkAssignableType(
         this.resolveExpressionArrayElementType(expression.value),
         fieldType.arrayElementType,
-        expression.value.loc
+        expression.value.loc,
+        false,
+        false
       )
     }
 
@@ -1695,11 +1709,11 @@ class Checker {
       const actual = this.resolveExpressionMapType(expression.value)
 
       if (fieldType.mapKeyType != null) {
-        this.checkAssignableType(actual?.key, fieldType.mapKeyType, expression.value.loc)
+        this.checkAssignableType(actual?.key, fieldType.mapKeyType, expression.value.loc, false, false)
       }
 
       if (fieldType.mapValueType != null) {
-        this.checkAssignableType(actual?.value, fieldType.mapValueType, expression.value.loc)
+        this.checkAssignableType(actual?.value, fieldType.mapValueType, expression.value.loc, false, false)
       }
     }
 
@@ -1707,7 +1721,9 @@ class Checker {
       this.checkAssignableType(
         this.resolveExpressionSetElementType(expression.value),
         fieldType.setElementType,
-        expression.value.loc
+        expression.value.loc,
+        false,
+        false
       )
     }
 
@@ -1715,7 +1731,9 @@ class Checker {
       this.checkAssignableType(
         this.resolveExpressionPromiseValueType(expression.value),
         fieldType.promiseValueType,
-        expression.value.loc
+        expression.value.loc,
+        false,
+        false
       )
     }
 
@@ -1759,13 +1777,13 @@ class Checker {
 
     if (expression.index.type !== 'StringLiteral') {
       if (objectType === 'bytes') {
-        this.checkAssignableType(indexType, 'number', expression.index.loc)
+        this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
         expression.valueType = 'number'
         return 'number'
       }
 
       if (objectType === 'array') {
-        this.checkAssignableType(indexType, 'number', expression.index.loc)
+        this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
         const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
         const declaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
         expression.valueType = valueType
@@ -1818,7 +1836,7 @@ class Checker {
 
     if (expression.index.type !== 'StringLiteral') {
       if (objectType === 'array') {
-        this.checkAssignableType(indexType, 'number', expression.index.loc)
+        this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
         const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
         const declaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
 
@@ -1909,8 +1927,8 @@ class Checker {
     }
 
     if (objectType === 'bytes' && expression.target.index.type !== 'StringLiteral') {
-      this.checkAssignableType(indexType, 'number', expression.target.index.loc)
-      this.checkAssignableType(valueType, 'number', expression.value.loc)
+      this.checkAssignableType(indexType, 'number', expression.target.index.loc, false, false)
+      this.checkAssignableType(valueType, 'number', expression.value.loc, false, false)
       expression.target.valueType = 'number'
       return valueType
     }
@@ -1953,7 +1971,9 @@ class Checker {
       this.checkAssignableType(
         this.resolveExpressionArrayElementType(expression.value),
         fieldType.arrayElementType,
-        expression.value.loc
+        expression.value.loc,
+        false,
+        false
       )
     }
 
@@ -1961,11 +1981,11 @@ class Checker {
       const actual = this.resolveExpressionMapType(expression.value)
 
       if (fieldType.mapKeyType != null) {
-        this.checkAssignableType(actual?.key, fieldType.mapKeyType, expression.value.loc)
+        this.checkAssignableType(actual?.key, fieldType.mapKeyType, expression.value.loc, false, false)
       }
 
       if (fieldType.mapValueType != null) {
-        this.checkAssignableType(actual?.value, fieldType.mapValueType, expression.value.loc)
+        this.checkAssignableType(actual?.value, fieldType.mapValueType, expression.value.loc, false, false)
       }
     }
 
@@ -1973,7 +1993,9 @@ class Checker {
       this.checkAssignableType(
         this.resolveExpressionSetElementType(expression.value),
         fieldType.setElementType,
-        expression.value.loc
+        expression.value.loc,
+        false,
+        false
       )
     }
 
@@ -1981,7 +2003,9 @@ class Checker {
       this.checkAssignableType(
         this.resolveExpressionPromiseValueType(expression.value),
         fieldType.promiseValueType,
-        expression.value.loc
+        expression.value.loc,
+        false,
+        false
       )
     }
 
@@ -2121,7 +2145,7 @@ class Checker {
       return fetchType
     }
 
-    const jsonType = this.checkJsonCall(expression)
+    const jsonType = this.checkJsonCall(expression, null)
 
     if (jsonType != null) {
       return jsonType
@@ -2366,7 +2390,7 @@ class Checker {
         }
 
         if (expression.args[0] != null) {
-          this.checkAssignableType(this.checkExpression(expression.args[0]), 'number', expression.args[0].loc)
+          this.checkAssignableType(this.checkExpression(expression.args[0]), 'number', expression.args[0].loc, false, false)
         }
 
         expression.binaryRuntimeMethod = staticMethod
@@ -2394,7 +2418,7 @@ class Checker {
       }
 
       for (const arg of expression.args) {
-        this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc)
+        this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, false)
       }
 
       expression.binaryRuntimeMethod = instanceMethod
@@ -2972,7 +2996,7 @@ class Checker {
         return 'bytes'
       }
 
-      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc)
+      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, false)
       return 'bytes'
     }
 
@@ -2998,7 +3022,7 @@ class Checker {
         const argType = argTypes[index]
 
         if (index > 0) {
-          this.checkAssignableType(argType, 'number', expression.args[index].loc)
+          this.checkAssignableType(argType, 'number', expression.args[index].loc, false, false)
         }
       }
 
@@ -3018,7 +3042,7 @@ class Checker {
       for (let index = 0; index < argTypes.length; index++) {
         const argType = argTypes[index]
 
-        this.checkAssignableType(argType, 'number', expression.args[index].loc)
+        this.checkAssignableType(argType, 'number', expression.args[index].loc, false, false)
       }
 
       return 'number'
@@ -3172,7 +3196,7 @@ class Checker {
       }
 
       if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc)
+        this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc, false, false)
       }
 
       this.checkChildProcessSyncOptions(expression.args[1], expression.loc, true)
@@ -3192,7 +3216,7 @@ class Checker {
       }
 
       if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc)
+        this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc, false, false)
       }
 
       const second = expression.args[1]
@@ -3219,7 +3243,7 @@ class Checker {
         )
       } else if (args != null) {
         for (const element of args.elements) {
-          this.checkAssignableType(this.checkExpression(element), 'string', element.loc)
+          this.checkAssignableType(this.checkExpression(element), 'string', element.loc, false, false)
         }
       }
 
@@ -3239,7 +3263,7 @@ class Checker {
     }
 
     if (expression.args[0] != null) {
-      this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc)
+      this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc, false, false)
     }
 
     const second = expression.args[1]
@@ -3266,7 +3290,7 @@ class Checker {
       )
     } else if (args != null && args.type === 'ArrayLiteral') {
       for (const element of args.elements) {
-        this.checkAssignableType(this.checkExpression(element), 'string', element.loc)
+        this.checkAssignableType(this.checkExpression(element), 'string', element.loc, false, false)
       }
     }
 
@@ -3390,7 +3414,7 @@ class Checker {
       }
 
       if (property.key === 'cwd') {
-        this.checkAssignableType(this.checkExpression(property.value), 'string', property.value.loc)
+        this.checkAssignableType(this.checkExpression(property.value), 'string', property.value.loc, false, false)
         continue
       }
 
@@ -3409,7 +3433,7 @@ class Checker {
       }
 
       if (property.key === 'timeout') {
-        this.checkAssignableType(this.checkExpression(property.value), 'number', property.value.loc)
+        this.checkAssignableType(this.checkExpression(property.value), 'number', property.value.loc, false, false)
         continue
       }
 
@@ -3425,7 +3449,7 @@ class Checker {
         }
 
         for (const envProperty of property.value.properties) {
-          this.checkAssignableType(this.checkExpression(envProperty.value), 'string', envProperty.value.loc)
+          this.checkAssignableType(this.checkExpression(envProperty.value), 'string', envProperty.value.loc, false, false)
         }
         continue
       }
@@ -3640,7 +3664,7 @@ class Checker {
     }
 
     if (expression.args[0] != null) {
-      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc)
+      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, false)
     }
 
     expression.valueType = 'void'
@@ -3818,7 +3842,7 @@ class Checker {
     }
 
     const valueType = this.checkExpression(expression.value)
-    this.checkAssignableType(valueType, 'number', expression.value.loc)
+    this.checkAssignableType(valueType, 'number', expression.value.loc, false, false)
     expression.processRuntimeProperty = 'exitCode'
     expression.valueType = 'number'
 
@@ -3849,7 +3873,7 @@ class Checker {
     }
 
     const indexType = this.checkExpression(expression.index)
-    this.checkAssignableType(indexType, 'number', expression.index.loc)
+    this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
     expression.processRuntimeProperty = 'argv'
     expression.valueType = 'string'
 
@@ -4582,7 +4606,7 @@ class Checker {
     }
 
     for (const arg of expression.args) {
-      this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc)
+      this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, false)
     }
 
     return 'number'
@@ -6088,7 +6112,7 @@ class Checker {
     if (expression.type !== 'ArrowFunctionExpression') {
       const callbackType = this.checkExpression(expression)
 
-      this.checkAssignableType(callbackType, 'function', expression.loc)
+      this.checkAssignableType(callbackType, 'function', expression.loc, false, false)
 
       return 'unknown'
     }
@@ -6131,7 +6155,7 @@ class Checker {
         }
 
         if (param.valueType !== 'unknown') {
-          this.checkAssignableType(expected, param.valueType, param.loc)
+          this.checkAssignableType(expected, param.valueType, param.loc, false, false)
         }
 
         param.declaredType = param.valueType
@@ -6381,7 +6405,7 @@ class Checker {
       }
 
       if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), 'timer', expression.args[0].loc)
+        this.checkAssignableType(this.checkExpression(expression.args[0]), 'timer', expression.args[0].loc, false, false)
       }
 
       expression.valueType = 'void'
@@ -6415,7 +6439,7 @@ class Checker {
     this.checkTimerCallbackArg(expression, 0)
 
     if (expression.args[1] != null) {
-      this.checkAssignableType(this.checkExpression(expression.args[1]), 'number', expression.args[1].loc)
+      this.checkAssignableType(this.checkExpression(expression.args[1]), 'number', expression.args[1].loc, false, false)
     }
 
     expression.valueType = 'timer'
@@ -6492,7 +6516,7 @@ class Checker {
       return
     }
 
-    this.checkAssignableType(this.checkExpression(arg), 'function', arg.loc)
+    this.checkAssignableType(this.checkExpression(arg), 'function', arg.loc, false, false)
 
     const symbol = this.getCallableSymbol(arg)
 
@@ -6764,7 +6788,7 @@ class Checker {
     if (expression.type !== 'ArrowFunctionExpression') {
       const callbackType = this.checkExpression(expression)
 
-      this.checkAssignableType(callbackType, 'function', expression.loc)
+      this.checkAssignableType(callbackType, 'function', expression.loc, false, false)
 
       return 'unknown'
     }
@@ -6806,7 +6830,7 @@ class Checker {
         }
 
         if (param.valueType !== 'unknown') {
-          this.checkAssignableType(expected, param.valueType, param.loc)
+          this.checkAssignableType(expected, param.valueType, param.loc, false, false)
         }
 
         param.declaredType = param.valueType
@@ -7088,7 +7112,7 @@ class Checker {
     for (let index = 0; index < argTypes.length; index++) {
       const argType = argTypes[index]
 
-      this.checkAssignableType(argType, 'number', expression.args[index].loc)
+      this.checkAssignableType(argType, 'number', expression.args[index].loc, false, false)
     }
 
     expression.valueType = 'string'
@@ -7256,7 +7280,7 @@ class Checker {
         const elementType = this.resolveExpressionArrayElementType(expression.args[0])
 
         if (elementType != null) {
-          this.checkAssignableType(elementType, 'number', expression.args[0].loc)
+          this.checkAssignableType(elementType, 'number', expression.args[0].loc, false, false)
         }
       }
 
@@ -7408,7 +7432,7 @@ class Checker {
             for (const field of shape.fields) {
               const fieldType = this.resolveFieldDeclaredType(field)
 
-              this.checkAssignableType(fieldType.valueType, 'string', expression.args[0].loc, fieldType.nullable)
+              this.checkAssignableType(fieldType.valueType, 'string', expression.args[0].loc, fieldType.nullable, false)
             }
           }
         }
@@ -7484,7 +7508,7 @@ class Checker {
     }
 
     if (executor.type !== 'ArrowFunctionExpression') {
-      this.checkAssignableType(this.checkExpression(executor), 'function', executor.loc)
+      this.checkAssignableType(this.checkExpression(executor), 'function', executor.loc, false, false)
       expression.valueType = 'promise'
       expression.promiseValueType = promiseValueType
       return 'promise'
@@ -7867,7 +7891,7 @@ class Checker {
         }
 
         if (expected != null && param.valueType !== 'unknown') {
-          this.checkAssignableType(expected.valueType, paramInfo.valueType, param.loc, expected.nullable === true)
+          this.checkAssignableType(expected.valueType, paramInfo.valueType, param.loc, expected.nullable === true, false)
         }
 
         param.declaredType = param.valueType
@@ -7937,7 +7961,9 @@ class Checker {
               this.checkAssignableType(
                 this.resolveExpressionPromiseValueType(expression.body),
                 functionType.returnPromiseValueType,
-                expression.body.loc
+                expression.body.loc,
+                false,
+                false
               )
             }
           }
@@ -8212,7 +8238,9 @@ class Checker {
         this.checkAssignableType(
           this.resolveExpressionArrayElementType(property.value),
           fieldType.arrayElementType,
-          property.loc
+          property.loc,
+          false,
+          false
         )
       }
 
@@ -8220,11 +8248,11 @@ class Checker {
         const actual = this.resolveExpressionMapType(property.value)
 
         if (fieldType.mapKeyType != null) {
-          this.checkAssignableType(actual?.key, fieldType.mapKeyType, property.loc)
+          this.checkAssignableType(actual?.key, fieldType.mapKeyType, property.loc, false, false)
         }
 
         if (fieldType.mapValueType != null) {
-          this.checkAssignableType(actual?.value, fieldType.mapValueType, property.loc)
+          this.checkAssignableType(actual?.value, fieldType.mapValueType, property.loc, false, false)
         }
       }
 
@@ -8232,7 +8260,9 @@ class Checker {
         this.checkAssignableType(
           this.resolveExpressionSetElementType(property.value),
           fieldType.setElementType,
-          property.loc
+          property.loc,
+          false,
+          false
         )
       }
 
@@ -8240,7 +8270,9 @@ class Checker {
         this.checkAssignableType(
           this.resolveExpressionPromiseValueType(property.value),
           fieldType.promiseValueType,
-          property.loc
+          property.loc,
+          false,
+          false
         )
       }
     }
@@ -8525,7 +8557,7 @@ class Checker {
     statement.shape = shape
 
     if (declared != null) {
-      this.checkAssignableType(elementType, declared.valueType, statement.nameLoc, declared.nullable)
+      this.checkAssignableType(elementType, declared.valueType, statement.nameLoc, declared.nullable, false)
     }
 
     this.withScope(() => {
