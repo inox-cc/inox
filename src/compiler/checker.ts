@@ -32,13 +32,17 @@ import { timerCallbackFunctionType, timerClearMethodName, timerRuntimeMethodName
 import { memberExpressionPath } from './member-paths.ts'
 import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
 import {
-  arrayElementTypeNameFromTypeName,
+  arrayElementTypeNameFromKnownTypeName,
+  isArrayTypeName,
   isBuiltinValueType,
   isBytesTypeName,
+  isNullableTypeName,
+  isPromiseTypeName,
+  isSetTypeName,
   mapTypeNamesFromTypeName,
-  nullableTypeNameFromTypeName,
-  promiseValueTypeNameFromTypeName,
-  setElementTypeNameFromTypeName
+  nullableTypeNameFromKnownTypeName,
+  promiseValueTypeNameFromKnownTypeName,
+  setElementTypeNameFromKnownTypeName
 } from './type-names.ts'
 import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
 import { unsupportedRuntimeBuiltinImportMessage } from './stdlib/descriptors/node-builtins.ts'
@@ -577,10 +581,9 @@ class Checker {
     }
 
     let actualName = name
-    const nullableName = nullableTypeNameFromTypeName(name)
 
-    if (nullableName != null) {
-      actualName = nullableName
+    if (isNullableTypeName(name)) {
+      actualName = nullableTypeNameFromKnownTypeName(name)
     }
 
     if (this.classNames.has(actualName)) {
@@ -9417,21 +9420,21 @@ class Checker {
       return []
     }
 
-    const nullableTypeName = nullableTypeNameFromTypeName(name)
+    if (isNullableTypeName(name)) {
+      const nullableTypeName = nullableTypeNameFromKnownTypeName(name)
 
-    if (nullableTypeName != null) {
       return this.ownershipTargetsFromTypeName(nullableTypeName)
     }
 
-    const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
+    if (isArrayTypeName(name)) {
+      const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
 
-    if (arrayElementTypeName != null) {
       return this.ownershipTargetsFromTypeName(arrayElementTypeName)
     }
 
-    const setElementTypeName = setElementTypeNameFromTypeName(name)
+    if (isSetTypeName(name)) {
+      const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
 
-    if (setElementTypeName != null) {
       return this.ownershipTargetsFromTypeName(setElementTypeName)
     }
 
@@ -9471,9 +9474,8 @@ class Checker {
       }
     }
 
-    const nullableTypeName = nullableTypeNameFromTypeName(name)
-
-    if (nullableTypeName != null) {
+    if (isNullableTypeName(name)) {
+      const nullableTypeName = nullableTypeNameFromKnownTypeName(name)
       const inner = this.resolveDeclaredType(nullableTypeName, loc)
 
       return {
@@ -9490,25 +9492,32 @@ class Checker {
       }
     }
 
-    const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
-
-    if (name === 'array' || arrayElementTypeName != null) {
-      let arrayElementType: ValueType = 'unknown'
-      let arrayElementDeclaredType: string | null = null
-
-      if (arrayElementTypeName != null) {
-        const elementInfo = this.resolveDeclaredType(arrayElementTypeName, loc)
-        arrayElementType = elementInfo.valueType
-        arrayElementDeclaredType = arrayElementTypeName
+    if (name === 'array') {
+      return {
+        valueType: 'array',
+        nullable: false,
+        functionType: null,
+        shape: null,
+        arrayElementType: 'unknown',
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null
       }
+    }
+
+    if (isArrayTypeName(name)) {
+      const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
+      const elementInfo = this.resolveDeclaredType(arrayElementTypeName, loc)
 
       return {
         valueType: 'array',
         nullable: false,
         functionType: null,
         shape: null,
-        arrayElementType,
-        arrayElementDeclaredType,
+        arrayElementType: elementInfo.valueType,
+        arrayElementDeclaredType: arrayElementTypeName,
         mapKeyType: null,
         mapValueType: null,
         promiseValueType: null,
@@ -9543,15 +9552,24 @@ class Checker {
       }
     }
 
-    const setElementTypeName = setElementTypeNameFromTypeName(name)
-
-    if (name === 'set' || setElementTypeName != null) {
-      let setElementType: ValueType = 'unknown'
-
-      if (setElementTypeName != null) {
-        const elementInfo = this.resolveDeclaredType(setElementTypeName, loc)
-        setElementType = elementInfo.valueType
+    if (name === 'set') {
+      return {
+        valueType: 'set',
+        nullable: false,
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: 'unknown'
       }
+    }
+
+    if (isSetTypeName(name)) {
+      const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
+      const elementInfo = this.resolveDeclaredType(setElementTypeName, loc)
 
       return {
         valueType: 'set',
@@ -9563,19 +9581,28 @@ class Checker {
         mapKeyType: null,
         mapValueType: null,
         promiseValueType: null,
-        setElementType
+        setElementType: elementInfo.valueType
       }
     }
 
-    const promiseValueTypeName = promiseValueTypeNameFromTypeName(name)
-
-    if (name === 'promise' || promiseValueTypeName != null) {
-      let promiseValueType: ValueType = 'unknown'
-
-      if (promiseValueTypeName != null) {
-        const valueInfo = this.resolveDeclaredType(promiseValueTypeName, loc)
-        promiseValueType = valueInfo.valueType
+    if (name === 'promise') {
+      return {
+        valueType: 'promise',
+        nullable: false,
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: 'unknown',
+        setElementType: null
       }
+    }
+
+    if (isPromiseTypeName(name)) {
+      const promiseValueTypeName = promiseValueTypeNameFromKnownTypeName(name)
+      const valueInfo = this.resolveDeclaredType(promiseValueTypeName, loc)
 
       return {
         valueType: 'promise',
@@ -9586,7 +9613,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
-        promiseValueType,
+        promiseValueType: valueInfo.valueType,
         setElementType: null
       }
     }
@@ -9876,10 +9903,9 @@ class Checker {
     }
 
     let targetName = declaredName
-    const nullableTypeName = nullableTypeNameFromTypeName(declaredName)
 
-    if (nullableTypeName != null) {
-      targetName = nullableTypeName
+    if (isNullableTypeName(declaredName)) {
+      targetName = nullableTypeNameFromKnownTypeName(declaredName)
     }
 
     const fieldInfo = this.resolveWeakTargetDeclaredType(targetName, field.loc)
@@ -10058,9 +10084,8 @@ class Checker {
       return this.unresolvedTypeInfo()
     }
 
-    const nullableTypeName = nullableTypeNameFromTypeName(name)
-
-    if (nullableTypeName != null) {
+    if (isNullableTypeName(name)) {
+      const nullableTypeName = nullableTypeNameFromKnownTypeName(name)
       const inner = this.resolveWeakTargetShapeTypeName(nullableTypeName, loc)
 
       return {
@@ -10077,19 +10102,22 @@ class Checker {
       }
     }
 
-    const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
-
-    if (name === 'array' || arrayElementTypeName != null) {
+    if (name === 'array') {
       const info = this.unresolvedTypeInfo()
       info.valueType = 'array'
       info.arrayElementType = 'unknown'
       info.arrayElementDeclaredType = null
 
-      if (arrayElementTypeName != null) {
-        const elementInfo = this.resolveWeakTargetShapeTypeName(arrayElementTypeName, loc)
-        info.arrayElementType = elementInfo.valueType
-        info.arrayElementDeclaredType = arrayElementTypeName
-      }
+      return info
+    }
+
+    if (isArrayTypeName(name)) {
+      const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
+      const elementInfo = this.resolveWeakTargetShapeTypeName(arrayElementTypeName, loc)
+      const info = this.unresolvedTypeInfo()
+      info.valueType = 'array'
+      info.arrayElementType = elementInfo.valueType
+      info.arrayElementDeclaredType = arrayElementTypeName
 
       return info
     }
@@ -10112,17 +10140,20 @@ class Checker {
       return info
     }
 
-    const setElementTypeName = setElementTypeNameFromTypeName(name)
-
-    if (name === 'set' || setElementTypeName != null) {
+    if (name === 'set') {
       const info = this.unresolvedTypeInfo()
       info.valueType = 'set'
       info.setElementType = 'unknown'
 
-      if (setElementTypeName != null) {
-        const elementInfo = this.resolveWeakTargetShapeTypeName(setElementTypeName, loc)
-        info.setElementType = elementInfo.valueType
-      }
+      return info
+    }
+
+    if (isSetTypeName(name)) {
+      const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
+      const elementInfo = this.resolveWeakTargetShapeTypeName(setElementTypeName, loc)
+      const info = this.unresolvedTypeInfo()
+      info.valueType = 'set'
+      info.setElementType = elementInfo.valueType
 
       return info
     }

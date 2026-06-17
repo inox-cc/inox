@@ -1,12 +1,16 @@
 import type { AnyNode, ProgramNode } from '../types.ts'
 import {
-  arrayElementTypeNameFromTypeName,
+  arrayElementTypeNameFromKnownTypeName,
+  isArrayTypeName,
   isBuiltinValueType,
   isBytesTypeName,
+  isNullableTypeName,
+  isPromiseTypeName,
+  isSetTypeName,
   mapTypeNamesFromTypeName,
-  nullableTypeNameFromTypeName,
-  promiseValueTypeNameFromTypeName,
-  setElementTypeNameFromTypeName
+  nullableTypeNameFromKnownTypeName,
+  promiseValueTypeNameFromKnownTypeName,
+  setElementTypeNameFromKnownTypeName
 } from '../type-names.ts'
 
 type LowerTypeNode = AnyNode
@@ -51,22 +55,20 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     return unresolvedType()
   }
 
-  const nullableTypeName = nullableTypeNameFromTypeName(name)
-
-  if (nullableTypeName != null) {
+  if (isNullableTypeName(name)) {
+    const nullableTypeName = nullableTypeNameFromKnownTypeName(name)
     const inner = resolveDeclaredType(nullableTypeName, context)
 
     return nullableResolvedType(inner)
   }
 
-  const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
+  if (name === 'array') {
+    return arrayResolvedType(null, null)
+  }
 
-  if (name === 'array' || arrayElementTypeName != null) {
-    let elementType: LowerResolvedType | null = null
-
-    if (arrayElementTypeName != null) {
-      elementType = resolveDeclaredType(arrayElementTypeName, context)
-    }
+  if (isArrayTypeName(name)) {
+    const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
+    const elementType = resolveDeclaredType(arrayElementTypeName, context)
 
     return arrayResolvedType(elementType, arrayElementTypeName)
   }
@@ -90,26 +92,24 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     return mapResolvedType(keyType, valueType)
   }
 
-  const setElementTypeName = setElementTypeNameFromTypeName(name)
+  if (name === 'set') {
+    return setResolvedType(null)
+  }
 
-  if (name === 'set' || setElementTypeName != null) {
-    let elementType: LowerResolvedType | null = null
-
-    if (setElementTypeName != null) {
-      elementType = resolveDeclaredType(setElementTypeName, context)
-    }
+  if (isSetTypeName(name)) {
+    const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
+    const elementType = resolveDeclaredType(setElementTypeName, context)
 
     return setResolvedType(elementType)
   }
 
-  const promiseValueTypeName = promiseValueTypeNameFromTypeName(name)
+  if (name === 'promise') {
+    return promiseResolvedType(null)
+  }
 
-  if (name === 'promise' || promiseValueTypeName != null) {
-    let valueType: LowerResolvedType | null = null
-
-    if (promiseValueTypeName != null) {
-      valueType = resolveDeclaredType(promiseValueTypeName, context)
-    }
+  if (isPromiseTypeName(name)) {
+    const promiseValueTypeName = promiseValueTypeNameFromKnownTypeName(name)
+    const valueType = resolveDeclaredType(promiseValueTypeName, context)
 
     return promiseResolvedType(valueType)
   }
@@ -290,10 +290,9 @@ function resolveFieldDeclaredType(field: LowerTypeNode, context: LowerContext): 
 
 function resolveWeakFieldDeclaredType(field: LowerTypeNode, context: LowerContext): LowerResolvedType {
   let targetName = field.valueType
-  const nullableTypeName = nullableTypeNameFromTypeName(field.valueType)
 
-  if (nullableTypeName != null) {
-    targetName = nullableTypeName
+  if (isNullableTypeName(field.valueType)) {
+    targetName = nullableTypeNameFromKnownTypeName(field.valueType)
   }
 
   const typeInfo = context.types.get(targetName)
@@ -369,22 +368,20 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
     return unresolvedType()
   }
 
-  const nullableTypeName = nullableTypeNameFromTypeName(name)
-
-  if (nullableTypeName != null) {
+  if (isNullableTypeName(name)) {
+    const nullableTypeName = nullableTypeNameFromKnownTypeName(name)
     const inner = resolveWeakTargetShapeTypeName(nullableTypeName, context)
 
     return nullableResolvedType(inner)
   }
 
-  const arrayElementTypeName = arrayElementTypeNameFromTypeName(name)
+  if (name === 'array') {
+    return arrayResolvedType(null, null)
+  }
 
-  if (name === 'array' || arrayElementTypeName != null) {
-    let elementType: LowerResolvedType | null = null
-
-    if (arrayElementTypeName != null) {
-      elementType = resolveWeakTargetShapeTypeName(arrayElementTypeName, context)
-    }
+  if (isArrayTypeName(name)) {
+    const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
+    const elementType = resolveWeakTargetShapeTypeName(arrayElementTypeName, context)
 
     return arrayResolvedType(elementType, arrayElementTypeName)
   }
@@ -408,14 +405,13 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
     return mapResolvedType(keyType, valueType)
   }
 
-  const setElementTypeName = setElementTypeNameFromTypeName(name)
+  if (name === 'set') {
+    return setResolvedType(null)
+  }
 
-  if (name === 'set' || setElementTypeName != null) {
-    let elementType: LowerResolvedType | null = null
-
-    if (setElementTypeName != null) {
-      elementType = resolveWeakTargetShapeTypeName(setElementTypeName, context)
-    }
+  if (isSetTypeName(name)) {
+    const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
+    const elementType = resolveWeakTargetShapeTypeName(setElementTypeName, context)
 
     return setResolvedType(elementType)
   }

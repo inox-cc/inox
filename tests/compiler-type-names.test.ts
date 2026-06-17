@@ -2,11 +2,19 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   arrayElementTypeNameFromTypeName,
+  arrayElementTypeNameFromKnownTypeName,
   isBuiltinValueType,
+  isArrayTypeName,
   isBytesTypeName,
+  isNullableTypeName,
+  isPromiseTypeName,
+  isSetTypeName,
   mapTypeNamesFromTypeName,
   nullableTypeNameFromTypeName,
+  nullableTypeNameFromKnownTypeName,
   promiseValueTypeNameFromTypeName,
+  promiseValueTypeNameFromKnownTypeName,
+  setElementTypeNameFromKnownTypeName,
   setElementTypeNameFromTypeName,
   splitGenericArgs,
   splitUnionArgs
@@ -39,7 +47,20 @@ test('extracts collection and promise type names', () => {
   assert.equal(promiseValueTypeNameFromTypeName('promise<object>'), 'object')
 })
 
+test('recognizes known collection and nullable type names', () => {
+  assert.equal(isNullableTypeName('nullable<string>'), true)
+  assert.equal(nullableTypeNameFromKnownTypeName('nullable<string>'), 'string')
+  assert.equal(isArrayTypeName('array<number>'), true)
+  assert.equal(arrayElementTypeNameFromKnownTypeName('array<number>'), 'number')
+  assert.equal(isSetTypeName('set<boolean>'), true)
+  assert.equal(setElementTypeNameFromKnownTypeName('set<boolean>'), 'boolean')
+  assert.equal(isPromiseTypeName('promise<object>'), true)
+  assert.equal(promiseValueTypeNameFromKnownTypeName('promise<object>'), 'object')
+})
+
 test('returns null for malformed generic type names', () => {
+  assert.equal(isArrayTypeName('array<>'), false)
+  assert.equal(isNullableTypeName('nullable<>'), false)
   assert.equal(mapTypeNamesFromTypeName('map<string>'), null)
   assert.equal(setElementTypeNameFromTypeName('set<string,number>'), null)
   assert.equal(promiseValueTypeNameFromTypeName('promise<string,number>'), null)

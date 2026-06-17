@@ -7,8 +7,24 @@ export function arrayElementTypeNameFromTypeName(name: string): string | null {
   return genericTypeInner(name, 'array')
 }
 
+export function isArrayTypeName(name: string): boolean {
+  return hasGenericTypeInner(name, 'array')
+}
+
+export function arrayElementTypeNameFromKnownTypeName(name: string): string {
+  return knownGenericTypeInner(name, 'array')
+}
+
 export function nullableTypeNameFromTypeName(name: string): string | null {
   return genericTypeInner(name, 'nullable')
+}
+
+export function isNullableTypeName(name: string): boolean {
+  return hasGenericTypeInner(name, 'nullable')
+}
+
+export function nullableTypeNameFromKnownTypeName(name: string): string {
+  return knownGenericTypeInner(name, 'nullable')
 }
 
 export function mapTypeNamesFromTypeName(name: string): MapTypeNames | null {
@@ -46,6 +62,14 @@ export function setElementTypeNameFromTypeName(name: string): string | null {
   return null
 }
 
+export function isSetTypeName(name: string): boolean {
+  return hasGenericTypeInner(name, 'set')
+}
+
+export function setElementTypeNameFromKnownTypeName(name: string): string {
+  return knownGenericTypeInner(name, 'set')
+}
+
 export function promiseValueTypeNameFromTypeName(name: string): string | null {
   const inner = genericTypeInner(name, 'promise')
 
@@ -60,6 +84,14 @@ export function promiseValueTypeNameFromTypeName(name: string): string | null {
   }
 
   return null
+}
+
+export function isPromiseTypeName(name: string): boolean {
+  return hasGenericTypeInner(name, 'promise')
+}
+
+export function promiseValueTypeNameFromKnownTypeName(name: string): string {
+  return knownGenericTypeInner(name, 'promise')
 }
 
 export function splitGenericArgs(value: string): string[] {
@@ -119,23 +151,31 @@ export function isBytesTypeName(name: string): boolean {
 }
 
 function genericTypeInner(name: string, wrapper: string): string | null {
+  if (!hasGenericTypeInner(name, wrapper)) {
+    return null
+  }
+
+  return knownGenericTypeInner(name, wrapper)
+}
+
+function hasGenericTypeInner(name: string, wrapper: string): boolean {
   const prefix = `${wrapper}<`
 
   if (!name.startsWith(prefix)) {
-    return null
+    return false
   }
 
   if (!name.endsWith('>')) {
-    return null
+    return false
   }
 
-  const inner = name.slice(prefix.length, name.length - 1)
+  return name.length - prefix.length - 1 > 0
+}
 
-  if (inner.length === 0) {
-    return null
-  }
+function knownGenericTypeInner(name: string, wrapper: string): string {
+  const prefix = `${wrapper}<`
 
-  return inner
+  return name.slice(prefix.length, name.length - 1)
 }
 
 function splitDelimitedTypeArgs(value: string, delimiter: string): string[] {
