@@ -19,6 +19,7 @@ import {
   cProcessRuntimeStringPropertyName
 } from '../stdlib/process.ts'
 import { cUnsupportedExpressionCode, isNullishCoalescingExpression, isOptionalChainExpression } from '../syntax.ts'
+import { isNullableScalarType } from '../value-types.ts'
 import { isStringPredicateMethod, isStringRuntimeMethod } from '../../stdlib/descriptors/collections.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
@@ -202,7 +203,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
   if (expression != null && stringDeps(context).isMemberAccessExpression(expression)) {
     const member = stringDeps(context).resolveKnownObjectMember(expression, context)
 
-    if (member != null && ['number', 'boolean'].includes(member.valueType)) {
+    if (member != null && isNullableScalarType(member.valueType)) {
       context.diagnostics.push(
         diagnostic(
           'CCJS_C_UNSUPPORTED_EXPR',

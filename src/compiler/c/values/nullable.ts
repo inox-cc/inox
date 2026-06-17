@@ -352,7 +352,7 @@ export function canLowerCScalarNullishCoalescingExpression(expression: AnyNode, 
   const resultType = nullableDeps(context).inferExpressionType(expression, context)
 
   return (
-    ['number', 'boolean'].includes(resultType) &&
+    isNullableScalarType(resultType) &&
     (nullableDeps(context).inferExpressionType(expression.left, context) === 'null' || isNullableRuntimeExpression(expression.left, context))
   )
 }
