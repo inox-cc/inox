@@ -696,6 +696,10 @@ function isRuntimeValueReferenceExpression(expression: ObjectFieldNode, context:
     return false
   }
 
+  if (valueType === 'unknown') {
+    return true
+  }
+
   for (const value of context.ownedValues) {
     if (value === name) {
       return true

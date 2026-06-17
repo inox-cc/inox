@@ -2121,7 +2121,7 @@ function runtimeValueReferenceName(expression: CValueNode, context: CFunctionCon
     return null
   }
 
-  if (!isOwnedRuntimeValueName(name, context)) {
+  if (!isOwnedRuntimeValueName(name, context) && valueType !== 'unknown') {
     return null
   }
 
@@ -2725,7 +2725,7 @@ export function emitCValueExpression(
       }
     }
 
-    if (valueType === 'unknown' && context.ownedValues.includes(name)) {
+    if (valueType === 'unknown') {
       return {
         lines: [],
         expression: name

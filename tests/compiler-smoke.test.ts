@@ -798,6 +798,32 @@ export function main(): void {
   assert.match(result.code, /ccjs_object_set\(ccjs_value_\d+, "name", 4, ccjs_value_\d+\)/)
 })
 
+test('lowers C unknown receiver field assignments through runtime lookup', () => {
+  const result = compileSource(
+    `function update(value: unknown): void {
+  value.name = "next"
+}
+
+function read(value: unknown): string {
+  return value.name
+}
+
+export function main(): void {
+  const extra = { name: "first" }
+  update(extra)
+  console.log(read(extra))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /if \(value.tag != CCJS_TAG_OBJECT \|\| value.as.ref == 0\)/)
+  assert.match(result.code, /ccjs_object_set\(value, "name", 4, ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(value, "name", 4, &ccjs_value_\d+\)/)
+})
+
 
 test('lowers C dynamic runtime value comparisons against string literals', () => {
   const result = compileSource(

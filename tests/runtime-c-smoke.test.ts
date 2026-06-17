@@ -7558,6 +7558,56 @@ console.log(read(extra))
   }
 })
 
+test('generated C unknown receiver field assignment lowering compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-unknown-receiver-field-assignment-'))
+  const source = join(dir, 'unknown-receiver-field-assignment.c')
+  const output = join(dir, 'unknown-receiver-field-assignment')
+
+  try {
+    const result = compileSource(
+      `function update(value: unknown): void {
+  value.name = "next"
+}
+
+function read(value: unknown): string {
+  return value.name
+}
+
+const extra = { name: "first" }
+update(extra)
+console.log(read(extra))
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'next\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('generated C dynamic object field null comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
