@@ -5,7 +5,7 @@ import { resolveDeclaredType } from './type-resolution.ts'
 import type { LowerContext, LowerResolvedType } from './type-resolution.ts'
 
 type LowerNode = AnyNode
-type LoweredStatement = LowerNode | LowerNode[]
+type LoweredStatement = LowerNode[]
 
 type ArrayMethodReceiverExpansion = {
   statements: LowerNode[]
@@ -43,87 +43,101 @@ export function lowerStatementList(statements: LowerNode[], context: LowerContex
 
 function lowerStatementInternal(statement: LowerNode, context: LowerContext): LoweredStatement {
   if (statement.type === 'BlockStatement') {
-    return {
-      type: 'BlockStatement',
-      body: lowerStatementList(statement.body, context)
-    }
+    return [
+      {
+        type: 'BlockStatement',
+        body: lowerStatementList(statement.body, context)
+      }
+    ]
   }
 
   if (statement.type === 'IfStatement') {
-    return {
-      type: 'IfStatement',
-      condition: lowerStatementExpression(statement.condition, context),
-      consequent: lowerStatementBody(statement.consequent, context),
-      alternate: lowerOptionalStatementBody(statement.alternate, context),
-      loc: statement.loc
-    }
+    return [
+      {
+        type: 'IfStatement',
+        condition: lowerStatementExpression(statement.condition, context),
+        consequent: lowerStatementBody(statement.consequent, context),
+        alternate: lowerOptionalStatementBody(statement.alternate, context),
+        loc: statement.loc
+      }
+    ]
   }
 
   if (statement.type === 'WhileStatement') {
-    return {
-      type: 'WhileStatement',
-      condition: lowerStatementExpression(statement.condition, context),
-      body: lowerStatementBody(statement.body, context),
-      loc: statement.loc
-    }
+    return [
+      {
+        type: 'WhileStatement',
+        condition: lowerStatementExpression(statement.condition, context),
+        body: lowerStatementBody(statement.body, context),
+        loc: statement.loc
+      }
+    ]
   }
 
   if (statement.type === 'ForStatement') {
-    return {
-      type: 'ForStatement',
-      init: lowerOptionalForInitializer(statement.init, context),
-      test: lowerOptionalStatementExpression(statement.test, context),
-      update: lowerOptionalStatementExpression(statement.update, context),
-      body: lowerStatementBody(statement.body, context),
-      loc: statement.loc
-    }
+    return [
+      {
+        type: 'ForStatement',
+        init: lowerOptionalForInitializer(statement.init, context),
+        test: lowerOptionalStatementExpression(statement.test, context),
+        update: lowerOptionalStatementExpression(statement.update, context),
+        body: lowerStatementBody(statement.body, context),
+        loc: statement.loc
+      }
+    ]
   }
 
   if (statement.type === 'ForOfStatement') {
-    return {
-      type: 'ForOfStatement',
-      kind: statement.kind,
-      name: statement.name,
-      declaredType: statement.declaredType,
-      inferredDeclaredType: statement.inferredDeclaredType,
-      valueType: statement.valueType,
-      nullable: statement.nullable === true,
-      arrayElementType: nullableString(statement.arrayElementType),
-      arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
-      mapKeyType: nullableString(statement.mapKeyType),
-      mapValueType: nullableString(statement.mapValueType),
-      promiseValueType: nullableString(statement.promiseValueType),
-      setElementType: nullableString(statement.setElementType),
-      functionType: nullableNode(statement.functionType),
-      shape: nullableNode(statement.shape),
-      loc: statement.loc,
-      nameLoc: statement.nameLoc,
-      iterable: lowerStatementExpression(statement.iterable, context),
-      body: lowerStatementBody(statement.body, context)
-    }
+    return [
+      {
+        type: 'ForOfStatement',
+        kind: statement.kind,
+        name: statement.name,
+        declaredType: statement.declaredType,
+        inferredDeclaredType: statement.inferredDeclaredType,
+        valueType: statement.valueType,
+        nullable: statement.nullable === true,
+        arrayElementType: nullableString(statement.arrayElementType),
+        arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
+        mapKeyType: nullableString(statement.mapKeyType),
+        mapValueType: nullableString(statement.mapValueType),
+        promiseValueType: nullableString(statement.promiseValueType),
+        setElementType: nullableString(statement.setElementType),
+        functionType: nullableNode(statement.functionType),
+        shape: nullableNode(statement.shape),
+        loc: statement.loc,
+        nameLoc: statement.nameLoc,
+        iterable: lowerStatementExpression(statement.iterable, context),
+        body: lowerStatementBody(statement.body, context)
+      }
+    ]
   }
 
   if (statement.type === 'SwitchStatement') {
-    return {
-      type: 'SwitchStatement',
-      discriminant: lowerStatementExpression(statement.discriminant, context),
-      cases: lowerSwitchCases(statement.cases, context),
-      loc: statement.loc
-    }
+    return [
+      {
+        type: 'SwitchStatement',
+        discriminant: lowerStatementExpression(statement.discriminant, context),
+        cases: lowerSwitchCases(statement.cases, context),
+        loc: statement.loc
+      }
+    ]
   }
 
   if (statement.type === 'TryStatement') {
-    return {
-      type: 'TryStatement',
-      block: lowerStatementBody(statement.block, context),
-      handler: lowerCatchClause(statement.handler, context),
-      finalizer: lowerOptionalStatementBody(statement.finalizer, context),
-      loc: statement.loc
-    }
+    return [
+      {
+        type: 'TryStatement',
+        block: lowerStatementBody(statement.block, context),
+        handler: lowerCatchClause(statement.handler, context),
+        finalizer: lowerOptionalStatementBody(statement.finalizer, context),
+        loc: statement.loc
+      }
+    ]
   }
 
   if (statement.type === 'BreakStatement' || statement.type === 'ContinueStatement') {
-    return statement
+    return [statement]
   }
 
   if (statement.type === 'VariableDeclaration') {
@@ -143,10 +157,12 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
       })
     }
 
-    return {
-      type: 'ExpressionStatement',
-      expression
-    }
+    return [
+      {
+        type: 'ExpressionStatement',
+        expression
+      }
+    ]
   }
 
   if (statement.type === 'ReturnStatement') {
@@ -167,22 +183,26 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
       })
     }
 
-    return {
-      type: 'ReturnStatement',
-      argument,
-      loc: statement.loc
-    }
+    return [
+      {
+        type: 'ReturnStatement',
+        argument,
+        loc: statement.loc
+      }
+    ]
   }
 
   if (statement.type === 'ThrowStatement') {
-    return {
-      type: 'ThrowStatement',
-      argument: lowerStatementExpression(statement.argument, context),
-      loc: statement.loc
-    }
+    return [
+      {
+        type: 'ThrowStatement',
+        argument: lowerStatementExpression(statement.argument, context),
+        loc: statement.loc
+      }
+    ]
   }
 
-  return statement
+  return [statement]
 }
 
 function lowerOptionalStatementBody(
@@ -293,7 +313,13 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
 
 function lowerForInitializer(init: LowerNode, context: LowerContext): LowerNode {
   if (init.type === 'VariableDeclaration') {
-    return lowerVariableDeclaration(init, context, false)
+    const lowered = lowerVariableDeclaration(init, context, false)
+
+    if (lowered.length > 0) {
+      return lowered[0]
+    }
+
+    return init
   }
 
   return lowerStatementExpression(init, context)
@@ -302,8 +328,8 @@ function lowerForInitializer(init: LowerNode, context: LowerContext): LowerNode 
 function lowerStatementBody(statement: LowerNode, context: LowerContext): LowerNode {
   const lowered = lowerStatementInternal(statement, context)
 
-  if (!Array.isArray(lowered)) {
-    return lowered
+  if (lowered.length === 1) {
+    return lowered[0]
   }
 
   return {
@@ -358,15 +384,10 @@ function lowerCatchClause(handler: LowerNode | null | undefined, context: LowerC
   }
 }
 
-function appendLoweredStatement(out: LowerNode[], statement: LoweredStatement): void {
-  if (Array.isArray(statement)) {
-    for (const item of statement) {
-      out.push(item)
-    }
-    return
+function appendLoweredStatement(out: LowerNode[], statements: LoweredStatement): void {
+  for (const statement of statements) {
+    out.push(statement)
   }
-
-  out.push(statement)
 }
 
 function lowerVariableDeclaration(
@@ -409,7 +430,7 @@ function lowerVariableDeclaration(
 
   if (!allowArrayMethodExpansion || statement.exported === true || init == null) {
     declareLowerVariable(context, lowered)
-    return lowered
+    return [lowered]
   }
 
   const expanded = lowerArrayMethodVariableDeclaration(lowered, init, context)
@@ -427,7 +448,7 @@ function lowerVariableDeclaration(
     }
 
     declareLowerVariable(context, lowered)
-    return lowered
+    return [lowered]
   }
 
   declareLoweredTopLevelVariables(context, expanded)
