@@ -2526,7 +2526,13 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   }
 
   if (isDynamicRuntimeValueDeclaration(statement, context)) {
-    return emitRuntimeValueVariableDeclaration(statement, statement.init, context, statement.valueType ?? 'unknown')
+    let valueType = statement.valueType
+
+    if (valueType == null) {
+      valueType = 'unknown'
+    }
+
+    return emitRuntimeValueVariableDeclaration(statement, statement.init, context, valueType)
   }
 
   if (deps.isIndexAccessExpression(statement.init)) {
@@ -2846,6 +2852,12 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
         return deps.emitKnownArrayIndexAssignment(statement.expression, element, context)
       }
 
+      const runtimeArrayAssignment = emitRuntimeArrayIndexAssignment(statement.expression, context)
+
+      if (runtimeArrayAssignment != null) {
+        return runtimeArrayAssignment
+      }
+
       const field = deps.resolveKnownObjectIndex(statement.expression.target, context)
 
       if (field != null) {
@@ -2894,6 +2906,55 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   }
 
   return []
+}
+
+function emitRuntimeArrayIndexAssignment(expression: StatementNode, context: CFunctionContext): string[] | null {
+  if (expression.type !== 'AssignmentExpression' || expression.target.type !== 'IndexExpression') {
+    return null
+  }
+
+  const deps = statementDeps(context)
+  const element = deps.resolveRuntimeArrayIndex(expression.target, context)
+
+  if (element == null) {
+    return null
+  }
+
+  if (expression.target.object.type !== 'Reference' || expression.target.object.path.length !== 1) {
+    return null
+  }
+
+  const arrayName = expression.target.object.path[0]
+  const index = emitRuntimeArrayIndexExpression(element, context)
+  const value = deps.emitCValueExpression(expression.value, context)
+  const lines: string[] = []
+
+  pushAllLines(lines, index.lines)
+  pushAllLines(lines, value.lines)
+  lines.push(emitStatusCheck(`ccjs_array_set(${arrayName}, ${index.expression}, ${value.expression})`, context))
+
+  return lines
+}
+
+function emitRuntimeArrayIndexExpression(
+  element: CRuntimeArrayElement,
+  context: CFunctionContext
+): PreparedExpression {
+  const indexExpression = element.indexExpression
+
+  if (indexExpression == null) {
+    return {
+      lines: [],
+      expression: `${element.index}`
+    }
+  }
+
+  const index = statementDeps(context).emitPreparedNumberExpression(indexExpression, context)
+
+  return {
+    lines: index.lines,
+    expression: `(size_t)(${index.expression})`
+  }
 }
 
 function normalizeCAsyncReturnArgument(

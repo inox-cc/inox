@@ -2081,7 +2081,11 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
   } else if (awaitStatement.init.arrayElementType != null) {
     arrayElementType = awaitStatement.init.arrayElementType
   } else {
-    arrayElementType = awaitedPromiseExpression.arrayElementType ?? null
+    arrayElementType = awaitedPromiseExpression.arrayElementType
+
+    if (arrayElementType == null) {
+      arrayElementType = null
+    }
   }
 
   if (awaitedType === 'map') {

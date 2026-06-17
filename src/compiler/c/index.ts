@@ -2335,10 +2335,16 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   const objectShapeFields: CObjectShapeField[] = []
 
   for (const field of fields) {
+    let ownership = field.ownership
+
+    if (ownership == null) {
+      ownership = 'strong'
+    }
+
     const objectShapeField: CObjectShapeField = {
       name: field.name,
       optional: field.optional,
-      ownership: field.ownership ?? 'strong',
+      ownership,
       readonlyField: isReadonlyCObjectShapeField(field),
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,

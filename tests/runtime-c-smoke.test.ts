@@ -8239,6 +8239,51 @@ console.log(score, active)
   }
 })
 
+test('generated C dynamic array index assignment lowering compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-array-assignment-'))
+  const source = join(dir, 'dynamic-array-assignment.c')
+  const output = join(dir, 'dynamic-array-assignment')
+
+  try {
+    const result = compileSource(
+      `const values = [1, 2, 3]
+const index = 1
+values[index] = 7
+const lines = ["if", "}"]
+lines[lines.length - 1] = "} else {"
+console.log(values[1], lines[1])
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7 } else {\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('generated C string array index reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])

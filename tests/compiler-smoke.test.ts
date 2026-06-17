@@ -1034,6 +1034,26 @@ export function main(): void {
   assert.match(result.code, /memcmp\(\(\(ccjs_string\*\)ccjs_string_cmp_value_\d+\.as\.ref\)->bytes, "Literal", 7\)/)
 })
 
+test('lowers C dynamic runtime array index assignments through runtime set', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const values = [1, 2, 3]
+  const index = 1
+  values[index] = 7
+  const lines = ["if", "}"]
+  lines[lines.length - 1] = "} else {"
+  console.log(values[1], lines[1])
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_array_set\(values, \(size_t\)\(index\), ccjs_number_value\(7\)\)/)
+  assert.match(result.code, /ccjs_array_set\(lines, \(size_t\)\(\(2 - 1\)\), ccjs_value_\d+\)/)
+})
+
 
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
