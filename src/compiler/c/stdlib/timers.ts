@@ -43,34 +43,6 @@ export type TimerLoweringDependencies = {
   ): PreparedExpression
 }
 
-type TimerStartCallDescriptor = {
-  callName: string
-  delay: boolean
-  method: string
-  requiresHandle: boolean
-}
-
-const timerStartCallDescriptors: TimerStartCallDescriptor[] = [
-  {
-    method: 'setImmediate',
-    callName: 'ccjs_loop_queue_immediate',
-    delay: false,
-    requiresHandle: false
-  },
-  {
-    method: 'setInterval',
-    callName: 'ccjs_loop_set_interval',
-    delay: true,
-    requiresHandle: true
-  },
-  {
-    method: 'setTimeout',
-    callName: 'ccjs_loop_set_timeout',
-    delay: true,
-    requiresHandle: false
-  }
-]
-
 export function cTimerRuntimeCallName(callee: AnyNode | null | undefined): string | null {
   if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
@@ -111,48 +83,28 @@ export function isTimerStartCallExpression(expression: AnyNode | null | undefine
   return cTimerStartCallName(expression.callee) != null || timerRuntimeMethodStartsWithSet(expression)
 }
 
-function timerStartCallDescriptorFor(method: string | null): TimerStartCallDescriptor | null {
-  if (method == null) {
-    return null
-  }
-
-  for (const descriptor of timerStartCallDescriptors) {
-    if (descriptor.method === method) {
-      return descriptor
-    }
-  }
-
-  return null
-}
-
 function timerStartCallNameFor(method: string | null): string | null {
-  const descriptor = timerStartCallDescriptorFor(method)
+  if (method === 'setImmediate') {
+    return 'ccjs_loop_queue_immediate'
+  }
 
-  if (descriptor != null) {
-    return descriptor.callName
+  if (method === 'setInterval') {
+    return 'ccjs_loop_set_interval'
+  }
+
+  if (method === 'setTimeout') {
+    return 'ccjs_loop_set_timeout'
   }
 
   return null
 }
 
 function timerStartCallHasDelay(method: string | null): boolean {
-  const descriptor = timerStartCallDescriptorFor(method)
-
-  if (descriptor != null) {
-    return descriptor.delay
-  }
-
-  return false
+  return method === 'setInterval' || method === 'setTimeout'
 }
 
 function timerStartCallRequiresHandle(method: string | null): boolean {
-  const descriptor = timerStartCallDescriptorFor(method)
-
-  if (descriptor != null) {
-    return descriptor.requiresHandle
-  }
-
-  return false
+  return method === 'setInterval'
 }
 
 function timerRuntimeMethodForExpression(expression: AnyNode | null | undefined): string | null {
