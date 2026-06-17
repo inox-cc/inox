@@ -1,9 +1,12 @@
 import { collectIrTopLevelNodes } from './top-level.ts'
 import type { AnyNode, IrFunctionEffect, IrThrowValueType, IrTopLevelItem } from '../types.ts'
 
+type ThrowValueTypeMap = Map<string, IrThrowValueType[]>
+type StringSet = Set<string>
+
 type IrLocalThrowValueTypeOptions = {
-  errorObjectNames?: any
-  functionThrowValueTypes?: any
+  errorObjectNames?: StringSet | null
+  functionThrowValueTypes?: ThrowValueTypeMap | null
 }
 
 type EffectChildNode = AnyNode
@@ -56,9 +59,7 @@ type EffectNode = EffectChildNode & {
 
 type NodeList = EffectChildList
 type MaybeNode = EffectNode | null | undefined
-type ThrowValueTypeMap = Map<string, IrThrowValueType[]>
 type ThrowValueTypeSet = Set<IrThrowValueType>
-type StringSet = Set<string>
 type FunctionEffectProgram = {
   body: NodeList
   topLevelItems: IrTopLevelItem[]
@@ -100,7 +101,7 @@ export function collectIrLocalThrowValueTypes(
 ): IrThrowValueType[] {
   const functionThrowValueTypes = cloneFunctionThrowValueTypeMap(options.functionThrowValueTypes)
   const functionNames = functionNameSetFromMap(functionThrowValueTypes)
-  const errorObjectNames = stringSetFromIterable(options.errorObjectNames)
+  const errorObjectNames = cloneOptionalStringSet(options.errorObjectNames)
 
   return uniqueThrowValueTypes(
     collectEscapingThrowValueTypesFromStatement(
@@ -830,24 +831,12 @@ function createThrowValueTypeSet(): ThrowValueTypeSet {
   return result
 }
 
-function cloneFunctionThrowValueTypeMap(input: any): ThrowValueTypeMap {
-  const result = createFunctionThrowValueTypeMap()
-
+function cloneFunctionThrowValueTypeMap(input: ThrowValueTypeMap | null | undefined): ThrowValueTypeMap {
   if (input == null) {
-    return result
+    return createFunctionThrowValueTypeMap()
   }
 
-  for (const entry of input) {
-    const values: IrThrowValueType[] = []
-
-    for (const value of entry[1]) {
-      values.push(value)
-    }
-
-    result.set(entry[0], values)
-  }
-
-  return result
+  return new Map(input)
 }
 
 function functionNameSetFromMap(map: ThrowValueTypeMap): StringSet {
@@ -860,28 +849,16 @@ function functionNameSetFromMap(map: ThrowValueTypeMap): StringSet {
   return names
 }
 
-function stringSetFromIterable(input: any): StringSet {
-  const result = createStringSet()
-
+function cloneOptionalStringSet(input: StringSet | null | undefined): StringSet {
   if (input == null) {
-    return result
+    return createStringSet()
   }
 
-  for (const value of input) {
-    result.add(value)
-  }
-
-  return result
+  return new Set(input)
 }
 
 function cloneStringSet(source: StringSet): StringSet {
-  const result = createStringSet()
-
-  for (const value of source) {
-    result.add(value)
-  }
-
-  return result
+  return new Set(source)
 }
 
 function pushNodes(target: NodeList, values: NodeList): void {

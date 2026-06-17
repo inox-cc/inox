@@ -12,7 +12,7 @@ import {
   collectIrStoredFunctionEffects as collectIrStoredFunctionEffectsFromFacade
 } from '../src/compiler/ir.ts'
 import { collectTopLevelItems } from '../src/compiler/ir/top-level.ts'
-import type { AnyNode, ProgramNode } from '../src/compiler/types.ts'
+import type { AnyNode, IrThrowValueType, ProgramNode } from '../src/compiler/types.ts'
 
 test('collects IR function effects and propagates call throws', () => {
   const body: AnyNode[] = [
@@ -74,8 +74,9 @@ test('collects local IR throw value types', () => {
       }
     ]
   }
+  const throwValueTypes: IrThrowValueType[] = ['string']
   const options = {
-    functionThrowValueTypes: new Map([['failWithString', ['string'] as const]])
+    functionThrowValueTypes: new Map([['failWithString', throwValueTypes]])
   }
 
   assert.deepEqual(collectIrLocalThrowValueTypes(statement, options), ['error', 'string'])

@@ -2001,7 +2001,7 @@ export function main(): void {
 
   assert.deepEqual(
     collectIrLocalThrowValueTypes(tryStatement?.block, {
-      errorObjectNames: ['error'],
+      errorObjectNames: new Set(['error']),
       functionThrowValueTypes
     }),
     ['string', 'error']
