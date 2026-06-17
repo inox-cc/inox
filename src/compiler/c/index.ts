@@ -1151,6 +1151,7 @@ const cScalarExpressionDependencies = {
     emitPreparedObjectExpressionScalarMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies),
+  emitPreparedNumberExpression,
   emitPreparedProcessNumberExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedStringCompareExpression,
@@ -1194,6 +1195,7 @@ const cValueExpressionDependencies = {
   emitCStringSplitValueExpression,
   emitCStringTrimValueExpression,
   emitCTemplateLiteralValueExpression,
+  emitCValueExpression,
   emitOptionalRuntimeCallbackCallValueExpression,
   emitPreparedArrayPopCallExpression,
   emitPreparedBinaryValueExpression: (expression: AnyNode, context: CFunctionContext) =>

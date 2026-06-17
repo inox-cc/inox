@@ -60,6 +60,17 @@ type CStringNullableMap = Map<string, string | null>
 type CStringSet = Set<string>
 type CValueNode = AnyNode
 
+type CDynamicObjectArrayIndexDependencies = {
+  emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  inferExpressionType(expression: CValueNode, context: CFunctionContext): string
+}
+
+type CDynamicObjectFieldAccess = {
+  object: CValueNode
+  key: string
+}
+
 type CEmitContext = {
   throwingFunctions: CStringSet
 }
@@ -254,6 +265,7 @@ export type CScalarExpressionDependencies = {
   emitPreparedObjectExpressionScalarMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathBooleanCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedProcessNumberExpression(expression: AnyNode): PreparedExpression | null
+  emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedRuntimeArrayIndexValue(
     expression: AnyNode,
     element: CRuntimeArrayElement,
@@ -282,7 +294,7 @@ export type CCallExpressionDependencies = {
   currentErrorTarget(context: CFunctionContext): string | null
   emitCExpression(expression: AnyNode, context: CFunctionContext): string
   emitCNumberConversionValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
-  emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitFunctionValueExpression(expression: AnyNode, context: CFunctionContext): string
   emitNullableFunctionValueExpression(
     expression: AnyNode,
@@ -1509,7 +1521,7 @@ function emitPreparedNullableNullCompareExpression(
   }
 
   const value = deps.emitCValueExpression(nullable, context)
-  const equals = `(${value.expression}.tag == CCJS_TAG_NULL)`
+  const equals = `(${value.expression}.tag == CCJS_TAG_NULL || ${value.expression}.tag == CCJS_TAG_UNDEFINED)`
   let result = `(!${equals})`
 
   if (isPositiveEqualityOperator(expression.operator)) {
@@ -1539,12 +1551,17 @@ function emitPreparedDynamicObjectNullCompareExpression(
     maybeNull = expression.left
   }
 
-  if (maybeNull.type !== 'NullLiteral' || !isDynamicObjectFieldValueExpression(valueExpression, context, deps)) {
+  if (maybeNull.type !== 'NullLiteral') {
     return null
   }
 
-  const value = deps.emitCValueExpression(valueExpression, context)
-  const equals = `(${value.expression}.tag == CCJS_TAG_NULL)`
+  const value = emitPreparedDynamicRuntimeValueExpression(valueExpression, context, deps)
+
+  if (value == null) {
+    return null
+  }
+
+  const equals = `(${value.expression}.tag == CCJS_TAG_NULL || ${value.expression}.tag == CCJS_TAG_UNDEFINED)`
   let result = `(!${equals})`
 
   if (isPositiveEqualityOperator(expression.operator)) {
@@ -1574,11 +1591,16 @@ function emitPreparedDynamicObjectBooleanLiteralCompareExpression(
     literal = booleanLiteralValue(expression.left)
   }
 
-  if (literal == null || !isDynamicObjectFieldValueExpression(valueExpression, context, deps)) {
+  if (literal == null) {
     return null
   }
 
-  const value = deps.emitCValueExpression(valueExpression, context)
+  const value = emitPreparedDynamicRuntimeValueExpression(valueExpression, context, deps)
+
+  if (value == null) {
+    return null
+  }
+
   const expected = runtimeBoolValueExpression(literal)
   const equals = `(${value.expression}.tag == CCJS_TAG_BOOL && ${value.expression}.as.boolean == ${expected})`
   let result = `(!${equals})`
@@ -1615,6 +1637,140 @@ function isDynamicObjectFieldValueExpression(
   }
 
   return false
+}
+
+function emitPreparedDynamicRuntimeValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (isDynamicObjectFieldValueExpression(expression, context, deps)) {
+    return deps.emitCValueExpression(expression, context)
+  }
+
+  return emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
+}
+
+function emitPreparedDynamicObjectArrayIndexValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): PreparedExpression | null {
+  if (expression.type !== 'IndexExpression') {
+    return null
+  }
+
+  const access = dynamicObjectFieldAccess(expression.object, context, deps)
+
+  if (access == null) {
+    return null
+  }
+
+  const object = deps.emitCValueExpression(access.object, context)
+  const index = emitPreparedDynamicArrayIndexExpression(expression.index, context, deps)
+
+  if (index == null) {
+    return null
+  }
+
+  const array = nextCName(context, 'ccjs_array_value')
+  const value = nextCName(context, 'ccjs_value')
+  const status = nextCName(context, 'ccjs_array_status')
+  const lines: string[] = []
+
+  registerOwnedValue(context, array)
+  registerOwnedValue(context, value)
+  appendLines(lines, object.lines)
+  appendLines(lines, index.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(array))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${array})`,
+      context
+    )
+  )
+  lines.push(emitRuntimeTypeCheck(`${array}.tag != CCJS_TAG_ARRAY || ${array}.as.ref == 0`, context))
+  appendLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(`ccjs_status ${status} = ccjs_array_get(${array}, ${index.expression}, &${value});`)
+  lines.push(`if (${status} == CCJS_ERR_FIELD) {`)
+  lines.push(`  ${value} = ccjs_undefined_value();`)
+  lines.push('}')
+  lines.push(`if (${status} != CCJS_OK && ${status} != CCJS_ERR_FIELD) ${emitFailureStatement(context)}`)
+
+  return {
+    lines,
+    expression: value
+  }
+}
+
+function emitPreparedDynamicArrayIndexExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): PreparedExpression | null {
+  if (expression.type === 'NumberLiteral') {
+    return {
+      lines: [],
+      expression: `${parseArrayIndexExpression(expression.value)}`
+    }
+  }
+
+  if (deps.inferExpressionType(expression, context) !== 'number') {
+    return null
+  }
+
+  const index = deps.emitPreparedNumberExpression(expression, context)
+
+  return {
+    lines: index.lines,
+    expression: `(size_t)(${index.expression})`
+  }
+}
+
+function parseArrayIndexExpression(value: string): string {
+  let out = 0
+
+  if (value.length === 0) {
+    return '0'
+  }
+
+  for (let index = 0; index < value.length; index = index + 1) {
+    const code = value.charCodeAt(index)
+
+    if (code < 48 || code > 57) {
+      return '0'
+    }
+
+    out = out * 10 + (code - 48)
+  }
+
+  return `${out}`
+}
+
+function dynamicObjectFieldAccess(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): CDynamicObjectFieldAccess | null {
+  if (expression.type === 'MemberExpression' && deps.inferExpressionType(expression.object, context) === 'object') {
+    return {
+      object: expression.object,
+      key: expression.property
+    }
+  }
+
+  if (
+    expression.type === 'IndexExpression' &&
+    expression.index.type === 'StringLiteral' &&
+    deps.inferExpressionType(expression.object, context) === 'object'
+  ) {
+    return {
+      object: expression.object,
+      key: expression.index.value
+    }
+  }
+
+  return null
 }
 
 function emitPreparedNumericCastExpression(
@@ -1769,6 +1925,7 @@ export type CValueExpressionDependencies = {
   emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitCNumberConversionValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitCObjectLiteralValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitCOptionalIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitCOptionalMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitCStringConcatValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
@@ -2162,6 +2319,12 @@ export function emitCValueExpression(
 
     if (runtimeArrayValue != null) {
       return runtimeArrayValue
+    }
+
+    const dynamicArrayValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
+
+    if (dynamicArrayValue != null) {
+      return dynamicArrayValue
     }
 
     const objectValue = deps.emitPreparedKnownObjectIndexValueExpression(expression, context)

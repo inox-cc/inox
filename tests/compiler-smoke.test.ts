@@ -549,8 +549,8 @@ export function main(): void {
   )
 
   assert.match(result.code, /ccjs_object_get\(node, "init", 4, &ccjs_value_\d+\)/)
-  assert.match(result.code, /!\(ccjs_value_\d+\.tag == CCJS_TAG_NULL\)/)
-  assert.match(result.code, /ccjs_value_\d+\.tag == CCJS_TAG_NULL/)
+  assert.match(result.code, /!\(ccjs_value_\d+\.tag == CCJS_TAG_NULL \|\| ccjs_value_\d+\.tag == CCJS_TAG_UNDEFINED\)/)
+  assert.match(result.code, /ccjs_value_\d+\.tag == CCJS_TAG_NULL \|\| ccjs_value_\d+\.tag == CCJS_TAG_UNDEFINED/)
 })
 
 
@@ -603,6 +603,29 @@ export function main(): void {
   assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
   assert.match(result.code, /ccjs_object_get\(node, "fields", 6, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
+})
+
+
+test('lowers C dynamic object array index null comparisons through runtime lookup', () => {
+  const result = compileSource(
+    `function hasFirst(node: object): boolean {
+  return node.args[0] != null
+}
+
+export function main(): void {
+  console.log(hasFirst({ args: [{ type: 'Literal' }] }), hasFirst({ args: [] }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "args", 4, &ccjs_array_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_array_value_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_status_\d+ == CCJS_ERR_FIELD/)
+  assert.match(result.code, /ccjs_value_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(result.code, /!\(ccjs_value_\d+\.tag == CCJS_TAG_NULL \|\| ccjs_value_\d+\.tag == CCJS_TAG_UNDEFINED\)/)
 })
 
 
@@ -2294,9 +2317,9 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /if \(!\(score\.tag == CCJS_TAG_NULL\)\) \{/)
+  assert.match(result.code, /if \(!\(score\.tag == CCJS_TAG_NULL \|\| score\.tag == CCJS_TAG_UNDEFINED\)\) \{/)
   assert.match(result.code, /\(score\.as\.number \+ 1\)/)
-  assert.match(result.code, /if \(active\.tag == CCJS_TAG_NULL\) \{/)
+  assert.match(result.code, /if \(active\.tag == CCJS_TAG_NULL \|\| active\.tag == CCJS_TAG_UNDEFINED\) \{/)
   assert.match(result.code, /\(active\.as\.boolean \? 1 : 0\)/)
 
   assertDiagnostic(
