@@ -175,11 +175,13 @@ export function emitPreparedPathStringCallExpression(
   if (method === 'join' || method === 'resolve') {
     const args: PreparedExpression[] = []
 
-    for (const arg of expression.args) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = expression.args[index]
       args.push(dependencies.emitCValueExpression(arg, context))
     }
 
-    for (const arg of args) {
+    for (let index = 0; index < args.length; index = index + 1) {
+      const arg = args[index]
       pushLines(lines, arg.lines)
     }
 
@@ -191,7 +193,8 @@ export function emitPreparedPathStringCallExpression(
       const argArray = nextCName(context, 'ccjs_path_args')
       const expressions: string[] = []
 
-      for (const arg of args) {
+      for (let index = 0; index < args.length; index = index + 1) {
+        const arg = args[index]
         expressions.push(arg.expression)
       }
 

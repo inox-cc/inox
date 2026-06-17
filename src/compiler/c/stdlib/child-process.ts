@@ -117,12 +117,14 @@ export function emitPreparedChildProcessCallExpression(
   const args: PreparedExpression[] = []
 
   if (argArray != null && argArray.type === 'ArrayLiteral') {
-    for (const arg of argArray.elements) {
+    for (let index = 0; index < argArray.elements.length; index = index + 1) {
+      const arg = argArray.elements[index]
       args.push(dependencies.emitCValueExpression(arg, context))
     }
   }
 
-  for (const arg of args) {
+  for (let index = 0; index < args.length; index = index + 1) {
+    const arg = args[index]
     pushChildProcessLines(lines, arg.lines)
   }
 
