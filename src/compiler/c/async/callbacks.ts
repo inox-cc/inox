@@ -521,7 +521,8 @@ export function collectCallbackWrappers(
     }
   }
 
-  for (const pending of pendingPlainFunctionArgs) {
+  for (let pendingIndex = 0; pendingIndex < pendingPlainFunctionArgs.length; pendingIndex = pendingIndex + 1) {
+    const pending = pendingPlainFunctionArgs[pendingIndex]
     if (
       resolveRuntimeFunctionArgumentType(
         pending.callee,
