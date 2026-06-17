@@ -1820,16 +1820,12 @@ function resolveReceiverElementInfo(receiver: LowerNode, callback: LowerNode | n
     valueType,
     declaredType,
     shape: receiverElementShape(callbackParam, declared),
-    arrayElementType: receiverElementNestedType(callbackParam, declared.arrayElementType, 'arrayElementType'),
-    arrayElementDeclaredType: receiverElementNestedType(
-      callbackParam,
-      declared.arrayElementDeclaredType,
-      'arrayElementDeclaredType'
-    ),
-    mapKeyType: receiverElementNestedType(callbackParam, declared.mapKeyType, 'mapKeyType'),
-    mapValueType: receiverElementNestedType(callbackParam, declared.mapValueType, 'mapValueType'),
-    promiseValueType: receiverElementNestedType(callbackParam, declared.promiseValueType, 'promiseValueType'),
-    setElementType: receiverElementNestedType(callbackParam, declared.setElementType, 'setElementType'),
+    arrayElementType: receiverElementArrayElementType(callbackParam, declared),
+    arrayElementDeclaredType: receiverElementArrayElementDeclaredType(callbackParam, declared),
+    mapKeyType: receiverElementMapKeyType(callbackParam, declared),
+    mapValueType: receiverElementMapValueType(callbackParam, declared),
+    promiseValueType: receiverElementPromiseValueType(callbackParam, declared),
+    setElementType: receiverElementSetElementType(callbackParam, declared),
     functionType: receiverElementFunctionType(callbackParam, declared)
   }
 }
@@ -1843,8 +1839,10 @@ function receiverElementDeclaredType(receiver: LowerNode, callbackParam: LowerNo
     return receiver.arrayElementType
   }
 
-  if (callbackParam != null && callbackParam.declaredType != null) {
-    return callbackParam.declaredType
+  if (callbackParam != null) {
+    if (callbackParam.declaredType != null) {
+      return callbackParam.declaredType
+    }
   }
 
   return null
@@ -1859,8 +1857,10 @@ function receiverElementValueType(
     return receiver.arrayElementType
   }
 
-  if (callbackParam != null && callbackParam.valueType != null) {
-    return callbackParam.valueType
+  if (callbackParam != null) {
+    if (callbackParam.valueType != null) {
+      return callbackParam.valueType
+    }
   }
 
   const declaredValueType = declared.valueType
@@ -1873,32 +1873,107 @@ function receiverElementValueType(
 }
 
 function receiverElementShape(callbackParam: LowerNode | null, declared: LowerResolvedType): LowerNode | null {
-  if (callbackParam != null && callbackParam.shape != null) {
-    return callbackParam.shape
+  if (callbackParam != null) {
+    if (callbackParam.shape != null) {
+      return callbackParam.shape
+    }
   }
 
   return declared.shape
 }
 
-function receiverElementNestedType(
-  callbackParam: LowerNode | null,
-  declaredValue: string | null | undefined,
-  key: string
-): string | null {
-  if (callbackParam != null && callbackParam[key] != null) {
-    return callbackParam[key]
+function receiverElementArrayElementType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
+  if (callbackParam != null) {
+    if (callbackParam.arrayElementType != null) {
+      return callbackParam.arrayElementType
+    }
   }
 
-  if (declaredValue != null) {
-    return declaredValue
+  if (declared.arrayElementType != null) {
+    return declared.arrayElementType
+  }
+
+  return null
+}
+
+function receiverElementArrayElementDeclaredType(
+  callbackParam: LowerNode | null,
+  declared: LowerResolvedType
+): string | null {
+  if (callbackParam != null) {
+    if (callbackParam.arrayElementDeclaredType != null) {
+      return callbackParam.arrayElementDeclaredType
+    }
+  }
+
+  if (declared.arrayElementDeclaredType != null) {
+    return declared.arrayElementDeclaredType
+  }
+
+  return null
+}
+
+function receiverElementMapKeyType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
+  if (callbackParam != null) {
+    if (callbackParam.mapKeyType != null) {
+      return callbackParam.mapKeyType
+    }
+  }
+
+  if (declared.mapKeyType != null) {
+    return declared.mapKeyType
+  }
+
+  return null
+}
+
+function receiverElementMapValueType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
+  if (callbackParam != null) {
+    if (callbackParam.mapValueType != null) {
+      return callbackParam.mapValueType
+    }
+  }
+
+  if (declared.mapValueType != null) {
+    return declared.mapValueType
+  }
+
+  return null
+}
+
+function receiverElementPromiseValueType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
+  if (callbackParam != null) {
+    if (callbackParam.promiseValueType != null) {
+      return callbackParam.promiseValueType
+    }
+  }
+
+  if (declared.promiseValueType != null) {
+    return declared.promiseValueType
+  }
+
+  return null
+}
+
+function receiverElementSetElementType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
+  if (callbackParam != null) {
+    if (callbackParam.setElementType != null) {
+      return callbackParam.setElementType
+    }
+  }
+
+  if (declared.setElementType != null) {
+    return declared.setElementType
   }
 
   return null
 }
 
 function receiverElementFunctionType(callbackParam: LowerNode | null, declared: LowerResolvedType): LowerNode | null {
-  if (callbackParam != null && callbackParam.functionType != null) {
-    return callbackParam.functionType
+  if (callbackParam != null) {
+    if (callbackParam.functionType != null) {
+      return callbackParam.functionType
+    }
   }
 
   return declared.functionType
