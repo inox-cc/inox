@@ -2047,11 +2047,7 @@ class Checker {
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
-    let valueType = field.valueType
-
-    if (valueType == null) {
-      valueType = fieldType.valueType
-    }
+    const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
     expression.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
     expression.valueType = valueType
