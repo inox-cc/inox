@@ -71,11 +71,17 @@ export function timeRuntimeCapabilityFromPath(
   path: string[] | null | undefined
 ): TimeRuntimeCapability | null {
   if (isDateNowRuntimePath(path)) {
-    return wallClockTimeRuntimeCapability
+    return {
+      key: 'wallClock',
+      name: 'wall-clock'
+    }
   }
 
   if (isPerformanceNowRuntimePath(path)) {
-    return monotonicClockTimeRuntimeCapability
+    return {
+      key: 'monotonicClock',
+      name: 'monotonic-clock'
+    }
   }
 
   return null
