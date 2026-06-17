@@ -9,15 +9,17 @@ import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
 import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
+type CGlobalNameSet = Set<string>
+
 export type CGlobalUsageSupportContext = {
-  cryptoImportNames?: Set<string>
-  dgramCreateSocketNames?: Set<string>
-  dgramImportNames?: Set<string>
-  httpCreateServerNames?: Set<string>
-  httpImportNames?: Set<string>
-  netConnectNames?: Set<string>
-  netCreateServerNames?: Set<string>
-  netImportNames?: Set<string>
+  cryptoImportNames?: CGlobalNameSet
+  dgramCreateSocketNames?: CGlobalNameSet
+  dgramImportNames?: CGlobalNameSet
+  httpCreateServerNames?: CGlobalNameSet
+  httpImportNames?: CGlobalNameSet
+  netConnectNames?: CGlobalNameSet
+  netCreateServerNames?: CGlobalNameSet
+  netImportNames?: CGlobalNameSet
 }
 
 export function reportUnsupportedCSyntaxFeatures(
@@ -107,8 +109,8 @@ function isSupportedCDgramGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsag
   return (
     (usage.path.length === 2 &&
       usage.path[1] === 'createSocket' &&
-      context.dgramImportNames?.has(usage.root) === true) ||
-    (usage.path.length === 1 && context.dgramCreateSocketNames?.has(usage.root) === true)
+      runtimeNameSetHas(context.dgramImportNames, usage.root)) ||
+    (usage.path.length === 1 && runtimeNameSetHas(context.dgramCreateSocketNames, usage.root))
   )
 }
 
@@ -116,32 +118,43 @@ function isSupportedCHttpGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsage
   return (
     (usage.path.length === 2 &&
       usage.path[1] === 'createServer' &&
-      context.httpImportNames?.has(usage.root) === true) ||
-    (usage.path.length === 1 && context.httpCreateServerNames?.has(usage.root) === true)
+      runtimeNameSetHas(context.httpImportNames, usage.root)) ||
+    (usage.path.length === 1 && runtimeNameSetHas(context.httpCreateServerNames, usage.root))
   )
 }
 
 function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
   return (
-    (usage.path.length === 2 && usage.path[1] === 'createServer' && context.netImportNames?.has(usage.root) === true) ||
+    (usage.path.length === 2 &&
+      usage.path[1] === 'createServer' &&
+      runtimeNameSetHas(context.netImportNames, usage.root)) ||
     (usage.path.length === 2 &&
       (usage.path[1] === 'connect' || usage.path[1] === 'createConnection') &&
-      context.netImportNames?.has(usage.root) === true) ||
+      runtimeNameSetHas(context.netImportNames, usage.root)) ||
     (usage.path.length === 1 &&
-      (context.netCreateServerNames?.has(usage.root) === true || context.netConnectNames?.has(usage.root) === true))
+      (runtimeNameSetHas(context.netCreateServerNames, usage.root) ||
+        runtimeNameSetHas(context.netConnectNames, usage.root)))
   )
 }
 
 export function isSupportedCCryptoGlobalUsage(
   usage: IrGlobalUsage,
-  context?: CGlobalUsageSupportContext
+  context: CGlobalUsageSupportContext
 ): boolean {
   return (
     isCryptoRuntimeMethodPath(usage.path) ||
     (usage.path.length === 2 &&
-      context?.cryptoImportNames?.has(usage.root) === true &&
+      runtimeNameSetHas(context.cryptoImportNames, usage.root) &&
       isCryptoRuntimeMethod(usage.path[1]))
   )
+}
+
+function runtimeNameSetHas(names: CGlobalNameSet | undefined, root: string): boolean {
+  if (names == null) {
+    return false
+  }
+
+  return names.has(root)
 }
 
 export function isSupportedCDebugGlobalUsage(usage: IrGlobalUsage): boolean {
