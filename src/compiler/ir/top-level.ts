@@ -4,13 +4,36 @@ import type {
   IrProgram,
   IrTopLevelItem,
   IrTopLevelItemKind,
+  ModuleRecord,
   ModuleGraph,
-  ProgramNode
+  ObjectShapeInfo,
+  ProgramNode,
+  SourceLocation,
+  ValueType
 } from '../types.ts'
 
 export type IrModuleRecord = {
   path: string
   ir: IrProgram
+}
+
+type IrTopLevelNode = AnyNode & {
+  async?: boolean | null
+  body?: AnyNode[]
+  exported?: boolean | null
+  loc?: SourceLocation
+  name?: string | null
+  params?: AnyNode[]
+  returnArrayElementDeclaredType?: string | null
+  returnArrayElementType?: ValueType | null
+  returnMapKeyType?: ValueType | null
+  returnMapValueType?: ValueType | null
+  returnNullable?: boolean | null
+  returnPromiseValueType?: ValueType | null
+  returnSetElementType?: ValueType | null
+  returnShape?: ObjectShapeInfo | null
+  returnType?: string | null
+  type?: string | null
 }
 
 type NodeList = AnyNode[]
@@ -38,16 +61,19 @@ export type IrFunctionNodeEntry = {
   node: AnyNode
 }
 
-type FunctionDeclarationMap = Map<string, IrFunctionDeclaration[]>
+type FunctionDeclarationMap = Map<string, IrFunctionDeclaration>
 
 export function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
   const records: IrModuleRecord[] = []
+  const modules = graph.modules
 
-  for (const module of graph.modules) {
-    if (module.ir != null) {
+  for (let index = 0; index < modules.length; index = index + 1) {
+    const moduleRecord: ModuleRecord = modules[index]
+
+    if (moduleRecord.ir != null) {
       records.push({
-        path: module.path,
-        ir: module.ir
+        path: moduleRecord.path,
+        ir: moduleRecord.ir
       })
     }
   }
@@ -58,7 +84,8 @@ export function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
 export function collectIrPrograms(records: IrModuleRecord[]): IrProgram[] {
   const programs: IrProgram[] = []
 
-  for (const record of records) {
+  for (let index = 0; index < records.length; index = index + 1) {
+    const record = records[index]
     programs.push(record.ir)
   }
 
@@ -66,7 +93,9 @@ export function collectIrPrograms(records: IrModuleRecord[]): IrProgram[] {
 }
 
 export function findIrEntryProgram(records: IrModuleRecord[], entry: string): IrProgram | null {
-  for (const record of records) {
+  for (let index = 0; index < records.length; index = index + 1) {
+    const record = records[index]
+
     if (record.path === entry) {
       return record.ir
     }
@@ -80,8 +109,12 @@ export function collectIrFunctionDeclarations(
 ): IrFunctionDeclaration[] {
   const declarations: IrFunctionDeclaration[] = []
 
-  for (const program of programs) {
-    for (const declaration of program.functionDeclarations) {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = programs[programIndex]
+    const functionDeclarations = program.functionDeclarations
+
+    for (let declarationIndex = 0; declarationIndex < functionDeclarations.length; declarationIndex = declarationIndex + 1) {
+      const declaration = functionDeclarations[declarationIndex]
       declarations.push(declaration)
     }
   }
@@ -92,15 +125,17 @@ export function collectIrFunctionDeclarations(
 export function collectIrFunctionNodeEntries(programs: IrFunctionNodeProgram[]): IrFunctionNodeEntry[] {
   const entries: IrFunctionNodeEntry[] = []
 
-  for (const program of programs) {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = programs[programIndex]
     const declarationsByName = collectFunctionDeclarationsByName(program.functionDeclarations)
     const topLevelEntries = collectIrTopLevelNodeEntries(program)
 
-    for (const item of topLevelEntries) {
+    for (let entryIndex = 0; entryIndex < topLevelEntries.length; entryIndex = entryIndex + 1) {
+      const item = topLevelEntries[entryIndex]
+
       if (item.kind === 'function') {
         const name = nodeNameForTopLevelLookup(item.node)
-        const declarations = declarationsByName.get(name)
-        const declaration = shiftFunctionDeclaration(declarations)
+        const declaration = functionDeclarationForName(declarationsByName, name)
 
         if (declaration != null) {
           entries.push({
@@ -120,7 +155,11 @@ export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, 
     return false
   }
 
-  for (const item of program.functionDeclarations) {
+  const declarations = program.functionDeclarations
+
+  for (let index = 0; index < declarations.length; index = index + 1) {
+    const item = declarations[index]
+
     if (item.name === name) {
       return true
     }
@@ -132,7 +171,8 @@ export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, 
 export function collectIrTopLevelNodeEntries(program: IrTopLevelProgram): IrTopLevelNodeEntry[] {
   const entries: IrTopLevelNodeEntry[] = []
 
-  for (const item of program.topLevelItems) {
+  for (let index = 0; index < program.topLevelItems.length; index = index + 1) {
+    const item = program.topLevelItems[index]
     const node = nodeAt(program.body, item.index)
 
     if (node != null) {
@@ -148,8 +188,11 @@ export function collectIrTopLevelNodeEntries(program: IrTopLevelProgram): IrTopL
 
 export function collectIrTopLevelNodes(program: IrTopLevelProgram, kind: IrTopLevelItemKind): NodeList {
   const nodes: NodeList = []
+  const entries = collectIrTopLevelNodeEntries(program)
 
-  for (const item of collectIrTopLevelNodeEntries(program)) {
+  for (let index = 0; index < entries.length; index = index + 1) {
+    const item = entries[index]
+
     if (item.kind === kind) {
       nodes.push(item.node)
     }
@@ -164,8 +207,12 @@ export function collectIrTopLevelNodesFromPrograms(
 ): NodeList {
   const nodes: NodeList = []
 
-  for (const program of programs) {
-    for (const node of collectIrTopLevelNodes(program, kind)) {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = programs[programIndex]
+    const programNodes = collectIrTopLevelNodes(program, kind)
+
+    for (let nodeIndex = 0; nodeIndex < programNodes.length; nodeIndex = nodeIndex + 1) {
+      const node = programNodes[nodeIndex]
       nodes.push(node)
     }
   }
@@ -177,14 +224,24 @@ export function collectTopLevelItems(program: ProgramNode): IrTopLevelItem[] {
   const items: IrTopLevelItem[] = []
 
   for (let index = 0; index < program.body.length; index = index + 1) {
-    const item = program.body[index]
+    const item: IrTopLevelNode = program.body[index]
 
     if (item.type !== 'ExportDeclaration') {
-      items.push({
-        kind: topLevelItemKind(item),
-        index,
-        loc: item.loc
-      })
+      const kind = topLevelItemKind(item)
+      const loc = item.loc
+
+      if (loc != null) {
+        items.push({
+          kind,
+          index,
+          loc
+        })
+      } else {
+        items.push({
+          kind,
+          index
+        })
+      }
     }
   }
 
@@ -204,10 +261,11 @@ export function collectFunctionDeclarations(
     'function'
   )
 
-  for (const item of nodes) {
-    const name = item.name
+  for (let index = 0; index < nodes.length; index = index + 1) {
+    const item: IrTopLevelNode = nodes[index]
+    const name = nodeNameForTopLevelLookup(item)
 
-    if (name != null) {
+    if (name !== '') {
       declarations.push(createFunctionDeclaration(item, name))
     }
   }
@@ -218,9 +276,9 @@ export function collectFunctionDeclarations(
 function collectFunctionDeclarationsByName(declarations: IrFunctionDeclaration[]): FunctionDeclarationMap {
   const declarationsByName = createFunctionDeclarationMap()
 
-  for (const declaration of declarations) {
-    const items = functionDeclarationListForName(declarationsByName, declaration.name)
-    items.push(declaration)
+  for (let index = 0; index < declarations.length; index = index + 1) {
+    const declaration = declarations[index]
+    declarationsByName.set(declaration.name, declaration)
   }
 
   return declarationsByName
@@ -231,19 +289,17 @@ function createFunctionDeclarationMap(): FunctionDeclarationMap {
   return map
 }
 
-function functionDeclarationListForName(
+function functionDeclarationForName(
   declarationsByName: FunctionDeclarationMap,
   name: string
-): IrFunctionDeclaration[] {
-  const existing = declarationsByName.get(name)
+): IrFunctionDeclaration | null {
+  const declaration = declarationsByName.get(name)
 
-  if (existing != null) {
-    return existing
+  if (declaration == null) {
+    return null
   }
 
-  const created: IrFunctionDeclaration[] = []
-  declarationsByName.set(name, created)
-  return created
+  return declaration
 }
 
 function nodeAt(nodes: NodeList, index: number): AnyNode | null {
@@ -254,39 +310,35 @@ function nodeAt(nodes: NodeList, index: number): AnyNode | null {
   return nodes[index]
 }
 
-function shiftFunctionDeclaration(
-  declarations: IrFunctionDeclaration[] | null | undefined
-): IrFunctionDeclaration | null {
-  if (declarations == null) {
-    return null
-  }
+function nodeNameForTopLevelLookup(node: IrTopLevelNode): string {
+  const name = node.name
 
-  const declaration = declarations.shift()
-
-  if (declaration == null) {
-    return null
-  }
-
-  return declaration
-}
-
-function nodeNameForTopLevelLookup(node: AnyNode): string {
-  if (node.name == null) {
+  if (name == null) {
     return ''
   }
 
-  return node.name
+  return name
 }
 
-function createFunctionDeclaration(item: AnyNode, name: string): IrFunctionDeclaration {
+function createFunctionDeclaration(item: IrTopLevelNode, name: string): IrFunctionDeclaration {
+  const exported = item.exported ?? false
+  const usesTask = item.async ?? false
+  const params = item.params ?? []
+  const returnNullable = item.returnNullable ?? false
+  const returnType = item.returnType ?? 'void'
   const declaration: IrFunctionDeclaration = {
     name,
-    exported: item.exported === true,
-    async: item.async === true,
-    params: item.params,
-    returnType: item.returnType,
-    returnNullable: item.returnNullable === true,
-    loc: item.loc
+    exported,
+    async: usesTask,
+    params,
+    returnType,
+    returnNullable
+  }
+
+  const loc = item.loc
+
+  if (loc != null) {
+    declaration.loc = loc
   }
 
   if (item.returnArrayElementType != null) {
@@ -320,7 +372,7 @@ function createFunctionDeclaration(item: AnyNode, name: string): IrFunctionDecla
   return declaration
 }
 
-function topLevelItemKind(item: AnyNode): IrTopLevelItemKind {
+function topLevelItemKind(item: IrTopLevelNode): IrTopLevelItemKind {
   if (item.type === 'ImportDeclaration') {
     return 'import'
   }
