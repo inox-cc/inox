@@ -2138,17 +2138,26 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(
     return false
   }
 
-  let valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context)
-
-  if (valueType == null) {
-    valueType = expression.promiseValueType
-  }
-
-  if (valueType == null) {
-    valueType = 'unknown'
-  }
+  const valueType = resolvedAsyncFunctionAwaitValueType(expression, context)
 
   return isSupportedAsyncTaskValueType(valueType)
+}
+
+function resolvedAsyncFunctionAwaitValueType(
+  expression: AsyncTaskAstNode,
+  context: AsyncTaskPlannerContext
+): string {
+  const resolvedValueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context)
+
+  if (resolvedValueType != null) {
+    return resolvedValueType
+  }
+
+  if (expression.promiseValueType != null) {
+    return expression.promiseValueType
+  }
+
+  return 'unknown'
 }
 
 function resolveAsyncTaskReturnValueExpression(
@@ -3048,15 +3057,7 @@ function emitPreparedAsyncFunctionSourceCallExpression(
     return null
   }
 
-  let valueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context)
-
-  if (valueType == null) {
-    valueType = expression.promiseValueType
-  }
-
-  if (valueType == null) {
-    valueType = 'unknown'
-  }
+  const valueType = resolvedAsyncFunctionAwaitValueType(expression, context)
 
   if (!isSupportedAsyncTaskValueType(valueType)) {
     return null

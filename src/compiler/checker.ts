@@ -211,6 +211,19 @@ function resolvedValueTypeMetadata(
   return null
 }
 
+function resolvedConcreteValueTypeMetadata(
+  value: ValueType | null | undefined,
+  fallback: ValueType | null | undefined
+): ValueType {
+  const resolved = resolvedValueTypeMetadata(value, fallback)
+
+  if (resolved != null) {
+    return resolved
+  }
+
+  return 'unknown'
+}
+
 function resolvedStringMetadata(value: string | null | undefined, fallback: string | null | undefined): string | null {
   if (value != null) {
     return value
@@ -1773,11 +1786,7 @@ class Checker {
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
-    let valueType = field.valueType
-
-    if (valueType == null) {
-      valueType = fieldType.valueType
-    }
+    const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
     expression.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
     expression.valueType = valueType
@@ -3999,12 +4008,7 @@ class Checker {
 
       if (path.length === 2 && isProcessRuntimeProperty(path[1])) {
         expression.processRuntimeProperty = path[1]
-        let valueType: ValueType = 'unknown'
-        const propertyValueType = processRuntimePropertyValueType(path[1])
-
-        if (propertyValueType != null) {
-          valueType = propertyValueType
-        }
+        const valueType = resolvedConcreteValueTypeMetadata(processRuntimePropertyValueType(path[1]), 'unknown')
 
         expression.valueType = valueType
         return expression.valueType
