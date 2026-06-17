@@ -63,7 +63,9 @@ type TypeAnnotationOptions = {
 }
 
 function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
-  for (const node of source) {
+  for (let index = 0; index < source.length; index = index + 1) {
+    const node = source[index]
+
     target.push(node)
   }
 }
