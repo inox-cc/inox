@@ -1,5 +1,7 @@
 import { diagnostic } from '../../diagnostics.ts'
 import {
+  cloneCFunctionReturnMapTypeMap,
+  cloneCObjectShapeFieldMap,
   cloneCStringMap,
   cloneCStringSet,
   emitPrepareOwnedValueWrite,
@@ -1701,11 +1703,11 @@ function createAsyncTaskExpressionContext(
   result.functionErrorOut = context.functionErrorOut
   result.functionReturnOut = context.functionReturnOut
   result.functionTypes = context.functionTypes
-  result.mapTypes = new Map(context.mapTypes)
+  result.mapTypes = cloneCFunctionReturnMapTypeMap(context.mapTypes)
   result.narrowedNullableScalars = context.narrowedNullableScalars
   result.netReadingSockets = context.netReadingSockets
   result.nullableVariables = context.nullableVariables
-  result.objectShapes = new Map(context.objectShapes)
+  result.objectShapes = cloneCObjectShapeFieldMap(context.objectShapes)
   result.ownedCryptoHashes = context.ownedCryptoHashes
   result.ownedCryptoHmacs = context.ownedCryptoHmacs
   result.ownedPromises = context.ownedPromises

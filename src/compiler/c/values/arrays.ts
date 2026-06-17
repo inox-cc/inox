@@ -1,4 +1,9 @@
 import {
+  cloneCArrayShapeMap,
+  cloneCFunctionReturnMapTypeMap,
+  cloneCFunctionTypeMap,
+  cloneCObjectShapeFieldMap,
+  cloneCPromiseConstructorHandlerMap,
   cloneCStringMap,
   cloneCStringSet,
   emitPrepareOwnedValueWrite,
@@ -299,16 +304,16 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
     variables: context.variables
   }
 
-  context.arrayShapes = new Map(snapshot.arrayShapes)
+  context.arrayShapes = cloneCArrayShapeMap(snapshot.arrayShapes)
   context.boxedVariables = cloneCStringSet(snapshot.boxedVariables)
   context.classInstanceTypes = cloneCStringMap(snapshot.classInstanceTypes)
   context.errorObjectNames = cloneCStringSet(snapshot.errorObjectNames)
-  context.functionTypes = new Map(snapshot.functionTypes)
-  context.mapTypes = new Map(snapshot.mapTypes)
+  context.functionTypes = cloneCFunctionTypeMap(snapshot.functionTypes)
+  context.mapTypes = cloneCFunctionReturnMapTypeMap(snapshot.mapTypes)
   context.narrowedNullableScalars = cloneCStringSet(snapshot.narrowedNullableScalars)
   context.nullableVariables = cloneCStringSet(snapshot.nullableVariables)
-  context.objectShapes = new Map(snapshot.objectShapes)
-  context.promiseConstructorHandlers = new Map(snapshot.promiseConstructorHandlers)
+  context.objectShapes = cloneCObjectShapeFieldMap(snapshot.objectShapes)
+  context.promiseConstructorHandlers = cloneCPromiseConstructorHandlerMap(snapshot.promiseConstructorHandlers)
   context.promiseRejectionValueTypes = cloneCStringMap(snapshot.promiseRejectionValueTypes)
   context.promiseValueTypes = cloneCStringMap(snapshot.promiseValueTypes)
   context.runtimeArrayElementTypes = cloneCStringMap(snapshot.runtimeArrayElementTypes)

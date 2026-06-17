@@ -29,10 +29,12 @@ export type CLoopFlowTarget = {
   throughFinally: boolean
 }
 
+export type CArrayShapeMap = Map<string, CArrayElementInfo[]>
 export type CBooleanMap = Map<string, boolean>
 export type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 export type CFunctionTypeMap = Map<string, CFunctionType>
 export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
+export type CPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
 export type CStringMap = Map<string, string>
 export type CStringNullableMap = Map<string, string | null>
 export type CStringSet = Set<string>
@@ -57,6 +59,82 @@ export function cloneCStringSet(values: CStringSet): CStringSet {
 
 export function cloneCStringMap(values: CStringMap): CStringMap {
   const result: CStringMap = new Map()
+
+  for (const entry of values) {
+    result.set(entry[0], entry[1])
+  }
+
+  return result
+}
+
+export function cloneCArrayShapeMap(values: CArrayShapeMap | null | undefined): CArrayShapeMap {
+  const result: CArrayShapeMap = new Map()
+
+  if (values == null) {
+    return result
+  }
+
+  for (const entry of values) {
+    result.set(entry[0], entry[1])
+  }
+
+  return result
+}
+
+export function cloneCFunctionTypeMap(values: CFunctionTypeMap | null | undefined): CFunctionTypeMap {
+  const result: CFunctionTypeMap = new Map()
+
+  if (values == null) {
+    return result
+  }
+
+  for (const entry of values) {
+    result.set(entry[0], entry[1])
+  }
+
+  return result
+}
+
+export function cloneCFunctionReturnMapTypeMap(
+  values: CFunctionReturnMapTypeMap | null | undefined
+): CFunctionReturnMapTypeMap {
+  const result: CFunctionReturnMapTypeMap = new Map()
+
+  if (values == null) {
+    return result
+  }
+
+  for (const entry of values) {
+    result.set(entry[0], entry[1])
+  }
+
+  return result
+}
+
+export function cloneCObjectShapeFieldMap(
+  values: CObjectShapeFieldMap | null | undefined
+): CObjectShapeFieldMap {
+  const result: CObjectShapeFieldMap = new Map()
+
+  if (values == null) {
+    return result
+  }
+
+  for (const entry of values) {
+    result.set(entry[0], entry[1])
+  }
+
+  return result
+}
+
+export function cloneCPromiseConstructorHandlerMap(
+  values: CPromiseConstructorHandlerMap | null | undefined
+): CPromiseConstructorHandlerMap {
+  const result: CPromiseConstructorHandlerMap = new Map()
+
+  if (values == null) {
+    return result
+  }
 
   for (const entry of values) {
     result.set(entry[0], entry[1])
@@ -148,7 +226,7 @@ export type COwnedPromiseContext = {
 }
 
 export type CFunctionContext = CEmitContext & {
-  arrayShapes: Map<string, CArrayElementInfo[]>
+  arrayShapes: CArrayShapeMap
   breakFlowUsed: boolean
   breakTargets: CLoopFlowTarget[]
   boxedValueTypes: CStringMap
@@ -180,7 +258,7 @@ export type CFunctionContext = CEmitContext & {
   ownedPromises: string[]
   ownedValues: string[]
   objectShapes: CObjectShapeFieldMap
-  promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
+  promiseConstructorHandlers: CPromiseConstructorHandlerMap
   promiseRejectionValueTypes: CStringMap
   promiseValueTypes: CStringMap
   returnNullable: boolean
@@ -204,7 +282,7 @@ export type CFunctionContext = CEmitContext & {
 }
 
 export type CVariableScopeSnapshot = {
-  arrayShapes: Map<string, CArrayElementInfo[]>
+  arrayShapes: CArrayShapeMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   errorObjectNames: CStringSet
@@ -213,7 +291,7 @@ export type CVariableScopeSnapshot = {
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
   objectShapes: CObjectShapeFieldMap
-  promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
+  promiseConstructorHandlers: CPromiseConstructorHandlerMap
   promiseRejectionValueTypes: CStringMap
   promiseValueTypes: CStringMap
   runtimeArrayElementTypes: CStringMap
@@ -765,16 +843,16 @@ export function pushVariableScope(context: CFunctionContext): CVariableScopeSnap
   const previousRuntimeStrings = context.runtimeStrings
 
   context.variables = cloneCStringMap(previousVariables)
-  context.arrayShapes = new Map(previousArrayShapes)
+  context.arrayShapes = cloneCArrayShapeMap(previousArrayShapes)
   context.boxedVariables = cloneCStringSet(previousBoxedVariables)
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
   context.errorObjectNames = cloneCStringSet(previousErrorObjectNames)
-  context.functionTypes = new Map(previousFunctionTypes)
-  context.mapTypes = new Map(previousMapTypes)
+  context.functionTypes = cloneCFunctionTypeMap(previousFunctionTypes)
+  context.mapTypes = cloneCFunctionReturnMapTypeMap(previousMapTypes)
   context.narrowedNullableScalars = cloneCStringSet(previousNarrowedNullableScalars)
   context.nullableVariables = cloneCStringSet(previousNullableVariables)
-  context.objectShapes = new Map(previousObjectShapes)
-  context.promiseConstructorHandlers = new Map(previousPromiseConstructorHandlers)
+  context.objectShapes = cloneCObjectShapeFieldMap(previousObjectShapes)
+  context.promiseConstructorHandlers = cloneCPromiseConstructorHandlerMap(previousPromiseConstructorHandlers)
   context.promiseRejectionValueTypes = cloneCStringMap(previousPromiseRejectionValueTypes)
   context.promiseValueTypes = cloneCStringMap(previousPromiseValueTypes)
   context.runtimeCallbacks = cloneCStringSet(previousRuntimeCallbacks)
