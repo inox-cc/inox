@@ -9,7 +9,7 @@ export function emitCIdentifier(value: string): string {
     const code = value.charCodeAt(index)
 
     if (isCIdentifierCode(code)) {
-      result = result + value[index]
+      result = result + value.slice(index, index + 1)
     } else {
       result = result + '_'
     }
@@ -57,12 +57,27 @@ export function utf8ByteLength(value: string): number {
 }
 
 export function escapeCString(value: string): string {
-  return value
-    .replaceAll('\\', '\\\\')
-    .replaceAll('"', '\\"')
-    .replaceAll('\n', '\\n')
-    .replaceAll('\r', '\\r')
-    .replaceAll('\t', '\\t')
+  let result = ''
+
+  for (let index = 0; index < value.length; index = index + 1) {
+    const code = value.charCodeAt(index)
+
+    if (code === 92) {
+      result = result + '\\\\'
+    } else if (code === 34) {
+      result = result + '\\"'
+    } else if (code === 10) {
+      result = result + '\\n'
+    } else if (code === 13) {
+      result = result + '\\r'
+    } else if (code === 9) {
+      result = result + '\\t'
+    } else {
+      result = result + value.slice(index, index + 1)
+    }
+  }
+
+  return result
 }
 
 function isHighSurrogate(code: number): boolean {
