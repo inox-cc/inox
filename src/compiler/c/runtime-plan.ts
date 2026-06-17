@@ -161,7 +161,9 @@ export function resolveCRuntimePreludeRequirements(
 }
 
 function runtimePlanHasSupportedFetchGlobalUsage(globalUsages: IrGlobalUsage[]): boolean {
-  for (const usage of globalUsages) {
+  for (let index = 0; index < globalUsages.length; index = index + 1) {
+    const usage = globalUsages[index] as IrGlobalUsage
+
     if (isSupportedCFetchGlobalUsage(usage)) {
       return true
     }
@@ -171,7 +173,9 @@ function runtimePlanHasSupportedFetchGlobalUsage(globalUsages: IrGlobalUsage[]):
 }
 
 function runtimePlanHasSupportedMathGlobalUsage(globalUsages: IrGlobalUsage[]): boolean {
-  for (const usage of globalUsages) {
+  for (let index = 0; index < globalUsages.length; index = index + 1) {
+    const usage = globalUsages[index] as IrGlobalUsage
+
     if (isSupportedCMathGlobalUsage(usage)) {
       return true
     }
@@ -184,7 +188,9 @@ function runtimePlanHasSupportedCryptoGlobalUsage(
   globalUsages: IrGlobalUsage[],
   context: CGlobalUsageSupportContext
 ): boolean {
-  for (const usage of globalUsages) {
+  for (let index = 0; index < globalUsages.length; index = index + 1) {
+    const usage = globalUsages[index] as IrGlobalUsage
+
     if (isSupportedCCryptoGlobalUsage(usage, context)) {
       return true
     }
