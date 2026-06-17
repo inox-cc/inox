@@ -1,6 +1,10 @@
 import type { AnyNode, SourceLocation, Token } from '../types.ts'
 import { locFromToken } from './locations.ts'
 
+type OptionalCallTargetNode = AnyNode & {
+  callee: AnyNode
+}
+
 export function createAssignmentExpression(target: AnyNode, value: AnyNode): AnyNode {
   return {
     type: 'AssignmentExpression',
@@ -124,18 +128,20 @@ export function createOptionalMemberExpression(object: AnyNode, property: Token)
 }
 
 export function createCallExpression(callee: AnyNode, args: AnyNode[]): AnyNode {
-  const optional = callee.type === 'OptionalCallTarget'
-  let expressionType = 'CallExpression'
-  let actualCallee = callee
+  if (callee.type === 'OptionalCallTarget') {
+    const target = callee as OptionalCallTargetNode
 
-  if (optional) {
-    expressionType = 'OptionalCallExpression'
-    actualCallee = callee.callee
+    return {
+      type: 'OptionalCallExpression',
+      callee: target.callee,
+      args,
+      loc: callee.loc
+    }
   }
 
   return {
-    type: expressionType,
-    callee: actualCallee,
+    type: 'CallExpression',
+    callee,
     args,
     loc: callee.loc
   }
