@@ -2468,6 +2468,12 @@ class Checker {
       return mathType
     }
 
+    const arrayIsArrayType = this.checkArrayIsArrayCall(expression)
+
+    if (arrayIsArrayType != null) {
+      return arrayIsArrayType
+    }
+
     this.checkExpression(expression.callee)
     const argTypes: ValueType[] = []
 
@@ -4874,6 +4880,34 @@ class Checker {
     }
 
     return 'number'
+  }
+
+  checkArrayIsArrayCall(expression: AnyNode): ValueType | null {
+    const path = memberExpressionPath(expression.callee)
+
+    if (path == null || path.length !== 2 || path[0] !== 'Array' || path[1] !== 'isArray') {
+      return null
+    }
+
+    if (this.scope.resolve('Array') != null) {
+      return null
+    }
+
+    expression.arrayIsArrayCall = true
+    expression.valueType = 'boolean'
+
+    if (expression.args.length !== 1) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function Array.isArray expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+      return 'boolean'
+    }
+
+    this.checkExpression(expression.args[0])
+
+    return 'boolean'
   }
 
   checkFsConstantMemberExpression(expression: AnyNode): ValueType | null {

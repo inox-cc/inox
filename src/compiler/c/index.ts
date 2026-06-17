@@ -955,6 +955,7 @@ const expressionTypeDependencies = {
   collectionConstructorName,
   cryptoRuntimeMethodName,
   emitPreparedNetAddressPortExpression,
+  isArrayIsArrayCall,
   isArrayLengthExpression,
   isBinaryConstructorExpression,
   isBinaryRuntimeCall,
@@ -1039,6 +1040,7 @@ const cScalarExpressionDependencies = {
   emitCValueExpression,
   emitObjectValueReference,
   emitPreparedArrayLengthExpression,
+  emitPreparedArrayIsArrayCallExpression,
   emitPreparedBinaryNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBinaryNumberCallExpression(expression, context, binaryLoweringDependencies),
   emitPreparedBytesIndexExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -4909,6 +4911,35 @@ function isFetchAbortControllerConstructorExpression(expression: AnyNode): boole
     expression.callee.path.length === 1 &&
     expression.callee.path[0] === 'AbortController'
   )
+}
+
+function isArrayIsArrayCall(expression: AnyNode): boolean {
+  if (expression.type !== 'CallExpression' || expression.args.length !== 1) {
+    return false
+  }
+
+  const callee = expression.callee
+
+  return (
+    callee.type === 'MemberExpression' &&
+    callee.property === 'isArray' &&
+    callee.object.type === 'Reference' &&
+    callee.object.path.length === 1 &&
+    callee.object.path[0] === 'Array'
+  )
+}
+
+function emitPreparedArrayIsArrayCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
+  if (!isArrayIsArrayCall(expression)) {
+    return null
+  }
+
+  const value = emitCValueExpression(expression.args[0], context)
+
+  return {
+    lines: value.lines,
+    expression: `(${value.expression}.tag == CCJS_TAG_ARRAY)`
+  }
 }
 
 function isErrorValueExpression(expression: AnyNode, context: CFunctionContext): boolean {

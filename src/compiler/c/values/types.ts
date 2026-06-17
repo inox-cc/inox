@@ -30,6 +30,7 @@ export type CExpressionTypeDependencies = {
   cUrlRuntimeMethodName: (expression: AnyNode) => string | null
   collectionConstructorName: (expression: AnyNode) => string | null
   cryptoRuntimeMethodName: (expression: AnyNode) => string | null
+  isArrayIsArrayCall: (expression: AnyNode) => boolean
   emitPreparedNetAddressPortExpression: (expression: AnyNode, context: CFunctionContext) => CPreparedExpression | null
   isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isBinaryConstructorExpression: (expression: AnyNode) => boolean
@@ -316,6 +317,10 @@ export function inferExpressionType(
 
   if (expression.type === 'CallExpression' && deps.mathRuntimeMethodName(expression.callee) != null) {
     return 'number'
+  }
+
+  if (deps.isArrayIsArrayCall(expression)) {
+    return 'boolean'
   }
 
   if (deps.isNumberConversionCall(expression, context)) {

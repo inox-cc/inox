@@ -135,6 +135,7 @@ test('lowers C null literals in prepared scalar expressions', () => {
   }
   const deps = {
     cFsRuntimeConstantExpression: () => null,
+    emitPreparedArrayIsArrayCallExpression: () => null,
     emitPreparedClassMethodCallExpression: () => null,
     emitPreparedPathBooleanCallExpression: () => null,
     emitPreparedProcessNumberExpression: () => null,
@@ -153,6 +154,27 @@ test('lowers C null literals in prepared scalar expressions', () => {
     lines: [],
     expression: '0'
   })
+})
+
+test('lowers Array.isArray calls to C runtime tag checks', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const values = [1, 2, 3]
+  console.log(Array.isArray(values), Array.isArray(7))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.deepEqual(
+    result.ir.globalUsages.map((usage) => usage.path.join('.')),
+    ['Array.isArray', 'Array.isArray']
+  )
+  assert.match(result.code, /ccjs_array_new\(&ccjs_default_allocator, 3, &values\)/)
+  assert.match(result.code, /\(values\.tag == CCJS_TAG_ARRAY\)/)
+  assert.match(result.code, /\(ccjs_number_value\(7\)\.tag == CCJS_TAG_ARRAY\)/)
 })
 
 test('erases TypeScript as expressions before C emission', () => {

@@ -267,6 +267,7 @@ export type CScalarExpressionDependencies = {
   emitPreparedBinaryNumberCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBytesIndexExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBytesLengthExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArrayIsArrayCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitPreparedClassMethodCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
@@ -922,6 +923,12 @@ export function emitPreparedNumberExpression(
 
   if (pathBooleanCall != null) {
     return pathBooleanCall
+  }
+
+  const arrayIsArrayCall = deps.emitPreparedArrayIsArrayCallExpression(expression, context)
+
+  if (arrayIsArrayCall != null) {
+    return arrayIsArrayCall
   }
 
   const urlSearchParamsCall = deps.emitPreparedUrlSearchParamsCallExpression(expression, context)
