@@ -493,7 +493,7 @@ function recordNodeFeatures(node: FeatureNode, features: Set<IrFeature>): void {
 
     if (
       operator != null &&
-      ['===', '!==', '==', '!='].includes(operator) &&
+      isFeatureEqualityOperator(operator) &&
       (mayBeStringBytesOperand(node.left) || mayBeStringBytesOperand(node.right))
     ) {
       features.add('string-bytes')
@@ -508,7 +508,7 @@ function recordNodeFeatures(node: FeatureNode, features: Set<IrFeature>): void {
 function recordCallableSignatureFeatures(node: FeatureNode, features: Set<IrFeature>): void {
   const returnType = node.returnType
 
-  if ((returnType != null && ['bytes', 'string'].includes(returnType)) || node.returnNullable === true) {
+  if ((returnType != null && isRuntimeCallableReturnType(returnType)) || node.returnNullable === true) {
     features.add('runtime-values')
   }
 
@@ -517,7 +517,7 @@ function recordCallableSignatureFeatures(node: FeatureNode, features: Set<IrFeat
   }
 
   for (const param of node.params) {
-    if (['bytes', 'string', 'object'].includes(param.valueType) || isRuntimeFunctionType(param.functionType)) {
+    if (isRuntimeCallableParamValueType(param.valueType) || isRuntimeFunctionType(param.functionType)) {
       features.add('runtime-values')
     }
 
@@ -851,7 +851,7 @@ function isNumberConversionCall(expression: FeatureNode): boolean {
 function isNumericCastCall(expression: FeatureNode): boolean {
   const calleePath = simpleReferencePath(expression.callee)
 
-  return calleePath != null && ['i32', 'u32', 'u64', 'f32', 'f64'].includes(calleePath[0])
+  return calleePath != null && isNumericCastName(calleePath[0])
 }
 
 function stringRuntimeMethodName(expression: FeatureNode): string | null {
@@ -904,16 +904,7 @@ function mayBeStringBytesOperand(expression: FeatureNode | null | undefined): bo
   }
 
   return (
-    expression.type != null &&
-    [
-      'StringLiteral',
-      'TemplateLiteral',
-      'Reference',
-      'MemberExpression',
-      'IndexExpression',
-      'CallExpression',
-      'BinaryExpression'
-    ].includes(expression.type)
+    isPossibleStringBytesNodeType(expression.type)
   )
 }
 
@@ -931,7 +922,7 @@ function isRuntimeFunctionType(functionType: FeatureFunctionType | null | undefi
   }
 
   for (const param of params) {
-    if (!['number', 'boolean', 'string', 'object'].includes(param.valueType)) {
+    if (!isSupportedRuntimeFunctionParamValueType(param.valueType)) {
       return false
     }
 
@@ -941,6 +932,42 @@ function isRuntimeFunctionType(functionType: FeatureFunctionType | null | undefi
   }
 
   return hasRuntimeParam
+}
+
+function isFeatureEqualityOperator(operator: string): boolean {
+  return operator === '===' || operator === '!==' || operator === '==' || operator === '!='
+}
+
+function isRuntimeCallableReturnType(valueType: string): boolean {
+  return valueType === 'bytes' || valueType === 'string'
+}
+
+function isRuntimeCallableParamValueType(valueType: string | null | undefined): boolean {
+  return valueType === 'bytes' || valueType === 'string' || valueType === 'object'
+}
+
+function isNumericCastName(name: string | undefined): boolean {
+  return name === 'i32' || name === 'u32' || name === 'u64' || name === 'f32' || name === 'f64'
+}
+
+function isPossibleStringBytesNodeType(nodeType: string | null | undefined): boolean {
+  if (nodeType == null) {
+    return false
+  }
+
+  return (
+    nodeType === 'StringLiteral' ||
+    nodeType === 'TemplateLiteral' ||
+    nodeType === 'Reference' ||
+    nodeType === 'MemberExpression' ||
+    nodeType === 'IndexExpression' ||
+    nodeType === 'CallExpression' ||
+    nodeType === 'BinaryExpression'
+  )
+}
+
+function isSupportedRuntimeFunctionParamValueType(valueType: string | null | undefined): boolean {
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'object'
 }
 
 function simpleReferencePath(expression: FeatureNode | null | undefined): string[] | null {
