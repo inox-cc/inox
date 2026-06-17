@@ -360,6 +360,7 @@ import {
   emitPreparedMapIndexGetExpression,
   isCollectionConstructorExpression,
   resolveRuntimeForOfMap,
+  resolveRuntimeForOfMapValues,
   resolveRuntimeForOfSet,
   resolveRuntimeMapType,
   resolveRuntimeSetElementType
@@ -695,6 +696,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   resolveRuntimeArrayIndex,
   resolveRuntimeForOfArray,
   resolveRuntimeForOfMap,
+  resolveRuntimeForOfMapValues,
   resolveRuntimeStringReference,
   resolveRuntimeForOfSet,
   emitBoxedRuntimeValueAssignment,

@@ -66,6 +66,12 @@ type RuntimeForOfMap = {
   valueType: string
 }
 
+type RuntimeForOfMapValues = {
+  elementType: string
+  lines: string[]
+  name: string
+}
+
 type RuntimeMapMetadata = {
   key: string
   value: string
@@ -232,6 +238,7 @@ export type StatementLoweringDependencies = {
   resolveRuntimeArrayIndex(expression: StatementNode, context: CFunctionContext): CRuntimeArrayElement | null
   resolveRuntimeForOfArray(expression: StatementNode, context: CFunctionContext): RuntimeForOfArray | null
   resolveRuntimeForOfMap(expression: StatementNode, context: CFunctionContext): RuntimeForOfMap | null
+  resolveRuntimeForOfMapValues(expression: StatementNode, context: CFunctionContext): RuntimeForOfMapValues | null
   resolveRuntimeForOfSet(expression: StatementNode, context: CFunctionContext): RuntimeForOfSet | null
   emitBoxedRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[]
   emitConsoleLogStatement(method: string, args: StatementNode[], context: CFunctionContext): string[]
@@ -1443,6 +1450,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   let array: KnownForOfArray | null = statementDeps(context).resolveKnownForOfArray(statement.iterable, context)
   let runtimeArray: RuntimeForOfArray | null = null
   let runtimeMap: RuntimeForOfMap | null = null
+  let runtimeMapValues: RuntimeForOfMapValues | null = null
   let runtimeSet: RuntimeForOfSet | null = null
 
   if (array == null) {
@@ -1473,6 +1481,14 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
 
   if (array == null) {
     runtimeArray = statementDeps(context).resolveRuntimeForOfArray(statement.iterable, context)
+  }
+
+  if (array == null && runtimeArray == null) {
+    runtimeMapValues = statementDeps(context).resolveRuntimeForOfMapValues(statement.iterable, context)
+  }
+
+  if (runtimeMapValues != null) {
+    return emitRuntimeMapValuesForOfStatement(statement, runtimeMapValues, context)
   }
 
   if (array == null && runtimeArray == null) {
@@ -1680,26 +1696,83 @@ function emitRuntimeMapForOfStatement(
   }
 }
 
+function emitRuntimeMapValuesForOfStatement(
+  statement: StatementNode,
+  runtimeMapValues: RuntimeForOfMapValues,
+  context: CFunctionContext
+): string[] {
+  return emitRuntimeCollectionValueForOfStatement(
+    statement,
+    runtimeMapValues.name,
+    runtimeMapValues.elementType,
+    runtimeMapValues.lines,
+    'map',
+    context
+  )
+}
+
 function emitRuntimeSetForOfStatement(
   statement: StatementNode,
   runtimeSet: RuntimeForOfSet,
   context: CFunctionContext
 ): string[] {
-  const elementType = runtimeSet.elementType
+  return emitRuntimeCollectionValueForOfStatement(
+    statement,
+    runtimeSet.name,
+    runtimeSet.elementType,
+    runtimeSet.lines,
+    'set',
+    context
+  )
+}
 
-  if (!isCCollectionHashableType(elementType)) {
+function emitRuntimeCollectionValueForOfStatement(
+  statement: StatementNode,
+  collectionName: string,
+  elementType: string,
+  setupLines: string[],
+  collectionKind: string,
+  context: CFunctionContext
+): string[] {
+  const isMap = collectionKind === 'map'
+  let unsupported = false
+  let unsupportedMessage = 'C for-of currently supports only uniform number/boolean/string Set values'
+
+  if (isMap) {
+    unsupportedMessage = 'C for-of currently supports only uniform number/boolean/string/object Map values'
+
+    if (!isCForOfArrayElementType(elementType)) {
+      unsupported = true
+    }
+  } else if (!isCCollectionHashableType(elementType)) {
+    unsupported = true
+  }
+
+  if (unsupported) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FOR_OF',
-        'C for-of currently supports only uniform number/boolean/string Set values',
+        unsupportedMessage,
         statement.loc
       )
     )
     return []
   }
 
-  const index = nextCName(context, 'ccjs_for_set_index')
-  const set = nextCName(context, 'ccjs_for_set')
+  let indexPrefix = 'ccjs_for_set_index'
+  let collectionPrefix = 'ccjs_for_set'
+  let collectionType = 'ccjs_set'
+  let slotState = 'CCJS_SET_SLOT_OCCUPIED'
+
+  if (isMap) {
+    indexPrefix = 'ccjs_for_map_index'
+    collectionPrefix = 'ccjs_for_map'
+    collectionType = 'ccjs_map'
+    slotState = 'CCJS_MAP_SLOT_OCCUPIED'
+  }
+
+  const index = nextCName(context, indexPrefix)
+  const collection = nextCName(context, collectionPrefix)
   const value = nextCName(context, 'ccjs_for_value')
   const breakLabel = nextCName(context, 'ccjs_break')
   const continueLabel = nextCName(context, 'ccjs_continue')
@@ -1717,6 +1790,8 @@ function emitRuntimeSetForOfStatement(
     context.variables.set(statement.name, elementType)
     if (elementType === 'string') {
       context.runtimeStrings.add(statement.name)
+    } else if (elementType === 'object') {
+      registerObjectShape(context, statement.name, statement.shape)
     }
     const body = withBreakTarget(context, breakLabel, false, () =>
       withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
@@ -1727,6 +1802,9 @@ function emitRuntimeSetForOfStatement(
     if (elementType === 'string') {
       declaration = `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
       checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+    } else if (elementType === 'object') {
+      declaration = `ccjs_value ${statement.name} = ${value};`
+      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_OBJECT || ${value}.as.ref == 0`, context))
     } else if (elementType === 'boolean') {
       checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context))
     } else {
@@ -1734,12 +1812,12 @@ function emitRuntimeSetForOfStatement(
     }
 
     const lines: string[] = []
-    pushAllLines(lines, runtimeSet.lines)
-    lines.push(`ccjs_set* ${set} = (ccjs_set*)${runtimeSet.name}.as.ref;`)
-    lines.push(`for (size_t ${index} = 0; ${index} < ${set}->cap; ${index} += 1) {`)
-    lines.push(`  if (${set}->entries[${index}].state != CCJS_SET_SLOT_OCCUPIED) continue;`)
+    pushAllLines(lines, setupLines)
+    lines.push(`${collectionType}* ${collection} = (${collectionType}*)${collectionName}.as.ref;`)
+    lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->cap; ${index} += 1) {`)
+    lines.push(`  if (${collection}->entries[${index}].state != ${slotState}) continue;`)
     pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
-    lines.push(`  ${value} = ${set}->entries[${index}].value;`)
+    lines.push(`  ${value} = ${collection}->entries[${index}].value;`)
     lines.push(`  ccjs_retain(${value});`)
     pushIndentedLines(lines, checks, '  ')
     lines.push(`  ${declaration}`)
