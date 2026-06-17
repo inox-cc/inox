@@ -55,7 +55,7 @@ import {
 } from './context.ts'
 import type { CEmitContext, CFunctionContext } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
-import { emitCFunctionName } from './identifiers.ts'
+import { emitCFunctionName, emitCIdentifier } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
 import { emitCPrelude } from './prelude.ts'
 import {
@@ -84,8 +84,14 @@ import {
 } from './stdlib/net.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
 import type { CClassInfo, CClassMethod, CModuleEmitOptions, CModulePlan } from './types.ts'
-import { isManagedRuntimeReturnType } from './value-types.ts'
+import { emitCType, isManagedRuntimeReturnType } from './value-types.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
+
+type CModuleValueDeclaration = {
+  name: string
+  symbolName: string
+  valueType: string
+}
 
 function pushCModuleLines(target: string[], source: string[]): void {
   for (let index = 0; index < source.length; index = index + 1) {
@@ -146,6 +152,7 @@ export function emitCModuleSource(
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
+  const exportedValues = collectCModuleExportedValueDeclarations(plan)
   const prelude = resolveCRuntimePreludeRequirements({
     classInfoCount: context.classInfos.size,
     cryptoContext: context,
@@ -213,6 +220,7 @@ export function emitCModuleSource(
     )
   )
 
+  emitCModuleValueDefinitions(lines, exportedValues)
   emitCModuleDeclarations(lines, functions, classMethods, context, deps)
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
@@ -276,6 +284,7 @@ export function emitCModuleHeader(
 ): string {
   const context = createCModuleBaseContext(plan, plans, diagnostics, deps)
   const exportedFunctions = collectCModuleExportedFunctions(plan)
+  const exportedValues = collectCModuleExportedValueDeclarations(plan)
   const lines: string[] = []
 
   lines.push(`#ifndef ${plan.headerGuard}`)
@@ -292,6 +301,10 @@ export function emitCModuleHeader(
 
   for (const item of exportedFunctions) {
     lines.push(`${deps.emitFunctionHead(item, context)};`)
+  }
+
+  for (const item of exportedValues) {
+    lines.push(`extern ${cModuleValueCType(item.valueType)} ${item.symbolName};`)
   }
 
   lines.push('')
@@ -430,6 +443,9 @@ function createCModuleBaseContext(
 
   const context = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
 
+  registerCModuleValueDeclarations(context, plan)
+  registerImportedCModuleValueDeclarations(context, plan)
+
   context.dgramImportNames = collectRuntimeImportNames(
     irPrograms,
     new Set(['dgram', 'node:dgram']),
@@ -492,6 +508,99 @@ function collectCModuleContextRuntimeTypes(context: CEmitContext): Set<string> {
   }
 
   return types
+}
+
+function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePlan): void {
+  for (const item of collectCModuleExportedValueDeclarations(plan)) {
+    context.moduleValueNames.set(item.name, item.symbolName)
+    context.moduleValueTypes.set(item.name, item.valueType)
+  }
+}
+
+function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: CModulePlan): void {
+  for (const item of plan.imports) {
+    for (const specifier of item.declaration.specifiers) {
+      const exported = item.module.record.exports.get(specifier.imported)
+
+      if (exported == null || exported.type !== 'VariableDeclaration') {
+        continue
+      }
+
+      context.moduleValueNames.set(specifier.local, emitCModuleValueName(item.module, specifier.imported))
+      context.moduleValueTypes.set(specifier.local, cModuleValueType(exported))
+    }
+  }
+}
+
+function collectCModuleExportedValueDeclarations(plan: CModulePlan): CModuleValueDeclaration[] {
+  const values: CModuleValueDeclaration[] = []
+
+  for (const item of collectIrTopLevelNodes(plan.ir, 'statement')) {
+    if (item.type !== 'VariableDeclaration' || item.exported !== true) {
+      continue
+    }
+
+    values.push({
+      name: item.name,
+      symbolName: emitCModuleValueName(plan, item.name),
+      valueType: cModuleValueType(item)
+    })
+  }
+
+  return values
+}
+
+function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclaration[]): void {
+  if (values.length === 0) {
+    return
+  }
+
+  for (const item of values) {
+    const cType = cModuleValueCType(item.valueType)
+    const initializer = cModuleValueGlobalInitializer(item.valueType)
+
+    if (initializer === '') {
+      lines.push(`${cType} ${item.symbolName};`)
+    } else {
+      lines.push(`${cType} ${item.symbolName} = ${initializer};`)
+    }
+  }
+
+  lines.push('')
+}
+
+function cModuleValueType(node: AnyNode): string {
+  const valueType = node.valueType
+
+  if (valueType == null || valueType === '') {
+    return 'unknown'
+  }
+
+  return valueType
+}
+
+function cModuleValueCType(valueType: string): string {
+  if (valueType === 'string') {
+    return 'char*'
+  }
+
+  if (valueType === 'unknown') {
+    return 'ccjs_value'
+  }
+
+  return emitCType(valueType)
+}
+
+function cModuleValueGlobalInitializer(valueType: string): string {
+  if (valueType === 'string') {
+    return '""'
+  }
+
+  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType)) {
+    return ''
+  }
+
+  return '0'
 }
 
 function emitCModuleInitFunction(
@@ -719,4 +828,8 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
 
 function emitCModuleFunctionName(plan: CModulePlan, name: string): string {
   return `${plan.symbolPrefix}_${emitCFunctionName(name)}`
+}
+
+function emitCModuleValueName(plan: CModulePlan, name: string): string {
+  return `${plan.symbolPrefix}_${emitCIdentifier(name)}`
 }

@@ -196,6 +196,7 @@ export type StatementLoweringDependencies = {
   emitProcessExitStatement(expression: StatementNode, context: CFunctionContext): string[] | null
   emitPromiseConstructorSettlementCall(expression: StatementNode, context: CFunctionContext): string[] | null
   emitReference(expression: StatementNode, context: CFunctionContext): string
+  emitModuleValueVariableAssignment(statement: StatementNode, context: CFunctionContext): string[]
   emitRuntimeCallbackVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
   emitScalarVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
   emitStatement(statement: StatementNode, context: CFunctionContext): string[]
@@ -1983,6 +1984,11 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
 
 export function emitVariableDeclarationStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const deps = statementDeps(context)
+
+  if (context.moduleValueNames.has(statement.name)) {
+    return deps.emitModuleValueVariableAssignment(statement, context)
+  }
+
   const dgramSocket = deps.emitDgramSocketVariableDeclaration(statement, context)
 
   if (dgramSocket != null) {

@@ -180,7 +180,7 @@ function reportUnsupportedCModuleImports(
   for (const specifier of declaration.specifiers) {
     const exported = importedModule.record.exports.get(specifier.imported)
 
-    if (exported == null || exported.type === 'FunctionDeclaration') {
+    if (exported == null || exported.type === 'FunctionDeclaration' || exported.type === 'VariableDeclaration') {
       continue
     }
 

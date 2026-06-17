@@ -737,6 +737,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPromiseConstructorSettlementCall: (expression: AnyNode, context: CFunctionContext) =>
     emitPromiseConstructorSettlementCall(expression, context, promiseLoweringDependencies),
   emitReference,
+  emitModuleValueVariableAssignment,
   emitRuntimeCallbackVariableDeclaration,
   emitScalarVariableDeclaration,
   emitStatement,
@@ -1470,6 +1471,8 @@ function createBaseContext(
     functionAsyncFlags,
     asyncTaskWrappers: new Map(),
     jsGlobalRoots,
+    moduleValueNames: new Map(),
+    moduleValueTypes: new Map(),
     promiseChainArrowWrappers: new Map(),
     promiseChainWrappers: new Map(),
     processRuntime: false,
@@ -2098,6 +2101,68 @@ function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context:
   }
 
   return [`${prefix}double ${statement.name} = 0;`]
+}
+
+function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctionContext): string[] {
+  const name = context.moduleValueNames.get(statement.name)
+
+  if (name == null) {
+    return emitScalarVariableDeclaration(statement, context)
+  }
+
+  let inferred = knownValueType(statement.valueType)
+
+  if (inferred == null && statement.init != null) {
+    inferred = inferExpressionType(statement.init, context)
+  }
+
+  if (inferred == null) {
+    inferred = 'unknown'
+  }
+
+  context.variables.set(statement.name, inferred)
+  context.moduleValueTypes.set(statement.name, inferred)
+
+  if (statement.init == null) {
+    return [`${name} = ${moduleValueDefaultExpression(inferred)};`]
+  }
+
+  if (inferred === 'number' || inferred === 'boolean') {
+    const value = emitPreparedNumberExpression(statement.init, context)
+    const lines: string[] = []
+
+    pushAll(lines, value.lines)
+    lines.push(`${name} = ${value.expression};`)
+    return lines
+  }
+
+  if (inferred === 'string') {
+    return [`${name} = ${emitStringExpression(statement.init, context)};`]
+  }
+
+  const value = emitCValueExpression(statement.init, context)
+  const lines: string[] = []
+
+  pushAll(lines, value.lines)
+  lines.push(`${name} = ${value.expression};`)
+
+  if (inferred === 'unknown' || isManagedRuntimeReturnType(inferred)) {
+    lines.push(`ccjs_retain(${name});`)
+  }
+
+  return lines
+}
+
+function moduleValueDefaultExpression(valueType: string): string {
+  if (valueType === 'string') {
+    return '""'
+  }
+
+  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType)) {
+    return 'ccjs_undefined_value()'
+  }
+
+  return '0'
 }
 
 function uninitializedDeclarationPrefix(statement: AnyNode): string {
@@ -3599,6 +3664,12 @@ function emitReference(expression: AnyNode, context: CFunctionContext): string {
     const name = expression.path.join('_')
 
     if (context.variables.has(name)) {
+      const moduleValueName = context.moduleValueNames.get(name)
+
+      if (moduleValueName != null) {
+        return moduleValueName
+      }
+
       if (context.boxedVariables.has(name)) {
         return `(*${name})`
       }

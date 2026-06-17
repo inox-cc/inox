@@ -70,6 +70,8 @@ export type CEmitContext = {
   httpHandlers: Map<AnyNode, CHttpHandler>
   httpImportNames: CStringSet
   jsGlobalRoots: CStringSet
+  moduleValueNames: CStringMap
+  moduleValueTypes: CStringMap
   netConnectNames: CStringSet
   netCreateServerNames: CStringSet
   netHandlers: Map<string, CNetHandler>
@@ -236,6 +238,8 @@ export function createFunctionContext(
     httpHandlers: baseContext.httpHandlers,
     httpImportNames: baseContext.httpImportNames,
     jsGlobalRoots: baseContext.jsGlobalRoots,
+    moduleValueNames: baseContext.moduleValueNames,
+    moduleValueTypes: baseContext.moduleValueTypes,
     netConnectNames: baseContext.netConnectNames,
     netCreateServerNames: baseContext.netCreateServerNames,
     netHandlers: baseContext.netHandlers,
@@ -292,7 +296,7 @@ export function createFunctionContext(
     statusReturn: false,
     throwingFunction: false,
     usedCleanupGoto: false,
-    variables: new Map(),
+    variables: new Map(baseContext.moduleValueTypes),
     returnNullable: returnNullable,
     returnType: returnType
   }

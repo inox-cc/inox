@@ -195,6 +195,37 @@ export function main(): void {
   assert.match(result.files.find((file) => file.path === 'index.c')?.code ?? '', /#include "lib\.h"/)
 })
 
+test('emits imported exported constants as C module globals', async () => {
+  const files = [
+    {
+      path: '/project/dep.ts',
+      source: 'export const answer: number = 42\n'
+    },
+    {
+      path: '/project/index.ts',
+      source: `import { answer } from './dep'
+
+export function main(): void {
+  console.log(answer)
+}
+`
+    }
+  ]
+
+  const result = await compileMemoryPackageToCModules('/project/index.ts', files, {
+    sourceRoot: '/project',
+    target: 'c'
+  })
+  const depHeader = result.files.find((file) => file.path === 'dep.h')?.code ?? ''
+  const depSource = result.files.find((file) => file.path === 'dep.c')?.code ?? ''
+  const indexSource = result.files.find((file) => file.path === 'index.c')?.code ?? ''
+
+  assert.match(depHeader, /extern double ccjs_mod_dep_ts_[a-f0-9]+_answer;/)
+  assert.match(depSource, /double ccjs_mod_dep_ts_[a-f0-9]+_answer = 0;/)
+  assert.match(indexSource, /ccjs_mod_dep_ts_[a-f0-9]+_init\(\);/)
+  assert.match(indexSource, /ccjs_mod_dep_ts_[a-f0-9]+_answer/)
+})
+
 test('compiles memory packages through self-hosting entrypoints', async () => {
   const files = [
     {
