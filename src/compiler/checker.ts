@@ -196,6 +196,48 @@ type FsBooleanOptions = {
   withFileTypes?: boolean
 }
 
+function resolvedValueTypeMetadata(
+  value: ValueType | null | undefined,
+  fallback: ValueType | null | undefined
+): ValueType | null {
+  if (value != null) {
+    return value
+  }
+
+  if (fallback != null) {
+    return fallback
+  }
+
+  return null
+}
+
+function resolvedStringMetadata(value: string | null | undefined, fallback: string | null | undefined): string | null {
+  if (value != null) {
+    return value
+  }
+
+  if (fallback != null) {
+    return fallback
+  }
+
+  return null
+}
+
+function resolvedObjectShapeMetadata(
+  value: ObjectShapeInfo | null | undefined,
+  fallback: ObjectShapeInfo | null | undefined
+): ObjectShapeInfo | null {
+  if (value != null) {
+    return value
+  }
+
+  if (fallback != null) {
+    return fallback
+  }
+
+  return null
+}
+
 class Scope {
   parent: Scope | null
   bindings: Map<string, SymbolInfo>
@@ -1731,17 +1773,24 @@ class Checker {
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
-    const valueType = field.valueType ?? fieldType.valueType
+    let valueType = field.valueType
+
+    if (valueType == null) {
+      valueType = fieldType.valueType
+    }
 
     expression.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
     expression.valueType = valueType
-    expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
-    expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
-    expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
-    expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
-    expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
-    expression.setElementType = field.setElementType ?? fieldType.setElementType
-    expression.shape = field.shape ?? fieldType.shape
+    expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
+    expression.arrayElementDeclaredType = resolvedStringMetadata(
+      field.arrayElementDeclaredType,
+      fieldType.arrayElementDeclaredType
+    )
+    expression.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
+    expression.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+    expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+    expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
+    expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
     expression.className = null
 
     if (field.className != null) {
@@ -1772,17 +1821,24 @@ class Checker {
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
-    const valueType = field.valueType ?? fieldType.valueType
+    let valueType = field.valueType
+
+    if (valueType == null) {
+      valueType = fieldType.valueType
+    }
 
     expression.nullable = true
     expression.valueType = valueType
-    expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
-    expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
-    expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
-    expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
-    expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
-    expression.setElementType = field.setElementType ?? fieldType.setElementType
-    expression.shape = field.shape ?? fieldType.shape
+    expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
+    expression.arrayElementDeclaredType = resolvedStringMetadata(
+      field.arrayElementDeclaredType,
+      fieldType.arrayElementDeclaredType
+    )
+    expression.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
+    expression.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+    expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+    expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
+    expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
     expression.className = null
 
     if (field.className != null) {
@@ -1979,17 +2035,24 @@ class Checker {
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
-    const valueType = field.valueType ?? fieldType.valueType
+    let valueType = field.valueType
+
+    if (valueType == null) {
+      valueType = fieldType.valueType
+    }
 
     expression.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
     expression.valueType = valueType
-    expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
-    expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
-    expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
-    expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
-    expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
-    expression.setElementType = field.setElementType ?? fieldType.setElementType
-    expression.shape = field.shape ?? fieldType.shape
+    expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
+    expression.arrayElementDeclaredType = resolvedStringMetadata(
+      field.arrayElementDeclaredType,
+      fieldType.arrayElementDeclaredType
+    )
+    expression.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
+    expression.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+    expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+    expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
+    expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
     expression.className = null
 
     if (field.className != null) {
@@ -2041,17 +2104,24 @@ class Checker {
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
-    const valueType = field.valueType ?? fieldType.valueType
+    let valueType = field.valueType
+
+    if (valueType == null) {
+      valueType = fieldType.valueType
+    }
 
     expression.nullable = true
     expression.valueType = valueType
-    expression.arrayElementType = field.arrayElementType ?? fieldType.arrayElementType
-    expression.arrayElementDeclaredType = field.arrayElementDeclaredType ?? fieldType.arrayElementDeclaredType
-    expression.mapKeyType = field.mapKeyType ?? fieldType.mapKeyType
-    expression.mapValueType = field.mapValueType ?? fieldType.mapValueType
-    expression.promiseValueType = field.promiseValueType ?? fieldType.promiseValueType ?? null
-    expression.setElementType = field.setElementType ?? fieldType.setElementType
-    expression.shape = field.shape ?? fieldType.shape
+    expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
+    expression.arrayElementDeclaredType = resolvedStringMetadata(
+      field.arrayElementDeclaredType,
+      fieldType.arrayElementDeclaredType
+    )
+    expression.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
+    expression.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+    expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+    expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
+    expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
     expression.className = null
 
     if (field.className != null) {
