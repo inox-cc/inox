@@ -26,10 +26,8 @@ export function cOsRuntimeMethodName(expression: AnyNode | null | undefined): st
     return null
   }
 
-  const method = expression.osRuntimeMethod
-
-  if (method != null) {
-    return method
+  if (expression.osRuntimeMethod != null) {
+    return expression.osRuntimeMethod
   }
 
   return null
@@ -40,10 +38,8 @@ export function cOsRuntimeConstantName(expression: AnyNode | null | undefined): 
     return null
   }
 
-  const constant = expression.osRuntimeConstant
-
-  if (constant != null) {
-    return constant
+  if (expression.osRuntimeConstant != null) {
+    return expression.osRuntimeConstant
   }
 
   return null
