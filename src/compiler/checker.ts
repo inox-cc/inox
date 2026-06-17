@@ -300,6 +300,18 @@ function resolvedObjectShapeMetadata(
   return null
 }
 
+function resolvedFieldNullableMetadata(field: AnyNode, fieldType: ResolvedTypeInfo): boolean {
+  if (field.ownership === 'weak') {
+    return true
+  }
+
+  if (field.nullable === true) {
+    return true
+  }
+
+  return fieldType.nullable
+}
+
 function resolvedFunctionTypeMetadata(
   value: FunctionTypeMetadata | null | undefined,
   fallback: FunctionTypeMetadata | null | undefined
@@ -1672,12 +1684,14 @@ class Checker {
     const symbol = this.resolveReference(expression.target)
     const valueType = this.checkExpression(expression.value)
 
-    if (symbol != null && expression.target.path.length === 1 && !symbol.mutable) {
-      this.report(
-        'CCJS_ASSIGN_CONST',
-        `cannot assign to ${symbol.kind} binding ${expression.target.path[0]}`,
-        expression.target.loc
-      )
+    if (symbol != null) {
+      if (expression.target.path.length === 1 && symbol.mutable !== true) {
+        this.report(
+          'CCJS_ASSIGN_CONST',
+          `cannot assign to ${symbol.kind} binding ${expression.target.path[0]}`,
+          expression.target.loc
+        )
+      }
     }
 
     if (symbol != null) {
@@ -1699,8 +1713,10 @@ class Checker {
         )
       }
 
-      if (expression.target.path.length === 1 && symbol.nullable === true) {
-        this.narrowedNullableNames.delete(expression.target.path[0])
+      if (expression.target.path.length === 1) {
+        if (symbol.nullable === true) {
+          this.narrowedNullableNames.delete(expression.target.path[0])
+        }
       }
     }
 
@@ -1715,18 +1731,24 @@ class Checker {
     if (expression.argument.type === 'Reference') {
       const symbol = this.resolveReference(expression.argument)
 
-      if (symbol != null && expression.argument.path.length === 1 && !symbol.mutable) {
-        this.report(
-          'CCJS_ASSIGN_CONST',
-          `cannot assign to ${symbol.kind} binding ${expression.argument.path[0]}`,
-          expression.argument.loc
-        )
+      if (symbol != null) {
+        if (expression.argument.path.length === 1 && symbol.mutable !== true) {
+          this.report(
+            'CCJS_ASSIGN_CONST',
+            `cannot assign to ${symbol.kind} binding ${expression.argument.path[0]}`,
+            expression.argument.loc
+          )
+        }
       }
 
       return 'number'
     }
 
-    if (expression.argument.type === 'MemberExpression' || expression.argument.type === 'IndexExpression') {
+    if (expression.argument.type === 'MemberExpression') {
+      return 'number'
+    }
+
+    if (expression.argument.type === 'IndexExpression') {
       return 'number'
     }
 
@@ -1851,7 +1873,7 @@ class Checker {
     const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
-    expression.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
+    expression.nullable = resolvedFieldNullableMetadata(field, fieldType)
     expression.valueType = valueType
     expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.arrayElementDeclaredType = resolvedStringMetadata(
@@ -1939,9 +1961,11 @@ class Checker {
       return valueType
     }
 
-    if ((targetType === 'map' || targetType === 'set') && expression.target.property === 'size') {
-      this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field size', expression.target.loc)
-      return valueType
+    if (targetType === 'map' || targetType === 'set') {
+      if (expression.target.property === 'size') {
+        this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field size', expression.target.loc)
+        return valueType
+      }
     }
 
     if (targetType === 'bytes' && expression.target.property === 'length') {
@@ -1953,17 +1977,19 @@ class Checker {
       return valueType
     }
 
-    if (shape.builtin === 'url.URL' && isUrlMutableObjectField(expression.target.property)) {
-      this.checkAssignableType(
-        valueType,
-        'string',
-        expression.value.loc,
-        false,
-        this.expressionCanBeNull(expression.value)
-      )
-      expression.urlRuntimeMethod = 'URL.setField'
-      expression.urlRuntimeField = expression.target.property
-      return valueType
+    if (shape.builtin === 'url.URL') {
+      if (isUrlMutableObjectField(expression.target.property)) {
+        this.checkAssignableType(
+          valueType,
+          'string',
+          expression.value.loc,
+          false,
+          this.expressionCanBeNull(expression.value)
+        )
+        expression.urlRuntimeMethod = 'URL.setField'
+        expression.urlRuntimeField = expression.target.property
+        return valueType
+      }
     }
 
     const field = this.findShapeField(shape, expression.target.property)
@@ -1973,18 +1999,20 @@ class Checker {
       return valueType
     }
 
-    if (field.readonly && !this.canInitializeReadonlyClassField(expression.target.object)) {
-      this.report(
-        'CCJS_ASSIGN_READONLY_FIELD',
-        `cannot assign to readonly field ${expression.target.property}`,
-        expression.target.loc
-      )
+    if (field.readonly === true) {
+      if (!this.canInitializeReadonlyClassField(expression.target.object)) {
+        this.report(
+          'CCJS_ASSIGN_READONLY_FIELD',
+          `cannot assign to readonly field ${expression.target.property}`,
+          expression.target.loc
+        )
+      }
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
     const targetValueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
-    expression.target.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
+    expression.target.nullable = resolvedFieldNullableMetadata(field, fieldType)
     expression.target.valueType = targetValueType
     expression.target.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.target.arrayElementDeclaredType = resolvedStringMetadata(
@@ -2131,7 +2159,7 @@ class Checker {
     const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
-    expression.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
+    expression.nullable = resolvedFieldNullableMetadata(field, fieldType)
     expression.valueType = valueType
     expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.arrayElementDeclaredType = resolvedStringMetadata(
@@ -2260,11 +2288,13 @@ class Checker {
       return valueType
     }
 
-    if (objectType === 'bytes' && expression.target.index.type !== 'StringLiteral') {
-      this.checkAssignableType(indexType, 'number', expression.target.index.loc, false, false)
-      this.checkAssignableType(valueType, 'number', expression.value.loc, false, false)
-      expression.target.valueType = 'number'
-      return valueType
+    if (objectType === 'bytes') {
+      if (expression.target.index.type !== 'StringLiteral') {
+        this.checkAssignableType(indexType, 'number', expression.target.index.loc, false, false)
+        this.checkAssignableType(valueType, 'number', expression.value.loc, false, false)
+        expression.target.valueType = 'number'
+        return valueType
+      }
     }
 
     if (expression.target.index.type !== 'StringLiteral') {
@@ -2284,18 +2314,20 @@ class Checker {
       return valueType
     }
 
-    if (field.readonly && !this.canInitializeReadonlyClassField(expression.target.object)) {
-      this.report(
-        'CCJS_ASSIGN_READONLY_FIELD',
-        `cannot assign to readonly field ${expression.target.index.value}`,
-        expression.target.loc
-      )
+    if (field.readonly === true) {
+      if (!this.canInitializeReadonlyClassField(expression.target.object)) {
+        this.report(
+          'CCJS_ASSIGN_READONLY_FIELD',
+          `cannot assign to readonly field ${expression.target.index.value}`,
+          expression.target.loc
+        )
+      }
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
     const targetValueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
-    expression.target.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
+    expression.target.nullable = resolvedFieldNullableMetadata(field, fieldType)
     expression.target.valueType = targetValueType
     expression.target.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.target.arrayElementDeclaredType = resolvedStringMetadata(
@@ -10972,13 +11004,25 @@ function promiseSettlementFunctionType(): AnyNode {
 }
 
 function promiseStaticMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'MemberExpression' || (callee.property !== 'resolve' && callee.property !== 'reject')) {
+  if (callee.type !== 'MemberExpression') {
     return null
   }
 
-  if (callee.object.type === 'Reference' && callee.object.path.length === 1 && callee.object.path[0] === 'Promise') {
-    return callee.property
+  if (callee.property !== 'resolve' && callee.property !== 'reject') {
+    return null
   }
 
-  return null
+  if (callee.object.type !== 'Reference') {
+    return null
+  }
+
+  if (callee.object.path.length !== 1) {
+    return null
+  }
+
+  if (callee.object.path[0] !== 'Promise') {
+    return null
+  }
+
+  return callee.property
 }
