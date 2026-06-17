@@ -14,18 +14,20 @@ import { timerRuntimeMethodNameFromPath } from '../stdlib/descriptors/timers.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
 
+type FeatureRawNode = AnyNode
+
 type FeatureShape = AnyNode & {
   kind?: string
 }
 
 type FeatureFunctionType = AnyNode & {
-  params?: AnyNode[]
+  params?: FeatureRawNode[]
   returnType?: string | null
 }
 
 type FeatureChildNode = AnyNode & {
   collectionKind?: string | null
-  elements?: AnyNode[]
+  elements?: FeatureRawNode[]
   path?: string[]
   property?: string | null
   shape?: FeatureShape | null
@@ -51,7 +53,7 @@ type FeatureNode = AnyNode & {
   osRuntimeConstant?: string | null
   osRuntimeMethod?: string | null
   ownership?: string | null
-  params?: AnyNode[]
+  params?: FeatureRawNode[]
   path?: string[]
   pathRuntimeConstant?: string | null
   pathRuntimeMethod?: string | null
@@ -72,8 +74,17 @@ type FeatureNode = AnyNode & {
 }
 
 type ChildNode = FeatureNode
+type FeatureProgram = {
+  features: IrFeature[]
+}
 type IrFeatureSet = Set<IrFeature>
+type RuntimeRequirementProgram = {
+  runtimeRequirements: IrRuntimeRequirement[]
+}
 type IrRuntimeRequirementSet = Set<IrRuntimeRequirement>
+type SyntaxFeatureProgram = {
+  syntaxFeatures: IrSyntaxFeatureUsage[]
+}
 
 const NODE_CHILD_KEYS = [
   'body',
@@ -117,11 +128,91 @@ export function collectIrFeatures(program: ProgramNode): IrFeature[] {
   return sortedIrFeatures(features)
 }
 
-export function collectIrFeatureRequirements(programs: Array<{ features: IrFeature[] }>): IrFeature[] {
+function featureProgramAt(programs: FeatureProgram[], index: number): FeatureProgram {
+  return programs[index]
+}
+
+function irFeatureAt(features: IrFeature[], index: number): IrFeature {
+  return features[index]
+}
+
+function runtimeRequirementProgramAt(
+  programs: RuntimeRequirementProgram[],
+  index: number
+): RuntimeRequirementProgram {
+  return programs[index]
+}
+
+function runtimeRequirementAt(
+  requirements: IrRuntimeRequirement[],
+  index: number
+): IrRuntimeRequirement {
+  return requirements[index]
+}
+
+function syntaxFeatureProgramAt(programs: SyntaxFeatureProgram[], index: number): SyntaxFeatureProgram {
+  return programs[index]
+}
+
+function syntaxFeatureUsageAt(usages: IrSyntaxFeatureUsage[], index: number): IrSyntaxFeatureUsage {
+  return usages[index]
+}
+
+function featureNodeAt(nodes: FeatureRawNode[], index: number): FeatureRawNode {
+  return nodes[index]
+}
+
+function featureArrayNodeAt(nodes: FeatureNode, index: number): FeatureNode {
+  return nodes[index]
+}
+
+function featureChildNodeAt(nodes: FeatureChildNode[], index: number): FeatureChildNode {
+  return nodes[index]
+}
+
+function featureChildKeyAt(keys: string[], index: number): string {
+  return keys[index]
+}
+
+function featureNodeArgsOrEmpty(node: FeatureNode): FeatureChildNode[] {
+  const args = node.args
+
+  if (args != null) {
+    return args
+  }
+
+  return []
+}
+
+function featureNodeElementsOrEmpty(node: FeatureChildNode): FeatureRawNode[] {
+  const elements = node.elements
+
+  if (elements != null) {
+    return elements
+  }
+
+  return []
+}
+
+function featureChildValueOrNull(item: ChildNode, key: string): FeatureNode | null {
+  const value = item[key]
+
+  if (value != null) {
+    return value
+  }
+
+  return null
+}
+
+export function collectIrFeatureRequirements(programs: FeatureProgram[]): IrFeature[] {
   const features = createFeatureSet()
 
-  for (const program of programs) {
-    for (const feature of program.features) {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = featureProgramAt(programs, programIndex)
+
+    for (let featureIndex = 0; featureIndex < program.features.length; featureIndex = featureIndex + 1) {
+      const feature = irFeatureAt(program.features, featureIndex)
+
       features.add(feature)
     }
   }
@@ -132,7 +223,9 @@ export function collectIrFeatureRequirements(programs: Array<{ features: IrFeatu
 export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement[] {
   const requirements = createRuntimeRequirementSet()
 
-  for (const feature of features) {
+  for (let index = 0; index < features.length; index = index + 1) {
+    const feature = irFeatureAt(features, index)
+
     if (feature === 'runtime-values') {
       requirements.add('managed-values')
     } else if (feature === 'child-process') {
@@ -208,12 +301,20 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
 }
 
 export function collectIrRuntimeRequirements(
-  programs: Array<{ runtimeRequirements: IrRuntimeRequirement[] }>
+  programs: RuntimeRequirementProgram[]
 ): IrRuntimeRequirement[] {
   const requirements = createRuntimeRequirementSet()
 
-  for (const program of programs) {
-    for (const requirement of program.runtimeRequirements) {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = runtimeRequirementProgramAt(programs, programIndex)
+
+    for (
+      let requirementIndex = 0;
+      requirementIndex < program.runtimeRequirements.length;
+      requirementIndex = requirementIndex + 1
+    ) {
+      const requirement = runtimeRequirementAt(program.runtimeRequirements, requirementIndex)
+
       requirements.add(requirement)
     }
   }
@@ -230,12 +331,16 @@ export function collectSyntaxFeatureUsages(program: ProgramNode): IrSyntaxFeatur
 }
 
 export function collectIrSyntaxFeatureUsages(
-  programs: Array<{ syntaxFeatures: IrSyntaxFeatureUsage[] }>
+  programs: SyntaxFeatureProgram[]
 ): IrSyntaxFeatureUsage[] {
   const usages: IrSyntaxFeatureUsage[] = []
 
-  for (const program of programs) {
-    for (const usage of program.syntaxFeatures) {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = syntaxFeatureProgramAt(programs, programIndex)
+
+    for (let usageIndex = 0; usageIndex < program.syntaxFeatures.length; usageIndex = usageIndex + 1) {
+      const usage = syntaxFeatureUsageAt(program.syntaxFeatures, usageIndex)
+
       usages.push(usage)
     }
   }
@@ -327,7 +432,9 @@ function createRuntimeRequirementSet(): IrRuntimeRequirementSet {
 function visitSyntaxFeatureUsage(node: AnyNode | null, usages: IrSyntaxFeatureUsage[]): void {
   if (node != null) {
     if (Array.isArray(node)) {
-      for (const item of node) {
+      for (let index = 0; index < node.length; index = index + 1) {
+        const item = featureArrayNodeAt(node, index)
+
         visitSyntaxFeatureUsage(item, usages)
       }
       return
@@ -354,7 +461,9 @@ function visitSyntaxFeatureUsage(node: AnyNode | null, usages: IrSyntaxFeatureUs
 function visitNode(node: AnyNode | null, features: IrFeatureSet): void {
   if (node != null) {
     if (Array.isArray(node)) {
-      for (const item of node) {
+      for (let index = 0; index < node.length; index = index + 1) {
+        const item = featureArrayNodeAt(node, index)
+
         visitNode(item, features)
       }
       return
@@ -367,11 +476,19 @@ function visitNode(node: AnyNode | null, features: IrFeatureSet): void {
     if (isBinaryArrayLiteralConstructor(item)) {
       visitNode(item.callee, features)
 
-      for (const element of item.args[0].elements) {
+      const args = featureNodeArgsOrEmpty(item)
+      const firstArg = featureChildNodeAt(args, 0)
+      const elements = featureNodeElementsOrEmpty(firstArg)
+
+      for (let elementIndex = 0; elementIndex < elements.length; elementIndex = elementIndex + 1) {
+        const element = featureNodeAt(elements, elementIndex)
+
         visitNode(element, features)
       }
 
-      for (const arg of item.args.slice(1)) {
+      for (let argIndex = 1; argIndex < args.length; argIndex = argIndex + 1) {
+        const arg = featureChildNodeAt(args, argIndex)
+
         visitNode(arg, features)
       }
 
@@ -383,8 +500,9 @@ function visitNode(node: AnyNode | null, features: IrFeatureSet): void {
 }
 
 function visitSyntaxFeatureChildren(item: ChildNode, usages: IrSyntaxFeatureUsage[]): void {
-  for (const key of NODE_CHILD_KEYS) {
-    const value = item[key]
+  for (let index = 0; index < NODE_CHILD_KEYS.length; index = index + 1) {
+    const key = featureChildKeyAt(NODE_CHILD_KEYS, index)
+    const value = featureChildValueOrNull(item, key)
 
     if (value != null) {
       visitSyntaxFeatureUsage(value, usages)
@@ -393,8 +511,9 @@ function visitSyntaxFeatureChildren(item: ChildNode, usages: IrSyntaxFeatureUsag
 }
 
 function visitFeatureChildren(item: ChildNode, features: IrFeatureSet): void {
-  for (const key of NODE_CHILD_KEYS) {
-    const value = item[key]
+  for (let index = 0; index < NODE_CHILD_KEYS.length; index = index + 1) {
+    const key = featureChildKeyAt(NODE_CHILD_KEYS, index)
+    const value = featureChildValueOrNull(item, key)
 
     if (value != null) {
       visitNode(value, features)
@@ -565,11 +684,15 @@ function recordCallableSignatureFeatures(node: FeatureNode, features: IrFeatureS
     features.add('runtime-values')
   }
 
-  if (node.params == null) {
+  const params = node.params
+
+  if (params == null) {
     return
   }
 
-  for (const param of node.params) {
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = featureNodeAt(params, index)
+
     if (isRuntimeCallableParamValueType(param.valueType) || isRuntimeFunctionType(param.functionType)) {
       features.add('runtime-values')
     }
@@ -974,7 +1097,9 @@ function isRuntimeFunctionType(functionType: FeatureFunctionType | null | undefi
     return false
   }
 
-  for (const param of params) {
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = featureNodeAt(params, index)
+
     if (!isSupportedRuntimeFunctionParamValueType(param.valueType)) {
       return false
     }

@@ -791,12 +791,21 @@ test('compiles for of loops over Set values to C', () => {
   names: Set<string>
 }
 
+type User = {
+  name: string
+}
+
 export function main(): void {
   const values: Set<number> = new Set([1, 2, 3])
   const names: Set<string> = new Set(['Ada', 'Grace'])
+  const ada: User = { name: 'Ada' }
+  const users: Set<User> = new Set()
   const bag: Bag = { names }
   let total = 0
   let letters = 0
+  let seenUsers = 0
+
+  users.add(ada)
 
   for (const value of values.add(4)) {
     total = total + value
@@ -806,7 +815,13 @@ export function main(): void {
     letters = letters + name.length
   }
 
-  console.log(total, letters)
+  for (const user of users) {
+    if (users.has(user)) {
+      seenUsers = seenUsers + 1
+    }
+  }
+
+  console.log(total, letters, seenUsers)
 }
 `
   const c = compileSource(source, {
@@ -819,6 +834,8 @@ export function main(): void {
   assert.match(c.code, /ccjs_for_value_\d+ = ccjs_for_set_\d+->entries\[ccjs_for_set_index_\d+\]\.value;/)
   assert.match(c.code, /ccjs_object_get\(bag, "names", 5, &ccjs_value_\d+\)/)
   assert.match(c.code, /ccjs_string \*name = \(ccjs_string \*\)ccjs_for_value_\d+\.as\.ref;/)
+  assert.match(c.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
+  assert.match(c.code, /ccjs_value user = ccjs_for_value_\d+;/)
 })
 
 
@@ -852,6 +869,35 @@ export function main(): void {
   assert.match(c.code, /ccjs_object_init_known\(entry, 1, ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.value\)/)
   assert.match(c.code, /ccjs_object_get_known\(entry, 1, &ccjs_(?:expr_)?value_\d+\)/)
   assert.match(c.code, /ccjs_object_get_known\(entry, 0, &ccjs_(?:expr_)?value_\d+\)/)
+
+  const objectKeys = compileSource(
+    `type User = {
+  name: string
+}
+
+export function main(): void {
+  const ada: User = { name: 'Ada' }
+  const scores: Map<User, number> = new Map()
+  scores.set(ada, 7)
+  let seen = 0
+
+  for (const entry of scores) {
+    if (scores.has(entry.key)) {
+      seen = seen + entry.value
+    }
+  }
+
+  console.log(seen)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(objectKeys.code, /ccjs_object_init_known\(entry, 0, ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.key\)/)
+  assert.match(objectKeys.code, /ccjs_object_get_known\(entry, 0, &ccjs_(?:expr_)?value_\d+\)/)
+  assert.match(objectKeys.code, /ccjs_map_has\(scores, ccjs_(?:expr_)?value_\d+, &ccjs_map_has_\d+\)/)
 })
 
 

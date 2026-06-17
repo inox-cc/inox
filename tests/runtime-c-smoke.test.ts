@@ -6706,6 +6706,81 @@ console.log(total, letters, ada, grace, alan)
 })
 
 
+test('generated C for of object Set and Map entries compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-object-collections-'))
+  const source = join(dir, 'for-of-object-collections.c')
+  const output = join(dir, 'for-of-object-collections')
+
+  try {
+    const result = compileSource(
+      `type User = {
+  name: string
+}
+
+const ada: User = { name: 'Ada' }
+const grace: User = { name: 'Grace' }
+const users: Set<User> = new Set()
+users.add(ada)
+users.add(grace)
+const usersCopy: Set<User> = new Set(users)
+users.clear()
+let seenUsers = 0
+
+for (const user of usersCopy) {
+  if (usersCopy.has(user)) {
+    seenUsers = seenUsers + 1
+  }
+}
+
+const scores: Map<User, number> = new Map()
+scores.set(ada, 7)
+scores.set(grace, 9)
+const scoresCopy: Map<User, number> = new Map(scores)
+scores.clear()
+let scoreTotal = 0
+let seenKeys = 0
+
+for (const entry of scoresCopy) {
+  if (scoresCopy.has(entry.key)) {
+    scoreTotal = scoreTotal + entry.value
+    seenKeys = seenKeys + 1
+  }
+}
+
+console.log(seenUsers, scoreTotal, seenKeys)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2 16 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C inline for of array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

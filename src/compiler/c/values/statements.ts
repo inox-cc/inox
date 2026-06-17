@@ -967,7 +967,68 @@ function isCCollectionHashableType(valueType: string): boolean {
 }
 
 function isCForOfArrayElementType(valueType: string): boolean {
-  return isCCollectionHashableType(valueType) || valueType === 'object'
+  return isCForOfValueType(valueType)
+}
+
+function isCForOfValueType(valueType: string): boolean {
+  return valueType === 'number' || valueType === 'boolean' || isManagedRuntimeReturnType(valueType)
+}
+
+function registerForOfElementMetadata(
+  context: CFunctionContext,
+  name: string,
+  elementType: string,
+  statement: StatementNode
+): void {
+  context.variables.set(name, elementType)
+
+  if (elementType === 'string') {
+    context.runtimeStrings.add(name)
+  } else if (elementType === 'object') {
+    registerObjectShape(context, name, statement.shape)
+  } else if (elementType === 'array') {
+    context.runtimeArrayElementTypes.set(name, stringOrUnknown(statement.arrayElementType))
+  } else if (elementType === 'map') {
+    context.mapTypes.set(name, {
+      key: stringOrUnknown(statement.mapKeyType),
+      value: stringOrUnknown(statement.mapValueType)
+    })
+  } else if (elementType === 'set') {
+    context.setElementTypes.set(name, stringOrUnknown(statement.setElementType))
+  }
+}
+
+function emitForOfElementDeclaration(
+  name: string,
+  value: string,
+  elementType: string,
+  context: CFunctionContext
+): PreparedExpression {
+  let declaration = `double ${name} = ${value}.as.number;`
+  const checks: string[] = []
+
+  if (elementType === 'string') {
+    declaration = `ccjs_string* ${name} = (ccjs_string*)${value}.as.ref;`
+    checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+  } else if (elementType === 'boolean') {
+    declaration = `double ${name} = ((double)(${value}.as.boolean ? 1 : 0));`
+    checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context))
+  } else if (isManagedRuntimeReturnType(elementType)) {
+    const expectedTag = cRuntimeValueTag(elementType)
+
+    declaration = `ccjs_value ${name} = ${value};`
+
+    if (expectedTag != null) {
+      checks.push(emitRuntimeTypeCheck(`${value}.tag != ${expectedTag} || ${value}.as.ref == 0`, context))
+    }
+  } else {
+    checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context))
+  }
+
+  return {
+    lines: checks,
+    expression: declaration
+  }
 }
 
 function emitCollectionVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] {
@@ -1605,36 +1666,17 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
 
   const breakLabel = nextCName(context, 'ccjs_break')
   const continueLabel = nextCName(context, 'ccjs_continue')
-  let loopValue = `${value}.as.number`
-
-  if (elementType === 'boolean') {
-    loopValue = `((double)(${value}.as.boolean ? 1 : 0))`
-  }
 
   registerOwnedValue(context, value)
 
   const variableScope = pushVariableScope(context)
 
   try {
-    context.variables.set(statement.name, elementType)
-    if (elementType === 'string') {
-      context.runtimeStrings.add(statement.name)
-    } else if (elementType === 'object') {
-      registerObjectShape(context, statement.name, statement.shape)
-    }
+    registerForOfElementMetadata(context, statement.name, elementType, statement)
     const body = withBreakTarget(context, breakLabel, false, () =>
       withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
     )
-    let declaration = `double ${statement.name} = ${loopValue};`
-    const checks: string[] = []
-
-    if (elementType === 'string') {
-      declaration = `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
-      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
-    } else if (elementType === 'object') {
-      declaration = `ccjs_value ${statement.name} = ${value};`
-      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_OBJECT || ${value}.as.ref == 0`, context))
-    }
+    const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
 
     const getElementStatus = emitStatusCheck(`ccjs_array_get(${arrayName}, ${index}, &${value})`, context)
     const lines: string[] = []
@@ -1649,8 +1691,8 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
     pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
     lines.push(`  ${getElementStatus}`)
-    pushIndentedLines(lines, checks, '  ')
-    lines.push(`  ${declaration}`)
+    pushIndentedLines(lines, element.lines, '  ')
+    lines.push(`  ${element.expression}`)
     pushIndentedLines(lines, body, '  ')
     pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
     lines.push('}')
@@ -1671,11 +1713,11 @@ function emitRuntimeMapForOfStatement(
   const keyType = stringOrUnknown(runtimeMap.keyType)
   const valueType = stringOrUnknown(runtimeMap.valueType)
 
-  if (!isCCollectionHashableType(keyType) || !isCCollectionHashableType(valueType)) {
+  if (!isCForOfValueType(keyType) || !isCForOfValueType(valueType)) {
     pushDiagnostic(context,
       diagnostic(
         'CCJS_C_FOR_OF',
-        'C for-of currently supports only Map entries with number/boolean/string keys and values',
+        'C for-of currently supports only Map entries with number/boolean/string or managed runtime keys and values',
         statement.loc
       )
     )
@@ -1793,15 +1835,15 @@ function emitRuntimeCollectionValueForOfStatement(
 ): string[] {
   const isMap = collectionKind === 'map'
   let unsupported = false
-  let unsupportedMessage = 'C for-of currently supports only uniform number/boolean/string Set values'
+  let unsupportedMessage = 'C for-of currently supports only uniform number/boolean/string or managed runtime Set values'
 
   if (isMap) {
-    unsupportedMessage = 'C for-of currently supports only uniform number/boolean/string/object Map values'
+    unsupportedMessage = 'C for-of currently supports only uniform number/boolean/string or managed runtime Map values'
 
-    if (!isCForOfArrayElementType(elementType)) {
+    if (!isCForOfValueType(elementType)) {
       unsupported = true
     }
-  } else if (!isCCollectionHashableType(elementType)) {
+  } else if (!isCForOfValueType(elementType)) {
     unsupported = true
   }
 
@@ -1833,40 +1875,17 @@ function emitRuntimeCollectionValueForOfStatement(
   const value = nextCName(context, 'ccjs_for_value')
   const breakLabel = nextCName(context, 'ccjs_break')
   const continueLabel = nextCName(context, 'ccjs_continue')
-  let loopValue = `${value}.as.number`
-
-  if (elementType === 'boolean') {
-    loopValue = `((double)(${value}.as.boolean ? 1 : 0))`
-  }
 
   registerOwnedValue(context, value)
 
   const variableScope = pushVariableScope(context)
 
   try {
-    context.variables.set(statement.name, elementType)
-    if (elementType === 'string') {
-      context.runtimeStrings.add(statement.name)
-    } else if (elementType === 'object') {
-      registerObjectShape(context, statement.name, statement.shape)
-    }
+    registerForOfElementMetadata(context, statement.name, elementType, statement)
     const body = withBreakTarget(context, breakLabel, false, () =>
       withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
     )
-    let declaration = `double ${statement.name} = ${loopValue};`
-    const checks: string[] = []
-
-    if (elementType === 'string') {
-      declaration = `ccjs_string* ${statement.name} = (ccjs_string*)${value}.as.ref;`
-      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
-    } else if (elementType === 'object') {
-      declaration = `ccjs_value ${statement.name} = ${value};`
-      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_OBJECT || ${value}.as.ref == 0`, context))
-    } else if (elementType === 'boolean') {
-      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context))
-    } else {
-      checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context))
-    }
+    const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
 
     const lines: string[] = []
     pushAllLines(lines, setupLines)
@@ -1876,8 +1895,8 @@ function emitRuntimeCollectionValueForOfStatement(
     pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
     lines.push(`  ${value} = ${collection}->entries[${index}].value;`)
     lines.push(`  ccjs_retain(${value});`)
-    pushIndentedLines(lines, checks, '  ')
-    lines.push(`  ${declaration}`)
+    pushIndentedLines(lines, element.lines, '  ')
+    lines.push(`  ${element.expression}`)
     pushIndentedLines(lines, body, '  ')
     pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
     lines.push('}')
