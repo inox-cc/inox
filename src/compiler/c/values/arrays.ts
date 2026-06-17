@@ -1213,21 +1213,17 @@ function emitPreparedArrayComparatorSortCallExpression(
 
   const bodyScope = pushArrayVariableScope(context)
   let body: string[] = []
+  const input = emitPreparedArraySortComparatorInput(callback, receiver, left, right, context)
+  const result = arrayDeps(context).emitPreparedNumberExpression(returnExpression, context)
 
-  try {
-    const input = emitPreparedArraySortComparatorInput(callback, receiver, left, right, context)
-    const result = arrayDeps(context).emitPreparedNumberExpression(returnExpression, context)
-
-    body = []
-    appendLines(body, input)
-    appendLines(body, result.lines)
-    body.push(`double ${compare} = ${result.expression};`)
-    body.push(`if (!(${compare} > 0)) break;`)
-    body.push(emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan} - 1, ${right})`, context))
-    body.push(emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan}, ${left})`, context))
-  } finally {
-    restoreArrayVariableScope(context, bodyScope)
-  }
+  body = []
+  appendLines(body, input)
+  appendLines(body, result.lines)
+  body.push(`double ${compare} = ${result.expression};`)
+  body.push(`if (!(${compare} > 0)) break;`)
+  body.push(emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan} - 1, ${right})`, context))
+  body.push(emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan}, ${left})`, context))
+  restoreArrayVariableScope(context, bodyScope)
 
   const leftReadStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${scan} - 1, &${left})`, context)
   const rightReadStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${scan}, &${right})`, context)
@@ -1304,25 +1300,21 @@ export function emitPreparedArrayMapCallExpression(
     const bodyScope = pushArrayVariableScope(context)
     let body: string[] = []
     let bodyReady = false
+    const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
 
-    try {
-      const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
-
-      if (mappedElementType === 'unknown') {
-        mappedElementType = resolveArrayCallbackReturnType(callbackBody, context)
-      }
-
-      if (!isSupportedRuntimeArrayElementType(mappedElementType)) {
-        bodyReady = false
-      } else {
-        body = []
-        appendLines(body, input)
-        appendLines(body, emitArrayMapCallbackBodyLines(callbackBody, mappedElementType, out, context))
-        bodyReady = true
-      }
-    } finally {
-      restoreArrayVariableScope(context, bodyScope)
+    if (mappedElementType === 'unknown') {
+      mappedElementType = resolveArrayCallbackReturnType(callbackBody, context)
     }
+
+    if (!isSupportedRuntimeArrayElementType(mappedElementType)) {
+      bodyReady = false
+    } else {
+      body = []
+      appendLines(body, input)
+      appendLines(body, emitArrayMapCallbackBodyLines(callbackBody, mappedElementType, out, context))
+      bodyReady = true
+    }
+    restoreArrayVariableScope(context, bodyScope)
 
     if (!bodyReady) {
       return null
@@ -1405,23 +1397,25 @@ export function emitPreparedArrayFilterCallExpression(
 
     const bodyScope = pushArrayVariableScope(context)
     let body: string[] = []
+    let bodyReady = true
 
-    try {
-      if (booleanCallback) {
-        appendLines(body, emitArrayFilterBooleanCallbackBodyLines(receiver.elementType, out, value, context))
+    if (booleanCallback) {
+      appendLines(body, emitArrayFilterBooleanCallbackBodyLines(receiver.elementType, out, value, context))
+    } else {
+      if (callbackBody == null) {
+        bodyReady = false
       } else {
-        if (callbackBody == null) {
-          return null
-        }
-
         const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
 
         body = []
         appendLines(body, input)
         appendLines(body, emitArrayFilterCallbackBodyLines(callbackBody, out, value, context))
       }
-    } finally {
-      restoreArrayVariableScope(context, bodyScope)
+    }
+    restoreArrayVariableScope(context, bodyScope)
+
+    if (!bodyReady) {
+      return null
     }
 
     const readStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)
