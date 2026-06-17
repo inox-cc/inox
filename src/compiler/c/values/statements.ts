@@ -1495,7 +1495,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
 
   if (array == null && runtimeArray == null) {
     context.diagnostics.push(
-      diagnostic('CCJS_C_FOR_OF', 'C for...of currently supports arrays, Map values and Set values', statement.loc)
+      diagnostic('CCJS_C_FOR_OF', 'C for-of currently supports arrays, Map values and Set values', statement.loc)
     )
     return []
   }
@@ -1512,7 +1512,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FOR_OF',
-        'C for...of currently supports only uniform number/boolean/string arrays',
+        'C for-of currently supports only uniform number/boolean/string arrays',
         statement.loc
       )
     )
@@ -1599,7 +1599,7 @@ function emitRuntimeMapForOfStatement(
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FOR_OF',
-        'C for...of currently supports only Map entries with number/boolean/string keys and values',
+        'C for-of currently supports only Map entries with number/boolean/string keys and values',
         statement.loc
       )
     )
@@ -1688,7 +1688,7 @@ function emitRuntimeSetForOfStatement(
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_FOR_OF',
-        'C for...of currently supports only uniform number/boolean/string Set values',
+        'C for-of currently supports only uniform number/boolean/string Set values',
         statement.loc
       )
     )

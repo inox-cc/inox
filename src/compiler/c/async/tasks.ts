@@ -2718,7 +2718,7 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_ASYNC',
-        'async task state-machine slice currently supports local Promise.resolve(...) variables only',
+        'async task state-machine slice currently supports local Promise.resolve call variables only',
         loc
       )
     )
@@ -3211,7 +3211,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
   context.diagnostics.push(
       diagnostic(
         'CCJS_C_ASYNC',
-        'async task state-machine slice currently supports local Promise.resolve(...).then(...) variables only',
+        'async task state-machine slice currently supports local Promise.resolve then-chain variables only',
         expression?.loc ?? null
       )
   )
@@ -3354,7 +3354,7 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_ASYNC',
-        'async task state-machine slice currently supports await Promise.resolve(...) only',
+        'async task state-machine slice currently supports await Promise.resolve calls only',
         null
       )
     )
@@ -3373,7 +3373,7 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
     context.diagnostics.push(
       diagnostic(
         'CCJS_C_ASYNC',
-        'async task state-machine slice currently supports await Promise.resolve(...) only',
+        'async task state-machine slice currently supports await Promise.resolve calls only',
         loc
       )
     )

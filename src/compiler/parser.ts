@@ -920,15 +920,15 @@ class Parser {
 
   parseForOfStatement(start: Token): AnyNode {
     const kind = this.advance().value
-    const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected for...of binding name')
+    const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected for-of binding name')
     let declaredType: string | null = null
 
     if (this.matchValue(':')) {
       declaredType = this.parseTypeAnnotation(['of'], null)
     }
-    this.expectKeyword('of', 'CCJS_EXPECTED_OF', 'expected of in for...of statement')
+    this.expectKeyword('of', 'CCJS_EXPECTED_OF', 'expected of in for-of statement')
     const iterable = this.parseExpression()
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after for...of iterable')
+    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after for-of iterable')
 
     return {
       type: 'ForOfStatement',
@@ -943,7 +943,7 @@ class Parser {
   }
 
   parseUnsupportedForInStatement(): AnyNode {
-    this.report('CCJS_NO_FOR_IN', 'for...in is not supported; use Object.keys/map helpers later', null)
+    this.report('CCJS_NO_FOR_IN', 'for-in is not supported; use Object.keys/map helpers later', null)
 
     while (!this.isValue(')') && !this.is('eof')) {
       this.advance()
