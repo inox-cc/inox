@@ -468,6 +468,33 @@ export function main(): void {
 })
 
 
+test('lowers C nested dynamic object scalar field access through runtime lookup', () => {
+  const result = compileSource(
+    `function read(node: object): void {
+  const line: number = node.loc.line
+  const active: boolean = node.meta.active
+  console.log(line, active)
+}
+
+export function main(): void {
+  read({ loc: { line: 7 }, meta: { active: true } })
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "loc", 3, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(ccjs_value_\d+, "line", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_NUMBER/)
+  assert.match(result.code, /ccjs_object_get\(node, "meta", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(ccjs_value_\d+, "active", 6, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_BOOL/)
+  assert.match(result.code, /const double active = \(ccjs_value_\d+\.as\.boolean \? 1 : 0\);/)
+})
+
+
 test('lowers C dynamic object field truthiness conditions through runtime lookup', () => {
   const result = compileSource(
     `function read(extra: object): void {

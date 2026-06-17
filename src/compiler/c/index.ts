@@ -2056,20 +2056,28 @@ function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, con
 
 function isDynamicObjectFieldInitializer(expression: CDynamicObjectFieldNode, context: CFunctionContext): boolean {
   if (isMemberAccessExpression(expression)) {
-    return (
+    if (
       resolveKnownObjectMember(expression, context) == null &&
       inferExpressionType(expression.object, context) === 'object'
-    )
+    ) {
+      return true
+    }
+
+    return isDynamicObjectFieldInitializer(expression.object, context)
   }
 
   if (isIndexAccessExpression(expression) && expression.index.type === 'StringLiteral') {
-    return (
+    if (
       resolveKnownObjectIndex(expression, context) == null &&
       inferExpressionType(expression.object, context) === 'object'
-    )
+    ) {
+      return true
+    }
+
+    return isDynamicObjectFieldInitializer(expression.object, context)
   }
 
-  return false
+  return isStatementDynamicRuntimeValueExpression(expression, context)
 }
 
 function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {

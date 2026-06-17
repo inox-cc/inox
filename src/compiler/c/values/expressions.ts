@@ -1275,6 +1275,12 @@ export function emitPreparedNumberExpression(
     }
   }
 
+  const dynamicRuntimeScalar = emitPreparedDynamicRuntimeScalarValueExpression(expression, context, deps)
+
+  if (dynamicRuntimeScalar != null) {
+    return dynamicRuntimeScalar
+  }
+
   if (isOptionalChainExpression(expression)) {
     context.diagnostics.push(
       diagnostic(
@@ -1660,6 +1666,38 @@ function emitPreparedDynamicObjectBooleanLiteralCompareExpression(
   }
 }
 
+function emitPreparedDynamicRuntimeScalarValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  const valueType = deps.inferExpressionType(expression, context)
+
+  if (!isNumberOrBooleanValueType(valueType)) {
+    return null
+  }
+
+  const value = emitPreparedDynamicRuntimeValueExpression(expression, context, deps)
+
+  if (value == null) {
+    return null
+  }
+
+  const check = emitRuntimeValueCheck(value.expression, cRuntimeValueTag(valueType), context)
+  const lines: string[] = []
+
+  appendLines(lines, value.lines)
+
+  if (check !== '') {
+    lines.push(check)
+  }
+
+  return {
+    lines,
+    expression: scalarRuntimeValueExpression(value.expression, valueType)
+  }
+}
+
 function booleanLiteralValue(expression: CValueNode): boolean | null {
   if (expression.type !== 'BooleanLiteral') {
     return null
@@ -1671,7 +1709,7 @@ function booleanLiteralValue(expression: CValueNode): boolean | null {
 function isDynamicObjectFieldValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
-  deps: CScalarExpressionDependencies
+  deps: CDynamicObjectArrayIndexDependencies
 ): boolean {
   if (expression.type === 'MemberExpression') {
     return deps.inferExpressionType(expression.object, context) === 'object'
@@ -1739,10 +1777,27 @@ function isDynamicRuntimeObjectFieldValueExpression(
     return false
   }
 
-  return (
-    isDynamicObjectArrayIndexValueExpression(access.object, context, deps) ||
-    isRuntimeValueReferenceExpression(access.object, context)
-  )
+  return isDynamicRuntimeObjectValueExpression(access.object, context, deps)
+}
+
+function isDynamicRuntimeObjectValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): boolean {
+  if (isRuntimeValueReferenceExpression(expression, context)) {
+    return true
+  }
+
+  if (isDynamicObjectFieldValueExpression(expression, context, deps)) {
+    return true
+  }
+
+  if (isDynamicObjectArrayIndexValueExpression(expression, context, deps)) {
+    return true
+  }
+
+  return isDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
 }
 
 function emitPreparedDynamicRuntimeObjectFieldValueExpression(
@@ -1841,13 +1896,23 @@ function emitPreparedDynamicRuntimeObjectValueExpression(
   context: CFunctionContext,
   deps: CDynamicObjectArrayIndexDependencies
 ): PreparedExpression | null {
+  const runtimeReference = emitPreparedRuntimeValueReferenceExpression(expression, context)
+
+  if (runtimeReference != null) {
+    return runtimeReference
+  }
+
+  if (isDynamicObjectFieldValueExpression(expression, context, deps)) {
+    return deps.emitCValueExpression(expression, context)
+  }
+
   const arrayIndexValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
 
   if (arrayIndexValue != null) {
     return arrayIndexValue
   }
 
-  return emitPreparedRuntimeValueReferenceExpression(expression, context)
+  return emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
 }
 
 function emitPreparedRuntimeValueReferenceExpression(

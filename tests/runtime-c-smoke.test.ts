@@ -6999,6 +6999,54 @@ console.log(child.value)
 })
 
 
+test('generated C nested dynamic object scalar field access compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nested-dynamic-object-scalar-'))
+  const source = join(dir, 'nested-dynamic-object-scalar.c')
+  const output = join(dir, 'nested-dynamic-object-scalar')
+
+  try {
+    const result = compileSource(
+      `function read(node: object): void {
+  const line: number = node.loc.line
+  const active: boolean = node.meta.active
+  console.log(line, active)
+}
+
+read({ loc: { line: 7 }, meta: { active: true } })
+read({ loc: { line: 9 }, meta: { active: false } })
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7 1\n9 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C dynamic runtime string literal comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

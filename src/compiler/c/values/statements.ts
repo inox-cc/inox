@@ -690,20 +690,28 @@ function isDynamicObjectScalarFieldInitializer(
   const deps = statementDeps(context)
 
   if (deps.isMemberAccessExpression(expression)) {
-    return (
+    if (
       deps.resolveKnownObjectMember(expression, context) == null &&
       deps.inferExpressionType(expression.object, context) === 'object'
-    )
+    ) {
+      return true
+    }
+
+    return isDynamicObjectScalarFieldInitializer(expression.object, context)
   }
 
   if (deps.isIndexAccessExpression(expression) && expression.index.type === 'StringLiteral') {
-    return (
+    if (
       deps.resolveKnownObjectIndex(expression, context) == null &&
       deps.inferExpressionType(expression.object, context) === 'object'
-    )
+    ) {
+      return true
+    }
+
+    return isDynamicObjectScalarFieldInitializer(expression.object, context)
   }
 
-  return false
+  return deps.isDynamicRuntimeValueExpression(expression, context)
 }
 
 export function emitRuntimeValueVariableDeclaration(
