@@ -146,11 +146,6 @@ const setMethodDescriptors = {
   has: { kind: 'boolean', callName: 'ccjs_set_has', tempPrefix: 'ccjs_set_has', hashSubject: 'Set values' }
 } as const
 
-const collectionSizeDescriptors = {
-  map: { callName: 'ccjs_map_size', tempPrefix: 'ccjs_map_size' },
-  set: { callName: 'ccjs_set_size', tempPrefix: 'ccjs_set_size' }
-} as const
-
 function emitCollectionValueExpression(
   expression: CollectionNode,
   context: CollectionFunctionContext
@@ -850,12 +845,19 @@ export function emitPreparedCollectionSizeExpression(
   const receiver = emitPreparedCollectionReceiver(expression.object, context)
 
   if (receiver != null) {
-    const descriptor = collectionSizeDescriptors[receiver.type]
-    const out = nextCName(context, descriptor.tempPrefix)
+    let callName = 'ccjs_set_size'
+    let tempPrefix = 'ccjs_set_size'
+
+    if (receiver.type === 'map') {
+      callName = 'ccjs_map_size'
+      tempPrefix = 'ccjs_map_size'
+    }
+
+    const out = nextCName(context, tempPrefix)
     const lines: string[] = []
     pushAllLines(lines, receiver.lines)
     lines.push(`size_t ${out} = 0;`)
-    lines.push(emitStatusCheck(`${descriptor.callName}(${receiver.expression}, &${out})`, context))
+    lines.push(emitStatusCheck(`${callName}(${receiver.expression}, &${out})`, context))
 
     return {
       lines,
