@@ -1009,6 +1009,14 @@ export function emitPreparedNumberExpression(
   }
 
   if (expression.type === 'UnaryExpression') {
+    if (expression.operator === '!') {
+      const truthiness = emitPreparedRuntimeTruthinessExpression(expression, context, deps)
+
+      if (truthiness != null) {
+        return truthiness
+      }
+    }
+
     const argument = emitPreparedNumberExpression(expression.argument, context, deps)
 
     return {
@@ -1314,6 +1322,19 @@ export function emitPreparedRuntimeTruthinessExpression(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression | null {
+  if (expression.type === 'UnaryExpression' && expression.operator === '!') {
+    const argument = emitPreparedRuntimeTruthinessExpression(expression.argument, context, deps)
+
+    if (argument == null) {
+      return null
+    }
+
+    return {
+      lines: argument.lines,
+      expression: `(!(${argument.expression}))`
+    }
+  }
+
   const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression, context, deps)
 
   if (value == null) {

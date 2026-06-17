@@ -7109,6 +7109,18 @@ test('generated C dynamic object field truthiness conditions compile and run wit
     total = total + 1000000
   }
 
+  if (!extra.empty) {
+    total = total + 3
+  }
+
+  if (!extra.ok) {
+    total = total + 30
+  }
+
+  if (!extra.missing) {
+    total = total + 300
+  }
+
   return total
 }
 
@@ -7129,7 +7141,7 @@ console.log(score({ name: 'Ada', empty: '', count: 0, ok: true, nope: false, chi
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '101001\n')
+    assert.equal(run.stdout, '101304\n')
   } finally {
     await rm(dir, {
       recursive: true,

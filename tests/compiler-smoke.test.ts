@@ -521,6 +521,32 @@ export function main(): void {
   assert.match(result.code, /ccjs_object_get\(extra, "active", 6, &ccjs_value_\d+\)/)
 })
 
+test('lowers C dynamic object field logical not through runtime truthiness', () => {
+  const result = compileSource(
+    `function read(extra: object): void {
+  if (!extra.name) {
+    console.log(1)
+  }
+
+  const inactive = !extra['active']
+  console.log(inactive)
+}
+
+export function main(): void {
+  read({ name: '', active: false })
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(extra, "name", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /if \(!\(ccjs_value_truthy\(ccjs_value_\d+\) \? 1 : 0\)\) \{/)
+  assert.match(result.code, /ccjs_object_get\(extra, "active", 6, &ccjs_value_\d+\)/)
+  assert.match(result.code, /const double inactive = \(!\(ccjs_value_truthy\(ccjs_value_\d+\) \? 1 : 0\)\);/)
+})
+
 
 test('lowers C dynamic object field assignments through runtime lookup', () => {
   const result = compileSource(
