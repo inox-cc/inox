@@ -1758,13 +1758,7 @@ function asyncTaskWrapperFunctionParams(wrapper: CAsyncTaskWrapper | null): CFun
 }
 
 function copyStringSet(source: Set<string>): Set<string> {
-  const result: Set<string> = new Set()
-
-  for (const value of source) {
-    result.add(value)
-  }
-
-  return result
+  return new Set(source)
 }
 
 function copyStringMap(source: Map<string, string>): Map<string, string> {

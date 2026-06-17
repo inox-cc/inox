@@ -2792,6 +2792,14 @@ function asyncTaskFirstArgumentOrNull(expression: AsyncTaskAstNode): AsyncTaskAs
   return argument
 }
 
+function asyncTaskReferenceNameOrNull(expression: AsyncTaskAstNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  return expression.path[0]
+}
+
 function asyncTaskLocationOrNull(expression: AsyncTaskAstNode): SourceLocation | null {
   const loc = expression.loc
 
@@ -3086,10 +3094,12 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
     return null
   }
 
-  if (expression.args[0] != null && expression.args[0].type === 'StringLiteral') {
+  const rejectArgument = asyncTaskFirstArgumentOrNull(expression)
+
+  if (rejectArgument != null && rejectArgument.type === 'StringLiteral') {
     const value = nextCName(context, 'ccjs_reject_value')
-    const bytes = cStringLiteral(expression.args[0].value)
-    const length = utf8ByteLength(expression.args[0].value)
+    const bytes = cStringLiteral(rejectArgument.value)
+    const length = utf8ByteLength(rejectArgument.value)
     const lines: string[] = []
 
     lines.push(`ccjs_value ${value} = ccjs_undefined_value();`)
@@ -3106,9 +3116,9 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   }
 
   if (
-    expression.args[0] != null &&
-    expression.args[0].type !== 'NumberLiteral' &&
-    expression.args[0].type !== 'BooleanLiteral'
+    rejectArgument != null &&
+    rejectArgument.type !== 'NumberLiteral' &&
+    rejectArgument.type !== 'BooleanLiteral'
   ) {
     context.diagnostics.push(
       diagnostic(
@@ -3126,8 +3136,8 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   let valueLines: string[] = []
   let valueExpression = 'ccjs_undefined_value()'
 
-  if (expression.args[0] != null) {
-    const value = asyncTaskDeps(context).emitCValueExpression(expression.args[0], context)
+  if (rejectArgument != null) {
+    const value = asyncTaskDeps(context).emitCValueExpression(rejectArgument, context)
 
     valueLines = value.lines
     valueExpression = value.expression
@@ -3150,11 +3160,13 @@ function emitPreparedAsyncTaskSourceCallExpression(
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
 ): PreparedAsyncTaskPromise | null {
-  if (expression.callee == null || expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+  const sourceName = asyncTaskReferenceNameOrNull(expression.callee)
+
+  if (sourceName == null) {
     return null
   }
 
-  const target = context.asyncTaskWrappers.get(expression.callee.path[0])
+  const target = context.asyncTaskWrappers.get(sourceName)
 
   if (target != null) {
     const prepared = asyncTaskDeps(context).emitPreparedCallArgs(expression, target.params, context)
@@ -3184,7 +3196,13 @@ function emitPreparedAsyncFunctionSourceCallExpression(
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
 ): PreparedAsyncTaskPromise | null {
-  if (!isAsyncFunctionCallee(expression.callee, context) || asyncTaskDeps(context).isThrowingFunctionCallee(expression.callee, context)) {
+  const callee = expression.callee
+
+  if (!isAsyncFunctionCallee(callee, context)) {
+    return null
+  }
+
+  if (asyncTaskDeps(context).isThrowingFunctionCallee(callee, context)) {
     return null
   }
 

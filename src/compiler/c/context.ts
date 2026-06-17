@@ -48,13 +48,7 @@ export function pushDiagnostic(context: CDiagnosticContext, item: Diagnostic): v
 }
 
 export function cloneCStringSet(values: CStringSet): CStringSet {
-  const result: CStringSet = new Set()
-
-  for (const value of values) {
-    result.add(value)
-  }
-
-  return result
+  return new Set(values)
 }
 
 export function cloneCStringMap(values: CStringMap): CStringMap {
