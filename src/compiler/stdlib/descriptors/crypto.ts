@@ -15,8 +15,6 @@ export const cryptoRuntimeMethods = [
 
 export type CryptoRuntimeMethod = string
 
-const cryptoGlobalRuntimeMethods: string[] = ['getRandomValues']
-
 export const unsupportedNodeCryptoMethods = [
   'argon2',
   'argon2Sync',
@@ -76,7 +74,7 @@ export function cryptoRuntimeMethodNameFromPath(
   const method = pathSegment(path, 1)
 
   if (root === 'crypto' && method != null) {
-    if (isCryptoRuntimeMethod(method) && stringListIncludes(cryptoGlobalRuntimeMethods, method)) {
+    if (isCryptoRuntimeMethod(method) && method === 'getRandomValues') {
       return method
     }
   }
