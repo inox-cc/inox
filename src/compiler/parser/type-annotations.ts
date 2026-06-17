@@ -146,38 +146,53 @@ export function normalizeTypeName(name: string): string {
   const unionArgs = splitUnionArgs(name)
 
   if (unionArgs.length > 1) {
-    const normalized: string[] = []
-    const withoutNullish: string[] = []
+    return normalizeUnionTypeNames(unionArgs)
+  }
 
-    for (let index = 0; index < unionArgs.length; index = index + 1) {
-      const arg = stringArrayValueAt(unionArgs, index)
-      const normalizedArg = normalizeTypeName(arg)
-      normalized.push(normalizedArg)
+  const nullableInner = genericTypeInner(name, 'nullable')
 
-      if (!isNullishTypeName(normalizedArg)) {
-        withoutNullish.push(normalizedArg)
-      }
+  if (nullableInner != null) {
+    return `nullable<${normalizeTypeName(nullableInner)}>`
+  }
+
+  const unionInner = genericTypeInner(name, 'union')
+
+  if (unionInner != null) {
+    const args = splitGenericArgs(unionInner)
+
+    if (args.length === 0) {
+      return 'unknown'
     }
 
-    if (allStringsSame(normalized)) {
-      return normalized[0]
-    }
-
-    if (withoutNullish.length === 1 && normalized.length > withoutNullish.length) {
-      return `nullable<${withoutNullish[0]}>`
-    }
-
-    return 'unknown'
+    return normalizeUnionTypeNames(args)
   }
 
   if (name.endsWith('[]')) {
     return `array<${normalizeTypeName(name.slice(0, -2))}>`
   }
 
+  const normalizedArrayInner = genericTypeInner(name, 'array')
+
+  if (normalizedArrayInner != null) {
+    return `array<${normalizeTypeName(normalizedArrayInner)}>`
+  }
+
   const arrayInner = genericTypeInner(name, 'Array')
 
   if (arrayInner != null) {
     return `array<${normalizeTypeName(arrayInner)}>`
+  }
+
+  const normalizedMapInner = genericTypeInner(name, 'map')
+
+  if (normalizedMapInner != null) {
+    const args = splitGenericArgs(normalizedMapInner)
+
+    if (args.length === 2) {
+      return `map<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
+    }
+
+    return 'map'
   }
 
   const mapInner = genericTypeInner(name, 'Map')
@@ -192,6 +207,18 @@ export function normalizeTypeName(name: string): string {
     return 'map'
   }
 
+  const normalizedSetInner = genericTypeInner(name, 'set')
+
+  if (normalizedSetInner != null) {
+    const args = splitGenericArgs(normalizedSetInner)
+
+    if (args.length === 1) {
+      return `set<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'set'
+  }
+
   const setInner = genericTypeInner(name, 'Set')
 
   if (setInner != null) {
@@ -202,6 +229,18 @@ export function normalizeTypeName(name: string): string {
     }
 
     return 'set'
+  }
+
+  const normalizedPromiseInner = genericTypeInner(name, 'promise')
+
+  if (normalizedPromiseInner != null) {
+    const args = splitGenericArgs(normalizedPromiseInner)
+
+    if (args.length === 1) {
+      return `promise<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'promise'
   }
 
   const promiseInner = genericTypeInner(name, 'Promise')
@@ -249,6 +288,39 @@ export function normalizeTypeName(name: string): string {
   }
 
   return 'unknown'
+}
+
+function normalizeUnionTypeNames(unionArgs: string[]): string {
+  const normalized: string[] = []
+  const withoutNullish: string[] = []
+
+  for (let index = 0; index < unionArgs.length; index = index + 1) {
+    const arg = stringArrayValueAt(unionArgs, index)
+    const normalizedArg = normalizeTypeName(arg)
+    normalized.push(normalizedArg)
+
+    if (!isNullishTypeName(normalizedArg)) {
+      withoutNullish.push(normalizedArg)
+    }
+  }
+
+  if (allStringsSame(normalized)) {
+    return normalized[0]
+  }
+
+  if (withoutNullish.length === 0) {
+    return 'unknown'
+  }
+
+  if (normalized.length > withoutNullish.length) {
+    if (withoutNullish.length === 1) {
+      return `nullable<${withoutNullish[0]}>`
+    }
+
+    return `nullable<union<${joinStrings(withoutNullish, ',')}>>`
+  }
+
+  return `union<${joinStrings(normalized, ',')}>`
 }
 
 function allStringsSame(values: string[]): boolean {

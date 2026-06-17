@@ -10,7 +10,8 @@ import {
   mapTypeNamesFromTypeName,
   nullableTypeNameFromKnownTypeName,
   promiseValueTypeNameFromKnownTypeName,
-  setElementTypeNameFromKnownTypeName
+  setElementTypeNameFromKnownTypeName,
+  unionTypeNamesFromTypeName
 } from '../type-names.ts'
 
 type LowerTypeNode = AnyNode
@@ -41,6 +42,16 @@ type LowerObjectShapeBases = {
   fields: LowerTypeNode[]
 }
 
+type LowerResolvedStringKey =
+  | 'arrayElementType'
+  | 'arrayElementDeclaredType'
+  | 'mapKeyType'
+  | 'mapValueType'
+  | 'promiseValueType'
+  | 'setElementType'
+
+type LowerTypeNameResolver = (name: string, context: LowerContext) => LowerResolvedType
+
 export function createLowerContext(ast: ProgramNode): LowerContext {
   return {
     types: collectTypes(ast),
@@ -60,6 +71,12 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     const inner = resolveDeclaredType(nullableTypeName, context)
 
     return nullableResolvedType(inner)
+  }
+
+  const unionTypeNames = unionTypeNamesFromTypeName(name)
+
+  if (unionTypeNames != null) {
+    return resolveUnionTypeNames(unionTypeNames, context, resolveDeclaredType)
   }
 
   if (name === 'array') {
@@ -377,6 +394,12 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
     return nullableResolvedType(inner)
   }
 
+  const unionTypeNames = unionTypeNamesFromTypeName(name)
+
+  if (unionTypeNames != null) {
+    return resolveUnionTypeNames(unionTypeNames, context, resolveWeakTargetShapeTypeName)
+  }
+
   if (name === 'array') {
     return arrayResolvedType(null, null)
   }
@@ -540,6 +563,93 @@ function nullableResolvedType(source: LowerResolvedType): LowerResolvedType {
   resolved.nullable = true
 
   return resolved
+}
+
+function resolveUnionTypeNames(
+  names: string[],
+  context: LowerContext,
+  resolveTypeName: LowerTypeNameResolver
+): LowerResolvedType {
+  const resolvedTypes: LowerResolvedType[] = []
+
+  for (let index = 0; index < names.length; index = index + 1) {
+    resolvedTypes.push(resolveTypeName(names[index], context))
+  }
+
+  const valueType = commonResolvedValueType(resolvedTypes)
+
+  if (valueType == null || valueType === 'unknown') {
+    return unresolvedType()
+  }
+
+  const resolved = namedResolvedType(valueType)
+  resolved.nullable = resolvedTypeListHasNullable(resolvedTypes)
+
+  if (valueType === 'array') {
+    resolved.arrayElementType = commonResolvedString(resolvedTypes, 'arrayElementType')
+    resolved.arrayElementDeclaredType = commonResolvedString(resolvedTypes, 'arrayElementDeclaredType')
+  } else if (valueType === 'map') {
+    resolved.mapKeyType = commonResolvedString(resolvedTypes, 'mapKeyType')
+    resolved.mapValueType = commonResolvedString(resolvedTypes, 'mapValueType')
+  } else if (valueType === 'promise') {
+    resolved.promiseValueType = commonResolvedString(resolvedTypes, 'promiseValueType')
+  } else if (valueType === 'set') {
+    resolved.setElementType = commonResolvedString(resolvedTypes, 'setElementType')
+  }
+
+  return resolved
+}
+
+function resolvedTypeListHasNullable(values: LowerResolvedType[]): boolean {
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (values[index].nullable === true) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function commonResolvedValueType(values: LowerResolvedType[]): string | null {
+  if (values.length === 0) {
+    return null
+  }
+
+  const first = values[0].valueType
+
+  if (first == null) {
+    return null
+  }
+
+  for (let index = 1; index < values.length; index = index + 1) {
+    if (values[index].valueType !== first) {
+      return null
+    }
+  }
+
+  return first
+}
+
+function commonResolvedString(values: LowerResolvedType[], key: LowerResolvedStringKey): string | null {
+  if (values.length === 0) {
+    return null
+  }
+
+  const first = values[0][key] ?? null
+
+  if (first == null) {
+    return null
+  }
+
+  for (let index = 1; index < values.length; index = index + 1) {
+    const value = values[index][key] ?? null
+
+    if (value !== first) {
+      return null
+    }
+  }
+
+  return first
 }
 
 function arrayResolvedType(elementType: LowerResolvedType | null, elementDeclaredType: string | null): LowerResolvedType {

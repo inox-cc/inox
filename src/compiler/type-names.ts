@@ -102,6 +102,22 @@ export function splitUnionArgs(value: string): string[] {
   return splitDelimitedTypeArgs(value, '|')
 }
 
+export function unionTypeNamesFromTypeName(name: string): string[] | null {
+  const inner = genericTypeInner(name, 'union')
+
+  if (inner == null) {
+    return null
+  }
+
+  const args = splitGenericArgs(inner)
+
+  if (args.length === 0) {
+    return null
+  }
+
+  return args
+}
+
 export function isBuiltinValueType(name: string): boolean {
   if (name === 'array') {
     return true

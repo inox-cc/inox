@@ -948,6 +948,44 @@ export function main(): void {
   assert.match(objects.code, /ccjs_for_value_\d+ = ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.value;/)
   assert.match(objects.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
   assert.match(objects.code, /ccjs_value user = ccjs_for_value_\d+;/)
+
+  const unionObjects = compileSource(
+    `type Named = {
+  kind: string,
+  name: string
+}
+
+type Scored = {
+  kind: string,
+  score: number
+}
+
+type Item = Named | Scored
+
+export function main(): void {
+  const named: Named = { kind: 'named', name: 'Ada' }
+  const scored: Scored = { kind: 'scored', score: 7 }
+  const items: Map<string, Item> = new Map()
+  let count = 0
+
+  items.set('named', named)
+  items.set('scored', scored)
+
+  for (const item of items.values()) {
+    count = count + 1
+  }
+
+  console.log(count)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(unionObjects.code, /ccjs_for_value_\d+ = ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.value;/)
+  assert.match(unionObjects.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
+  assert.match(unionObjects.code, /ccjs_value item = ccjs_for_value_\d+;/)
 })
 
 

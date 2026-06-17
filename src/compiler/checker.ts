@@ -42,7 +42,8 @@ import {
   mapTypeNamesFromTypeName,
   nullableTypeNameFromKnownTypeName,
   promiseValueTypeNameFromKnownTypeName,
-  setElementTypeNameFromKnownTypeName
+  setElementTypeNameFromKnownTypeName,
+  unionTypeNamesFromTypeName
 } from './type-names.ts'
 import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
 import {
@@ -152,6 +153,13 @@ type ResolvedTypeInfo = {
   promiseValueType?: ValueType | null
   setElementType: ValueType | null
 }
+
+type ResolvedTypeInfoValueKey =
+  | 'arrayElementType'
+  | 'mapKeyType'
+  | 'mapValueType'
+  | 'promiseValueType'
+  | 'setElementType'
 
 type OwnershipGraphEdge = {
   from: string
@@ -352,6 +360,56 @@ function stringSetFromArray(values: string[]): Set<string> {
 
 function cloneStringSet(values: Set<string>): Set<string> {
   return new Set(values)
+}
+
+function resolvedTypeListHasNullable(infos: ResolvedTypeInfo[]): boolean {
+  for (let index = 0; index < infos.length; index = index + 1) {
+    if (infos[index].nullable) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function commonResolvedArrayElementType(infos: ResolvedTypeInfo[]): ValueType | null {
+  return commonResolvedOptionalValueType(infos, 'arrayElementType')
+}
+
+function commonResolvedMapKeyType(infos: ResolvedTypeInfo[]): ValueType | null {
+  return commonResolvedOptionalValueType(infos, 'mapKeyType')
+}
+
+function commonResolvedMapValueType(infos: ResolvedTypeInfo[]): ValueType | null {
+  return commonResolvedOptionalValueType(infos, 'mapValueType')
+}
+
+function commonResolvedPromiseValueType(infos: ResolvedTypeInfo[]): ValueType | null {
+  return commonResolvedOptionalValueType(infos, 'promiseValueType')
+}
+
+function commonResolvedSetElementType(infos: ResolvedTypeInfo[]): ValueType | null {
+  return commonResolvedOptionalValueType(infos, 'setElementType')
+}
+
+function commonResolvedOptionalValueType(infos: ResolvedTypeInfo[], key: ResolvedTypeInfoValueKey): ValueType | null {
+  const values: ValueType[] = []
+
+  for (let index = 0; index < infos.length; index = index + 1) {
+    const value = infos[index][key]
+
+    if (value == null) {
+      return null
+    }
+
+    values.push(value)
+  }
+
+  if (values.length === 0) {
+    return null
+  }
+
+  return commonValueType(values)
 }
 
 class Scope {
@@ -9863,6 +9921,12 @@ class Checker {
       }
     }
 
+    const unionTypeNames = unionTypeNamesFromTypeName(name)
+
+    if (unionTypeNames != null) {
+      return this.resolveUnionDeclaredType(unionTypeNames, loc)
+    }
+
     if (name === 'array') {
       return {
         valueType: 'array',
@@ -10158,6 +10222,40 @@ class Checker {
       promiseValueType: null,
       setElementType: null
     }
+  }
+
+  resolveUnionDeclaredType(names: string[], loc: SourceLocation): ResolvedTypeInfo {
+    const infos: ResolvedTypeInfo[] = []
+    const valueTypes: ValueType[] = []
+
+    for (let index = 0; index < names.length; index = index + 1) {
+      const info = this.resolveDeclaredType(names[index], loc)
+      infos.push(info)
+      valueTypes.push(info.valueType)
+    }
+
+    const valueType = commonValueType(valueTypes)
+    const result = this.unresolvedTypeInfo()
+
+    if (valueType === 'unknown') {
+      return result
+    }
+
+    result.valueType = valueType
+    result.nullable = resolvedTypeListHasNullable(infos)
+
+    if (valueType === 'array') {
+      result.arrayElementType = commonResolvedArrayElementType(infos)
+    } else if (valueType === 'map') {
+      result.mapKeyType = commonResolvedMapKeyType(infos)
+      result.mapValueType = commonResolvedMapValueType(infos)
+    } else if (valueType === 'promise') {
+      result.promiseValueType = commonResolvedPromiseValueType(infos)
+    } else if (valueType === 'set') {
+      result.setElementType = commonResolvedSetElementType(infos)
+    }
+
+    return result
   }
 
   resolveObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {

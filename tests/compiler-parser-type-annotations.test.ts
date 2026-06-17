@@ -11,6 +11,11 @@ test('normalizes TypeScript-style type names for parser lowering', () => {
   assert.equal(normalizeTypeName('Array<Map<string,number>>'), 'array<map<string,number>>')
   assert.equal(normalizeTypeName('Promise<Array<boolean|null>>'), 'promise<array<nullable<boolean>>>')
   assert.equal(normalizeTypeName('Set<User>'), 'set<User>')
+  assert.equal(normalizeTypeName('Named|Scored'), 'union<Named,Scored>')
+  assert.equal(normalizeTypeName('Named|Scored|null'), 'nullable<union<Named,Scored>>')
+  assert.equal(normalizeTypeName('union<Named,Scored>'), 'union<Named,Scored>')
+  assert.equal(normalizeTypeName('Map<string,union<Named,Scored>>'), 'map<string,union<Named,Scored>>')
+  assert.equal(normalizeTypeName('map<string,nullable<number>>'), 'map<string,nullable<number>>')
   assert.equal(normalizeTypeName('any'), 'unknown')
 })
 
