@@ -6,14 +6,40 @@ const defaultRandomSeed = 1831565813
 
 type CRandomBackend = 'simple' | 'xorshift32' | 'os'
 
+type CPreludeEmitOptions = {
+  random?: RandomOptions | null
+}
+
+type CPreludeRandomConfig = {
+  backend: CRandomBackend
+  seed: number
+  unsupportedBackend: string | null
+}
+
+type CPreludeRandomOptions = {
+  backend?: string | null
+  seed?: number | null
+}
+
 function pushCPreludeLines(target: string[], source: string[]): void {
   for (let index = 0; index < source.length; index = index + 1) {
     target.push(source[index])
   }
 }
 
-function cPreludeUsesOsRandom(options: CEmitOptions): boolean {
-  return (options.random?.backend ?? 'simple') === 'os'
+function cPreludeRandomOptions(options: CEmitOptions): RandomOptions {
+  const emitOptions = options as CPreludeEmitOptions
+  const random = emitOptions.random
+
+  if (random != null) {
+    return random
+  }
+
+  return {}
+}
+
+function cPreludeUsesOsRandom(random: CPreludeRandomConfig): boolean {
+  return random.backend === 'os'
 }
 
 export function emitCPrelude(
@@ -44,6 +70,8 @@ export function emitCPrelude(
   options: CEmitOptions = {}
 ): string[] {
   const lines = ['#include <stdio.h>']
+  const randomOptions = cPreludeRandomOptions(options)
+  const random = cPreludeRandomConfig(randomOptions)
 
   if (needsConsoleRuntime) {
     lines.push('#include <stdlib.h>')
@@ -74,7 +102,7 @@ export function emitCPrelude(
     lines.push('#include <stdint.h>')
   }
 
-  if (needsMathRuntime && cPreludeUsesOsRandom(options)) {
+  if (needsMathRuntime && cPreludeUsesOsRandom(random)) {
     pushCPreludeLines(lines, emitOsEntropyHeaders())
   }
 
@@ -143,13 +171,13 @@ export function emitCPrelude(
 
   lines.push('')
 
-  if (needsMathRuntime && cPreludeUsesOsRandom(options)) {
+  if (needsMathRuntime && cPreludeUsesOsRandom(random)) {
     pushCPreludeLines(lines, emitOsEntropyHelper())
     lines.push('')
   }
 
   if (needsMathRuntime) {
-    pushCPreludeLines(lines, emitMathHelpers(options.random))
+    pushCPreludeLines(lines, emitMathHelpers(random))
     lines.push('')
   }
 
@@ -227,9 +255,9 @@ export function emitCPrelude(
   return lines
 }
 
-function emitMathHelpers(random: RandomOptions = {}): string[] {
+function emitMathHelpers(random: CPreludeRandomConfig): string[] {
   const randomSeed = emitRandomSeedLiteral(random)
-  const randomBackend = cPreludeRandomBackend(random)
+  const randomBackend = random.backend
   const lines: string[] = []
 
   lines.push('static double ccjs_math_abs(double value) {')
@@ -407,16 +435,14 @@ function emitRandomBackendHelper(backend: CRandomBackend): string[] {
   ]
 }
 
-function emitRandomSeedLiteral(random: RandomOptions = {}): string {
-  const backend = random.backend
+function emitRandomSeedLiteral(random: CPreludeRandomConfig): string {
+  const backend = random.unsupportedBackend
 
   if (backend != null) {
-    if (isSupportedCRandomBackend(backend) === false) {
-      throw new Error(`unsupported random backend ${quoteDiagnosticString(backend)}`)
-    }
+    throw new Error(`unsupported random backend ${quoteDiagnosticString(backend)}`)
   }
 
-  const seed = cPreludeRandomSeed(random)
+  const seed = random.seed
 
   if (isValidCRandomSeed(seed)) {
     return `0x${seed.toString(16).padStart(8, '0')}u`
@@ -425,26 +451,38 @@ function emitRandomSeedLiteral(random: RandomOptions = {}): string {
   throw new Error('random.seed must be an integer from 0 to 4294967295')
 }
 
-function cPreludeRandomBackend(random: RandomOptions): CRandomBackend {
-  const backend = random.backend ?? 'simple'
+function cPreludeRandomConfig(random: RandomOptions): CPreludeRandomConfig {
+  const options = random as CPreludeRandomOptions
+  const backend = options.backend
+  const seed = cPreludeRandomSeed(options)
+  let randomBackend: CRandomBackend = 'simple'
+  let unsupportedBackend: string | null = null
 
   if (backend === 'os') {
-    return 'os'
+    randomBackend = 'os'
+  } else if (backend === 'xorshift32') {
+    randomBackend = 'xorshift32'
+  } else if (backend === 'simple' || backend == null) {
+    randomBackend = 'simple'
+  } else {
+    unsupportedBackend = backend
   }
 
-  if (backend === 'xorshift32') {
-    return 'xorshift32'
+  return {
+    backend: randomBackend,
+    seed,
+    unsupportedBackend
+  }
+}
+
+function cPreludeRandomSeed(random: CPreludeRandomOptions): number {
+  const seed = random.seed
+
+  if (seed != null) {
+    return seed
   }
 
-  return 'simple'
-}
-
-function cPreludeRandomSeed(random: RandomOptions): number {
-  return random.seed ?? defaultRandomSeed
-}
-
-function isSupportedCRandomBackend(backend: string): boolean {
-  return backend === 'simple' || backend === 'xorshift32' || backend === 'os'
+  return defaultRandomSeed
 }
 
 function isValidCRandomSeed(seed: number): boolean {
