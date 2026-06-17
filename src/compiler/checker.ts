@@ -236,6 +236,10 @@ function resolvedStringMetadata(value: string | null | undefined, fallback: stri
   return null
 }
 
+function firstPathSegment(path: readonly string[]): string {
+  return path[0]
+}
+
 function resolvedObjectShapeMetadata(
   value: ObjectShapeInfo | null | undefined,
   fallback: ObjectShapeInfo | null | undefined
@@ -2701,7 +2705,7 @@ class Checker {
       return null
     }
 
-    if (path.length === 2 && path[0] === 'Buffer') {
+    if (path.length === 2 && firstPathSegment(path) === 'Buffer') {
       const symbol = this.scope.resolve('Buffer')
 
       if (symbol == null) {
@@ -2724,7 +2728,8 @@ class Checker {
     }
 
     if (path.length === 3 && path[1] === 'Buffer') {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -2771,7 +2776,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -2790,7 +2796,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -2856,7 +2863,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -2883,7 +2891,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -2915,7 +2924,8 @@ class Checker {
     }
 
     if (path.length === 3 && path[1] === 'promises') {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       const exportName = `promises.${path[2]}`
 
       if (
@@ -3577,7 +3587,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -3594,7 +3605,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -3775,7 +3787,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -3792,7 +3805,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -3830,7 +3844,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -3849,7 +3864,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -3946,7 +3962,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -3963,7 +3980,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -3989,7 +4007,8 @@ class Checker {
       return null
     }
 
-    const root = this.scope.resolve(path[0])
+    const rootName = firstPathSegment(path)
+    const root = this.scope.resolve(rootName)
 
     if (root == null || root.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
       return null
@@ -4025,12 +4044,7 @@ class Checker {
 
         if (isProcessRuntimeProperty(property)) {
           expression.processRuntimeProperty = property
-          let valueType: ValueType = 'unknown'
-          const propertyValueType = processRuntimePropertyValueType(property)
-
-          if (propertyValueType != null) {
-            valueType = propertyValueType
-          }
+          const valueType = resolvedConcreteValueTypeMetadata(processRuntimePropertyValueType(property), 'unknown')
 
           expression.valueType = valueType
           return expression.valueType
@@ -4051,12 +4065,7 @@ class Checker {
 
       if (isProcessRuntimeProperty(property)) {
         expression.processRuntimeProperty = property
-        let valueType: ValueType = 'unknown'
-        const propertyValueType = processRuntimePropertyValueType(property)
-
-        if (propertyValueType != null) {
-          valueType = propertyValueType
-        }
+        const valueType = resolvedConcreteValueTypeMetadata(processRuntimePropertyValueType(property), 'unknown')
 
         expression.valueType = valueType
         return expression.valueType
@@ -4073,7 +4082,8 @@ class Checker {
       return null
     }
 
-    const root = this.scope.resolve(path[0])
+    const rootName = firstPathSegment(path)
+    const root = this.scope.resolve(rootName)
 
     if (
       root == null ||
@@ -4099,7 +4109,8 @@ class Checker {
       return null
     }
 
-    const root = this.scope.resolve(path[0])
+    const rootName = firstPathSegment(path)
+    const root = this.scope.resolve(rootName)
 
     if (root == null || root.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
       return null
@@ -4275,7 +4286,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -4292,7 +4304,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -4344,7 +4357,8 @@ class Checker {
         return globalMethod
       }
 
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -4361,7 +4375,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -4560,7 +4575,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -4577,7 +4593,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -4594,7 +4611,8 @@ class Checker {
     }
 
     if (path.length === 3 && path[1] === 'posix') {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -4633,7 +4651,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -4647,7 +4666,8 @@ class Checker {
     }
 
     if (path.length === 3 && path[1] === 'posix') {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
@@ -4682,7 +4702,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (symbol != null && symbol.kind === 'import') {
         const importSource = symbol.importSource
@@ -4699,7 +4720,8 @@ class Checker {
     }
 
     if (path.length === 3 && path[1] === 'constants') {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (symbol != null && symbol.kind === 'import') {
         const importSource = symbol.importSource
@@ -4862,7 +4884,8 @@ class Checker {
       return null
     }
 
-    const symbol = this.scope.resolve(path[0])
+    const rootName = firstPathSegment(path)
+    const symbol = this.scope.resolve(rootName)
 
     if (symbol == null || !isFsRuntimeImportSymbol(symbol)) {
       return null
@@ -6704,7 +6727,8 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
       if (symbol != null && symbol.importedName != null) {
@@ -6719,7 +6743,8 @@ class Checker {
     }
 
     if (path.length === 2) {
-      const symbol = this.scope.resolve(path[0])
+      const rootName = firstPathSegment(path)
+      const symbol = this.scope.resolve(rootName)
 
       if (
         symbol != null &&
