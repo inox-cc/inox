@@ -25,7 +25,9 @@ function readonlyStringFields(names: string[]): AnyNode[] {
 function readonlyDebugMemoryStatsFields(names: DebugMemoryStatsField[]): AnyNode[] {
   const fields: AnyNode[] = []
 
-  for (const field of names) {
+  for (let index = 0; index < names.length; index = index + 1) {
+    const field = names[index] as DebugMemoryStatsField
+
     fields.push({
       name: field.name,
       valueType: 'number',
