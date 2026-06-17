@@ -128,16 +128,18 @@ export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: 
 
 export async function compileFile(entry: string, options: CompileOptions = {}): Promise<FileCompileResult> {
   const compiled = await compileGraphToIrModules(entry, options)
+  const irModules: IrProgram[] = []
 
-  runCStaticChecks(
-    compiled.irModules.map((module) => module.ir),
-    options
-  )
+  for (const module of compiled.irModules) {
+    irModules.push(module.ir)
+  }
+
+  runCStaticChecks(irModules, options)
 
   return {
     target: compiled.target,
     graph: compiled.graph,
-    irRuntimeRequirements: collectIrRuntimeRequirements(compiled.irModules.map((module) => module.ir)),
+    irRuntimeRequirements: collectIrRuntimeRequirements(irModules),
     code: emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, {
       random: options.random
     })
@@ -150,11 +152,13 @@ export async function compileFileToCModules(
 ): Promise<CModuleCompileResult> {
   const host = requireCompilerHost(options.host, 'compileFileToCModules')
   const compiled = await compileGraphToIrModules(entry, cModuleOptionsWithHostAndTarget(options, host, 'c'))
+  const irModules: IrProgram[] = []
 
-  runCStaticChecks(
-    compiled.irModules.map((module) => module.ir),
-    options
-  )
+  for (const module of compiled.irModules) {
+    irModules.push(module.ir)
+  }
+
+  runCStaticChecks(irModules, options)
 
   return {
     target: 'c',

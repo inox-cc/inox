@@ -1,7 +1,40 @@
-import type { ObjectShapeInfo, SymbolInfo } from '../types.ts'
+import type { AnyNode, ObjectShapeInfo, SymbolInfo } from '../types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
 import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { urlObjectFields } from '../stdlib/descriptors/url.ts'
+
+type DebugMemoryStatsField = {
+  name: string
+  cField: string
+}
+
+function readonlyStringFields(names: string[]): AnyNode[] {
+  const fields: AnyNode[] = []
+
+  for (const name of names) {
+    fields.push({
+      name,
+      valueType: 'string',
+      readonly: true
+    })
+  }
+
+  return fields
+}
+
+function readonlyDebugMemoryStatsFields(names: DebugMemoryStatsField[]): AnyNode[] {
+  const fields: AnyNode[] = []
+
+  for (const field of names) {
+    fields.push({
+      name: field.name,
+      valueType: 'number',
+      readonly: true
+    })
+  }
+
+  return fields
+}
 
 export const errorObjectShape: ObjectShapeInfo = {
   kind: 'object',
@@ -140,11 +173,7 @@ export const fetchAbortControllerObjectShape: ObjectShapeInfo = {
 export const urlObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'url.URL',
-  fields: urlObjectFields.map((name) => ({
-    name,
-    valueType: 'string',
-    readonly: true
-  }))
+  fields: readonlyStringFields(urlObjectFields)
 }
 
 export const urlSearchParamsObjectShape: ObjectShapeInfo = {
@@ -178,21 +207,13 @@ export const childProcessSpawnSyncResultShape: ObjectShapeInfo = {
 export const pathParseObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'path.ParsedPath',
-  fields: pathParseObjectFields.map((name) => ({
-    name,
-    valueType: 'string',
-    readonly: true
-  }))
+  fields: readonlyStringFields(pathParseObjectFields)
 }
 
 export const debugMemoryStatsObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'ccjs.DebugMemoryStats',
-  fields: debugMemoryStatsFields.map((field) => ({
-    name: field.name,
-    valueType: 'number',
-    readonly: true
-  }))
+  fields: readonlyDebugMemoryStatsFields(debugMemoryStatsFields)
 }
 
 export const fsConstantValues = new Map([
