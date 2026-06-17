@@ -220,6 +220,7 @@ type CheckerMapType = {
 
 type JsonParseLiteralTypeInfo = {
   valueType: ValueType
+  shape: ObjectShapeInfo | null
   arrayElementType: ValueType | null
   arrayElementDeclaredType: string | null
 }
@@ -5246,9 +5247,19 @@ class Checker {
       const arg = checkerNodeAt(expression.args, 0)
       const argType = this.checkExpression(arg)
 
-      this.checkAssignableType(argType, 'object', arg.loc, false, this.expressionCanBeNull(arg))
+      if (argType !== 'unknown' && argType !== 'object' && argType !== 'array') {
+        this.report(
+          'CCJS_TYPE_MISMATCH',
+          `function Object.${method} expects an object or array argument`,
+          arg.loc
+        )
+      }
       if (method === 'values') {
-        expression.arrayElementType = this.resolveObjectValuesElementType(arg)
+        if (argType === 'array') {
+          expression.arrayElementType = this.resolveExpressionArrayElementType(arg) ?? 'unknown'
+        } else {
+          expression.arrayElementType = this.resolveObjectValuesElementType(arg)
+        }
       }
     }
 
@@ -6642,6 +6653,7 @@ class Checker {
       } else if (literalType != null) {
         expression.arrayElementType = literalType.arrayElementType
         expression.arrayElementDeclaredType = literalType.arrayElementDeclaredType
+        expression.shape = literalType.shape
       }
 
       return valueType
@@ -6692,14 +6704,41 @@ class Checker {
 
       return {
         valueType: 'array',
+        shape: null,
         arrayElementType,
         arrayElementDeclaredType: arrayElementType === 'unknown' ? null : arrayElementType
       }
     }
 
     if (value != null && typeof value === 'object') {
+      const fields: AnyNode[] = []
+
+      for (const [name, fieldValue] of Object.entries(value)) {
+        const fieldType = this.inferJsonLiteralType(fieldValue)
+
+        fields.push({
+          type: 'Field',
+          name,
+          valueType: fieldType.valueType,
+          nullable: fieldType.valueType === 'unknown',
+          arrayElementType: fieldType.arrayElementType,
+          arrayElementDeclaredType: fieldType.arrayElementDeclaredType,
+          mapKeyType: null,
+          mapValueType: null,
+          promiseValueType: null,
+          setElementType: null,
+          shape: fieldType.shape,
+          loc: { line: 1, column: 1 }
+        })
+      }
+
       return {
         valueType: 'object',
+        shape: {
+          kind: 'object',
+          dynamic: true,
+          fields
+        },
         arrayElementType: null,
         arrayElementDeclaredType: null
       }
@@ -6708,6 +6747,7 @@ class Checker {
     if (typeof value === 'number') {
       return {
         valueType: 'number',
+        shape: null,
         arrayElementType: null,
         arrayElementDeclaredType: null
       }
@@ -6716,6 +6756,7 @@ class Checker {
     if (typeof value === 'boolean') {
       return {
         valueType: 'boolean',
+        shape: null,
         arrayElementType: null,
         arrayElementDeclaredType: null
       }
@@ -6724,6 +6765,7 @@ class Checker {
     if (typeof value === 'string') {
       return {
         valueType: 'string',
+        shape: null,
         arrayElementType: null,
         arrayElementDeclaredType: null
       }
@@ -6731,6 +6773,7 @@ class Checker {
 
     return {
       valueType: 'unknown',
+      shape: null,
       arrayElementType: null,
       arrayElementDeclaredType: null
     }

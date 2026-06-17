@@ -1,6 +1,7 @@
 import { jsonRuntimeMethodNameFromPath } from '../../stdlib/descriptors/json.ts'
 import {
   emitPrepareOwnedValueWrite,
+  emitFailureStatement,
   emitStatusCheck,
   nextCName,
   registerOwnedValue
@@ -80,6 +81,44 @@ function singleStringPathName(path: string[] | null | undefined): string | null 
 
 function stringValueAt(values: string[], index: number): string {
   return values[index]
+}
+
+function currentJsonErrorTarget(context: CFunctionContext): string | null {
+  const targets = context.errorTargets
+
+  if (targets == null || targets.length === 0) {
+    return null
+  }
+
+  return targets[targets.length - 1]
+}
+
+function pushJsonParseStatusLines(target: string[], call: string, context: CFunctionContext): void {
+  const errorTarget = currentJsonErrorTarget(context)
+
+  if (errorTarget == null && context.throwingFunction !== true) {
+    target.push(emitStatusCheck(call, context))
+    return
+  }
+
+  const status = nextCName(context, 'ccjs_json_status')
+  const message = 'JSON.parse failed'
+
+  target.push(`ccjs_status ${status} = ${call};`)
+  target.push(`if (${status} != CCJS_OK) {`)
+  target.push('  ccjs_release(ccjs_error);')
+  target.push('  ccjs_error = ccjs_undefined_value();')
+  target.push(
+    `  if (ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(message)}, ${utf8ByteLength(message)}, &ccjs_error) != CCJS_OK) ${emitFailureStatement(context)}`
+  )
+
+  if (errorTarget == null) {
+    target.push('  ccjs_status_result = CCJS_ERR_THROW;')
+  }
+
+  target.push('  ccjs_error_active = 1;')
+  target.push(`  goto ${errorTarget ?? 'ccjs_cleanup'};`)
+  target.push('}')
 }
 
 export function emitJsonParseVariableDeclaration(
@@ -188,7 +227,7 @@ export function emitPreparedJsonCallExpression(
 
     pushJsonLines(lines, text.lines)
     pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`ccjs_json_parse(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out})`, context))
+    pushJsonParseStatusLines(lines, `ccjs_json_parse(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out})`, context)
 
     if (expectedTag != null) {
       lines.push(emitRuntimeValueCheck(out, expectedTag, context))

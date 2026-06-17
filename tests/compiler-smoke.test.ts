@@ -270,6 +270,64 @@ test('infers JSON.parse literal arrays for C for-of object iteration', () => {
   assert.match(result.code, /ccjs_object_entries\(&ccjs_default_allocator, row, &ccjs_object_entries_\d+\)/)
 })
 
+test('infers JSON.parse object fields with array values for C iteration', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const payload = JSON.parse('{"items":[{"score":3},{"score":5,"bonus":8}]}')
+  console.log(Object.entries(payload.items))
+
+  for (const item of payload.items) {
+    const values = Object.values(item)
+    const first = values[0]
+    console.log(first)
+  }
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.deepEqual(
+    result.ir.globalUsages.map((usage) => usage.path.join('.')),
+    ['JSON.parse', 'Object.entries', 'Object.values']
+  )
+  assert.match(result.code, /ccjs_json_parse\(&ccjs_default_allocator, "\{\\"items\\":\[\{\\"score\\":3\},\{\\"score\\":5,\\"bonus\\":8\}\]\}"/)
+  assert.match(result.code, /ccjs_json_object_\d+\.tag != CCJS_TAG_OBJECT/)
+  assert.match(result.code, /ccjs_object_get_known\(payload, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_entries\(&ccjs_default_allocator, ccjs_value_\d+, &ccjs_object_entries_\d+\)/)
+  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_for_length_\d+\)/)
+  assert.match(result.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
+  assert.match(result.code, /ccjs_object_values\(&ccjs_default_allocator, item, &ccjs_object_values_\d+\)/)
+})
+
+test('lowers invalid JSON.parse inside C try catch as a local throw', () => {
+  const result = compileSource(
+    `export function main(): void {
+  try {
+    const value = JSON.parse('{"items":[}')
+    console.log(value)
+  } catch (error) {
+    console.log(error)
+  }
+
+  console.log('after')
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.deepEqual(
+    result.ir.globalUsages.map((usage) => usage.path.join('.')),
+    ['JSON.parse']
+  )
+  assert.match(result.code, /ccjs_status ccjs_json_status_\d+ = ccjs_json_parse\(&ccjs_default_allocator, "\{\\"items\\":\[\}", 11, &ccjs_json_value_\d+\);/)
+  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "JSON\.parse failed", 17, &ccjs_error\)/)
+  assert.match(result.code, /ccjs_error_active = 1;\n {4}goto ccjs_try_\d+_catch;/)
+})
+
 test('erases TypeScript as expressions before C emission', () => {
   const result = compileSource(
     `export function main(): void {

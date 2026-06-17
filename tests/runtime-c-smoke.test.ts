@@ -224,6 +224,101 @@ for (const row of rows) {
   }
 })
 
+test('generated C JSON.parse object array fields feed Object.entries and for-of', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-object-array-field-'))
+  const source = join(dir, 'json-object-array-field.c')
+  const output = join(dir, 'json-object-array-field')
+
+  try {
+    const result = compileSource(
+      `const payload = JSON.parse('{"items":[{"score":3},{"score":5,"bonus":8}]}')
+const entries = Object.entries(payload.items)
+console.log(entries)
+
+for (const item of payload.items) {
+  const values = Object.values(item)
+  const first = values[0]
+  console.log(first)
+}
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '[[0, { score: 3 }], [1, { score: 5, bonus: 8 }]]\n3\n5\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C invalid JSON.parse is caught and execution continues', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-parse-catch-'))
+  const source = join(dir, 'json-parse-catch.c')
+  const output = join(dir, 'json-parse-catch')
+
+  try {
+    const result = compileSource(
+      `try {
+  const value = JSON.parse('{"items":[}')
+  console.log(value)
+} catch (error) {
+  console.log(error)
+}
+
+console.log('after')
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'JSON.parse failed\nafter\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('C runtime JSON parse and stringify compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])

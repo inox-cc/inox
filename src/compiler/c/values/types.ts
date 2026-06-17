@@ -385,6 +385,10 @@ export function inferExpressionType(
     return 'bytes'
   }
 
+  if (expression.type === 'CallExpression' && expression.objectRuntimeMethod != null) {
+    return cValueTypeOrUnknown(expression)
+  }
+
   if (expression.type === 'CallExpression' && usesCJsGlobal(expression.callee, context)) {
     return 'js-global'
   }

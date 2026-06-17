@@ -9,11 +9,20 @@ console.log('hello world')
 //   console.log('#error:', error)
 // }
 
-const foo = JSON.parse('[{"1":2},{"3":4,"5":6}]')
+try {
+  const foo = JSON.parse('{"v":{"1":2},{"3":4,"5":6}]}') // bad json
+  console.log(foo)
+} catch (e) {
+  console.error('Error', e)
+}
 
-console.log(foo)
+const foo = JSON.parse('{"v":[{"1":2},{"3":4,"5":6}]}')
 
-for (const a of foo) {
+console.log(Array.isArray(foo))
+
+console.log(Object.entries(foo.v))
+
+for (const a of foo.v) {
   console.log(a)
 
   const b = Object.values(a)
