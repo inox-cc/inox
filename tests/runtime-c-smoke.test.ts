@@ -5140,6 +5140,52 @@ console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getNam
 })
 
 
+test('generated C string charCodeAt calls compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-char-code-'))
+  const source = join(dir, 'string-char-code.c')
+  const output = join(dir, 'string-char-code')
+
+  try {
+    const result = compileSource(
+      `function isLower(ch: string): boolean {
+  const code = ch.charCodeAt(0)
+  return code >= 97 && code <= 122
+}
+
+console.log(isLower('m'), isLower('M'))
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string slice compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

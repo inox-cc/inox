@@ -188,20 +188,23 @@ function trimGeneratedCEnd(value: string): string {
   return value.slice(0, end)
 }
 
-function isGeneratedCWhitespace(char: string): boolean {
-  return char === ' ' || char === '\t' || char === '\r' || char === '\n'
+function isGeneratedCWhitespace(ch: string): boolean {
+  return ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n'
 }
 
-function isGeneratedCIdentifierStart(char: string): boolean {
+function isGeneratedCIdentifierStart(ch: string): boolean {
+  const code = ch.charCodeAt(0)
+
   return (
-    char === '_' ||
-    (char >= 'A' && char <= 'Z') ||
-    (char >= 'a' && char <= 'z')
+    ch === '_' ||
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122)
   )
 }
 
-function isGeneratedCIdentifierPart(char: string): boolean {
-  return isGeneratedCIdentifierStart(char) || (char >= '0' && char <= '9')
+function isGeneratedCIdentifierPart(ch: string): boolean {
+  const code = ch.charCodeAt(0)
+  return isGeneratedCIdentifierStart(ch) || (code >= 48 && code <= 57)
 }
 
 function generatedCStringStartsWithAt(value: string, search: string, start: number): boolean {

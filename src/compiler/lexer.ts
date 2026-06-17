@@ -375,14 +375,16 @@ function makeToken(tokenType: string, value: string, line: number, column: numbe
   return token
 }
 
-function isDigit(char: string): boolean {
-  return char >= '0' && char <= '9'
+function isDigit(ch: string): boolean {
+  const code = ch.charCodeAt(0)
+  return code >= 48 && code <= 57
 }
 
-function isIdentifierStart(char: string): boolean {
-  return char === '_' || (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')
+function isIdentifierStart(ch: string): boolean {
+  const code = ch.charCodeAt(0)
+  return ch === '_' || (code >= 97 && code <= 122) || (code >= 65 && code <= 90)
 }
 
-function isIdentifierPart(char: string): boolean {
-  return isIdentifierStart(char) || isDigit(char)
+function isIdentifierPart(ch: string): boolean {
+  return isIdentifierStart(ch) || isDigit(ch)
 }

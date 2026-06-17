@@ -303,6 +303,52 @@ export function emitPreparedStringPredicateCall(expression: AnyNode, context: St
   }
 }
 
+export function emitPreparedStringCharCodeAtExpression(
+  expression: any,
+  context: StringCContext
+): PreparedExpression | null {
+  if (!isNodeCandidate(expression) || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (!isNodeCandidate(callee) || callee.type !== 'MemberExpression' || callee.property !== 'charCodeAt') {
+    return null
+  }
+
+  const object = callee.object
+  const args = expression.args
+
+  if (!isNodeCandidate(object) || args == null || args.length !== 1 || !isNodeCandidate(args[0])) {
+    return null
+  }
+
+  const indexArgument = args[0]
+
+  if (!isStringLengthObject(object, context) || stringDeps(context).inferExpressionType(indexArgument, context) !== 'number') {
+    return null
+  }
+
+  const value = emitPreparedStringBytesOperand(object, context, 'ccjs_string_char_code_value')
+  const index = stringDeps(context).emitPreparedNumberExpression(indexArgument, context)
+  const offset = nextCName(context, 'ccjs_string_char_code_index')
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, index.lines)
+  lines.push(`size_t ${offset} = (size_t)(${index.expression});`)
+
+  return {
+    lines,
+    expression: `((${offset} < ${value.length}) ? (double)((unsigned char)${value.bytes}[${offset}]) : 0)`
+  }
+}
+
+function isNodeCandidate(value: any): boolean {
+  return value != null
+}
+
 export function emitPreparedStringBytesOperand(
   expression: AnyNode | null | undefined,
   context: StringCContext,

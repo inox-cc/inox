@@ -321,6 +321,28 @@ export function main(): void {
 })
 
 
+test('lowers C string charCodeAt calls to byte reads', () => {
+  const result = compileSource(
+    `function isLower(ch: string): boolean {
+  const code = ch.charCodeAt(0)
+  return code >= 97 && code <= 122
+}
+
+export function main(): void {
+  console.log(isLower('m'), isLower('M'))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /size_t ccjs_string_char_code_index_\d+ = \(size_t\)\(0\);/)
+  assert.match(result.code, /\(double\)\(\(unsigned char\)ch->bytes\[ccjs_string_char_code_index_\d+\]\)/)
+  assert.match(result.code, /const double code = \(\(ccjs_string_char_code_index_\d+ < ch->len\)/)
+})
+
+
 test('lowers C string slice for literals and runtime strings', () => {
   const result = compileSource(
     `type User = {

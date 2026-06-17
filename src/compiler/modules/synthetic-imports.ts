@@ -260,13 +260,15 @@ function uniqueTypeNames(names: string[]): string[] {
   return result
 }
 
-function isTypeNameIdentifierChar(char: string): boolean {
+function isTypeNameIdentifierChar(ch: string): boolean {
+  const code = ch.charCodeAt(0)
+
   return (
-    (char >= 'A' && char <= 'Z') ||
-    (char >= 'a' && char <= 'z') ||
-    (char >= '0' && char <= '9') ||
-    char === '_' ||
-    char === '$'
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    (code >= 48 && code <= 57) ||
+    ch === '_' ||
+    ch === '$'
   )
 }
 

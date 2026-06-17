@@ -313,28 +313,32 @@ function isIdentifierTypeName(name: string): boolean {
   return true
 }
 
-function isIdentifierStartChar(char: string): boolean {
-  if (char === '_' || char === '$') {
+function isIdentifierStartChar(ch: string): boolean {
+  if (ch === '_' || ch === '$') {
     return true
   }
 
-  if (char >= 'A' && char <= 'Z') {
+  const code = ch.charCodeAt(0)
+
+  if (code >= 65 && code <= 90) {
     return true
   }
 
-  if (char >= 'a' && char <= 'z') {
+  if (code >= 97 && code <= 122) {
     return true
   }
 
   return false
 }
 
-function isIdentifierPartChar(char: string): boolean {
-  if (isIdentifierStartChar(char)) {
+function isIdentifierPartChar(ch: string): boolean {
+  if (isIdentifierStartChar(ch)) {
     return true
   }
 
-  if (char >= '0' && char <= '9') {
+  const code = ch.charCodeAt(0)
+
+  if (code >= 48 && code <= 57) {
     return true
   }
 
