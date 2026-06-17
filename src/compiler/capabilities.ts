@@ -90,6 +90,22 @@ const NODE_CHILD_KEYS = [
   'expression'
 ]
 
+function capabilityUsageAt(values: CapabilityUsage[], index: number): CapabilityUsage {
+  return values[index]
+}
+
+function globalUsageAt(values: IrGlobalUsage[], index: number): IrGlobalUsage {
+  return values[index]
+}
+
+function programAt(values: IrProgram[], index: number): IrProgram {
+  return values[index]
+}
+
+function nodeChildKeyAt(values: string[], index: number): string {
+  return values[index]
+}
+
 export function checkCProfileCapabilities(programs: IrProgram[], options: CompileOptions): void {
   if (options.profile !== 'embedded') {
     return
@@ -98,7 +114,11 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
   const diagnostics: Diagnostic[] = []
   const reported = createStringSet()
 
-  for (const usage of collectCapabilityUsages(programs, options)) {
+  const usages = collectCapabilityUsages(programs, options)
+
+  for (let index = 0; index < usages.length; index = index + 1) {
+    const usage = capabilityUsageAt(usages, index)
+
     if (capabilityEnabled(options.capabilities, usage.key)) {
       continue
     }
@@ -122,7 +142,8 @@ function collectCapabilityUsages(programs: IrProgram[], options: CompileOptions)
   const globalUsages = collectIrGlobalUsages(programs)
   const usages: CapabilityUsage[] = []
 
-  for (const usage of globalUsages) {
+  for (let usageIndex = 0; usageIndex < globalUsages.length; usageIndex = usageIndex + 1) {
+    const usage = globalUsageAt(globalUsages, usageIndex)
     const required = requiredCapabilityForGlobalUsage(usage)
 
     if (required != null) {
@@ -132,7 +153,8 @@ function collectCapabilityUsages(programs: IrProgram[], options: CompileOptions)
 
   collectEntropyCapabilityUsages(globalUsages, options, usages)
 
-  for (const program of programs) {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = programAt(programs, programIndex)
     visitCapabilityNode(program.body, usages)
   }
 
@@ -146,7 +168,8 @@ function collectEntropyCapabilityUsages(
 ): void {
   const random = options.random
 
-  for (const usage of globalUsages) {
+  for (let usageIndex = 0; usageIndex < globalUsages.length; usageIndex = usageIndex + 1) {
+    const usage = globalUsageAt(globalUsages, usageIndex)
     const path = dotPath(usage.path)
 
     if (path === 'Math.random' && random != null && random.backend === 'os') {
@@ -177,7 +200,8 @@ function visitCapabilityNode(node: AnyNode | NodeList | null | undefined, usages
 }
 
 function visitCapabilityChildren(item: CapabilityNode, usages: CapabilityUsage[]): void {
-  for (const key of NODE_CHILD_KEYS) {
+  for (let keyIndex = 0; keyIndex < NODE_CHILD_KEYS.length; keyIndex = keyIndex + 1) {
+    const key = nodeChildKeyAt(NODE_CHILD_KEYS, keyIndex)
     const value = item[key]
 
     if (value != null) {
