@@ -820,8 +820,8 @@ function emitHttpServerCreateLines(
   const listener = expression.args[0]
   let wrapper: CHttpHandler | null = null
 
-  if (context.httpHandlers.has(listener)) {
-    const registeredWrapper = context.httpHandlers.get(listener)
+  if (listener != null) {
+    const registeredWrapper = findHttpHandler(context, listener)
 
     if (registeredWrapper != null) {
       wrapper = registeredWrapper
@@ -934,8 +934,8 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
     listener = args[1]
   }
 
-  if (listener != null && context.httpHandlers.has(listener)) {
-    const registeredWrapper = context.httpHandlers.get(listener)
+  if (listener != null) {
+    const registeredWrapper = findHttpHandler(context, listener)
 
     if (registeredWrapper != null) {
       wrapper = registeredWrapper
@@ -1105,8 +1105,8 @@ function isHttpRequestEventCall(expression: AnyNode): boolean {
   return expression.args[0].value === 'request'
 }
 
-export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<AnyNode, CHttpHandler> {
-  const handlers: Map<AnyNode, CHttpHandler> = new Map()
+export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<string, CHttpHandler> {
+  const handlers: Map<string, CHttpHandler> = new Map()
 
   for (const ir of irPrograms) {
     for (const item of collectIrTopLevelNodeEntries(ir)) {
@@ -1123,23 +1123,58 @@ export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitConte
   return handlers
 }
 
-function registerHttpHandler(handlers: Map<AnyNode, CHttpHandler>, expression: AnyNode | null | undefined): void {
+function registerHttpHandler(handlers: Map<string, CHttpHandler>, expression: AnyNode | null | undefined): void {
   if (expression == null || expression.type !== 'ArrowFunctionExpression') {
     return
   }
 
-  if (handlers.has(expression)) {
+  const existingName = httpHandlerName(expression)
+
+  if (existingName != null && handlers.has(existingName)) {
     return
   }
 
-  handlers.set(expression, {
-    name: `ccjs_http_handler_${handlers.size}`,
+  const name = `ccjs_http_handler_${handlers.size}`
+  expression.httpHandlerName = name
+
+  handlers.set(name, {
+    name: name,
     expression: expression
   })
 }
 
+function httpHandlerName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
+  const name = expression.httpHandlerName
+
+  if (name == null) {
+    return null
+  }
+
+  return name
+}
+
+function findHttpHandler(context: CFunctionContext, expression: AnyNode | null | undefined): CHttpHandler | null {
+  const name = httpHandlerName(expression)
+
+  if (name == null) {
+    return null
+  }
+
+  const handler = context.httpHandlers.get(name)
+
+  if (handler == null) {
+    return null
+  }
+
+  return handler
+}
+
 function visitHttpHandlerStatement(
-  handlers: Map<AnyNode, CHttpHandler>,
+  handlers: Map<string, CHttpHandler>,
   context: CEmitContext,
   statement: AnyNode | null | undefined
 ): void {
@@ -1223,7 +1258,7 @@ function visitHttpHandlerStatement(
 }
 
 function visitHttpHandlerExpression(
-  handlers: Map<AnyNode, CHttpHandler>,
+  handlers: Map<string, CHttpHandler>,
   context: CEmitContext,
   expression: AnyNode | null | undefined
 ): void {

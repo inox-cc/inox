@@ -157,7 +157,7 @@ export type CEmitContext = {
   diagnostics: Diagnostic[]
   dgramCreateSocketNames: CStringSet
   dgramImportNames: CStringSet
-  dgramMessageHandlers: Map<AnyNode, CDgramMessageHandler>
+  dgramMessageHandlers: Map<string, CDgramMessageHandler>
   externalEventLoopFunctions: CStringSet
   functionAsyncFlags: CBooleanMap
   functionNames: CStringMap
@@ -173,7 +173,7 @@ export type CEmitContext = {
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   forceRuntimeStringDeclarations?: CStringSet
   httpCreateServerNames: CStringSet
-  httpHandlers: Map<AnyNode, CHttpHandler>
+  httpHandlers: Map<string, CHttpHandler>
   httpImportNames: CStringSet
   jsGlobalRoots: CStringSet
   moduleValueNames: CStringMap

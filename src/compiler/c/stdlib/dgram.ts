@@ -341,8 +341,8 @@ export function emitPreparedDgramAddressPortExpression(
 export function collectDgramMessageHandlers(
   irPrograms: IrProgram[],
   context: CEmitContext
-): Map<AnyNode, CDgramMessageHandler> {
-  const handlers: Map<AnyNode, CDgramMessageHandler> = new Map()
+): Map<string, CDgramMessageHandler> {
+  const handlers: Map<string, CDgramMessageHandler> = new Map()
 
   for (const ir of irPrograms) {
     for (const item of collectIrTopLevelNodeEntries(ir)) {
@@ -360,25 +360,63 @@ export function collectDgramMessageHandlers(
 }
 
 function registerDgramMessageHandler(
-  handlers: Map<AnyNode, CDgramMessageHandler>,
+  handlers: Map<string, CDgramMessageHandler>,
   expression: AnyNode | null | undefined
 ): void {
   if (expression == null || expression.type !== 'ArrowFunctionExpression') {
     return
   }
 
-  if (handlers.has(expression)) {
+  const existingName = dgramMessageHandlerName(expression)
+
+  if (existingName != null && handlers.has(existingName)) {
     return
   }
 
-  handlers.set(expression, {
-    name: `ccjs_dgram_message_handler_${handlers.size}`,
+  const name = `ccjs_dgram_message_handler_${handlers.size}`
+  expression.dgramMessageHandlerName = name
+
+  handlers.set(name, {
+    name: name,
     expression: expression
   })
 }
 
+function dgramMessageHandlerName(expression: AnyNode | null | undefined): string | null {
+  if (expression == null) {
+    return null
+  }
+
+  const name = expression.dgramMessageHandlerName
+
+  if (name == null) {
+    return null
+  }
+
+  return name
+}
+
+function findDgramMessageHandler(
+  context: CFunctionContext,
+  expression: AnyNode | null | undefined
+): CDgramMessageHandler | null {
+  const name = dgramMessageHandlerName(expression)
+
+  if (name == null) {
+    return null
+  }
+
+  const handler = context.dgramMessageHandlers.get(name)
+
+  if (handler == null) {
+    return null
+  }
+
+  return handler
+}
+
 function visitDgramMessageHandlerStatement(
-  handlers: Map<AnyNode, CDgramMessageHandler>,
+  handlers: Map<string, CDgramMessageHandler>,
   context: CEmitContext,
   statement: AnyNode | null | undefined
 ): void {
@@ -462,7 +500,7 @@ function visitDgramMessageHandlerStatement(
 }
 
 function visitDgramMessageHandlerExpression(
-  handlers: Map<AnyNode, CDgramMessageHandler>,
+  handlers: Map<string, CDgramMessageHandler>,
   context: CEmitContext,
   expression: AnyNode | null | undefined
 ): void {
@@ -678,7 +716,7 @@ function emitDgramSocketCreateLines(
   let wrapper: CDgramMessageHandler | null = null
 
   if (listener != null) {
-    const registeredWrapper = context.dgramMessageHandlers.get(listener)
+    const registeredWrapper = findDgramMessageHandler(context, listener)
 
     if (registeredWrapper != null) {
       wrapper = registeredWrapper
@@ -848,8 +886,8 @@ function emitDgramOnLines(socketName: string, args: AnyNode[], context: CFunctio
     listener = args[1]
   }
 
-  if (listener != null && context.dgramMessageHandlers.has(listener)) {
-    const registeredWrapper = context.dgramMessageHandlers.get(listener)
+  if (listener != null) {
+    const registeredWrapper = findDgramMessageHandler(context, listener)
 
     if (registeredWrapper != null) {
       wrapper = registeredWrapper
