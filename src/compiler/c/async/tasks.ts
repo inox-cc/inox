@@ -2132,8 +2132,8 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(
     return false
   }
 
-  const receiver = expression?.callee?.object ?? null
-  const callback = asyncTaskNodeOrEmpty(expression?.args[0] ?? null)
+  const receiver = asyncTaskMemberObjectOrNull(expression)
+  const callback = asyncTaskNodeOrEmpty(asyncTaskFirstArgumentOrNull(expression))
 
   if (receiver == null || receiver.type !== 'CallExpression') {
     return false
@@ -2708,6 +2708,48 @@ function asyncTaskNodeOrEmpty(node: AsyncTaskAstNode | null | undefined): AsyncT
   return { type: '' }
 }
 
+function asyncTaskMemberObjectOrNull(expression: AsyncTaskAstNode): AsyncTaskAstNode | null {
+  const callee = expression.callee
+
+  if (callee == null) {
+    return null
+  }
+
+  const object = callee.object
+
+  if (object == null) {
+    return null
+  }
+
+  return object
+}
+
+function asyncTaskFirstArgumentOrNull(expression: AsyncTaskAstNode): AsyncTaskAstNode | null {
+  const args = expression.args
+
+  if (args.length === 0) {
+    return null
+  }
+
+  const argument = args[0]
+
+  if (argument == null) {
+    return null
+  }
+
+  return argument
+}
+
+function asyncTaskLocationOrNull(expression: AsyncTaskAstNode): SourceLocation | null {
+  const loc = expression.loc
+
+  if (loc == null) {
+    return null
+  }
+
+  return loc
+}
+
 function emitPreparedAsyncTaskAwaitedPromiseExpression(
   wrapper: CAsyncTaskWrapper,
   item: CAsyncTaskAwaitStep,
@@ -3211,8 +3253,8 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
     return null
   }
 
-  const receiver = asyncTaskNodeOrEmpty(expression?.callee?.object ?? null)
-  const callback = asyncTaskNodeOrEmpty(expression?.args[0] ?? null)
+  const receiver = asyncTaskNodeOrEmpty(asyncTaskMemberObjectOrNull(expression))
+  const callback = asyncTaskNodeOrEmpty(asyncTaskFirstArgumentOrNull(expression))
   let chainWrapper: CPromiseChainWrapper | null | undefined = null
 
   chainWrapper = context.promiseChainArrowWrappers.get(callback)
@@ -3235,7 +3277,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
       diagnostic(
         'CCJS_C_ASYNC',
         'async task state-machine slice currently supports local Promise.resolve then-chain variables only',
-        expression?.loc ?? null
+        asyncTaskLocationOrNull(expression)
       )
   )
 
