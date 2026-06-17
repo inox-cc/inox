@@ -1656,7 +1656,7 @@ function createAsyncTaskExpressionContext(
   result.eventLoopUsed = context.eventLoopUsed
   result.externalEventLoop = context.externalEventLoop
   result.failureStatement = context.failureStatement
-  result.failureStatementUsed = context.failureStatementUsed
+  result.failureStatementUsed = context.failureStatementUsed === true
   result.functionErrorOut = context.functionErrorOut
   result.functionReturnOut = context.functionReturnOut
   result.functionTypes = context.functionTypes
@@ -1676,17 +1676,26 @@ function createAsyncTaskExpressionContext(
   result.returnShape = context.returnShape
   result.returnTargets = context.returnTargets
   result.runtimeArrayElementTypes = new Map(context.runtimeArrayElementTypes)
-  result.runtimeCallbackCleanupLabel = context.runtimeCallbackCleanupLabel
-  result.runtimeCallbackReturnOut = context.runtimeCallbackReturnOut
+  const runtimeCallbackCleanupLabel = context.runtimeCallbackCleanupLabel
+  if (runtimeCallbackCleanupLabel != null) {
+    result.runtimeCallbackCleanupLabel = runtimeCallbackCleanupLabel
+  }
+  const runtimeCallbackReturnOut = context.runtimeCallbackReturnOut
+  if (runtimeCallbackReturnOut != null) {
+    result.runtimeCallbackReturnOut = runtimeCallbackReturnOut
+  }
   result.runtimeCallbackReturnShape = context.runtimeCallbackReturnShape
-  result.runtimeCallbackReturnType = context.runtimeCallbackReturnType
+  const runtimeCallbackReturnType = context.runtimeCallbackReturnType
+  if (runtimeCallbackReturnType != null) {
+    result.runtimeCallbackReturnType = runtimeCallbackReturnType
+  }
   result.runtimeCallbacks = context.runtimeCallbacks
   result.runtimeStrings = new Set(context.runtimeStrings)
   result.setElementTypes = new Map(context.setElementTypes)
   result.statusReturn = context.statusReturn
   result.throwingFunction = context.throwingFunction
   result.usedCleanupGoto = context.usedCleanupGoto
-  result.usedRuntimeCallbackCleanupGoto = context.usedRuntimeCallbackCleanupGoto
+  result.usedRuntimeCallbackCleanupGoto = context.usedRuntimeCallbackCleanupGoto === true
   result.variables = new Map(context.variables)
 
   for (const param of params) {

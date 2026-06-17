@@ -694,14 +694,16 @@ function emitPreparedRuntimeArrayIndexExpression(
   element: CRuntimeArrayElement,
   context: ArrayFunctionContext
 ): PreparedExpression {
-  if (element.indexExpression == null) {
+  const indexExpression = element.indexExpression
+
+  if (indexExpression == null) {
     return {
       lines: [],
       expression: `${element.index}`
     }
   }
 
-  const index = arrayDeps(context).emitPreparedNumberExpression(element.indexExpression, context)
+  const index = arrayDeps(context).emitPreparedNumberExpression(indexExpression, context)
 
   return {
     lines: index.lines,

@@ -45,6 +45,33 @@ test('runs C static checks as a separate pipeline helper', () => {
   assert.match(emitTargetFromIr('c', compiled.ir), /int main\(void\)/)
 })
 
+test('preserves function-typed object field return shapes through lowering', () => {
+  const compiled = compileSourceToIr(
+    `type State = { value: number }
+type Deps = { make(): State }
+
+function useDeps(deps: Deps): number {
+  const state = deps.make()
+  state.value = state.value + 1
+  return state.value
+}
+`,
+    { target: 'c' }
+  )
+  const declaration = compiled.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'useDeps')
+
+  assert.ok(declaration)
+
+  const stateDeclaration = declaration.body[0]
+  const assignment = declaration.body[1].expression
+
+  assert.equal(stateDeclaration.valueType, 'object')
+  assert.equal(stateDeclaration.shape?.fields[0]?.name, 'value')
+  assert.equal(stateDeclaration.init.shape?.fields[0]?.name, 'value')
+  assert.equal(assignment.target.valueType, 'number')
+  assert.equal(assignment.value.left.valueType, 'number')
+})
+
 test('compiles module graphs to IR modules before target bundle emission', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-pipeline-'))
 

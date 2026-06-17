@@ -1,4 +1,5 @@
 const generatedCColumnLimit = 130
+const generatedCJoinChunkSize = 65536
 
 export function formatGeneratedC(code: string, _assumeFilename: string): string {
   return spaceGeneratedCControlFlow(
@@ -155,14 +156,31 @@ function splitGeneratedCLines(code: string): GeneratedCLineSet {
 }
 
 function joinGeneratedCLines(lines: string[], hasTrailingNewline: boolean): string {
+  const chunks: string[] = []
+  let chunk = ''
   let result = ''
 
   for (let index = 0; index < lines.length; index = index + 1) {
+    let part = lines[index]
+
     if (index > 0) {
-      result = `${result}\n`
+      part = `\n${part}`
     }
 
-    result = `${result}${lines[index]}`
+    if (chunk.length + part.length > generatedCJoinChunkSize && chunk !== '') {
+      chunks.push(chunk)
+      chunk = ''
+    }
+
+    chunk = `${chunk}${part}`
+  }
+
+  if (chunk !== '') {
+    chunks.push(chunk)
+  }
+
+  for (let index = 0; index < chunks.length; index = index + 1) {
+    result = `${result}${chunks[index]}`
   }
 
   if (hasTrailingNewline) {

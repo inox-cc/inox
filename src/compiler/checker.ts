@@ -143,7 +143,7 @@ import type {
 type ResolvedTypeInfo = {
   valueType: ValueType
   nullable: boolean
-  functionType: AnyNode | null
+  functionType: FunctionTypeMetadata | null
   shape: ObjectShapeInfo | null
   arrayElementType: ValueType | null
   arrayElementDeclaredType: string | null
@@ -166,6 +166,43 @@ type OptionalParamInfo = {
 }
 
 type NullableNode = AnyNode | null
+
+type FunctionTypeParamMetadata = {
+  name: string
+  loc: SourceLocation
+  optional?: boolean
+  declaredType?: string
+  valueType: ValueType
+  nullable?: boolean
+  arrayElementType?: ValueType | null
+  arrayElementDeclaredType?: string | null
+  mapKeyType?: ValueType | null
+  mapValueType?: ValueType | null
+  promiseValueType?: ValueType | null
+  setElementType?: ValueType | null
+  functionType?: FunctionTypeMetadata | null
+  functionTypeOwnership?: 'weak'
+  shape?: ObjectShapeInfo | null
+  [key: string]: any
+}
+
+type FunctionTypeMetadata = {
+  kind?: string
+  resolved: boolean
+  params: FunctionTypeParamMetadata[]
+  returnType: ValueType
+  declaredReturnType?: string
+  returnNullable: boolean
+  returnArrayElementType?: ValueType | null
+  returnArrayElementDeclaredType?: string | null
+  returnMapKeyType?: ValueType | null
+  returnMapValueType?: ValueType | null
+  returnPromiseValueType?: ValueType | null
+  returnSetElementType?: ValueType | null
+  returnShape?: ObjectShapeInfo | null
+  loc?: SourceLocation
+  [key: string]: any
+}
 
 type CheckerMapType = {
   key: ValueType | null
@@ -252,6 +289,21 @@ function resolvedObjectShapeMetadata(
   value: ObjectShapeInfo | null | undefined,
   fallback: ObjectShapeInfo | null | undefined
 ): ObjectShapeInfo | null {
+  if (value != null) {
+    return value
+  }
+
+  if (fallback != null) {
+    return fallback
+  }
+
+  return null
+}
+
+function resolvedFunctionTypeMetadata(
+  value: FunctionTypeMetadata | null | undefined,
+  fallback: FunctionTypeMetadata | null | undefined
+): FunctionTypeMetadata | null {
   if (value != null) {
     return value
   }
@@ -1811,6 +1863,7 @@ class Checker {
     expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
     expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
     expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+    expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.className = null
 
     if (field.className != null) {
@@ -1855,6 +1908,7 @@ class Checker {
     expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
     expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
     expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+    expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.className = null
 
     if (field.className != null) {
@@ -1928,6 +1982,27 @@ class Checker {
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
+    const targetValueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
+
+    expression.target.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
+    expression.target.valueType = targetValueType
+    expression.target.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
+    expression.target.arrayElementDeclaredType = resolvedStringMetadata(
+      field.arrayElementDeclaredType,
+      fieldType.arrayElementDeclaredType
+    )
+    expression.target.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
+    expression.target.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+    expression.target.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+    expression.target.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
+    expression.target.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+    expression.target.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
+    expression.target.className = null
+
+    if (field.className != null) {
+      expression.target.className = field.className
+    }
+
     this.checkAssignableType(
       valueType,
       fieldType.valueType,
@@ -2068,6 +2143,7 @@ class Checker {
     expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
     expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
     expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+    expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.className = null
 
     if (field.className != null) {
@@ -2137,6 +2213,7 @@ class Checker {
     expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
     expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
     expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+    expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.className = null
 
     if (field.className != null) {
@@ -2216,6 +2293,27 @@ class Checker {
     }
 
     const fieldType = this.resolveFieldDeclaredType(field)
+    const targetValueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
+
+    expression.target.nullable = field.ownership === 'weak' || field.nullable === true || fieldType.nullable
+    expression.target.valueType = targetValueType
+    expression.target.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
+    expression.target.arrayElementDeclaredType = resolvedStringMetadata(
+      field.arrayElementDeclaredType,
+      fieldType.arrayElementDeclaredType
+    )
+    expression.target.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
+    expression.target.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+    expression.target.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+    expression.target.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
+    expression.target.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+    expression.target.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
+    expression.target.className = null
+
+    if (field.className != null) {
+      expression.target.className = field.className
+    }
+
     this.checkAssignableType(
       valueType,
       fieldType.valueType,
@@ -8162,7 +8260,7 @@ class Checker {
           let mapValueType: ValueType | null = null
           let promiseValueType: ValueType | null = null
           let setElementType: ValueType | null = null
-          let expectedFunctionType: AnyNode | null = null
+          let expectedFunctionType: FunctionTypeMetadata | null = null
           let shape: ObjectShapeInfo | null = null
 
           if (expected.arrayElementType != null) {
@@ -8692,6 +8790,12 @@ class Checker {
   }
 
   getCallableSymbol(callee: AnyNode): SymbolInfo | null {
+    const calleeFunctionType = callee.functionType
+
+    if (calleeFunctionType != null) {
+      return this.callableSymbolFromFunctionType(calleeFunctionType, callee.loc)
+    }
+
     if (callee.type !== 'Reference' || callee.path.length !== 1) {
       return null
     }
@@ -8712,24 +8816,46 @@ class Checker {
     }
 
     if (symbol != null && symbol.valueType === 'function' && symbol.functionType != null) {
-      return {
-        kind: 'function',
-        valueType: 'function',
-        params: symbol.functionType.params,
-        returnType: symbol.functionType.returnType,
-        returnNullable: symbol.functionType.returnNullable,
-        returnArrayElementType: symbol.functionType.returnArrayElementType,
-        returnArrayElementDeclaredType: symbol.functionType.returnArrayElementDeclaredType,
-        returnMapKeyType: symbol.functionType.returnMapKeyType,
-        returnMapValueType: symbol.functionType.returnMapValueType,
-        returnPromiseValueType: symbol.functionType.returnPromiseValueType,
-        returnSetElementType: symbol.functionType.returnSetElementType,
-        returnShape: symbol.functionType.returnShape,
-        loc: symbol.loc
-      }
+      return this.callableSymbolFromFunctionType(symbol.functionType, symbol.loc)
     }
 
     return null
+  }
+
+  callableSymbolFromFunctionType(functionType: FunctionTypeMetadata, loc: SourceLocation | null | undefined): SymbolInfo {
+    const resolvedFunctionType = this.resolvedCallableFunctionType(functionType, loc)
+
+    const symbol: SymbolInfo = {
+      kind: 'function',
+      valueType: 'function',
+      params: resolvedFunctionType.params,
+      returnType: resolvedFunctionType.returnType,
+      returnNullable: resolvedFunctionType.returnNullable,
+      returnArrayElementType: resolvedFunctionType.returnArrayElementType,
+      returnArrayElementDeclaredType: resolvedFunctionType.returnArrayElementDeclaredType,
+      returnMapKeyType: resolvedFunctionType.returnMapKeyType,
+      returnMapValueType: resolvedFunctionType.returnMapValueType,
+      returnPromiseValueType: resolvedFunctionType.returnPromiseValueType,
+      returnSetElementType: resolvedFunctionType.returnSetElementType,
+      returnShape: resolvedFunctionType.returnShape
+    }
+
+    if (loc != null) {
+      symbol.loc = loc
+    }
+
+    return symbol
+  }
+
+  resolvedCallableFunctionType(
+    functionType: FunctionTypeMetadata,
+    loc: SourceLocation | null | undefined
+  ): FunctionTypeMetadata {
+    if (functionType.resolved === true) {
+      return functionType
+    }
+
+    return this.resolveFunctionTypeMetadata(functionType, loc) ?? functionType
   }
 
   checkObjectLiteral(expression: AnyNode): void {
@@ -9732,7 +9858,7 @@ class Checker {
 
       if (shape.kind === 'function') {
         const returnInfo = this.resolveDeclaredType(shape.returnType, loc)
-        const params: AnyNode[] = []
+        const params: FunctionTypeParamMetadata[] = []
         let returnPromiseValueType: ValueType | null = null
 
         if (returnInfo.promiseValueType != null) {
@@ -9772,6 +9898,7 @@ class Checker {
           nullable: false,
           functionType: {
             kind: 'function',
+            resolved: true,
             params,
             declaredReturnType: shape.returnType,
             returnType: returnInfo.valueType,
@@ -9854,14 +9981,10 @@ class Checker {
       }
 
       let promiseValueType: ValueType | null = null
-      let functionType: AnyNode | null = fieldInfo.functionType
+      const functionType = resolvedFunctionTypeMetadata(fieldInfo.functionType, field.functionType)
 
       if (fieldInfo.promiseValueType != null) {
         promiseValueType = fieldInfo.promiseValueType
-      }
-
-      if (field.functionType != null) {
-        functionType = field.functionType
       }
 
       resolvedFields.push({
@@ -9903,6 +10026,66 @@ class Checker {
     }
 
     return resolvedShape
+  }
+
+  resolveFunctionTypeMetadata(
+    functionType: FunctionTypeMetadata | null | undefined,
+    loc: SourceLocation | null | undefined
+  ): FunctionTypeMetadata | null {
+    if (functionType == null) {
+      return null
+    }
+
+    const typeLoc = functionType.loc ?? loc ?? { line: 1, column: 1 }
+    const returnInfo = this.resolveDeclaredType(functionType.returnType, typeLoc)
+    const params: FunctionTypeParamMetadata[] = []
+    let returnPromiseValueType: ValueType | null = null
+
+    if (returnInfo.promiseValueType != null) {
+      returnPromiseValueType = returnInfo.promiseValueType
+    }
+
+    for (const param of functionType.params) {
+      const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
+      let paramPromiseValueType: ValueType | null = null
+
+      if (paramInfo.promiseValueType != null) {
+        paramPromiseValueType = paramInfo.promiseValueType
+      }
+
+      params.push({
+        name: param.name,
+        loc: param.loc,
+        optional: param.optional,
+        declaredType: param.valueType,
+        valueType: paramInfo.valueType,
+        nullable: paramInfo.nullable,
+        arrayElementType: paramInfo.arrayElementType,
+        arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
+        mapKeyType: paramInfo.mapKeyType,
+        mapValueType: paramInfo.mapValueType,
+        promiseValueType: paramPromiseValueType,
+        setElementType: paramInfo.setElementType,
+        functionType: paramInfo.functionType,
+        shape: paramInfo.shape
+      })
+    }
+
+    return {
+      kind: 'function',
+      resolved: true,
+      params,
+      declaredReturnType: functionType.returnType,
+      returnType: returnInfo.valueType,
+      returnNullable: returnInfo.nullable,
+      returnArrayElementType: returnInfo.arrayElementType,
+      returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
+      returnMapKeyType: returnInfo.mapKeyType,
+      returnMapValueType: returnInfo.mapValueType,
+      returnPromiseValueType,
+      returnSetElementType: returnInfo.setElementType,
+      returnShape: returnInfo.shape
+    }
   }
 
   resolveObjectShapeBases(shape: ObjectShapeInfo): ObjectShapeBases {
@@ -10066,7 +10249,7 @@ class Checker {
       const declared = this.resolveWeakTargetShapeFieldType(field)
       let declaredType = field.valueType
       let promiseValueType: ValueType | null = null
-      let functionType: AnyNode | null = null
+      const functionType = resolvedFunctionTypeMetadata(declared.functionType, field.functionType)
 
       if (field.declaredType != null) {
         declaredType = field.declaredType
@@ -10074,10 +10257,6 @@ class Checker {
 
       if (declared.promiseValueType != null) {
         promiseValueType = declared.promiseValueType
-      }
-
-      if (field.functionType != null) {
-        functionType = field.functionType
       }
 
       resolvedFields.push({
@@ -10779,6 +10958,14 @@ function promiseExecutorFunctionType(): AnyNode {
 function promiseSettlementFunctionType(): AnyNode {
   return {
     kind: 'function',
+    params: [
+      {
+        name: 'value',
+        loc: { line: 1, column: 1 },
+        optional: true,
+        valueType: 'unknown'
+      }
+    ],
     returnType: 'void',
     returnNullable: false
   }
