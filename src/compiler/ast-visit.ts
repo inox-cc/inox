@@ -7,6 +7,44 @@ export type VisitAstLikeOptions = {
 }
 
 const defaultSkipKeys = new Set(['loc', 'parent', 'shape'])
+const astLikeChildKeys = [
+  'loc',
+  'parent',
+  'shape',
+  'body',
+  'params',
+  'fields',
+  'methods',
+  'init',
+  'condition',
+  'consequent',
+  'alternate',
+  'test',
+  'update',
+  'iterable',
+  'discriminant',
+  'cases',
+  'block',
+  'handler',
+  'finalizer',
+  'argument',
+  'args',
+  'callee',
+  'object',
+  'index',
+  'target',
+  'value',
+  'valueType',
+  'functionType',
+  'returnShape',
+  'left',
+  'right',
+  'elements',
+  'properties',
+  'expression',
+  'child',
+  'siblings'
+]
 
 export function visitAstLike(node: unknown, visitor: AstLikeVisitor, options: VisitAstLikeOptions = {}): void {
   const skipKeys = options.skipKeys == null ? defaultSkipKeys : new Set(options.skipKeys)
@@ -20,7 +58,8 @@ function visitAstLikeNode(node: unknown, visitor: AstLikeVisitor, skipKeys: Set<
   }
 
   if (Array.isArray(node)) {
-    for (const item of node) {
+    for (let index = 0; index < node.length; index = index + 1) {
+      const item = node[index]
       visitAstLikeNode(item, visitor, skipKeys)
     }
     return
@@ -34,11 +73,17 @@ function visitAstLikeNode(node: unknown, visitor: AstLikeVisitor, skipKeys: Set<
 
   visitor(item)
 
-  for (const [key, value] of Object.entries(item)) {
+  for (let index = 0; index < astLikeChildKeys.length; index = index + 1) {
+    const key = astLikeChildKeys[index]
+
     if (skipKeys.has(key)) {
       continue
     }
 
-    visitAstLikeNode(value, visitor, skipKeys)
+    const value = item[key]
+
+    if (value != null) {
+      visitAstLikeNode(value, visitor, skipKeys)
+    }
   }
 }
