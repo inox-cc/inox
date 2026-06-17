@@ -95,7 +95,7 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
   }
 
   while (state.index < state.source.length) {
-    const char = state.source[state.index]
+    const char = lexerCurrentChar(state)
 
     if (char === ' ' || char === '\t' || char === '\r') {
       advanceLexer(state, char)
@@ -107,12 +107,12 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
       continue
     }
 
-    if (char === '/' && state.source[state.index + 1] === '/') {
+    if (char === '/' && lexerNextChar(state) === '/') {
       skipLineComment(state)
       continue
     }
 
-    if (char === '/' && state.source[state.index + 1] === '*') {
+    if (char === '/' && lexerNextChar(state) === '*') {
       skipBlockComment(state)
       continue
     }
@@ -154,6 +154,18 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
   return state.tokens
 }
 
+function lexerCharAt(source: string, index: number): string {
+  return source[index]
+}
+
+function lexerCurrentChar(state: LexerState): string {
+  return lexerCharAt(state.source, state.index)
+}
+
+function lexerNextChar(state: LexerState): string {
+  return lexerCharAt(state.source, state.index + 1)
+}
+
 function readStringToken(state: LexerState, quote: string): Token {
   const startLine = state.line
   const startColumn = state.column
@@ -164,7 +176,7 @@ function readStringToken(state: LexerState, quote: string): Token {
   advanceLexer(state, quote)
 
   while (state.index < source.length) {
-    const char = source[state.index]
+    const char = lexerCharAt(source, state.index)
 
     if (isMatchingStringQuote(char, quote)) {
       advanceLexer(state, char)
@@ -203,13 +215,14 @@ function readTemplateToken(state: LexerState): Token {
   advanceLexer(state, '`')
 
   while (state.index < state.source.length) {
-    const char = state.source[state.index]
+    const char = lexerCurrentChar(state)
     raw = raw + char
     advanceLexer(state, char)
 
     if (char === '\\' && state.index < state.source.length) {
-      raw = raw + state.source[state.index]
-      advanceLexer(state, state.source[state.index])
+      const escaped = lexerCurrentChar(state)
+      raw = raw + escaped
+      advanceLexer(state, escaped)
       continue
     }
 
@@ -231,18 +244,20 @@ function readNumberToken(state: LexerState): Token {
   const startIndex = state.index
   let value = ''
 
-  while (state.index < state.source.length && isDigit(state.source[state.index])) {
-    value = value + state.source[state.index]
-    advanceLexer(state, state.source[state.index])
+  while (state.index < state.source.length && isDigit(lexerCurrentChar(state))) {
+    const char = lexerCurrentChar(state)
+    value = value + char
+    advanceLexer(state, char)
   }
 
-  if (state.source[state.index] === '.') {
+  if (lexerCurrentChar(state) === '.') {
     value = value + '.'
     advanceLexer(state, '.')
 
-    while (state.index < state.source.length && isDigit(state.source[state.index])) {
-      value = value + state.source[state.index]
-      advanceLexer(state, state.source[state.index])
+    while (state.index < state.source.length && isDigit(lexerCurrentChar(state))) {
+      const char = lexerCurrentChar(state)
+      value = value + char
+      advanceLexer(state, char)
     }
   }
 
@@ -255,9 +270,10 @@ function readIdentifierToken(state: LexerState): Token {
   const startIndex = state.index
   let value = ''
 
-  while (state.index < state.source.length && isIdentifierPart(state.source[state.index])) {
-    value = value + state.source[state.index]
-    advanceLexer(state, state.source[state.index])
+  while (state.index < state.source.length && isIdentifierPart(lexerCurrentChar(state))) {
+    const char = lexerCurrentChar(state)
+    value = value + char
+    advanceLexer(state, char)
   }
 
   let tokenType = 'identifier'
@@ -275,7 +291,7 @@ function readPunctuatorToken(state: LexerState): Token {
   const startIndex = state.index
   const three = state.source.slice(state.index, state.index + 3)
   const two = state.source.slice(state.index, state.index + 2)
-  let value = state.source[state.index]
+  let value = lexerCurrentChar(state)
 
   if (threeCharPunctuators.has(three)) {
     value = three
@@ -292,12 +308,12 @@ function readPunctuatorToken(state: LexerState): Token {
 
 function readEscapeValue(state: LexerState): string {
   advanceLexer(state, '\\')
-  const char = state.source[state.index]
 
-  if (char == null) {
+  if (state.index >= state.source.length) {
     return '\\'
   }
 
+  const char = lexerCurrentChar(state)
   advanceLexer(state, char)
 
   if (char === 'n') {
@@ -316,8 +332,8 @@ function readEscapeValue(state: LexerState): string {
 }
 
 function skipLineComment(state: LexerState): void {
-  while (state.index < state.source.length && state.source[state.index] !== '\n') {
-    advanceLexer(state, state.source[state.index])
+  while (state.index < state.source.length && lexerCurrentChar(state) !== '\n') {
+    advanceLexer(state, lexerCurrentChar(state))
   }
 }
 
@@ -326,13 +342,13 @@ function skipBlockComment(state: LexerState): void {
   advanceLexer(state, '*')
 
   while (state.index < state.source.length) {
-    if (state.source[state.index] === '*' && state.source[state.index + 1] === '/') {
+    if (lexerCurrentChar(state) === '*' && lexerNextChar(state) === '/') {
       advanceLexer(state, '*')
       advanceLexer(state, '/')
       return
     }
 
-    advanceLexer(state, state.source[state.index])
+    advanceLexer(state, lexerCurrentChar(state))
   }
 }
 
