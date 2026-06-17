@@ -91,7 +91,7 @@ function isUrlSearchParamsRuntimeCall(method: string): boolean {
 
 function urlObjectFieldIndex(field: string): number {
   for (let index = 0; index < urlObjectFields.length; index = index + 1) {
-    if (urlObjectFields[index] === field) {
+    if (stringArrayValueAt(urlObjectFields, index) === field) {
       return index
     }
   }
@@ -101,12 +101,16 @@ function urlObjectFieldIndex(field: string): number {
 
 function isMutableUrlObjectField(field: string): boolean {
   for (let index = 0; index < urlMutableObjectFields.length; index = index + 1) {
-    if (urlMutableObjectFields[index] === field) {
+    if (stringArrayValueAt(urlMutableObjectFields, index) === field) {
       return true
     }
   }
 
   return false
+}
+
+function stringArrayValueAt(values: string[], index: number): string {
+  return values[index]
 }
 
 export function cUrlRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
