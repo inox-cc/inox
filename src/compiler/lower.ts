@@ -7,7 +7,8 @@ export function lowerProgram(ast: ProgramNode): ProgramNode {
   const context = createLowerContext(ast)
   const body: AnyNode[] = []
 
-  for (const item of ast.body) {
+  for (let itemIndex = 0; itemIndex < ast.body.length; itemIndex = itemIndex + 1) {
+    const item = ast.body[itemIndex]
     appendLoweredTopLevelItem(body, lowerTopLevelItem(item, context))
   }
 
@@ -93,7 +94,8 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
 function lowerParamList(params: AnyNode[], context: LowerContext): AnyNode[] {
   const lowered: AnyNode[] = []
 
-  for (const param of params) {
+  for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
+    const param = params[paramIndex]
     lowered.push(lowerParam(param, context))
   }
 
@@ -107,7 +109,8 @@ function lowerClassFields(fields: AnyNode[] | null | undefined): AnyNode[] {
     return lowered
   }
 
-  for (const field of fields) {
+  for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
+    const field = fields[fieldIndex]
     lowered.push(lowerClassField(field))
   }
 
@@ -147,7 +150,8 @@ function lowerClassMethods(methods: AnyNode[] | null | undefined, context: Lower
     return lowered
   }
 
-  for (const method of methods) {
+  for (let methodIndex = 0; methodIndex < methods.length; methodIndex = methodIndex + 1) {
+    const method = methods[methodIndex]
     lowered.push(lowerClassMethod(method, context))
   }
 
