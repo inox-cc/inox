@@ -6,6 +6,11 @@ export type TypeAnnotationReadOptions = {
   stopAtStatementBoundary?: boolean
 }
 
+type RequiredTypeAnnotationReadOptions = {
+  stopAtLineBreak: boolean
+  stopAtStatementBoundary: boolean
+}
+
 export type TypeAnnotationReadResult = {
   typeName: string
   position: number
@@ -22,7 +27,7 @@ export function readTypeAnnotation(
   let position = startPosition
   let lastTokenLine = 0
   const startToken = tokenAt(tokens, position)
-  const actualOptions = typeAnnotationReadOptionsOrEmpty(options)
+  const actualOptions = requiredTypeAnnotationReadOptions(typeAnnotationReadOptionsOrEmpty(options))
 
   if (startToken != null) {
     lastTokenLine = startToken.line
@@ -95,12 +100,20 @@ function joinStrings(values: string[], separator: string): string {
   return result
 }
 
+function stringArrayValueAt(values: string[], index: number): string {
+  return values[index]
+}
+
 function typeAnnotationReadOptionsOrEmpty(options: TypeAnnotationReadOptions | null): TypeAnnotationReadOptions {
   if (options != null) {
     return options
   }
 
   return {}
+}
+
+function requiredTypeAnnotationReadOptions(options: TypeAnnotationReadOptions): RequiredTypeAnnotationReadOptions {
+  return options as RequiredTypeAnnotationReadOptions
 }
 
 function tokenAt(tokens: Token[], position: number): Token | null {
@@ -136,7 +149,8 @@ export function normalizeTypeName(name: string): string {
     const normalized: string[] = []
     const withoutNullish: string[] = []
 
-    for (const arg of unionArgs) {
+    for (let index = 0; index < unionArgs.length; index = index + 1) {
+      const arg = stringArrayValueAt(unionArgs, index)
       const normalizedArg = normalizeTypeName(arg)
       normalized.push(normalizedArg)
 
