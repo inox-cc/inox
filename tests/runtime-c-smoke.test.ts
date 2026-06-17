@@ -10292,6 +10292,81 @@ console.log(usersCopyAgain.has(ada), usersCopyAgain.has(otherAda), usersCopyAgai
 })
 
 
+test('generated C Map keys iterables compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-map-keys-'))
+  const source = join(dir, 'map-keys.c')
+  const output = join(dir, 'map-keys')
+
+  try {
+    const result = compileSource(
+      `type User = {
+  name: string
+}
+
+const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+const copy: Map<string, number> = new Map(scores)
+let totalLetters = 0
+let sawAda = false
+
+for (const key of copy.keys()) {
+  totalLetters = totalLetters + key.length
+
+  if (key === 'Ada') {
+    sawAda = true
+  }
+}
+
+const ada: User = { name: 'Ada' }
+const grace: User = { name: 'Grace' }
+const users: Map<User, number> = new Map()
+users.set(ada, 7)
+users.set(grace, 9)
+const userCopy: Map<User, number> = new Map(users)
+let userCount = 0
+let knownUsers = 0
+
+for (const user of userCopy.keys()) {
+  userCount = userCount + 1
+
+  if (userCopy.has(user)) {
+    knownUsers = knownUsers + 1
+  }
+}
+
+console.log(totalLetters, sawAda, copy.size, userCount, knownUsers)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '8 1 2 2 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C Map and Set object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

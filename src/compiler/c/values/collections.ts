@@ -93,6 +93,7 @@ type RuntimeForOfMapValues = {
   name: string
   elementType: string
   lines: string[]
+  useKey: boolean
 }
 
 function emitFallbackCollectionValueExpression(
@@ -1104,6 +1105,22 @@ function resolveFunctionReturnNameFromCall(expression: AnyNode): string | null {
   return null
 }
 
+function resolveCollectionKeysCallReceiver(
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): PreparedCollectionReceiver | null {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'keys' ||
+    expression.args.length !== 0
+  ) {
+    return null
+  }
+
+  return emitPreparedCollectionReceiver(expression.callee.object, context)
+}
+
 function resolveCollectionValuesCallReceiver(
   expression: AnyNode,
   context: CollectionFunctionContext
@@ -1145,6 +1162,30 @@ export function resolveRuntimeForOfSet(
   return null
 }
 
+export function resolveRuntimeForOfMapKeys(
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): RuntimeForOfMapValues | null {
+  const keysReceiver = resolveCollectionKeysCallReceiver(expression, context)
+
+  if (keysReceiver == null || keysReceiver.type !== 'map') {
+    return null
+  }
+
+  const mapType = resolveRuntimeMapType(expression.callee.object, context)
+
+  if (mapType == null) {
+    return null
+  }
+
+  return {
+    name: keysReceiver.expression,
+    elementType: stringOrUnknown(mapType.key),
+    lines: keysReceiver.lines,
+    useKey: true
+  }
+}
+
 export function resolveRuntimeForOfMapValues(
   expression: AnyNode,
   context: CollectionFunctionContext
@@ -1164,7 +1205,8 @@ export function resolveRuntimeForOfMapValues(
   return {
     name: valuesReceiver.expression,
     elementType: stringOrUnknown(mapType.value),
-    lines: valuesReceiver.lines
+    lines: valuesReceiver.lines,
+    useKey: false
   }
 }
 

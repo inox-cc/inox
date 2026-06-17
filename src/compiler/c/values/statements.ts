@@ -18,7 +18,7 @@ import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType, isRuntimeNullableType } from '../value-types.ts'
 import { resolveRuntimeArrayElementType } from './arrays.ts'
-import { resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
+import { resolveRuntimeForOfMapKeys, resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
 import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
 import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
@@ -71,6 +71,7 @@ type RuntimeForOfMapValues = {
   elementType: string
   lines: string[]
   name: string
+  useKey: boolean
 }
 
 type RuntimeMapMetadata = {
@@ -1568,6 +1569,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   let array: KnownForOfArray | null = statementDeps(context).resolveKnownForOfArray(statement.iterable, context)
   let runtimeArray: RuntimeForOfArray | null = null
   let runtimeMap: RuntimeForOfMap | null = null
+  let runtimeMapKeys: RuntimeForOfMapValues | null = null
   let runtimeMapValues: RuntimeForOfMapValues | null = null
   let runtimeSet: RuntimeForOfSet | null = null
 
@@ -1599,6 +1601,14 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
 
   if (array == null) {
     runtimeArray = statementDeps(context).resolveRuntimeForOfArray(statement.iterable, context)
+  }
+
+  if (array == null && runtimeArray == null) {
+    runtimeMapKeys = resolveRuntimeForOfMapKeys(statement.iterable, context)
+  }
+
+  if (runtimeMapKeys != null) {
+    return emitRuntimeMapValuesForOfStatement(statement, runtimeMapKeys, context)
   }
 
   if (array == null && runtimeArray == null) {
@@ -1806,6 +1816,7 @@ function emitRuntimeMapValuesForOfStatement(
     runtimeMapValues.elementType,
     runtimeMapValues.lines,
     'map',
+    runtimeMapValues.useKey,
     context
   )
 }
@@ -1821,6 +1832,7 @@ function emitRuntimeSetForOfStatement(
     runtimeSet.elementType,
     runtimeSet.lines,
     'set',
+    false,
     context
   )
 }
@@ -1831,6 +1843,7 @@ function emitRuntimeCollectionValueForOfStatement(
   elementType: string,
   setupLines: string[],
   collectionKind: string,
+  useKey: boolean,
   context: CFunctionContext
 ): string[] {
   const isMap = collectionKind === 'map'
@@ -1893,7 +1906,11 @@ function emitRuntimeCollectionValueForOfStatement(
     lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->cap; ${index} += 1) {`)
     lines.push(`  if (${collection}->entries[${index}].state != ${slotState}) continue;`)
     pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
-    lines.push(`  ${value} = ${collection}->entries[${index}].value;`)
+    if (isMap && useKey) {
+      lines.push(`  ${value} = ${collection}->entries[${index}].key;`)
+    } else {
+      lines.push(`  ${value} = ${collection}->entries[${index}].value;`)
+    }
     lines.push(`  ccjs_retain(${value});`)
     pushIndentedLines(lines, element.lines, '  ')
     lines.push(`  ${element.expression}`)

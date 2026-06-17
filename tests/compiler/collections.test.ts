@@ -951,6 +951,62 @@ export function main(): void {
 })
 
 
+test('compiles for of loops over Map.keys iterables', () => {
+  const strings = compileSource(
+    `export function main(): void {
+  const scores: Map<string, number> = new Map([['Ada', 7], ['Grace', 9]])
+  const copy: Map<string, number> = new Map(scores)
+  let letters = 0
+
+  for (const key of copy.keys()) {
+    letters = letters + key.length
+  }
+
+  console.log(letters)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(strings.code, /ccjs_map \*ccjs_for_map_\d+ = \(ccjs_map \*\)copy\.as\.ref;/)
+  assert.match(strings.code, /CCJS_MAP_SLOT_OCCUPIED/)
+  assert.match(strings.code, /ccjs_for_value_\d+ = ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.key;/)
+  assert.match(strings.code, /ccjs_string \*key = \(ccjs_string \*\)ccjs_for_value_\d+\.as\.ref;/)
+
+  const objects = compileSource(
+    `type User = {
+  name: string
+}
+
+export function main(): void {
+  const ada: User = { name: 'Ada' }
+  const scores: Map<User, number> = new Map()
+  scores.set(ada, 7)
+  let seen = 0
+
+  for (const user of scores.keys()) {
+    if (scores.has(user)) {
+      seen = seen + 1
+    }
+  }
+
+  console.log(seen)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(objects.code, /ccjs_for_value_\d+ = ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.key;/)
+  assert.match(objects.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
+  assert.match(objects.code, /ccjs_value user = ccjs_for_value_\d+;/)
+  assert.match(objects.code, /ccjs_map_has\(scores, user, &ccjs_map_has_\d+\)/)
+})
+
+
 test('compiles for of loops over inline array literals to C', () => {
   const c = compileSource(
     `export function main(): void {
