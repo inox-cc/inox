@@ -10050,6 +10050,74 @@ console.log(namesFromCall.has('Grace'), namesFromCall.has('Alan'), namesFromCall
 })
 
 
+test('generated C Map and Set copy constructors preserve object identity keys', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-object-identity-'))
+  const source = join(dir, 'collection-object-identity.c')
+  const output = join(dir, 'collection-object-identity')
+
+  try {
+    const result = compileSource(
+      `type User = {
+  name: string
+}
+
+function cloneScores(scores: Map<User, number>): Map<User, number> {
+  return new Map(scores)
+}
+
+function cloneUsers(users: Set<User>): Set<User> {
+  return new Set(users)
+}
+
+const ada: User = { name: 'Ada' }
+const otherAda: User = { name: 'Ada' }
+const scores: Map<User, number> = new Map()
+scores.set(ada, 7)
+const scoresCopy = cloneScores(scores)
+const scoresCopyAgain: Map<User, number> = new Map(scoresCopy)
+scores.set(otherAda, 9)
+
+const users: Set<User> = new Set()
+users.add(ada)
+const usersCopy = cloneUsers(users)
+const usersCopyAgain: Set<User> = new Set(usersCopy)
+users.add(otherAda)
+
+console.log(scoresCopyAgain.get(ada) ?? 0, scoresCopyAgain.has(otherAda), scoresCopyAgain.size)
+console.log(usersCopyAgain.has(ada), usersCopyAgain.has(otherAda), usersCopyAgain.size)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7 0 1\n1 0 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C Map and Set object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

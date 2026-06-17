@@ -1718,23 +1718,28 @@ test('checks Map and Set generic methods as typed chain calls', () => {
     'CCJS_ARG_COUNT'
   )
 
-  assertDiagnostic(
+  const objectIdentityResult = compileSource(
     `type User = {
   name: string
 }
 
 export function main(): void {
   const users: Map<User, number> = new Map()
-  console.log(users.size)
+  const ada: User = { name: 'Ada' }
+  users.set(ada, 7)
+  const copy: Map<User, number> = new Map(users)
+  console.log(copy.get(ada) ?? 0)
 }
 `,
-    'CCJS_C_COLLECTION',
     {
       target: 'c'
     }
   )
 
-  assertDiagnostic(
+  assert.match(objectIdentityResult.code, /ccjs_map_set\(users, ada, ccjs_number_value\(7\)\)/)
+  assert.match(objectIdentityResult.code, /ccjs_map\* ccjs_map_source_\d+ = \(ccjs_map\*\)users\.as\.ref;/)
+
+  const objectSetResult = compileSource(
     `type User = {
   name: string
 }
@@ -1743,13 +1748,17 @@ export function main(): void {
   const users: Set<User> = new Set()
   const user: User = { name: 'Ada' }
   users.add(user)
+  const copy: Set<User> = new Set(users)
+  console.log(copy.has(user))
 }
 `,
-    'CCJS_C_COLLECTION',
     {
       target: 'c'
     }
   )
+
+  assert.match(objectSetResult.code, /ccjs_set_add\(users, user\)/)
+  assert.match(objectSetResult.code, /ccjs_set\* ccjs_set_source_\d+ = \(ccjs_set\*\)users\.as\.ref;/)
 })
 
 

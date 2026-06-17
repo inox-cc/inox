@@ -62,6 +62,16 @@ static inline ccjs_status ccjs_hash_value(ccjs_value value, uint64_t* out) {
     return CCJS_OK;
   }
 
+  if (ccjs_is_ref_value(value)) {
+    if (value.as.ref == 0) {
+      return CCJS_ERR_TYPE;
+    }
+
+    uintptr_t ref = (uintptr_t)value.as.ref;
+    *out = ccjs_hash_mix(hash, &ref, sizeof(ref));
+    return CCJS_OK;
+  }
+
   if (value.tag == CCJS_TAG_NULL || value.tag == CCJS_TAG_UNDEFINED) {
     *out = hash;
     return CCJS_OK;
@@ -96,6 +106,10 @@ static inline bool ccjs_hash_value_equal(ccjs_value left, ccjs_value right) {
 
   if (left.tag == CCJS_TAG_BOOL) {
     return left.as.boolean == right.as.boolean;
+  }
+
+  if (ccjs_is_ref_value(left)) {
+    return left.as.ref == right.as.ref;
   }
 
   return left.tag == CCJS_TAG_NULL || left.tag == CCJS_TAG_UNDEFINED;

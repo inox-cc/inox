@@ -1,6 +1,5 @@
 // @targets c
-// @expect diagnostic
-// @diagnostic CCJS_C_COLLECTION
+// @expect pass
 
 type User = {
   name: string
@@ -9,4 +8,4 @@ type User = {
 const users: Set<User> = new Set()
 const user: User = { name: 'Ada' }
 users.add(user)
-
+console.log(users.has(user))

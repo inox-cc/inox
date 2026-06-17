@@ -963,7 +963,7 @@ export function reportCCollectionHashability(
 }
 
 function isCCollectionHashableType(valueType: string): boolean {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
+  return valueType === 'number' || valueType === 'boolean' || isManagedRuntimeReturnType(valueType)
 }
 
 function isCForOfArrayElementType(valueType: string): boolean {
