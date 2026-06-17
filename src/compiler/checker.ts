@@ -1230,7 +1230,12 @@ class Checker {
 
     if (expression.type === 'OptionalCallExpression') {
       this.checkExpression(expression.callee)
-      const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+      const argTypes: ValueType[] = []
+
+      for (const arg of expression.args) {
+        argTypes.push(this.checkExpression(arg))
+      }
+
       const symbol = this.getCallableSymbol(expression.callee)
 
       if (symbol == null) {
@@ -6962,7 +6967,11 @@ class Checker {
       return null
     }
 
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
 
     if (expression.args.length !== 1) {
       this.report('CCJS_ARG_COUNT', `String expects 1 argument(s), got ${expression.args.length}`, expression.loc)
@@ -7171,7 +7180,11 @@ class Checker {
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
 
     if (objectType !== 'string') {
       return null
@@ -7208,7 +7221,11 @@ class Checker {
       return promiseType
     }
 
-    const argTypes = expression.args.map((arg) => this.checkExpression(arg))
+    const argTypes: ValueType[] = []
+
+    for (const arg of expression.args) {
+      argTypes.push(this.checkExpression(arg))
+    }
 
     const eventStreamConstructorType = this.checkEventStreamUnsupportedConstructor(expression)
 
