@@ -158,14 +158,15 @@ function readStringToken(state: LexerState, quote: string): Token {
   const startLine = state.line
   const startColumn = state.column
   const startIndex = state.index
+  const source = state.source
   let value = ''
 
   advanceLexer(state, quote)
 
-  while (state.index < state.source.length) {
-    const char = state.source[state.index]
+  while (state.index < source.length) {
+    const char = source[state.index]
 
-    if (char === quote) {
+    if (isMatchingStringQuote(char, quote)) {
       advanceLexer(state, char)
       return makeToken('string', value, startLine, startColumn, startIndex, state.file)
     }
@@ -183,6 +184,14 @@ function readStringToken(state: LexerState, quote: string): Token {
   )
 
   return makeToken('string', value, startLine, startColumn, startIndex, state.file)
+}
+
+function isMatchingStringQuote(char: string, quote: string): boolean {
+  if (quote === "'") {
+    return char === "'"
+  }
+
+  return char === '"'
 }
 
 function readTemplateToken(state: LexerState): Token {

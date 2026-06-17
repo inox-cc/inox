@@ -18,18 +18,42 @@ import type {
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
 
+type JsonMemberExpressionNode = {
+  object?: JsonReferenceNode | null
+  property?: string | null
+  type?: string | null
+}
+
+type JsonReferenceNode = {
+  path?: string[] | null
+  type?: string | null
+}
+
 export function cJsonRuntimeCallName(callee: AnyNode | null | undefined): string | null {
-  if (
-    callee == null ||
-    callee.type !== 'MemberExpression' ||
-    callee.object == null ||
-    callee.object.type !== 'Reference' ||
-    callee.object.path.length !== 1
-  ) {
+  if (callee == null) {
     return null
   }
 
-  return jsonRuntimeMethodNameFromPath([callee.object.path[0], callee.property])
+  const member = callee as JsonMemberExpressionNode
+
+  if (member.type !== 'MemberExpression') {
+    return null
+  }
+
+  const object = member.object
+
+  if (object == null || object.type !== 'Reference') {
+    return null
+  }
+
+  const root = singleStringPathName(object.path)
+  const property = member.property
+
+  if (root == null || property == null) {
+    return null
+  }
+
+  return jsonRuntimeMethodNameFromPath([root, property])
 }
 
 export type JsonDeclarationDependencies = {
@@ -44,6 +68,18 @@ function pushJsonLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
   }
+}
+
+function singleStringPathName(path: string[] | null | undefined): string | null {
+  if (path == null || path.length !== 1) {
+    return null
+  }
+
+  return stringValueAt(path, 0)
+}
+
+function stringValueAt(values: string[], index: number): string {
+  return values[index]
 }
 
 export function emitJsonParseVariableDeclaration(
