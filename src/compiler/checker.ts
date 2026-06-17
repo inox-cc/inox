@@ -9448,14 +9448,25 @@ class Checker {
   }
 
   ownershipCycleKey(cycle: OwnershipGraphEdge[]): string {
-    return cycle
-      .map((edge) => `${edge.from}.${edge.field}->${edge.to}`)
-      .sort()
-      .join('|')
+    const parts: string[] = []
+
+    for (let index = 0; index < cycle.length; index = index + 1) {
+      const edge = cycle[index]
+      parts.push(`${edge.from}.${edge.field}->${edge.to}`)
+    }
+
+    return joinStrings(parts, '|')
   }
 
   formatOwnershipCycle(cycle: OwnershipGraphEdge[]): string {
-    return cycle.map((edge) => `${edge.from}.${edge.field} -> ${edge.to}`).join(' -> ')
+    const parts: string[] = []
+
+    for (let index = 0; index < cycle.length; index = index + 1) {
+      const edge = cycle[index]
+      parts.push(`${edge.from}.${edge.field} -> ${edge.to}`)
+    }
+
+    return joinStrings(parts, ' -> ')
   }
 
   resolveDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
@@ -10684,6 +10695,20 @@ class Checker {
   report(code: string, message: string, loc: SourceLocation): void {
     this.diagnostics.push(diagnostic(code, message, loc))
   }
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 function isPromiseMethod(name: string): boolean {
