@@ -1,3 +1,5 @@
+import { stringListIncludes } from './string-list.ts'
+
 export const cryptoRuntimeMethods = [
   'createHash',
   'createHmac',
@@ -13,9 +15,8 @@ export const cryptoRuntimeMethods = [
 
 export type CryptoRuntimeMethod = string
 
-const cryptoRuntimeMethodSet = createStringSet(cryptoRuntimeMethods)
-const cryptoGlobalRuntimeMethodSet = createStringSet(['getRandomValues'])
-const nodeCryptoImportSources = createStringSet(['node:crypto'])
+const cryptoGlobalRuntimeMethods: string[] = ['getRandomValues']
+const nodeCryptoImportSources: string[] = ['node:crypto']
 
 export const unsupportedNodeCryptoMethods = [
   'argon2',
@@ -65,12 +66,10 @@ export const unsupportedNodeCryptoMethods = [
   'verify'
 ]
 
-const unsupportedNodeCryptoMethodSet = createStringSet(unsupportedNodeCryptoMethods)
-
 export function cryptoRuntimeMethodNameFromPath(
-  path: string[] | null | undefined
+  path: string[]
 ): CryptoRuntimeMethod | null {
-  if (path == null || path.length !== 2) {
+  if (path.length !== 2) {
     return null
   }
 
@@ -78,7 +77,7 @@ export function cryptoRuntimeMethodNameFromPath(
   const method = pathSegment(path, 1)
 
   if (root === 'crypto' && method != null) {
-    if (isCryptoRuntimeMethod(method) && cryptoGlobalRuntimeMethodSet.has(method)) {
+    if (isCryptoRuntimeMethod(method) && stringListIncludes(cryptoGlobalRuntimeMethods, method)) {
       return method
     }
   }
@@ -87,25 +86,15 @@ export function cryptoRuntimeMethodNameFromPath(
 }
 
 export function isCryptoRuntimeMethod(method: string): boolean {
-  return cryptoRuntimeMethodSet.has(method)
+  return stringListIncludes(cryptoRuntimeMethods, method)
 }
 
 export function isNodeCryptoImportSource(source: string | null | undefined): boolean {
-  return source != null && nodeCryptoImportSources.has(source)
+  return source != null && stringListIncludes(nodeCryptoImportSources, source)
 }
 
 export function isUnsupportedNodeCryptoMethod(method: string): boolean {
-  return unsupportedNodeCryptoMethodSet.has(method)
-}
-
-function createStringSet(values: string[]): Set<string> {
-  const set: Set<string> = new Set()
-
-  for (const value of values) {
-    set.add(value)
-  }
-
-  return set
+  return stringListIncludes(unsupportedNodeCryptoMethods, method)
 }
 
 function pathSegment(path: string[], index: number): string | null {

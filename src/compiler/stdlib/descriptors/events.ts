@@ -1,4 +1,6 @@
-export const unsupportedEventsRuntimeExports = [
+import { stringListIncludes } from './string-list.ts'
+
+export const unsupportedEventsRuntimeExports: string[] = [
   'EventEmitter',
   'EventEmitterAsyncResource',
   'addAbortListener',
@@ -11,17 +13,16 @@ export const unsupportedEventsRuntimeExports = [
   'on',
   'once',
   'setMaxListeners'
-] as const
+]
 
-const nodeEventsImportSources = new Set(['node:events'])
-const unsupportedEventsRuntimeExportSet: Set<string> = new Set(unsupportedEventsRuntimeExports)
+const nodeEventsImportSources: string[] = ['node:events']
 
 export function isNodeEventsImportSource(source: string | null | undefined): boolean {
-  return source != null && nodeEventsImportSources.has(source)
+  return source != null && stringListIncludes(nodeEventsImportSources, source)
 }
 
 export function isUnsupportedEventsRuntimeExport(name: string): boolean {
-  return unsupportedEventsRuntimeExportSet.has(name)
+  return stringListIncludes(unsupportedEventsRuntimeExports, name)
 }
 
 export function unsupportedEventsRuntimeExportReason(name: string): string {

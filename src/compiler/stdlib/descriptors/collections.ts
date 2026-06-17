@@ -1,3 +1,5 @@
+import { stringListIncludes } from './string-list.ts'
+
 export const arrayMethods: string[] = ['filter', 'find', 'map', 'pop', 'push', 'sort']
 export const collectionConstructors: string[] = ['Map', 'Set']
 export const mapMethods: string[] = ['clear', 'delete', 'get', 'has', 'set']
@@ -5,13 +7,6 @@ export const setMethods: string[] = ['add', 'clear', 'delete', 'has']
 export const stringTransformMethods: string[] = ['slice', 'split', 'trim']
 export const stringPredicateMethods: string[] = ['endsWith', 'includes', 'startsWith']
 export const stringRuntimeMethods: string[] = ['slice', 'split', 'trim', 'endsWith', 'includes', 'startsWith']
-
-const arrayMethodSet = createStringSet(arrayMethods)
-const collectionConstructorSet = createStringSet(collectionConstructors)
-const mapMethodSet = createStringSet(mapMethods)
-const setMethodSet = createStringSet(setMethods)
-const stringPredicateMethodSet = createStringSet(stringPredicateMethods)
-const stringRuntimeMethodSet = createStringSet(stringRuntimeMethods)
 
 export function arrayRuntimeMethodName(method: string): string | null {
   if (isArrayMethod(method)) {
@@ -22,9 +17,9 @@ export function arrayRuntimeMethodName(method: string): string | null {
 }
 
 export function collectionConstructorNameFromPath(
-  path: string[] | null | undefined
+  path: string[]
 ): string | null {
-  if (path == null || path.length !== 1) {
+  if (path.length !== 1) {
     return null
   }
 
@@ -60,31 +55,31 @@ export function stringRuntimeMethodName(method: string): string | null {
 }
 
 export function isArrayMethod(method: string): boolean {
-  return arrayMethodSet.has(method)
+  return stringListIncludes(arrayMethods, method)
 }
 
 export function isCollectionConstructorName(name: string): boolean {
-  return collectionConstructorSet.has(name)
+  return stringListIncludes(collectionConstructors, name)
 }
 
-export function isCollectionConstructorGlobalUsagePath(path: string[] | null | undefined): boolean {
+export function isCollectionConstructorGlobalUsagePath(path: string[]): boolean {
   return collectionConstructorNameFromPath(path) != null
 }
 
 export function isMapMethod(method: string): boolean {
-  return mapMethodSet.has(method)
+  return stringListIncludes(mapMethods, method)
 }
 
 export function isSetMethod(method: string): boolean {
-  return setMethodSet.has(method)
+  return stringListIncludes(setMethods, method)
 }
 
 export function isStringPredicateMethod(method: string): boolean {
-  return stringPredicateMethodSet.has(method)
+  return stringListIncludes(stringPredicateMethods, method)
 }
 
 export function isStringRuntimeMethod(method: string): boolean {
-  return stringRuntimeMethodSet.has(method)
+  return stringListIncludes(stringRuntimeMethods, method)
 }
 
 export function stringRuntimeReturnType(method: string): 'array' | 'boolean' | 'string' | null {
@@ -101,8 +96,4 @@ export function stringRuntimeReturnType(method: string): 'array' | 'boolean' | '
   }
 
   return null
-}
-
-function createStringSet(values: string[]): Set<string> {
-  return new Set(values)
 }

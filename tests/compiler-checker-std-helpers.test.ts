@@ -27,7 +27,8 @@ test('maps member expressions to runtime paths', () => {
   }
 
   assert.deepEqual(memberExpressionPath(expression), ['fs', 'promises', 'readFile'])
-  assert.equal(memberExpressionPath({ type: 'NumberLiteral', value: 1 }), null)
+  assert.deepEqual(memberExpressionPath({ type: 'NumberLiteral', value: 1 }), [])
+  assert.deepEqual(memberExpressionPath(undefined), [])
 })
 
 test('classifies fs checker std helpers', () => {

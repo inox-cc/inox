@@ -4,8 +4,8 @@ export const mathBinaryMethods: string[] = ['max', 'min']
 
 export type MathRuntimeMethod = string
 
-export function mathRuntimeMethodNameFromPath(path: string[] | null | undefined): MathRuntimeMethod | null {
-  if (path == null || path.length !== 2 || path[0] !== 'Math') {
+export function mathRuntimeMethodNameFromPath(path: string[]): MathRuntimeMethod | null {
+  if (path.length !== 2 || path[0] !== 'Math') {
     return null
   }
 

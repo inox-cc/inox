@@ -1191,7 +1191,11 @@ export function emitPreparedNumberExpression(
   }
 
   context.diagnostics.push(
-    diagnostic('CCJS_C_NUMBER_EXPR', 'this number expression is not supported by the current C backend slice')
+    diagnostic(
+      'CCJS_C_NUMBER_EXPR',
+      'this number expression is not supported by the current C backend slice',
+      expressionLocation(expression)
+    )
   )
 
   return {

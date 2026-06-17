@@ -1,26 +1,28 @@
 import type { AnyNode } from './types.ts'
 
-export function memberExpressionPath(expression: AnyNode | null): string[] | null {
-  if (expression != null) {
-    if (expression.type === 'Reference' && expression.path.length > 0) {
-      return expression.path
-    }
+export function memberExpressionPath(expression: AnyNode | null | undefined): string[] {
+  if (expression == null) {
+    return []
+  }
 
-    if (expression.type === 'MemberExpression') {
-      const objectPath = memberExpressionPath(expression.object)
+  if (expression.type === 'Reference' && expression.path.length > 0) {
+    return expression.path
+  }
 
-      if (objectPath != null) {
-        const path: string[] = []
+  if (expression.type === 'MemberExpression') {
+    const objectPath = memberExpressionPath(expression.object)
 
-        for (const part of objectPath) {
-          path.push(part)
-        }
+    if (objectPath.length > 0) {
+      const path: string[] = []
 
-        path.push(expression.property)
-        return path
+      for (const part of objectPath) {
+        path.push(part)
       }
+
+      path.push(expression.property)
+      return path
     }
   }
 
-  return null
+  return []
 }

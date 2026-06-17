@@ -1,4 +1,6 @@
-export const unsupportedStreamRuntimeExports = [
+import { stringListIncludes } from './string-list.ts'
+
+export const unsupportedStreamRuntimeExports: string[] = [
   'Readable',
   'Writable',
   'Duplex',
@@ -9,17 +11,16 @@ export const unsupportedStreamRuntimeExports = [
   'pipeline',
   'promises.finished',
   'promises.pipeline'
-] as const
+]
 
-const nodeStreamImportSources = new Set(['node:stream'])
-const unsupportedStreamRuntimeExportSet: Set<string> = new Set(unsupportedStreamRuntimeExports)
+const nodeStreamImportSources: string[] = ['node:stream']
 
 export function isNodeStreamImportSource(source: string | null | undefined): boolean {
-  return source != null && nodeStreamImportSources.has(source)
+  return source != null && stringListIncludes(nodeStreamImportSources, source)
 }
 
 export function isUnsupportedStreamRuntimeExport(name: string): boolean {
-  return unsupportedStreamRuntimeExportSet.has(name)
+  return stringListIncludes(unsupportedStreamRuntimeExports, name)
 }
 
 export function unsupportedStreamRuntimeExportReason(name: string): string {

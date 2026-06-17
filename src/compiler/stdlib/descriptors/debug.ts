@@ -49,8 +49,8 @@ export const debugMemoryStatsFields = [
   }
 ]
 
-export function debugRuntimeMethodNameFromPath(path: string[] | null | undefined): string | null {
-  if (path == null || path.length !== 3 || path[0] !== 'ccjs' || path[1] !== '__debug') {
+export function debugRuntimeMethodNameFromPath(path: string[]): string | null {
+  if (path.length !== 3 || path[0] !== 'ccjs' || path[1] !== '__debug') {
     return null
   }
 

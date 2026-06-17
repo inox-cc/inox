@@ -1,3 +1,5 @@
+import { stringListIncludes } from './string-list.ts'
+
 export const binaryStaticMethods: string[] = ['alloc', 'from', 'isBuffer']
 export const binaryInstanceMethods: string[] = ['slice', 'toString']
 export const binaryConstructors: string[] = ['Uint8Array']
@@ -16,21 +18,16 @@ export const unsupportedBufferRuntimeExports: string[] = [
   'transcode'
 ]
 
-const nodeBufferImportSources = createStringSet(['node:buffer'])
-const binaryStaticMethodSet = createStringSet(binaryStaticMethods)
-const binaryInstanceMethodSet = createStringSet(binaryInstanceMethods)
-const binaryConstructorSet = createStringSet(binaryConstructors)
-const bufferRuntimeConstantSet = createStringSet(bufferRuntimeConstants)
-const unsupportedBufferRuntimeExportSet = createStringSet(unsupportedBufferRuntimeExports)
+const nodeBufferImportSources: string[] = ['node:buffer']
 
 export function isNodeBufferImportSource(source: string | null | undefined): boolean {
-  return source != null && nodeBufferImportSources.has(source)
+  return source != null && stringListIncludes(nodeBufferImportSources, source)
 }
 
 export function binaryStaticRuntimeMethodNameFromPath(
-  path: string[] | null | undefined
+  path: string[]
 ): string | null {
-  if (path == null || path.length !== 2 || path[0] !== 'Buffer') {
+  if (path.length !== 2 || path[0] !== 'Buffer') {
     return null
   }
 
@@ -49,8 +46,8 @@ export function binaryInstanceRuntimeMethodName(method: string): string | null {
   return null
 }
 
-export function binaryConstructorNameFromPath(path: string[] | null | undefined): string | null {
-  if (path == null || path.length !== 1) {
+export function binaryConstructorNameFromPath(path: string[]): string | null {
+  if (path.length !== 1) {
     return null
   }
 
@@ -62,23 +59,23 @@ export function binaryConstructorNameFromPath(path: string[] | null | undefined)
 }
 
 export function isBinaryStaticMethod(method: string): boolean {
-  return binaryStaticMethodSet.has(method)
+  return stringListIncludes(binaryStaticMethods, method)
 }
 
 export function isBinaryInstanceMethod(method: string): boolean {
-  return binaryInstanceMethodSet.has(method)
+  return stringListIncludes(binaryInstanceMethods, method)
 }
 
 export function isBinaryConstructorName(name: string): boolean {
-  return binaryConstructorSet.has(name)
+  return stringListIncludes(binaryConstructors, name)
 }
 
 export function isBufferRuntimeConstant(name: string): boolean {
-  return bufferRuntimeConstantSet.has(name)
+  return stringListIncludes(bufferRuntimeConstants, name)
 }
 
 export function isUnsupportedBufferRuntimeExport(name: string): boolean {
-  return unsupportedBufferRuntimeExportSet.has(name)
+  return stringListIncludes(unsupportedBufferRuntimeExports, name)
 }
 
 export function binaryRuntimeReturnType(method: string): 'bytes' | 'string' | null {
@@ -97,10 +94,6 @@ export function binaryRuntimeReturnType(method: string): 'bytes' | 'string' | nu
   return null
 }
 
-export function isBinaryGlobalUsagePath(path: string[] | null | undefined): boolean {
+export function isBinaryGlobalUsagePath(path: string[]): boolean {
   return binaryStaticRuntimeMethodNameFromPath(path) != null || binaryConstructorNameFromPath(path) != null
-}
-
-function createStringSet(values: string[]): Set<string> {
-  return new Set(values)
 }
