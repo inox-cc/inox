@@ -30,6 +30,7 @@ type ClassMethodCallInfo = {
   info: CClassInfo
   methodName: string
   objectExpression: string
+  objectLines: string[]
 }
 
 type CClassInfoMap = Map<string, CClassInfo>
@@ -814,13 +815,17 @@ function emitKnownPreparedClassMethodCallExpression(
 
   const prepared = emitPreparedClassCallArgs(context, expression, method.params)
   const callExpression = emitClassMethodCallExpression(call, method, prepared)
+  const callLines: string[] = []
+
+  pushAllLines(callLines, call.objectLines)
+  pushAllLines(callLines, prepared.lines)
 
   if (isManagedRuntimeReturnType(method.returnType)) {
     const value = nextCName(context, 'ccjs_method_value')
     const tag = cRuntimeValueTag(method.returnType)
     registerOwnedValue(context, value)
     const lines: string[] = []
-    pushAllLines(lines, prepared.lines)
+    pushAllLines(lines, callLines)
     pushAllLines(lines, emitPrepareOwnedValueWrite(value))
     lines.push(`${value} = ${callExpression};`)
     lines.push(emitRuntimeValueCheck(value, tag, context))
@@ -838,7 +843,7 @@ function emitKnownPreparedClassMethodCallExpression(
   }
 
   return {
-    lines: prepared.lines,
+    lines: callLines,
     expression: expressionText
   }
 }
@@ -860,20 +865,36 @@ function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFu
 
   const objectName = resolveCObjectExpressionName(expression.callee.object)
 
-  if (objectName == null) {
-    return null
+  if (objectName != null) {
+    const className = classNameForObject(context, objectName)
+
+    if (className != null) {
+      const info = classInfoForName(context, className)
+
+      if (info != null) {
+        return {
+          info,
+          methodName: expression.callee.property,
+          objectExpression: emitObjectValueReference(objectName, context),
+          objectLines: []
+        }
+      }
+    }
   }
 
-  const className = classNameForObject(context, objectName)
+  const receiverClassName = expression.callee.object.className
 
-  if (className != null) {
-    const info = classInfoForName(context, className)
+  if (receiverClassName != null) {
+    const info = classInfoForName(context, receiverClassName)
 
     if (info != null) {
+      const object = emitClassValueExpression(context, expression.callee.object)
+
       return {
         info,
         methodName: expression.callee.property,
-        objectExpression: emitObjectValueReference(objectName, context)
+        objectExpression: object.expression,
+        objectLines: object.lines
       }
     }
   }

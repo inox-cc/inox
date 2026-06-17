@@ -153,6 +153,46 @@ export function main(): void {
 })
 
 
+test('lowers class method calls through class-typed object fields', () => {
+  const source = `class Inner {
+  value: number
+
+  constructor(value: number) {
+    this.value = value
+  }
+
+  read(extra: number): number {
+    return this.value + extra
+  }
+}
+
+class Outer {
+  inner: Inner
+
+  constructor(inner: Inner) {
+    this.inner = inner
+  }
+
+  total(): number {
+    return this.inner.read(2)
+  }
+}
+
+export function main(): void {
+  const outer = new Outer(new Inner(5))
+  console.log(outer.total())
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /ccjs_object_get_known\(this, 0, &ccjs_value_\d+\)/)
+  assert.match(c.code, /ccjs_value_\d+\.tag != CCJS_TAG_OBJECT/)
+  assert.match(c.code, /ccjs_return = ccjs_method_Inner_read\(ccjs_value_\d+, 2\);/)
+})
+
+
 test('rejects readonly class field assignment outside constructors', () => {
   assertDiagnostic(
     `class User {

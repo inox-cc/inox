@@ -1696,6 +1696,72 @@ console.log(value, name)
 })
 
 
+test('generated C class method calls through class fields compile and run', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-class-field-method-'))
+  const source = join(dir, 'class-field-method.c')
+  const output = join(dir, 'class-field-method')
+
+  try {
+    const result = compileSource(
+      `class Inner {
+  value: number
+
+  constructor(value: number) {
+    this.value = value
+  }
+
+  read(extra: number): number {
+    return this.value + extra
+  }
+}
+
+class Outer {
+  inner: Inner
+
+  constructor(inner: Inner) {
+    this.inner = inner
+  }
+
+  total(): number {
+    return this.inner.read(2)
+  }
+}
+
+const outer = new Outer(new Inner(5))
+console.log(outer.total())
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C async await over settled promises compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
