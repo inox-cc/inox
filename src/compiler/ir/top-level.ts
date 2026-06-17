@@ -36,6 +36,12 @@ type IrTopLevelNode = AnyNode & {
   type?: string | null
 }
 
+type IrFunctionDeclarationFlags = {
+  async: boolean
+  exported: boolean
+  returnNullable: boolean
+}
+
 type NodeList = AnyNode[]
 
 type IrProgramWithFunctionDeclarations = {
@@ -321,19 +327,9 @@ function nodeNameForTopLevelLookup(node: IrTopLevelNode): string {
 }
 
 function createFunctionDeclaration(item: IrTopLevelNode, name: string): IrFunctionDeclaration {
-  const exported = item.exported ?? false
-  const usesTask = item.async ?? false
   const params = item.params ?? []
-  const returnNullable = item.returnNullable ?? false
   const returnType = item.returnType ?? 'void'
-  const declaration: IrFunctionDeclaration = {
-    name,
-    exported,
-    async: usesTask,
-    params,
-    returnType,
-    returnNullable
-  }
+  const declaration = createFunctionDeclarationFromFlags(item as IrFunctionDeclarationFlags, name, params, returnType)
 
   const loc = item.loc
 
@@ -370,6 +366,26 @@ function createFunctionDeclaration(item: IrTopLevelNode, name: string): IrFuncti
   }
 
   return declaration
+}
+
+function createFunctionDeclarationFromFlags(
+  item: IrFunctionDeclarationFlags,
+  name: string,
+  params: AnyNode[],
+  returnType: string
+): IrFunctionDeclaration {
+  const exported = item.exported === true
+  const usesTask = item.async === true
+  const returnNullable = item.returnNullable === true
+
+  return {
+    name,
+    exported,
+    async: usesTask,
+    params,
+    returnType,
+    returnNullable
+  }
 }
 
 function topLevelItemKind(item: IrTopLevelNode): IrTopLevelItemKind {
