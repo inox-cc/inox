@@ -919,7 +919,7 @@ class Parser {
   }
 
   parseForOfStatement(start: Token): AnyNode {
-    const kind = this.advance().value
+    const kindToken = this.advance()
     const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected for-of binding name')
     let declaredType: string | null = null
 
@@ -932,12 +932,12 @@ class Parser {
 
     return {
       type: 'ForOfStatement',
-      kind,
+      kind: kindToken.value,
       name: name.value,
-      declaredType,
+      declaredType: declaredType,
       loc: locFromToken(start),
       nameLoc: locFromToken(name),
-      iterable,
+      iterable: iterable,
       body: this.parseStatement()
     }
   }
