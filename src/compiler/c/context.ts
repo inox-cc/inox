@@ -37,6 +37,14 @@ export type CStringMap = Map<string, string>
 export type CStringNullableMap = Map<string, string | null>
 export type CStringSet = Set<string>
 
+type CDiagnosticContext = {
+  diagnostics: Diagnostic[]
+}
+
+export function pushDiagnostic(context: CDiagnosticContext, item: Diagnostic): void {
+  context.diagnostics.push(item)
+}
+
 export type CEmitContext = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies

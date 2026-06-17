@@ -6,6 +6,7 @@ import {
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
+  pushDiagnostic,
   registerOwnedValue
 } from '../context.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
@@ -102,6 +103,10 @@ function stringDeps(context: StringCContext): StringLoweringDependencies {
   return context.stringLoweringDependencies
 }
 
+function pushStringDiagnostic(context: StringCContext | StringDiagnosticContext, item: Diagnostic): void {
+  pushDiagnostic(context as unknown as StringDiagnosticContext, item)
+}
+
 function pushAllLines(target: string[], source: string[]): void {
   for (const line of source) {
     target.push(line)
@@ -194,7 +199,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
   }
 
   if (expression != null && isNullishCoalescingExpression(expression)) {
-    context.diagnostics.push(
+    pushStringDiagnostic(context,
       diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
     )
     return '""'
@@ -204,7 +209,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     const member = stringDeps(context).resolveKnownObjectMember(expression, context)
 
     if (member != null && isNullableScalarType(member.valueType)) {
-      context.diagnostics.push(
+      pushStringDiagnostic(context,
         diagnostic(
           'CCJS_C_UNSUPPORTED_EXPR',
           'object field access must be assigned before it can be used by the current C backend slice',
@@ -216,14 +221,14 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
   }
 
   if (expression != null && expression.type === 'AwaitExpression') {
-    context.diagnostics.push(
+    pushStringDiagnostic(context,
       diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', nodeLocation(expression))
     )
     return '""'
   }
 
   if (expression != null && isOptionalChainExpression(expression)) {
-    context.diagnostics.push(
+    pushStringDiagnostic(context,
       diagnostic(
         'CCJS_C_OPTIONAL_CHAINING',
         'optional chaining is not supported by the current C backend slice',
@@ -233,7 +238,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     return '""'
   }
 
-  context.diagnostics.push(
+  pushStringDiagnostic(context,
     diagnostic(
       'CCJS_C_STRING_EXPR',
       'this string expression is not supported by the current C backend slice',
@@ -426,7 +431,7 @@ export function emitPreparedStringBytesOperand(
   }
 
   if (expression == null) {
-    context.diagnostics.push(
+    pushStringDiagnostic(context,
       diagnostic('CCJS_C_STRING_EXPR', 'this string operand is not supported by the current C backend slice', null)
     )
 
@@ -462,7 +467,7 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
-  context.diagnostics.push(
+  pushStringDiagnostic(context,
     diagnostic(
       'CCJS_C_STRING_EXPR',
       'this string operand is not supported by the current C backend slice',
@@ -637,7 +642,7 @@ function emitPreparedTemplatePlaceholderBytesOperand(
     }
   }
 
-  context.diagnostics.push(
+  pushStringDiagnostic(context,
     diagnostic(
       cUnsupportedExpressionCode(valueType),
       'template placeholders currently support string, number, boolean and null expressions in C',
@@ -1143,7 +1148,7 @@ function parseTemplateLiteralParts(
       }
 
       if (index >= end) {
-        context.diagnostics.push(
+        pushStringDiagnostic(context,
           diagnostic('CCJS_C_STRING_EXPR', 'unterminated template placeholder in C template literal', loc)
         )
         return parts
@@ -1296,7 +1301,7 @@ function parseTemplatePlaceholderExpression(
   context: StringCContext
 ): AnyNode | null {
   if (value === '') {
-    context.diagnostics.push(diagnostic('CCJS_C_STRING_EXPR', 'empty template placeholder in C template literal', loc))
+    pushStringDiagnostic(context, diagnostic('CCJS_C_STRING_EXPR', 'empty template placeholder in C template literal', loc))
     return null
   }
 
@@ -1312,14 +1317,14 @@ function parseTemplatePlaceholderExpression(
     }
 
     if (program.body.length !== 1) {
-      context.diagnostics.push(
+      pushStringDiagnostic(context,
         diagnostic('CCJS_C_STRING_EXPR', 'template placeholder must contain exactly one expression', loc)
       )
       return null
     }
 
     if (expression == null) {
-      context.diagnostics.push(
+      pushStringDiagnostic(context,
         diagnostic('CCJS_C_STRING_EXPR', 'template placeholder must contain exactly one expression', loc)
       )
       return null
@@ -1345,7 +1350,7 @@ function parseTemplatePlaceholderExpression(
         message = `invalid template placeholder expression: ${first.message}`
       }
 
-      context.diagnostics.push(
+      pushStringDiagnostic(context,
         diagnostic(
           code,
           message,
@@ -1421,7 +1426,7 @@ function reportUnknownTemplatePlaceholderReference(
 
   if (!state.reported.has(reportKey)) {
     state.reported.add(reportKey)
-    state.context.diagnostics.push(diagnostic('CCJS_UNKNOWN_NAME', `unknown name ${name}`, node.loc))
+    pushStringDiagnostic(state.context, diagnostic('CCJS_UNKNOWN_NAME', `unknown name ${name}`, node.loc))
   }
 
   state.valid = false

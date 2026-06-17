@@ -4,6 +4,7 @@ import {
   emitStatusCheck,
   narrowNullableScalars,
   nextCName,
+  pushDiagnostic,
   pushNullableScalarNarrowing,
   pushVariableScope,
   registerBoxedValue,
@@ -616,7 +617,7 @@ export function emitNumberBooleanScalarVariableDeclaration(statement: StatementN
   }
 
   if (!isNullableScalarType(inferred)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         cUnsupportedExpressionCode(inferred),
         'this expression is not supported by the current C backend slice',
@@ -932,7 +933,7 @@ export function reportCCollectionHashability(
     return
   }
 
-  context.diagnostics.push(
+  pushDiagnostic(context,
     diagnostic('CCJS_C_COLLECTION', `${subject} must be hashable in the current C backend slice`, loc)
   )
 }
@@ -950,7 +951,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   const collectionConstructor = deps.collectionConstructorName(statement.init)
 
   if (collectionConstructor == null) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_COLLECTION',
         'this collection constructor is not supported by the current C backend slice',
@@ -961,7 +962,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   }
 
   if (statement.init.args.length > 1) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_COLLECTION',
         'C collection constructors currently support at most one array literal iterable',
@@ -1017,7 +1018,7 @@ function emitMapConstructorEntries(
   }
 
   if (expression.type !== 'ArrayLiteral') {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
 	        'CCJS_C_COLLECTION',
 	        'C Map constructor currently supports only array literal entries',
@@ -1031,7 +1032,7 @@ function emitMapConstructorEntries(
 
   for (const entry of expression.elements) {
     if (entry.type !== 'ArrayLiteral' || entry.elements.length !== 2) {
-      context.diagnostics.push(
+      pushDiagnostic(context,
         diagnostic(
 	        'CCJS_C_COLLECTION',
 	        'C Map constructor entries must be [key, value] array literals',
@@ -1071,7 +1072,7 @@ function emitSetConstructorValues(
   }
 
   if (expression.type !== 'ArrayLiteral') {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
 	        'CCJS_C_COLLECTION',
 	        'C Set constructor currently supports only array literal values',
@@ -1394,7 +1395,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   }
 
   if (!isNullableScalarType(inferred)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         cUnsupportedVariableDeclarationCode(statement, inferred),
         'this expression is not supported by the current C backend slice',
@@ -1508,7 +1509,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   }
 
   if (array == null && runtimeArray == null) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic('CCJS_C_FOR_OF', 'C for-of currently supports arrays, Map values and Set values', statement.loc)
     )
     return []
@@ -1523,7 +1524,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   }
 
   if (!isCForOfArrayElementType(elementType)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_FOR_OF',
         'C for-of currently supports only uniform number/boolean/string arrays',
@@ -1615,7 +1616,7 @@ function emitRuntimeMapForOfStatement(
   const valueType = stringOrUnknown(runtimeMap.valueType)
 
   if (!isCCollectionHashableType(keyType) || !isCCollectionHashableType(valueType)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_FOR_OF',
         'C for-of currently supports only Map entries with number/boolean/string keys and values',
@@ -1749,7 +1750,7 @@ function emitRuntimeCollectionValueForOfStatement(
   }
 
   if (unsupported) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_FOR_OF',
         unsupportedMessage,
@@ -1879,11 +1880,11 @@ function emitSwitchCaseLabel(expression: StatementNode | null | undefined, conte
     }
   }
 
-  context.diagnostics.push(
+  pushDiagnostic(context,
     diagnostic(
       'CCJS_C_SWITCH_CASE',
       'C switch case labels must be numeric or boolean literals in the current backend slice',
-      expression?.loc
+      nodeLocOrFallback(expression, null)
     )
   )
 
@@ -1900,7 +1901,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     currentErrorTarget(context) != null &&
     containsAwaitExpression(statement.block)
   ) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_ASYNC',
         'nested async try/catch state-machine lowering is not supported by the current C backend slice',
@@ -2054,7 +2055,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   const target = currentErrorTarget(context)
 
   if (target == null && !context.throwingFunction) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic('CCJS_C_THROW', 'uncaught throw is not supported by the current C backend slice', statement.loc)
     )
     return []
@@ -2063,7 +2064,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   const isErrorObject = statementDeps(context).isErrorValueExpression(statement.argument, context)
 
   if (statementDeps(context).inferExpressionType(statement.argument, context) !== 'string' && !isErrorObject) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_THROW',
         'C throw currently supports only string values and lightweight Error objects in local try/catch regions',
@@ -2595,7 +2596,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
     }
 
     if (deps.isArrayMethodCall(statement.expression)) {
-      context.diagnostics.push(
+      pushDiagnostic(context,
         diagnostic(
           'CCJS_C_ARRAY_METHOD',
           'array methods are not supported by the current C backend slice',
@@ -2836,7 +2837,7 @@ function emitPromiseReturnStatement(statement: StatementNode, context: CFunction
   })
 
   if (promise == null) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_ASYNC',
         'this Promise return expression is not supported by the current C backend slice',
