@@ -214,6 +214,7 @@ export type StatementLoweringDependencies = {
   isErrorConstructorExpression(expression: StatementNode): boolean
   isErrorValueExpression(expression: StatementNode, context: CFunctionContext): boolean
   isIndexAccessExpression(expression: StatementNode): boolean
+  isDynamicRuntimeValueExpression(expression: StatementNode, context: CFunctionContext): boolean
   isMemberAccessExpression(expression: StatementNode): boolean
   isNullableRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): boolean
   isRuntimeProducedStringExpression(expression: StatementNode, context: CFunctionContext): boolean
@@ -676,9 +677,10 @@ function isDynamicObjectScalarFieldInitializer(
 export function emitRuntimeValueVariableDeclaration(
   statement: StatementNode,
   expression: StatementNode,
-  context: CFunctionContext
+  context: CFunctionContext,
+  valueTypeOverride?: string | null
 ): string[] {
-  const valueType = statementDeps(context).inferExpressionType(expression, context)
+  const valueType = valueTypeOverride ?? statementDeps(context).inferExpressionType(expression, context)
   const expectedTag = cRuntimeValueTag(valueType)
   let objectLiteralExpression = false
 
@@ -701,7 +703,12 @@ export function emitRuntimeValueVariableDeclaration(
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${value.expression};`)
-  lines.push(emitRuntimeValueCheck(statement.name, expectedTag, context))
+  const valueCheck = emitRuntimeValueCheck(statement.name, expectedTag, context)
+
+  if (valueCheck !== '') {
+    lines.push(valueCheck)
+  }
+
   lines.push(`ccjs_retain(${statement.name});`)
 
   return lines
@@ -2326,6 +2333,10 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
   }
 
+  if (isDynamicRuntimeValueDeclaration(statement, context)) {
+    return emitRuntimeValueVariableDeclaration(statement, statement.init, context, statement.valueType ?? 'unknown')
+  }
+
   if (deps.isIndexAccessExpression(statement.init)) {
     const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
 
@@ -2343,6 +2354,25 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   }
 
   return deps.emitScalarVariableDeclaration(statement, context)
+}
+
+function isDynamicRuntimeValueDeclaration(statement: StatementNode, context: CFunctionContext): boolean {
+  if (!isRuntimeValueDeclarationValueType(statement.valueType)) {
+    return false
+  }
+
+  return statementDeps(context).isDynamicRuntimeValueExpression(statement.init, context)
+}
+
+function isRuntimeValueDeclarationValueType(valueType: string | null | undefined): boolean {
+  return (
+    valueType === 'unknown' ||
+    valueType === 'bytes' ||
+    valueType === 'object' ||
+    valueType === 'array' ||
+    valueType === 'map' ||
+    valueType === 'set'
+  )
 }
 
 export function emitExpressionStatement(statement: StatementNode, context: CFunctionContext): string[] {

@@ -655,6 +655,39 @@ export function main(): void {
 })
 
 
+test('lowers C dynamic object array index variable declarations through runtime lookup', () => {
+  const result = compileSource(
+    `function isLiteral(node: object, index: number): boolean {
+  const arg = node.args[index]
+  if (arg != null) {
+    return arg.type === 'Literal'
+  }
+
+  return false
+}
+
+export function main(): void {
+  console.log(
+    isLiteral({ args: [{ type: 'Literal' }] }, 0),
+    isLiteral({ args: [{ type: 'Other' }] }, 0),
+    isLiteral({ args: [] }, 0)
+  )
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "args", 4, &ccjs_array_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_array_value_\d+, \(size_t\)\(index\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /arg = ccjs_value_\d+;/)
+  assert.match(result.code, /!\(arg\.tag == CCJS_TAG_NULL \|\| arg\.tag == CCJS_TAG_UNDEFINED\)/)
+  assert.match(result.code, /ccjs_object_get\(arg, "type", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /memcmp\(\(\(ccjs_string\*\)ccjs_string_cmp_value_\d+\.as\.ref\)->bytes, "Literal", 7\)/)
+})
+
+
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
     `type Point = {

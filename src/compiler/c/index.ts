@@ -429,6 +429,7 @@ import {
   emitPreparedNumberExpression as emitPreparedNumberExpressionWithDependencies,
   emitPreparedRuntimeTruthinessExpression as emitPreparedRuntimeTruthinessExpressionWithDependencies,
   emitPreparedUpdateExpression as emitPreparedUpdateExpressionWithDependencies,
+  isDynamicRuntimeValueExpression as isDynamicRuntimeValueExpressionWithDependencies,
   isThrowingFunctionCallee as isThrowingFunctionCalleeFromExpressions,
   isThrowingFunctionName as isThrowingFunctionNameFromExpressions
 } from './values/expressions.ts'
@@ -772,6 +773,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   isErrorConstructorExpression,
   isErrorValueExpression,
   isIndexAccessExpression,
+  isDynamicRuntimeValueExpression: isStatementDynamicRuntimeValueExpression,
   isMemberAccessExpression,
   isNullableRuntimeValueAssignment,
   isRuntimeProducedStringExpression,
@@ -1177,6 +1179,13 @@ function emitPreparedStatementRuntimeTruthinessExpression(
   context: CFunctionContext
 ) {
   return emitPreparedRuntimeTruthinessExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
+}
+
+function isStatementDynamicRuntimeValueExpression(
+  expression: CDynamicObjectFieldNode,
+  context: CFunctionContext
+): boolean {
+  return isDynamicRuntimeValueExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
 const cValueExpressionDependencies = {

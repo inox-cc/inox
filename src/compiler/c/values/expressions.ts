@@ -1655,11 +1655,37 @@ function isDynamicObjectFieldValueExpression(
   return false
 }
 
+export function isDynamicRuntimeValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): boolean {
+  if (isRuntimeValueReferenceExpression(expression, context)) {
+    return true
+  }
+
+  if (isDynamicObjectFieldValueExpression(expression, context, deps)) {
+    return true
+  }
+
+  if (isDynamicObjectArrayIndexValueExpression(expression, context, deps)) {
+    return true
+  }
+
+  return isDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
+}
+
 function emitPreparedDynamicRuntimeValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression | null {
+  const runtimeReference = emitPreparedRuntimeValueReferenceExpression(expression, context)
+
+  if (runtimeReference != null) {
+    return runtimeReference
+  }
+
   if (isDynamicObjectFieldValueExpression(expression, context, deps)) {
     return deps.emitCValueExpression(expression, context)
   }
@@ -1673,6 +1699,23 @@ function emitPreparedDynamicRuntimeValueExpression(
   return emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
 }
 
+function isDynamicRuntimeObjectFieldValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): boolean {
+  const access = dynamicRuntimeObjectFieldAccess(expression)
+
+  if (access == null) {
+    return false
+  }
+
+  return (
+    isDynamicObjectArrayIndexValueExpression(access.object, context, deps) ||
+    isRuntimeValueReferenceExpression(access.object, context)
+  )
+}
+
 function emitPreparedDynamicRuntimeObjectFieldValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
@@ -1684,7 +1727,7 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
     return null
   }
 
-  const object = emitPreparedDynamicObjectArrayIndexValueExpression(access.object, context, deps)
+  const object = emitPreparedDynamicRuntimeObjectValueExpression(access.object, context, deps)
 
   if (object == null) {
     return null
@@ -1762,6 +1805,97 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
     lines,
     expression: value
   }
+}
+
+function emitPreparedDynamicRuntimeObjectValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): PreparedExpression | null {
+  const arrayIndexValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
+
+  if (arrayIndexValue != null) {
+    return arrayIndexValue
+  }
+
+  return emitPreparedRuntimeValueReferenceExpression(expression, context)
+}
+
+function emitPreparedRuntimeValueReferenceExpression(
+  expression: CValueNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  const name = runtimeValueReferenceName(expression, context)
+
+  if (name == null) {
+    return null
+  }
+
+  return {
+    lines: [],
+    expression: name
+  }
+}
+
+function isDynamicObjectArrayIndexValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): boolean {
+  if (expression.type !== 'IndexExpression') {
+    return false
+  }
+
+  if (dynamicObjectFieldAccess(expression.object, context, deps) == null) {
+    return false
+  }
+
+  return isDynamicArrayIndexExpression(expression.index, context, deps)
+}
+
+function isDynamicArrayIndexExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): boolean {
+  if (expression.type === 'NumberLiteral') {
+    return true
+  }
+
+  return deps.inferExpressionType(expression, context) === 'number'
+}
+
+function isRuntimeValueReferenceExpression(expression: CValueNode, context: CFunctionContext): boolean {
+  return runtimeValueReferenceName(expression, context) != null
+}
+
+function runtimeValueReferenceName(expression: CValueNode, context: CFunctionContext): string | null {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.path[0]
+  const valueType = context.variables.get(name)
+
+  if (valueType !== 'unknown' && !isManagedRuntimeReturnType(valueType)) {
+    return null
+  }
+
+  if (!isOwnedRuntimeValueName(name, context)) {
+    return null
+  }
+
+  return name
+}
+
+function isOwnedRuntimeValueName(name: string, context: CFunctionContext): boolean {
+  for (const value of context.ownedValues) {
+    if (value === name) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function emitPreparedDynamicArrayIndexExpression(
