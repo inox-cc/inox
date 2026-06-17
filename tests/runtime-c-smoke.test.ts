@@ -6672,6 +6672,53 @@ console.log(child.value)
 })
 
 
+test('generated C dynamic object scalar field access lowering compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-scalar-field-'))
+  const source = join(dir, 'dynamic-object-scalar-field.c')
+  const output = join(dir, 'dynamic-object-scalar-field')
+
+  try {
+    const result = compileSource(
+      `function read(extra: object): void {
+const score: number = extra.score
+const active: boolean = extra['active']
+console.log(score, active)
+}
+
+read({ score: 42, active: true })
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '42 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C dynamic object field assignment lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

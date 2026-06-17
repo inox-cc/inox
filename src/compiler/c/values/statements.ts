@@ -609,12 +609,67 @@ export function emitNumberBooleanScalarVariableDeclaration(statement: StatementN
     return [`double ${statement.name} = 0;`]
   }
 
+  const dynamicObjectField = emitDynamicObjectScalarVariableDeclaration(statement, inferred, context)
+
+  if (dynamicObjectField != null) {
+    return dynamicObjectField
+  }
+
   const value = statementDeps(context).emitPreparedNumberExpression(statement.init, context)
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${value.expression};`)
 
   return lines
+}
+
+function emitDynamicObjectScalarVariableDeclaration(
+  statement: StatementNode,
+  valueType: string,
+  context: CFunctionContext
+): string[] | null {
+  if (!isDynamicObjectScalarFieldInitializer(statement.init, context)) {
+    return null
+  }
+
+  const deps = statementDeps(context)
+  const value = deps.emitCValueExpression(statement.init, context)
+  const tag = cRuntimeValueTag(valueType)
+  const lines: string[] = []
+  let runtimeValueExpression = `${value.expression}.as.number`
+
+  if (valueType === 'boolean') {
+    runtimeValueExpression = `(${value.expression}.as.boolean ? 1 : 0)`
+  }
+
+  pushAllLines(lines, value.lines)
+  lines.push(emitRuntimeValueCheck(value.expression, tag, context))
+  lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${runtimeValueExpression};`)
+
+  return lines
+}
+
+function isDynamicObjectScalarFieldInitializer(
+  expression: StatementNode,
+  context: CFunctionContext
+): boolean {
+  const deps = statementDeps(context)
+
+  if (deps.isMemberAccessExpression(expression)) {
+    return (
+      deps.resolveKnownObjectMember(expression, context) == null &&
+      deps.inferExpressionType(expression.object, context) === 'object'
+    )
+  }
+
+  if (deps.isIndexAccessExpression(expression) && expression.index.type === 'StringLiteral') {
+    return (
+      deps.resolveKnownObjectIndex(expression, context) == null &&
+      deps.inferExpressionType(expression.object, context) === 'object'
+    )
+  }
+
+  return false
 }
 
 export function emitRuntimeValueVariableDeclaration(

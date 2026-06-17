@@ -323,6 +323,32 @@ export function main(): void {
 })
 
 
+test('lowers C dynamic object scalar field access through runtime lookup', () => {
+  const result = compileSource(
+    `function read(extra: object): void {
+  const score: number = extra.score
+  const active: boolean = extra['active']
+  console.log(score, active)
+}
+
+export function main(): void {
+  read({ score: 42, active: true })
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(extra, "score", 5, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_NUMBER/)
+  assert.match(result.code, /const double score = ccjs_value_\d+\.as\.number;/)
+  assert.match(result.code, /ccjs_object_get\(extra, "active", 6, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_BOOL/)
+  assert.match(result.code, /const double active = \(ccjs_value_\d+\.as\.boolean \? 1 : 0\);/)
+})
+
+
 test('lowers C dynamic object field assignments through runtime lookup', () => {
   const result = compileSource(
     `type Child = {

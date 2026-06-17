@@ -2045,7 +2045,7 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     return fetchHeadersBooleanDeclaration
   }
 
-  const inferred = inferExpressionType(statement.init, context)
+  const inferred = inferScalarDeclarationValueType(statement, context)
   context.variables.set(statement.name, inferred)
 
   const stringScalarDeclaration = emitStringScalarVariableDeclaration(statement, context, inferred)
@@ -2090,6 +2090,39 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
   }
 
   return emitNumberBooleanScalarVariableDeclaration(statement, context, inferred)
+}
+
+function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, context: CFunctionContext): string {
+  const inferred = inferExpressionType(statement.init, context)
+  const declared = knownValueType(statement.valueType)
+
+  if (
+    (declared === 'number' || declared === 'boolean') &&
+    inferred === 'number' &&
+    isDynamicObjectFieldInitializer(statement.init, context)
+  ) {
+    return declared
+  }
+
+  return inferred
+}
+
+function isDynamicObjectFieldInitializer(expression: CDynamicObjectFieldNode, context: CFunctionContext): boolean {
+  if (isMemberAccessExpression(expression)) {
+    return (
+      resolveKnownObjectMember(expression, context) == null &&
+      inferExpressionType(expression.object, context) === 'object'
+    )
+  }
+
+  if (isIndexAccessExpression(expression) && expression.index.type === 'StringLiteral') {
+    return (
+      resolveKnownObjectIndex(expression, context) == null &&
+      inferExpressionType(expression.object, context) === 'object'
+    )
+  }
+
+  return false
 }
 
 function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
