@@ -105,6 +105,14 @@ function pushIndentedCModuleLines(target: string[], source: string[]): void {
   }
 }
 
+function pushIrFunctionDeclaration(target: IrFunctionDeclaration[], declaration: IrFunctionDeclaration): void {
+  target.push(declaration)
+}
+
+function pushIrFunctionEffect(target: IrFunctionEffect[], effect: IrFunctionEffect): void {
+  target.push(effect)
+}
+
 function cModuleHasRuntimeCallbackWrapper(context: CEmitContext): boolean {
   for (const wrapper of context.callbackWrappers.values()) {
     if (isRuntimeCallbackWrapper(wrapper)) {
@@ -448,11 +456,11 @@ function createCModuleBaseContext(
   }
 
   for (const declaration of importedDeclarations) {
-    functionDeclarations.push(declaration)
+    pushIrFunctionDeclaration(functionDeclarations, declaration)
   }
 
   for (const effect of collectImportedCModuleFunctionEffects(plan)) {
-    functionEffects.push(effect)
+    pushIrFunctionEffect(functionEffects, effect)
   }
 
   const context = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)

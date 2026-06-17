@@ -317,6 +317,22 @@ function lastFlowTargetOrNull(values: CLoopFlowTarget[]): CLoopFlowTarget | null
   return values[values.length - 1]
 }
 
+function pushFlowTarget(values: CLoopFlowTarget[], value: CLoopFlowTarget): void {
+  values.push(value)
+}
+
+function popFlowTarget(values: CLoopFlowTarget[]): void {
+  values.pop()
+}
+
+function pushStringTarget(values: string[], value: string): void {
+  values.push(value)
+}
+
+function popStringTarget(values: string[]): void {
+  values.pop()
+}
+
 export function emitStatementBody(statement: StatementNode, context: CFunctionContext): string[] {
   if (statement.type === 'BlockStatement') {
     return emitStatementList(statement.body, context)
@@ -3079,13 +3095,13 @@ export function withBreakTarget(
     return callback()
   }
 
-  context.breakTargets.push({
+  pushFlowTarget(context.breakTargets, {
     label,
     throughFinally
   })
 
   const lines = callback()
-  context.breakTargets.pop()
+  popFlowTarget(context.breakTargets)
 
   return lines
 }
@@ -3100,13 +3116,13 @@ export function withContinueTarget(
     return callback()
   }
 
-  context.continueTargets.push({
+  pushFlowTarget(context.continueTargets, {
     label,
     throughFinally
   })
 
   const lines = callback()
-  context.continueTargets.pop()
+  popFlowTarget(context.continueTargets)
 
   return lines
 }
@@ -3170,10 +3186,10 @@ export function withReturnTarget(
     return callback()
   }
 
-  context.returnTargets.push(target)
+  pushStringTarget(context.returnTargets, target)
 
   const lines = callback()
-  context.returnTargets.pop()
+  popStringTarget(context.returnTargets)
 
   return lines
 }
@@ -3187,10 +3203,10 @@ export function withErrorTarget(
     return callback()
   }
 
-  context.errorTargets.push(target)
+  pushStringTarget(context.errorTargets, target)
 
   const lines = callback()
-  context.errorTargets.pop()
+  popStringTarget(context.errorTargets)
 
   return lines
 }

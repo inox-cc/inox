@@ -33,6 +33,7 @@ import {
   emitStatusCheck,
   isRuntimeBoxedValueType,
   nextCName,
+  pushDiagnostic,
   registerBoxedValue,
   registerEventLoop,
   registerOwnedPromise,
@@ -2007,7 +2008,7 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
   }
 
   if (isArrayMethodCall(statement.init)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic('CCJS_C_ARRAY_METHOD', 'array methods are not supported by the current C backend slice', statement.loc)
     )
     return [`double ${statement.name} = 0;`]
@@ -2360,7 +2361,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
 
     if (propertyValue == null) {
       if (field.optional !== true) {
-        context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
+        pushDiagnostic(context, diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
       }
       continue
     }
@@ -2439,7 +2440,7 @@ function emitObjectMemberVariableDeclaration(
         'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
     }
 
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         cUnsupportedExpressionCode(member.valueType),
         message,
@@ -2674,7 +2675,7 @@ function emitKnownArrayIndexVariableDeclaration(
   }
 
   if (!isNullableScalarType(element.valueType)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         cUnsupportedExpressionCode(element.valueType),
         unsupportedArrayElementMessage(element.valueType),
@@ -2817,7 +2818,7 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
   const valueType = inferExpressionType(expression, context)
 
   if (!isNullableScalarType(valueType)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_NULLISH',
         'nullable scalar values currently support only number, boolean and null values in C',
@@ -2904,7 +2905,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     }
   }
 
-  context.diagnostics.push(
+  pushDiagnostic(context,
     diagnostic(
       'CCJS_C_NULLISH',
       'this nullable scalar expression is not supported by the current C backend slice',
@@ -3012,7 +3013,7 @@ function emitCObjectLiteralValueExpression(
 
     if (propertyValue == null) {
       if (field.optional !== true) {
-        context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, expression.loc))
+        pushDiagnostic(context, diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, expression.loc))
       }
       continue
     }
@@ -3086,7 +3087,7 @@ function errorConstructorExpressions(
   context: CFunctionContext
 ): CErrorConstructorParts {
   if (expression.args.length > 2) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_ARG_COUNT',
         `Error constructor expects at most 2 argument(s), got ${expression.args.length}`,
@@ -3111,7 +3112,7 @@ function errorConstructorExpressions(
       loc = message.loc
     }
 
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_TYPE_MISMATCH',
         'Error message must be a string in the current C backend slice',
@@ -3141,7 +3142,7 @@ function errorConstructorExpressions(
       loc = options.loc
     }
 
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_TYPE_MISMATCH',
         'Error options must be an object literal in the current C backend slice',
@@ -3165,7 +3166,7 @@ function errorConstructorExpressions(
           loc = property.value.loc
         }
 
-        context.diagnostics.push(
+        pushDiagnostic(context,
           diagnostic(
             'CCJS_TYPE_MISMATCH',
             'Error code must be a string in the current C backend slice',
@@ -3185,7 +3186,7 @@ function errorConstructorExpressions(
           loc = property.value.loc
         }
 
-        context.diagnostics.push(
+        pushDiagnostic(context,
           diagnostic(
             'CCJS_TYPE_MISMATCH',
             'Error cause must be an Error object or null in the current C backend slice',
@@ -3200,7 +3201,7 @@ function errorConstructorExpressions(
         loc = property.loc
       }
 
-      context.diagnostics.push(
+      pushDiagnostic(context,
         diagnostic('CCJS_UNKNOWN_FIELD', `unknown Error option ${property.key}`, loc)
       )
     }
@@ -3230,7 +3231,7 @@ function cNullLiteralNode(loc: CSourceLocation = null): AnyNode {
 
 function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   if (!canLowerCNullishCoalescingExpression(expression, context)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
     )
 
@@ -3341,7 +3342,7 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return emitRuntimeErrorLogValue(expression, context)
   }
 
-  context.diagnostics.push(
+  pushDiagnostic(context,
     diagnostic(
       cUnsupportedExpressionCode(valueType),
       'this console.log argument is not supported by the current C backend slice',
@@ -3711,7 +3712,7 @@ function emitReference(expression: AnyNode, context: CFunctionContext): string {
     return name
   }
 
-  context.diagnostics.push(
+  pushDiagnostic(context,
     diagnostic(
       'CCJS_C_ASSIGNMENT_TARGET',
       'this assignment target is not supported by the current C backend slice',
@@ -3863,7 +3864,7 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
   }
 
   if (!isSupportedAsyncFunctionPromiseValueType(valueType)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_ASYNC',
         'async function calls as Promise values currently support only number, boolean, string, bytes, object, array, map, set and void values in C',
@@ -3993,7 +3994,7 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   if (!isSupportedAsyncFunctionPromiseValueType(valueType)) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_ASYNC',
         'throwing async function calls as Promise values currently support only number, boolean, string, bytes, object, array, map, set and void values in C',
@@ -4012,7 +4013,7 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   const params = resolveFunctionParams(expression.callee, context)
 
   if (params == null) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_ASYNC',
         'this async function call is not supported as a Promise value in the current C backend slice',
@@ -4200,7 +4201,7 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
       return emitCValueExpression(expression.argument, context)
     }
 
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_ASYNC',
         'this awaited promise expression is not supported by the current C backend slice',
@@ -4349,7 +4350,7 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
   const valueTag = cRuntimeValueTag(valueType)
 
   if (valueTag == null && valueType !== 'number' && valueType !== 'boolean') {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_ASYNC',
         'this async function return value is not supported by the current C backend slice',
@@ -4411,7 +4412,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
       return wrapper.name
     }
 
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_FUNCTION_VALUE',
         'capturing or unsupported inline callbacks are not supported by the current C backend slice; use a named function or a non-capturing inline callback with a supported signature',
@@ -4440,7 +4441,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
 
   const loc = expression.loc
 
-  context.diagnostics.push(
+  pushDiagnostic(context,
     diagnostic(
       'CCJS_C_FUNCTION_VALUE',
       'this function value is not supported by the current C backend slice',
@@ -4531,7 +4532,7 @@ function emitRuntimeCallbackValueInto(
     const wrapper = context.callbackArrowWrappers.get(expression)
 
     if (wrapper == null || wrapper.kind !== 'arrow') {
-      context.diagnostics.push(
+      pushDiagnostic(context,
         diagnostic(
           'CCJS_C_FUNCTION_VALUE',
           'runtime C callback wrapper was not generated for this arrow function',
@@ -4551,7 +4552,7 @@ function emitRuntimeCallbackValueInto(
   ) {
     const loc = expression.loc
 
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_FUNCTION_VALUE',
         'runtime C callbacks currently require a named non-capturing function',
@@ -4564,7 +4565,7 @@ function emitRuntimeCallbackValueInto(
   const wrapper = runtimeCallbackWrapperFor(expression.path[0], normalizeFunctionType(functionType), context)
 
   if (wrapper == null) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_FUNCTION_VALUE',
         'runtime C callback wrapper was not generated for this function value',
@@ -4627,7 +4628,7 @@ function emitRuntimeArrowCallbackValueInto(
 
   for (const capture of wrapper.captures) {
     if (capture.mutable && !isSupportedMutableRuntimeArrowCapture(capture, context)) {
-      context.diagnostics.push(
+      pushDiagnostic(context,
         diagnostic(
           'CCJS_C_FUNCTION_VALUE',
           'capturing this mutable binding in C callbacks requires unsupported boxed closure storage',
@@ -4637,7 +4638,7 @@ function emitRuntimeArrowCallbackValueInto(
     }
 
     if (!isSupportedRuntimeArrowCaptureValueType(capture.valueType)) {
-      context.diagnostics.push(
+      pushDiagnostic(context,
         diagnostic(
           'CCJS_C_FUNCTION_VALUE',
           'capturing C callbacks currently support only const number/boolean/string/object/timer bindings and Promise resolve/reject handlers',
@@ -4708,7 +4709,7 @@ function emitRuntimeArrowCaptureStoreLines(
     const handler = context.promiseConstructorHandlers.get(capture.name)
 
     if (handler == null) {
-      context.diagnostics.push(
+      pushDiagnostic(context,
         diagnostic(
           'CCJS_C_FUNCTION_VALUE',
           'Promise resolve/reject handlers can only be captured inside Promise constructor executors',
@@ -4774,7 +4775,7 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
   const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
 
   if (functionType == null) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_OPTIONAL_CHAINING',
         'optional calls currently require a nullable runtime callback value in the C backend',
@@ -4828,7 +4829,7 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   const expectedTag = cRuntimeValueTag(resultType)
 
   if (functionType == null || !isRuntimeNullableType(functionType.returnType) || expectedTag == null) {
-    context.diagnostics.push(
+    pushDiagnostic(context,
       diagnostic(
         'CCJS_C_OPTIONAL_CHAINING',
         'optional call results currently support nullable runtime callback results in the C backend',
