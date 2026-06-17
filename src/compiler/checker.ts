@@ -165,6 +165,7 @@ type OptionalParamInfo = {
   [key: string]: unknown
 }
 
+type CheckerNode = AnyNode
 type NullableNode = AnyNode | null
 
 type FunctionTypeParamMetadata = {
@@ -331,6 +332,14 @@ function stringAt(values: string[], index: number): string {
   return values[index]
 }
 
+function checkerNodeAt(values: CheckerNode[], index: number): CheckerNode {
+  return values[index]
+}
+
+function optionalParamAt(values: OptionalParamInfo[], index: number): OptionalParamInfo {
+  return values[index]
+}
+
 function stringSetFromArray(values: string[]): Set<string> {
   const result: Set<string> = new Set()
 
@@ -438,7 +447,9 @@ class Checker {
   check(): void {
     this.collectTopLevelDeclarations()
 
-    for (const item of this.program.body) {
+    for (let index = 0; index < this.program.body.length; index = index + 1) {
+      const item = checkerNodeAt(this.program.body, index)
+
       this.checkTopLevelItem(item)
     }
 
@@ -446,7 +457,9 @@ class Checker {
   }
 
   collectTopLevelDeclarations(): void {
-    for (const item of this.program.body) {
+    for (let index = 0; index < this.program.body.length; index = index + 1) {
+      const item = checkerNodeAt(this.program.body, index)
+
       if (item.type === 'TypeAliasDeclaration') {
         this.declareTypeAlias(item)
       } else if (item.type === 'ClassDeclaration') {
@@ -457,13 +470,17 @@ class Checker {
     this.reportOwnershipCycles()
     throwDiagnostics(this.diagnostics)
 
-    for (const item of this.program.body) {
+    for (let index = 0; index < this.program.body.length; index = index + 1) {
+      const item = checkerNodeAt(this.program.body, index)
+
       if (item.type === 'ImportDeclaration') {
         if (item.typeOnly) {
           continue
         }
 
-        for (const specifier of item.specifiers) {
+        for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
+          const specifier = checkerNodeAt(item.specifiers, specifierIndex)
+
           this.declare(
             specifier.local,
             {
@@ -590,7 +607,9 @@ class Checker {
   requiredParamCount(params: OptionalParamInfo[]): number {
     let count = 0
 
-    for (const param of params) {
+    for (let index = 0; index < params.length; index = index + 1) {
+      const param = optionalParamAt(params, index)
+
       if (param.optional !== true) {
         count = count + 1
       }
@@ -603,7 +622,9 @@ class Checker {
     if (statement.fields != null && statement.fields.length > 0) {
       const resolvedFields: AnyNode[] = []
 
-      for (const field of statement.fields) {
+      for (let index = 0; index < statement.fields.length; index = index + 1) {
+        const field = checkerNodeAt(statement.fields, index)
+
         resolvedFields.push(this.resolveClassField(field))
       }
 
@@ -617,7 +638,11 @@ class Checker {
     const seen: Set<string> = new Set()
     const constructorMethod = this.findClassConstructorMethod(statement)
 
-    for (const assignment of this.collectClassConstructorFieldAssignments(constructorMethod)) {
+    const assignments = this.collectClassConstructorFieldAssignments(constructorMethod)
+
+    for (let index = 0; index < assignments.length; index = index + 1) {
+      const assignment = checkerNodeAt(assignments, index)
+
       if (seen.has(assignment.field)) {
         continue
       }
@@ -696,7 +721,9 @@ class Checker {
   }
 
   findClassConstructorMethod(statement: AnyNode): NullableNode {
-    for (const method of statement.methods) {
+    for (let index = 0; index < statement.methods.length; index = index + 1) {
+      const method = checkerNodeAt(statement.methods, index)
+
       if (method.name === 'constructor') {
         return method
       }
@@ -712,7 +739,9 @@ class Checker {
 
     const assignments: AnyNode[] = []
 
-    for (const statement of constructorMethod.body) {
+    for (let index = 0; index < constructorMethod.body.length; index = index + 1) {
+      const statement = checkerNodeAt(constructorMethod.body, index)
+
       let assignment: NullableNode = null
 
       if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
@@ -776,7 +805,9 @@ class Checker {
   }
 
   findParamByName(params: AnyNode[], name: string): NullableNode {
-    for (const param of params) {
+    for (let index = 0; index < params.length; index = index + 1) {
+      const param = checkerNodeAt(params, index)
+
       if (param.name === name) {
         return param
       }
@@ -823,8 +854,10 @@ class Checker {
         const previousFunctionDepth = this.functionDepth
         this.functionDepth = this.functionDepth + 1
 
-        for (const param of item.params) {
+        for (let paramIndex = 0; paramIndex < item.params.length; paramIndex = paramIndex + 1) {
+          const param = checkerNodeAt(item.params, paramIndex)
           const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
+
           this.declare(
             param.name,
             {
@@ -870,7 +903,9 @@ class Checker {
   }
 
   checkStatements(statements: AnyNode[]): void {
-    for (const statement of statements) {
+    for (let index = 0; index < statements.length; index = index + 1) {
+      const statement = checkerNodeAt(statements, index)
+
       this.checkStatement(statement)
       this.applyStatementExitNarrowing(statement)
     }
@@ -922,7 +957,9 @@ class Checker {
   }
 
   statementListAlwaysExits(statements: AnyNode[]): boolean {
-    for (const statement of statements) {
+    for (let index = 0; index < statements.length; index = index + 1) {
+      const statement = checkerNodeAt(statements, index)
+
       if (this.statementAlwaysExits(statement)) {
         return true
       }
