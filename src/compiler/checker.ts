@@ -5229,7 +5229,7 @@ class Checker {
         const signalType = this.checkExpression(property.value)
         const signalShape = this.resolveExpressionShape(property.value)
 
-        if (signalType !== 'object' || signalShape?.builtin !== 'fetch.AbortSignal') {
+        if (signalType !== 'object' || signalShape == null || signalShape.builtin !== 'fetch.AbortSignal') {
           this.report(
             'CCJS_FETCH',
             'fetch init signal must be an AbortSignal in the current C/libuv fetch slice',
@@ -5438,7 +5438,7 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape?.builtin !== 'fetch.AbortController') {
+    if (objectType !== 'object' || shape == null || shape.builtin !== 'fetch.AbortController') {
       return null
     }
 
@@ -5464,7 +5464,7 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape?.builtin !== 'fetch.Response') {
+    if (objectType !== 'object' || shape == null || shape.builtin !== 'fetch.Response') {
       return null
     }
 
@@ -5503,7 +5503,7 @@ class Checker {
     const objectType = this.checkExpression(expression.object)
     const shape = this.resolveExpressionShape(expression.object)
 
-    if (objectType !== 'object' || shape?.builtin !== 'fetch.Response') {
+    if (objectType !== 'object' || shape == null || shape.builtin !== 'fetch.Response') {
       return null
     }
 
@@ -5525,7 +5525,7 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape?.builtin !== 'fetch.Headers') {
+    if (objectType !== 'object' || shape == null || shape.builtin !== 'fetch.Headers') {
       return null
     }
 

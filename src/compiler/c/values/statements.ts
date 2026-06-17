@@ -1261,14 +1261,14 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  if (statement.init?.type === 'ObjectLiteral') {
+  if (statement.init != null && statement.init.type === 'ObjectLiteral') {
     return {
       lines: deps.emitObjectVariableDeclaration(statement, context),
       expression: ''
     }
   }
 
-  if (statement.init?.type === 'ArrayLiteral') {
+  if (statement.init != null && statement.init.type === 'ArrayLiteral') {
     return {
       lines: deps.emitArrayVariableDeclaration(statement, context),
       expression: ''
@@ -2251,7 +2251,11 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     out: statement.name
   })
 
-  if (childProcessObject != null && statement.init?.childProcessRuntimeMethod === 'spawnSync') {
+  if (
+    childProcessObject != null &&
+    statement.init != null &&
+    statement.init.childProcessRuntimeMethod === 'spawnSync'
+  ) {
     return childProcessObject.lines
   }
 
@@ -2384,7 +2388,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return jsonParseDeclaration
   }
 
-  if (statement.init?.type === 'ObjectLiteral') {
+  if (statement.init != null && statement.init.type === 'ObjectLiteral') {
     if (context.boxedMutableCaptureDeclarations.has(statement)) {
       return deps.emitBoxedObjectVariableDeclaration(statement, context)
     }
@@ -2392,7 +2396,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return deps.emitObjectVariableDeclaration(statement, context)
   }
 
-  if (statement.init?.type === 'ArrayLiteral') {
+  if (statement.init != null && statement.init.type === 'ArrayLiteral') {
     return deps.emitArrayVariableDeclaration(statement, context)
   }
 
@@ -2435,13 +2439,14 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   if (deps.isIndexAccessExpression(statement.init)) {
     const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
 
-    if (runtimeElement?.valueType === 'object') {
+    if (runtimeElement != null && runtimeElement.valueType === 'object') {
       return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
     }
   }
 
   if (
-    statement.init?.type === 'CallExpression' &&
+    statement.init != null &&
+    statement.init.type === 'CallExpression' &&
     statement.nullable !== true &&
     deps.inferExpressionType(statement.init, context) === 'string'
   ) {

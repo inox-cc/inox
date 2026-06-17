@@ -2186,7 +2186,8 @@ function uninitializedDeclarationPrefix(statement: AnyNode): string {
 
 function isBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): boolean {
   return (
-    expression.target?.type === 'Reference' &&
+    expression.target != null &&
+    expression.target.type === 'Reference' &&
     expression.target.path.length === 1 &&
     isBoxedRuntimeValueName(expression.target.path[0], context)
   )
@@ -2194,7 +2195,8 @@ function isBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionCo
 
 function isNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): boolean {
   return (
-    expression.target?.type === 'Reference' &&
+    expression.target != null &&
+    expression.target.type === 'Reference' &&
     expression.target.path.length === 1 &&
     context.nullableVariables.has(expression.target.path[0])
   )
