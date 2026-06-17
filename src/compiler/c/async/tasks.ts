@@ -1,5 +1,7 @@
 import { diagnostic } from '../../diagnostics.ts'
 import {
+  cloneCStringMap,
+  cloneCStringSet,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   nextCName
@@ -712,6 +714,45 @@ function appendAsyncTaskNodes(target: AsyncTaskAstNode[], source: AsyncTaskAstNo
   for (const item of source) {
     target.push(item)
   }
+}
+
+function asyncTaskSuccessPhaseKindAt(
+  values: CAsyncTaskSuccessPhaseKind[],
+  index: number
+): CAsyncTaskSuccessPhaseKind {
+  return values[index]
+}
+
+function asyncTaskSuccessPhaseKindSetFromArray(
+  values: CAsyncTaskSuccessPhaseKind[]
+): Set<CAsyncTaskSuccessPhaseKind> {
+  const result: Set<CAsyncTaskSuccessPhaseKind> = new Set()
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    result.add(asyncTaskSuccessPhaseKindAt(values, index))
+  }
+
+  return result
+}
+
+function cloneOptionalAsyncTaskStringMap(
+  values: AsyncTaskStringMap | null | undefined
+): AsyncTaskStringMap {
+  if (values == null) {
+    return new Map()
+  }
+
+  return cloneCStringMap(values)
+}
+
+function cloneOptionalAsyncTaskStringSet(
+  values: AsyncTaskStringSet | null | undefined
+): AsyncTaskStringSet {
+  if (values == null) {
+    return new Set()
+  }
+
+  return cloneCStringSet(values)
 }
 
 function appendAsyncTaskLines(target: string[], source: string[]): void {
@@ -1675,7 +1716,7 @@ function createAsyncTaskExpressionContext(
   result.returnFlowUsed = context.returnFlowUsed
   result.returnShape = context.returnShape
   result.returnTargets = context.returnTargets
-  result.runtimeArrayElementTypes = new Map(context.runtimeArrayElementTypes)
+  result.runtimeArrayElementTypes = cloneOptionalAsyncTaskStringMap(context.runtimeArrayElementTypes)
   const runtimeCallbackCleanupLabel = context.runtimeCallbackCleanupLabel
   if (runtimeCallbackCleanupLabel != null) {
     result.runtimeCallbackCleanupLabel = runtimeCallbackCleanupLabel
@@ -1690,13 +1731,13 @@ function createAsyncTaskExpressionContext(
     result.runtimeCallbackReturnType = runtimeCallbackReturnType
   }
   result.runtimeCallbacks = context.runtimeCallbacks
-  result.runtimeStrings = new Set(context.runtimeStrings)
-  result.setElementTypes = new Map(context.setElementTypes)
+  result.runtimeStrings = cloneOptionalAsyncTaskStringSet(context.runtimeStrings)
+  result.setElementTypes = cloneOptionalAsyncTaskStringMap(context.setElementTypes)
   result.statusReturn = context.statusReturn
   result.throwingFunction = context.throwingFunction
   result.usedCleanupGoto = context.usedCleanupGoto
   result.usedRuntimeCallbackCleanupGoto = context.usedRuntimeCallbackCleanupGoto === true
-  result.variables = new Map(context.variables)
+  result.variables = cloneOptionalAsyncTaskStringMap(context.variables)
 
   for (const param of params) {
     registerAsyncTaskLocalMetadata(param.name, param.valueType, param, result)
@@ -3642,7 +3683,7 @@ function collectAsyncTaskSuccessPhaseStatements(
   let allowedKinds: Set<CAsyncTaskSuccessPhaseKind> | null = null
 
   if (kinds != null) {
-    allowedKinds = new Set(kinds)
+    allowedKinds = asyncTaskSuccessPhaseKindSetFromArray(kinds)
   }
 
   const statements: AsyncTaskAstNode[] = []
