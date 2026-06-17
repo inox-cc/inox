@@ -58,7 +58,7 @@ type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CStringMap = Map<string, string>
 type CStringNullableMap = Map<string, string | null>
 type CStringSet = Set<string>
-type CDynamicObjectFieldNode = AnyNode
+type CValueNode = AnyNode
 
 type CEmitContext = {
   throwingFunctions: CStringSet
@@ -1005,6 +1005,12 @@ export function emitPreparedNumberExpression(
       return deps.emitPreparedStringCompareExpression(expression, context)
     }
 
+    const runtimeStringLiteralCompare = emitPreparedRuntimeStringLiteralCompareExpression(expression, context, deps)
+
+    if (runtimeStringLiteralCompare != null) {
+      return runtimeStringLiteralCompare
+    }
+
     if (leftType === 'string' || rightType === 'string') {
       context.diagnostics.push(
         diagnostic(
@@ -1223,6 +1229,80 @@ export function emitPreparedNumberExpression(
     lines: [],
     expression: '0'
   }
+}
+
+function emitPreparedRuntimeStringLiteralCompareExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (!isEqualityOperator(expression.operator)) {
+    return null
+  }
+
+  const leftLiteral = stringLiteralValue(expression.left)
+
+  if (leftLiteral != null) {
+    return emitPreparedRuntimeValueStringLiteralCompare(
+      expression.right,
+      leftLiteral,
+      expression.operator,
+      context,
+      deps
+    )
+  }
+
+  const rightLiteral = stringLiteralValue(expression.right)
+
+  if (rightLiteral != null) {
+    return emitPreparedRuntimeValueStringLiteralCompare(
+      expression.left,
+      rightLiteral,
+      expression.operator,
+      context,
+      deps
+    )
+  }
+
+  return null
+}
+
+function emitPreparedRuntimeValueStringLiteralCompare(
+  valueExpression: CValueNode,
+  literal: string,
+  operator: string,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression {
+  const value = deps.emitCValueExpression(valueExpression, context)
+  const temp = nextCName(context, 'ccjs_string_cmp_value')
+  const literalLength = utf8ByteLength(literal)
+  const string = `((ccjs_string*)${temp}.as.ref)`
+  const equals =
+    `(${temp}.tag == CCJS_TAG_STRING && ${temp}.as.ref != 0 && ` +
+    `${string}->len == ${literalLength} && memcmp(${string}->bytes, ${cStringLiteral(literal)}, ${literalLength}) == 0)`
+  const lines: string[] = []
+  let resultExpression = `(!${equals})`
+
+  appendLines(lines, value.lines)
+  lines.push(`ccjs_value ${temp} = ${value.expression};`)
+
+  if (operator === '===' || operator === '==') {
+    resultExpression = equals
+  }
+
+  return {
+    lines,
+    expression: resultExpression
+  }
+}
+
+function stringLiteralValue(expression: CValueNode): string | null {
+  if (expression.type === 'StringLiteral') {
+    return expression.value
+  }
+
+  return null
 }
 
 function emitPreparedLogicalExpression(
@@ -1527,8 +1607,8 @@ export type CValueExpressionDependencies = {
   emitPreparedKnownObjectMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedMapIndexGetExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNullableScalarRuntimeValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
-  emitPreparedDynamicObjectIndexValueExpression(expression: CDynamicObjectFieldNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedDynamicObjectMemberValueExpression(expression: CDynamicObjectFieldNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedDynamicObjectIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedDynamicObjectMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedObjectExpressionIndexValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedObjectExpressionMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedOsConstantExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null

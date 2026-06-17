@@ -354,6 +354,31 @@ export function main(): void {
 })
 
 
+test('lowers C dynamic runtime value comparisons against string literals', () => {
+  const result = compileSource(
+    `function isReference(node: object): boolean {
+  return node.type === 'Reference'
+}
+
+function isNotReference(node: object): boolean {
+  return node.type !== 'Reference'
+}
+
+export function main(): void {
+  console.log(isReference({ type: 'Reference' }), isNotReference({ type: 1 }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "type", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_cmp_value_\d+\.tag == CCJS_TAG_STRING/)
+  assert.match(result.code, /memcmp\(\(\(ccjs_string\*\)ccjs_string_cmp_value_\d+\.as\.ref\)->bytes, "Reference", 9\)/)
+})
+
+
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
     `type Point = {

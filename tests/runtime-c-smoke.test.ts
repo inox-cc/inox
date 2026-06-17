@@ -6728,6 +6728,62 @@ console.log(child.value)
 })
 
 
+test('generated C dynamic runtime string literal comparisons compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-string-compare-'))
+  const source = join(dir, 'dynamic-string-compare.c')
+  const output = join(dir, 'dynamic-string-compare')
+
+  try {
+    const result = compileSource(
+      `function isReference(node: object): boolean {
+  return node.type === 'Reference'
+}
+
+function isNotReference(node: object): boolean {
+  return node.type !== 'Reference'
+}
+
+console.log(
+  isReference({ type: 'Reference' }),
+  isReference({ type: 'Other' }),
+  isReference({ type: 1 }),
+  isNotReference({ type: 'Reference' }),
+  isNotReference({ type: 'Other' }),
+  isNotReference({ type: 1 })
+)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 0 0 0 1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
