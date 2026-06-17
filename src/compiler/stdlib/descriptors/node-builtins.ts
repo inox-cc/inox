@@ -29,22 +29,38 @@ export const unsupportedRuntimeBuiltinImportSources: string[] = [
   'node:zlib'
 ]
 
-const unsupportedRuntimeBuiltinImportSet = createUnsupportedRuntimeBuiltinImportSet()
-
-function createUnsupportedRuntimeBuiltinImportSet(): Set<string> {
-  const sources: Set<string> = new Set()
-
-  for (const source of unsupportedRuntimeBuiltinImportSources) {
-    sources.add(source)
-  }
-
-  return sources
-}
-
 export function unsupportedRuntimeBuiltinImportMessage(source: string): string | null {
-  if (!unsupportedRuntimeBuiltinImportSet.has(source)) {
+  if (!isUnsupportedRuntimeBuiltinImportSource(source)) {
     return null
   }
 
   return `${source} is recognized but not implemented by the current C backend`
+}
+
+function isUnsupportedRuntimeBuiltinImportSource(source: string): boolean {
+  if (source === 'node:dns') {
+    return true
+  }
+
+  if (source === 'node:https') {
+    return true
+  }
+
+  if (source === 'node:timers/promises') {
+    return true
+  }
+
+  if (source === 'node:tls') {
+    return true
+  }
+
+  if (source === 'node:worker_threads') {
+    return true
+  }
+
+  if (source === 'node:zlib') {
+    return true
+  }
+
+  return false
 }
