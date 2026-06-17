@@ -310,14 +310,14 @@ function isIdentifierTypeName(name: string): boolean {
     return false
   }
 
-  if (!isIdentifierStartChar(name[0])) {
+  if (!isIdentifierStartChar(name.slice(0, 1))) {
     return false
   }
 
   let index = 1
 
   while (index < name.length) {
-    if (!isIdentifierPartChar(name[index])) {
+    if (!isIdentifierPartChar(name.slice(index, index + 1))) {
       return false
     }
 

@@ -186,7 +186,7 @@ function splitDelimitedTypeArgs(value: string, delimiter: string): string[] {
   let index = 0
 
   while (index < value.length) {
-    const char = value[index]
+    const char = value.slice(index, index + 1)
 
     if (char === '<') {
       depth = depth + 1
