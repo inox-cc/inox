@@ -1,3 +1,4 @@
+import { memberExpressionPath } from '../../member-paths.ts'
 import type { IrProgram, AnyNode } from '../../types.ts'
 
 const CONSOLE_RUNTIME_CHILD_KEYS = [
@@ -35,22 +36,25 @@ const CONSOLE_RUNTIME_CHILD_KEYS = [
 ]
 
 export function isConsoleLog(expression: AnyNode): boolean {
-  return (
-    expression?.type === 'CallExpression' &&
-    expression.callee.type === 'MemberExpression' &&
-    expression.callee.object.type === 'Reference' &&
-    expression.callee.object.path.length === 1 &&
-    expression.callee.object.path[0] === 'console' &&
-    isConsoleRuntimeProperty(expression.callee.property)
-  )
+  if (expression.type !== 'CallExpression') {
+    return false
+  }
+
+  return isConsoleRuntimePath(memberExpressionPath(expression.callee))
 }
 
 function isConsoleRuntimeProperty(property: string | null | undefined): boolean {
   return property === 'log' || property === 'info' || property === 'warn' || property === 'error'
 }
 
+function isConsoleRuntimePath(path: string[]): boolean {
+  return path.length === 2 && path[0] === 'console' && isConsoleRuntimeProperty(path[1])
+}
+
 export function irProgramsUseConsoleRuntime(programs: IrProgram[]): boolean {
-  for (const program of programs) {
+  for (let index = 0; index < programs.length; index = index + 1) {
+    const program = programs[index]
+
     if (containsConsoleRuntimeCallList(program.body)) {
       return true
     }
@@ -60,7 +64,9 @@ export function irProgramsUseConsoleRuntime(programs: IrProgram[]): boolean {
 }
 
 function containsConsoleRuntimeCallList(nodes: AnyNode[]): boolean {
-  for (const node of nodes) {
+  for (let index = 0; index < nodes.length; index = index + 1) {
+    const node = nodes[index]
+
     if (containsConsoleRuntimeCall(node)) {
       return true
     }
