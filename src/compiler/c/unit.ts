@@ -9,7 +9,14 @@ import {
   collectIrSyntaxFeatureUsages,
   collectIrTopLevelNodesFromPrograms
 } from '../ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrProgram } from '../types.ts'
+import type {
+  AnyNode,
+  Diagnostic,
+  IrFunctionDeclaration,
+  IrFunctionEffect,
+  IrProgram,
+  IrRuntimeRequirement
+} from '../types.ts'
 import type { CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
 import {
   collectCallbackWrappers,
@@ -119,6 +126,34 @@ function joinCUnitLines(lines: string[]): string {
   return output
 }
 
+function unitRuntimeRequirementAt(values: IrRuntimeRequirement[], index: number): IrRuntimeRequirement {
+  return values[index]
+}
+
+function unitStringAt(values: string[], index: number): string {
+  return values[index]
+}
+
+function runtimeRequirementSetFromArray(values: IrRuntimeRequirement[]): Set<IrRuntimeRequirement> {
+  const result: Set<IrRuntimeRequirement> = new Set()
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    result.add(unitRuntimeRequirementAt(values, index))
+  }
+
+  return result
+}
+
+function stringSetFromArray(values: string[]): Set<string> {
+  const result: Set<string> = new Set()
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    result.add(unitStringAt(values, index))
+  }
+
+  return result
+}
+
 export function emitCUnit(
   irPrograms: IrProgram[],
   entryIrProgram: IrProgram | null,
@@ -133,10 +168,10 @@ export function emitCUnit(
   const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const globalRoots = collectIrGlobalRoots(irPrograms)
-  const runtimeRequirements = new Set(collectIrRuntimeRequirements(irPrograms))
+  const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const classes = collectIrTopLevelNodesFromPrograms(irPrograms, 'class')
-  const jsGlobalRoots = new Set(globalRoots)
+  const jsGlobalRoots = stringSetFromArray(globalRoots)
   const baseContext = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
   baseContext.dgramImportNames = collectRuntimeImportNames(
     irPrograms,

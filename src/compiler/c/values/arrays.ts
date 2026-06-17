@@ -1,4 +1,6 @@
 import {
+  cloneCStringMap,
+  cloneCStringSet,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
@@ -298,22 +300,22 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
   }
 
   context.arrayShapes = new Map(snapshot.arrayShapes)
-  context.boxedVariables = new Set(snapshot.boxedVariables)
-  context.classInstanceTypes = new Map(snapshot.classInstanceTypes)
-  context.errorObjectNames = new Set(snapshot.errorObjectNames)
+  context.boxedVariables = cloneCStringSet(snapshot.boxedVariables)
+  context.classInstanceTypes = cloneCStringMap(snapshot.classInstanceTypes)
+  context.errorObjectNames = cloneCStringSet(snapshot.errorObjectNames)
   context.functionTypes = new Map(snapshot.functionTypes)
   context.mapTypes = new Map(snapshot.mapTypes)
-  context.narrowedNullableScalars = new Set(snapshot.narrowedNullableScalars)
-  context.nullableVariables = new Set(snapshot.nullableVariables)
+  context.narrowedNullableScalars = cloneCStringSet(snapshot.narrowedNullableScalars)
+  context.nullableVariables = cloneCStringSet(snapshot.nullableVariables)
   context.objectShapes = new Map(snapshot.objectShapes)
   context.promiseConstructorHandlers = new Map(snapshot.promiseConstructorHandlers)
-  context.promiseRejectionValueTypes = new Map(snapshot.promiseRejectionValueTypes)
-  context.promiseValueTypes = new Map(snapshot.promiseValueTypes)
-  context.runtimeArrayElementTypes = new Map(snapshot.runtimeArrayElementTypes)
-  context.runtimeCallbacks = new Set(snapshot.runtimeCallbacks)
-  context.runtimeStrings = new Set(snapshot.runtimeStrings)
-  context.setElementTypes = new Map(snapshot.setElementTypes)
-  context.variables = new Map(snapshot.variables)
+  context.promiseRejectionValueTypes = cloneCStringMap(snapshot.promiseRejectionValueTypes)
+  context.promiseValueTypes = cloneCStringMap(snapshot.promiseValueTypes)
+  context.runtimeArrayElementTypes = cloneCStringMap(snapshot.runtimeArrayElementTypes)
+  context.runtimeCallbacks = cloneCStringSet(snapshot.runtimeCallbacks)
+  context.runtimeStrings = cloneCStringSet(snapshot.runtimeStrings)
+  context.setElementTypes = cloneCStringMap(snapshot.setElementTypes)
+  context.variables = cloneCStringMap(snapshot.variables)
 
   return snapshot
 }

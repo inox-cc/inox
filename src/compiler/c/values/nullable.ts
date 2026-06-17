@@ -1,4 +1,5 @@
 import {
+  cloneCStringSet,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
@@ -170,7 +171,7 @@ function pushNullableScalarNarrowing(
     }
   }
 
-  context.narrowedNullableScalars = new Set(previous)
+  context.narrowedNullableScalars = cloneCStringSet(previous)
 
   for (const name of names) {
     context.narrowedNullableScalars.add(name)

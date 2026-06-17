@@ -327,6 +327,30 @@ function resolvedFunctionTypeMetadata(
   return null
 }
 
+function stringAt(values: string[], index: number): string {
+  return values[index]
+}
+
+function stringSetFromArray(values: string[]): Set<string> {
+  const result: Set<string> = new Set()
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    result.add(stringAt(values, index))
+  }
+
+  return result
+}
+
+function cloneStringSet(values: Set<string>): Set<string> {
+  const result: Set<string> = new Set()
+
+  for (const value of values) {
+    result.add(value)
+  }
+
+  return result
+}
+
 class Scope {
   parent: Scope | null
   bindings: Map<string, SymbolInfo>
@@ -9364,7 +9388,7 @@ class Checker {
     }
 
     const previous = this.narrowedNullableNames
-    this.narrowedNullableNames = new Set(previous)
+    this.narrowedNullableNames = cloneStringSet(previous)
 
     for (const name of names) {
       this.narrowedNullableNames.add(name)
@@ -9392,7 +9416,7 @@ class Checker {
   }
 
   intersectNames(left: string[], right: string[]): string[] {
-    const rightNames = new Set(right)
+    const rightNames = stringSetFromArray(right)
     const names: string[] = []
 
     for (const name of left) {
@@ -10866,7 +10890,7 @@ class Checker {
     const previous = this.scope
     const previousNarrowedNullableNames = this.narrowedNullableNames
     this.scope = new Scope(previous)
-    this.narrowedNullableNames = new Set(previousNarrowedNullableNames)
+    this.narrowedNullableNames = cloneStringSet(previousNarrowedNullableNames)
 
     try {
       callback()

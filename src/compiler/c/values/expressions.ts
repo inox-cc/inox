@@ -1,5 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import {
+  cloneCStringSet,
   emitEventLoopReference,
   emitFailureStatement,
   emitPrepareOwnedValueWrite,
@@ -236,7 +237,7 @@ function pushNullableScalarNarrowing(
     }
   }
 
-  context.narrowedNullableScalars = new Set(previous)
+  context.narrowedNullableScalars = cloneCStringSet(previous)
 
   for (const name of names) {
     context.narrowedNullableScalars.add(name)

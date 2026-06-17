@@ -45,7 +45,7 @@ export function pushDiagnostic(context: CDiagnosticContext, item: Diagnostic): v
   context.diagnostics.push(item)
 }
 
-function cloneCStringSet(values: CStringSet): CStringSet {
+export function cloneCStringSet(values: CStringSet): CStringSet {
   const result: CStringSet = new Set()
 
   for (const value of values) {
@@ -55,7 +55,7 @@ function cloneCStringSet(values: CStringSet): CStringSet {
   return result
 }
 
-function cloneCStringMap(values: CStringMap): CStringMap {
+export function cloneCStringMap(values: CStringMap): CStringMap {
   const result: CStringMap = new Map()
 
   for (const entry of values) {
