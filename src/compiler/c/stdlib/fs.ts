@@ -502,8 +502,20 @@ export function emitPreparedFsAccessModeExpression(
 }
 
 export function emitFsBooleanFlag(expression: AnyNode, field: string): string {
-  if (expression[field] === true) {
-    return 'true'
+  if (field === 'fsRecursive') {
+    if (expression.fsRecursive === true) {
+      return 'true'
+    }
+
+    return 'false'
+  }
+
+  if (field === 'fsForce') {
+    if (expression.fsForce === true) {
+      return 'true'
+    }
+
+    return 'false'
   }
 
   return 'false'
