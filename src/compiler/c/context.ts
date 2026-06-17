@@ -55,6 +55,16 @@ function cloneCStringSet(values: CStringSet): CStringSet {
   return result
 }
 
+function cloneCStringMap(values: CStringMap): CStringMap {
+  const result: CStringMap = new Map()
+
+  for (const entry of values) {
+    result.set(entry[0], entry[1])
+  }
+
+  return result
+}
+
 export type CEmitContext = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
@@ -314,7 +324,7 @@ export function createFunctionContext(
     statusReturn: false,
     throwingFunction: false,
     usedCleanupGoto: false,
-    variables: new Map(baseContext.moduleValueTypes),
+    variables: cloneCStringMap(baseContext.moduleValueTypes),
     returnNullable: returnNullable,
     returnType: returnType
   }
@@ -754,23 +764,23 @@ export function pushVariableScope(context: CFunctionContext): CVariableScopeSnap
   const previousSetElementTypes = context.setElementTypes
   const previousRuntimeStrings = context.runtimeStrings
 
-  context.variables = new Map(previousVariables)
+  context.variables = cloneCStringMap(previousVariables)
   context.arrayShapes = new Map(previousArrayShapes)
-  context.boxedVariables = new Set(previousBoxedVariables)
-  context.classInstanceTypes = new Map(previousClassInstanceTypes)
-  context.errorObjectNames = new Set(previousErrorObjectNames)
+  context.boxedVariables = cloneCStringSet(previousBoxedVariables)
+  context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
+  context.errorObjectNames = cloneCStringSet(previousErrorObjectNames)
   context.functionTypes = new Map(previousFunctionTypes)
   context.mapTypes = new Map(previousMapTypes)
-  context.narrowedNullableScalars = new Set(previousNarrowedNullableScalars)
-  context.nullableVariables = new Set(previousNullableVariables)
+  context.narrowedNullableScalars = cloneCStringSet(previousNarrowedNullableScalars)
+  context.nullableVariables = cloneCStringSet(previousNullableVariables)
   context.objectShapes = new Map(previousObjectShapes)
   context.promiseConstructorHandlers = new Map(previousPromiseConstructorHandlers)
-  context.promiseRejectionValueTypes = new Map(previousPromiseRejectionValueTypes)
-  context.promiseValueTypes = new Map(previousPromiseValueTypes)
-  context.runtimeCallbacks = new Set(previousRuntimeCallbacks)
-  context.runtimeArrayElementTypes = new Map(previousRuntimeArrayElementTypes)
-  context.setElementTypes = new Map(previousSetElementTypes)
-  context.runtimeStrings = new Set(previousRuntimeStrings)
+  context.promiseRejectionValueTypes = cloneCStringMap(previousPromiseRejectionValueTypes)
+  context.promiseValueTypes = cloneCStringMap(previousPromiseValueTypes)
+  context.runtimeCallbacks = cloneCStringSet(previousRuntimeCallbacks)
+  context.runtimeArrayElementTypes = cloneCStringMap(previousRuntimeArrayElementTypes)
+  context.setElementTypes = cloneCStringMap(previousSetElementTypes)
+  context.runtimeStrings = cloneCStringSet(previousRuntimeStrings)
 
   return {
     arrayShapes: previousArrayShapes,
