@@ -372,28 +372,22 @@ function statementBodyDefinitelyReturns(statements: StatementNode[]): boolean {
 
 function emitScopedStatementBody(statement: StatementNode, context: CFunctionContext, narrowedNames: string[]): string[] {
   const variableScope = pushVariableScope(context)
+  const nullableScope = pushNullableScalarNarrowing(context, narrowedNames)
+  const lines = emitStatementBody(statement, context)
 
-  try {
-    const nullableScope = pushNullableScalarNarrowing(context, narrowedNames)
+  restoreNullableScalarNarrowing(context, nullableScope)
+  restoreVariableScope(context, variableScope)
 
-    try {
-      return emitStatementBody(statement, context)
-    } finally {
-      restoreNullableScalarNarrowing(context, nullableScope)
-    }
-  } finally {
-    restoreVariableScope(context, variableScope)
-  }
+  return lines
 }
 
 function emitScopedStatementList(statements: StatementNode[], context: CFunctionContext): string[] {
   const variableScope = pushVariableScope(context)
+  const lines = emitStatementList(statements, context)
 
-  try {
-    return emitStatementList(statements, context)
-  } finally {
-    restoreVariableScope(context, variableScope)
-  }
+  restoreVariableScope(context, variableScope)
+
+  return lines
 }
 
 export function emitIfStatement(statement: StatementNode, context: CFunctionContext): string[] {
@@ -2997,11 +2991,10 @@ export function withBreakTarget(
     throughFinally
   })
 
-  try {
-    return callback()
-  } finally {
-    context.breakTargets.pop()
-  }
+  const lines = callback()
+  context.breakTargets.pop()
+
+  return lines
 }
 
 export function withContinueTarget(
@@ -3019,11 +3012,10 @@ export function withContinueTarget(
     throughFinally
   })
 
-  try {
-    return callback()
-  } finally {
-    context.continueTargets.pop()
-  }
+  const lines = callback()
+  context.continueTargets.pop()
+
+  return lines
 }
 
 export function withFinallyFlowTarget(
@@ -3087,11 +3079,10 @@ export function withReturnTarget(
 
   context.returnTargets.push(target)
 
-  try {
-    return callback()
-  } finally {
-    context.returnTargets.pop()
-  }
+  const lines = callback()
+  context.returnTargets.pop()
+
+  return lines
 }
 
 export function withErrorTarget(
@@ -3105,9 +3096,8 @@ export function withErrorTarget(
 
   context.errorTargets.push(target)
 
-  try {
-    return callback()
-  } finally {
-    context.errorTargets.pop()
-  }
+  const lines = callback()
+  context.errorTargets.pop()
+
+  return lines
 }
