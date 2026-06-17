@@ -484,21 +484,32 @@ class Checker {
 
   resolveClassField(field: AnyNode): AnyNode {
     const fieldInfo = this.resolveFieldDeclaredType(field)
+    const declaredType = field.valueType
 
-    field.declaredType = field.valueType
-    field.className = this.declaredClassName(field.declaredType)
-    field.valueType = fieldInfo.valueType
-    field.nullable = fieldInfo.nullable
-    field.arrayElementType = fieldInfo.arrayElementType
-    field.arrayElementDeclaredType = fieldInfo.arrayElementDeclaredType
-    field.mapKeyType = fieldInfo.mapKeyType
-    field.mapValueType = fieldInfo.mapValueType
-    field.promiseValueType = fieldInfo.promiseValueType ?? null
-    field.setElementType = fieldInfo.setElementType
-    field.functionType = fieldInfo.functionType
-    field.shape = fieldInfo.shape
-
-    return field
+    return {
+      type: field.type,
+      name: field.name,
+      optional: field.optional,
+      readonly: field.readonly,
+      ownership: field.ownership,
+      weakLoc: field.weakLoc,
+      static: field.static,
+      staticLoc: field.staticLoc,
+      weakTypeValidated: field.weakTypeValidated,
+      loc: field.loc,
+      declaredType,
+      className: this.declaredClassName(declaredType),
+      valueType: fieldInfo.valueType,
+      nullable: fieldInfo.nullable,
+      arrayElementType: fieldInfo.arrayElementType,
+      arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
+      mapKeyType: fieldInfo.mapKeyType,
+      mapValueType: fieldInfo.mapValueType,
+      promiseValueType: fieldInfo.promiseValueType ?? null,
+      setElementType: fieldInfo.setElementType,
+      functionType: fieldInfo.functionType,
+      shape: fieldInfo.shape
+    }
   }
 
   declaredClassName(name: string | null | undefined): string | null {
