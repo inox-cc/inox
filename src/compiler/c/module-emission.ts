@@ -84,7 +84,7 @@ import {
 } from './stdlib/net.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
 import type { CClassInfo, CClassMethod, CModuleEmitOptions, CModuleImportPlan, CModulePlan } from './types.ts'
-import { emitCType, isManagedRuntimeReturnType } from './value-types.ts'
+import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType } from './value-types.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
 
 type CModuleValueDeclaration = {
@@ -647,7 +647,7 @@ function collectCModuleContextRuntimeTypes(context: CEmitContext): Set<string> {
   const types: Set<string> = new Set()
 
   for (const valueType of context.functionReturnTypes.values()) {
-    if (isManagedRuntimeReturnType(valueType) || valueType === 'promise') {
+    if (isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType) || valueType === 'promise') {
       types.add(valueType)
     }
   }
@@ -656,7 +656,7 @@ function collectCModuleContextRuntimeTypes(context: CEmitContext): Set<string> {
     for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
       const param = cModuleFunctionParamAt(params, paramIndex)
 
-      if (isManagedRuntimeReturnType(param.valueType) || param.valueType === 'promise') {
+      if (isManagedRuntimeReturnType(param.valueType) || isOpaqueRuntimeValueType(param.valueType) || param.valueType === 'promise') {
         types.add(param.valueType)
       }
     }
@@ -769,7 +769,7 @@ function cModuleValueGlobalInitializer(valueType: string): string {
     return '""'
   }
 
-  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType)) {
+  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {
     return ''
   }
 

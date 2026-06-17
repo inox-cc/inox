@@ -50,6 +50,7 @@ import {
   emitCType,
   emitThrowingFunctionOutType,
   isNullableScalarParam,
+  isOpaqueRuntimeValueType,
   isRuntimeNullableType,
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
@@ -315,6 +316,8 @@ function registerFunctionParamsInContext(statement: CNode, params: CFunctionPara
       if (runtimeFunctionType != null) {
         context.runtimeCallbacks.add(param.name)
       }
+    } else if (isOpaqueRuntimeValueType(param.valueType)) {
+      context.variables.set(param.name, 'unknown')
     } else {
       context.variables.set(param.name, param.valueType)
     }

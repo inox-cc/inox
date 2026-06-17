@@ -19,7 +19,7 @@ type CPresentNullableScalarParam = {
 
 export type CRuntimeValueTag = string | null
 
-export function isManagedRuntimeReturnType(valueType: CValueTypeInput): boolean {
+function isConcreteManagedRuntimeReturnType(valueType: CValueTypeInput): boolean {
   return (
     valueType === 'bytes' ||
     valueType === 'string' ||
@@ -27,6 +27,31 @@ export function isManagedRuntimeReturnType(valueType: CValueTypeInput): boolean 
     valueType === 'array' ||
     valueType === 'map' ||
     valueType === 'set'
+  )
+}
+
+export function isManagedRuntimeReturnType(valueType: CValueTypeInput): boolean {
+  return isConcreteManagedRuntimeReturnType(valueType)
+}
+
+export function isOpaqueRuntimeValueType(valueType: CValueTypeInput): boolean {
+  if (valueType == null || valueType === 'unknown') {
+    return false
+  }
+
+  if (isConcreteManagedRuntimeReturnType(valueType) || isNullableScalarType(valueType)) {
+    return false
+  }
+
+  return (
+    valueType !== 'void' &&
+    valueType !== 'function' &&
+    valueType !== 'promise' &&
+    valueType !== 'timer' &&
+    valueType !== 'crypto-hash' &&
+    valueType !== 'crypto-hmac' &&
+    valueType !== 'optional' &&
+    valueType !== 'js-global'
   )
 }
 
@@ -44,6 +69,10 @@ export function emitCType(valueType: CValueTypeInput): string {
   }
 
   if (valueType === 'unknown') {
+    return 'ccjs_value'
+  }
+
+  if (isOpaqueRuntimeValueType(valueType)) {
     return 'ccjs_value'
   }
 
@@ -97,6 +126,7 @@ export function emitThrowingFunctionOutType(valueType: CValueTypeInput, nullable
 export function isThrowingFunctionRuntimeOut(context: CReturnTypeContext): boolean {
   return (
     isManagedRuntimeReturnType(context.returnType) ||
+    isOpaqueRuntimeValueType(context.returnType) ||
     (context.returnNullable === true && isNullableScalarType(context.returnType))
   )
 }

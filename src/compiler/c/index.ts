@@ -302,6 +302,7 @@ import {
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
   isNullableScalarType,
+  isOpaqueRuntimeValueType,
   isRuntimeNullableType
 } from './value-types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
@@ -2087,7 +2088,7 @@ function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context:
     return [`${prefix}char* ${statement.name} = "";`]
   }
 
-  if (isManagedRuntimeReturnType(inferred)) {
+  if (isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred)) {
     registerOwnedValue(context, statement.name)
     return [`${prefix}ccjs_value ${statement.name} = ccjs_undefined_value();`]
   }
@@ -2158,7 +2159,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   pushAll(lines, value.lines)
   lines.push(`${name} = ${value.expression};`)
 
-  if (inferred === 'unknown' || isManagedRuntimeReturnType(inferred)) {
+  if (inferred === 'unknown' || isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred)) {
     lines.push(`ccjs_retain(${name});`)
   }
 
@@ -2170,7 +2171,7 @@ function moduleValueDefaultExpression(valueType: string): string {
     return '""'
   }
 
-  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType)) {
+  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {
     return 'ccjs_undefined_value()'
   }
 

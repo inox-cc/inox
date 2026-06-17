@@ -20,6 +20,7 @@ import {
   isManagedRuntimeReturnType,
   isNullableScalarParam,
   isNullableScalarType,
+  isOpaqueRuntimeValueType,
   isRuntimeNullableType
 } from '../value-types.ts'
 import { cTimeRuntimeCallName } from '../stdlib/time.ts'
@@ -219,7 +220,7 @@ function emitPreparedTypeofArgumentValue(
   if (
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
-    (valueType === 'unknown' || isManagedRuntimeReturnType(valueType))
+    (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType))
   ) {
     return {
       lines: [],
@@ -717,7 +718,7 @@ export function emitPreparedCallArgs(
 
         appendLines(lines, value.lines)
         args.push(value.expression)
-      } else if (param.valueType === 'unknown') {
+      } else if (param.valueType === 'unknown' || isOpaqueRuntimeValueType(param.valueType)) {
         const value = deps.emitCValueExpression(arg, context)
 
         appendLines(lines, value.lines)
@@ -775,7 +776,7 @@ function emitDefaultOptionalArg(param: CFunctionParam): string {
     return 'ccjs_null_value()'
   }
 
-  if (param.valueType === 'unknown' || isManagedRuntimeReturnType(param.valueType)) {
+  if (param.valueType === 'unknown' || isManagedRuntimeReturnType(param.valueType) || isOpaqueRuntimeValueType(param.valueType)) {
     return 'ccjs_undefined_value()'
   }
 
@@ -814,7 +815,11 @@ function emitPreparedThrowingCallExpression(
   appendLines(lines, emitPrepareOwnedValueWrite('ccjs_error'))
 
   if (returnType !== 'void') {
-    if (isManagedRuntimeReturnType(returnType) || (returnNullable && isNullableScalarType(returnType))) {
+    if (
+      isManagedRuntimeReturnType(returnType) ||
+      isOpaqueRuntimeValueType(returnType) ||
+      (returnNullable && isNullableScalarType(returnType))
+    ) {
       result = nextCName(context, 'ccjs_call_result')
       lines.push(`ccjs_value ${result} = ccjs_undefined_value();`)
     } else {
@@ -2117,11 +2122,11 @@ function runtimeValueReferenceName(expression: CValueNode, context: CFunctionCon
   const name = expression.path[0]
   const valueType = context.variables.get(name)
 
-  if (valueType !== 'unknown' && !isManagedRuntimeReturnType(valueType)) {
+  if (valueType !== 'unknown' && !isManagedRuntimeReturnType(valueType) && !isOpaqueRuntimeValueType(valueType)) {
     return null
   }
 
-  if (!isOwnedRuntimeValueName(name, context) && valueType !== 'unknown') {
+  if (!isOwnedRuntimeValueName(name, context) && valueType !== 'unknown' && !isOpaqueRuntimeValueType(valueType)) {
     return null
   }
 
@@ -2725,7 +2730,7 @@ export function emitCValueExpression(
       }
     }
 
-    if (valueType === 'unknown') {
+    if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)) {
       return {
         lines: [],
         expression: name

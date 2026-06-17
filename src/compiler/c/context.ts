@@ -1,4 +1,4 @@
-import { isManagedRuntimeReturnType, isNullableScalarType } from './value-types.ts'
+import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from './value-types.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect } from '../types.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
@@ -501,7 +501,7 @@ export function emitReturnValueDeclarations(context: CFunctionContext): string[]
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
 
-  if (isManagedRuntimeReturnType(context.returnType)) {
+  if (isManagedRuntimeReturnType(context.returnType) || isOpaqueRuntimeValueType(context.returnType)) {
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
 

@@ -9,7 +9,7 @@ import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
-import { cRuntimeValueTag } from '../value-types.ts'
+import { cRuntimeValueTag, isOpaqueRuntimeValueType } from '../value-types.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
 import type {
   CKnownObjectField,
@@ -692,11 +692,11 @@ function isRuntimeValueReferenceExpression(expression: ObjectFieldNode, context:
   const name = expression.path[0]
   const valueType = context.variables.get(name)
 
-  if (valueType !== 'unknown' && valueType !== 'object') {
+  if (valueType !== 'unknown' && valueType !== 'object' && !isOpaqueRuntimeValueType(valueType)) {
     return false
   }
 
-  if (valueType === 'unknown') {
+  if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)) {
     return true
   }
 
