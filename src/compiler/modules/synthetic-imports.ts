@@ -223,7 +223,7 @@ function collectTypeNameDependencyNames(typeName: string | null | undefined, nam
   let index = 0
 
   while (index < typeName.length) {
-    const char = typeName[index]
+    const char = typeName.slice(index, index + 1)
 
     if (isTypeNameIdentifierChar(char)) {
       current = current + char
