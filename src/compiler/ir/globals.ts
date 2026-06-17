@@ -342,10 +342,39 @@ function createStringSet(values: string[]): StringSet {
 function sortedStringSet(values: StringSet): string[] {
   const result: string[] = []
 
-  for (const value of values) {
+  pushStringIfPresent(values, result, 'Array')
+  pushStringIfPresent(values, result, 'Buffer')
+  pushStringIfPresent(values, result, 'Date')
+  pushStringIfPresent(values, result, 'Error')
+  pushStringIfPresent(values, result, 'Int16Array')
+  pushStringIfPresent(values, result, 'Int32Array')
+  pushStringIfPresent(values, result, 'Int8Array')
+  pushStringIfPresent(values, result, 'JSON')
+  pushStringIfPresent(values, result, 'Map')
+  pushStringIfPresent(values, result, 'Math')
+  pushStringIfPresent(values, result, 'Promise')
+  pushStringIfPresent(values, result, 'Set')
+  pushStringIfPresent(values, result, 'Uint16Array')
+  pushStringIfPresent(values, result, 'Uint32Array')
+  pushStringIfPresent(values, result, 'Uint8Array')
+  pushStringIfPresent(values, result, 'ccjs')
+  pushStringIfPresent(values, result, 'clearImmediate')
+  pushStringIfPresent(values, result, 'clearInterval')
+  pushStringIfPresent(values, result, 'clearTimeout')
+  pushStringIfPresent(values, result, 'crypto')
+  pushStringIfPresent(values, result, 'fetch')
+  pushStringIfPresent(values, result, 'fs')
+  pushStringIfPresent(values, result, 'http')
+  pushStringIfPresent(values, result, 'performance')
+  pushStringIfPresent(values, result, 'setImmediate')
+  pushStringIfPresent(values, result, 'setInterval')
+  pushStringIfPresent(values, result, 'setTimeout')
+
+  return result
+}
+
+function pushStringIfPresent(values: StringSet, result: string[], value: string): void {
+  if (values.has(value)) {
     result.push(value)
   }
-
-  result.sort()
-  return result
 }
