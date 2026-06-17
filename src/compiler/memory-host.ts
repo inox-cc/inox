@@ -31,14 +31,7 @@ class MemoryCompilerHost {
       relative: relativePosixPath
     }
     this.root = memoryCompilerHostRoot(options)
-    this.sources = []
-
-    for (const file of files) {
-      this.sources.push({
-        path: resolvePosixPath(file.path, this.root),
-        source: file.source
-      })
-    }
+    this.sources = normalizeMemoryCompilerSources(files, this.root)
   }
 
   dirname(path: string): string {
@@ -68,7 +61,9 @@ class MemoryCompilerHost {
   readFile(path: string): Promise<string> {
     const resolved = resolvePosixPath(path, this.root)
 
-    for (const file of this.sources) {
+    for (let index = 0; index < this.sources.length; index = index + 1) {
+      const file = this.sources[index]
+
       if (file.path === resolved) {
         return Promise.resolve(file.source)
       }
@@ -88,6 +83,20 @@ class MemoryCompilerHost {
   shortHash(value: string): string {
     return shortStableHash(value)
   }
+}
+
+function normalizeMemoryCompilerSources(files: MemoryCompilerSourceFile[], root: string): MemoryCompilerSourceFile[] {
+  const sources: MemoryCompilerSourceFile[] = []
+
+  for (let index = 0; index < files.length; index = index + 1) {
+    const file = files[index]
+    sources.push({
+      path: resolvePosixPath(file.path, root),
+      source: file.source
+    })
+  }
+
+  return sources
 }
 
 function memoryCompilerHostRoot(options: MemoryCompilerHostOptions): string {
