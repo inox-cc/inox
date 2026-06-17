@@ -2727,6 +2727,12 @@ class Checker {
       return arrayIsArrayType
     }
 
+    const objectValuesType = this.checkObjectStaticCall(expression)
+
+    if (objectValuesType != null) {
+      return objectValuesType
+    }
+
     this.checkExpression(expression.callee)
     const argTypes: ValueType[] = []
 
@@ -5203,6 +5209,66 @@ class Checker {
     this.checkExpression(expression.args[0])
 
     return 'boolean'
+  }
+
+  checkObjectStaticCall(expression: AnyNode): ValueType | null {
+    const path = memberExpressionPath(expression.callee)
+
+    if (path == null || path.length !== 2 || path[0] !== 'Object' || (path[1] !== 'values' && path[1] !== 'entries')) {
+      return null
+    }
+
+    if (this.scope.resolve('Object') != null) {
+      return null
+    }
+
+    const method = path[1]
+
+    expression.objectRuntimeMethod = method
+    expression.valueType = 'array'
+    expression.arrayElementType = method === 'entries' ? 'array' : 'unknown'
+
+    if (expression.args.length !== 1) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `function Object.${method} expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (expression.args[0] != null) {
+      const arg = checkerNodeAt(expression.args, 0)
+      const argType = this.checkExpression(arg)
+
+      this.checkAssignableType(argType, 'object', arg.loc, false, this.expressionCanBeNull(arg))
+      if (method === 'values') {
+        expression.arrayElementType = this.resolveObjectValuesElementType(arg)
+      }
+    }
+
+    for (let index = 1; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      this.checkExpression(arg)
+    }
+
+    return 'array'
+  }
+
+  resolveObjectValuesElementType(expression: AnyNode): ValueType {
+    const shape = this.resolveExpressionShape(expression)
+
+    if (shape == null || shape.fields.length === 0) {
+      return 'unknown'
+    }
+
+    const types: ValueType[] = []
+
+    for (const field of shape.fields) {
+      types.push(field.valueType ?? 'unknown')
+    }
+
+    return commonValueType(types)
   }
 
   checkFsConstantMemberExpression(expression: AnyNode): ValueType | null {

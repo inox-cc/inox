@@ -36,6 +36,8 @@ ccjs_status ccjs_object_init_known(ccjs_value object, uint32_t index, ccjs_value
 ccjs_status ccjs_object_set_known(ccjs_value object, uint32_t index, ccjs_value value);
 ccjs_status ccjs_object_get(ccjs_value object, const char* name, size_t len, ccjs_value* out);
 ccjs_status ccjs_object_set(ccjs_value object, const char* name, size_t len, ccjs_value value);
+ccjs_status ccjs_object_entries(ccjs_allocator* allocator, ccjs_value object, ccjs_value* out);
+ccjs_status ccjs_object_values(ccjs_allocator* allocator, ccjs_value object, ccjs_value* out);
 void ccjs_object_dispose_fields(ccjs_object* object);
 
 #endif

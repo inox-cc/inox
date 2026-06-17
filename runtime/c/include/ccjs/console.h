@@ -21,6 +21,7 @@ ccjs_console_adapter ccjs_console_get_adapter(void);
 void ccjs_console_clear_adapter(void);
 ccjs_status ccjs_console_write(ccjs_console_stream stream, const char* bytes, size_t len);
 ccjs_status ccjs_console_write_line(ccjs_console_stream stream, const char* bytes, size_t len);
+ccjs_status ccjs_console_format_value(ccjs_allocator* allocator, ccjs_value value, ccjs_value* out);
 int ccjs_console_printf(ccjs_console_stream stream, const char* format, ...);
 
 #ifndef CCJS_CONSOLE_NO_PRINTF_MACRO

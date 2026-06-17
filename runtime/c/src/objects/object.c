@@ -4,7 +4,9 @@
 #ifdef CCJS_DEBUG_MEMORY
 #include "ccjs/debug.h"
 #endif
+#include "ccjs/array.h"
 #include "ccjs/object.h"
+#include "ccjs/string.h"
 #ifdef CCJS_ENABLE_WEAK
 #include "ccjs/weak.h"
 #endif
@@ -208,4 +210,91 @@ ccjs_status ccjs_object_set(ccjs_value object, const char* name, size_t len, ccj
   }
 
   return CCJS_ERR_FIELD;
+}
+
+ccjs_status ccjs_object_values(ccjs_allocator* allocator, ccjs_value object, ccjs_value* out) {
+  if (allocator == 0 || out == 0 || object.tag != CCJS_TAG_OBJECT || object.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_object* instance = (ccjs_object*)object.as.ref;
+  ccjs_status status = ccjs_array_new(allocator, instance->shape->field_count, out);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  for (uint32_t index = 0; index < instance->shape->field_count; index += 1) {
+    ccjs_value value = ccjs_undefined_value();
+
+    status = ccjs_object_get_known(object, index, &value);
+
+    if (status == CCJS_OK) {
+      status = ccjs_array_set(*out, index, value);
+    }
+
+    ccjs_release(value);
+
+    if (status != CCJS_OK) {
+      ccjs_release(*out);
+      *out = ccjs_undefined_value();
+      return status;
+    }
+  }
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_object_entries(ccjs_allocator* allocator, ccjs_value object, ccjs_value* out) {
+  if (allocator == 0 || out == 0 || object.tag != CCJS_TAG_OBJECT || object.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_object* instance = (ccjs_object*)object.as.ref;
+  ccjs_status status = ccjs_array_new(allocator, instance->shape->field_count, out);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  for (uint32_t index = 0; index < instance->shape->field_count; index += 1) {
+    const char* name = instance->shape->fields[index].name == 0 ? "" : instance->shape->fields[index].name;
+    ccjs_value pair = ccjs_undefined_value();
+    ccjs_value key = ccjs_undefined_value();
+    ccjs_value value = ccjs_undefined_value();
+
+    status = ccjs_array_new(allocator, 2, &pair);
+
+    if (status == CCJS_OK) {
+      status = ccjs_string_from_literal(allocator, name, strlen(name), &key);
+    }
+
+    if (status == CCJS_OK) {
+      status = ccjs_object_get_known(object, index, &value);
+    }
+
+    if (status == CCJS_OK) {
+      status = ccjs_array_set(pair, 0, key);
+    }
+
+    if (status == CCJS_OK) {
+      status = ccjs_array_set(pair, 1, value);
+    }
+
+    if (status == CCJS_OK) {
+      status = ccjs_array_set(*out, index, pair);
+    }
+
+    ccjs_release(value);
+    ccjs_release(key);
+    ccjs_release(pair);
+
+    if (status != CCJS_OK) {
+      ccjs_release(*out);
+      *out = ccjs_undefined_value();
+      return status;
+    }
+  }
+
+  return CCJS_OK;
 }

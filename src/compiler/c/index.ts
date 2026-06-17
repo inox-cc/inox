@@ -1146,6 +1146,7 @@ const cValueExpressionDependencies = {
   emitPreparedKnownObjectMemberValueExpression,
   emitPreparedMapIndexGetExpression,
   emitPreparedNullableScalarRuntimeValueExpression,
+  emitPreparedObjectValuesCallExpression,
   emitPreparedNumberExpression,
   emitPreparedDynamicObjectIndexValueExpression: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
     emitPreparedDynamicObjectIndexValueExpression(expression, context, objectExpressionFieldDependencies),
@@ -3400,6 +3401,14 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return emitRuntimeErrorLogValue(expression, context)
   }
 
+  if (isRuntimeLogValueType(valueType)) {
+    return emitRuntimeValueLogValue(expression, context)
+  }
+
+  if (valueType === 'unknown' && isOwnedRuntimeValueReference(expression, context)) {
+    return emitRuntimeValueLogValue(expression, context)
+  }
+
   pushDiagnostic(context,
     diagnostic(
       cUnsupportedExpressionCode(valueType),
@@ -3412,6 +3421,47 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     lines: [],
     format: '%g',
     values: ['0']
+  }
+}
+
+function isRuntimeLogValueType(valueType: string): boolean {
+  return (
+    valueType === 'array' ||
+    valueType === 'bytes' ||
+    valueType === 'function' ||
+    valueType === 'map' ||
+    valueType === 'object' ||
+    valueType === 'set'
+  )
+}
+
+function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionContext): boolean {
+  if (expression?.type !== 'Reference' || expression.path.length !== 1) {
+    return false
+  }
+
+  const name = expression.path[0]
+
+  return context.variables.get(name) === 'unknown' && context.ownedValues.includes(name)
+}
+
+function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
+  const value = emitCValueExpression(expression, context)
+  const temp = nextCName(context, 'ccjs_log_value')
+  const string = nextCName(context, 'ccjs_log_string')
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+  pushAll(lines, value.lines)
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(`ccjs_console_format_value(&ccjs_default_allocator, ${value.expression}, &${temp})`, context))
+  lines.push(emitRuntimeTypeCheck(`${temp}.tag != CCJS_TAG_STRING || ${temp}.as.ref == 0`, context))
+  lines.push(`ccjs_string* ${string} = (ccjs_string*)${temp}.as.ref;`)
+
+  return {
+    lines,
+    format: '%.*s',
+    values: [`(int)${string}->len`, `${string}->bytes`]
   }
 }
 
@@ -5002,6 +5052,44 @@ function emitPreparedArrayIsArrayCallExpression(expression: AnyNode, context: CF
   return {
     lines: value.lines,
     expression: `(${value.expression}.tag == CCJS_TAG_ARRAY)`
+  }
+}
+
+function cObjectRuntimeCallName(expression: AnyNode): string | null {
+  if (expression?.type !== 'CallExpression' || expression.args.length !== 1) {
+    return null
+  }
+
+  if (expression.objectRuntimeMethod === 'values') {
+    return 'values'
+  }
+
+  if (expression.objectRuntimeMethod === 'entries') {
+    return 'entries'
+  }
+
+  return null
+}
+
+function emitPreparedObjectValuesCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
+  const method = cObjectRuntimeCallName(expression)
+
+  if (method == null) {
+    return null
+  }
+
+  const object = emitCValueExpression(expression.args[0], context)
+  const temp = nextCName(context, `ccjs_object_${method}`)
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+  pushAll(lines, object.lines)
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(`ccjs_object_${method}(&ccjs_default_allocator, ${object.expression}, &${temp})`, context))
+
+  return {
+    lines,
+    expression: temp
   }
 }
 

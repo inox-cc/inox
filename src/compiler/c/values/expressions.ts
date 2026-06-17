@@ -2295,6 +2295,7 @@ export type CValueExpressionDependencies = {
   emitPreparedKnownObjectMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedMapIndexGetExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNullableScalarRuntimeValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedObjectValuesCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedDynamicObjectIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedDynamicObjectMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
@@ -2459,6 +2460,12 @@ export function emitCValueExpression(
     return collectionConstructor
   }
 
+  const objectValuesCall = deps.emitPreparedObjectValuesCallExpression(expression, context)
+
+  if (objectValuesCall != null) {
+    return objectValuesCall
+  }
+
   if (deps.isErrorConstructorExpression(expression)) {
     return deps.emitCErrorObjectValueExpression(expression, context)
   }
@@ -2598,6 +2605,13 @@ export function emitCValueExpression(
     }
 
     if (valueType === 'map' || valueType === 'set') {
+      return {
+        lines: [],
+        expression: name
+      }
+    }
+
+    if (valueType === 'unknown' && context.ownedValues.includes(name)) {
       return {
         lines: [],
         expression: name

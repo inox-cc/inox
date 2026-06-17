@@ -128,6 +128,58 @@ int main(void) {
   }
 })
 
+test('generated C Object.values compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-values-'))
+  const source = join(dir, 'object-values.c')
+  const output = join(dir, 'object-values')
+
+  try {
+    const result = compileSource(
+      `const foo = [{ '1': 2 }, { '3': 4 }]
+
+for (const a of foo) {
+  console.log(a)
+  const b = Object.values(a)
+  console.log(b)
+  const c = Object.values(a)[0]
+  console.log(c)
+  const d = Object.entries(a)
+  console.log(d)
+  const e = Object.entries(a)[0]
+  console.log(e)
+}
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '{ 1: 2 }\n[2]\n2\n[[1, 2]]\n[1, 2]\n{ 3: 4 }\n[4]\n4\n[[3, 4]]\n[3, 4]\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 
 test('C runtime JSON parse and stringify compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])

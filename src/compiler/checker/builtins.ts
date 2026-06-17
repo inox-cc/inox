@@ -315,6 +315,14 @@ export const globals: Map<string, SymbolInfo> = new Map([
     }
   ],
   [
+    'Object',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
+  [
     'AbortController',
     {
       kind: 'global',

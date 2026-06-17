@@ -2532,9 +2532,13 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   if (deps.isIndexAccessExpression(statement.init)) {
     const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
 
-    if (runtimeElement != null && runtimeElement.valueType === 'object') {
-      return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
+    if (runtimeElement != null && isRuntimeValueDeclarationValueType(runtimeElement.valueType)) {
+      return emitRuntimeValueVariableDeclaration(statement, statement.init, context, runtimeElement.valueType)
     }
+  }
+
+  if (statement.init.type === 'CallExpression' && statement.init.objectRuntimeMethod != null) {
+    return emitRuntimeValueVariableDeclaration(statement, statement.init, context, 'array')
   }
 
   if (

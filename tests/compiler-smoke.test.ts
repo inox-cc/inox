@@ -177,6 +177,37 @@ test('lowers Array.isArray calls to C runtime tag checks', () => {
   assert.match(result.code, /\(ccjs_number_value\(7\)\.tag == CCJS_TAG_ARRAY\)/)
 })
 
+test('lowers Object.values calls to C object value arrays', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const user = { score: 7 }
+  const values = Object.values(user)
+  const first = Object.values(user)[0]
+  const entries = Object.entries(user)
+  const firstEntry = Object.entries(user)[0]
+  console.log(user, values, first, entries, firstEntry)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.deepEqual(
+    result.ir.globalUsages.map((usage) => usage.path.join('.')),
+    ['Object.values', 'Object.values', 'Object.entries', 'Object.entries']
+  )
+  assert.match(result.code, /ccjs_object_values\(&ccjs_default_allocator, user, &ccjs_object_values_\d+\)/)
+  assert.match(result.code, /ccjs_object_entries\(&ccjs_default_allocator, user, &ccjs_object_entries_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_object_values_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_object_entries_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, user, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, values, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, first, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, entries, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, firstEntry, &ccjs_log_value_\d+\)/)
+})
+
 test('erases TypeScript as expressions before C emission', () => {
   const result = compileSource(
     `export function main(): void {

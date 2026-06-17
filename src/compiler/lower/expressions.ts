@@ -196,6 +196,7 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   target.mathRuntimeMethod = nullableString(source.mathRuntimeMethod)
   target.osRuntimeConstant = nullableString(source.osRuntimeConstant)
   target.osRuntimeMethod = nullableString(source.osRuntimeMethod)
+  target.objectRuntimeMethod = nullableString(source.objectRuntimeMethod)
   target.pathRuntimeConstant = nullableString(source.pathRuntimeConstant)
   target.pathRuntimeMethod = nullableString(source.pathRuntimeMethod)
   target.processRuntimeEnvName = nullableString(source.processRuntimeEnvName)

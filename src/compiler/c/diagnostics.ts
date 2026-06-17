@@ -51,6 +51,8 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
     path === 'Promise.resolve' ||
     path === 'Promise.reject' ||
     path === 'Array.isArray' ||
+    path === 'Object.entries' ||
+    path === 'Object.values' ||
     path === 'fs.promises.access' ||
     path === 'fs.promises.appendFile' ||
     path === 'fs.promises.copyFile' ||

@@ -52,6 +52,7 @@ type FeatureNode = AnyNode & {
   operator?: string | null
   osRuntimeConstant?: string | null
   osRuntimeMethod?: string | null
+  objectRuntimeMethod?: string | null
   ownership?: string | null
   params?: FeatureRawNode[]
   path?: string[]
@@ -547,6 +548,12 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
 
   if (node.osRuntimeMethod != null || node.osRuntimeConstant != null) {
     features.add('os')
+    features.add('runtime-values')
+  }
+
+  if (node.objectRuntimeMethod != null) {
+    features.add('collections')
+    features.add('objects')
     features.add('runtime-values')
   }
 
