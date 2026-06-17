@@ -816,6 +816,7 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   isBoxedRuntimeStringName,
   isBoxedRuntimeStringReference,
   isMemberAccessExpression,
+  resolveKnownObjectIndex,
   resolveKnownObjectMember,
   resolveNetAddressStringMember
 }

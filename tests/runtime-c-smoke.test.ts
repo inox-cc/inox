@@ -5206,6 +5206,61 @@ console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getNam
 })
 
 
+test('generated C dynamic object string field methods compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-string-fields-'))
+  const source = join(dir, 'dynamic-string-fields.c')
+  const output = join(dir, 'dynamic-string-fields')
+
+  try {
+    const result = compileSource(
+      `function hasInterpolation(node: object): boolean {
+  return node.raw.includes('\${') && node.raw.startsWith('expr') && node.raw.endsWith('}')
+}
+
+function body(node: object): string {
+  return node['raw'].slice(1, -1).trim()
+}
+
+function countNames(node: object): number {
+  return node.names.split(',').length
+}
+
+const first = { raw: 'expr \${name}', names: 'Ada,Grace' }
+const second = { raw: 'plain', names: 'Grace,Ada' }
+console.log(hasInterpolation(first), hasInterpolation(second), body({ raw: ' Ada ' }), countNames(first))
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 0 Ada 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string charCodeAt calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

@@ -354,6 +354,40 @@ export function main(): void {
 })
 
 
+test('lowers C string methods over dynamic object string fields', () => {
+  const result = compileSource(
+    `function hasInterpolation(node: object): boolean {
+  return node.raw.includes('\${') && node.raw.startsWith('expr') && node.raw.endsWith('}')
+}
+
+function body(node: object): string {
+  return node['raw'].slice(1, -1).trim()
+}
+
+function countNames(node: object): number {
+  return node.names.split(',').length
+}
+
+export function main(): void {
+  const first = { raw: 'expr \${name}', names: 'Ada,Grace' }
+  console.log(hasInterpolation(first), body({ raw: ' Ada ' }), countNames(first))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "raw", 3, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_includes_parts\(ccjs_string_method_value_\d+->bytes, ccjs_string_method_value_\d+->len, "\$\{", 2\)/)
+  assert.match(result.code, /ccjs_string_starts_with_parts\(ccjs_string_method_value_\d+->bytes, ccjs_string_method_value_\d+->len, "expr", 4\)/)
+  assert.match(result.code, /ccjs_string_ends_with_parts\(ccjs_string_method_value_\d+->bytes, ccjs_string_method_value_\d+->len, "}", 1\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, ccjs_slice_string_\d+->bytes, ccjs_slice_string_\d+->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_trim_parts\(&ccjs_default_allocator, ccjs_trim_string_\d+->bytes, ccjs_trim_string_\d+->len, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_split_parts\(&ccjs_default_allocator, ccjs_split_string_\d+->bytes, ccjs_split_string_\d+->len, ",", 1, &ccjs_split_array_\d+\)/)
+})
+
+
 test('lowers C string charCodeAt calls to byte reads', () => {
   const result = compileSource(
     `function isLower(ch: string): boolean {

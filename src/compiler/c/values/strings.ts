@@ -95,6 +95,7 @@ export type StringLoweringDependencies = {
   isBoxedRuntimeStringName(name: string, context: StringCContext): boolean
   isBoxedRuntimeStringReference(expression: AnyNode, context: StringCContext): boolean
   isMemberAccessExpression(expression: AnyNode): boolean
+  resolveKnownObjectIndex(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
   resolveKnownObjectMember(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
   resolveNetAddressStringMember(expression: AnyNode, context: StringCContext): string | null
 }
@@ -261,6 +262,10 @@ export function emitPreparedStringLengthExpression(
     return null
   }
 
+  if (isDynamicRuntimeStringFieldExpression(expression.object, context)) {
+    return null
+  }
+
   const operand = emitPreparedStringBytesOperand(expression.object, context, 'ccjs_length_string')
   const length = nextCName(context, 'ccjs_string_length')
   const lines: string[] = []
@@ -275,8 +280,8 @@ export function emitPreparedStringLengthExpression(
 }
 
 export function emitPreparedStringCompareExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const left = emitPreparedStringBytesOperand(expression.left, context)
-  const right = emitPreparedStringBytesOperand(expression.right, context)
+  const left = emitPreparedStringBytesOperand(expression.left, context, 'ccjs_cmp_string')
+  const right = emitPreparedStringBytesOperand(expression.right, context, 'ccjs_cmp_string')
   const equals = `(${left.length} == ${right.length} && memcmp(${left.bytes}, ${right.bytes}, ${left.length}) == 0)`
   const lines: string[] = []
   let resultExpression = `(!${equals})`
@@ -358,10 +363,8 @@ function isNodeCandidate(value: any): boolean {
 export function emitPreparedStringBytesOperand(
   expression: AnyNode | null | undefined,
   context: StringCContext,
-  tempPrefix?: string
+  tempPrefix: string
 ): PreparedStringBytesOperand {
-  const actualTempPrefix = tempPrefix || 'ccjs_cmp_string'
-
   if (expression != null && expression.type === 'StringLiteral') {
     return {
       lines: [],
@@ -382,7 +385,7 @@ export function emitPreparedStringBytesOperand(
 
   if (expression != null && expression.type === 'TemplateLiteral') {
     const value = emitCTemplateLiteralValueExpression(expression, context)
-    const string = nextCName(context, actualTempPrefix)
+    const string = nextCName(context, tempPrefix)
     const lines: string[] = []
 
     pushAllLines(lines, value.lines)
@@ -400,7 +403,7 @@ export function emitPreparedStringBytesOperand(
 
     if (context.variables.get(name) === 'string') {
       if (stringDeps(context).isBoxedRuntimeStringName(name, context)) {
-        const string = nextCName(context, actualTempPrefix)
+        const string = nextCName(context, tempPrefix)
 
         return {
           lines: [
@@ -452,9 +455,15 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
+  const dynamicRuntimeString = emitPreparedDynamicRuntimeStringBytesOperand(expression, context, tempPrefix)
+
+  if (dynamicRuntimeString != null) {
+    return dynamicRuntimeString
+  }
+
   if (stringDeps(context).inferExpressionType(expression, context) === 'string') {
     const value = stringDeps(context).emitCValueExpression(expression, context)
-    const string = nextCName(context, actualTempPrefix)
+    const string = nextCName(context, tempPrefix)
     const lines: string[] = []
 
     pushAllLines(lines, value.lines)
@@ -482,9 +491,99 @@ export function emitPreparedStringBytesOperand(
   }
 }
 
+function emitPreparedDynamicRuntimeStringBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  if (!isDynamicRuntimeStringFieldExpression(expression, context)) {
+    return null
+  }
+
+  const value = stringDeps(context).emitCValueExpression(expression, context)
+  const string = nextCName(context, tempPrefix)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+  lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
+}
+
+function isDynamicRuntimeStringFieldExpression(expression: AnyNode, context: StringCContext): boolean {
+  const object = dynamicRuntimeObjectFieldObject(expression)
+
+  if (object == null) {
+    return false
+  }
+
+  if (knownObjectFieldValueType(expression, context) != null) {
+    return false
+  }
+
+  return isDynamicRuntimeObjectExpression(object, context)
+}
+
+function isDynamicRuntimeObjectExpression(expression: AnyNode, context: StringCContext): boolean {
+  if (stringDeps(context).inferExpressionType(expression, context) === 'object') {
+    return true
+  }
+
+  const knownValueType = knownObjectFieldValueType(expression, context)
+
+  if (knownValueType != null) {
+    return knownValueType === 'object'
+  }
+
+  const object = dynamicRuntimeObjectFieldObject(expression)
+
+  if (object == null) {
+    return false
+  }
+
+  return isDynamicRuntimeObjectExpression(object, context)
+}
+
+function knownObjectFieldValueType(expression: AnyNode, context: StringCContext): string | null {
+  if (stringDeps(context).isMemberAccessExpression(expression)) {
+    const member = stringDeps(context).resolveKnownObjectMember(expression, context)
+
+    if (member != null) {
+      return member.valueType
+    }
+  }
+
+  if (expression.type === 'IndexExpression') {
+    const field = stringDeps(context).resolveKnownObjectIndex(expression, context)
+
+    if (field != null) {
+      return field.valueType
+    }
+  }
+
+  return null
+}
+
+function dynamicRuntimeObjectFieldObject(expression: AnyNode): AnyNode | null {
+  if (expression.type === 'MemberExpression') {
+    return expression.object
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    return expression.object
+  }
+
+  return null
+}
+
 export function emitCStringConcatValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const left = emitPreparedStringBytesOperand(expression.left, context)
-  const right = emitPreparedStringBytesOperand(expression.right, context)
+  const left = emitPreparedStringBytesOperand(expression.left, context, 'ccjs_cmp_string')
+  const right = emitPreparedStringBytesOperand(expression.right, context, 'ccjs_cmp_string')
   const temp = nextCName(context, 'ccjs_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
@@ -1040,6 +1139,10 @@ function isStringLengthObject(expression: AnyNode | null | undefined, context: S
     const name = expression.path[0]
 
     return context.variables.get(name) === 'string' || context.runtimeStrings.has(name)
+  }
+
+  if (isDynamicRuntimeStringFieldExpression(expression, context)) {
+    return true
   }
 
   return stringDeps(context).inferExpressionType(expression, context) === 'string'
