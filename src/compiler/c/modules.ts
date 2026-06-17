@@ -291,7 +291,7 @@ function toCPath(path: string, host: CModuleHost): string {
     return path
   }
 
-  return path.split(host.pathSeparator).join('/')
+  return joinStrings(path.split(host.pathSeparator), '/')
 }
 
 function commonDirectory(paths: string[], host: CModuleHost): string {
@@ -333,5 +333,19 @@ function cModulePathPrefix(segments: string[], length: number, host: CModuleHost
     prefix.push(segments[index])
   }
 
-  return prefix.join(host.pathSeparator)
+  return joinStrings(prefix, host.pathSeparator)
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
