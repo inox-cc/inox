@@ -32,7 +32,9 @@ export function reportUnsupportedCGlobalUsages(
   diagnostics: Diagnostic[],
   context: CGlobalUsageSupportContext
 ): void {
-  for (const usage of globalUsages) {
+  for (let index = 0; index < globalUsages.length; index = index + 1) {
+    const usage = globalUsages[index] as IrGlobalUsage
+
     if (!isSupportedCGlobalUsage(usage, context)) {
       reportCJsGlobalDiagnostic(diagnostics, usage.loc)
     }
@@ -180,7 +182,7 @@ export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
   return mathRuntimeMethodNameFromPath(usage.path) != null
 }
 
-export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc?: SourceLocation): void {
+export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | null | undefined): void {
   if (hasCJsGlobalDiagnosticAtLocation(diagnostics, loc)) {
     return
   }
@@ -190,7 +192,7 @@ export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc?: Sourc
   )
 }
 
-function hasCJsGlobalDiagnosticAtLocation(diagnostics: Diagnostic[], loc: SourceLocation | undefined): boolean {
+function hasCJsGlobalDiagnosticAtLocation(diagnostics: Diagnostic[], loc: SourceLocation | null | undefined): boolean {
   for (let index = 0; index < diagnostics.length; index = index + 1) {
     const item = diagnostics[index]
 
@@ -202,7 +204,7 @@ function hasCJsGlobalDiagnosticAtLocation(diagnostics: Diagnostic[], loc: Source
   return false
 }
 
-function sameLocation(left: SourceLocation | undefined, right: SourceLocation | undefined): boolean {
+function sameLocation(left: SourceLocation | undefined, right: SourceLocation | null | undefined): boolean {
   if (left == null || right == null) {
     return left == null && right == null
   }
