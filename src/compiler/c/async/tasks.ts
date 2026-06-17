@@ -765,6 +765,16 @@ function getAsyncTaskLastStatement(statements: AsyncTaskAstNode[]): AsyncTaskAst
   return statements[statements.length - 1]
 }
 
+function getAsyncTaskReturnArgument(statement: AsyncTaskAstNode): AsyncTaskAstNode | null {
+  const argument = statement.argument
+
+  if (argument == null) {
+    return null
+  }
+
+  return argument
+}
+
 function getAsyncTaskStatementsBeforeLast(statements: AsyncTaskAstNode[]): AsyncTaskAstNode[] {
   if (statements.length === 0) {
     return []
@@ -874,7 +884,11 @@ function resolveAsyncTaskBodyPlan(
 
   const resolvedAwaits = asyncTaskAwaitStepsOrEmpty(awaits)
   const returnContext = createAsyncTaskExpressionContext(context, params, resolvedAwaits)
-  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement?.argument ?? null, returnType, returnContext)
+  const returnExpression = resolveAsyncTaskReturnValueExpression(
+    getAsyncTaskReturnArgument(returnStatement),
+    returnType,
+    returnContext
+  )
 
   if (returnType !== 'void' && returnExpression == null) {
     return null
@@ -961,7 +975,11 @@ function resolveAsyncTaskTryBodyPlan(
 
   const resolvedAwaits = asyncTaskAwaitStepsOrEmpty(awaits)
   const returnContext = createAsyncTaskExpressionContext(context, params, resolvedAwaits)
-  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement?.argument ?? null, returnType, returnContext)
+  const returnExpression = resolveAsyncTaskReturnValueExpression(
+    getAsyncTaskReturnArgument(returnStatement),
+    returnType,
+    returnContext
+  )
 
   if (returnType !== 'void' && returnExpression == null) {
     return null
@@ -1071,7 +1089,11 @@ function resolveAsyncTaskNestedTryBodyPlan(
 
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
   registerAsyncTaskStatementListLocals(returnContext, successStatements)
-  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement?.argument ?? null, returnType, returnContext)
+  const returnExpression = resolveAsyncTaskReturnValueExpression(
+    getAsyncTaskReturnArgument(returnStatement),
+    returnType,
+    returnContext
+  )
 
   if (returnType !== 'void' && returnExpression == null) {
     return null
@@ -1585,7 +1607,11 @@ function resolveAsyncTaskTryHandler(
   }
 
   registerAsyncTaskStatementListLocals(catchContext, handlerStatements)
-  const returnExpression = resolveAsyncTaskReturnValueExpression(returnStatement?.argument ?? null, returnType, catchContext)
+  const returnExpression = resolveAsyncTaskReturnValueExpression(
+    getAsyncTaskReturnArgument(returnStatement),
+    returnType,
+    catchContext
+  )
 
   if (returnExpression == null) {
     return null
