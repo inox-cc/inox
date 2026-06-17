@@ -10049,8 +10049,11 @@ class Checker {
 
   resolveObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
     const bases = this.resolveObjectShapeBases(shape)
-    const fields = bases.fields.concat(shape.fields)
+    const fields: AnyNode[] = []
     const resolvedFields: AnyNode[] = []
+
+    pushAllNodes(fields, bases.fields)
+    pushAllNodes(fields, shape.fields)
 
     for (const field of fields) {
       const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
@@ -10322,8 +10325,11 @@ class Checker {
 
   resolveWeakTargetObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
     const bases = this.resolveObjectShapeBases(shape)
-    const fields = bases.fields.concat(shape.fields)
+    const fields: AnyNode[] = []
     const resolvedFields: AnyNode[] = []
+
+    pushAllNodes(fields, bases.fields)
+    pushAllNodes(fields, shape.fields)
 
     for (const field of fields) {
       const declared = this.resolveWeakTargetShapeFieldType(field)
@@ -11009,6 +11015,12 @@ function joinStrings(values: readonly string[], separator: string): string {
   }
 
   return result
+}
+
+function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
+  for (let index = 0; index < source.length; index = index + 1) {
+    target.push(source[index])
+  }
 }
 
 function isPromiseMethod(name: string): boolean {
