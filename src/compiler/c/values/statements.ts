@@ -350,11 +350,21 @@ function statementDefinitelyReturns(statement: StatementNode): boolean {
   }
 
   if (statement.type === 'BlockStatement') {
-    return statement.body.some(statementDefinitelyReturns)
+    return statementBodyDefinitelyReturns(statement.body)
   }
 
   if (statement.type === 'IfStatement' && statement.alternate != null) {
     return statementDefinitelyReturns(statement.consequent) && statementDefinitelyReturns(statement.alternate)
+  }
+
+  return false
+}
+
+function statementBodyDefinitelyReturns(statements: StatementNode[]): boolean {
+  for (let index = 0; index < statements.length; index = index + 1) {
+    if (statementDefinitelyReturns(statements[index])) {
+      return true
+    }
   }
 
   return false

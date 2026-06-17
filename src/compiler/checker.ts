@@ -418,7 +418,7 @@ class Checker {
       }
 
       if (item.type === 'ClassDeclaration') {
-        const constructorMethod = item.methods.find((method) => method.name === 'constructor')
+        const constructorMethod = this.findClassConstructorMethod(item)
         let constructorParams: AnyNode[] = []
 
         if (constructorMethod != null) {

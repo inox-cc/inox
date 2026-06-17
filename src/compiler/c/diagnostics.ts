@@ -180,13 +180,25 @@ export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
 }
 
 export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc?: SourceLocation): void {
-  if (diagnostics.some((item) => item.code === 'CCJS_C_JS_GLOBAL' && sameLocation(item, loc))) {
+  if (hasCJsGlobalDiagnosticAtLocation(diagnostics, loc)) {
     return
   }
 
   diagnostics.push(
     diagnostic('CCJS_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', loc)
   )
+}
+
+function hasCJsGlobalDiagnosticAtLocation(diagnostics: Diagnostic[], loc: SourceLocation | undefined): boolean {
+  for (let index = 0; index < diagnostics.length; index = index + 1) {
+    const item = diagnostics[index]
+
+    if (item.code === 'CCJS_C_JS_GLOBAL' && sameLocation(item, loc)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function sameLocation(left: SourceLocation | undefined, right: SourceLocation | undefined): boolean {

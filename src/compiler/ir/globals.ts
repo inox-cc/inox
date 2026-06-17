@@ -84,8 +84,6 @@ const jsStdGlobalRootNames = [
   'setImmediate'
 ]
 
-const jsStdGlobalRoots = createStringSet(jsStdGlobalRootNames)
-
 export function collectGlobalUsages(program: ProgramNode): IrGlobalUsage[] {
   const usages: IrGlobalUsage[] = []
 
@@ -179,7 +177,7 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
 
     const root = firstString(path)
 
-    if (root != null && jsStdGlobalRoots.has(root)) {
+    if (root != null && isJsStdGlobalRootName(root)) {
       pushGlobalUsage(usages, path, item)
       return
     }
@@ -228,7 +226,7 @@ function globalUsagePath(expression: GlobalUsageNode | null | undefined): string
 
     const root = firstString(path)
 
-    if (root != null && jsStdGlobalRoots.has(root)) {
+    if (root != null && isJsStdGlobalRootName(root)) {
       return path
     }
   }
@@ -285,6 +283,38 @@ function appendString(values: string[], value: string): string[] {
   const result = copyStrings(values)
   result.push(value)
   return result
+}
+
+function isJsStdGlobalRootName(name: string): boolean {
+  return (
+    name === 'Array' ||
+    name === 'Buffer' ||
+    name === 'ccjs' ||
+    name === 'Date' ||
+    name === 'Error' ||
+    name === 'Int8Array' ||
+    name === 'Int16Array' ||
+    name === 'Int32Array' ||
+    name === 'JSON' ||
+    name === 'Map' ||
+    name === 'Math' ||
+    name === 'Promise' ||
+    name === 'Set' ||
+    name === 'Uint8Array' ||
+    name === 'Uint16Array' ||
+    name === 'Uint32Array' ||
+    name === 'crypto' ||
+    name === 'fetch' ||
+    name === 'fs' ||
+    name === 'http' ||
+    name === 'performance' ||
+    name === 'clearTimeout' ||
+    name === 'clearInterval' ||
+    name === 'clearImmediate' ||
+    name === 'setTimeout' ||
+    name === 'setInterval' ||
+    name === 'setImmediate'
+  )
 }
 
 function copyStrings(values: string[]): string[] {
