@@ -7810,11 +7810,12 @@ class Checker {
     expression.arrayElementType = elementType
     expression.arrayElementDeclaredType = elementDeclaredType
 
-    if (expression.callee.property === 'push') {
+    if (expression.callee.property === 'push' || expression.callee.property === 'unshift') {
+      const method = expression.callee.property
       expression.valueType = 'number'
 
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `array.push expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report('CCJS_ARG_COUNT', `array.${method} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
       }
 
       if (expression.args[0] != null) {

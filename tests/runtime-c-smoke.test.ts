@@ -6172,6 +6172,53 @@ console.log(names.length, names[1])
 })
 
 
+test('generated C Array.unshift expressions compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-unshift-'))
+  const source = join(dir, 'array-unshift.c')
+  const output = join(dir, 'array-unshift')
+
+  try {
+    const result = compileSource(
+      `const values: number[] = [2, 3]
+const length = values.unshift(1)
+console.log(length, values.length, values[0], values[1], values[2])
+
+const names: string[] = ['Grace']
+const nameLength = names.unshift('Ada')
+console.log(nameLength, names[0], names[1])
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '3 3 1 2 3\n2 Ada Grace\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C Array.pop expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

@@ -27,5 +27,6 @@ ccjs_status ccjs_array_push(ccjs_value array, ccjs_value value);
 ccjs_status ccjs_array_set(ccjs_value array, size_t index, ccjs_value value);
 ccjs_status ccjs_array_slice(ccjs_allocator* allocator, ccjs_value array, size_t start, size_t end, ccjs_value* out);
 ccjs_status ccjs_array_sort(ccjs_value array);
+ccjs_status ccjs_array_unshift(ccjs_value array, ccjs_value value, size_t* out);
 
 #endif

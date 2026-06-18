@@ -247,6 +247,7 @@ export type StatementLoweringDependencies = {
     expression: StatementNode,
     context: CFunctionContext
   ): PreparedArrayExpression | null
+  emitPreparedArrayUnshiftCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedAsyncFunctionPromiseCallExpression(expression: StatementNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
   emitPreparedBytesIndexAssignment(expression: StatementNode, context: CFunctionContext): PreparedStatement | null
   emitPreparedCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
@@ -2749,6 +2750,12 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (arrayPushCall != null) {
       return arrayPushCall.lines
+    }
+
+    const arrayUnshiftCall = deps.emitPreparedArrayUnshiftCallExpression(expression, context)
+
+    if (arrayUnshiftCall != null) {
+      return arrayUnshiftCall.lines
     }
 
     const arrayMapCall = deps.emitPreparedArrayMapCallExpression(expression, context)

@@ -60,6 +60,13 @@ import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectSh
 
 type CSourceLocation = SourceLocation | null | undefined
 
+type CDeclarationFunctionContext = CFunctionContext & {
+  classInstanceTypes: Map<string, string>
+  functionReturnShapes: Map<string, CObjectShape | null>
+  returnShape?: CObjectShape | null
+  variables: Map<string, string>
+}
+
 type CFunctionReturnInfo = {
   returnType: string
   returnNullable: boolean
@@ -201,7 +208,7 @@ export function emitFunctionDeclaration(
   const returnType = returnInfo.returnType
   const returnNullable = returnInfo.returnNullable
   const params = resolveFunctionDeclarationParams(statement.name, statement.params, baseContext)
-  const context = createFunctionContext(baseContext, returnType, returnNullable)
+  const context: CDeclarationFunctionContext = createFunctionContext(baseContext, returnType, returnNullable)
   const returnShape = context.functionReturnShapes.get(statement.name)
 
   if (returnShape != null) {
@@ -472,7 +479,7 @@ export function emitClassMethodDeclaration(
   baseContext: CEmitContext,
   deps: CDeclarationEmissionDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, method.returnType, method.returnNullable)
+  const context: CDeclarationFunctionContext = createFunctionContext(baseContext, method.returnType, method.returnNullable)
   const params = method.params
 
   context.returnShape = null

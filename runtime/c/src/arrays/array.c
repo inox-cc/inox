@@ -174,6 +174,30 @@ ccjs_status ccjs_array_push(ccjs_value array, ccjs_value value) {
   return CCJS_OK;
 }
 
+ccjs_status ccjs_array_unshift(ccjs_value array, ccjs_value value, size_t* out) {
+  if (out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  ccjs_status status = ccjs_array_reserve(instance, instance->len + 1);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  for (size_t index = instance->len; index > 0; index -= 1) {
+    instance->items[index] = instance->items[index - 1];
+  }
+
+  ccjs_retain(value);
+  instance->items[0] = value;
+  instance->len += 1;
+  *out = instance->len;
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_array_get(ccjs_value array, size_t index, ccjs_value* out) {
   if (out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
     return CCJS_ERR_TYPE;

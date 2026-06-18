@@ -33,6 +33,10 @@ type HttpHandlerContext = {
   stringLocals: Map<string, string>
 }
 
+type HttpFunctionContext = CFunctionContext & {
+  variables: Map<string, string>
+}
+
 type HttpStaticStringContext = {
   stringLocals: Map<string, string>
 }
@@ -86,7 +90,7 @@ export function emitHttpHandlerDeclaration(
   baseContext: CEmitContext,
   deps: HttpLoweringDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, 'void', false)
+  const context: HttpFunctionContext = createFunctionContext(baseContext, 'void', false)
   const expression = wrapper.expression
   const firstParam = expression.params[0]
   const secondParam = expression.params[1]

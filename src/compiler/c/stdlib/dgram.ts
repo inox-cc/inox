@@ -22,6 +22,10 @@ type DgramMessageContext = {
   stringLocals: Map<string, string>
 }
 
+type DgramFunctionContext = CFunctionContext & {
+  variables: Map<string, string>
+}
+
 type DgramAstNode = AnyNode
 
 type DgramSocketCreateOptions = {
@@ -102,7 +106,7 @@ export function emitDgramMessageHandlerDeclaration(
   baseContext: CEmitContext,
   deps: DgramLoweringDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, 'void', false)
+  const context: DgramFunctionContext = createFunctionContext(baseContext, 'void', false)
   const expression = wrapper.expression
   const firstParam = expression.params[0]
   const secondParam = expression.params[1]

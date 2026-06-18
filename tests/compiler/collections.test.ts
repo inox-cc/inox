@@ -430,6 +430,33 @@ export function main(): void {
 })
 
 
+test('lowers C Array.unshift calls for primitive runtime arrays', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const values: number[] = [2, 3]
+  const length = values.unshift(1)
+  const names: string[] = ['Grace']
+  names.unshift('Ada')
+  console.log(length, values[0], names[0])
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const length = main?.body.find((item) => item.name === 'length')
+
+  assert.equal(length?.valueType, 'number')
+  assert.match(result.code, /ccjs_array_unshift\(values, ccjs_number_value\(1\), &ccjs_array_unshift_len_\d+\)/)
+  assert.match(result.code, /const double length = \(double\)ccjs_array_unshift_len_\d+;/)
+  assert.match(result.code, /ccjs_array_unshift\(names, ccjs_value_\d+, &ccjs_array_unshift_len_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_[a-z_]+_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(names, 0, &ccjs_[a-z_]+_\d+\)/)
+})
+
+
 test('lowers C Array.slice calls to runtime arrays', () => {
   const result = compileSource(
     `export function main(): void {

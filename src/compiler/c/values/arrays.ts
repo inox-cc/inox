@@ -481,6 +481,16 @@ export function isArrayIncludesCall(expression: ArrayMaybeNode): boolean {
   return callee.type === 'MemberExpression' && callee.property === 'includes'
 }
 
+export function isArrayUnshiftCall(expression: ArrayMaybeNode): boolean {
+  if (expression == null || expression.type !== 'CallExpression') {
+    return false
+  }
+
+  const callee = expression.callee
+
+  return callee.type === 'MemberExpression' && callee.property === 'unshift'
+}
+
 export function isArrayLengthExpression(expression: ArrayMaybeNode, context: ArrayFunctionContext): boolean {
   if (expression == null) {
     return false
@@ -1412,6 +1422,50 @@ export function emitPreparedArrayPushCallExpression(
   return null
 }
 
+export function emitPreparedArrayUnshiftCallExpression(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): PreparedExpression | null {
+  if (expression == null || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression' || callee.property !== 'unshift' || expression.args.length !== 1) {
+    return null
+  }
+
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
+
+  if (receiver == null) {
+    return null
+  }
+
+  const arg = expression.args[0]
+
+  if (arg == null) {
+    return null
+  }
+
+  const valueType = arrayDeps(context).inferExpressionType(arg, context)
+  const value = emitPreparedArrayElementValue(arg, valueType, context)
+  const length = nextCName(context, 'ccjs_array_unshift_len')
+  const lines: string[] = []
+
+  updateUnshiftedArrayMetadata(callee.object, valueType, context)
+
+  appendLines(lines, receiver.lines)
+  appendLines(lines, value.lines)
+  lines.push(`size_t ${length} = 0;`)
+  lines.push(emitStatusCheck(`ccjs_array_unshift(${receiver.expression}, ${value.expression}, &${length})`, context))
+
+  return {
+    lines,
+    expression: `(double)${length}`
+  }
+}
+
 export function emitPreparedArrayPopCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext,
@@ -2242,6 +2296,49 @@ function updatePushedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, 
   nextElements.push({
     valueType
   })
+  const elementType = resolveForOfElementType(nextElements)
+
+  if (elementType === 'unknown') {
+    ensureArrayShapes(context).delete(name)
+    context.runtimeArrayElementTypes.set(name, 'unknown')
+    return
+  }
+
+  ensureArrayShapes(context).set(name, nextElements)
+}
+
+function updateUnshiftedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, context: ArrayFunctionContext): void {
+  if (receiver == null || receiver.type !== 'Reference' || receiver.path.length !== 1 || valueType === 'unknown') {
+    return
+  }
+
+  const name = receiver.path[0]
+  const elements = findArrayShape(context, name)
+
+  if (elements == null) {
+    if (context.variables.get(name) === 'array') {
+      const existingElementType = context.runtimeArrayElementTypes.get(name)
+
+      if (existingElementType == null) {
+        context.runtimeArrayElementTypes.set(name, valueType)
+      } else {
+        context.runtimeArrayElementTypes.set(name, existingElementType)
+      }
+    }
+
+    return
+  }
+
+  const nextElements: CArrayElementInfo[] = [
+    {
+      valueType
+    }
+  ]
+
+  for (const element of elements) {
+    nextElements.push(element)
+  }
+
   const elementType = resolveForOfElementType(nextElements)
 
   if (elementType === 'unknown') {

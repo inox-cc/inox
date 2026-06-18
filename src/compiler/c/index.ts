@@ -394,9 +394,11 @@ import {
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedArraySliceCallExpression,
   emitPreparedArraySortCallExpression,
+  emitPreparedArrayUnshiftCallExpression,
   isArrayIncludesCall,
   isArrayLengthExpression,
   isArrayMethodCall,
+  isArrayUnshiftCall,
   resolveForOfElementType,
   resolveKnownArrayIndex,
   resolveKnownArrayLength,
@@ -675,6 +677,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedArrayPushCallExpression,
   emitPreparedArraySliceCallExpression,
   emitPreparedArraySortCallExpression,
+  emitPreparedArrayUnshiftCallExpression,
   emitPreparedAsyncFunctionPromiseCallExpression,
   emitPreparedBytesIndexAssignment: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBytesIndexAssignment(expression, context, binaryLoweringDependencies),
@@ -1127,6 +1130,7 @@ const cScalarExpressionDependencies = {
   emitPreparedArrayLengthExpression,
   emitPreparedArrayIncludesCallExpression,
   emitPreparedArrayIsArrayCallExpression,
+  emitPreparedArrayUnshiftCallExpression,
   emitPreparedBinaryNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBinaryNumberCallExpression(expression, context, binaryLoweringDependencies),
   emitPreparedBytesIndexExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -2347,7 +2351,7 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     return functionScalarDeclaration
   }
 
-  if (isArrayMethodCall(statement.init) && !isArrayIncludesCall(statement.init)) {
+  if (isArrayMethodCall(statement.init) && !isArrayIncludesCall(statement.init) && !isArrayUnshiftCall(statement.init)) {
     pushDiagnostic(context,
       diagnostic('CCJS_C_ARRAY_METHOD', 'array methods are not supported by the current C backend slice', statement.loc)
     )
