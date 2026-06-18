@@ -7869,6 +7869,25 @@ class Checker {
 
     expression.valueType = 'array'
 
+    if (expression.callee.property === 'slice') {
+      if (expression.args.length > 2) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `array.slice expects 0, 1 or 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+        const argType = this.checkExpression(arg)
+
+        this.checkAssignableType(argType, 'number', arg.loc, false, false)
+      }
+
+      return 'array'
+    }
+
     if (expression.callee.property === 'sort') {
       if (expression.args.length > 1) {
         this.report(

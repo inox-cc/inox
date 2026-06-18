@@ -1052,6 +1052,14 @@ function arrayMethodCallName(expression: FeatureNode): string | null {
     return null
   }
 
+  if (property === 'slice') {
+    const object = callee.object
+
+    if (object == null || object.valueType !== 'array') {
+      return null
+    }
+  }
+
   return arrayRuntimeMethodName(property)
 }
 

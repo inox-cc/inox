@@ -6027,6 +6027,54 @@ console.log('ok')
 })
 
 
+test('generated C Array.slice lowering compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-slice-'))
+  const source = join(dir, 'array-slice.c')
+  const output = join(dir, 'array-slice')
+
+  try {
+    const result = compileSource(
+      `const values = [1, 2, 3, 4]
+const copy = values.slice()
+const middle = values.slice(1, 3)
+const tail = values.slice(-2)
+const clamped = values.slice(-99, 2)
+values[1] = 9
+
+console.log(copy.length, copy[1], values[1], middle[0], middle[1], tail[0], tail[1], clamped.length, clamped[1])
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '4 2 9 2 3 3 4 2 2\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C Array.push statements compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

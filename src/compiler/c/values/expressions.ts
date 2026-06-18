@@ -767,6 +767,7 @@ export type CCallExpressionDependencies = {
     context: CFunctionContext,
     options: PreparedCallOptions | null
   ): PreparedExpression | null
+  emitPreparedArraySliceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArraySortCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedClassMethodCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -871,6 +872,12 @@ export function emitPreparedCallExpression(
 
   if (arrayFilterCall != null) {
     return arrayFilterCall
+  }
+
+  const arraySliceCall = deps.emitPreparedArraySliceCallExpression(expression, context)
+
+  if (arraySliceCall != null) {
+    return arraySliceCall
   }
 
   const arraySortCall = deps.emitPreparedArraySortCallExpression(expression, context)
@@ -2849,6 +2856,7 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext,
     options: PreparedCallOptions | null
   ): PreparedExpression | null
+  emitPreparedArraySliceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBinaryValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedChildProcessCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -3016,6 +3024,12 @@ export function emitCValueExpression(
 
   if (arrayPopCall != null) {
     return arrayPopCall
+  }
+
+  const arraySliceCall = deps.emitPreparedArraySliceCallExpression(expression, context)
+
+  if (arraySliceCall != null) {
+    return arraySliceCall
   }
 
   const mapIndexGet = deps.emitPreparedMapIndexGetExpression(expression, context)

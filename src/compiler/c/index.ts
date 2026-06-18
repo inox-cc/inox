@@ -380,6 +380,7 @@ import type { CollectionLoweringDependencies } from './values/collections.ts'
 import {
   emitArrayFilterVariableDeclaration,
   emitArrayMapVariableDeclaration,
+  emitArraySliceVariableDeclaration,
   emitArraySortVariableDeclaration,
   emitPreparedKnownArrayIndexValueExpression,
   emitPreparedArrayFilterCallExpression,
@@ -389,6 +390,7 @@ import {
   emitPreparedArrayPushCallExpression,
   emitPreparedRuntimeArrayIndexValueExpression,
   emitPreparedRuntimeArrayIndexValue,
+  emitPreparedArraySliceCallExpression,
   emitPreparedArraySortCallExpression,
   isArrayLengthExpression,
   isArrayMethodCall,
@@ -652,10 +654,12 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitObjectVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitObjectVariableDeclaration(statement, context, objectVariableDeclarationDependencies),
   emitOptionalRuntimeCallbackCallExpression,
+  emitArraySliceVariableDeclaration,
   emitPreparedArrayFilterCallExpression,
   emitPreparedArrayMapCallExpression,
   emitPreparedArrayPopCallExpression,
   emitPreparedArrayPushCallExpression,
+  emitPreparedArraySliceCallExpression,
   emitPreparedArraySortCallExpression,
   emitPreparedAsyncFunctionPromiseCallExpression,
   emitPreparedBytesIndexAssignment: (expression: AnyNode, context: CFunctionContext) =>
@@ -1051,6 +1055,7 @@ const cCallExpressionDependencies = {
   emitPreparedArrayFilterCallExpression,
   emitPreparedArrayMapCallExpression,
   emitPreparedArrayPopCallExpression,
+  emitPreparedArraySliceCallExpression,
   emitPreparedArraySortCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
@@ -1180,6 +1185,7 @@ const cValueExpressionDependencies = {
   emitCValueExpression,
   emitOptionalRuntimeCallbackCallValueExpression,
   emitPreparedArrayPopCallExpression,
+  emitPreparedArraySliceCallExpression,
   emitPreparedBinaryValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBinaryValueExpression(expression, context, binaryLoweringDependencies),
   emitPreparedCallExpression,

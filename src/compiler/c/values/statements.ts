@@ -226,6 +226,11 @@ export type StatementLoweringDependencies = {
   emitNullableRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[]
   emitObjectVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
   emitOptionalRuntimeCallbackCallExpression(expression: StatementNode, context: CFunctionContext): string[]
+  emitArraySliceVariableDeclaration(
+    statement: StatementNode,
+    sliced: PreparedArrayExpression,
+    context: CFunctionContext
+  ): string[]
   emitPreparedArrayFilterCallExpression(
     expression: StatementNode,
     context: CFunctionContext
@@ -237,6 +242,7 @@ export type StatementLoweringDependencies = {
     options: PreparedCallOptions | null
   ): PreparedExpression | null
   emitPreparedArrayPushCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArraySliceCallExpression(expression: StatementNode, context: CFunctionContext): PreparedArrayExpression | null
   emitPreparedArraySortCallExpression(
     expression: StatementNode,
     context: CFunctionContext
@@ -1453,6 +1459,15 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
+  const arraySliceCall = deps.emitPreparedArraySliceCallExpression(statement.init, context)
+
+  if (arraySliceCall != null) {
+    return {
+      lines: deps.emitArraySliceVariableDeclaration(statement, arraySliceCall, context),
+      expression: ''
+    }
+  }
+
   const arraySortCall = deps.emitPreparedArraySortCallExpression(statement.init, context)
 
   if (arraySortCall != null) {
@@ -2520,6 +2535,12 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return deps.emitArrayFilterVariableDeclaration(statement, arrayFilterCall, context)
   }
 
+  const arraySliceCall = deps.emitPreparedArraySliceCallExpression(statement.init, context)
+
+  if (arraySliceCall != null) {
+    return deps.emitArraySliceVariableDeclaration(statement, arraySliceCall, context)
+  }
+
   const arraySortCall = deps.emitPreparedArraySortCallExpression(statement.init, context)
 
   if (arraySortCall != null) {
@@ -2740,6 +2761,12 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (arrayFilterCall != null) {
       return arrayFilterCall.lines
+    }
+
+    const arraySliceCall = deps.emitPreparedArraySliceCallExpression(expression, context)
+
+    if (arraySliceCall != null) {
+      return arraySliceCall.lines
     }
 
     const arraySortCall = deps.emitPreparedArraySortCallExpression(expression, context)

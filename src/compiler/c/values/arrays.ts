@@ -16,6 +16,7 @@ import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
+import { emitSliceIndexNormalizationLines } from './slices.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
 import type {
   CArrayElementInfo,
@@ -1103,6 +1104,32 @@ export function emitArrayMapVariableDeclaration(
   return lines
 }
 
+export function emitArraySliceVariableDeclaration(
+  statement: AnyNode,
+  sliced: PreparedArrayExpression,
+  context: ArrayFunctionContext
+): string[] {
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'array')
+
+  let elementType = sliced.elementType
+
+  if (statement.arrayElementType != null) {
+    elementType = statement.arrayElementType
+  }
+
+  context.runtimeArrayElementTypes.set(statement.name, elementType)
+
+  const lines: string[] = []
+
+  appendLines(lines, sliced.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(`${statement.name} = ${sliced.expression};`)
+  lines.push(`ccjs_retain(${statement.name});`)
+
+  return lines
+}
+
 export function emitPreparedArraySortCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
@@ -1137,6 +1164,77 @@ export function emitPreparedArraySortCallExpression(
   }
 
   return null
+}
+
+export function emitPreparedArraySliceCallExpression(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): PreparedArrayExpression | null {
+  if (expression == null || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression' || callee.property !== 'slice' || expression.args.length > 2) {
+    return null
+  }
+
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
+
+  if (receiver == null) {
+    return null
+  }
+
+  let start: PreparedExpression = {
+    lines: [],
+    expression: '0'
+  }
+  const lengthName = nextCName(context, 'ccjs_array_slice_length')
+  const startRaw = nextCName(context, 'ccjs_array_slice_start_raw')
+  const startIndex = nextCName(context, 'ccjs_array_slice_start')
+  const endRaw = nextCName(context, 'ccjs_array_slice_end_raw')
+  const endIndex = nextCName(context, 'ccjs_array_slice_end')
+  let end: PreparedExpression = {
+    lines: [],
+    expression: `((double)${lengthName})`
+  }
+  const out = nextCName(context, 'ccjs_array_slice')
+  const lines: string[] = []
+
+  if (expression.args[0] != null) {
+    start = arrayDeps(context).emitPreparedNumberExpression(expression.args[0], context)
+  }
+
+  if (expression.args[1] != null) {
+    end = arrayDeps(context).emitPreparedNumberExpression(expression.args[1], context)
+  }
+
+  registerOwnedValue(context, out)
+
+  appendLines(lines, receiver.lines)
+  appendLines(lines, start.lines)
+  appendLines(lines, end.lines)
+  lines.push(`size_t ${lengthName} = 0;`)
+  lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${lengthName})`, context))
+  lines.push(`double ${startRaw} = ${start.expression};`)
+  lines.push(`double ${endRaw} = ${end.expression};`)
+  appendLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_array_slice_start'))
+  appendLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'ccjs_array_slice_end'))
+  lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
+  appendLines(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_array_slice(&ccjs_default_allocator, ${receiver.expression}, ${startIndex}, ${endIndex}, &${out})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: out,
+    elementType: receiver.elementType
+  }
 }
 
 export function emitPreparedArrayPushCallExpression(
@@ -2191,6 +2289,10 @@ function emitPreparedArrayReceiver(
 
     if (call == null) {
       call = emitPreparedArrayFilterCallExpression(expression, context)
+    }
+
+    if (call == null) {
+      call = emitPreparedArraySliceCallExpression(expression, context)
     }
 
     if (call == null) {

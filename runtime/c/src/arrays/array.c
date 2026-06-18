@@ -240,6 +240,44 @@ ccjs_status ccjs_array_set(ccjs_value array, size_t index, ccjs_value value) {
   return CCJS_OK;
 }
 
+ccjs_status ccjs_array_slice(ccjs_allocator* allocator, ccjs_value array, size_t start, size_t end, ccjs_value* out) {
+  if (allocator == 0 || out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_array* source = (ccjs_array*)array.as.ref;
+
+  if (start > source->len) {
+    start = source->len;
+  }
+
+  if (end > source->len) {
+    end = source->len;
+  }
+
+  if (end < start) {
+    end = start;
+  }
+
+  ccjs_status status = ccjs_array_new(allocator, end - start, out);
+
+  if (status != CCJS_OK) {
+    return status;
+  }
+
+  ccjs_array* target = (ccjs_array*)out->as.ref;
+
+  for (size_t index = 0; index < target->len; index += 1) {
+    ccjs_value value = source->items[start + index];
+
+    ccjs_retain(value);
+    ccjs_release(target->items[index]);
+    target->items[index] = value;
+  }
+
+  return CCJS_OK;
+}
+
 ccjs_status ccjs_array_sort(ccjs_value array) {
   if (array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
     return CCJS_ERR_TYPE;

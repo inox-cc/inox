@@ -331,6 +331,38 @@ export function main(): void {
 })
 
 
+test('lowers C Array.slice calls to runtime arrays', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const values = [1, 2, 3, 4]
+  const copy = values.slice()
+  const middle = values.slice(1, 3)
+  const tail = values.slice(-2)
+  const clamped = values.slice(-99, 2)
+  console.log(copy.length, middle[0], middle[1], tail[0], tail[1], clamped.length)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.equal(result.hir.body[0].body.find((item) => item.name === 'copy')?.arrayElementType, 'number')
+  assert.equal(result.hir.body[0].body.find((item) => item.name === 'middle')?.arrayElementType, 'number')
+  assert.match(
+    result.code,
+    /ccjs_array_slice\(&ccjs_default_allocator, values, ccjs_array_slice_start_\d+, ccjs_array_slice_end_\d+, &ccjs_array_slice_\d+\)/
+  )
+  assert.match(result.code, /double ccjs_array_slice_start_raw_\d+ = 0;/)
+  assert.match(result.code, /double ccjs_array_slice_start_raw_\d+ = \(-2\);/)
+  assert.match(result.code, /double ccjs_array_slice_start_raw_\d+ = \(-99\);/)
+  assert.match(
+    result.code,
+    /if \(ccjs_array_slice_end_\d+ < ccjs_array_slice_start_\d+\) ccjs_array_slice_end_\d+ = ccjs_array_slice_start_\d+;/
+  )
+})
+
+
 test('lowers C string length for literals and runtime strings', () => {
   const result = compileSource(
     `type User = {
