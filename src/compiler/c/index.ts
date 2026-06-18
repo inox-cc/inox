@@ -537,26 +537,42 @@ function cPathSegment(path: string[], index: number): string {
   return path[index]
 }
 
+function cStringEquals(left: string, right: string): boolean {
+  return left === right
+}
+
+function cStringOrEmpty(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
+function cKnownValueTypeOrEmpty(valueType: string | null | undefined): string {
+  return cStringOrEmpty(knownValueType(valueType))
+}
+
 function firstKnownValueTypeOrUnknown(
   first: string | null | undefined,
   second: string | null | undefined,
   third: string | null | undefined
 ): string {
-  const firstKnown = knownValueType(first)
+  const firstKnown = cKnownValueTypeOrEmpty(first)
 
-  if (firstKnown != null) {
+  if (!cStringEquals(firstKnown, '')) {
     return firstKnown
   }
 
-  const secondKnown = knownValueType(second)
+  const secondKnown = cKnownValueTypeOrEmpty(second)
 
-  if (secondKnown != null) {
+  if (!cStringEquals(secondKnown, '')) {
     return secondKnown
   }
 
-  const thirdKnown = knownValueType(third)
+  const thirdKnown = cKnownValueTypeOrEmpty(third)
 
-  if (thirdKnown != null) {
+  if (!cStringEquals(thirdKnown, '')) {
     return thirdKnown
   }
 
@@ -2102,9 +2118,9 @@ function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, con
 }
 
 function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionContext): string {
-  const declared = knownValueType(statement.valueType)
+  const declared = cKnownValueTypeOrEmpty(statement.valueType)
 
-  if (declared != null) {
+  if (!cStringEquals(declared, '')) {
     return declared
   }
 
@@ -3557,9 +3573,9 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 
   if (isMemberAccessExpression(expression)) {
-    const netAddressMember = resolveNetAddressStringMember(expression, context)
+    const netAddressMember = cStringOrEmpty(resolveNetAddressStringMember(expression, context))
 
-    if (netAddressMember != null) {
+    if (!cStringEquals(netAddressMember, '')) {
       return {
         lines: [],
         format: '%s',
@@ -4016,12 +4032,16 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
   }
 
   let valueType = 'unknown'
-  const awaitedValueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context)
+  const awaitedValueType = cStringOrEmpty(resolveCAsyncFunctionAwaitValueType(expression.callee, context))
 
-  if (awaitedValueType != null) {
+  if (!cStringEquals(awaitedValueType, '')) {
     valueType = awaitedValueType
-  } else if (expression.promiseValueType != null) {
-    valueType = expression.promiseValueType
+  } else {
+    const promiseValueType = cStringOrEmpty(expression.promiseValueType)
+
+    if (!cStringEquals(promiseValueType, '')) {
+      valueType = promiseValueType
+    }
   }
 
   const taskCall = emitPreparedAsyncTaskPromiseCallExpression(expression, valueType, context, options)
@@ -4394,10 +4414,10 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
   const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
   const pollCall = `ccjs_loop_poll(${emitEventLoopReference(context)}, ${emitEventLoopNextTimeExpression(context)})`
   let rejectionValueType = 'unknown'
-  const promiseRejectionValueType = preparedPromise.rejectionValueType
+  const promiseRejectionValueType = cStringOrEmpty(preparedPromise.rejectionValueType)
   const lines: string[] = []
 
-  if (promiseRejectionValueType != null) {
+  if (!cStringEquals(promiseRejectionValueType, '')) {
     rejectionValueType = promiseRejectionValueType
   }
 
@@ -4430,14 +4450,14 @@ function emitAwaitRejectedPromiseLines(
   rejectionValueType: string,
   context: CFunctionContext
 ): string[] {
-  const target = currentErrorTarget(context)
+  const target = cStringOrEmpty(currentErrorTarget(context))
   let rejectedTypeCheck = 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
 
-  if (rejectionValueType === 'error') {
+  if (cStringEquals(rejectionValueType, 'error')) {
     rejectedTypeCheck = 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
   }
 
-  if (target == null && !context.throwingFunction) {
+  if (cStringEquals(target, '') && !context.throwingFunction) {
     const failureLines: string[] = []
 
     failureLines.push(
@@ -4457,7 +4477,7 @@ function emitAwaitRejectedPromiseLines(
   lines.push(`  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`)
   lines.push('  ccjs_error_active = 1;')
 
-  if (target == null) {
+  if (cStringEquals(target, '')) {
     lines.push('  ccjs_status_result = CCJS_ERR_THROW;')
     lines.push('  goto ccjs_cleanup;')
   } else {
@@ -4501,8 +4521,13 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
   }
 
   const valueTag = cRuntimeValueTag(valueType)
+  const valueTagName = cStringOrEmpty(valueTag)
 
-  if (valueTag == null && valueType !== 'number' && valueType !== 'boolean') {
+  if (
+    cStringEquals(valueTagName, '') &&
+    !cStringEquals(valueType, 'number') &&
+    !cStringEquals(valueType, 'boolean')
+  ) {
     pushDiagnostic(context,
       diagnostic(
         'CCJS_C_ASYNC',
@@ -4984,8 +5009,13 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
   const resultType = inferExpressionType(expression, context)
   const expectedTag = cRuntimeValueTag(resultType)
+  const expectedTagName = cStringOrEmpty(expectedTag)
 
-  if (functionType == null || !isRuntimeNullableType(functionType.returnType) || expectedTag == null) {
+  if (
+    functionType == null ||
+    !isRuntimeNullableType(functionType.returnType) ||
+    cStringEquals(expectedTagName, '')
+  ) {
     pushDiagnostic(context,
       diagnostic(
         'CCJS_C_OPTIONAL_CHAINING',
