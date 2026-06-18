@@ -7855,6 +7855,36 @@ class Checker {
       return elementType
     }
 
+    if (expression.callee.property === 'join') {
+      expression.valueType = 'string'
+
+      if (expression.args.length > 1) {
+        this.report(
+          'CCJS_ARG_COUNT',
+          `array.join expects 0 or 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (expression.args[0] != null) {
+        const separatorType = this.checkExpression(expression.args[0])
+
+        this.checkAssignableType(
+          separatorType,
+          'string',
+          expression.args[0].loc,
+          false,
+          this.expressionCanBeNull(expression.args[0])
+        )
+      }
+
+      for (let index = 1; index < expression.args.length; index++) {
+        this.checkExpression(expression.args[index])
+      }
+
+      return 'string'
+    }
+
     expression.valueType = 'array'
 
     if (expression.callee.property === 'slice') {

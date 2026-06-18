@@ -27,6 +27,7 @@ import type {
   CObjectShapeField,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand,
   CPromiseConstructorHandler,
   CRuntimeArrayElement
 } from '../types.ts'
@@ -95,6 +96,11 @@ export type ArrayLoweringDependencies = {
   emitCArrayLiteralValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
   emitCStringSplitValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedArrayExpression | null
   emitCValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
+  emitPreparedStringBytesOperand(
+    expression: AnyNode | null | undefined,
+    context: ArrayFunctionContext,
+    tempPrefix: string
+  ): PreparedStringBytesOperand
   emitPreparedNumberExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
   inferExpressionType(expression: AnyNode, context: ArrayFunctionContext): string
   resolveKnownObjectIndex(expression: AnyNode, context: ArrayFunctionContext): CObjectFieldInfo | null
@@ -1234,6 +1240,56 @@ export function emitPreparedArraySliceCallExpression(
     lines,
     expression: out,
     elementType: receiver.elementType
+  }
+}
+
+export function emitPreparedArrayJoinCallExpression(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): PreparedExpression | null {
+  if (expression == null || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression' || callee.property !== 'join' || expression.args.length > 1) {
+    return null
+  }
+
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
+
+  if (receiver == null || !isSupportedRuntimeArrayElementType(receiver.elementType)) {
+    return null
+  }
+
+  let separator: PreparedStringBytesOperand = {
+    lines: [],
+    bytes: '","',
+    length: '1'
+  }
+
+  if (expression.args[0] != null) {
+    separator = arrayDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_array_join_separator')
+  }
+
+  const out = nextCName(context, 'ccjs_array_join')
+  const lines: string[] = []
+  registerOwnedValue(context, out)
+
+  appendLines(lines, receiver.lines)
+  appendLines(lines, separator.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_array_join(&ccjs_default_allocator, ${receiver.expression}, ${separator.bytes}, ${separator.length}, &${out})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: out
   }
 }
 

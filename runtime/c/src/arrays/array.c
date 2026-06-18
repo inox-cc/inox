@@ -240,6 +240,132 @@ ccjs_status ccjs_array_set(ccjs_value array, size_t index, ccjs_value value) {
   return CCJS_OK;
 }
 
+static ccjs_status ccjs_array_join_part(ccjs_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
+  if (bytes == 0 || len == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (value.tag == CCJS_TAG_STRING && value.as.ref != 0) {
+    ccjs_string* string = (ccjs_string*)value.as.ref;
+    *bytes = string->bytes;
+    *len = string->len;
+    return CCJS_OK;
+  }
+
+  if (value.tag == CCJS_TAG_NUMBER) {
+    int written = snprintf(buffer, buffer_len, "%.17g", value.as.number);
+
+    if (written < 0 || (size_t)written >= buffer_len) {
+      return CCJS_ERR_TYPE;
+    }
+
+    *bytes = buffer;
+    *len = (size_t)written;
+    return CCJS_OK;
+  }
+
+  if (value.tag == CCJS_TAG_BOOL) {
+    *bytes = value.as.boolean ? "true" : "false";
+    *len = value.as.boolean ? 4 : 5;
+    return CCJS_OK;
+  }
+
+  if (value.tag == CCJS_TAG_NULL || value.tag == CCJS_TAG_UNDEFINED) {
+    *bytes = "";
+    *len = 0;
+    return CCJS_OK;
+  }
+
+  return CCJS_ERR_TYPE;
+}
+
+ccjs_status ccjs_array_join(
+  ccjs_allocator* allocator,
+  ccjs_value array,
+  const char* separator_bytes,
+  size_t separator_len,
+  ccjs_value* out
+) {
+  if (out != 0) {
+    *out = ccjs_undefined_value();
+  }
+
+  if (
+    allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || out == 0 ||
+    array.tag != CCJS_TAG_ARRAY || array.as.ref == 0 || (separator_bytes == 0 && separator_len != 0)
+  ) {
+    return CCJS_ERR_TYPE;
+  }
+
+  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  const char* separator = separator_bytes == 0 ? "" : separator_bytes;
+  size_t total_len = 0;
+
+  for (size_t index = 0; index < instance->len; index += 1) {
+    char buffer[64];
+    const char* bytes = "";
+    size_t len = 0;
+    ccjs_status status = ccjs_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
+
+    if (status != CCJS_OK) {
+      return status;
+    }
+
+    if (index > 0) {
+      if (total_len > (size_t)-1 - separator_len) {
+        return CCJS_ERR_OOM;
+      }
+
+      total_len += separator_len;
+    }
+
+    if (total_len > (size_t)-1 - len) {
+      return CCJS_ERR_OOM;
+    }
+
+    total_len += len;
+  }
+
+  if (total_len == 0) {
+    return ccjs_string_from_literal(allocator, "", 0, out);
+  }
+
+  char* joined = allocator->alloc(allocator->user, total_len, _Alignof(char));
+
+  if (joined == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  size_t offset = 0;
+
+  for (size_t index = 0; index < instance->len; index += 1) {
+    char buffer[64];
+    const char* bytes = "";
+    size_t len = 0;
+    ccjs_status status = ccjs_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
+
+    if (status != CCJS_OK) {
+      allocator->free(allocator->user, joined, total_len, _Alignof(char));
+      return status;
+    }
+
+    if (index > 0 && separator_len > 0) {
+      memcpy(joined + offset, separator, separator_len);
+      offset += separator_len;
+    }
+
+    if (len > 0) {
+      memcpy(joined + offset, bytes, len);
+      offset += len;
+    }
+  }
+
+  ccjs_status status = ccjs_string_from_literal(allocator, joined, total_len, out);
+  allocator->free(allocator->user, joined, total_len, _Alignof(char));
+
+  return status;
+}
+
 ccjs_status ccjs_array_slice(ccjs_allocator* allocator, ccjs_value array, size_t start, size_t end, ccjs_value* out) {
   if (allocator == 0 || out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
     return CCJS_ERR_TYPE;

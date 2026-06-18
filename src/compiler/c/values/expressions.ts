@@ -762,6 +762,7 @@ export type CCallExpressionDependencies = {
   ): PreparedExpression
   emitNullableScalarValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedArrayFilterCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArrayJoinCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayMapCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayPopCallExpression(
     expression: CValueNode,
@@ -861,6 +862,12 @@ export function emitPreparedCallExpression(
 
   if (arrayPopCall != null) {
     return arrayPopCall
+  }
+
+  const arrayJoinCall = deps.emitPreparedArrayJoinCallExpression(expression, context)
+
+  if (arrayJoinCall != null) {
+    return arrayJoinCall
   }
 
   const arrayMapCall = deps.emitPreparedArrayMapCallExpression(expression, context)
@@ -2861,6 +2868,7 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext,
     options: PreparedCallOptions | null
   ): PreparedExpression | null
+  emitPreparedArrayJoinCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArraySliceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBinaryValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
@@ -3029,6 +3037,12 @@ export function emitCValueExpression(
 
   if (arrayPopCall != null) {
     return arrayPopCall
+  }
+
+  const arrayJoinCall = deps.emitPreparedArrayJoinCallExpression(expression, context)
+
+  if (arrayJoinCall != null) {
+    return arrayJoinCall
   }
 
   const arraySliceCall = deps.emitPreparedArraySliceCallExpression(expression, context)

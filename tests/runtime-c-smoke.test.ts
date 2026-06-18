@@ -10188,6 +10188,51 @@ console.log(length(user.name), total)
 })
 
 
+test('generated C Array.join compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-join-'))
+  const source = join(dir, 'array-join.c')
+  const output = join(dir, 'array-join')
+
+  try {
+    const result = compileSource(
+      `const parts = ['src', 'compiler']
+const joined = parts.join('/')
+const digits = [1, 2, 3].join()
+const flags = [true, false].join('|')
+console.log(joined, digits, flags)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'src/compiler 1,2,3 true|false\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C runtime string return compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

@@ -363,6 +363,31 @@ test('lowers C Array.slice calls to runtime arrays', () => {
 })
 
 
+test('lowers C Array.join calls for primitive arrays', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const parts = ['src', 'compiler']
+  const joined = parts.join('/')
+  const digits = [1, 2, 3].join()
+  const flags = [true, false].join('|')
+  console.log(joined, digits, flags)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.equal(result.hir.body[0].body.find((item) => item.name === 'joined')?.valueType, 'string')
+  assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, parts, "\/", 1, &ccjs_array_join_\d+\)/)
+  assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, ccjs_array_\d+, ",", 1, &ccjs_array_join_\d+\)/)
+  assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, ccjs_array_\d+, "\|", 1, &ccjs_array_join_\d+\)/)
+  assert.match(result.code, /const ccjs_string\* joined = \(ccjs_string\*\)ccjs_array_join_\d+\.as\.ref;/)
+  assert.match(result.code, /const ccjs_string\* digits = \(ccjs_string\*\)ccjs_array_join_\d+\.as\.ref;/)
+  assert.match(result.code, /const ccjs_string\* flags = \(ccjs_string\*\)ccjs_array_join_\d+\.as\.ref;/)
+})
+
+
 test('lowers C string length for literals and runtime strings', () => {
   const result = compileSource(
     `type User = {
