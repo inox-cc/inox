@@ -1,4 +1,4 @@
-import { pathParseObjectFields, pathRuntimeConstantValue } from '../../stdlib/descriptors/path.ts'
+import { pathRuntimeConstantValue } from '../../stdlib/descriptors/path.ts'
 import type { AnyNode } from '../../types.ts'
 import {
   emitPrepareOwnedValueWrite,
@@ -307,13 +307,15 @@ function emitPathParseObjectShape(context: PathCContext): PreparedExpression {
   const fieldsName = `${shapeName}_fields`
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
 
-  for (const field of pathParseObjectFields) {
-    lines.push(`  { ${cStringLiteral(field)}, CCJS_FIELD_READONLY },`)
-  }
+  lines.push(`  { ${cStringLiteral('root')}, CCJS_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('dir')}, CCJS_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('base')}, CCJS_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('ext')}, CCJS_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('name')}, CCJS_FIELD_READONLY },`)
 
   lines.push('};')
   lines.push(`static const ccjs_shape ${shapeName} = {`)
-  lines.push(`  ${pathParseObjectFields.length},`)
+  lines.push('  5,')
   lines.push(`  ${fieldsName}`)
   lines.push('};')
 
