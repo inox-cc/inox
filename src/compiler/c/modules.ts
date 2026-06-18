@@ -11,6 +11,7 @@ const cModuleSourceExtensions = ['', '.ts', '.js']
 type CModuleExtension = string
 type CModuleHost = CompilerHost
 type CModuleInitName = string | null
+type CModuleNode = AnyNode
 type CModulePathSet = Set<string>
 type NullableCModulePath = string | null
 type NullableCModulePlan = CModulePlan | null
@@ -107,9 +108,10 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
 
   for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
     const plan = plans[planIndex]
+    const declarations: CModuleNode[] = plan.record.imports
     const imports: CModuleImportPlan[] = []
 
-    for (const declaration of plan.record.imports) {
+    for (const declaration of declarations) {
       if (declaration.typeOnly || isRuntimeBuiltinImportSource(declaration.source)) {
         continue
       }
@@ -185,7 +187,9 @@ function reportUnsupportedCModuleImports(
   importedModule: CModulePlan,
   diagnostics: Diagnostic[]
 ): void {
-  for (const specifier of declaration.specifiers) {
+  const specifiers: CModuleNode[] = declaration.specifiers
+
+  for (const specifier of specifiers) {
     const exported = importedModule.record.exports.get(specifier.imported)
 
     if (exported == null || exported.type === 'FunctionDeclaration' || exported.type === 'VariableDeclaration') {
@@ -207,11 +211,19 @@ export function uniqueCModuleImports(imports: CModuleImportPlan[]): CModuleImpor
   const unique: CModuleImportPlan[] = []
 
   for (const item of imports) {
-    if (seen.has(item.module.headerPath)) {
+    const module = item.module
+
+    if (module == null) {
       continue
     }
 
-    seen.add(item.module.headerPath)
+    const headerPath = module.headerPath
+
+    if (seen.has(headerPath)) {
+      continue
+    }
+
+    seen.add(headerPath)
     unique.push(item)
   }
 
