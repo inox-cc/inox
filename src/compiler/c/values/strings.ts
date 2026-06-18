@@ -36,14 +36,20 @@ type StringDiagnosticContext = {
 
 type StringCContext = {
   cleanupEnabled: boolean
+  diagnostics?: Diagnostic[]
   failureStatement?: string | null
   failureStatementUsed?: boolean
+  functionNames?: Map<string, string>
+  jsGlobalRoots?: Set<string>
   nextId: number
   ownedValues: string[]
   returnType?: string
+  runtimeStrings?: Set<string>
   statusReturn: boolean
+  stringLoweringDependencies?: any
   throwingFunction: boolean
   usedCleanupGoto: boolean
+  variables?: Map<string, string>
   [key: string]: any
 }
 
@@ -196,8 +202,9 @@ export function resolveRuntimeStringReference(
   }
 
   const name = expression.path[0]
+  const runtimeStrings = context.runtimeStrings
 
-  if (context.runtimeStrings.has(name)) {
+  if (runtimeStrings != null && runtimeStrings.has(name)) {
     return name
   }
 
@@ -592,8 +599,9 @@ export function emitPreparedStringBytesOperand(
 
   if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
+    const variables = context.variables
 
-    if (context.variables.get(name) === 'string') {
+    if (variables != null && variables.get(name) === 'string') {
       if (stringDeps(context).isBoxedRuntimeStringName(name, context)) {
         const string = nextCName(context, tempPrefix)
 
@@ -608,8 +616,9 @@ export function emitPreparedStringBytesOperand(
       }
 
       const reference = stringDeps(context).emitReference(expression, context)
+      const runtimeStrings = context.runtimeStrings
 
-      if (context.runtimeStrings.has(reference)) {
+      if (runtimeStrings != null && runtimeStrings.has(reference)) {
         return {
           lines: [],
           bytes: `${reference}->bytes`,
@@ -797,7 +806,8 @@ export function emitCStringConcatValueExpression(expression: AnyNode, context: S
 }
 
 export function emitCTemplateLiteralValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const parts = parseTemplateLiteralParts(expression.raw, { diagnostics: context.diagnostics }, expression.loc)
+  const diagnostics = context.diagnostics ?? []
+  const parts = parseTemplateLiteralParts(expression.raw, { diagnostics }, expression.loc)
   const operands: PreparedStringBytesOperand[] = []
 
   for (const part of parts) {
@@ -1434,8 +1444,13 @@ function isStringLengthObject(expression: AnyNode | null | undefined, context: S
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
+    const variables = context.variables
+    const runtimeStrings = context.runtimeStrings
 
-    return context.variables.get(name) === 'string' || context.runtimeStrings.has(name)
+    return (
+      (variables != null && variables.get(name) === 'string') ||
+      (runtimeStrings != null && runtimeStrings.has(name))
+    )
   }
 
   if (isDynamicRuntimeStringFieldExpression(expression, context)) {
@@ -1894,20 +1909,25 @@ function isKnownTemplatePlaceholderReference(
   context: StringCContext
 ): boolean {
   const name = expression.path[0]
+  const variables = context.variables
 
-  if (context.variables.has(joinStrings(expression.path, '.'))) {
+  if (variables != null && variables.has(joinStrings(expression.path, '.'))) {
     return true
   }
 
-  if (context.variables.has(name)) {
+  if (variables != null && variables.has(name)) {
     return true
   }
 
-  if (context.functionNames.has(name)) {
+  const functionNames = context.functionNames
+
+  if (functionNames != null && functionNames.has(name)) {
     return true
   }
 
-  if (isCJsGlobalRoot(name, { jsGlobalRoots: context.jsGlobalRoots })) {
+  const jsGlobalRoots = context.jsGlobalRoots
+
+  if (jsGlobalRoots != null && isCJsGlobalRoot(name, { jsGlobalRoots })) {
     return true
   }
 
