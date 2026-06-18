@@ -30,10 +30,16 @@ export type CLoopFlowTarget = {
 }
 
 export type CArrayShapeMap = Map<string, CArrayElementInfo[]>
+export type CAsyncTaskWrapperMap = Map<string, CAsyncTaskWrapper>
 export type CBooleanMap = Map<string, boolean>
+export type CCallbackWrapperMap = Map<string, CCallbackWrapper>
+export type CDgramMessageHandlerMap = Map<string, CDgramMessageHandler>
 export type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 export type CFunctionTypeMap = Map<string, CFunctionType>
+export type CHttpHandlerMap = Map<string, CHttpHandler>
+export type CNetHandlerMap = Map<string, CNetHandler>
 export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
+export type CPromiseChainWrapperMap = Map<string, CPromiseChainWrapper>
 export type CPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
 export type CStringMap = Map<string, string>
 export type CStringNullableMap = Map<string, string | null>
@@ -114,10 +120,10 @@ export function cloneCPromiseConstructorHandlerMap(
 export type CEmitContext = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
-  asyncTaskWrappers: Map<string, CAsyncTaskWrapper>
+  asyncTaskWrappers: CAsyncTaskWrapperMap
   boxedMutableCaptureDeclarations: Set<AnyNode>
   callbackArrowWrappers: Map<AnyNode, CCallbackWrapper>
-  callbackWrappers: Map<string, CCallbackWrapper>
+  callbackWrappers: CCallbackWrapperMap
   classInfos: Map<string, CClassInfo>
   classLoweringDependencies: ClassLoweringDependencies
   collectionLoweringDependencies: CollectionLoweringDependencies
@@ -125,7 +131,7 @@ export type CEmitContext = {
   diagnostics: Diagnostic[]
   dgramCreateSocketNames: CStringSet
   dgramImportNames: CStringSet
-  dgramMessageHandlers: Map<string, CDgramMessageHandler>
+  dgramMessageHandlers: CDgramMessageHandlerMap
   externalEventLoopFunctions: CStringSet
   functionAsyncFlags: CBooleanMap
   functionNames: CStringMap
@@ -141,19 +147,19 @@ export type CEmitContext = {
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   forceRuntimeStringDeclarations?: CStringSet
   httpCreateServerNames: CStringSet
-  httpHandlers: Map<string, CHttpHandler>
+  httpHandlers: CHttpHandlerMap
   httpImportNames: CStringSet
   jsGlobalRoots: CStringSet
   moduleValueNames: CStringMap
   moduleValueTypes: CStringMap
   netConnectNames: CStringSet
   netCreateServerNames: CStringSet
-  netHandlers: Map<string, CNetHandler>
+  netHandlers: CNetHandlerMap
   netImportNames: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
-  promiseChainWrappers: Map<string, CPromiseChainWrapper>
+  promiseChainWrappers: CPromiseChainWrapperMap
   processRuntime: boolean
   runtimeFunctionParams: CFunctionTypeMap
   statementLoweringDependencies: StatementLoweringDependencies

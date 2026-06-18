@@ -43,7 +43,15 @@ import {
   emitAsyncTaskWrapperPrototypes
 } from './async/tasks.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
-import type { CEmitContext } from './context.ts'
+import type {
+  CAsyncTaskWrapperMap,
+  CCallbackWrapperMap,
+  CDgramMessageHandlerMap,
+  CEmitContext,
+  CHttpHandlerMap,
+  CNetHandlerMap,
+  CPromiseChainWrapperMap
+} from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCPrelude } from './prelude.ts'
 import {
@@ -292,20 +300,26 @@ export function emitCUnit(
   )
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
   const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
+  const callbackWrappers: CCallbackWrapperMap = baseContext.callbackWrappers
+  const promiseChainWrappers: CPromiseChainWrapperMap = baseContext.promiseChainWrappers
+  const asyncTaskWrappers: CAsyncTaskWrapperMap = baseContext.asyncTaskWrappers
+  const dgramMessageHandlers: CDgramMessageHandlerMap = baseContext.dgramMessageHandlers
+  const httpHandlers: CHttpHandlerMap = baseContext.httpHandlers
+  const netHandlers: CNetHandlerMap = baseContext.netHandlers
 
-  for (const wrapper of baseContext.callbackWrappers.values()) {
+  for (const wrapper of callbackWrappers.values()) {
     if (wrapper.kind === 'arrow' && isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
       arrowCallbackWrappers.push(wrapper)
     }
   }
 
-  for (const wrapper of baseContext.promiseChainWrappers.values()) {
+  for (const wrapper of promiseChainWrappers.values()) {
     if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
       promiseChainCallbackWrappers.push(wrapper)
     }
   }
 
-  for (const wrapper of baseContext.asyncTaskWrappers.values()) {
+  for (const wrapper of asyncTaskWrappers.values()) {
     pushUnitLines(lines, emitAsyncTaskFrameType(wrapper))
     lines.push('')
   }
@@ -333,11 +347,11 @@ export function emitCUnit(
     lines.push(`${deps.emitClassMethodHead(classMethod.info, classMethod.method, baseContext)};`)
   }
 
-  for (const wrapper of baseContext.asyncTaskWrappers.values()) {
+  for (const wrapper of asyncTaskWrappers.values()) {
     pushUnitLines(lines, emitAsyncTaskWrapperPrototypes(wrapper))
   }
 
-  for (const wrapper of baseContext.callbackWrappers.values()) {
+  for (const wrapper of callbackWrappers.values()) {
     if (wrapper.kind === 'plain-arrow') {
       lines.push(`${emitPlainArrowCallbackWrapperHead(wrapper)};`)
       continue
@@ -350,7 +364,7 @@ export function emitCUnit(
     lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)};`)
   }
 
-  for (const wrapper of baseContext.promiseChainWrappers.values()) {
+  for (const wrapper of promiseChainWrappers.values()) {
     if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
       lines.push(`static void ${wrapper.finalizerName}(void* context);`)
     }
@@ -358,37 +372,37 @@ export function emitCUnit(
     lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
   }
 
-  for (const wrapper of baseContext.dgramMessageHandlers.values()) {
+  for (const wrapper of dgramMessageHandlers.values()) {
     lines.push(`${emitDgramMessageHandlerHead(wrapper)};`)
   }
 
-  for (const wrapper of baseContext.httpHandlers.values()) {
+  for (const wrapper of httpHandlers.values()) {
     lines.push(`${emitHttpHandlerHead(wrapper)};`)
   }
 
-  for (const wrapper of baseContext.netHandlers.values()) {
+  for (const wrapper of netHandlers.values()) {
     lines.push(`${emitNetHandlerHead(wrapper)};`)
   }
 
   if (
     functions.length > 0 ||
     classMethods.length > 0 ||
-    baseContext.asyncTaskWrappers.size > 0 ||
-    baseContext.callbackWrappers.size > 0 ||
-    baseContext.promiseChainWrappers.size > 0 ||
-    baseContext.dgramMessageHandlers.size > 0 ||
-    baseContext.httpHandlers.size > 0 ||
-    baseContext.netHandlers.size > 0
+    asyncTaskWrappers.size > 0 ||
+    callbackWrappers.size > 0 ||
+    promiseChainWrappers.size > 0 ||
+    dgramMessageHandlers.size > 0 ||
+    httpHandlers.size > 0 ||
+    netHandlers.size > 0
   ) {
     lines.push('')
   }
 
-  for (const wrapper of baseContext.asyncTaskWrappers.values()) {
+  for (const wrapper of asyncTaskWrappers.values()) {
     pushUnitLines(lines, emitAsyncTaskWrapperDeclaration(wrapper, baseContext, deps.asyncTaskLoweringDependencies))
     lines.push('')
   }
 
-  for (const wrapper of baseContext.callbackWrappers.values()) {
+  for (const wrapper of callbackWrappers.values()) {
     if (wrapper.kind === 'plain-arrow') {
       pushUnitLines(lines, emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext, deps.callbackLoweringDependencies))
     } else {
@@ -398,22 +412,22 @@ export function emitCUnit(
     lines.push('')
   }
 
-  for (const wrapper of baseContext.promiseChainWrappers.values()) {
+  for (const wrapper of promiseChainWrappers.values()) {
     pushUnitLines(lines, emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext, deps.promiseChainLoweringDependencies))
     lines.push('')
   }
 
-  for (const wrapper of baseContext.dgramMessageHandlers.values()) {
+  for (const wrapper of dgramMessageHandlers.values()) {
     pushUnitLines(lines, emitDgramMessageHandlerDeclaration(wrapper, baseContext, deps.dgramLoweringDependencies))
     lines.push('')
   }
 
-  for (const wrapper of baseContext.httpHandlers.values()) {
+  for (const wrapper of httpHandlers.values()) {
     pushUnitLines(lines, emitHttpHandlerDeclaration(wrapper, baseContext, deps.httpLoweringDependencies))
     lines.push('')
   }
 
-  for (const wrapper of baseContext.netHandlers.values()) {
+  for (const wrapper of netHandlers.values()) {
     pushUnitLines(lines, emitNetHandlerDeclaration(wrapper, baseContext, deps.netLoweringDependencies))
     lines.push('')
   }
