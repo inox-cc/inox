@@ -13,6 +13,8 @@ import type { CEmitContext, CFunctionContext } from '../context.ts'
 import type { AnyNode, IrProgram, SourceLocation } from '../../types.ts'
 import type { CHttpHandler, CPreparedExpression as PreparedExpression } from '../types.ts'
 
+type HttpAstNode = AnyNode
+
 type HttpStringBytesOperand = {
   lines: string[]
   bytes: string
@@ -39,17 +41,26 @@ type HttpServerCreateOptions = {
   declare: boolean | undefined
 }
 
-export type HttpLoweringDependencies = {
-  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitStatementList: (body: AnyNode[], context: CFunctionContext) => string[]
+type HttpTopLevelNodeEntry = {
+  kind: string
+  node: HttpAstNode
 }
 
-function httpNodeLoc(node: AnyNode | null | undefined): SourceLocation | null {
+export type HttpLoweringDependencies = {
+  emitPreparedNumberExpression: (expression: HttpAstNode, context: CFunctionContext) => PreparedExpression
+  emitStatementList: (body: HttpAstNode[], context: CFunctionContext) => string[]
+}
+
+function httpNodeLoc(node: HttpAstNode | null | undefined): SourceLocation | null {
   if (node == null) {
     return null
   }
 
   return node.loc
+}
+
+function httpTopLevelNodeEntryAt(entries: HttpTopLevelNodeEntry[], index: number): HttpTopLevelNodeEntry {
+  return entries[index]
 }
 
 function pushHttpLines(target: string[], lines: string[]): void {
@@ -58,7 +69,7 @@ function pushHttpLines(target: string[], lines: string[]): void {
   }
 }
 
-function pushHttpNodes(target: AnyNode[], nodes: AnyNode[]): void {
+function pushHttpNodes(target: HttpAstNode[], nodes: HttpAstNode[]): void {
   for (const node of nodes) {
     target.push(node)
   }
@@ -109,7 +120,7 @@ export function emitHttpHandlerDeclaration(
     context.variables.set(responseName, 'http-response')
   }
 
-  const body: AnyNode[] = []
+  const body: HttpAstNode[] = []
 
   if (expression.expressionBody) {
     body.push({
@@ -157,8 +168,9 @@ function emitHttpHandlerStatement(
 
   if (statement.type === 'BlockStatement') {
     const lines = ['{']
+    const statements: HttpAstNode[] = statement.body
 
-    for (const item of statement.body) {
+    for (const item of statements) {
       pushIndentedHttpLines(lines, emitHttpHandlerStatement(item, httpContext, context, deps))
     }
 
@@ -377,12 +389,13 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
   }
 
   const name = nextCName(context, 'ccjs_http_headers')
+  const properties: HttpAstNode[] = expression.properties
   const lines = [`ccjs_http_header ${name}[] = {`]
   const staticContext: HttpStaticStringContext = {
     stringLocals: new Map()
   }
 
-  for (const property of expression.properties) {
+  for (const property of properties) {
     const value = emitHttpStaticStringValue(property.value, staticContext, context)
 
     if (value == null) {
@@ -655,8 +668,9 @@ function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context
 
   if (expression.type === 'ArrayLiteral') {
     const items: string[] = []
+    const elements: HttpAstNode[] = expression.elements
 
-    for (const item of expression.elements) {
+    for (const item of elements) {
       const value = emitHttpStaticJsonValue(item, context)
 
       if (value != null) {
@@ -671,8 +685,9 @@ function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context
 
   if (expression.type === 'ObjectLiteral') {
     const fields: string[] = []
+    const properties: HttpAstNode[] = expression.properties
 
-    for (const property of expression.properties) {
+    for (const property of properties) {
       const value = emitHttpStaticJsonValue(property.value, context)
 
       if (value == null) {
@@ -1107,11 +1122,18 @@ function isHttpRequestEventCall(expression: AnyNode): boolean {
 
 export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<string, CHttpHandler> {
   const handlers: Map<string, CHttpHandler> = new Map()
+  const programs: IrProgram[] = irPrograms
 
-  for (const ir of irPrograms) {
-    for (const item of collectIrTopLevelNodeEntries(ir)) {
+  for (const ir of programs) {
+    const items: HttpTopLevelNodeEntry[] = collectIrTopLevelNodeEntries(ir)
+
+    for (let itemIndex = 0; itemIndex < items.length; itemIndex = itemIndex + 1) {
+      const item = httpTopLevelNodeEntryAt(items, itemIndex)
+
       if (item.kind === 'function') {
-        for (const statement of item.node.body) {
+        const statements: HttpAstNode[] = item.node.body
+
+        for (const statement of statements) {
           visitHttpHandlerStatement(handlers, context, statement)
         }
       } else if (item.kind === 'statement') {
@@ -1198,7 +1220,9 @@ function visitHttpHandlerStatement(
   }
 
   if (statement.type === 'BlockStatement') {
-    for (const item of statement.body) {
+    const statements: HttpAstNode[] = statement.body
+
+    for (const item of statements) {
       visitHttpHandlerStatement(handlers, context, item)
     }
     return
@@ -1238,9 +1262,13 @@ function visitHttpHandlerStatement(
 
   if (statement.type === 'SwitchStatement') {
     visitHttpHandlerExpression(handlers, context, statement.discriminant)
-    for (const item of statement.cases) {
+    const cases: HttpAstNode[] = statement.cases
+
+    for (const item of cases) {
       visitHttpHandlerExpression(handlers, context, item.test)
-      for (const consequent of item.consequent) {
+      const consequents: HttpAstNode[] = item.consequent
+
+      for (const consequent of consequents) {
         visitHttpHandlerStatement(handlers, context, consequent)
       }
     }
@@ -1276,7 +1304,9 @@ function visitHttpHandlerExpression(
     }
 
     visitHttpHandlerExpression(handlers, context, expression.callee)
-    for (const arg of expression.args) {
+    const args: HttpAstNode[] = expression.args
+
+    for (const arg of args) {
       visitHttpHandlerExpression(handlers, context, arg)
     }
     return
@@ -1284,7 +1314,9 @@ function visitHttpHandlerExpression(
 
   if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
     visitHttpHandlerExpression(handlers, context, expression.callee)
-    for (const arg of expression.args) {
+    const args: HttpAstNode[] = expression.args
+
+    for (const arg of args) {
       visitHttpHandlerExpression(handlers, context, arg)
     }
     return
@@ -1294,7 +1326,9 @@ function visitHttpHandlerExpression(
     if (expression.expressionBody) {
       visitHttpHandlerExpression(handlers, context, expression.body)
     } else {
-      for (const statement of expression.body) {
+      const statements: HttpAstNode[] = expression.body
+
+      for (const statement of statements) {
         visitHttpHandlerStatement(handlers, context, statement)
       }
     }
@@ -1335,14 +1369,18 @@ function visitHttpHandlerExpression(
   }
 
   if (expression.type === 'ArrayLiteral') {
-    for (const element of expression.elements) {
+    const elements: HttpAstNode[] = expression.elements
+
+    for (const element of elements) {
       visitHttpHandlerExpression(handlers, context, element)
     }
     return
   }
 
   if (expression.type === 'ObjectLiteral') {
-    for (const property of expression.properties) {
+    const properties: HttpAstNode[] = expression.properties
+
+    for (const property of properties) {
       visitHttpHandlerExpression(handlers, context, property.value)
     }
   }
