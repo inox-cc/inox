@@ -435,14 +435,6 @@ function arrayNodeAt(nodes: ArrayNode[], index: number): ArrayNode {
   return nodes[index]
 }
 
-function maybeArrayNodeAt(nodes: ArrayNode[], index: number): ArrayNode | null {
-  if (index >= nodes.length) {
-    return null
-  }
-
-  return arrayNodeAt(nodes, index)
-}
-
 function arrayElementInfoWithoutLast(elements: CArrayElementInfo[]): CArrayElementInfo[] {
   const out: CArrayElementInfo[] = []
 
@@ -2238,8 +2230,16 @@ function emitPreparedArrayCallbackInput(
   context: ArrayFunctionContext
 ): string[] {
   const lines: string[] = []
-  const valueParam = maybeArrayNodeAt(callback.params, 0)
-  const indexParam = maybeArrayNodeAt(callback.params, 1)
+  let valueParam: ArrayNode | null = null
+  let indexParam: ArrayNode | null = null
+
+  if (callback.params.length > 0) {
+    valueParam = arrayNodeAt(callback.params, 0)
+  }
+
+  if (callback.params.length > 1) {
+    indexParam = arrayNodeAt(callback.params, 1)
+  }
 
   if (valueParam != null) {
     context.variables.set(valueParam.name, receiver.elementType)
@@ -2397,8 +2397,16 @@ function emitPreparedArraySortComparatorInput(
   context: ArrayFunctionContext
 ): string[] {
   const lines: string[] = []
-  const leftParam = maybeArrayNodeAt(callback.params, 0)
-  const rightParam = maybeArrayNodeAt(callback.params, 1)
+  let leftParam: ArrayNode | null = null
+  let rightParam: ArrayNode | null = null
+
+  if (callback.params.length > 0) {
+    leftParam = arrayNodeAt(callback.params, 0)
+  }
+
+  if (callback.params.length > 1) {
+    rightParam = arrayNodeAt(callback.params, 1)
+  }
 
   if (leftParam != null) {
     appendLines(lines, emitPreparedArraySortComparatorParam(leftParam.name, receiver.elementType, left, context))

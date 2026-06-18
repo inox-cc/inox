@@ -193,6 +193,40 @@ export function main(): void {
 })
 
 
+test('lowers string class method assignments into runtime value locals', () => {
+  const source = `class Reader {
+  fallback(): string | null {
+    return 'fallback'
+  }
+
+  read(node: object): void {
+    let value = node.name
+
+    if (value == null) {
+      value = this.fallback()
+    }
+
+    console.log(value)
+  }
+}
+
+export function main(): void {
+  const reader = new Reader()
+  reader.read({ name: null })
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /ccjs_method_Reader_fallback\(this\)/)
+  assert.match(c.code, /ccjs_method_value_\d+ = ccjs_method_Reader_fallback\(this\);/)
+  assert.match(c.code, /ccjs_retain\(ccjs_method_value_\d+\);/)
+  assert.match(c.code, /ccjs_release\(value\);/)
+  assert.match(c.code, /value = ccjs_method_value_\d+;/)
+})
+
+
 test('rejects readonly class field assignment outside constructors', () => {
   assertDiagnostic(
     `class User {

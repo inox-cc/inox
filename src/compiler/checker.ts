@@ -2609,6 +2609,12 @@ class Checker {
       return numericCastType
     }
 
+    const numberToStringType = this.checkNumberToStringCall(expression)
+
+    if (numberToStringType != null) {
+      return numberToStringType
+    }
+
     const stringCharCodeAtType = this.checkStringCharCodeAtCall(expression)
 
     if (stringCharCodeAtType != null) {
@@ -2625,6 +2631,18 @@ class Checker {
 
     if (stringTrimType != null) {
       return stringTrimType
+    }
+
+    const stringCaseType = this.checkStringCaseCall(expression)
+
+    if (stringCaseType != null) {
+      return stringCaseType
+    }
+
+    const stringPadStartType = this.checkStringPadStartCall(expression)
+
+    if (stringPadStartType != null) {
+      return stringPadStartType
     }
 
     const stringSliceType = this.checkStringSliceCall(expression)
@@ -8368,6 +8386,48 @@ class Checker {
     return 'number'
   }
 
+  checkNumberToStringCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'toString') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const argTypes: ValueType[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      argTypes.push(this.checkExpression(arg))
+    }
+
+    if (objectType !== 'number') {
+      return null
+    }
+
+    expression.valueType = 'string'
+    expression.numberRuntimeMethod = 'toString'
+
+    if (expression.args.length > 1) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `number.toString expects 0 or 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (expression.args[0] != null) {
+      this.checkAssignableType(
+        argTypes[0],
+        'number',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+    }
+
+    return 'string'
+  }
+
   checkStringCharCodeAtCall(expression: CheckerNode): ValueType | null {
     if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'charCodeAt') {
       return null
@@ -8434,6 +8494,79 @@ class Checker {
 
     expression.valueType = 'string'
     expression.stringRuntimeMethod = method
+
+    return 'string'
+  }
+
+  checkStringCaseCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'toUpperCase') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      this.checkExpression(arg)
+    }
+
+    if (objectType !== 'string') {
+      return null
+    }
+
+    if (expression.args.length !== 0) {
+      this.report('CCJS_ARG_COUNT', `string.toUpperCase expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    expression.valueType = 'string'
+    expression.stringRuntimeMethod = 'toUpperCase'
+
+    return 'string'
+  }
+
+  checkStringPadStartCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'padStart') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const argTypes: ValueType[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      argTypes.push(this.checkExpression(arg))
+    }
+
+    if (objectType !== 'string') {
+      return null
+    }
+
+    if (expression.args.length < 1 || expression.args.length > 2) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `string.padStart expects 1 or 2 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (expression.args[0] != null) {
+      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, false)
+    }
+
+    if (expression.args.length > 1) {
+      this.checkAssignableType(
+        argTypes[1],
+        'string',
+        expression.args[1].loc,
+        false,
+        this.expressionCanBeNull(expression.args[1])
+      )
+    }
+
+    expression.valueType = 'string'
+    expression.stringRuntimeMethod = 'padStart'
 
     return 'string'
   }

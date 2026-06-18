@@ -27,7 +27,7 @@ type ModuleGraphContext = {
 
 export async function buildModuleGraph(entry: string, options: CompileOptions = {}): Promise<ModuleGraph> {
   const host = requireCompilerHost(options.host, 'buildModuleGraph')
-  const entryPath = host.resolvePath(entry)
+  const entryPath = resolveExistingSource(entry, host)
   const context: ModuleGraphContext = {
     host,
     options,

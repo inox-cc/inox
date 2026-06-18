@@ -1188,6 +1188,40 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
   }
 }
 
+export function emitCNumberToStringValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
+  const value = stringDeps(context).emitPreparedNumberExpression(expression.callee.object, context)
+  const temp = nextCName(context, 'ccjs_value')
+  const lines: string[] = []
+  registerOwnedValue(context, temp)
+
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+
+  if (expression.args.length === 0) {
+    lines.push(emitStatusCheck(`ccjs_string_from_number(&ccjs_default_allocator, ${value.expression}, &${temp})`, context))
+
+    return {
+      lines,
+      expression: temp
+    }
+  }
+
+  const radix = stringDeps(context).emitPreparedNumberExpression(stringNodeAt(expression.args, 0), context)
+
+  pushAllLines(lines, radix.lines)
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_from_number_radix(&ccjs_default_allocator, ${value.expression}, (int)(${radix.expression}), &${temp})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: temp
+  }
+}
+
 export function emitCNumberConversionValueExpression(
   expression: AnyNode,
   context: StringCContext
@@ -1223,6 +1257,65 @@ export function emitCStringTrimValueExpression(expression: AnyNode, context: Str
   lines.push(
     emitStatusCheck(
       `${helper}(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: temp
+  }
+}
+
+export function emitCStringCaseValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_case_string')
+  const temp = nextCName(context, 'ccjs_value')
+  const lines: string[] = []
+  registerOwnedValue(context, temp)
+
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_to_upper_case_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: temp
+  }
+}
+
+export function emitCStringPadStartValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_pad_string')
+  const targetLength = stringDeps(context).emitPreparedNumberExpression(expression.args[0], context)
+  let pad: PreparedStringBytesOperand = {
+    lines: [],
+    bytes: cStringLiteral(' '),
+    length: '1'
+  }
+
+  if (expression.args[1] != null) {
+    pad = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_pad_fill')
+  }
+
+  const targetLengthRaw = nextCName(context, 'ccjs_pad_target_length_raw')
+  const targetLengthIndex = nextCName(context, 'ccjs_pad_target_length')
+  const temp = nextCName(context, 'ccjs_value')
+  const lines: string[] = []
+  registerOwnedValue(context, temp)
+
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, targetLength.lines)
+  pushAllLines(lines, pad.lines)
+  lines.push(`double ${targetLengthRaw} = ${targetLength.expression};`)
+  pushAllLines(lines, emitNonNegativeStringPositionLines(targetLengthRaw, targetLengthIndex))
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_pad_start_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${targetLengthIndex}, ${pad.bytes}, ${pad.length}, &${temp})`,
       context
     )
   )
@@ -1427,6 +1520,28 @@ export function isNumberConversionCall(expression: AnyNode | null | undefined, c
   return stringDeps(context).inferExpressionType(stringNodeAt(expression.args, 0), context) === 'string'
 }
 
+export function isNumberToStringCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
+  if (
+    expression == null ||
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'toString' ||
+    expression.args.length > 1
+  ) {
+    return false
+  }
+
+  if (stringDeps(context).inferExpressionType(expression.callee.object, context) !== 'number') {
+    return false
+  }
+
+  if (expression.args.length === 0) {
+    return true
+  }
+
+  return stringDeps(context).inferExpressionType(stringNodeAt(expression.args, 0), context) === 'number'
+}
+
 export function isStringTrimCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
   if (
     expression == null ||
@@ -1439,6 +1554,47 @@ export function isStringTrimCall(expression: AnyNode | null | undefined, context
   }
 
   return isStringLengthObject(expression.callee.object, context)
+}
+
+export function isStringCaseCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
+  if (
+    expression == null ||
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'toUpperCase' ||
+    expression.args.length !== 0
+  ) {
+    return false
+  }
+
+  return isStringLengthObject(expression.callee.object, context)
+}
+
+export function isStringPadStartCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
+  if (
+    expression == null ||
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'padStart' ||
+    expression.args.length < 1 ||
+    expression.args.length > 2
+  ) {
+    return false
+  }
+
+  if (!isStringLengthObject(expression.callee.object, context)) {
+    return false
+  }
+
+  if (stringDeps(context).inferExpressionType(expression.args[0], context) !== 'number') {
+    return false
+  }
+
+  if (expression.args.length > 1) {
+    return stringDeps(context).inferExpressionType(expression.args[1], context) === 'string'
+  }
+
+  return true
 }
 
 export function isStringIndexCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {

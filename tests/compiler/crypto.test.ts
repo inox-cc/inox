@@ -69,8 +69,8 @@ console.log(hex)
     }
   )
 
-  assert.deepEqual(result.ir.features, ['crypto', 'runtime-values'])
-  assert.deepEqual(result.ir.runtimeRequirements, ['binary', 'crypto', 'managed-values'])
+  assert.deepEqual(result.ir.features, ['crypto', 'runtime-values', 'string-bytes'])
+  assert.deepEqual(result.ir.runtimeRequirements, ['binary', 'crypto', 'managed-values', 'string-bytes'])
   assert.match(result.code, /ccjs_crypto_hash\* hash = 0;/)
   assert.match(result.code, /ccjs_crypto_hash_create\(&ccjs_default_allocator, "sha256", 6, &hash\)/)
   assert.match(result.code, /ccjs_crypto_hash_update\(hash, ccjs_value_\d+\)/)

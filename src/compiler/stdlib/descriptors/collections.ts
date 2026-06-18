@@ -4,12 +4,24 @@ export const arrayMethods: string[] = ['filter', 'find', 'includes', 'join', 'ma
 export const collectionConstructors: string[] = ['Map', 'Set']
 export const mapMethods: string[] = ['clear', 'delete', 'get', 'has', 'set']
 export const setMethods: string[] = ['add', 'clear', 'delete', 'has']
-export const stringTransformMethods: string[] = ['slice', 'split', 'trim', 'trimEnd', 'trimLeft', 'trimRight', 'trimStart']
+export const stringTransformMethods: string[] = [
+  'padStart',
+  'slice',
+  'split',
+  'toUpperCase',
+  'trim',
+  'trimEnd',
+  'trimLeft',
+  'trimRight',
+  'trimStart'
+]
 export const stringIndexMethods: string[] = ['indexOf', 'lastIndexOf']
 export const stringPredicateMethods: string[] = ['endsWith', 'includes', 'startsWith']
 export const stringRuntimeMethods: string[] = [
   'slice',
   'split',
+  'padStart',
+  'toUpperCase',
   'trim',
   'trimEnd',
   'trimLeft',

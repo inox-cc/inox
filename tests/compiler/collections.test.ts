@@ -650,6 +650,40 @@ export function main(): void {
 })
 
 
+test('lowers C string case and padStart methods', () => {
+  const result = compileSource(
+    `function symbolName(prefix: string, seed: number): string {
+  return prefix.toUpperCase() + '_' + seed.toString(16).padStart(8, '0')
+}
+
+export function main(): void {
+  console.log(symbolName('ccjs', 255), 'x'.padStart(3), 'B'.padStart(2, 'é'))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(
+    result.code,
+    /ccjs_string_to_upper_case_parts\(&ccjs_default_allocator, prefix->bytes, prefix->len, &ccjs_value_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /ccjs_string_pad_start_parts\(&ccjs_default_allocator, ccjs_pad_string_\d+->bytes, ccjs_pad_string_\d+->len, ccjs_pad_target_length_\d+, "0", 1, &ccjs_value_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /ccjs_string_pad_start_parts\(&ccjs_default_allocator, "x", 1, ccjs_pad_target_length_\d+, " ", 1, &ccjs_value_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /ccjs_string_pad_start_parts\(&ccjs_default_allocator, "B", 1, ccjs_pad_target_length_\d+, "é", 2, &ccjs_value_\d+\)/
+  )
+})
+
+
 test('lowers C string methods over dynamic object string fields', () => {
   const result = compileSource(
     `function hasInterpolation(node: object): boolean {
@@ -1032,6 +1066,38 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_from_bool\(&ccjs_default_allocator, \(0\) != 0, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "null", 4, &ccjs_value_\d+\)/)
 })
+
+test('lowers C number toString calls with radix', () => {
+  const result = compileSource(
+    `function hex(value: number): string {
+  return value.toString(16)
+}
+
+export function main(): void {
+  const value = 255
+  const text = value.toString()
+  const padded = (value + 4294967296).toString(16).slice(1, 9)
+  console.log(hex(value), text, padded)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const hex = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'hex')
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const text = main?.body.find((item) => item.name === 'text')
+  const padded = main?.body.find((item) => item.name === 'padded')
+
+  assert.equal(hex?.returnType, 'string')
+  assert.equal(text?.valueType, 'string')
+  assert.equal(padded?.valueType, 'string')
+  assert.match(result.code, /ccjs_string_from_number_radix\(&ccjs_default_allocator, value, \(int\)\(16\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_from_number\(&ccjs_default_allocator, value, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string_slice_parts\(/)
+})
+
 
 test('lowers C plain string locals as string parameter values', () => {
   const result = compileSource(
@@ -2817,6 +2883,53 @@ export function main(): void {
 }
 `,
     'CCJS_ARG_COUNT'
+  )
+})
+
+
+test('checks string case and padStart as string calls', () => {
+  const result = compileSource(
+    `function symbolName(prefix: string, seed: number): string {
+  return prefix.toUpperCase() + '_' + seed.toString(16).padStart(8, '0')
+}
+
+export function main(): void {
+  console.log(symbolName('ccjs', 255))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const symbolName = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'symbolName')
+  assert.equal(symbolName?.returnType, 'string')
+
+  assertDiagnostic(
+    `export function main(): void {
+  const name = 'Ada'
+  name.toUpperCase(1)
+}
+`,
+    'CCJS_ARG_COUNT'
+  )
+
+  assertDiagnostic(
+    `export function main(): void {
+  const name = 'Ada'
+  name.padStart('3')
+}
+`,
+    'CCJS_TYPE_MISMATCH'
+  )
+
+  assertDiagnostic(
+    `export function main(): void {
+  const name = 'Ada'
+  name.padStart(3, 0)
+}
+`,
+    'CCJS_TYPE_MISMATCH'
   )
 })
 

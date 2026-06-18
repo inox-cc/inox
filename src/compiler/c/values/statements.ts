@@ -2681,6 +2681,48 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
   return lines
 }
 
+function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[] | null {
+  if (expression.target.type !== 'Reference' || expression.target.path.length !== 1) {
+    return null
+  }
+
+  const target = expression.target.path[0]
+  const targetType = context.variables.get(target)
+
+  if (!isRuntimeValueDeclarationValueType(targetType)) {
+    return null
+  }
+
+  const deps = statementDeps(context)
+  const valueType = deps.inferExpressionType(expression.value, context)
+
+  if (
+    valueType !== 'unknown' &&
+    !isManagedRuntimeReturnType(valueType) &&
+    !isOpaqueRuntimeValueType(valueType)
+  ) {
+    return null
+  }
+
+  const value = deps.emitCValueExpression(expression.value, context)
+  const expectedTag = cRuntimeValueTag(targetType)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+
+  const valueCheck = emitRuntimeValueCheck(value.expression, expectedTag, context)
+
+  if (valueCheck !== '') {
+    lines.push(valueCheck)
+  }
+
+  lines.push(`ccjs_retain(${value.expression});`)
+  lines.push(`ccjs_release(${target});`)
+  lines.push(`${target} = ${value.expression};`)
+
+  return lines
+}
+
 function isDynamicRuntimeValueDeclaration(statement: StatementNode, context: CFunctionContext): boolean {
   if (!isRuntimeValueDeclarationValueType(statement.valueType)) {
     return false
@@ -2984,6 +3026,12 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (runtimeStringAssignment != null) {
       return runtimeStringAssignment
+    }
+
+    const runtimeValueAssignment = emitRuntimeValueAssignment(expression, context)
+
+    if (runtimeValueAssignment != null) {
+      return runtimeValueAssignment
     }
 
     if (valueType === 'number' || valueType === 'boolean') {

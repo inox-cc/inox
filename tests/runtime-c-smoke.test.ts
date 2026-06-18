@@ -1959,6 +1959,65 @@ console.log(outer.total())
 })
 
 
+test('generated C class method assignment into runtime value local compiles and runs', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-class-runtime-assignment-'))
+  const source = join(dir, 'class-runtime-assignment.c')
+  const output = join(dir, 'class-runtime-assignment')
+
+  try {
+    const result = compileSource(
+      `class Reader {
+  fallback(): string | null {
+    return 'fallback'
+  }
+
+  read(node: object): void {
+    let value = node.name
+
+    if (value == null) {
+      value = this.fallback()
+    }
+
+    console.log(value)
+  }
+}
+
+const reader = new Reader()
+reader.read({ name: null })
+reader.read({ name: 'Ada' })
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'fallback\nAda\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C async await over settled promises compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5469,6 +5528,54 @@ console.log(
 })
 
 
+test('generated C string case and padStart methods compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-case-pad-'))
+  const source = join(dir, 'string-case-pad.c')
+  const output = join(dir, 'string-case-pad')
+
+  try {
+    const result = compileSource(
+      `const symbolPrefix = 'ccjs'
+const seed = 255
+console.log(
+  symbolPrefix.toUpperCase(),
+  seed.toString(16).padStart(8, '0'),
+  '|' + 'x'.padStart(3) + '|',
+  'B'.padStart(2, 'é')
+)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'CCJS 000000ff |  x| éB\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C dynamic object string field methods compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5888,6 +5995,53 @@ console.log(String('Ada'), String(local), String(name), label(42), flag(true), S
 
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, 'Ada Ada Ada 42 true false null 3\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
+test('generated C number toString radix compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-number-to-string-'))
+  const source = join(dir, 'number-to-string.c')
+  const output = join(dir, 'number-to-string')
+
+  try {
+    const result = compileSource(
+      `function hex(value: number): string {
+  return value.toString(16)
+}
+
+const value = 255
+const padded = (value + 4294967296).toString(16).slice(1, 9)
+console.log(hex(value), value.toString(), padded)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'ff 255 000000ff\n')
   } finally {
     await rm(dir, {
       recursive: true,

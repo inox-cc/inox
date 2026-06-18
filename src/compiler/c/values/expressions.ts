@@ -2999,7 +2999,10 @@ export type CValueExpressionDependencies = {
   emitCOptionalMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringConcatValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringConversionValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitCNumberToStringValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitCStringCaseValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitCStringPadStartValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringSliceValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringSplitValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringTrimValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
@@ -3054,7 +3057,10 @@ export type CValueExpressionDependencies = {
   isNullableRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isNullableScalarRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isStringConcatExpression(expression: CValueNode, context: CFunctionContext): boolean
+  isNumberToStringCall(expression: CValueNode, context: CFunctionContext): boolean
+  isStringCaseCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringConversionCall(expression: CValueNode, context: CFunctionContext): boolean
+  isStringPadStartCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringSliceCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringSplitCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringTrimCall(expression: CValueNode, context: CFunctionContext): boolean
@@ -3235,6 +3241,18 @@ export function emitCValueExpression(
 
   if (deps.isStringConversionCall(expression, context)) {
     return deps.emitCStringConversionValueExpression(expression, context)
+  }
+
+  if (deps.isNumberToStringCall(expression, context)) {
+    return deps.emitCNumberToStringValueExpression(expression, context)
+  }
+
+  if (deps.isStringCaseCall(expression, context)) {
+    return deps.emitCStringCaseValueExpression(expression, context)
+  }
+
+  if (deps.isStringPadStartCall(expression, context)) {
+    return deps.emitCStringPadStartValueExpression(expression, context)
   }
 
   if (deps.isStringTrimCall(expression, context)) {

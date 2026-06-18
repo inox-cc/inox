@@ -61,6 +61,49 @@ ccjs_status ccjs_string_from_number(ccjs_allocator* allocator, double value, ccj
   return ccjs_string_from_literal(allocator, buffer, (size_t)len, out);
 }
 
+ccjs_status ccjs_string_from_number_radix(ccjs_allocator* allocator, double value, int radix, ccjs_value* out) {
+  if (radix == 10) {
+    return ccjs_string_from_number(allocator, value, out);
+  }
+
+  if (allocator == 0 || out == 0 || radix < 2 || radix > 36) {
+    if (out != 0) {
+      *out = ccjs_undefined_value();
+    }
+
+    return CCJS_ERR_TYPE;
+  }
+
+  if (value != value || isinf(value) || floor(value) != value) {
+    return ccjs_string_from_number(allocator, value, out);
+  }
+
+  const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  char buffer[80];
+  size_t index = sizeof(buffer);
+  bool negative = value < 0;
+  double remaining = negative ? -value : value;
+
+  buffer[--index] = '\0';
+
+  if (remaining == 0) {
+    buffer[--index] = '0';
+  } else {
+    while (remaining > 0 && index > 0) {
+      double quotient = floor(remaining / (double)radix);
+      int digit = (int)(remaining - quotient * (double)radix);
+      buffer[--index] = digits[digit];
+      remaining = quotient;
+    }
+  }
+
+  if (negative && index > 0) {
+    buffer[--index] = '-';
+  }
+
+  return ccjs_string_from_literal(allocator, buffer + index, sizeof(buffer) - index - 1, out);
+}
+
 ccjs_status ccjs_string_from_value(ccjs_allocator* allocator, ccjs_value value, ccjs_value* out) {
   if (value.tag == CCJS_TAG_UNDEFINED) {
     return ccjs_string_from_literal(allocator, "undefined", 9, out);
@@ -584,6 +627,163 @@ ccjs_status ccjs_string_trim_end_parts(ccjs_allocator* allocator, const char* va
   ccjs_string_trim_span(bytes, value_len, 0, &end);
 
   return ccjs_string_from_literal(allocator, bytes, end, out);
+}
+
+ccjs_status ccjs_string_to_upper_case_parts(ccjs_allocator* allocator, const char* value_bytes, size_t value_len, ccjs_value* out) {
+  if (out != 0) {
+    *out = ccjs_undefined_value();
+  }
+
+  if (allocator == 0 || allocator->alloc == 0 || out == 0 || (value_bytes == 0 && value_len != 0)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  if (value_len > ((size_t)-1) - sizeof(ccjs_string)) {
+    return CCJS_ERR_OOM;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  const size_t size = sizeof(ccjs_string) + value_len;
+  ccjs_string* string = allocator->alloc(allocator->user, size, _Alignof(ccjs_string));
+
+  if (string == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  string->header.kind = CCJS_REF_STRING;
+  string->header.ref_count = 1;
+  string->header.flags = 0;
+  string->header.size = size;
+  string->header.align = _Alignof(ccjs_string);
+  string->header.allocator = allocator;
+  ccjs_ref_init_weak(&string->header);
+  string->len = value_len;
+
+  for (size_t index = 0; index < value_len; index += 1) {
+    unsigned char value = (unsigned char)bytes[index];
+
+    if (value >= (unsigned char)'a' && value <= (unsigned char)'z') {
+      value = (unsigned char)(value - ((unsigned char)'a' - (unsigned char)'A'));
+    }
+
+    string->bytes[index] = (char)value;
+  }
+
+  out->tag = CCJS_TAG_STRING;
+  out->as.ref = &string->header;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_created(CCJS_REF_STRING);
+#endif
+
+  return CCJS_OK;
+}
+
+ccjs_status ccjs_string_pad_start_parts(
+  ccjs_allocator* allocator,
+  const char* value_bytes,
+  size_t value_len,
+  size_t target_len,
+  const char* pad_bytes,
+  size_t pad_len,
+  ccjs_value* out
+) {
+  if (out != 0) {
+    *out = ccjs_undefined_value();
+  }
+
+  if (
+    allocator == 0 || allocator->alloc == 0 || out == 0 || (value_bytes == 0 && value_len != 0) ||
+    (pad_bytes == 0 && pad_len != 0)
+  ) {
+    return CCJS_ERR_TYPE;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  const char* pad = pad_bytes == 0 ? "" : pad_bytes;
+  const size_t value_units = ccjs_string_code_unit_length_parts(bytes, value_len);
+  const size_t pad_units = ccjs_string_code_unit_length_parts(pad, pad_len);
+
+  if (target_len <= value_units || pad_len == 0 || pad_units == 0) {
+    return ccjs_string_from_literal(allocator, bytes, value_len, out);
+  }
+
+  size_t remaining_units = target_len - value_units;
+  size_t pad_total_len = 0;
+
+  while (remaining_units > 0) {
+    size_t take_units = pad_units;
+
+    if (take_units > remaining_units) {
+      take_units = remaining_units;
+    }
+
+    const size_t take_len = ccjs_string_code_unit_to_byte_offset_ceiling(pad, pad_len, take_units);
+
+    if (take_len > ((size_t)-1) - pad_total_len) {
+      return CCJS_ERR_OOM;
+    }
+
+    pad_total_len += take_len;
+    remaining_units -= take_units;
+  }
+
+  if (value_len > ((size_t)-1) - pad_total_len) {
+    return CCJS_ERR_OOM;
+  }
+
+  const size_t len = pad_total_len + value_len;
+
+  if (len > ((size_t)-1) - sizeof(ccjs_string)) {
+    return CCJS_ERR_OOM;
+  }
+
+  const size_t size = sizeof(ccjs_string) + len;
+  ccjs_string* string = allocator->alloc(allocator->user, size, _Alignof(ccjs_string));
+
+  if (string == 0) {
+    return CCJS_ERR_OOM;
+  }
+
+  string->header.kind = CCJS_REF_STRING;
+  string->header.ref_count = 1;
+  string->header.flags = 0;
+  string->header.size = size;
+  string->header.align = _Alignof(ccjs_string);
+  string->header.allocator = allocator;
+  ccjs_ref_init_weak(&string->header);
+  string->len = len;
+
+  remaining_units = target_len - value_units;
+  size_t offset = 0;
+
+  while (remaining_units > 0) {
+    size_t take_units = pad_units;
+
+    if (take_units > remaining_units) {
+      take_units = remaining_units;
+    }
+
+    const size_t take_len = ccjs_string_code_unit_to_byte_offset_ceiling(pad, pad_len, take_units);
+
+    if (take_len != 0) {
+      memcpy(string->bytes + offset, pad, take_len);
+      offset += take_len;
+    }
+
+    remaining_units -= take_units;
+  }
+
+  if (value_len != 0) {
+    memcpy(string->bytes + offset, bytes, value_len);
+  }
+
+  out->tag = CCJS_TAG_STRING;
+  out->as.ref = &string->header;
+#ifdef CCJS_DEBUG_MEMORY
+  ccjs_debug_memory_record_ref_created(CCJS_REF_STRING);
+#endif
+
+  return CCJS_OK;
 }
 
 ccjs_status ccjs_string_slice_parts(

@@ -41,8 +41,11 @@ export type CExpressionTypeDependencies = {
   isIndexAccessExpression: (expression: AnyNode) => boolean
   isMemberAccessExpression: (expression: AnyNode) => boolean
   isNumberConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isNumberToStringCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isPromiseConstructorExpression: (expression: AnyNode) => boolean
+  isStringCaseCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
+  isStringPadStartCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringPredicateCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringSliceCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringSplitCall: (expression: AnyNode, context: CFunctionContext) => boolean
@@ -332,6 +335,10 @@ export function inferExpressionType(
     return 'number'
   }
 
+  if (deps.isNumberToStringCall(expression, context)) {
+    return 'string'
+  }
+
   if (deps.isErrorConstructorExpression(expression)) {
     return 'object'
   }
@@ -353,6 +360,14 @@ export function inferExpressionType(
   }
 
   if (deps.isStringConversionCall(expression, context)) {
+    return 'string'
+  }
+
+  if (deps.isStringCaseCall(expression, context)) {
+    return 'string'
+  }
+
+  if (deps.isStringPadStartCall(expression, context)) {
     return 'string'
   }
 

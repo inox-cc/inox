@@ -275,7 +275,11 @@ export function emitFunctionDeclaration(
   return lines
 }
 
-function registerFunctionParamsInContext(statement: CNode, params: CFunctionParam[], context: CFunctionContext): void {
+function registerFunctionParamsInContext(
+  statement: CNode,
+  params: CFunctionParam[],
+  context: CDeclarationFunctionContext
+): void {
   for (let index = 0; index < params.length; index = index + 1) {
     const param = params[index]
 
