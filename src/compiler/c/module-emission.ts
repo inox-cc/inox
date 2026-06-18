@@ -372,8 +372,10 @@ export function emitCModuleSource(
 
   for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
     const item = cModuleClassMethodAt(classMethods, methodIndex)
+    const info = item.info
+    const method = item.method
 
-    pushCModuleLines(lines, deps.emitClassMethodDeclaration(item.info, item.method, context))
+    pushCModuleLines(lines, deps.emitClassMethodDeclaration(info, method, context))
     lines.push('')
   }
 
@@ -560,7 +562,8 @@ function createCModuleBaseContext(
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies
 ): CEmitContext {
-  const irPrograms = [plan.ir]
+  const ir = plan.ir
+  const irPrograms = [ir]
   const importedDeclarations = collectCModuleImportedFunctionDeclarations(plan)
   const functionEntries = collectIrFunctionNodeEntries(irPrograms)
   const functions: AnyNode[] = []
@@ -631,7 +634,9 @@ function createCModuleBaseContext(
     new Set(['connect', 'createConnection'])
   )
   context.functionNames = createCModuleFunctionNames(plan)
-  context.classInfos = createClassInfos(collectIrTopLevelNodes(plan.ir, 'class'), diagnostics)
+  const classNodes = collectIrTopLevelNodes(ir, 'class')
+
+  context.classInfos = createClassInfos(classNodes, diagnostics)
   context.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
   context.callbackWrappers = collectCallbackWrappers(irPrograms, context, deps.callbackLoweringDependencies)
   context.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, context, deps.promiseChainLoweringDependencies)
@@ -703,7 +708,8 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
 
 function collectCModuleExportedValueDeclarations(plan: CModulePlan): CModuleValueDeclaration[] {
   const values: CModuleValueDeclaration[] = []
-  const statements = collectIrTopLevelNodes(plan.ir, 'statement')
+  const ir = plan.ir
+  const statements = collectIrTopLevelNodes(ir, 'statement')
 
   for (let index = 0; index < statements.length; index = index + 1) {
     const item = cModuleNodeAt(statements, index)
@@ -782,7 +788,8 @@ function emitCModuleInitFunction(
   deps: CModuleEmissionDependencies
 ): string[] {
   const context = createFunctionContext(baseContext, 'void', false)
-  const body = collectIrTopLevelNodes(plan.ir, 'statement')
+  const ir = plan.ir
+  const body = collectIrTopLevelNodes(ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
   const bodyLines = deps.emitStatementList(body, context)
   const lines: string[] = []
@@ -824,7 +831,8 @@ function emitCModuleMainFunction(
   deps: CModuleEmissionDependencies
 ): string[] {
   const context = createFunctionContext(baseContext, 'number', false)
-  const body = collectIrTopLevelNodes(plan.ir, 'statement')
+  const ir = plan.ir
+  const body = collectIrTopLevelNodes(ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
   const bodyLines = deps.emitStatementList(body, context)
   const lines: string[] = []
@@ -887,20 +895,21 @@ function emitCModuleImportInitCalls(plan: CModulePlan): string[] {
 function collectCModuleExportedFunctions(plan: CModulePlan): AnyNode[] {
   const exportedNames: Set<string> = new Set()
   const functions: AnyNode[] = []
+  const ir = plan.ir
 
   for (
     let declarationIndex = 0;
-    declarationIndex < plan.ir.functionDeclarations.length;
+    declarationIndex < ir.functionDeclarations.length;
     declarationIndex = declarationIndex + 1
   ) {
-    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+    const declaration = cModuleFunctionDeclarationAt(ir.functionDeclarations, declarationIndex)
 
     if (declaration.exported) {
       exportedNames.add(declaration.name)
     }
   }
 
-  const nodes = collectIrTopLevelNodes(plan.ir, 'function')
+  const nodes = collectIrTopLevelNodes(ir, 'function')
 
   for (let index = 0; index < nodes.length; index = index + 1) {
     const item = cModuleNodeAt(nodes, index)
