@@ -42,6 +42,18 @@ type CStringSet = Set<string>
 type ClassExpressionNode = AnyNode
 type ClassMaybeNode = AnyNode | null | undefined
 
+function classPathSegmentAt(path: string[], index: number): string {
+  return path[index]
+}
+
+function classStringEquals(left: string, right: string): boolean {
+  return left === right
+}
+
+function classStringDiffers(left: string, right: string): boolean {
+  return !classStringEquals(left, right)
+}
+
 type ClassEmitContext = {
   classInfos: CClassInfoMap
 }
@@ -181,15 +193,17 @@ function classFieldOwnership(field: CObjectShapeField): string {
 
 export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]): CClassInfoMap {
   const infos = createClassInfoMap()
+  const classNodes: ClassExpressionNode[] = classes
 
-  for (const item of classes) {
+  for (const item of classNodes) {
     const constructorMethod = findClassConstructorMethod(item)
     const assignments = collectClassConstructorAssignments(item, constructorMethod, diagnostics)
     const fields = resolveClassFields(item, constructorMethod, assignments)
     const methods = createClassMethodMap()
+    const methodNodes: ClassExpressionNode[] = item.methods
 
-    for (const method of item.methods) {
-      if (method.name !== 'constructor') {
+    for (const method of methodNodes) {
+      if (classStringDiffers(method.name, 'constructor')) {
         methods.set(method.name, method)
       }
     }
@@ -208,8 +222,10 @@ export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]):
 }
 
 function findClassConstructorMethod(classNode: AnyNode): AnyNode | null {
-  for (const method of classNode.methods) {
-    if (method.name === 'constructor') {
+  const methods: ClassExpressionNode[] = classNode.methods
+
+  for (const method of methods) {
+    if (classStringEquals(method.name, 'constructor')) {
       return method
     }
   }
@@ -222,7 +238,13 @@ export function collectClassMethods(context: ClassEmitContext): CClassMethod[] {
   const classInfos = context.classInfos
 
   for (const info of classInfos.values()) {
-    for (const method of info.methods.values()) {
+    const methodList: ClassExpressionNode[] = info.node.methods
+
+    for (const method of methodList) {
+      if (classStringEquals(method.name, 'constructor')) {
+        continue
+      }
+
       methods.push({
         info,
         method
@@ -241,7 +263,9 @@ function collectClassConstructorAssignments(
   const assignments: AnyNode[] = []
 
   if (constructorMethod != null) {
-    for (const statement of constructorMethod.body) {
+    const statements: ClassExpressionNode[] = constructorMethod.body
+
+    for (const statement of statements) {
       let assignment: AnyNode | null = null
 
       if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
@@ -347,7 +371,8 @@ function inferClassConstructorFieldType(expression: ClassMaybeNode, constructorM
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1 && constructorMethod != null) {
-    const param = findClassParam(constructorMethod.params, expression.path[0])
+    const paramName = classPathSegmentAt(expression.path, 0)
+    const param = findClassParam(constructorMethod.params, paramName)
 
     if (param != null) {
       if (param.valueType != null) {
@@ -386,8 +411,10 @@ function inferClassConstructorFieldType(expression: ClassMaybeNode, constructorM
 }
 
 function findClassParam(params: AnyNode[], name: string): AnyNode | null {
-  for (const param of params) {
-    if (param.name === name) {
+  const source: ClassExpressionNode[] = params
+
+  for (const param of source) {
+    if (classStringEquals(param.name, name)) {
       return param
     }
   }
@@ -420,7 +447,11 @@ function isThisObjectExpression(expression: ClassMaybeNode): boolean {
     return true
   }
 
-  return expression.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'this'
+  return (
+    expression.type === 'Reference' &&
+    expression.path.length === 1 &&
+    classStringEquals(classPathSegmentAt(expression.path, 0), 'this')
+  )
 }
 
 function nodeLocOrFallback(node: ClassMaybeNode, fallback: ClassMaybeNode): SourceLocation | null {
@@ -607,8 +638,9 @@ function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstruct
     }
   }
 
-  if (node.type === 'Reference' && node.path.length === 1 && args.has(node.path[0])) {
-    const replacement = args.get(node.path[0])
+  if (node.type === 'Reference' && node.path.length === 1 && args.has(classPathSegmentAt(node.path, 0))) {
+    const name = classPathSegmentAt(node.path, 0)
+    const replacement = args.get(name)
 
     if (replacement != null) {
       return replacement
@@ -682,8 +714,9 @@ function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstruct
 
 function substituteArrayLiteral(node: AnyNode, args: CConstructorArgMap): AnyNode {
   const elements: AnyNode[] = []
+  const sourceElements: ClassExpressionNode[] = node.elements
 
-  for (const element of node.elements) {
+  for (const element of sourceElements) {
     elements.push(substituteClassConstructorParams(element, args))
   }
 
@@ -697,8 +730,9 @@ function substituteArrayLiteral(node: AnyNode, args: CConstructorArgMap): AnyNod
 
 function substituteObjectLiteral(node: AnyNode, args: CConstructorArgMap): AnyNode {
   const properties: AnyNode[] = []
+  const sourceProperties: ClassExpressionNode[] = node.properties
 
-  for (const property of node.properties) {
+  for (const property of sourceProperties) {
     properties.push({
       key: property.key,
       value: substituteClassConstructorParams(property.value, args),
@@ -717,8 +751,9 @@ function substituteObjectLiteral(node: AnyNode, args: CConstructorArgMap): AnyNo
 
 function substituteCallLikeExpression(node: AnyNode, args: CConstructorArgMap): AnyNode {
   const callArgs: AnyNode[] = []
+  const sourceArgs: ClassExpressionNode[] = node.args
 
-  for (const arg of node.args) {
+  for (const arg of sourceArgs) {
     callArgs.push(substituteClassConstructorParams(arg, args))
   }
 
@@ -746,7 +781,8 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassF
     return null
   }
 
-  const info = classInfos.get(expression.callee.path[0])
+  const className = classPathSegmentAt(expression.callee.path, 0)
+  const info = classInfos.get(className)
 
   if (info != null) {
     return info
