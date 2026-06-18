@@ -739,7 +739,9 @@ function emitHttpStatusCheck(call: string, context: CFunctionContext): string[] 
 }
 
 function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
-  if (httpContext.responseName == null) {
+  const responseName = httpContext.responseName
+
+  if (responseName == null) {
     return false
   }
 
@@ -747,18 +749,27 @@ function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerCo
     return false
   }
 
-  return expression.path.length === 1 && expression.path[0] === httpContext.responseName
+  const path: string[] = expression.path
+
+  return path.length === 1 && path[0] === responseName
 }
 
 function resolveHttpRequestStringMember(expression: AnyNode, httpContext: HttpHandlerContext): string | null {
+  const requestName = httpContext.requestName
+
   if (
-    httpContext.requestName == null ||
+    requestName == null ||
     expression.type !== 'MemberExpression' ||
     expression.object == null ||
     expression.object.type !== 'Reference' ||
-    expression.object.path.length !== 1 ||
-    expression.object.path[0] !== httpContext.requestName
+    expression.object.path.length !== 1
   ) {
+    return null
+  }
+
+  const path: string[] = expression.object.path
+
+  if (path[0] !== requestName) {
     return null
   }
 
@@ -809,20 +820,23 @@ export function emitHttpServerCallStatement(
   }
 
   if (isHttpServerMethodCall(expression, 'listen', context)) {
-    const serverName = expression.callee.object.path[0]
+    const path: string[] = expression.callee.object.path
+    const serverName = path[0]
     registerEventLoop(context)
 
     return emitHttpServerListenLines(serverName, expression.args, context, deps)
   }
 
   if (isHttpServerMethodCall(expression, 'on', context)) {
-    const serverName = expression.callee.object.path[0]
+    const path: string[] = expression.callee.object.path
+    const serverName = path[0]
 
     return emitHttpServerOnRequestLines(serverName, expression.args, context)
   }
 
   if (isHttpServerMethodCall(expression, 'close', context)) {
-    const serverName = expression.callee.object.path[0]
+    const path: string[] = expression.callee.object.path
+    const serverName = path[0]
 
     return emitHttpServerCloseLines(serverName, expression.args, context, deps)
   }
@@ -1078,7 +1092,8 @@ function isHttpServerMethodCall(expression: AnyNode, method: string, context: CF
     return false
   }
 
-  const serverName = expression.callee.object.path[0]
+  const path: string[] = expression.callee.object.path
+  const serverName = path[0]
 
   return context.variables.get(serverName) === 'http-server'
 }
@@ -1088,24 +1103,27 @@ function isHttpCreateServerCall(expression: AnyNode | null | undefined, context:
     return false
   }
 
-  if (
-    expression.callee != null &&
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    context.httpCreateServerNames.has(expression.callee.path[0])
-  ) {
-    return true
+  if (expression.callee != null && expression.callee.type === 'Reference') {
+    const path: string[] = expression.callee.path
+
+    if (path.length === 1 && context.httpCreateServerNames.has(path[0])) {
+      return true
+    }
   }
 
-  return (
-    expression.callee != null &&
-    expression.callee.type === 'MemberExpression' &&
-    expression.callee.property === 'createServer' &&
-    expression.callee.object != null &&
-    expression.callee.object.type === 'Reference' &&
-    expression.callee.object.path.length === 1 &&
-    context.httpImportNames.has(expression.callee.object.path[0])
-  )
+  if (
+    expression.callee == null ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'createServer' ||
+    expression.callee.object == null ||
+    expression.callee.object.type !== 'Reference'
+  ) {
+    return false
+  }
+
+  const path: string[] = expression.callee.object.path
+
+  return path.length === 1 && context.httpImportNames.has(path[0])
 }
 
 function isHttpRequestEventCall(expression: AnyNode): boolean {

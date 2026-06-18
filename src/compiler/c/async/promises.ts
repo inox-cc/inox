@@ -1488,10 +1488,10 @@ export function collectPromiseChainWrappers(
   for (let irIndex = 0; irIndex < irPrograms.length; irIndex = irIndex + 1) {
     const ir = promiseProgramAt(irPrograms, irIndex)
     const topLevelScope: CallbackScope = new Map()
-    const entries = collectIrTopLevelNodeEntries(ir)
+    const entries: PromiseTopLevelNodeEntry[] = collectIrTopLevelNodeEntries(ir)
 
     for (let entryIndex = 0; entryIndex < entries.length; entryIndex = entryIndex + 1) {
-      const item = entries[entryIndex]
+      const item: PromiseTopLevelNodeEntry = entries[entryIndex]
 
       if (item.kind === 'function') {
         const scope: CallbackScope = new Map()

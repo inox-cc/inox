@@ -1493,9 +1493,14 @@ export function isStringConversionCall(expression: AnyNode | null | undefined, c
     expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1 ||
-    expression.callee.path[0] !== 'String' ||
     expression.args.length !== 1
   ) {
+    return false
+  }
+
+  const path: string[] = expression.callee.path
+
+  if (path[0] !== 'String') {
     return false
   }
 
@@ -1511,9 +1516,14 @@ export function isNumberConversionCall(expression: AnyNode | null | undefined, c
     expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1 ||
-    expression.callee.path[0] !== 'Number' ||
     expression.args.length !== 1
   ) {
+    return false
+  }
+
+  const path: string[] = expression.callee.path
+
+  if (path[0] !== 'Number') {
     return false
   }
 

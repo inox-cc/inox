@@ -383,7 +383,8 @@ function objectExpressionPathName(expression: CValueNode, context: CFunctionCont
   }
 
   if (expression.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
-    const accessor = context.objectAccessorReturnPaths.get(expression.callee.path[0])
+    const path: string[] = expression.callee.path
+    const accessor = context.objectAccessorReturnPaths.get(path[0])
 
     if (accessor != null) {
       const argument = functionCallArgumentAt(expression.args, accessor.paramIndex)
@@ -641,7 +642,8 @@ function objectFunctionReturnShape(object: CValueNode, context: CFunctionContext
     return null
   }
 
-  const shape = context.functionReturnShapes.get(object.callee.path[0])
+  const path: string[] = object.callee.path
+  const shape = context.functionReturnShapes.get(path[0])
 
   if (shape != null) {
     return shape

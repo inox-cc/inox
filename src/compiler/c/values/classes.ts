@@ -773,7 +773,8 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassF
     return null
   }
 
-  const className = expression.callee.path[0]
+  const path: string[] = expression.callee.path
+  const className = path[0]
   const info = classInfos.get(className)
 
   if (info != null) {

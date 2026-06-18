@@ -315,6 +315,7 @@ import {
   isRuntimeNullableType
 } from './value-types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
+import type { DebugMemoryStatsField } from '../stdlib/descriptors/debug.ts'
 import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
 import {
   canLowerCNullishCoalescingExpression,
@@ -589,8 +590,10 @@ function firstKnownValueTypeOrUnknown(
   return 'unknown'
 }
 
-function debugMemoryStatsFieldAt(index: number): (typeof debugMemoryStatsFields)[number] {
-  return debugMemoryStatsFields[index]
+function debugMemoryStatsFieldAt(index: number): DebugMemoryStatsField {
+  const fields: DebugMemoryStatsField[] = debugMemoryStatsFields
+
+  return fields[index]
 }
 
 let objectVariableDeclarationDependencies = {} as ObjectVariableDeclarationDependencies
@@ -1681,8 +1684,11 @@ function objectAccessorReturnPathFromStatementList(
     return objectAccessorReturnPathFromStatement(statements, params, locals)
   }
 
-  for (let index = 0; index < statements.length; index = index + 1) {
-    const path = objectAccessorReturnPathFromStatement(statements[index], params, locals)
+  const statementList: CAccessorNode[] = statements
+
+  for (let index = 0; index < statementList.length; index = index + 1) {
+    const item: CAccessorNode = statementList[index]
+    const path = objectAccessorReturnPathFromStatement(item, params, locals)
 
     if (path != null) {
       return path
@@ -2555,21 +2561,23 @@ function uninitializedDeclarationPrefix(statement: AnyNode): string {
 }
 
 function isBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): boolean {
-  return (
-    expression.target != null &&
-    expression.target.type === 'Reference' &&
-    expression.target.path.length === 1 &&
-    isBoxedRuntimeValueName(expression.target.path[0], context)
-  )
+  if (expression.target == null || expression.target.type !== 'Reference') {
+    return false
+  }
+
+  const path: string[] = expression.target.path
+
+  return path.length === 1 && isBoxedRuntimeValueName(path[0], context)
 }
 
 function isNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): boolean {
-  return (
-    expression.target != null &&
-    expression.target.type === 'Reference' &&
-    expression.target.path.length === 1 &&
-    context.nullableVariables.has(expression.target.path[0])
-  )
+  if (expression.target == null || expression.target.type !== 'Reference') {
+    return false
+  }
+
+  const path: string[] = expression.target.path
+
+  return path.length === 1 && context.nullableVariables.has(path[0])
 }
 
 function emptyPreparedExpression(): PreparedExpression {
@@ -2580,7 +2588,8 @@ function emptyPreparedExpression(): PreparedExpression {
 }
 
 function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
-  const name = expression.target.path[0]
+  const path: string[] = expression.target.path
+  const name = path[0]
   const expectedTag = cRuntimeValueTag(context.variables.get(name))
   const targetType = context.variables.get(name)
   let value = emptyPreparedExpression()
@@ -2628,7 +2637,8 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
 }
 
 function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
-  const name = expression.target.path[0]
+  const path: string[] = expression.target.path
+  const name = path[0]
   const expected = context.variables.get(name)
   const value = emitCValueExpression(expression.value, context)
   const temp = nextCName(context, 'ccjs_box_value')
@@ -3225,13 +3235,15 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
 
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'array')
-  for (const element of statement.init.elements) {
+  const elements: AnyNode[] = statement.init.elements
+
+  for (const element of elements) {
     shapes.push({
       valueType: inferExpressionType(element, context)
     })
   }
   if (
-    statement.init.elements.length === 0 &&
+    elements.length === 0 &&
     statement.arrayElementType != null &&
     statement.arrayElementType !== 'unknown'
   ) {
@@ -3240,8 +3252,8 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
     context.arrayShapes.set(statement.name, shapes)
   }
 
-  for (let index = 0; index < statement.init.elements.length; index++) {
-    const element = statement.init.elements[index]
+  for (let index = 0; index < elements.length; index++) {
+    const element: AnyNode = elements[index]
     const value = emitCValueExpression(element, context)
 
     pushAll(lines, value.lines)
@@ -4581,7 +4593,8 @@ function emitPreparedAsyncTaskPromiseCallExpression(
     return null
   }
 
-  const wrapper = context.asyncTaskWrappers.get(expression.callee.path[0])
+  const path: string[] = expression.callee.path
+  const wrapper = context.asyncTaskWrappers.get(path[0])
 
   if (wrapper == null) {
     return null
@@ -4935,8 +4948,12 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
     return null
   }
 
-  if (callExpression.callee.type === 'Reference' && context.asyncTaskWrappers.has(callExpression.callee.path[0])) {
-    return null
+  if (callExpression.callee.type === 'Reference') {
+    const path: string[] = callExpression.callee.path
+
+    if (context.asyncTaskWrappers.has(path[0])) {
+      return null
+    }
   }
 
   const valueType = firstKnownValueTypeOrUnknown(
@@ -5561,7 +5578,8 @@ function resolveObjectFunctionParamExpressionName(expression: CAccessorNode, con
   }
 
   if (expression.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
-    const accessor = context.objectAccessorReturnPaths.get(expression.callee.path[0])
+    const path: string[] = expression.callee.path
+    const accessor = context.objectAccessorReturnPaths.get(path[0])
 
     if (accessor != null) {
       const argument = functionParamArgumentAt(expression.args, accessor.paramIndex)
@@ -5591,7 +5609,8 @@ function objectFunctionParamFields(object: CAccessorNode, objectName: string, co
   }
 
   if (object.type === 'CallExpression' && object.callee.type === 'Reference' && object.callee.path.length === 1) {
-    const shape = context.functionReturnShapes.get(object.callee.path[0])
+    const path: string[] = object.callee.path
+    const shape = context.functionReturnShapes.get(path[0])
 
     if (shape != null && shape.fields != null) {
       return shape.fields
@@ -5651,21 +5670,23 @@ function inferExpressionType(expression: AnyNode, context: CFunctionContext): st
 }
 
 function isErrorConstructorExpression(expression: AnyNode): boolean {
-  return (
-    expression?.type === 'NewExpression' &&
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    expression.callee.path[0] === 'Error'
-  )
+  if (expression?.type !== 'NewExpression' || expression.callee.type !== 'Reference') {
+    return false
+  }
+
+  const path: string[] = expression.callee.path
+
+  return path.length === 1 && path[0] === 'Error'
 }
 
 function isFetchAbortControllerConstructorExpression(expression: AnyNode): boolean {
-  return (
-    expression?.type === 'NewExpression' &&
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    expression.callee.path[0] === 'AbortController'
-  )
+  if (expression?.type !== 'NewExpression' || expression.callee.type !== 'Reference') {
+    return false
+  }
+
+  const path: string[] = expression.callee.path
+
+  return path.length === 1 && path[0] === 'AbortController'
 }
 
 function isArrayIsArrayCall(expression: AnyNode): boolean {
@@ -5675,13 +5696,17 @@ function isArrayIsArrayCall(expression: AnyNode): boolean {
 
   const callee = expression.callee
 
-  return (
-    callee.type === 'MemberExpression' &&
-    callee.property === 'isArray' &&
-    callee.object.type === 'Reference' &&
-    callee.object.path.length === 1 &&
-    callee.object.path[0] === 'Array'
-  )
+  if (
+    callee.type !== 'MemberExpression' ||
+    callee.property !== 'isArray' ||
+    callee.object.type !== 'Reference'
+  ) {
+    return false
+  }
+
+  const path: string[] = callee.object.path
+
+  return path.length === 1 && path[0] === 'Array'
 }
 
 function emitPreparedArrayIsArrayCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {

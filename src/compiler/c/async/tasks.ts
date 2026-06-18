@@ -644,8 +644,10 @@ function visitAsyncTaskReferencedValue(value: AsyncTaskChildValue, names: AsyncT
   const current = value as AsyncTaskAstNode
 
   if (current.type === 'Reference') {
-    if (current.path.length === 1) {
-      names.add(current.path[0])
+    const path: string[] = current.path
+
+    if (path.length === 1) {
+      names.add(path[0])
     }
 
     return

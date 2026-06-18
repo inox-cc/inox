@@ -510,7 +510,8 @@ export function resolveKnownArrayIndex(
     return null
   }
 
-  const arrayName = object.path[0]
+  const path: string[] = object.path
+  const arrayName = path[0]
   const elements = findArrayShape(context, arrayName)
 
   if (elements != null) {
@@ -721,7 +722,9 @@ function resolveFunctionReturnNameFromCall(expression: ArrayMaybeNode): string |
     return null
   }
 
-  return callee.path[0]
+  const path: string[] = callee.path
+
+  return path[0]
 }
 
 export function emitPreparedRuntimeArrayIndexValue(
@@ -858,7 +861,8 @@ export function resolveKnownArrayLength(expression: ArrayMaybeNode, context: Arr
     return null
   }
 
-  const arrayName = expression.object.path[0]
+  const path: string[] = expression.object.path
+  const arrayName = path[0]
   const elements = findArrayShape(context, arrayName)
 
   if (elements == null) {
