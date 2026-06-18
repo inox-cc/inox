@@ -1,7 +1,7 @@
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { emitCFunctionName, emitCIdentifier } from '../identifiers.ts'
-import { isManagedRuntimeReturnType, emitCType } from '../value-types.ts'
+import { emitCType, isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 import { isPromiseConstructorExpression, functionTakesEventLoopParam } from './promises.ts'
 import { isTimerStartCallExpression, timerCallbackFunctionType } from '../stdlib/timers.ts'
 import type {
@@ -47,6 +47,7 @@ type CallbackEmitContext = {
   functionParams: CallbackFunctionParamMap
   functionReturnTypes: CallbackStringMap
   jsGlobalRoots: CallbackStringSet
+  moduleValueNames?: CallbackStringMap
   runtimeFunctionParams: CallbackFunctionTypeMap
 }
 
@@ -83,10 +84,6 @@ function callbackBooleanValueIsTrue(value: boolean | null | undefined): boolean 
   return false
 }
 
-function callbackFunctionReturnType(functionType: CFunctionType): string {
-  return functionType.returnType
-}
-
 export type CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions(expression: AnyNode): AnyNode[]
   createFunctionContext(
@@ -103,6 +100,7 @@ export type CallbackLoweringDependencies = {
   emitOwnedValueDeclarations(context: CallbackFunctionContext): string[]
   emitPreparedNumberExpression(expression: AnyNode, context: CallbackFunctionContext): PreparedExpression
   emitReturnFlowDeclarations(context: CallbackFunctionContext): string[]
+  emitReturnValueDeclarations(context: CallbackFunctionContext): string[]
   emitRuntimeCallbackRuntimeValueReturnLines(argument: AnyNode, context: CallbackFunctionContext): string[]
   emitStatementList(statements: AnyNode[], context: CallbackFunctionContext): string[]
   registerObjectShape(context: CallbackFunctionContext, name: string, shape: CObjectShape | null | undefined): void
@@ -155,14 +153,6 @@ function callbackNodeAt(values: CallbackNode[], index: number): CallbackNode {
   return values[index]
 }
 
-function nullableCallbackNodeAt(values: CallbackNode[], index: number): CallbackNode | null {
-  if (index < 0 || index >= values.length) {
-    return null
-  }
-
-  return values[index]
-}
-
 function callbackParamAt(values: CFunctionParam[], index: number): CFunctionParam {
   return values[index]
 }
@@ -185,6 +175,73 @@ function callbackTopLevelNodeEntryAt(values: CallbackTopLevelNodeEntry[], index:
 
 function isPlainCallbackParamValueType(valueType: string): boolean {
   return valueType === 'number' || valueType === 'boolean'
+}
+
+function isPlainFunctionPointerParam(param: CFunctionParam): boolean {
+  if (param.nullable === true && isNullableScalarType(param.valueType)) {
+    return false
+  }
+
+  if (param.valueType === 'object' && !isSupportedPlainFunctionPointerShape(param.shape, [])) {
+    return false
+  }
+
+  return (
+    param.valueType === 'number' ||
+    param.valueType === 'boolean' ||
+    param.valueType === 'unknown' ||
+    isManagedRuntimeReturnType(param.valueType) ||
+    isOpaqueRuntimeValueType(param.valueType)
+  )
+}
+
+function isSupportedPlainFunctionPointerShape(shape: CObjectShape | null | undefined, seen: CObjectShape[]): boolean {
+  if (shape == null || shape.fields == null) {
+    return true
+  }
+
+  for (const item of seen) {
+    if (item === shape) {
+      return true
+    }
+  }
+
+  seen.push(shape)
+
+  for (const field of shape.fields) {
+    if (
+      field.valueType === 'function' &&
+      !isPlainFunctionPointerType(field.functionType) &&
+      !isRuntimeFunctionType(field.functionType)
+    ) {
+      seen.pop()
+      return false
+    }
+
+    if (field.valueType === 'object' && !isSupportedPlainFunctionPointerShape(field.shape, seen)) {
+      seen.pop()
+      return false
+    }
+  }
+
+  seen.pop()
+
+  return true
+}
+
+function isPlainFunctionPointerReturn(functionType: CFunctionType): boolean {
+  if (functionType.returnNullable === true && isNullableScalarType(functionType.returnType)) {
+    return false
+  }
+
+  return (
+    functionType.returnType === 'void' ||
+    functionType.returnType === 'number' ||
+    functionType.returnType === 'boolean' ||
+    functionType.returnType === 'unknown' ||
+    isManagedRuntimeReturnType(functionType.returnType) ||
+    isOpaqueRuntimeValueType(functionType.returnType)
+  )
 }
 
 function isManagedRuntimeCallbackParamValueType(valueType: string): boolean {
@@ -411,14 +468,14 @@ export function isPlainFunctionPointerType(functionType: CFunctionType | null | 
     return true
   }
 
-  if (functionType.returnType !== 'void') {
+  if (!isPlainFunctionPointerReturn(functionType)) {
     return false
   }
 
   for (let index = 0; index < functionType.params.length; index = index + 1) {
     const param = callbackParamAt(functionType.params, index)
 
-    if (!isPlainCallbackParamValueType(param.valueType)) {
+    if (!isPlainFunctionPointerParam(param)) {
       return false
     }
   }
@@ -833,7 +890,7 @@ function registerPlainArrowCallbackWrapper(
 
   const captures = collectArrowCaptures(expression, scopes, context, deps)
 
-  if (captures.length > 0) {
+  if (captures.length > 0 && !capturesAreModuleValues(captures, context)) {
     return
   }
 
@@ -849,6 +906,24 @@ function registerPlainArrowCallbackWrapper(
 
   wrappers.set(key, wrapper)
   context.callbackArrowWrappers.set(expression, wrapper)
+}
+
+function capturesAreModuleValues(captures: CRuntimeArrowCapture[], context: CallbackEmitContext): boolean {
+  const moduleValueNames = context.moduleValueNames
+
+  if (moduleValueNames == null) {
+    return false
+  }
+
+  for (let index = 0; index < captures.length; index = index + 1) {
+    const capture = callbackRuntimeArrowCaptureAt(captures, index)
+
+    if (!moduleValueNames.has(capture.name)) {
+      return false
+    }
+  }
+
+  return true
 }
 
 function declareCallbackBinding(scope: CallbackScope, name: string, info: CallbackScopeBinding): void {
@@ -1235,6 +1310,10 @@ function visitCallbackExpression(
   if (expression.type === 'ObjectLiteral') {
     for (let index = 0; index < expression.properties.length; index = index + 1) {
       const property = callbackNodeAt(expression.properties, index)
+
+      if (property.value.functionType != null) {
+        registerCallbackExpression(property.value, property.value.functionType, scopes, wrappers, context, deps)
+      }
 
       visitCallbackExpression(property.value, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
@@ -1807,7 +1886,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   baseContext: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
-  const returnType = callbackFunctionReturnType(wrapper.functionType)
+  const returnType = wrapper.functionType.returnType
   const params = wrapper.functionType.params
 
   const context = deps.createFunctionContext(baseContext, returnType, false)
@@ -1824,8 +1903,9 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   if (wrapper.expression.expressionBody) {
     statements = [
       {
-        type: 'ExpressionStatement',
-        expression: wrapper.expression.body
+        type: 'ReturnStatement',
+        argument: wrapper.expression.body,
+        loc: wrapper.expression.loc
       }
     ]
   }
@@ -1833,6 +1913,8 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   const statementLines = deps.emitStatementList(statements, context)
   const lines: string[] = [`${emitPlainArrowCallbackWrapperHead(wrapper)} {`]
 
+  pushIndentedLines(lines, deps.emitReturnValueDeclarations(context))
+  pushIndentedLines(lines, deps.emitReturnFlowDeclarations(context))
   pushIndentedLines(lines, deps.emitOwnedValueDeclarations(context))
   pushIndentedLines(lines, deps.emitBoxedValueDeclarations(context))
   pushIndentedLines(lines, statementLines)
@@ -1850,7 +1932,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
 }
 
 function plainArrowCallbackParamName(wrapper: CPlainArrowCallbackWrapper, index: number): string {
-  const param = nullableCallbackNodeAt(wrapper.expression.params, index)
+  const param = wrapper.expression.params[index] ?? null
 
   if (param != null) {
     return param.name
@@ -2238,7 +2320,7 @@ function emitRuntimeArrowCallbackParamPrelude(
 }
 
 function runtimeArrowCallbackParamName(wrapper: CRuntimeArrowCallbackWrapper, index: number): string {
-  const param = nullableCallbackNodeAt(wrapper.expression.params, index)
+  const param = wrapper.expression.params[index] ?? null
 
   if (param != null) {
     return param.name
@@ -2363,7 +2445,44 @@ export function emitFunctionPointerParams(functionType: CFunctionType | null | u
 
   for (const param of functionType.params) {
     params.push(emitCType(param.valueType))
+    appendObjectShapeFunctionPointerParamTypes(params, param.shape, [])
   }
 
   return joinStrings(params, ', ')
+}
+
+function appendObjectShapeFunctionPointerParamTypes(
+  params: string[],
+  shape: CObjectShape | null | undefined,
+  seen: CObjectShape[]
+): void {
+  if (shape == null || shape.fields == null) {
+    return
+  }
+
+  for (const item of seen) {
+    if (item === shape) {
+      return
+    }
+  }
+
+  seen.push(shape)
+
+  for (const field of shape.fields) {
+    if (field.valueType === 'function') {
+      params.push(emitFunctionPointerParamType(field.functionType))
+    } else if (field.valueType === 'object') {
+      appendObjectShapeFunctionPointerParamTypes(params, field.shape, seen)
+    }
+  }
+
+  seen.pop()
+}
+
+function emitFunctionPointerParamType(functionType: CFunctionType | null | undefined): string {
+  if (isRuntimeFunctionType(functionType)) {
+    return 'ccjs_value'
+  }
+
+  return `${emitFunctionPointerReturnType(functionType)} (*)(${emitFunctionPointerParams(functionType)})`
 }

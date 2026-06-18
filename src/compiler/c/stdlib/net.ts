@@ -76,14 +76,6 @@ function lastNetArgument(args: NetAstNode[]): NetAstNode | null {
   return args[args.length - 1]
 }
 
-function netTopLevelNodeEntryAt(entries: NetTopLevelNodeEntry[], index: number): NetTopLevelNodeEntry {
-  return entries[index]
-}
-
-function netStringEquals(left: string, right: string): boolean {
-  return left === right
-}
-
 function pushNetLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
@@ -96,20 +88,12 @@ function pushNetNodes(target: NetAstNode[], nodes: NetAstNode[]): void {
   }
 }
 
-function firstNetReferencePathSegment(path: string[]): string | null {
-  for (const segment of path) {
-    return segment
-  }
-
-  return null
-}
-
 function netReferenceName(expression: NetAstNode | null | undefined): string | null {
   if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
     return null
   }
 
-  return firstNetReferencePathSegment(expression.path)
+  return expression.path[0] ?? null
 }
 
 function netMemberObjectReferenceName(callee: NetAstNode | null | undefined): string | null {
@@ -1749,7 +1733,7 @@ function resolveNetSocketCounterMember(
 }
 
 function isNetSocketMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
-  return isNetSocketAnyMethodCall(expression, context) && netStringEquals(expression.callee.property, method)
+  return isNetSocketAnyMethodCall(expression, context) && expression.callee.property === method
 }
 
 function isNetSocketAnyMethodCall(expression: AnyNode, context: CFunctionContext): boolean {
@@ -1775,7 +1759,7 @@ function isNetSocketAnyMethodCall(expression: AnyNode, context: CFunctionContext
 }
 
 function isNetServerMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
-  return isNetServerAnyMethodCall(expression, context) && netStringEquals(expression.callee.property, method)
+  return isNetServerAnyMethodCall(expression, context) && expression.callee.property === method
 }
 
 function isNetServerAnyMethodCall(expression: AnyNode, context: CFunctionContext): boolean {
@@ -1906,7 +1890,7 @@ function findNetHandler(
   }
 
   for (const wrapper of context.netHandlers.values()) {
-    if (wrapper.expression === expression && netStringEquals(wrapper.kind, kind)) {
+    if (wrapper.expression === expression && wrapper.kind === kind) {
       return wrapper
     }
   }
@@ -1922,7 +1906,7 @@ export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContex
     const items: NetTopLevelNodeEntry[] = collectIrTopLevelNodeEntries(ir)
 
     for (let itemIndex = 0; itemIndex < items.length; itemIndex = itemIndex + 1) {
-      const item = netTopLevelNodeEntryAt(items, itemIndex)
+      const item = items[itemIndex]
 
       if (item.kind === 'function') {
         const statements: NetAstNode[] = item.node.body
@@ -1949,7 +1933,7 @@ function registerNetHandler(
   }
 
   for (const wrapper of handlers.values()) {
-    if (netStringEquals(wrapper.kind, kind) && wrapper.expression === expression) {
+    if (wrapper.kind === kind && wrapper.expression === expression) {
       return
     }
   }

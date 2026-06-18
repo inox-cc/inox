@@ -6,7 +6,7 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { diagnostic } from '../../diagnostics.ts'
-import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
+import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode } from '../syntax.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
@@ -22,6 +22,7 @@ import type {
   CKnownObjectIndexField,
   CKnownObjectMemberField,
   CObjectFieldInfo,
+  CFunctionType,
   CObjectShape,
   CObjectIndexFieldInfo,
   CObjectShapeField,
@@ -57,10 +58,33 @@ type ObjectPropertyNode = {
   value: ObjectFieldNode
 }
 
+type ObjectFunctionFieldSource = {
+  expression: ObjectFieldNode | null
+  loc?: any
+  pathName: string | null
+}
+
 export type ObjectVariableDeclarationDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
+  emitFunctionPointerVariable(
+    name: string,
+    init: AnyNode,
+    context: ObjectFunctionContext,
+    isConst: boolean,
+    functionType: CFunctionType | null | undefined,
+    loc: AnyNode['loc']
+  ): string
+  emitFunctionPointerVariableWithCInitializer(
+    name: string,
+    init: string,
+    context: ObjectFunctionContext,
+    isConst: boolean,
+    functionType: CFunctionType | null | undefined,
+    loc: AnyNode['loc']
+  ): string
   emitCValueExpression(expression: AnyNode, context: ObjectFunctionContext): PreparedExpression
   inferExpressionType(expression: AnyNode, context: ObjectFunctionContext): string
+  resolveFunctionValueType(expression: AnyNode, context: ObjectFunctionContext): CFunctionType | null
 }
 
 export type ObjectExpressionFieldDependencies = {
@@ -92,18 +116,6 @@ function appendLines(out: string[], lines: string[]): void {
   for (const line of lines) {
     out.push(line)
   }
-}
-
-function objectStringOrEmpty(value: string | null | undefined): string {
-  if (value == null) {
-    return ''
-  }
-
-  return value
-}
-
-function objectStringAt(values: string[], index: number): string {
-  return values[index]
 }
 
 function findObjectShapeFieldIndex(fields: CObjectShapeField[], key: string): number {
@@ -138,6 +150,92 @@ function findObjectProperty(properties: ObjectPropertyNode[], key: string): Obje
   return null
 }
 
+function objectFunctionFieldSource(expression: ObjectFieldNode): ObjectFunctionFieldSource {
+  return {
+    expression,
+    loc: expression.loc,
+    pathName: resolveCObjectExpressionPathName(expression)
+  }
+}
+
+function nestedObjectFunctionFieldSource(
+  source: ObjectFunctionFieldSource,
+  fieldName: string
+): ObjectFunctionFieldSource {
+  const propertyValue = objectFunctionFieldSourcePropertyValue(source, fieldName)
+
+  if (propertyValue != null) {
+    const pathName = resolveCObjectExpressionPathName(propertyValue)
+
+    return {
+      expression: propertyValue,
+      loc: propertyValue.loc ?? source.loc,
+      pathName: pathName ?? nestedObjectPathName(source.pathName, fieldName)
+    }
+  }
+
+  return {
+    expression: null,
+    loc: source.loc,
+    pathName: nestedObjectPathName(source.pathName, fieldName)
+  }
+}
+
+function objectFunctionFieldSourcePropertyValue(
+  source: ObjectFunctionFieldSource,
+  fieldName: string
+): ObjectFieldNode | null {
+  const expression = source.expression
+
+  if (expression == null || expression.type !== 'ObjectLiteral') {
+    return null
+  }
+
+  const property = findObjectProperty(objectNodeProperties(expression), fieldName)
+
+  if (property == null) {
+    return null
+  }
+
+  return property.value
+}
+
+function nestedObjectPathName(pathName: string | null, fieldName: string): string | null {
+  if (pathName == null) {
+    return null
+  }
+
+  return `${pathName}_${fieldName}`
+}
+
+function resolveCObjectExpressionPathName(expression: AnyNode): string | null {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    return expression.path[0]
+  }
+
+  if (expression.type === 'ThisExpression') {
+    return 'this'
+  }
+
+  if (expression.type === 'MemberExpression') {
+    const objectName = resolveCObjectExpressionPathName(expression.object)
+
+    if (objectName != null) {
+      return `${objectName}_${expression.property}`
+    }
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    const objectName = resolveCObjectExpressionPathName(expression.object)
+
+    if (objectName != null) {
+      return `${objectName}_${expression.index.value}`
+    }
+  }
+
+  return null
+}
+
 function objectShapeFieldOwnership(field: CObjectShapeField): string {
   const ownership = field.ownership
 
@@ -146,14 +244,6 @@ function objectShapeFieldOwnership(field: CObjectShapeField): string {
   }
 
   return 'strong'
-}
-
-function knownObjectName(field: KnownObjectNameField): string {
-  return field.objectName
-}
-
-function knownObjectIndexKey(field: KnownObjectIndexKeyField): string {
-  return field.key
 }
 
 function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField {
@@ -166,7 +256,9 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     arrayElementType: field.arrayElementType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
-    setElementType: field.setElementType
+    setElementType: field.setElementType,
+    shape: field.shape,
+    functionType: field.functionType
   }
 }
 
@@ -178,6 +270,29 @@ function normalizeObjectShapeFields(fields: CObjectShapeField[]): CObjectShapeFi
   }
 
   return normalized
+}
+
+function registerObjectShapeFields(
+  context: ObjectShapeContext,
+  name: string,
+  fields: CObjectShapeField[],
+  seen: Set<CObjectShape>
+): void {
+  const normalized = normalizeObjectShapeFields(fields)
+
+  context.objectShapes.set(name, normalized)
+
+  for (const field of normalized) {
+    const shape = field.shape
+
+    if (field.valueType !== 'object' || shape == null || shape.fields == null || seen.has(shape)) {
+      continue
+    }
+
+    seen.add(shape)
+    registerObjectShapeFields(context, `${name}_${field.name}`, shape.fields, seen)
+    seen.delete(shape)
+  }
 }
 
 export function isMemberAccessExpression(expression: AnyNode): boolean {
@@ -227,7 +342,9 @@ function knownObjectMemberField(
     arrayElementType: field.arrayElementType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
-    setElementType: field.setElementType
+    setElementType: field.setElementType,
+    shape: field.shape,
+    functionType: field.functionType
   }
 }
 
@@ -287,7 +404,9 @@ function knownObjectIndexField(
     arrayElementType: field.arrayElementType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
-    setElementType: field.setElementType
+    setElementType: field.setElementType,
+    shape: field.shape,
+    functionType: field.functionType
   }
 }
 
@@ -325,7 +444,9 @@ function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: strin
     arrayElementType: field.arrayElementType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
-    setElementType: field.setElementType
+    setElementType: field.setElementType,
+    shape: field.shape,
+    functionType: field.functionType
   }
 }
 
@@ -350,7 +471,7 @@ export function updateKnownObjectMemberValueType(
     return
   }
 
-  const objectName = knownObjectName(member)
+  const objectName = member.objectName
   const fields = context.objectShapes.get(objectName)
 
   if (fields != null) {
@@ -373,7 +494,7 @@ export function emitPreparedKnownObjectMemberValueExpression(
       index: member.index,
       key: '',
       kind: 'known',
-      objectName: knownObjectName(member)
+      objectName: member.objectName
     }
 
     return emitPreparedKnownObjectFieldValueExpression(member, expression, context, access)
@@ -391,9 +512,9 @@ export function emitPreparedKnownObjectIndexValueExpression(
   if (field != null) {
     const access: KnownObjectFieldReadAccess = {
       index: field.index,
-      key: knownObjectIndexKey(field),
+      key: field.key,
       kind: 'key',
-      objectName: knownObjectName(field)
+      objectName: field.objectName
     }
 
     return emitPreparedKnownObjectFieldValueExpression(field, expression, context, access)
@@ -714,8 +835,8 @@ function isRuntimeValueReferenceExpression(expression: ObjectFieldNode, context:
     return false
   }
 
-  const name = objectStringAt(expression.path, 0)
-  const valueType = objectStringOrEmpty(context.variables.get(name))
+  const name = expression.path[0]
+  const valueType = context.variables.get(name) ?? ''
 
   if (
     valueType !== 'unknown' &&
@@ -841,11 +962,143 @@ function emitObjectFieldInitializerValue(
   context: ObjectFunctionContext,
   dependencies: ObjectVariableDeclarationDependencies
 ): PreparedExpression {
+  if (field.valueType === 'function') {
+    return {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
   if (!isSupportedObjectFieldStorageType(field.valueType)) {
     return unsupportedObjectFieldValueExpression(field.valueType, property.value.loc, context)
   }
 
   return dependencies.emitCValueExpression(property.value, context)
+}
+
+function emitObjectFunctionFieldVariableDeclaration(
+  objectName: string,
+  field: CObjectShapeField,
+  property: ObjectPropertyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): string {
+  return `${dependencies.emitFunctionPointerVariable(
+    emitCObjectFunctionFieldName(objectName, field.name),
+    property.value,
+    context,
+    true,
+    field.functionType,
+    property.value.loc
+  )};`
+}
+
+function emitNestedObjectFunctionFieldVariableDeclarations(
+  objectName: string,
+  field: CObjectShapeField,
+  property: ObjectPropertyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): string[] {
+  if (field.valueType !== 'object') {
+    return []
+  }
+
+  return emitObjectShapeFunctionFieldVariableDeclarations(
+    `${objectName}_${field.name}`,
+    field.shape,
+    objectFunctionFieldSource(property.value),
+    context,
+    dependencies
+  )
+}
+
+function emitObjectShapeFunctionFieldVariableDeclarations(
+  objectName: string,
+  shape: CObjectShape | null | undefined,
+  source: ObjectFunctionFieldSource,
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): string[] {
+  const fields = shape?.fields
+  const lines: string[] = []
+
+  if (fields == null) {
+    return lines
+  }
+
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      lines.push(emitObjectShapeFunctionFieldVariableDeclaration(objectName, field, source, context, dependencies))
+    } else if (field.valueType === 'object') {
+      appendLines(lines,
+        emitObjectShapeFunctionFieldVariableDeclarations(
+          `${objectName}_${field.name}`,
+          field.shape,
+          nestedObjectFunctionFieldSource(source, field.name),
+          context,
+          dependencies
+        )
+      )
+    }
+  }
+
+  return lines
+}
+
+function emitObjectShapeFunctionFieldVariableDeclaration(
+  objectName: string,
+  field: CObjectShapeField,
+  source: ObjectFunctionFieldSource,
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): string {
+  const value = objectFunctionFieldSourcePropertyValue(source, field.name)
+  const name = emitCObjectFunctionFieldName(objectName, field.name)
+
+  if (value != null) {
+    return `${dependencies.emitFunctionPointerVariable(
+      name,
+      value,
+      context,
+      true,
+      field.functionType,
+      value.loc
+    )};`
+  }
+
+  if (source.pathName != null) {
+    return `${dependencies.emitFunctionPointerVariableWithCInitializer(
+      name,
+      emitCObjectFunctionFieldName(source.pathName, field.name),
+      context,
+      true,
+      field.functionType,
+      field.loc ?? source.loc
+    )};`
+  }
+
+  if (field.optional === true) {
+    return `${dependencies.emitFunctionPointerVariableWithCInitializer(
+      name,
+      '0',
+      context,
+      true,
+      field.functionType,
+      field.loc ?? source.loc
+    )};`
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, source.loc))
+
+  return `${dependencies.emitFunctionPointerVariableWithCInitializer(
+    name,
+    '0',
+    context,
+    true,
+    field.functionType,
+    field.loc ?? source.loc
+  )};`
 }
 
 function knownObjectFieldReadCall(
@@ -877,7 +1130,10 @@ export function registerObjectShape(
     return
   }
 
-  context.objectShapes.set(name, normalizeObjectShapeFields(fields))
+  const seen: Set<CObjectShape> = new Set()
+
+  seen.add(shape)
+  registerObjectShapeFields(context, name, fields, seen)
 }
 
 export function emitObjectVariableDeclaration(
@@ -905,16 +1161,22 @@ export function emitObjectVariableDeclaration(
   lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`, context))
 
   context.variables.set(statement.name, 'object')
-  context.objectShapes.set(statement.name, normalizeObjectShapeFields(fields))
+  registerObjectShapeFields(context, statement.name, fields, new Set())
 
   for (let index = 0; index < fields.length; index = index + 1) {
     const field = fields[index]
     const property = findObjectProperty(properties, field.name)
 
     if (property != null) {
+      if (field.valueType === 'function') {
+        lines.push(emitObjectFunctionFieldVariableDeclaration(statement.name, field, property, context, dependencies))
+        continue
+      }
+
       const value = emitObjectFieldInitializerValue(field, property, context, dependencies)
       appendLines(lines, value.lines)
       lines.push(emitStatusCheck(`ccjs_object_init_known(${statement.name}, ${index}, ${value.expression})`, context))
+      appendLines(lines, emitNestedObjectFunctionFieldVariableDeclarations(statement.name, field, property, context, dependencies))
     } else {
       if (field.optional !== true) {
         context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
@@ -942,7 +1204,9 @@ function objectVariableShapeFields(
     fields.push({
       name: property.key,
       readonlyField: false,
-      valueType: dependencies.inferExpressionType(property.value, context)
+      valueType: dependencies.inferExpressionType(property.value, context),
+      shape: property.value.shape,
+      functionType: dependencies.resolveFunctionValueType(property.value, context)
     })
   }
 

@@ -839,7 +839,20 @@ function concatFields(left: LowerTypeNode[], right: LowerTypeNode[] | null | und
 
   for (let fieldIndex = 0; fieldIndex < right.length; fieldIndex = fieldIndex + 1) {
     const field = right[fieldIndex]
-    fields.push(field)
+    let existingIndex = -1
+
+    for (let index = 0; index < fields.length; index = index + 1) {
+      if (fields[index].name === field.name) {
+        existingIndex = index
+        break
+      }
+    }
+
+    if (existingIndex >= 0) {
+      fields[existingIndex] = field
+    } else {
+      fields.push(field)
+    }
   }
 
   return fields

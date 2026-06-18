@@ -42,26 +42,6 @@ type CStringSet = Set<string>
 type ClassExpressionNode = AnyNode
 type ClassMaybeNode = AnyNode | null | undefined
 
-function classPathSegmentAt(path: string[], index: number): string {
-  return path[index]
-}
-
-function classStringEquals(left: string, right: string): boolean {
-  return left === right
-}
-
-function classStringOrEmpty(value: string | null | undefined): string {
-  if (value == null) {
-    return ''
-  }
-
-  return value
-}
-
-function classStringDiffers(left: string, right: string): boolean {
-  return !classStringEquals(left, right)
-}
-
 type ClassEmitContext = {
   classInfos: CClassInfoMap
 }
@@ -211,7 +191,7 @@ export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]):
     const methodNodes: ClassExpressionNode[] = item.methods
 
     for (const method of methodNodes) {
-      if (classStringDiffers(method.name, 'constructor')) {
+      if (method.name !== 'constructor') {
         methods.set(method.name, method)
       }
     }
@@ -233,7 +213,7 @@ function findClassConstructorMethod(classNode: AnyNode): AnyNode | null {
   const methods: ClassExpressionNode[] = classNode.methods
 
   for (const method of methods) {
-    if (classStringEquals(method.name, 'constructor')) {
+    if (method.name === 'constructor') {
       return method
     }
   }
@@ -249,7 +229,7 @@ export function collectClassMethods(context: ClassEmitContext): CClassMethod[] {
     const methodList: ClassExpressionNode[] = info.node.methods
 
     for (const method of methodList) {
-      if (classStringEquals(method.name, 'constructor')) {
+      if (method.name === 'constructor') {
         continue
       }
 
@@ -369,7 +349,9 @@ function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
     arrayElementType: field.arrayElementType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
-    setElementType: field.setElementType
+    setElementType: field.setElementType,
+    shape: field.shape,
+    functionType: field.functionType
   }
 }
 
@@ -379,7 +361,7 @@ function inferClassConstructorFieldType(expression: ClassMaybeNode, constructorM
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1 && constructorMethod != null) {
-    const paramName = classPathSegmentAt(expression.path, 0)
+    const paramName = expression.path[0]
     const param = findClassParam(constructorMethod.params, paramName)
 
     if (param != null) {
@@ -422,7 +404,7 @@ function findClassParam(params: AnyNode[], name: string): AnyNode | null {
   const source: ClassExpressionNode[] = params
 
   for (const param of source) {
-    if (classStringEquals(param.name, name)) {
+    if (param.name === name) {
       return param
     }
   }
@@ -458,7 +440,7 @@ function isThisObjectExpression(expression: ClassMaybeNode): boolean {
   return (
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
-    classStringEquals(classPathSegmentAt(expression.path, 0), 'this')
+    expression.path[0] === 'this'
   )
 }
 
@@ -598,7 +580,9 @@ export function registerClassObjectShape(context: ClassFunctionContext, name: st
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
       mapValueType: field.mapValueType,
-      setElementType: field.setElementType
+      setElementType: field.setElementType,
+      shape: field.shape,
+      functionType: field.functionType
     })
   }
 
@@ -646,8 +630,8 @@ function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstruct
     }
   }
 
-  if (node.type === 'Reference' && node.path.length === 1 && args.has(classPathSegmentAt(node.path, 0))) {
-    const name = classPathSegmentAt(node.path, 0)
+  if (node.type === 'Reference' && node.path.length === 1 && args.has(node.path[0])) {
+    const name = node.path[0]
     const replacement = args.get(name)
 
     if (replacement != null) {
@@ -789,7 +773,7 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassF
     return null
   }
 
-  const className = classPathSegmentAt(expression.callee.path, 0)
+  const className = expression.callee.path[0]
   const info = classInfos.get(className)
 
   if (info != null) {
@@ -907,9 +891,9 @@ function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFu
     return null
   }
 
-  const objectName = classStringOrEmpty(resolveCObjectExpressionName(expression.callee.object))
+  const objectName = resolveCObjectExpressionName(expression.callee.object)
 
-  if (classStringDiffers(objectName, '')) {
+  if (objectName) {
     const className = classNameForObject(context, objectName)
 
     if (className != null) {

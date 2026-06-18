@@ -359,10 +359,7 @@ export function canLowerCNullishCoalescingExpression(expression: AnyNode, contex
 
   const resultType = nullableDeps(context).inferExpressionType(expression, context)
 
-  return (
-    isRuntimeNullableType(resultType) &&
-    (nullableDeps(context).inferExpressionType(expression.left, context) === 'null' || isNullableRuntimeExpression(expression.left, context))
-  )
+  return resultType === 'unknown' || isRuntimeNullableType(resultType)
 }
 
 export function canLowerCScalarNullishCoalescingExpression(expression: AnyNode, context: NullableFunctionContext): boolean {

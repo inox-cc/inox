@@ -30,14 +30,19 @@ import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
 import type { PreparedArrayExpression } from './arrays.ts'
-import type { AnyNode, SourceLocation } from '../../types.ts'
+import type { NullableLoweringDependencies } from './nullable.ts'
+import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type {
   CArrayElementInfo,
+  CCallbackWrapper,
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
+  CFunctionReturnMapType,
   CFunctionType,
   CObjectShape,
+  CObjectShapeField,
+  CPromiseConstructorHandler,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
   CPreparedStatement as PreparedStatement,
@@ -53,7 +58,63 @@ type CLoopFlowTarget = {
   throughFinally: boolean
 }
 
-type CFunctionContext = any
+type CStringMap = Map<string, string>
+type CStringSet = Set<string>
+
+type CFunctionContext = {
+  arrayShapes: Map<string, CArrayElementInfo[]>
+  boxedMutableCaptureDeclarations: Set<StatementNode>
+  boxedValueTypes: CStringMap
+  boxedValues: string[]
+  boxedVariables: CStringSet
+  breakFlowUsed: boolean
+  breakTargets: CLoopFlowTarget[]
+  callbackArrowWrappers: Map<AnyNode, CCallbackWrapper>
+  classInstanceTypes: CStringMap
+  cleanupEnabled: boolean
+  continueFlowUsed: boolean
+  continueTargets: CLoopFlowTarget[]
+  diagnostics: Diagnostic[]
+  errorChannelUsed: boolean
+  errorObjectNames: CStringSet
+  errorTargets: string[]
+  failureStatement?: string | null
+  failureStatementUsed?: boolean
+  forceRuntimeStringDeclarations?: CStringSet
+  functionReturnArrayElementTypes: Map<string, string | null>
+  functionReturnNullables: Map<string, boolean>
+  functionTypes: Map<string, CFunctionType>
+  mapTypes: Map<string, CFunctionReturnMapType>
+  moduleValueNames: CStringMap
+  narrowedNullableScalars: CStringSet
+  nextId: number
+  nullableLoweringDependencies: NullableLoweringDependencies
+  nullableVariables: CStringSet
+  objectShapes: Map<string, CObjectShapeField[]>
+  ownedValues: string[]
+  promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
+  promiseRejectionValueTypes: CStringMap
+  promiseValueTypes: CStringMap
+  returnFlowUsed: boolean
+  returnNullable: boolean
+  returnShape?: CObjectShape | null
+  returnTargets: string[]
+  returnType: string
+  runtimeArrayElementTypes: CStringMap
+  runtimeCallbackCleanupLabel?: string
+  runtimeCallbackReturnOut?: string
+  runtimeCallbackReturnShape?: CObjectShape | null
+  runtimeCallbackReturnType?: string
+  runtimeCallbacks: CStringSet
+  runtimeStrings: CStringSet
+  setElementTypes: CStringMap
+  statementLoweringDependencies: StatementLoweringDependencies
+  statusReturn: boolean
+  throwingFunction: boolean
+  usedCleanupGoto: boolean
+  usedRuntimeCallbackCleanupGoto?: boolean
+  variables: CStringMap
+}
 
 type KnownForOfArray = {
   elements: CArrayElementInfo[]
@@ -284,14 +345,6 @@ function stringOrUnknown(value: string | null | undefined): string {
   return 'unknown'
 }
 
-function statementStringOrEmpty(value: string | null | undefined): string {
-  if (value == null) {
-    return ''
-  }
-
-  return value
-}
-
 function isUnsignedIntegerLiteral(value: string): boolean {
   if (value.length === 0) {
     return false
@@ -401,28 +454,12 @@ function statementDefinitelyReturns(statement: StatementNode): boolean {
 
 function statementBodyDefinitelyReturns(statements: StatementNode[]): boolean {
   for (let index = 0; index < statements.length; index = index + 1) {
-    if (statementDefinitelyReturns(statementNodeAt(statements, index))) {
+    if (statementDefinitelyReturns(statements[index])) {
       return true
     }
   }
 
   return false
-}
-
-function statementNodeAt(values: StatementNode[], index: number): StatementNode {
-  return values[index]
-}
-
-function nullableStatementNodeAt(values: StatementNode[], index: number): StatementNode | null {
-  if (index >= values.length) {
-    return null
-  }
-
-  return values[index]
-}
-
-function statementPathSegment(path: string[], index: number): string {
-  return path[index]
 }
 
 function runtimeMapMetadata(key: string, value: string): RuntimeMapMetadata {
@@ -894,7 +931,7 @@ function resolveRuntimeArrayMetadataElementType(
     return declaration.arrayElementType
   }
 
-  const resolvedElementType = statementStringOrEmpty(resolveRuntimeArrayElementType(expression, context))
+  const resolvedElementType = resolveRuntimeArrayElementType(expression, context) ?? ''
 
   if (resolvedElementType !== '') {
     return resolvedElementType
@@ -1153,7 +1190,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
     pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
     lines.push(emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context))
 
-    pushAllLines(lines, emitMapConstructorEntries(statement.name, nullableStatementNodeAt(statement.init.args, 0), context, statement.init.loc))
+    pushAllLines(lines, emitMapConstructorEntries(statement.name, statement.init.args[0] ?? null, context, statement.init.loc))
 
     return lines
   }
@@ -1172,13 +1209,13 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context))
 
-  pushAllLines(lines, emitSetConstructorValues(statement.name, nullableStatementNodeAt(statement.init.args, 0), context, statement.init.loc))
+  pushAllLines(lines, emitSetConstructorValues(statement.name, statement.init.args[0] ?? null, context, statement.init.loc))
 
   return lines
 }
 
 function emitCollectionVariableCopyConstructor(statement: StatementNode, context: CFunctionContext): string[] | null {
-  const expression = nullableStatementNodeAt(statement.init.args, 0)
+  const expression = statement.init.args[0] ?? null
 
   if (expression == null || expression.type === 'ArrayLiteral') {
     return null
@@ -1233,8 +1270,8 @@ function emitMapConstructorEntries(
       continue
     }
 
-    const keyNode = statementNodeAt(entry.elements, 0)
-    const valueNode = statementNodeAt(entry.elements, 1)
+    const keyNode = entry.elements[0]
+    const valueNode = entry.elements[1]
     const key = deps.emitCValueExpression(keyNode, context)
     const value = deps.emitCValueExpression(valueNode, context)
     reportCCollectionHashability(
@@ -2597,7 +2634,7 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
     return null
   }
 
-  const target = statementPathSegment(expression.target.path, 0)
+  const target = expression.target.path[0]
 
   if (!context.runtimeStrings.has(target)) {
     return null
@@ -2952,7 +2989,7 @@ function emitRuntimeArrayIndexAssignment(expression: StatementNode, context: CFu
     return null
   }
 
-  const arrayName = statementPathSegment(expression.target.object.path, 0)
+  const arrayName = expression.target.object.path[0]
   const index = emitRuntimeArrayIndexExpression(element, context)
   const value = deps.emitCValueExpression(expression.value, context)
   const lines: string[] = []
@@ -3091,11 +3128,14 @@ export function emitRuntimeCallbackRuntimeValueReturnLines(
   argument: StatementNode | null | undefined,
   context: CFunctionContext
 ): string[] {
-  if (context.runtimeCallbackReturnType == null || context.runtimeCallbackReturnOut == null) {
+  const returnType = context.runtimeCallbackReturnType
+  const returnOut = context.runtimeCallbackReturnOut
+
+  if (returnType == null || returnOut == null) {
     return emitReturnJump(context)
   }
 
-  const expectedTag = cRuntimeValueTag(context.runtimeCallbackReturnType)
+  const expectedTag = cRuntimeValueTag(returnType)
   let value: PreparedExpression = {
     lines: [],
     expression: 'ccjs_undefined_value()'
@@ -3105,16 +3145,16 @@ export function emitRuntimeCallbackRuntimeValueReturnLines(
     value = emitRuntimeReturnValueExpression(
       argument,
       context,
-      context.runtimeCallbackReturnType,
+      returnType,
       context.runtimeCallbackReturnShape
     )
   }
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${context.runtimeCallbackReturnOut} = ${value.expression};`)
-  lines.push(emitRuntimeValueCheck(context.runtimeCallbackReturnOut, expectedTag, context))
-  lines.push(`ccjs_retain(${context.runtimeCallbackReturnOut});`)
+  lines.push(`${returnOut} = ${value.expression};`)
+  lines.push(emitRuntimeValueCheck(returnOut, expectedTag, context))
+  lines.push(`ccjs_retain(${returnOut});`)
   return lines
 }
 

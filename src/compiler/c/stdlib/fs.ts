@@ -60,12 +60,15 @@ type FsSyncStatementDescriptor = {
   tempPrefix?: string
 }
 
-function fsStringOrEmpty(value: string | null | undefined): string {
-  if (value == null) {
-    return ''
-  }
-
-  return value
+const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
+  appendFileBytesSync: { kind: 'bytes-value', callName: 'ccjs_fs_append_file_bytes_sync' },
+  appendFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_append_file_sync' },
+  copyFileSync: { kind: 'path-arg', callName: 'ccjs_fs_copy_file_sync', tempPrefix: 'ccjs_fs_dest_path' },
+  renameSync: { kind: 'path-arg', callName: 'ccjs_fs_rename_sync', tempPrefix: 'ccjs_fs_new_path' },
+  symlinkSync: { kind: 'path-arg', callName: 'ccjs_fs_symlink_sync', tempPrefix: 'ccjs_fs_link_path' },
+  unlinkSync: { kind: 'path', callName: 'ccjs_fs_unlink_sync' },
+  writeFileBytesSync: { kind: 'bytes-value', callName: 'ccjs_fs_write_file_bytes_sync' },
+  writeFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_write_file_sync' }
 }
 
 function fsPromiseResultTypeForMethod(method: string | null): string | null {
@@ -209,39 +212,11 @@ function fsSyncValueCallNameForMethod(method: string | null): string | null {
 }
 
 function fsSyncStatementDescriptorForMethod(method: string | null): FsSyncStatementDescriptor | null {
-  if (method === 'appendFileBytesSync') {
-    return { kind: 'bytes-value', callName: 'ccjs_fs_append_file_bytes_sync' }
+  if (method == null) {
+    return null
   }
 
-  if (method === 'appendFileSync') {
-    return { kind: 'string-bytes', callName: 'ccjs_fs_append_file_sync' }
-  }
-
-  if (method === 'copyFileSync') {
-    return { kind: 'path-arg', callName: 'ccjs_fs_copy_file_sync', tempPrefix: 'ccjs_fs_dest_path' }
-  }
-
-  if (method === 'renameSync') {
-    return { kind: 'path-arg', callName: 'ccjs_fs_rename_sync', tempPrefix: 'ccjs_fs_new_path' }
-  }
-
-  if (method === 'symlinkSync') {
-    return { kind: 'path-arg', callName: 'ccjs_fs_symlink_sync', tempPrefix: 'ccjs_fs_link_path' }
-  }
-
-  if (method === 'unlinkSync') {
-    return { kind: 'path', callName: 'ccjs_fs_unlink_sync' }
-  }
-
-  if (method === 'writeFileBytesSync') {
-    return { kind: 'bytes-value', callName: 'ccjs_fs_write_file_bytes_sync' }
-  }
-
-  if (method === 'writeFileSync') {
-    return { kind: 'string-bytes', callName: 'ccjs_fs_write_file_sync' }
-  }
-
-  return null
+  return fsSyncStatementDescriptors[method] ?? null
 }
 
 export function cFsRuntimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
@@ -463,7 +438,7 @@ export function emitPreparedFsSyncValueExpression(
   }
 
   const valueType = dependencies.inferExpressionType(expression, context)
-  const expectedTag = fsStringOrEmpty(cRuntimeValueTag(valueType))
+  const expectedTag = cRuntimeValueTag(valueType) ?? ''
 
   if (expectedTag === '') {
     return null

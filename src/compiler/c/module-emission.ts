@@ -88,6 +88,7 @@ import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType } from 
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
 
 type CModuleValueDeclaration = {
+  exported: boolean
   name: string
   symbolName: string
   valueType: string
@@ -218,7 +219,8 @@ export type CModuleEmissionDependencies = {
     diagnostics: Diagnostic[],
     functionDeclarations: IrFunctionDeclaration[],
     functionEffects: IrFunctionEffect[],
-    jsGlobalRoots: Set<string>
+    jsGlobalRoots: Set<string>,
+    topLevelNodes: AnyNode[]
   ): CEmitContext
   dgramLoweringDependencies: DgramLoweringDependencies
   emitClassMethodDeclaration(info: CClassInfo, method: AnyNode, baseContext: CEmitContext): string[]
@@ -247,7 +249,7 @@ export function emitCModuleSource(
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
-  const exportedValues = collectCModuleExportedValueDeclarations(plan)
+  const moduleValues = collectCModuleValueDeclarations(plan)
   const prelude = resolveCRuntimePreludeRequirements({
     classInfoCount: context.classInfos.size,
     cryptoContext: context,
@@ -326,7 +328,7 @@ export function emitCModuleSource(
     )
   )
 
-  emitCModuleValueDefinitions(lines, exportedValues)
+  emitCModuleValueDefinitions(lines, moduleValues)
   emitCModuleDeclarations(lines, functions, classMethods, context, deps)
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
@@ -596,7 +598,13 @@ function createCModuleBaseContext(
     pushIrFunctionEffect(functionEffects, effect)
   }
 
-  const context = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
+  const context = deps.createBaseContext(
+    diagnostics,
+    functionDeclarations,
+    functionEffects,
+    jsGlobalRoots,
+    ir.body
+  )
 
   registerCModuleValueDeclarations(context, plan)
   registerImportedCModuleValueDeclarations(context, plan)
@@ -671,7 +679,7 @@ function collectCModuleContextRuntimeTypes(context: CEmitContext): Set<string> {
 }
 
 function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePlan): void {
-  const values = collectCModuleExportedValueDeclarations(plan)
+  const values = collectCModuleValueDeclarations(plan)
 
   for (let index = 0; index < values.length; index = index + 1) {
     const item = cModuleValueDeclarationAt(values, index)
@@ -707,6 +715,21 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
 }
 
 function collectCModuleExportedValueDeclarations(plan: CModulePlan): CModuleValueDeclaration[] {
+  const values = collectCModuleValueDeclarations(plan)
+  const exported: CModuleValueDeclaration[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = cModuleValueDeclarationAt(values, index)
+
+    if (item.exported === true) {
+      exported.push(item)
+    }
+  }
+
+  return exported
+}
+
+function collectCModuleValueDeclarations(plan: CModulePlan): CModuleValueDeclaration[] {
   const values: CModuleValueDeclaration[] = []
   const ir = plan.ir
   const statements = collectIrTopLevelNodes(ir, 'statement')
@@ -714,11 +737,12 @@ function collectCModuleExportedValueDeclarations(plan: CModulePlan): CModuleValu
   for (let index = 0; index < statements.length; index = index + 1) {
     const item = cModuleNodeAt(statements, index)
 
-    if (item.type !== 'VariableDeclaration' || item.exported !== true) {
+    if (item.type !== 'VariableDeclaration') {
       continue
     }
 
     values.push({
+      exported: item.exported === true,
       name: item.name,
       symbolName: emitCModuleValueName(plan, item.name),
       valueType: cModuleValueType(item)
@@ -737,11 +761,16 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
     const item = cModuleValueDeclarationAt(values, index)
     const cType = cModuleValueCType(item.valueType)
     const initializer = cModuleValueGlobalInitializer(item.valueType)
+    let prefix = ''
+
+    if (item.exported !== true) {
+      prefix = 'static '
+    }
 
     if (initializer === '') {
-      lines.push(`${cType} ${item.symbolName};`)
+      lines.push(`${prefix}${cType} ${item.symbolName};`)
     } else {
-      lines.push(`${cType} ${item.symbolName} = ${initializer};`)
+      lines.push(`${prefix}${cType} ${item.symbolName} = ${initializer};`)
     }
   }
 

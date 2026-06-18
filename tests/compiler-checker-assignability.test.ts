@@ -11,6 +11,7 @@ import {
   isMatchingSwitchCaseType,
   isSwitchableType
 } from '../src/compiler/checker/assignability.ts'
+import { compileSource } from '../src/compiler/index.ts'
 
 test('classifies binary and equality expression types', () => {
   assert.equal(inferBinaryExpressionType('+', 'number', 'number'), 'number')
@@ -44,4 +45,19 @@ test('checks switch and common value helpers', () => {
   assert.equal(commonValueType(['number', 'string']), 'unknown')
   assert.equal(commonValueType([]), 'unknown')
   assert.equal(commonArrayElementType(['boolean', 'boolean']), 'boolean')
+})
+
+test('allows JavaScript null equality checks on non-nullable values', () => {
+  assert.doesNotThrow(() => {
+    compileSource(
+      `export function main(): void {
+  const name = 'Ada'
+  if (name != null) {
+    console.log(name)
+  }
+}
+`,
+      { target: 'c' }
+    )
+  })
 })

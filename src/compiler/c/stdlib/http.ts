@@ -59,30 +59,6 @@ function httpNodeLoc(node: HttpAstNode | null | undefined): SourceLocation | nul
   return node.loc
 }
 
-function httpTopLevelNodeEntryAt(entries: HttpTopLevelNodeEntry[], index: number): HttpTopLevelNodeEntry {
-  return entries[index]
-}
-
-function httpNodeAt(values: HttpAstNode[], index: number): HttpAstNode {
-  return values[index]
-}
-
-function httpStringAt(values: string[], index: number): string {
-  return values[index]
-}
-
-function httpStringEquals(left: string, right: string): boolean {
-  return left === right
-}
-
-function httpStringOrEmpty(value: string | null | undefined): string {
-  if (value == null) {
-    return ''
-  }
-
-  return value
-}
-
 function pushHttpLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
@@ -759,9 +735,7 @@ function emitHttpStatusCheck(call: string, context: CFunctionContext): string[] 
 }
 
 function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
-  const responseName = httpStringOrEmpty(httpContext.responseName)
-
-  if (httpStringEquals(responseName, '')) {
+  if (httpContext.responseName == null) {
     return false
   }
 
@@ -769,19 +743,17 @@ function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerCo
     return false
   }
 
-  return expression.path.length === 1 && httpStringEquals(httpStringAt(expression.path, 0), responseName)
+  return expression.path.length === 1 && expression.path[0] === httpContext.responseName
 }
 
 function resolveHttpRequestStringMember(expression: AnyNode, httpContext: HttpHandlerContext): string | null {
-  const requestName = httpStringOrEmpty(httpContext.requestName)
-
   if (
-    httpStringEquals(requestName, '') ||
+    httpContext.requestName == null ||
     expression.type !== 'MemberExpression' ||
     expression.object == null ||
     expression.object.type !== 'Reference' ||
     expression.object.path.length !== 1 ||
-    !httpStringEquals(httpStringAt(expression.object.path, 0), requestName)
+    expression.object.path[0] !== httpContext.requestName
   ) {
     return null
   }
@@ -833,20 +805,20 @@ export function emitHttpServerCallStatement(
   }
 
   if (isHttpServerMethodCall(expression, 'listen', context)) {
-    const serverName = httpStringAt(expression.callee.object.path, 0)
+    const serverName = expression.callee.object.path[0]
     registerEventLoop(context)
 
     return emitHttpServerListenLines(serverName, expression.args, context, deps)
   }
 
   if (isHttpServerMethodCall(expression, 'on', context)) {
-    const serverName = httpStringAt(expression.callee.object.path, 0)
+    const serverName = expression.callee.object.path[0]
 
     return emitHttpServerOnRequestLines(serverName, expression.args, context)
   }
 
   if (isHttpServerMethodCall(expression, 'close', context)) {
-    const serverName = httpStringAt(expression.callee.object.path, 0)
+    const serverName = expression.callee.object.path[0]
 
     return emitHttpServerCloseLines(serverName, expression.args, context, deps)
   }
@@ -941,7 +913,7 @@ function emitHttpServerListenLines(
     )
   }
 
-  const portArg = httpNodeAt(args, 0)
+  const portArg = args[0]
   const port = deps.emitPreparedNumberExpression(portArg, context)
   const host = emitHttpListenHostExpression(hostArg, context)
   const lines: string[] = []
@@ -1090,7 +1062,7 @@ function isHttpServerMethodCall(expression: AnyNode, method: string, context: CF
     return false
   }
 
-  if (!httpStringEquals(expression.callee.property, method)) {
+  if (expression.callee.property !== method) {
     return false
   }
 
@@ -1102,7 +1074,7 @@ function isHttpServerMethodCall(expression: AnyNode, method: string, context: CF
     return false
   }
 
-  const serverName = httpStringAt(expression.callee.object.path, 0)
+  const serverName = expression.callee.object.path[0]
 
   return context.variables.get(serverName) === 'http-server'
 }
@@ -1116,7 +1088,7 @@ function isHttpCreateServerCall(expression: AnyNode | null | undefined, context:
     expression.callee != null &&
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1 &&
-    context.httpCreateServerNames.has(httpStringAt(expression.callee.path, 0))
+    context.httpCreateServerNames.has(expression.callee.path[0])
   ) {
     return true
   }
@@ -1128,7 +1100,7 @@ function isHttpCreateServerCall(expression: AnyNode | null | undefined, context:
     expression.callee.object != null &&
     expression.callee.object.type === 'Reference' &&
     expression.callee.object.path.length === 1 &&
-    context.httpImportNames.has(httpStringAt(expression.callee.object.path, 0))
+    context.httpImportNames.has(expression.callee.object.path[0])
   )
 }
 
@@ -1160,7 +1132,7 @@ export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitConte
     const items: HttpTopLevelNodeEntry[] = collectIrTopLevelNodeEntries(ir)
 
     for (let itemIndex = 0; itemIndex < items.length; itemIndex = itemIndex + 1) {
-      const item = httpTopLevelNodeEntryAt(items, itemIndex)
+      const item = items[itemIndex]
 
       if (item.kind === 'function') {
         const statements: HttpAstNode[] = item.node.body

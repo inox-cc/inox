@@ -86,6 +86,27 @@ export function main(): void {
   assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
 })
 
+test('lowers C object identity equality as runtime reference comparison', () => {
+  const result = compileSource(
+    `type User = {
+  name: string
+}
+
+export function main(): void {
+  const ada: User = { name: 'Ada' }
+  const same = ada
+  console.log(ada === same, ada !== { name: 'Ada' })
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ada\.tag == same\.tag && ada\.as\.ref == same\.as\.ref/)
+  assert.match(result.code, /!\(ada\.tag == ccjs_object_\d+\.tag && ada\.as\.ref == ccjs_object_\d+\.as\.ref\)/)
+})
+
 
 test('lowers C runtime array index reads for object fields', () => {
   const result = compileSource(
@@ -144,6 +165,36 @@ export function main(): void {
   assert.match(result.code, /names\.tag != CCJS_TAG_ARRAY/)
   assert.match(result.code, /ccjs_array_get\(values, 1, &ccjs_log_value_\d+\)/)
   assert.match(result.code, /ccjs_array_get\(names, 0, &ccjs_log_value_\d+\)/)
+})
+
+
+test('lowers C collection methods on object fields', () => {
+  const result = compileSource(
+    `type Box = {
+  scores: Map<string, number>,
+  names: Set<string>
+}
+
+export function main(): void {
+  const box: Box = { scores: new Map(), names: new Set() }
+  box.scores.set('Ada', 7)
+  box.names.add('Ada')
+  console.log(box.scores.get('Ada') ?? 0, box.names.has('Ada'), box.scores.size, box.names.size)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_map_set\(ccjs_value_\d+, ccjs_value_\d+, ccjs_number_value\(7\)\)/)
+  assert.match(result.code, /ccjs_map_get\(ccjs_value_\d+, ccjs_value_\d+, &ccjs_map_value_\d+\)/)
+  assert.match(result.code, /ccjs_map_size\(ccjs_value_\d+, &ccjs_map_size_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(box, 1, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_set_add\(ccjs_value_\d+, ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_set_has\(ccjs_value_\d+, ccjs_value_\d+, &ccjs_set_has_\d+\)/)
+  assert.match(result.code, /ccjs_set_size\(ccjs_value_\d+, &ccjs_set_size_\d+\)/)
 })
 
 

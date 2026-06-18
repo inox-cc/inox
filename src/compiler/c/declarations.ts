@@ -54,9 +54,9 @@ import {
   isRuntimeNullableType,
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
-import { emitCFunctionName } from './identifiers.ts'
+import { emitCFunctionName, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
-import type { CClassInfo, CFunctionParam, CFunctionType } from './types.ts'
+import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 
@@ -80,10 +80,6 @@ function cBooleanValueIsTrue(value: boolean | null | undefined): boolean {
   }
 
   return false
-}
-
-function declarationClassName(info: CClassInfo): string {
-  return info.name
 }
 
 export function resolveFunctionReturnType(name: string, fallback: string, context: CEmitContext): string {
@@ -354,7 +350,7 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
   const params: string[] = []
 
   for (let index = 0; index < functionParams.length; index = index + 1) {
-    params.push(emitFunctionHeadParam(functionParams[index], index, statement, context))
+    pushFunctionHeadParam(params, functionParams[index], index, statement, context)
   }
 
   if (functionTakesEventLoopParam(statement.name, context)) {
@@ -372,6 +368,61 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
   }
 
   return `${emitCReturnType(returnType, returnNullable)} ${name}(${declarationParamList(params)})`
+}
+
+function pushFunctionHeadParam(
+  params: string[],
+  param: CFunctionParam,
+  index: number,
+  statement: CNode,
+  context: CEmitContext
+): void {
+  params.push(emitFunctionHeadParam(param, index, statement, context))
+  pushObjectFunctionFieldParams(params, param, context)
+}
+
+function pushObjectFunctionFieldParams(params: string[], param: CFunctionParam, context: CEmitContext): void {
+  if (param.valueType !== 'object') {
+    return
+  }
+
+  pushObjectShapeFunctionFieldParams(params, param.name, param.shape, context, param.loc)
+}
+
+function pushObjectShapeFunctionFieldParams(
+  params: string[],
+  objectName: string,
+  shape: CObjectShape | null | undefined,
+  context: CEmitContext,
+  loc: CSourceLocation
+): void {
+  const fields = shape?.fields
+
+  if (fields == null) {
+    return
+  }
+
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      params.push(emitObjectFunctionFieldParam(objectName, field, context, loc))
+    } else if (field.valueType === 'object') {
+      pushObjectShapeFunctionFieldParams(params, `${objectName}_${field.name}`, field.shape, context, field.loc ?? loc)
+    }
+  }
+}
+
+function emitObjectFunctionFieldParam(
+  objectName: string,
+  field: CObjectShapeField,
+  context: CEmitContext,
+  loc: CSourceLocation
+): string {
+  return emitFunctionParameter(
+    emitCObjectFunctionFieldName(objectName, field.name),
+    field.functionType,
+    context,
+    field.loc ?? loc
+  )
 }
 
 function emitFunctionHeadParam(
@@ -428,7 +479,7 @@ export function emitClassMethodDeclaration(
   context.functionReturnOut = 'ccjs_out'
   context.functionErrorOut = 'ccjs_error_out'
   context.variables.set('this', 'object')
-  context.classInstanceTypes.set('this', declarationClassName(info))
+  context.classInstanceTypes.set('this', info.name)
   registerClassObjectShape(context, 'this', info)
   registerFunctionParamsInContext(method, params, context)
 
@@ -475,6 +526,7 @@ export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CE
 
   for (let index = 0; index < method.params.length; index = index + 1) {
     params.push(emitClassMethodParam(method.params[index], index, method, context))
+    pushObjectFunctionFieldParams(params, method.params[index], context)
   }
 
   return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${emitCClassMethodName(info.name, method.name)}(${joinDeclarationParams(params)})`

@@ -386,24 +386,12 @@ function promiseStringAt(values: string[], index: number): string {
   return values[index]
 }
 
-function promiseTopLevelNodeEntryAt(values: PromiseTopLevelNodeEntry[], index: number): PromiseTopLevelNodeEntry {
-  return values[index]
-}
-
-function firstPromiseReferencePathSegment(path: string[]): string | null {
-  for (const segment of path) {
-    return segment
-  }
-
-  return null
-}
-
 function promiseReferenceName(expression: PromiseNode | null | undefined): string | null {
   if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
     return null
   }
 
-  return firstPromiseReferencePathSegment(expression.path)
+  return expression.path[0] ?? null
 }
 
 function promiseMemberObjectReferenceName(expression: PromiseNode | null | undefined): string | null {
@@ -412,38 +400,6 @@ function promiseMemberObjectReferenceName(expression: PromiseNode | null | undef
   }
 
   return promiseReferenceName(expression.object)
-}
-
-function promiseChainArrowBodyKind(body: PromiseChainArrowBody | null | undefined): string {
-  if (body == null) {
-    return ''
-  }
-
-  return body.kind
-}
-
-function promiseChainArrowBodyStatements(body: PromiseChainArrowBody | null | undefined): PromiseNode[] {
-  if (body == null) {
-    return []
-  }
-
-  return body.statements
-}
-
-function promiseChainArrowBodyPrefixStatements(body: PromiseChainArrowBody | null | undefined): PromiseNode[] {
-  if (body == null) {
-    return []
-  }
-
-  return body.prefixStatements
-}
-
-function promiseChainArrowBodyReturnExpression(body: PromiseChainArrowBody | null | undefined): PromiseNode | null {
-  if (body == null) {
-    return null
-  }
-
-  return body.returnExpression
 }
 
 export function emitPreparedPromiseStaticExpression(
@@ -1535,7 +1491,7 @@ export function collectPromiseChainWrappers(
     const entries = collectIrTopLevelNodeEntries(ir)
 
     for (let entryIndex = 0; entryIndex < entries.length; entryIndex = entryIndex + 1) {
-      const item = promiseTopLevelNodeEntryAt(entries, entryIndex)
+      const item = entries[entryIndex]
 
       if (item.kind === 'function') {
         const scope: CallbackScope = new Map()
@@ -2015,14 +1971,14 @@ function emitPromiseChainCallbackStatementLines(
     return []
   }
 
-  if (promiseChainArrowBodyKind(body) === 'statement-list') {
-    return deps.emitStatementList(promiseChainArrowBodyStatements(body), context)
+  if (body.kind === 'statement-list') {
+    return deps.emitStatementList(body.statements, context)
   }
 
-  const prefixLines = deps.emitStatementList(promiseChainArrowBodyPrefixStatements(body), context)
+  const prefixLines = deps.emitStatementList(body.prefixStatements, context)
   const lines: string[] = []
   appendLines(lines, prefixLines)
-  appendLines(lines, emitPromiseChainCallbackReturnLines(promiseChainArrowBodyReturnExpression(body), wrapper, context, deps))
+  appendLines(lines, emitPromiseChainCallbackReturnLines(body.returnExpression, wrapper, context, deps))
 
   return lines
 }

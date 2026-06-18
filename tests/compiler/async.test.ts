@@ -172,6 +172,209 @@ export function main(): void {
 })
 
 
+test('lowers function-typed object fields to C function pointer parameters', () => {
+  const source = `type Deps = {
+  add(a: number, b: number): number
+}
+
+function add(a: number, b: number): number {
+  return a + b
+}
+
+function run(deps: Deps): number {
+  return deps.add(2, 3)
+}
+
+export function main(): void {
+  const deps = { add: add }
+  console.log(run(deps))
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /double run\(ccjs_value deps, double \(\*ccjs_objfn_deps_add\)\(double, double\)\);/)
+  assert.match(c.code, /ccjs_return = ccjs_objfn_deps_add\(2, 3\);/)
+  assert.match(c.code, /double \(\*const ccjs_objfn_deps_add\)\(double, double\) = add;/)
+  assert.match(c.code, /run\(deps, ccjs_objfn_deps_add\)/)
+  assert.doesNotMatch(c.code, /ccjs_callback_call/)
+})
+
+test('lowers colon function-typed object fields to C function pointer parameters', () => {
+  const source = `type Deps = {
+  add: (a: number, b: number) => number
+}
+
+function add(a: number, b: number): number {
+  return a + b
+}
+
+function run(deps: Deps): number {
+  return deps.add(2, 3)
+}
+
+export function main(): void {
+  const deps = { add: add }
+  console.log(run(deps))
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /double run\(ccjs_value deps, double \(\*ccjs_objfn_deps_add\)\(double, double\)\);/)
+  assert.match(c.code, /ccjs_return = ccjs_objfn_deps_add\(2, 3\);/)
+  assert.match(c.code, /run\(deps, ccjs_objfn_deps_add\)/)
+  assert.doesNotMatch(c.code, /CCJS_C_CALL_EXPR/)
+})
+
+test('lowers newline-separated colon function-typed object fields', () => {
+  const source = `type Deps = {
+  next: (value: number) => number
+  add: (a: number, b: number) => number
+}
+
+function next(value: number): number {
+  return value + 1
+}
+
+function add(a: number, b: number): number {
+  return a + b
+}
+
+function run(deps: Deps): number {
+  return deps.add(deps.next(1), 3)
+}
+
+export function main(): void {
+  const deps = { next: next, add: add }
+  console.log(run(deps))
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(
+    c.code,
+    /double run\(ccjs_value deps, double \(\*ccjs_objfn_deps_next\)\(double\), double \(\*ccjs_objfn_deps_add\)\(double, double\)\);/
+  )
+  assert.match(c.code, /ccjs_objfn_deps_add\(ccjs_objfn_deps_next\(1\), 3\)/)
+  assert.match(c.code, /run\(deps, ccjs_objfn_deps_next, ccjs_objfn_deps_add\)/)
+  assert.doesNotMatch(c.code, /CCJS_C_CALL_EXPR/)
+})
+
+test('lowers inline arrow object function fields with contextual types', () => {
+  const source = `type Deps = {
+  add: (a: number, b: number) => number
+}
+
+function run(deps: Deps): number {
+  return deps.add(2, 3)
+}
+
+export function main(): void {
+  const deps: Deps = {
+    add: (a, b) => a + b
+  }
+  console.log(run(deps))
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /static double ccjs_callback_arrow_0\(double a, double b\);/)
+  assert.match(c.code, /ccjs_return = \(a \+ b\);/)
+  assert.match(c.code, /return ccjs_return;/)
+  assert.match(c.code, /double \(\*const ccjs_objfn_deps_add\)\(double, double\) = ccjs_callback_arrow_0;/)
+  assert.match(c.code, /run\(deps, ccjs_objfn_deps_add\)/)
+  assert.doesNotMatch(c.code, /CCJS_C_FUNCTION_VALUE/)
+})
+
+test('lowers accessor-returned function-typed object fields to C function pointer parameters', () => {
+  const source = `type MathDeps = {
+  add(a: number): number
+}
+
+type Context = {
+  math: MathDeps
+}
+
+function deps(context: Context): MathDeps {
+  return context.math
+}
+
+function add(a: number): number {
+  return a + 1
+}
+
+function run(context: Context): number {
+  return deps(context).add(2)
+}
+
+export function main(): void {
+  const math = { add: add }
+  const context: Context = { math: math }
+  console.log(run(context))
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /double run\(ccjs_value context, double \(\*ccjs_objfn_context_math_add\)\(double\)\);/)
+  assert.match(c.code, /ccjs_return = ccjs_objfn_context_math_add\(2\);/)
+  assert.match(c.code, /run\(context, ccjs_objfn_context_math_add\)/)
+  assert.doesNotMatch(c.code, /CCJS_C_CALL_EXPR/)
+})
+
+
+test('lowers block accessor-returned function-typed object fields to C function pointer parameters', () => {
+  const source = `type MathDeps = {
+  add(a: number): number
+}
+
+type Context = {
+  math: MathDeps
+}
+
+function deps(context: Context): MathDeps {
+  const math = context.math
+
+  if (math != null) {
+    return math
+  }
+
+  return context.math
+}
+
+function add(a: number): number {
+  return a + 1
+}
+
+function run(context: Context): number {
+  return deps(context).add(2)
+}
+
+export function main(): void {
+  const math = { add: add }
+  const context: Context = { math: math }
+  console.log(run(context))
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /double run\(ccjs_value context, double \(\*ccjs_objfn_context_math_add\)\(double\)\);/)
+  assert.match(c.code, /ccjs_return = ccjs_objfn_context_math_add\(2\);/)
+  assert.match(c.code, /run\(context, ccjs_objfn_context_math_add\)/)
+  assert.doesNotMatch(c.code, /CCJS_C_CALL_EXPR/)
+})
+
+
 test('compiles typed callback aliases with string parameters through the C callback ABI', () => {
   const source = `type StringCallback = (value: string) => void;
 
@@ -523,27 +726,6 @@ export function main(): void {
 
 
 test('rejects delayed callback storage in C with stable diagnostics', () => {
-  assertDiagnostic(
-    `type Task = () => void;
-type Box = {
-  task: Task
-}
-
-function hello(): void {
-  console.log('hello')
-}
-
-export function main(): void {
-  const box: Box = { task: hello }
-  box.task()
-}
-`,
-    'CCJS_C_FUNCTION_VALUE',
-    {
-      target: 'c'
-    }
-  )
-
   assertDiagnostic(
     `type Task = () => void;
 

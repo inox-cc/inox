@@ -4,14 +4,10 @@
 
 type Task = () => void
 
-type Box = {
-  task: Task
-}
-
 function hello(): void {
   console.log('hello')
 }
 
-const box: Box = { task: hello }
-box.task()
-
+const tasks: Task[] = [hello]
+const task = tasks[0]
+task()

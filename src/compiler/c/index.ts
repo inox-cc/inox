@@ -29,6 +29,7 @@ import {
   emitOwnedValueDeclarations,
   emitPrepareOwnedValueWrite,
   emitReturnFlowDeclarations,
+  emitReturnValueDeclarations,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   isRuntimeBoxedValueType,
@@ -55,7 +56,14 @@ import {
   isStringRuntimeMethod
 } from '../stdlib/descriptors/collections.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from './globals.ts'
-import { cStringLiteral, emitCFunctionName, emitCIdentifier, escapeCString, utf8ByteLength } from './identifiers.ts'
+import {
+  cStringLiteral,
+  emitCFunctionName,
+  emitCIdentifier,
+  emitCObjectFunctionFieldName,
+  escapeCString,
+  utf8ByteLength
+} from './identifiers.ts'
 import {
   emitCModuleHeader as emitCModuleHeaderWithDependencies,
   emitCModuleSource as emitCModuleSourceWithDependencies
@@ -290,6 +298,7 @@ import type {
   CModuleEmitOptions,
   CModuleOutputFile,
   CModulePlan,
+  CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
   CPreparedCallOptions as PreparedCallOptions,
@@ -514,6 +523,7 @@ export type { CModuleOutputFile } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 type CDynamicObjectFieldNode = AnyNode
+type CAccessorNode = CDynamicObjectFieldNode
 type CStringMap = Map<string, string>
 type CNameSet = Set<string>
 type TempValueEmitter = (temp: string) => string
@@ -529,50 +539,26 @@ type CErrorConstructorParts = {
   cause: AnyNode
 }
 
-function cNodeAt(values: any[], index: number): any {
-  return values[index]
-}
-
-function cPathSegment(path: string[], index: number): string {
-  return path[index]
-}
-
-function cStringEquals(left: string, right: string): boolean {
-  return left === right
-}
-
-function cStringOrEmpty(value: string | null | undefined): string {
-  if (value == null) {
-    return ''
-  }
-
-  return value
-}
-
-function cKnownValueTypeOrEmpty(valueType: string | null | undefined): string {
-  return cStringOrEmpty(knownValueType(valueType))
-}
-
 function firstKnownValueTypeOrUnknown(
   first: string | null | undefined,
   second: string | null | undefined,
   third: string | null | undefined
 ): string {
-  const firstKnown = cKnownValueTypeOrEmpty(first)
+  const firstKnown = knownValueType(first)
 
-  if (!cStringEquals(firstKnown, '')) {
+  if (firstKnown != null) {
     return firstKnown
   }
 
-  const secondKnown = cKnownValueTypeOrEmpty(second)
+  const secondKnown = knownValueType(second)
 
-  if (!cStringEquals(secondKnown, '')) {
+  if (secondKnown != null) {
     return secondKnown
   }
 
-  const thirdKnown = cKnownValueTypeOrEmpty(third)
+  const thirdKnown = knownValueType(third)
 
-  if (!cStringEquals(thirdKnown, '')) {
+  if (thirdKnown != null) {
     return thirdKnown
   }
 
@@ -771,8 +757,13 @@ const classLoweringDependencies: ClassLoweringDependencies = {
 
 objectVariableDeclarationDependencies = {
   emitCFieldFlags,
+  emitFunctionPointerVariable: (name, init, context, isConst, functionType, loc) =>
+    emitFunctionPointerVariable(name, init, context as CFunctionContext, isConst, functionType, loc),
+  emitFunctionPointerVariableWithCInitializer: (name, init, context, isConst, functionType, loc) =>
+    emitFunctionPointerVariableWithCInitializer(name, init, context as CFunctionContext, isConst, functionType, loc),
   emitCValueExpression,
-  inferExpressionType
+  inferExpressionType,
+  resolveFunctionValueType: (expression, context) => resolveFunctionValueType(expression, context as CFunctionContext)
 }
 
 jsonDeclarationDependencies = {
@@ -839,7 +830,7 @@ promiseLoweringDependencies = {
   emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFsCallExpression(expression, context, fsLoweringDependencies, options),
   emitRuntimeArrowCaptureStoreLines,
-  emitStatementList,
+  emitStatementList: (statements, context) => emitStatementList(statements, context as CFunctionContext),
   inferExpressionType,
   inferRejectedValueType,
   isPromiseChainCallbackWrapperWithContext
@@ -916,8 +907,10 @@ const callbackLoweringDependencies: CallbackLoweringDependencies = {
   emitOwnedValueDeclarations,
   emitPreparedNumberExpression,
   emitReturnFlowDeclarations,
-  emitRuntimeCallbackRuntimeValueReturnLines,
-  emitStatementList,
+  emitReturnValueDeclarations,
+  emitRuntimeCallbackRuntimeValueReturnLines: (argument, context) =>
+    emitRuntimeCallbackRuntimeValueReturnLines(argument, context as CFunctionContext),
+  emitStatementList: (statements, context) => emitStatementList(statements, context as CFunctionContext),
   registerObjectShape,
   shouldEmitCleanupLabel
 }
@@ -937,8 +930,9 @@ const promiseChainLoweringDependencies: PromiseChainLoweringDependencies = {
   emitReturnFlowDeclarations,
   emitRuntimeArrowCallbackContextFinalizerDeclaration,
   emitRuntimeArrowCallbackContextLocals,
-  emitRuntimeCallbackRuntimeValueReturnLines,
-  emitStatementList,
+  emitRuntimeCallbackRuntimeValueReturnLines: (argument, context) =>
+    emitRuntimeCallbackRuntimeValueReturnLines(argument, context as CFunctionContext),
+  emitStatementList: (statements, context) => emitStatementList(statements, context as CFunctionContext),
   functionUsesExternalEventLoop,
   isPromiseChainCallbackWrapperWithContext
 }
@@ -960,7 +954,7 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeArrowCaptureStoreLines,
-  emitStatementList,
+  emitStatementList: (statements, context) => emitStatementList(statements, context as CFunctionContext),
   inferExpressionType,
   isIndexAccessExpression,
   isMemberAccessExpression,
@@ -969,7 +963,8 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   isThrowingFunctionName,
   pushVariableScope,
   registerObjectShape,
-  registerRuntimeValueMetadata,
+  registerRuntimeValueMetadata: (name, valueType, declaration, expression, context) =>
+    registerRuntimeValueMetadata(name, valueType, declaration, expression, context as CFunctionContext),
   resolveFunctionDeclarationParams,
   resolveFunctionParams: (callee, context) => resolveFunctionParams(callee, context as CFunctionContext),
   resolveKnownArrayIndex,
@@ -1046,7 +1041,7 @@ const expressionTypeDependencies = {
 }
 
 const cCallExpressionDependencies = {
-  currentErrorTarget,
+  currentErrorTarget: (context: unknown) => currentErrorTarget(context as CFunctionContext),
   emitCExpression,
   emitCNumberConversionValueExpression,
   emitCValueExpression,
@@ -1091,7 +1086,7 @@ const cCallExpressionDependencies = {
   isExternalEventLoopFunctionCallee,
   isNullableFunctionType,
   isPromiseReturningFunctionCallee,
-  registerErrorChannel,
+  registerErrorChannel: (context: unknown) => registerErrorChannel(context as CFunctionContext),
   resolveFunctionParams,
   resolveRuntimeCallbackCalleeType,
   resolveRuntimeFunctionArgumentType
@@ -1414,7 +1409,8 @@ function createBaseContext(
   diagnostics: Diagnostic[],
   functionDeclarations: IrFunctionDeclaration[],
   functionEffects: IrFunctionEffect[],
-  jsGlobalRoots: CNameSet
+  jsGlobalRoots: CNameSet,
+  topLevelNodes: CAccessorNode[]
 ): CEmitContext {
   const throwing = createThrowingFunctionInfo(functionDeclarations, functionEffects)
   const functionNames: CStringMap = new Map()
@@ -1428,6 +1424,8 @@ function createBaseContext(
   const functionReturnSetElementTypes: Map<string, any> = new Map()
   const functionReturnTypes: CStringMap = new Map()
   const functionAsyncFlags: Map<string, boolean> = new Map()
+  const moduleObjectShapes = collectModuleObjectShapes(topLevelNodes)
+  const objectAccessorReturnPaths = collectObjectAccessorReturnPaths(topLevelNodes)
   const unhandledRejectionFlag: string | null = null
 
   for (const item of functionDeclarations) {
@@ -1515,6 +1513,8 @@ function createBaseContext(
     asyncTaskWrappers: new Map(),
     jsGlobalRoots,
     moduleValueNames: new Map(),
+    objectAccessorReturnPaths,
+    moduleObjectShapes,
     moduleValueTypes: new Map(),
     promiseChainArrowWrappers: new Map(),
     promiseChainWrappers: new Map(),
@@ -1532,6 +1532,195 @@ function createBaseContext(
     unhandledRejectionFlag,
     nextId: 0
   }
+}
+
+function collectModuleObjectShapes(statements: CAccessorNode[]): Map<string, CObjectShapeField[]> {
+  const result: Map<string, CObjectShapeField[]> = new Map()
+
+  for (const statement of statements) {
+    if (
+      statement.type === 'VariableDeclaration' &&
+      statement.valueType === 'object' &&
+      statement.shape != null &&
+      statement.shape.fields != null
+    ) {
+      result.set(statement.name, statement.shape.fields)
+    }
+  }
+
+  return result
+}
+
+function collectObjectAccessorReturnPaths(statements: CAccessorNode[]): Map<string, CObjectAccessorReturnPath> {
+  const result: Map<string, CObjectAccessorReturnPath> = new Map()
+
+  for (const statement of statements) {
+    const path = objectAccessorReturnPath(statement)
+
+    if (path != null) {
+      result.set(statement.name, path)
+    }
+  }
+
+  return result
+}
+
+function objectAccessorReturnPath(statement: CAccessorNode): CObjectAccessorReturnPath | null {
+  if (statement.type !== 'FunctionDeclaration') {
+    return null
+  }
+
+  const locals: Map<string, CObjectAccessorReturnPath> = new Map()
+
+  for (let index = 0; index < statement.body.length; index = index + 1) {
+    const item = statement.body[index]
+
+    if (item.type === 'VariableDeclaration' && item.init != null) {
+      const path = objectAccessorExpressionReturnPath(item.init, statement.params)
+
+      if (path != null) {
+        locals.set(item.name, path)
+      }
+    }
+
+    const returned = objectAccessorReturnPathFromStatement(item, statement.params, locals)
+
+    if (returned != null) {
+      return returned
+    }
+  }
+
+  return null
+}
+
+function objectAccessorReturnPathFromStatement(
+  statement: CAccessorNode,
+  params: CFunctionParam[],
+  locals: Map<string, CObjectAccessorReturnPath>
+): CObjectAccessorReturnPath | null {
+  if (statement.type === 'ReturnStatement' && statement.argument != null) {
+    return objectAccessorReturnPathFromExpression(statement.argument, params, locals)
+  }
+
+  if (statement.type === 'IfStatement') {
+    const consequent = objectAccessorReturnPathFromStatementList(statement.consequent, params, locals)
+
+    if (consequent != null) {
+      return consequent
+    }
+
+    return objectAccessorReturnPathFromStatementList(statement.alternate, params, locals)
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return objectAccessorReturnPathFromStatementList(statement.body, params, locals)
+  }
+
+  return null
+}
+
+function objectAccessorReturnPathFromStatementList(
+  statements: CAccessorNode | CAccessorNode[] | null | undefined,
+  params: CFunctionParam[],
+  locals: Map<string, CObjectAccessorReturnPath>
+): CObjectAccessorReturnPath | null {
+  if (statements == null) {
+    return null
+  }
+
+  if (!Array.isArray(statements)) {
+    return objectAccessorReturnPathFromStatement(statements, params, locals)
+  }
+
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const path = objectAccessorReturnPathFromStatement(statements[index], params, locals)
+
+    if (path != null) {
+      return path
+    }
+  }
+
+  return null
+}
+
+function objectAccessorReturnPathFromExpression(
+  expression: CAccessorNode,
+  params: CFunctionParam[],
+  locals: Map<string, CObjectAccessorReturnPath>
+): CObjectAccessorReturnPath | null {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    return cloneObjectAccessorReturnPath(locals.get(expression.path[0]))
+  }
+
+  return objectAccessorExpressionReturnPath(expression, params)
+}
+
+function cloneObjectAccessorReturnPath(path: CObjectAccessorReturnPath | null | undefined): CObjectAccessorReturnPath | null {
+  if (path == null) {
+    return null
+  }
+
+  const fields: string[] = []
+
+  for (let index = 0; index < path.fields.length; index = index + 1) {
+    fields.push(path.fields[index])
+  }
+
+  return {
+    fields,
+    paramIndex: path.paramIndex
+  }
+}
+
+function objectAccessorExpressionReturnPath(
+  expression: CAccessorNode,
+  params: CFunctionParam[]
+): CObjectAccessorReturnPath | null {
+  if (expression.type !== 'MemberExpression') {
+    return null
+  }
+
+  const path = objectAccessorExpressionReturnPathPrefix(expression.object, params)
+
+  if (path == null) {
+    return null
+  }
+
+  path.fields.push(expression.property)
+
+  return path
+}
+
+function objectAccessorExpressionReturnPathPrefix(
+  expression: CAccessorNode,
+  params: CFunctionParam[]
+): CObjectAccessorReturnPath | null {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    for (let index = 0; index < params.length; index = index + 1) {
+      const param = params[index]
+
+      if (param.name === expression.path[0]) {
+        return {
+          fields: [],
+          paramIndex: index
+        }
+      }
+    }
+
+    return null
+  }
+
+  if (expression.type === 'MemberExpression') {
+    const path = objectAccessorExpressionReturnPathPrefix(expression.object, params)
+
+    if (path != null) {
+      path.fields.push(expression.property)
+    }
+
+    return path
+  }
+
+  return null
 }
 
 function collectExternalEventLoopFunctions(functions: AnyNode[]): CNameSet {
@@ -1621,6 +1810,24 @@ function emitFunctionPointerVariable(
   functionType: CFunctionType | null | undefined,
   loc: CSourceLocation
 ): string {
+  return emitFunctionPointerVariableWithCInitializer(
+    name,
+    emitFunctionValueExpression(init, context),
+    context,
+    isConst,
+    functionType,
+    loc
+  )
+}
+
+function emitFunctionPointerVariableWithCInitializer(
+  name: string,
+  init: string,
+  context: CFunctionContext,
+  isConst: boolean,
+  functionType: CFunctionType | null | undefined,
+  loc: CSourceLocation
+): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
   let constPrefix = ''
 
@@ -1628,7 +1835,38 @@ function emitFunctionPointerVariable(
     constPrefix = 'const '
   }
 
-  return `${emitFunctionPointerReturnType(functionType)} (*${constPrefix}${name})(${emitFunctionPointerParams(functionType)}) = ${emitFunctionValueExpression(init, context)}`
+  return `${emitFunctionPointerReturnType(functionType)} (*${constPrefix}${name})(${emitFunctionPointerParams(functionType)}) = ${init}`
+}
+
+function resolveFunctionValueType(expression: AnyNode, context: CFunctionContext): CFunctionType | null {
+  if (expression.functionType != null) {
+    return expression.functionType
+  }
+
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.path[0]
+  const params = context.functionParams.get(name)
+  const returnType = context.functionReturnTypes.get(name)
+
+  if (params == null || returnType == null) {
+    return null
+  }
+
+  return {
+    kind: 'function',
+    params,
+    returnArrayElementType: context.functionReturnArrayElementTypes.get(name) ?? null,
+    returnMapKeyType: context.functionReturnMapTypes.get(name)?.key ?? null,
+    returnMapValueType: context.functionReturnMapTypes.get(name)?.value ?? null,
+    returnNullable: context.functionReturnNullables.get(name) === true,
+    returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
+    returnSetElementType: context.functionReturnSetElementTypes.get(name) ?? null,
+    returnShape: context.functionReturnShapes.get(name) ?? null,
+    returnType
+  }
 }
 
 function emitStatement(statement: AnyNode, context: CFunctionContext): string[] {
@@ -1962,7 +2200,7 @@ function inferPromiseRejectionValueType(
   localErrorObjectNames: CNameSet
 ): string {
   if (expression.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'reject') {
-    return inferRejectedValueTypeWithErrors(cNodeAt(expression.args, 0), context, localErrorObjectNames)
+    return inferRejectedValueTypeWithErrors(expression.args[0], context, localErrorObjectNames)
   }
 
   if (expression.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression) != null) {
@@ -1974,7 +2212,7 @@ function inferPromiseRejectionValueType(
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = cPathSegment(expression.path, 0)
+    const name = expression.path[0]
     const localValueType = localPromiseRejectionValueTypes.get(name)
 
     if (localValueType != null) {
@@ -2118,9 +2356,9 @@ function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, con
 }
 
 function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionContext): string {
-  const declared = cKnownValueTypeOrEmpty(statement.valueType)
+  const declared = knownValueType(statement.valueType)
 
-  if (!cStringEquals(declared, '')) {
+  if (declared != null) {
     return declared
   }
 
@@ -2263,7 +2501,7 @@ function isBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionCo
     expression.target != null &&
     expression.target.type === 'Reference' &&
     expression.target.path.length === 1 &&
-    isBoxedRuntimeValueName(cPathSegment(expression.target.path, 0), context)
+    isBoxedRuntimeValueName(expression.target.path[0], context)
   )
 }
 
@@ -2272,7 +2510,7 @@ function isNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctio
     expression.target != null &&
     expression.target.type === 'Reference' &&
     expression.target.path.length === 1 &&
-    context.nullableVariables.has(cPathSegment(expression.target.path, 0))
+    context.nullableVariables.has(expression.target.path[0])
   )
 }
 
@@ -2284,7 +2522,7 @@ function emptyPreparedExpression(): PreparedExpression {
 }
 
 function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
-  const name = cPathSegment(expression.target.path, 0)
+  const name = expression.target.path[0]
   const expectedTag = cRuntimeValueTag(context.variables.get(name))
   const targetType = context.variables.get(name)
   let value = emptyPreparedExpression()
@@ -2332,7 +2570,7 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
 }
 
 function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
-  const name = cPathSegment(expression.target.path, 0)
+  const name = expression.target.path[0]
   const expected = context.variables.get(name)
   const value = emitCValueExpression(expression.value, context)
   const temp = nextCName(context, 'ccjs_box_value')
@@ -2369,7 +2607,7 @@ function isBoxedRuntimeStringReference(expression: AnyNode, context: CFunctionCo
   return (
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
-    isBoxedRuntimeStringName(cPathSegment(expression.path, 0), context)
+    isBoxedRuntimeStringName(expression.path[0], context)
   )
 }
 
@@ -2385,7 +2623,9 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       fields.push({
         name: property.key,
         readonlyField: false,
-        valueType: inferExpressionType(property.value, context)
+        valueType: inferExpressionType(property.value, context),
+        shape: property.value.shape,
+        functionType: resolveFunctionValueType(property.value, context)
       })
     }
   }
@@ -2422,7 +2662,9 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
       mapValueType: field.mapValueType,
-      setElementType: field.setElementType
+      setElementType: field.setElementType,
+      shape: field.shape,
+      functionType: field.functionType
     }
 
     objectShapeFields.push(objectShapeField)
@@ -2442,6 +2684,20 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       if (field.optional !== true) {
         pushDiagnostic(context, diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
       }
+      continue
+    }
+
+    if (field.valueType === 'function') {
+      lines.push(
+        `${emitFunctionPointerVariable(
+          emitCObjectFunctionFieldName(statement.name, field.name),
+          nodeOrEmpty(propertyValue),
+          context,
+          true,
+          field.functionType,
+          propertyValue.loc
+        )};`
+      )
       continue
     }
 
@@ -2749,7 +3005,7 @@ function emitKnownArrayIndexVariableDeclaration(
   element: CKnownArrayElement,
   context: CFunctionContext
 ): string[] {
-  if (cStringEquals(element.valueType, 'string')) {
+  if (element.valueType === 'string') {
     return emitKnownArrayStringIndexVariableDeclaration(statement, element, context)
   }
 
@@ -2860,7 +3116,7 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
   }
 
   for (let index = 0; index < statement.init.elements.length; index++) {
-    const element = cNodeAt(statement.init.elements, index)
+    const element = statement.init.elements[index]
     const value = emitCValueExpression(element, context)
 
     pushAll(lines, value.lines)
@@ -2880,7 +3136,7 @@ function unsupportedArrayElementMessage(valueType: string): string {
 
 function isSupportedObjectFieldStorageType(valueType: string): boolean {
   return (
-    cStringEquals(valueType, 'unknown') ||
+    valueType === 'unknown' ||
     isManagedRuntimeReturnType(valueType) ||
     isNullableScalarType(valueType) ||
     isOpaqueRuntimeValueType(valueType)
@@ -2888,7 +3144,7 @@ function isSupportedObjectFieldStorageType(valueType: string): boolean {
 }
 
 function unsupportedObjectFieldStorageMessage(valueType: string): string {
-  if (cStringEquals(valueType, 'function')) {
+  if (valueType === 'function') {
     return 'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
   }
 
@@ -2916,6 +3172,13 @@ function emitObjectFieldInitializerValue(
   propertyValue: AnyNode,
   context: CFunctionContext
 ): PreparedExpression {
+  if (field.valueType === 'function') {
+    return {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
   if (!isSupportedObjectFieldStorageType(field.valueType)) {
     return unsupportedObjectFieldValueExpression(field.valueType, propertyValue.loc, context)
   }
@@ -2974,7 +3237,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
   context: CFunctionContext
 ): PreparedExpression {
   if (expression?.type === 'Reference' && expression.path.length === 1) {
-    const name = cPathSegment(expression.path, 0)
+    const name = expression.path[0]
 
     if (context.nullableVariables.has(name) && isNullableScalarType(context.variables.get(name))) {
       return {
@@ -3114,7 +3377,7 @@ function emitNullableFunctionValueExpression(
   }
 
   if (expression?.type === 'Reference' && expression.path.length === 1) {
-    const name = cPathSegment(expression.path, 0)
+    const name = expression.path[0]
 
     if (context.nullableVariables.has(name) && context.variables.get(name) === 'function') {
       return {
@@ -3170,7 +3433,9 @@ function emitCObjectLiteralValueExpression(
       fields.push({
         name: property.key,
         readonlyField: false,
-        valueType: inferExpressionType(property.value, context)
+        valueType: inferExpressionType(property.value, context),
+        shape: property.value.shape,
+        functionType: resolveFunctionValueType(property.value, context)
       })
     }
   }
@@ -3196,6 +3461,10 @@ function emitCObjectLiteralValueExpression(
       if (field.optional !== true) {
         pushDiagnostic(context, diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, expression.loc))
       }
+      continue
+    }
+
+    if (field.valueType === 'function') {
       continue
     }
 
@@ -3282,7 +3551,7 @@ function errorConstructorExpressions(
   let code = cStringLiteralNode('', expression.loc)
   let cause = cNullLiteralNode(expression.loc)
 
-  const messageArg = cNodeAt(expression.args, 0)
+  const messageArg = expression.args[0]
 
   if (messageArg != null) {
     message = messageArg
@@ -3433,7 +3702,7 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
 
   pushAll(lines, left.lines)
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`if (${left.expression}.tag == CCJS_TAG_NULL) {`)
+  lines.push(`if (${left.expression}.tag == CCJS_TAG_NULL || ${left.expression}.tag == CCJS_TAG_UNDEFINED) {`)
   pushIndented(lines, right.lines, '  ')
   lines.push(`  ${temp} = ${right.expression};`)
   pushIndented(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
@@ -3564,7 +3833,7 @@ function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionCon
     return false
   }
 
-  const name = cPathSegment(expression.path, 0)
+  const name = expression.path[0]
 
   return context.variables.get(name) === 'unknown' && context.ownedValues.includes(name)
 }
@@ -3618,9 +3887,9 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 
   if (isMemberAccessExpression(expression)) {
-    const netAddressMember = cStringOrEmpty(resolveNetAddressStringMember(expression, context))
+    const netAddressMember = resolveNetAddressStringMember(expression, context) ?? ''
 
-    if (!cStringEquals(netAddressMember, '')) {
+    if (netAddressMember !== '') {
       return {
         lines: [],
         format: '%s',
@@ -3898,7 +4167,7 @@ function emitErrorLogObjectExpression(expression: AnyNode, context: CFunctionCon
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return {
       lines: [],
-      expression: emitObjectValueReference(cPathSegment(expression.path, 0), context)
+      expression: emitObjectValueReference(expression.path[0], context)
     }
   }
 
@@ -4077,14 +4346,14 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
   }
 
   let valueType = 'unknown'
-  const awaitedValueType = cStringOrEmpty(resolveCAsyncFunctionAwaitValueType(expression.callee, context))
+  const awaitedValueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? ''
 
-  if (!cStringEquals(awaitedValueType, '')) {
+  if (awaitedValueType !== '') {
     valueType = awaitedValueType
   } else {
-    const promiseValueType = cStringOrEmpty(expression.promiseValueType)
+    const promiseValueType = expression.promiseValueType ?? ''
 
-    if (!cStringEquals(promiseValueType, '')) {
+    if (promiseValueType !== '') {
       valueType = promiseValueType
     }
   }
@@ -4187,7 +4456,7 @@ function emitPreparedAsyncTaskPromiseCallExpression(
     return null
   }
 
-  const wrapper = context.asyncTaskWrappers.get(cPathSegment(expression.callee.path, 0))
+  const wrapper = context.asyncTaskWrappers.get(expression.callee.path[0])
 
   if (wrapper == null) {
     return null
@@ -4377,7 +4646,7 @@ function resolveCFunctionRejectionValueType(callee: AnyNode, context: CFunctionC
   }
 
   let types: IrThrowValueType[] = []
-  const storedTypes = context.functionThrowValueTypes.get(cPathSegment(callee.path, 0))
+  const storedTypes = context.functionThrowValueTypes.get(callee.path[0])
 
   if (storedTypes != null) {
     types = storedTypes
@@ -4459,10 +4728,10 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
   const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
   const pollCall = `ccjs_loop_poll(${emitEventLoopReference(context)}, ${emitEventLoopNextTimeExpression(context)})`
   let rejectionValueType = 'unknown'
-  const promiseRejectionValueType = cStringOrEmpty(preparedPromise.rejectionValueType)
+  const promiseRejectionValueType = preparedPromise.rejectionValueType ?? ''
   const lines: string[] = []
 
-  if (!cStringEquals(promiseRejectionValueType, '')) {
+  if (promiseRejectionValueType !== '') {
     rejectionValueType = promiseRejectionValueType
   }
 
@@ -4495,14 +4764,14 @@ function emitAwaitRejectedPromiseLines(
   rejectionValueType: string,
   context: CFunctionContext
 ): string[] {
-  const target = cStringOrEmpty(currentErrorTarget(context))
+  const target = currentErrorTarget(context) ?? ''
   let rejectedTypeCheck = 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
 
-  if (cStringEquals(rejectionValueType, 'error')) {
+  if (rejectionValueType === 'error') {
     rejectedTypeCheck = 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
   }
 
-  if (cStringEquals(target, '') && !context.throwingFunction) {
+  if (target === '' && !context.throwingFunction) {
     const failureLines: string[] = []
 
     failureLines.push(
@@ -4522,7 +4791,7 @@ function emitAwaitRejectedPromiseLines(
   lines.push(`  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`)
   lines.push('  ccjs_error_active = 1;')
 
-  if (cStringEquals(target, '')) {
+  if (target === '') {
     lines.push('  ccjs_status_result = CCJS_ERR_THROW;')
     lines.push('  goto ccjs_cleanup;')
   } else {
@@ -4541,7 +4810,7 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
     return null
   }
 
-  if (callExpression.callee.type === 'Reference' && context.asyncTaskWrappers.has(cPathSegment(callExpression.callee.path, 0))) {
+  if (callExpression.callee.type === 'Reference' && context.asyncTaskWrappers.has(callExpression.callee.path[0])) {
     return null
   }
 
@@ -4566,12 +4835,12 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
   }
 
   const valueTag = cRuntimeValueTag(valueType)
-  const valueTagName = cStringOrEmpty(valueTag)
+  const valueTagName = valueTag ?? ''
 
   if (
-    cStringEquals(valueTagName, '') &&
-    !cStringEquals(valueType, 'number') &&
-    !cStringEquals(valueType, 'boolean')
+    valueTagName === '' &&
+    valueType !== 'number' &&
+    valueType !== 'boolean'
   ) {
     pushDiagnostic(context,
       diagnostic(
@@ -4647,7 +4916,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = cPathSegment(expression.path, 0)
+    const name = expression.path[0]
 
     if (context.variables.get(name) === 'function') {
       return name
@@ -4680,7 +4949,7 @@ function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionCon
     return null
   }
 
-  const name = cPathSegment(callee.path, 0)
+  const name = callee.path[0]
 
   if (!context.runtimeCallbacks.has(name)) {
     return null
@@ -4714,9 +4983,9 @@ function emitRuntimeCallbackValue(
   if (
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
-    context.runtimeCallbacks.has(cPathSegment(expression.path, 0))
+    context.runtimeCallbacks.has(expression.path[0])
   ) {
-    const name = cPathSegment(expression.path, 0)
+    const name = expression.path[0]
 
     return {
       lines: [],
@@ -4742,9 +5011,9 @@ function emitRuntimeCallbackValueInto(
   if (
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
-    context.runtimeCallbacks.has(cPathSegment(expression.path, 0))
+    context.runtimeCallbacks.has(expression.path[0])
   ) {
-    const name = cPathSegment(expression.path, 0)
+    const name = expression.path[0]
     const lines: string[] = []
 
     pushAll(lines, emitPrepareOwnedValueWrite(out))
@@ -4774,7 +5043,7 @@ function emitRuntimeCallbackValueInto(
   if (
     expression.type !== 'Reference' ||
     expression.path.length !== 1 ||
-    !context.functionNames.has(cPathSegment(expression.path, 0))
+    !context.functionNames.has(expression.path[0])
   ) {
     const loc = expression.loc
 
@@ -4788,7 +5057,7 @@ function emitRuntimeCallbackValueInto(
     return emitUndefinedRuntimeCallbackValueInto(out)
   }
 
-  const functionName = cPathSegment(expression.path, 0)
+  const functionName = expression.path[0]
   const wrapper = runtimeCallbackWrapperFor(functionName, normalizeFunctionType(functionType), context)
 
   if (wrapper == null) {
@@ -5054,12 +5323,12 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
   const resultType = inferExpressionType(expression, context)
   const expectedTag = cRuntimeValueTag(resultType)
-  const expectedTagName = cStringOrEmpty(expectedTag)
+  const expectedTagName = expectedTag ?? ''
 
   if (
     functionType == null ||
     !isRuntimeNullableType(functionType.returnType) ||
-    cStringEquals(expectedTagName, '')
+    expectedTagName === ''
   ) {
     pushDiagnostic(context,
       diagnostic(
@@ -5118,14 +5387,138 @@ function emitOptionalRuntimeCallbackCallValueExpression(
 
 type FunctionParamContext = {
   functionParams: Map<string, CFunctionParam[]>
+  functionReturnShapes: Map<string, CObjectShape | null>
+  objectAccessorReturnPaths: Map<string, CObjectAccessorReturnPath>
+  objectShapes: Map<string, CObjectShapeField[]>
 }
 
-function resolveFunctionParams(callee: AnyNode, context: FunctionParamContext): CFunctionParam[] | null {
-  if (callee.type !== 'Reference' || callee.path.length !== 1) {
+function functionParamArgumentAt(args: CAccessorNode[], expectedIndex: number): CAccessorNode | null {
+  for (let index = 0; index < args.length; index = index + 1) {
+    if (index === expectedIndex) {
+      return args[index]
+    }
+  }
+
+  return null
+}
+
+function appendObjectFunctionParamAccessorFields(objectName: string, fields: string[]): string {
+  let result = objectName
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    result = `${result}_${fields[index]}`
+  }
+
+  return result
+}
+
+function resolveObjectFunctionParamExpressionName(expression: CAccessorNode, context: FunctionParamContext): string | null {
+  const directName = resolveCObjectExpressionName(expression)
+
+  if (directName != null) {
+    return directName
+  }
+
+  if (expression.type === 'MemberExpression') {
+    const objectName = resolveObjectFunctionParamExpressionName(expression.object, context)
+
+    if (objectName != null) {
+      return `${objectName}_${expression.property}`
+    }
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    const objectName = resolveObjectFunctionParamExpressionName(expression.object, context)
+
+    if (objectName != null) {
+      return `${objectName}_${expression.index.value}`
+    }
+  }
+
+  if (expression.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
+    const accessor = context.objectAccessorReturnPaths.get(expression.callee.path[0])
+
+    if (accessor != null) {
+      const argument = functionParamArgumentAt(expression.args, accessor.paramIndex)
+
+      if (argument != null) {
+        const objectName = resolveObjectFunctionParamExpressionName(argument, context)
+
+        if (objectName != null) {
+          return appendObjectFunctionParamAccessorFields(objectName, accessor.fields)
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+function objectFunctionParamFields(object: CAccessorNode, objectName: string, context: FunctionParamContext): CObjectShapeField[] | null {
+  const fields = context.objectShapes.get(objectName)
+
+  if (fields != null) {
+    return fields
+  }
+
+  if (object.shape != null && object.shape.fields != null) {
+    return object.shape.fields
+  }
+
+  if (object.type === 'CallExpression' && object.callee.type === 'Reference' && object.callee.path.length === 1) {
+    const shape = context.functionReturnShapes.get(object.callee.path[0])
+
+    if (shape != null && shape.fields != null) {
+      return shape.fields
+    }
+  }
+
+  return null
+}
+
+function objectFunctionFieldParams(callee: CAccessorNode, context: FunctionParamContext): CFunctionParam[] | null {
+  let object: CAccessorNode | null = null
+  let fieldName: string | null = null
+
+  if (callee.type === 'MemberExpression') {
+    object = callee.object
+    fieldName = callee.property
+  } else if (callee.type === 'IndexExpression' && callee.index.type === 'StringLiteral') {
+    object = callee.object
+    fieldName = callee.index.value
+  }
+
+  if (object == null || fieldName == null) {
     return null
   }
 
-  return context.functionParams.get(cPathSegment(callee.path, 0)) ?? null
+  const objectName = resolveObjectFunctionParamExpressionName(object, context)
+
+  if (objectName == null) {
+    return null
+  }
+
+  const fields = objectFunctionParamFields(object, objectName, context)
+
+  if (fields == null) {
+    return null
+  }
+
+  for (const field of fields) {
+    if (field.name === fieldName && field.valueType === 'function' && field.functionType != null) {
+      return field.functionType.params
+    }
+  }
+
+  return null
+}
+
+function resolveFunctionParams(callee: CAccessorNode, context: FunctionParamContext): CFunctionParam[] | null {
+  if (callee.type === 'Reference' && callee.path.length === 1) {
+    return context.functionParams.get(callee.path[0]) ?? null
+  }
+
+  return objectFunctionFieldParams(callee, context)
 }
 
 function inferExpressionType(expression: AnyNode, context: CFunctionContext): string {
@@ -5137,7 +5530,7 @@ function isErrorConstructorExpression(expression: AnyNode): boolean {
     expression?.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1 &&
-    cPathSegment(expression.callee.path, 0) === 'Error'
+    expression.callee.path[0] === 'Error'
   )
 }
 
@@ -5146,7 +5539,7 @@ function isFetchAbortControllerConstructorExpression(expression: AnyNode): boole
     expression?.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1 &&
-    cPathSegment(expression.callee.path, 0) === 'AbortController'
+    expression.callee.path[0] === 'AbortController'
   )
 }
 
@@ -5162,7 +5555,7 @@ function isArrayIsArrayCall(expression: AnyNode): boolean {
     callee.property === 'isArray' &&
     callee.object.type === 'Reference' &&
     callee.object.path.length === 1 &&
-    cPathSegment(callee.object.path, 0) === 'Array'
+    callee.object.path[0] === 'Array'
   )
 }
 
@@ -5171,7 +5564,7 @@ function emitPreparedArrayIsArrayCallExpression(expression: AnyNode, context: CF
     return null
   }
 
-  const value = emitCValueExpression(cNodeAt(expression.args, 0), context)
+  const value = emitCValueExpression(expression.args[0], context)
 
   return {
     lines: value.lines,
@@ -5206,7 +5599,7 @@ function emitPreparedObjectValuesCallExpression(expression: AnyNode, context: CF
     return null
   }
 
-  const object = emitCValueExpression(cNodeAt(expression.args, 0), context)
+  const object = emitCValueExpression(expression.args[0], context)
   const temp = nextCName(context, `ccjs_object_${method}`)
   const lines: string[] = []
 
@@ -5235,7 +5628,7 @@ function isKnownErrorValueExpression(
   }
 
   if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return errorObjectNames.has(cPathSegment(expression.path, 0))
+    return errorObjectNames.has(expression.path[0])
   }
 
   return false

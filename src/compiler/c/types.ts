@@ -45,10 +45,15 @@ export type CShapeValueMetadata = {
 }
 
 export type CObjectShapeField = CShapeValueMetadata & {
+  functionTypeOwnership?: 'weak'
+  functionType?: CFunctionType | null
+  loc?: AnyNode['loc']
   name: string
   optional?: boolean
   ownership?: string
   readonlyField?: boolean
+  shapeOwnership?: 'weak'
+  shape?: CObjectShape | null
 }
 
 export function isReadonlyCObjectShapeField(field: AnyNode): boolean {
@@ -64,9 +69,16 @@ export type CObjectShape = {
 }
 
 export type CObjectFieldInfo = CShapeValueMetadata & {
+  functionType?: CFunctionType | null
   index: number
   key: string | null
   objectName?: string
+  shape?: CObjectShape | null
+}
+
+export type CObjectAccessorReturnPath = {
+  fields: string[]
+  paramIndex: number
 }
 
 export type CObjectIndexFieldInfo = CObjectFieldInfo & {

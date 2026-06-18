@@ -91,6 +91,42 @@ test('resolves object aliases into lowered shapes', () => {
   )
 })
 
+test('resolves intersection object fields by overriding base fields', () => {
+  const context = createLowerContext({
+    type: 'Program',
+    body: [
+      {
+        type: 'TypeAliasDeclaration',
+        name: 'Base',
+        valueType: {
+          kind: 'object',
+          fields: [{ name: 'objectName', valueType: 'string', optional: true }]
+        }
+      },
+      {
+        type: 'TypeAliasDeclaration',
+        name: 'Known',
+        valueType: {
+          kind: 'object',
+          baseTypes: ['Base'],
+          fields: [{ name: 'objectName', valueType: 'string' }]
+        }
+      }
+    ]
+  })
+  const known = resolveDeclaredType('Known', context)
+
+  assert.deepEqual(
+    known.shape?.fields.map((field) => ({
+      name: field.name,
+      optional: field.optional,
+      nullable: field.nullable,
+      valueType: field.valueType
+    })),
+    [{ name: 'objectName', optional: false, nullable: false, valueType: 'string' }]
+  )
+})
+
 test('resolves function aliases into lowered function metadata', () => {
   const context = createLowerContext(typeProgram)
   const callback = resolveDeclaredType('Callback', context)

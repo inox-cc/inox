@@ -16,6 +16,7 @@ import type {
   CFunctionParam,
   CFunctionReturnMapType,
   CFunctionType,
+  CObjectAccessorReturnPath,
   CHttpHandler,
   CNetHandler,
   CObjectShape,
@@ -39,6 +40,7 @@ export type CFunctionTypeMap = Map<string, CFunctionType>
 export type CHttpHandlerMap = Map<string, CHttpHandler>
 export type CNetHandlerMap = Map<string, CNetHandler>
 export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
+export type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
 export type CPromiseChainWrapperMap = Map<string, CPromiseChainWrapper>
 export type CPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
 export type CStringMap = Map<string, string>
@@ -151,6 +153,8 @@ export type CEmitContext = {
   httpImportNames: CStringSet
   jsGlobalRoots: CStringSet
   moduleValueNames: CStringMap
+  objectAccessorReturnPaths: CObjectAccessorReturnPathMap
+  moduleObjectShapes: CObjectShapeFieldMap
   moduleValueTypes: CStringMap
   netConnectNames: CStringSet
   netCreateServerNames: CStringSet
@@ -196,6 +200,35 @@ export type COwnedPromiseContext = {
   ownedPromises: string[]
   promiseRejectionValueTypes: CStringMap
   promiseValueTypes: CStringMap
+  variables: CStringMap
+}
+
+type CBoxedValueContext = {
+  boxedValueTypes: CStringMap
+  boxedValues: string[]
+}
+
+type CNullableScalarContext = {
+  narrowedNullableScalars: CStringSet
+}
+
+type CVariableScopeContext = {
+  arrayShapes: CArrayShapeMap
+  boxedVariables: CStringSet
+  classInstanceTypes: CStringMap
+  errorObjectNames: CStringSet
+  functionTypes: CFunctionTypeMap
+  mapTypes: CFunctionReturnMapTypeMap
+  narrowedNullableScalars: CStringSet
+  nullableVariables: CStringSet
+  objectShapes: CObjectShapeFieldMap
+  promiseConstructorHandlers: CPromiseConstructorHandlerMap
+  promiseRejectionValueTypes: CStringMap
+  promiseValueTypes: CStringMap
+  runtimeArrayElementTypes: CStringMap
+  runtimeCallbacks: CStringSet
+  runtimeStrings: CStringSet
+  setElementTypes: CStringMap
   variables: CStringMap
 }
 
@@ -319,6 +352,8 @@ export function createFunctionContext(
     httpImportNames: baseContext.httpImportNames,
     jsGlobalRoots: baseContext.jsGlobalRoots,
     moduleValueNames: baseContext.moduleValueNames,
+    objectAccessorReturnPaths: baseContext.objectAccessorReturnPaths,
+    moduleObjectShapes: baseContext.moduleObjectShapes,
     moduleValueTypes: baseContext.moduleValueTypes,
     netConnectNames: baseContext.netConnectNames,
     netCreateServerNames: baseContext.netCreateServerNames,
@@ -359,7 +394,7 @@ export function createFunctionContext(
     netReadingSockets: new Set(),
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
-    objectShapes: new Map(),
+    objectShapes: cloneCObjectShapeFieldMap(baseContext.moduleObjectShapes),
     ownedPromises: [],
     ownedCryptoHashes: [],
     ownedCryptoHmacs: [],
@@ -461,7 +496,7 @@ export function registerEventLoop(context: CEventLoopContext): void {
   context.usedCleanupGoto = true
 }
 
-export function registerBoxedValue(context: CFunctionContext, name: string, valueType: string = 'number'): void {
+export function registerBoxedValue(context: CBoxedValueContext, name: string, valueType: string = 'number'): void {
   if (!stringArrayHas(context.boxedValues, name)) {
     context.boxedValues.push(name)
   }
@@ -801,7 +836,7 @@ export function nextCName(context: CNameContext, prefix: string): string {
   return name
 }
 
-export function pushVariableScope(context: CFunctionContext): CVariableScopeSnapshot {
+export function pushVariableScope(context: CVariableScopeContext): CVariableScopeSnapshot {
   const previousVariables = context.variables
   const previousArrayShapes = context.arrayShapes
   const previousBoxedVariables = context.boxedVariables
@@ -859,7 +894,7 @@ export function pushVariableScope(context: CFunctionContext): CVariableScopeSnap
   }
 }
 
-export function restoreVariableScope(context: CFunctionContext, snapshot: CVariableScopeSnapshot): void {
+export function restoreVariableScope(context: CVariableScopeContext, snapshot: CVariableScopeSnapshot): void {
   context.variables = snapshot.variables
   context.arrayShapes = snapshot.arrayShapes
   context.boxedVariables = snapshot.boxedVariables
@@ -880,7 +915,7 @@ export function restoreVariableScope(context: CFunctionContext, snapshot: CVaria
 }
 
 export function pushNullableScalarNarrowing(
-  context: CFunctionContext,
+  context: CNullableScalarContext,
   names: string[]
 ): CNullableScalarNarrowingSnapshot {
   const previous = context.narrowedNullableScalars
@@ -905,7 +940,7 @@ export function pushNullableScalarNarrowing(
 }
 
 export function restoreNullableScalarNarrowing(
-  context: CFunctionContext,
+  context: CNullableScalarContext,
   snapshot: CNullableScalarNarrowingSnapshot
 ): void {
   if (snapshot.active) {
@@ -913,7 +948,7 @@ export function restoreNullableScalarNarrowing(
   }
 }
 
-export function narrowNullableScalars(context: CFunctionContext, names: string[]): void {
+export function narrowNullableScalars(context: CNullableScalarContext, names: string[]): void {
   for (const name of names) {
     context.narrowedNullableScalars.add(name)
   }

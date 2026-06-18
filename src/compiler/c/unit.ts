@@ -86,7 +86,13 @@ export type CUnitDependencies = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
   collectExternalEventLoopFunctions: (functions: AnyNode[]) => Set<string>
-  createBaseContext: (diagnostics: Diagnostic[], functionDeclarations: IrFunctionDeclaration[], functionEffects: IrFunctionEffect[], jsGlobalRoots: Set<string>) => CEmitContext
+  createBaseContext(
+    diagnostics: Diagnostic[],
+    functionDeclarations: IrFunctionDeclaration[],
+    functionEffects: IrFunctionEffect[],
+    jsGlobalRoots: Set<string>,
+    topLevelNodes: AnyNode[]
+  ): CEmitContext
   dgramLoweringDependencies: DgramLoweringDependencies
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) => string[]
   emitClassMethodHead: (info: CClassInfo, method: AnyNode, context: CEmitContext) => string
@@ -112,6 +118,20 @@ function collectUnitFunctionNodes(functionEntries: AnyNode[]): AnyNode[] {
   }
 
   return functions
+}
+
+function collectCUnitTopLevelNodes(programs: IrProgram[]): AnyNode[] {
+  const nodes: AnyNode[] = []
+
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = programs[programIndex]
+
+    for (let nodeIndex = 0; nodeIndex < program.body.length; nodeIndex = nodeIndex + 1) {
+      nodes.push(program.body[nodeIndex])
+    }
+  }
+
+  return nodes
 }
 
 function hasCUnitRuntimeCallbackWrapper(baseContext: CEmitContext): boolean {
@@ -179,8 +199,15 @@ export function emitCUnit(
   const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const classes = collectIrTopLevelNodesFromPrograms(irPrograms, 'class')
+  const topLevelNodes = collectCUnitTopLevelNodes(irPrograms)
   const jsGlobalRoots = stringSetFromArray(globalRoots)
-  const baseContext = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots)
+  const baseContext = deps.createBaseContext(
+    diagnostics,
+    functionDeclarations,
+    functionEffects,
+    jsGlobalRoots,
+    topLevelNodes
+  )
   baseContext.dgramImportNames = collectRuntimeImportNames(
     irPrograms,
     new Set(['dgram', 'node:dgram']),

@@ -59,18 +59,6 @@ function lastDgramArgument(args: AnyNode[]): AnyNode | null {
   return args[args.length - 1]
 }
 
-function dgramArgumentAt(args: DgramAstNode[], index: number): DgramAstNode | null {
-  if (index < 0 || index >= args.length) {
-    return null
-  }
-
-  return args[index]
-}
-
-function dgramTopLevelNodeEntryAt(entries: DgramTopLevelNodeEntry[], index: number): DgramTopLevelNodeEntry {
-  return entries[index]
-}
-
 function pushDgramLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
@@ -83,20 +71,12 @@ function pushDgramNodes(target: DgramAstNode[], nodes: DgramAstNode[]): void {
   }
 }
 
-function firstDgramReferencePathSegment(path: string[]): string | null {
-  for (const segment of path) {
-    return segment
-  }
-
-  return null
-}
-
 function dgramReferenceName(expression: DgramAstNode | null | undefined): string | null {
   if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
     return null
   }
 
-  return firstDgramReferencePathSegment(expression.path)
+  return expression.path[0] ?? null
 }
 
 function dgramMemberObjectReferenceName(callee: DgramAstNode | null | undefined): string | null {
@@ -433,7 +413,7 @@ export function collectDgramMessageHandlers(
     const items: DgramTopLevelNodeEntry[] = collectIrTopLevelNodeEntries(ir)
 
     for (let itemIndex = 0; itemIndex < items.length; itemIndex = itemIndex + 1) {
-      const item = dgramTopLevelNodeEntryAt(items, itemIndex)
+      const item = items[itemIndex]
 
       if (item.kind === 'function') {
         const statements: DgramAstNode[] = item.node.body
@@ -1214,8 +1194,8 @@ function emitDgramSendLines(
   let hostArg = args[2]
 
   if (hasOffsetLength) {
-    const offsetPortArg = dgramArgumentAt(args, 3)
-    const offsetHostArg = dgramArgumentAt(args, 4)
+    const offsetPortArg = args[3] ?? null
+    const offsetHostArg = args[4] ?? null
 
     if (offsetPortArg != null && offsetHostArg != null) {
       portArg = offsetPortArg

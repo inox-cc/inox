@@ -35,6 +35,10 @@ export function emitCFunctionName(name: string): string {
   return name
 }
 
+export function emitCObjectFunctionFieldName(objectName: string, fieldName: string): string {
+  return `ccjs_objfn_${emitCIdentifier(objectName)}_${emitCIdentifier(fieldName)}`
+}
+
 export function utf8ByteLength(value: string): number {
   let length = 0
 

@@ -508,6 +508,37 @@ export function main(): void {
   assert.match(result.code, /ccjs_object_init_known\(token, 2, ccjs_value_\d+\)/)
 })
 
+test('uses right-hand intersection field metadata when it overrides a base field', () => {
+  const result = compileSource(
+    `type Base = {
+  objectName?: string
+}
+
+type Known = Base & {
+  objectName: string
+}
+
+function read(member: Known): string {
+  const name: string = member.objectName
+  return name
+}
+
+export function main(): void {
+  console.log(read({ objectName: 'box' }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const read = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'read')
+  assert.ok(read)
+  assert.equal(read.params[0].shape.fields[0].nullable, false)
+  assert.match(result.code, /ccjs_object_get_known\(member, 0, &ccjs_field_\d+\)/)
+  assert.doesNotMatch(result.code, /CCJS_TAG_NULL/)
+})
+
 
 test('rejects readonly typed object field assignment', () => {
   assertDiagnostic(

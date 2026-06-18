@@ -1955,8 +1955,7 @@ class Checker {
     }
     const nullableEquality =
       isEqualityOperator(expression.operator) &&
-      ((left === 'null' && this.expressionCanBeNull(expression.right)) ||
-        (right === 'null' && this.expressionCanBeNull(expression.left)))
+      (left === 'null' || right === 'null')
 
     if (isEqualityOperator(expression.operator) && !nullableEquality && !isEqualityComparableType(left, right)) {
       this.report(
@@ -9207,6 +9206,11 @@ class Checker {
       return
     }
 
+    expression.valueType = 'function'
+    if (functionType != null) {
+      expression.functionType = functionType
+    }
+
     let actualReturnType: ValueType = 'unknown'
 
     if (functionType != null && functionType.returnType != null) {
@@ -9235,12 +9239,17 @@ class Checker {
         if (param.valueType === 'unknown' && expected != null) {
           let arrayElementType: ValueType | null = null
           let arrayElementDeclaredType: string | null = null
+          let expectedValueType = expected.valueType
           let mapKeyType: ValueType | null = null
           let mapValueType: ValueType | null = null
           let promiseValueType: ValueType | null = null
           let setElementType: ValueType | null = null
           let expectedFunctionType: FunctionTypeMetadata | null = null
           let shape: ObjectShapeInfo | null = null
+
+          if (!isBuiltinValueType(expectedValueType)) {
+            expectedValueType = 'object'
+          }
 
           if (expected.arrayElementType != null) {
             arrayElementType = expected.arrayElementType
@@ -9275,7 +9284,7 @@ class Checker {
           }
 
           paramInfo = {
-            valueType: expected.valueType,
+            valueType: expectedValueType,
             nullable: expected.nullable === true,
             arrayElementType,
             arrayElementDeclaredType,
@@ -9288,7 +9297,7 @@ class Checker {
           }
         }
 
-        if (expected != null && param.valueType !== 'unknown') {
+        if (expected != null && param.valueType !== 'unknown' && isBuiltinValueType(expected.valueType)) {
           this.checkAssignableType(expected.valueType, paramInfo.valueType, param.loc, expected.nullable === true, false)
         }
 
@@ -9346,7 +9355,7 @@ class Checker {
         try {
           actualReturnType = this.checkExpression(expression.body)
 
-          if (functionType != null) {
+          if (functionType != null && isBuiltinValueType(functionType.returnType)) {
             this.checkAssignableType(
               actualReturnType,
               functionType.returnType,
@@ -9607,6 +9616,8 @@ class Checker {
   }
 
   checkObjectLiteralAgainstShape(expression: AnyNode, shape: ObjectShapeInfo): void {
+    expression.shape = shape
+
     const properties = new Map()
 
     for (const property of expression.properties) {
@@ -9624,7 +9635,23 @@ class Checker {
       }
 
       const fieldType = this.resolveFieldDeclaredType(field)
-      const propertyType = this.checkExpression(property.value)
+      const fieldShape = fieldType.shape
+      const propertyFunctionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
+      let propertyType: ValueType = 'unknown'
+
+      if (
+        fieldType.valueType === 'function' &&
+        propertyFunctionType != null &&
+        property.value.type === 'ArrowFunctionExpression'
+      ) {
+        this.checkArrowFunctionExpression(property.value, propertyFunctionType)
+        propertyType = 'function'
+      } else if (fieldType.valueType === 'object' && fieldShape != null && property.value.type === 'ObjectLiteral') {
+        this.checkObjectLiteralAgainstShape(property.value, fieldShape)
+        propertyType = 'object'
+      } else {
+        propertyType = this.checkExpression(property.value)
+      }
 
       this.checkAssignableType(
         propertyType,
@@ -11011,8 +11038,8 @@ class Checker {
     const fields: AnyNode[] = []
     const resolvedFields: AnyNode[] = []
 
-    pushAllNodes(fields, bases.fields)
-    pushAllNodes(fields, shape.fields)
+    mergeShapeFields(fields, bases.fields)
+    mergeShapeFields(fields, shape.fields)
 
     for (const field of fields) {
       const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
@@ -11309,8 +11336,8 @@ class Checker {
     const fields: AnyNode[] = []
     const resolvedFields: AnyNode[] = []
 
-    pushAllNodes(fields, bases.fields)
-    pushAllNodes(fields, shape.fields)
+    mergeShapeFields(fields, bases.fields)
+    mergeShapeFields(fields, shape.fields)
 
     for (const field of fields) {
       const declared = this.resolveWeakTargetShapeFieldType(field)
@@ -12001,6 +12028,29 @@ function joinStrings(values: readonly string[], separator: string): string {
 function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
   for (let index = 0; index < source.length; index = index + 1) {
     target.push(source[index])
+  }
+}
+
+function mergeShapeFields(target: AnyNode[], source: AnyNode[] | null | undefined): void {
+  if (source == null) {
+    return
+  }
+
+  for (const field of source) {
+    let existingIndex = -1
+
+    for (let index = 0; index < target.length; index = index + 1) {
+      if (target[index].name === field.name) {
+        existingIndex = index
+        break
+      }
+    }
+
+    if (existingIndex >= 0) {
+      target[existingIndex] = field
+    } else {
+      target.push(field)
+    }
   }
 }
 

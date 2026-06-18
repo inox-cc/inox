@@ -298,3 +298,40 @@ export function main(): void {
   )
   assert.match(modules.files.find((file) => file.path === 'index.c')?.code ?? '', /#include "math\.h"/)
 })
+
+test('lowers module-scope captures in object function field arrows', async () => {
+  const files = [
+    {
+      path: '/project/index.ts',
+      source: `type Base = {
+  value: number
+}
+
+type Deps = {
+  read: () => number
+}
+
+const base: Base = { value: 7 }
+const deps: Deps = {
+  read: () => base.value
+}
+
+export function main(): void {
+  console.log(deps.read())
+}
+`
+    }
+  ]
+
+  const modules = await compileMemoryPackageToCModules('/project/index.ts', files, {
+    sourceRoot: '/project',
+    target: 'c'
+  })
+  const source = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
+
+  assert.match(source, /static ccjs_value ccjs_mod_index_ts_[a-f0-9]+_base;/)
+  assert.match(source, /static ccjs_value ccjs_mod_index_ts_[a-f0-9]+_deps;/)
+  assert.match(source, /static double ccjs_callback_arrow_0\(void\)/)
+  assert.match(source, /ccjs_mod_index_ts_[a-f0-9]+_base/)
+  assert.match(source, /ccjs_objfn_deps_read/)
+})

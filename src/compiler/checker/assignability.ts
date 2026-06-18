@@ -42,7 +42,20 @@ export function isEqualityComparableType(left: ValueType, right: ValueType): boo
     return true
   }
 
-  return (left === 'boolean' || left === 'number' || left === 'string' || left === 'null') && left === right
+  return (
+    (
+      left === 'boolean' ||
+      left === 'number' ||
+      left === 'string' ||
+      left === 'null' ||
+      left === 'object' ||
+      left === 'array' ||
+      left === 'bytes' ||
+      left === 'map' ||
+      left === 'set'
+    ) &&
+    left === right
+  )
 }
 
 export function isAssignableType(

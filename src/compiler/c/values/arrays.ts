@@ -436,26 +436,6 @@ function maybeArrayNodeAt(nodes: ArrayNode[], index: number): ArrayNode | null {
   return arrayNodeAt(nodes, index)
 }
 
-function arrayPathSegmentAt(path: string[], index: number): string {
-  return path[index]
-}
-
-function arrayStringEquals(left: string, right: string): boolean {
-  return left === right
-}
-
-function arrayStringOrEmpty(value: string | null | undefined): string {
-  if (value == null) {
-    return ''
-  }
-
-  return value
-}
-
-function arrayStringDiffers(left: string, right: string): boolean {
-  return !arrayStringEquals(left, right)
-}
-
 function arrayElementInfoWithoutLast(elements: CArrayElementInfo[]): CArrayElementInfo[] {
   const out: CArrayElementInfo[] = []
 
@@ -511,7 +491,7 @@ export function resolveKnownArrayIndex(
     return null
   }
 
-  const arrayName = arrayPathSegmentAt(object.path, 0)
+  const arrayName = object.path[0]
   const elements = findArrayShape(context, arrayName)
 
   if (elements != null) {
@@ -616,6 +596,14 @@ export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, conte
     return null
   }
 
+  if (expression.valueType === 'array') {
+    if (expression.arrayElementType != null) {
+      return expression.arrayElementType
+    }
+
+    return 'unknown'
+  }
+
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const runtimeElementType = context.runtimeArrayElementTypes.get(expression.path[0])
 
@@ -714,7 +702,7 @@ function resolveFunctionReturnNameFromCall(expression: ArrayMaybeNode): string |
     return null
   }
 
-  return arrayPathSegmentAt(callee.path, 0)
+  return callee.path[0]
 }
 
 export function emitPreparedRuntimeArrayIndexValue(
@@ -818,9 +806,9 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
       }
     }
 
-    const tag = arrayStringOrEmpty(cRuntimeValueTag(runtimeElement.valueType))
+    const tag = cRuntimeValueTag(runtimeElement.valueType) ?? ''
 
-    if (arrayStringEquals(tag, '')) {
+    if (tag === '') {
       return value
     }
 
@@ -851,7 +839,7 @@ export function resolveKnownArrayLength(expression: ArrayMaybeNode, context: Arr
     return null
   }
 
-  const arrayName = arrayPathSegmentAt(expression.object.path, 0)
+  const arrayName = expression.object.path[0]
   const elements = findArrayShape(context, arrayName)
 
   if (elements == null) {
@@ -1001,7 +989,7 @@ export function resolveForOfElementType(elements: CArrayElementInfo[]): string {
   const sourceElements: CArrayElementInfo[] = elements
 
   for (const element of sourceElements) {
-    if (arrayStringDiffers(element.valueType, firstValueType)) {
+    if (element.valueType !== firstValueType) {
       return 'unknown'
     }
   }
@@ -1014,7 +1002,7 @@ export function updateKnownArrayElementValueType(
   valueType: string,
   context: ArrayFunctionContext
 ): void {
-  if (arrayStringEquals(valueType, 'unknown')) {
+  if (valueType === 'unknown') {
     return
   }
 

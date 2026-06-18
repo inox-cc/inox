@@ -317,7 +317,7 @@ class Parser {
     this.expectValue('=', 'CCJS_EXPECTED_TYPE', 'expected = after type alias name')
 
     if (this.isValue('(')) {
-      return createTypeAliasDeclaration(exported, name, this.parseFunctionType())
+      return createTypeAliasDeclaration(exported, name, this.parseFunctionType(false))
     }
 
     if (this.is('identifier') && this.peek(1).value === '&') {
@@ -336,7 +336,7 @@ class Parser {
     return createTypeAliasDeclaration(exported, name, createAliasType(valueType))
   }
 
-  parseFunctionType(): AnyNode {
+  parseFunctionType(stopReturnAtLineBreak: boolean): AnyNode {
     const params: AnyNode[] = []
 
     this.expectValue('(', 'CCJS_EXPECTED_TYPE', 'expected ( in function type')
@@ -356,9 +356,13 @@ class Parser {
 
     this.expectValue(')', 'CCJS_EXPECTED_TYPE', 'expected ) after function type parameters')
     this.expectValue('=>', 'CCJS_EXPECTED_ARROW', 'expected => in function type')
-    const returnType = this.parseTypeAnnotation([';', ',', '}'], {
-      stopAtStatementBoundary: true
-    })
+    let returnTypeOptions: TypeAnnotationOptions = { stopAtStatementBoundary: true }
+
+    if (stopReturnAtLineBreak) {
+      returnTypeOptions = { stopAtLineBreak: true }
+    }
+
+    const returnType = this.parseTypeAnnotation([';', ',', '}'], returnTypeOptions)
     this.matchValue(';')
 
     return createFunctionType(params, returnType)
@@ -421,6 +425,23 @@ class Parser {
       }
 
       this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after object type field name')
+      if (this.isValue('(')) {
+        const field = createObjectTypeField(
+          name,
+          modifiers.readOnly,
+          optional,
+          'function',
+          ownershipFromWeakToken(modifiers.weakToken),
+          modifiers.weakToken
+        )
+
+        field.functionType = this.parseFunctionType(true)
+        fields.push(field)
+        this.matchValue(',')
+        this.matchValue(';')
+        continue
+      }
+
       const valueType = this.parseTypeAnnotation([',', ';', '}'], {
         stopAtLineBreak: true
       })
