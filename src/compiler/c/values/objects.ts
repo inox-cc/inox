@@ -1240,7 +1240,9 @@ function objectVariableShapeFields(
   const fields: CObjectShapeField[] = []
 
   if (statement.shape != null && statement.shape.fields != null) {
-    for (const field of statement.shape.fields) {
+    const shapeFields: CObjectShapeField[] = statement.shape.fields
+
+    for (const field of shapeFields) {
       fields.push(field)
     }
 
