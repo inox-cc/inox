@@ -70,6 +70,18 @@ export type CDeclarationEmissionDependencies = {
   emitStatementList: (statements: CNode[], context: CFunctionContext) => string[]
 }
 
+function cBooleanValueIsTrue(value: boolean | null | undefined): boolean {
+  if (value == null) {
+    return false
+  }
+
+  if (value) {
+    return true
+  }
+
+  return false
+}
+
 export function resolveFunctionReturnType(name: string, fallback: string, context: CEmitContext): string {
   const returnType = context.functionReturnTypes.get(name)
 
@@ -82,7 +94,7 @@ export function resolveFunctionReturnType(name: string, fallback: string, contex
 
 export function resolveFunctionReturnNullable(name: string, fallback: boolean, context: CEmitContext): boolean {
   if (context.functionReturnNullables.has(name)) {
-    return context.functionReturnNullables.get(name) === true
+    return cBooleanValueIsTrue(context.functionReturnNullables.get(name))
   }
 
   return fallback === true
@@ -507,7 +519,7 @@ function resolveCFunctionReturnInfo(
   const returnType = resolveFunctionReturnType(statement.name, statement.returnType, context)
   const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
 
-  if (context.functionAsyncFlags.get(statement.name) === true && returnType === 'promise') {
+  if (cBooleanValueIsTrue(context.functionAsyncFlags.get(statement.name)) && returnType === 'promise') {
     let promiseValueType = context.functionReturnPromiseValueTypes.get(statement.name)
 
     if (promiseValueType == null) {

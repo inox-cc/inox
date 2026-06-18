@@ -635,21 +635,49 @@ function commonResolvedString(values: LowerResolvedType[], key: LowerResolvedStr
     return null
   }
 
-  const first = values[0][key] ?? null
+  const first = lowerResolvedStringValue(values[0], key)
 
   if (first == null) {
     return null
   }
 
   for (let index = 1; index < values.length; index = index + 1) {
-    const value = values[index][key] ?? null
+    const value = lowerResolvedStringValue(values[index], key)
 
-    if (value !== first) {
+    if (value == null || value !== first) {
       return null
     }
   }
 
   return first
+}
+
+function lowerResolvedStringValue(value: LowerResolvedType, key: LowerResolvedStringKey): string | null {
+  if (key === 'arrayElementType') {
+    return value.arrayElementType
+  }
+
+  if (key === 'arrayElementDeclaredType') {
+    return value.arrayElementDeclaredType
+  }
+
+  if (key === 'mapKeyType') {
+    return value.mapKeyType
+  }
+
+  if (key === 'mapValueType') {
+    return value.mapValueType
+  }
+
+  if (key === 'promiseValueType') {
+    if (value.promiseValueType != null) {
+      return value.promiseValueType
+    }
+
+    return null
+  }
+
+  return value.setElementType
 }
 
 function arrayResolvedType(elementType: LowerResolvedType | null, elementDeclaredType: string | null): LowerResolvedType {

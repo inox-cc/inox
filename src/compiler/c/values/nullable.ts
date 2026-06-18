@@ -65,6 +65,18 @@ type NullableFunctionContext = {
   variables: CStringMap
 }
 
+function nullableBooleanValueIsTrue(value: boolean | null | undefined): boolean {
+  if (value == null) {
+    return false
+  }
+
+  if (value) {
+    return true
+  }
+
+  return false
+}
+
 export type NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression(
     expression: AnyNode,
@@ -372,7 +384,7 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1
   ) {
-    return context.functionReturnNullables.get(expression.callee.path[0]) === true
+    return nullableBooleanValueIsTrue(context.functionReturnNullables.get(expression.callee.path[0]))
   }
 
   if (expression.type === 'OptionalCallExpression') {

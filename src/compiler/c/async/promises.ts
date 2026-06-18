@@ -75,6 +75,18 @@ type PromiseFunctionContext = PromiseEmitContext & {
   variables: PromiseStringMap
 }
 
+function promiseBooleanValueIsTrue(value: boolean | null | undefined): boolean {
+  if (value == null) {
+    return false
+  }
+
+  if (value) {
+    return true
+  }
+
+  return false
+}
+
 export function cPromiseRuntimeCallName(callee: AnyNode | null | undefined): string | null {
   if (callee == null) {
     return null
@@ -134,7 +146,7 @@ type PromiseEventLoopFunctionContext = {
 }
 
 export function isPlainPromiseReturningFunctionName(name: string, context: PromiseEventLoopFunctionContext): boolean {
-  return context.functionReturnTypes.get(name) === 'promise' && context.functionAsyncFlags.get(name) !== true
+  return context.functionReturnTypes.get(name) === 'promise' && !promiseBooleanValueIsTrue(context.functionAsyncFlags.get(name))
 }
 
 export function functionTakesEventLoopParam(name: string, context: PromiseEventLoopFunctionContext): boolean {
@@ -223,7 +235,7 @@ function optionalString(value: string | null | undefined): string {
 }
 
 function optionalBoolean(value: boolean | null | undefined): boolean {
-  return value === true
+  return promiseBooleanValueIsTrue(value)
 }
 
 export function isAsyncFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEmitContext): boolean {
@@ -231,7 +243,7 @@ export function isAsyncFunctionCallee(callee: AnyNode | null | undefined, contex
     return false
   }
 
-  return callee.path.length === 1 && context.functionAsyncFlags.get(callee.path[0]) === true
+  return callee.path.length === 1 && promiseBooleanValueIsTrue(context.functionAsyncFlags.get(callee.path[0]))
 }
 
 export function resolveCAsyncFunctionAwaitValueType(
@@ -242,7 +254,7 @@ export function resolveCAsyncFunctionAwaitValueType(
     return null
   }
 
-  if (context.functionAsyncFlags.get(callee.path[0]) !== true) {
+  if (!promiseBooleanValueIsTrue(context.functionAsyncFlags.get(callee.path[0]))) {
     return null
   }
 
@@ -1646,7 +1658,7 @@ function registerPromiseChainExpression(
     const declaration = capture.declaration
 
     if (
-      capture.mutable &&
+      promiseBooleanValueIsTrue(capture.mutable) &&
       isPromiseRuntimeManagedOrScalarCapture(capture.valueType) &&
       declaration != null
     ) {

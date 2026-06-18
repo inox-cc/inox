@@ -114,6 +114,18 @@ type CFunctionContext = CEmitContext & {
   variables: CStringMap
 }
 
+function cBooleanValueIsTrue(value: boolean | null | undefined): boolean {
+  if (value == null) {
+    return false
+  }
+
+  if (value) {
+    return true
+  }
+
+  return false
+}
+
 type NullableScalarNarrowingSnapshot = {
   active: boolean
   narrowedNullableScalars: CStringSet
@@ -713,7 +725,7 @@ export function emitPreparedCallArgs(
 
         appendLines(lines, value.lines)
         args.push(value.expression)
-      } else if (deps.isNullableFunctionType(param.valueType, param.nullable)) {
+      } else if (deps.isNullableFunctionType(param.valueType, cBooleanValueIsTrue(param.nullable))) {
         const value = deps.emitNullableFunctionValueExpression(arg, param.functionType, context)
 
         appendLines(lines, value.lines)
@@ -852,7 +864,7 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
     returnType = configuredReturnType
   }
 
-  if (context.functionAsyncFlags.get(name) === true && returnType === 'promise') {
+  if (cBooleanValueIsTrue(context.functionAsyncFlags.get(name)) && returnType === 'promise') {
     const promiseValueType = context.functionReturnPromiseValueTypes.get(name)
     let asyncReturnType = 'void'
 
@@ -868,7 +880,7 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
 
   return {
     returnType,
-    returnNullable: context.functionReturnNullables.get(name) === true
+    returnNullable: cBooleanValueIsTrue(context.functionReturnNullables.get(name))
   }
 }
 

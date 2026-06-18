@@ -71,6 +71,18 @@ type RuntimeFunctionArgumentContext = {
   runtimeFunctionParams: CallbackFunctionTypeMap
 }
 
+function callbackBooleanValueIsTrue(value: boolean | null | undefined): boolean {
+  if (value == null) {
+    return false
+  }
+
+  if (value) {
+    return true
+  }
+
+  return false
+}
+
 export type CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions(expression: AnyNode): AnyNode[]
   createFunctionContext(
@@ -420,7 +432,7 @@ export function isRuntimeFunctionType(functionType: CFunctionType | null | undef
 }
 
 export function isNullableFunctionType(valueType: string | null | undefined, nullable: boolean | null | undefined): boolean {
-  return valueType === 'function' && nullable === true
+  return valueType === 'function' && callbackBooleanValueIsTrue(nullable)
 }
 
 export function isSupportedRuntimeCallbackType(functionType: CFunctionType | null | undefined): boolean {
@@ -762,7 +774,7 @@ function registerArrowCallbackWrapper(
     const declaration = capture.declaration
 
     if (
-      capture.mutable &&
+      callbackBooleanValueIsTrue(capture.mutable) &&
       isSupportedRuntimeCallbackParamValueType(capture.valueType) &&
       declaration != null
     ) {
