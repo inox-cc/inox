@@ -393,12 +393,28 @@ function statementDefinitelyReturns(statement: StatementNode): boolean {
 
 function statementBodyDefinitelyReturns(statements: StatementNode[]): boolean {
   for (let index = 0; index < statements.length; index = index + 1) {
-    if (statementDefinitelyReturns(statements[index])) {
+    if (statementDefinitelyReturns(statementNodeAt(statements, index))) {
       return true
     }
   }
 
   return false
+}
+
+function statementNodeAt(values: StatementNode[], index: number): StatementNode {
+  return values[index]
+}
+
+function nullableStatementNodeAt(values: StatementNode[], index: number): StatementNode | null {
+  if (index >= values.length) {
+    return null
+  }
+
+  return values[index]
+}
+
+function statementPathSegment(path: string[], index: number): string {
+  return path[index]
 }
 
 function emitScopedStatementBody(statement: StatementNode, context: CFunctionContext, narrowedNames: string[]): string[] {
@@ -1079,7 +1095,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
     pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
     lines.push(emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context))
 
-    pushAllLines(lines, emitMapConstructorEntries(statement.name, statement.init.args[0], context, statement.init.loc))
+    pushAllLines(lines, emitMapConstructorEntries(statement.name, nullableStatementNodeAt(statement.init.args, 0), context, statement.init.loc))
 
     return lines
   }
@@ -1098,13 +1114,13 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context))
 
-  pushAllLines(lines, emitSetConstructorValues(statement.name, statement.init.args[0], context, statement.init.loc))
+  pushAllLines(lines, emitSetConstructorValues(statement.name, nullableStatementNodeAt(statement.init.args, 0), context, statement.init.loc))
 
   return lines
 }
 
 function emitCollectionVariableCopyConstructor(statement: StatementNode, context: CFunctionContext): string[] | null {
-  const expression = statement.init.args[0]
+  const expression = nullableStatementNodeAt(statement.init.args, 0)
 
   if (expression == null || expression.type === 'ArrayLiteral') {
     return null
@@ -2564,7 +2580,7 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
     return null
   }
 
-  const target = expression.target.path[0]
+  const target = statementPathSegment(expression.target.path, 0)
 
   if (!context.runtimeStrings.has(target)) {
     return null
@@ -2924,7 +2940,7 @@ function emitRuntimeArrayIndexAssignment(expression: StatementNode, context: CFu
     return null
   }
 
-  const arrayName = expression.target.object.path[0]
+  const arrayName = statementPathSegment(expression.target.object.path, 0)
   const index = emitRuntimeArrayIndexExpression(element, context)
   const value = deps.emitCValueExpression(expression.value, context)
   const lines: string[] = []
