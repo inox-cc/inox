@@ -71,6 +71,18 @@ function httpStringAt(values: string[], index: number): string {
   return values[index]
 }
 
+function httpStringEquals(left: string, right: string): boolean {
+  return left === right
+}
+
+function httpStringOrEmpty(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
 function pushHttpLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
@@ -747,7 +759,9 @@ function emitHttpStatusCheck(call: string, context: CFunctionContext): string[] 
 }
 
 function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
-  if (httpContext.responseName == null) {
+  const responseName = httpStringOrEmpty(httpContext.responseName)
+
+  if (httpStringEquals(responseName, '')) {
     return false
   }
 
@@ -755,17 +769,19 @@ function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerCo
     return false
   }
 
-  return expression.path.length === 1 && expression.path[0] === httpContext.responseName
+  return expression.path.length === 1 && httpStringEquals(httpStringAt(expression.path, 0), responseName)
 }
 
 function resolveHttpRequestStringMember(expression: AnyNode, httpContext: HttpHandlerContext): string | null {
+  const requestName = httpStringOrEmpty(httpContext.requestName)
+
   if (
-    httpContext.requestName == null ||
+    httpStringEquals(requestName, '') ||
     expression.type !== 'MemberExpression' ||
     expression.object == null ||
     expression.object.type !== 'Reference' ||
     expression.object.path.length !== 1 ||
-    expression.object.path[0] !== httpContext.requestName
+    !httpStringEquals(httpStringAt(expression.object.path, 0), requestName)
   ) {
     return null
   }
@@ -1074,7 +1090,7 @@ function isHttpServerMethodCall(expression: AnyNode, method: string, context: CF
     return false
   }
 
-  if (expression.callee.property !== method) {
+  if (!httpStringEquals(expression.callee.property, method)) {
     return false
   }
 

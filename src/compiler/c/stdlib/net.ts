@@ -80,6 +80,10 @@ function netTopLevelNodeEntryAt(entries: NetTopLevelNodeEntry[], index: number):
   return entries[index]
 }
 
+function netStringEquals(left: string, right: string): boolean {
+  return left === right
+}
+
 function pushNetLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
@@ -1745,7 +1749,7 @@ function resolveNetSocketCounterMember(
 }
 
 function isNetSocketMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
-  return isNetSocketAnyMethodCall(expression, context) && expression.callee.property === method
+  return isNetSocketAnyMethodCall(expression, context) && netStringEquals(expression.callee.property, method)
 }
 
 function isNetSocketAnyMethodCall(expression: AnyNode, context: CFunctionContext): boolean {
@@ -1771,7 +1775,7 @@ function isNetSocketAnyMethodCall(expression: AnyNode, context: CFunctionContext
 }
 
 function isNetServerMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
-  return isNetServerAnyMethodCall(expression, context) && expression.callee.property === method
+  return isNetServerAnyMethodCall(expression, context) && netStringEquals(expression.callee.property, method)
 }
 
 function isNetServerAnyMethodCall(expression: AnyNode, context: CFunctionContext): boolean {
@@ -1902,7 +1906,7 @@ function findNetHandler(
   }
 
   for (const wrapper of context.netHandlers.values()) {
-    if (wrapper.expression === expression && wrapper.kind === kind) {
+    if (wrapper.expression === expression && netStringEquals(wrapper.kind, kind)) {
       return wrapper
     }
   }
@@ -1945,7 +1949,7 @@ function registerNetHandler(
   }
 
   for (const wrapper of handlers.values()) {
-    if (wrapper.kind === kind && wrapper.expression === expression) {
+    if (netStringEquals(wrapper.kind, kind) && wrapper.expression === expression) {
       return
     }
   }
