@@ -289,6 +289,22 @@ function nullableNode(value: LowerNode | null | undefined): LowerNode | null {
   return null
 }
 
+function arrayHoistExpression(value: ArrayExpressionHoist | null, fallback: LowerNode): LowerNode {
+  if (value != null) {
+    return value.expression
+  }
+
+  return fallback
+}
+
+function lowerNameEquals(left: string, right: string): boolean {
+  return left === right
+}
+
+function lowerNameDiffers(left: string, right: string): boolean {
+  return !lowerNameEquals(left, right)
+}
+
 export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
   const declared = resolveDeclaredType(param.valueType, context)
   const promiseValueType = nullableString(declared.promiseValueType)
@@ -927,16 +943,8 @@ function lowerArrayMethodSubexpressions(
       return null
     }
 
-    let objectExpression = expression.object
-    let indexExpression = expression.index
-
-    if (object != null) {
-      objectExpression = object.expression
-    }
-
-    if (index != null) {
-      indexExpression = index.expression
-    }
+    const objectExpression = arrayHoistExpression(object, expression.object)
+    const indexExpression = arrayHoistExpression(index, expression.index)
 
     return {
       statements,
@@ -964,16 +972,8 @@ function lowerArrayMethodSubexpressions(
       return null
     }
 
-    let leftExpression = expression.left
-    let rightExpression = expression.right
-
-    if (left != null) {
-      leftExpression = left.expression
-    }
-
-    if (right != null) {
-      rightExpression = right.expression
-    }
+    const leftExpression = arrayHoistExpression(left, expression.left)
+    const rightExpression = arrayHoistExpression(right, expression.right)
 
     return {
       statements,
@@ -1011,9 +1011,10 @@ function lowerArrayMethodSubexpressions(
   if (expression.type === 'ObjectLiteral') {
     const statements: LowerNode[] = []
     const properties: LowerNode[] = []
+    const sourceProperties: LowerNode[] = expression.properties
     let changed = false
 
-    for (const property of expression.properties) {
+    for (const property of sourceProperties) {
       const hoisted = lowerArrayMethodSubexpressions(property.value, context)
 
       if (hoisted == null) {
@@ -1502,8 +1503,8 @@ function lowerArrayMapVariableDeclaration(
   }
 
   const indexName = nextLowerName(context, 'ccjs_map_index')
-  const valueParam = callback.params[0]
-  const indexParam = callback.params[1]
+  const valueParam = arrowCallbackParam(callback, 0)
+  const indexParam = arrowCallbackParam(callback, 1)
   const itemName = arrayMethodItemName(valueParam, statement.name, context, 'ccjs_map_item')
   const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
   const mappedValue = lowerStatementExpression(replaceExpressionReferences(mapped, replacements), context)
@@ -1551,7 +1552,7 @@ function arrayMethodItemName(
   context: LowerContext,
   fallbackPrefix: string
 ): string {
-  if (valueParam != null && valueParam.name !== outputName) {
+  if (valueParam != null && lowerNameDiffers(valueParam.name, outputName)) {
     return valueParam.name
   }
 
@@ -2268,7 +2269,7 @@ function createValueReferenceFromDeclaration(declaration: LowerNode, loc: LowerN
 
 function findVariableDeclaration(statements: LowerNode[], name: string): LowerNode | null {
   for (const statement of statements) {
-    if (statement.type === 'VariableDeclaration' && statement.name === name) {
+    if (statement.type === 'VariableDeclaration' && lowerNameEquals(statement.name, name)) {
       return statement
     }
   }
@@ -2513,8 +2514,9 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
 
   if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression') {
     const args: LowerNode[] = []
+    const sourceArgs: LowerNode[] = expression.args
 
-    for (const arg of expression.args) {
+    for (const arg of sourceArgs) {
       args.push(replaceExpressionReferences(arg, replacements))
     }
 
@@ -2527,8 +2529,9 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
 
   if (expression.type === 'NewExpression') {
     const args: LowerNode[] = []
+    const sourceArgs: LowerNode[] = expression.args
 
-    for (const arg of expression.args) {
+    for (const arg of sourceArgs) {
       args.push(replaceExpressionReferences(arg, replacements))
     }
 
@@ -2572,8 +2575,9 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
 
   if (expression.type === 'ArrayLiteral') {
     const elements: LowerNode[] = []
+    const sourceElements: LowerNode[] = expression.elements
 
-    for (const element of expression.elements) {
+    for (const element of sourceElements) {
       elements.push(replaceExpressionReferences(element, replacements))
     }
 
@@ -2582,8 +2586,9 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
 
   if (expression.type === 'ObjectLiteral') {
     const properties: LowerNode[] = []
+    const sourceProperties: LowerNode[] = expression.properties
 
-    for (const property of expression.properties) {
+    for (const property of sourceProperties) {
       properties.push(cloneObjectPropertyWithValue(property, replaceExpressionReferences(property.value, replacements)))
     }
 
@@ -2595,7 +2600,7 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
 
 function findReplacement(name: string, replacements: Replacement[]): LowerNode | null {
   for (const replacement of replacements) {
-    if (replacement.name === name) {
+    if (lowerNameEquals(replacement.name, name)) {
       return replacement.replacement
     }
   }
