@@ -71,7 +71,21 @@ int main(void) {
 `
     )
 
-    const compile = await runCommand('cc', ['-Iruntime/c/include', source, 'runtime/c/src/console/console.c', '-o', output])
+    const compile = await runCommand('cc', [
+      '-Iruntime/c/include',
+      source,
+      'runtime/c/src/core/value.c',
+      'runtime/c/src/core/allocator.c',
+      'runtime/c/src/core/callback.c',
+      'runtime/c/src/strings/string.c',
+      'runtime/c/src/objects/object.c',
+      'runtime/c/src/arrays/array.c',
+      'runtime/c/src/collections/map.c',
+      'runtime/c/src/collections/set.c',
+      'runtime/c/src/console/console.c',
+      '-o',
+      output
+    ])
 
     assert.equal(compile.code, 0, compile.stderr)
 

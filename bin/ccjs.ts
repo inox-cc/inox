@@ -293,6 +293,7 @@ function cRuntimeSourcesForCode(
   }
 
   if (usesCHeader(code, 'console')) {
+    groups.add('managed')
     groups.add('console')
   }
 

@@ -651,9 +651,9 @@ exec cc "$@"
 
     assert.match(invocation, /runtime\/c\/src\/time\/time\.c/)
     assert.match(invocation, /runtime\/c\/src\/console\/console\.c/)
+    assert.match(invocation, /runtime\/c\/src\/core\/value\.c/)
     assert.doesNotMatch(invocation, /runtime\/c\/src\/fs\/fs\.c/)
     assert.doesNotMatch(invocation, /runtime\/c\/src\/json\/json\.c/)
-    assert.doesNotMatch(invocation, /runtime\/c\/src\/core\/value\.c/)
   } finally {
     await rm(dir, {
       recursive: true,

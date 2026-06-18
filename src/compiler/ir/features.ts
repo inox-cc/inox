@@ -580,6 +580,10 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
     features.add('runtime-values')
   }
 
+  if (node.type === 'VariableDeclaration' && node.kind !== 'const' && node.valueType === 'string') {
+    features.add('runtime-values')
+  }
+
   if (node.type === 'ThrowStatement' || node.type === 'TryStatement') {
     features.add('runtime-values')
   }

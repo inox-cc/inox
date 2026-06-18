@@ -176,7 +176,6 @@ type OptionalParamInfo = {
   [key: string]: unknown
 }
 
-type CheckerScopeCallback = () => void
 type CheckerNode = AnyNode
 type NullableNode = AnyNode | null
 type CheckerObjectPropertyNode = CheckerNode & {
@@ -529,6 +528,27 @@ class Scope {
 
     return null
   }
+}
+
+type CheckerScopeState = {
+  scope: Scope
+  narrowedNullableNames: Set<string>
+}
+
+type CheckerNarrowingState = {
+  narrowedNullableNames: Set<string>
+}
+
+type CheckerReturnContextState = {
+  returnType: ValueType
+  returnNullable: boolean
+  returnPromiseValueType: ValueType | null
+  returnAsync: boolean
+}
+
+type CheckerLoopDepthState = {
+  breakDepth: number
+  continueDepth: number
 }
 
 export function checkProgram(program: ProgramNode, options: CompileOptions = {}): CheckProgramResult {
@@ -966,7 +986,9 @@ class Checker {
     }
 
     if (item.type === 'FunctionDeclaration') {
-      this.withScope(() => {
+      const scopeState = this.pushScope()
+
+      try {
         const previousReturnType = this.currentReturnType
         const returnInfo = this.resolveDeclaredType(item.returnType, item.loc)
         this.currentReturnType = returnInfo.valueType
@@ -1024,7 +1046,9 @@ class Checker {
           this.asyncDepth = previousAsyncDepth
           this.functionDepth = previousFunctionDepth
         }
-      })
+      } finally {
+        this.restoreScope(scopeState)
+      }
 
       return
     }
@@ -1105,9 +1129,13 @@ class Checker {
 
   checkStatement(statement: AnyNode): void {
     if (statement.type === 'BlockStatement') {
-      this.withScope(() => {
+      const scopeState = this.pushScope()
+
+      try {
         this.checkStatements(statement.body)
-      })
+      } finally {
+        this.restoreScope(scopeState)
+      }
 
       return
     }
@@ -1116,14 +1144,22 @@ class Checker {
       this.checkBooleanCondition(statement.condition)
       const narrowing = this.resolveNullableConditionNarrowing(statement.condition)
 
-      this.withNarrowedNullableNames(narrowing.trueNames, () => {
+      const trueNarrowingState = this.pushNarrowedNullableNames(narrowing.trueNames)
+
+      try {
         this.checkScopedBody(statement.consequent)
-      })
+      } finally {
+        this.restoreNarrowedNullableNames(trueNarrowingState)
+      }
 
       if (statement.alternate != null) {
-        this.withNarrowedNullableNames(narrowing.falseNames, () => {
+        const falseNarrowingState = this.pushNarrowedNullableNames(narrowing.falseNames)
+
+        try {
           this.checkScopedBody(statement.alternate)
-        })
+        } finally {
+          this.restoreNarrowedNullableNames(falseNarrowingState)
+        }
       }
 
       return
@@ -1133,11 +1169,19 @@ class Checker {
       this.checkBooleanCondition(statement.condition)
       const narrowing = this.resolveNullableConditionNarrowing(statement.condition)
 
-      this.withLoop(() => {
-        this.withNarrowedNullableNames(narrowing.trueNames, () => {
+      const loopState = this.pushLoop()
+
+      try {
+        const narrowingState = this.pushNarrowedNullableNames(narrowing.trueNames)
+
+        try {
           this.checkScopedBody(statement.body)
-        })
-      })
+        } finally {
+          this.restoreNarrowedNullableNames(narrowingState)
+        }
+      } finally {
+        this.restoreLoopDepth(loopState)
+      }
       return
     }
 
@@ -1458,7 +1502,9 @@ class Checker {
     this.checkStatement(statement.block)
 
     if (statement.handler != null) {
-      this.withScope(() => {
+      const scopeState = this.pushScope()
+
+      try {
         if (statement.handler.param != null) {
           this.declare(
             statement.handler.param,
@@ -1473,7 +1519,9 @@ class Checker {
         }
 
         this.checkStatement(statement.handler.body)
-      })
+      } finally {
+        this.restoreScope(scopeState)
+      }
     }
 
     if (statement.finalizer != null) {
@@ -1970,9 +2018,15 @@ class Checker {
     let right = 'unknown'
 
     if (expression.operator === '&&') {
-      right = this.withNarrowedNullableNames(leftNarrowing.trueNames, () => this.checkExpression(expression.right))
+      const narrowingState = this.pushNarrowedNullableNames(leftNarrowing.trueNames)
+
+      right = this.checkExpression(expression.right)
+      this.restoreNarrowedNullableNames(narrowingState)
     } else if (expression.operator === '||') {
-      right = this.withNarrowedNullableNames(leftNarrowing.falseNames, () => this.checkExpression(expression.right))
+      const narrowingState = this.pushNarrowedNullableNames(leftNarrowing.falseNames)
+
+      right = this.checkExpression(expression.right)
+      this.restoreNarrowedNullableNames(narrowingState)
     } else {
       right = this.checkExpression(expression.right)
     }
@@ -7497,7 +7551,7 @@ class Checker {
       let mappedType: ValueType = 'unknown'
 
       if (callback != null) {
-        mappedType = this.checkPromiseCallback(callback, [{ name: 'value', valueType: promiseValueType }], null, 'promise.then callback')
+        mappedType = this.checkPromiseCallback(callback, [promiseValueType], null, 'promise.then callback')
       }
 
       for (let index = 1; index < expression.args.length; index++) {
@@ -7519,7 +7573,7 @@ class Checker {
 
       this.checkPromiseCallback(
         callback,
-        [{ name: 'error', valueType: 'unknown' }],
+        ['unknown'],
         catchReturnType,
         'promise.catch callback'
       )
@@ -7537,7 +7591,7 @@ class Checker {
 
   checkPromiseCallback(
     expression: AnyNode,
-    params: Array<{ name: string; valueType: ValueType }>,
+    params: ValueType[],
     returnType: ValueType | null,
     label: string
   ): ValueType {
@@ -7571,13 +7625,15 @@ class Checker {
     let returnNullable = false
     let returnPromiseValueType: ValueType | null = null
 
-    this.withScope(() => {
+    const scopeState = this.pushScope()
+
+    try {
       for (let index = 0; index < expression.params.length; index++) {
         const param = expression.params[index]
         let expected: ValueType = 'unknown'
 
-        if (params[index] != null) {
-          expected = params[index].valueType
+        if (index < params.length) {
+          expected = params[index]
         }
 
         let actual = param.valueType
@@ -7613,7 +7669,12 @@ class Checker {
 
       if (expression.expressionBody) {
         actualReturnType = this.checkExpression(expression.body)
-        returnLoc = expression.body.loc ?? expression.loc
+        returnLoc = expression.loc
+
+        if (expression.body.loc != null) {
+          returnLoc = expression.body.loc
+        }
+
         returnNullable = this.expressionCanBeNull(expression.body)
         returnPromiseValueType = this.resolveExpressionPromiseValueType(expression.body)
       } else {
@@ -7621,25 +7682,46 @@ class Checker {
 
         if (returnExpression == null) {
           const terminalReturnExpression = this.resolveTerminalReturnExpression(expression.body)
+          let expectedReturnType: ValueType = 'unknown'
 
-          this.withReturnContext(returnType ?? 'unknown', false, null, () => {
+          if (returnType != null) {
+            expectedReturnType = returnType
+          }
+
+          const returnContextState = this.pushReturnContext(expectedReturnType, false, null)
+
+          try {
             this.checkStatements(expression.body)
-          })
+          } finally {
+            this.restoreReturnContext(returnContextState)
+          }
 
           if (terminalReturnExpression != null) {
             actualReturnType = this.checkExpression(terminalReturnExpression)
-            returnLoc = terminalReturnExpression.loc ?? expression.loc
+            returnLoc = expression.loc
+
+            if (terminalReturnExpression.loc != null) {
+              returnLoc = terminalReturnExpression.loc
+            }
+
             returnNullable = this.expressionCanBeNull(terminalReturnExpression)
             returnPromiseValueType = this.resolveExpressionPromiseValueType(terminalReturnExpression)
           }
         } else {
           actualReturnType = this.checkExpression(returnExpression)
-          returnLoc = returnExpression.loc ?? expression.loc
+          returnLoc = expression.loc
+
+          if (returnExpression.loc != null) {
+            returnLoc = returnExpression.loc
+          }
+
           returnNullable = this.expressionCanBeNull(returnExpression)
           returnPromiseValueType = this.resolveExpressionPromiseValueType(returnExpression)
         }
       }
-    })
+    } finally {
+      this.restoreScope(scopeState)
+    }
 
     if (returnType != null) {
       this.checkAssignableType(actualReturnType, returnType, returnLoc, false, returnNullable)
@@ -8166,10 +8248,7 @@ class Checker {
       if (expression.args[0] != null) {
         this.checkArrayCallback(
           expression.args[0],
-          [
-            { name: 'left', valueType: elementType },
-            { name: 'right', valueType: elementType }
-          ],
+          [elementType, elementType],
           'number'
         )
       }
@@ -8194,10 +8273,7 @@ class Checker {
         if (!this.isBooleanReference(expression.args[0])) {
           this.checkArrayCallback(
             expression.args[0],
-            [
-              { name: 'value', valueType: elementType },
-              { name: 'index', valueType: 'number' }
-            ],
+            [elementType, 'number'],
             'boolean'
           )
         }
@@ -8260,10 +8336,7 @@ class Checker {
         if (!this.isBooleanReference(expression.args[0])) {
           this.checkArrayCallback(
             expression.args[0],
-            [
-              { name: 'value', valueType: elementType },
-              { name: 'index', valueType: 'number' }
-            ],
+            [elementType, 'number'],
             'boolean'
           )
         }
@@ -8281,10 +8354,7 @@ class Checker {
     if (expression.args[0] != null) {
       mappedType = this.checkArrayCallback(
         expression.args[0],
-        [
-          { name: 'value', valueType: elementType },
-          { name: 'index', valueType: 'number' }
-        ],
+        [elementType, 'number'],
         null
       )
     }
@@ -8309,7 +8379,7 @@ class Checker {
 
   checkArrayCallback(
     expression: AnyNode,
-    params: Array<{ name: string; valueType: ValueType }>,
+    params: ValueType[],
     returnType: ValueType | null
   ): ValueType {
     if (expression.type !== 'ArrowFunctionExpression') {
@@ -8341,13 +8411,15 @@ class Checker {
     let returnLoc = expression.loc
     let returnNullable = false
 
-    this.withScope(() => {
+    const scopeState = this.pushScope()
+
+    try {
       for (let index = 0; index < expression.params.length; index++) {
         const param = expression.params[index]
         let expected: ValueType = 'unknown'
 
         if (index < params.length) {
-          expected = params[index].valueType
+          expected = params[index]
         }
 
         let actual = param.valueType
@@ -8401,9 +8473,13 @@ class Checker {
             expectedReturnType = returnType
           }
 
-          this.withReturnContext(expectedReturnType, false, null, () => {
+          const returnContextState = this.pushReturnContext(expectedReturnType, false, null)
+
+          try {
             this.checkStatements(expression.body)
-          })
+          } finally {
+            this.restoreReturnContext(returnContextState)
+          }
 
           if (terminalReturnExpression != null) {
             actualReturnType = this.checkExpression(terminalReturnExpression)
@@ -8426,7 +8502,9 @@ class Checker {
           returnNullable = this.expressionCanBeNull(returnExpression)
         }
       }
-    })
+    } finally {
+      this.restoreScope(scopeState)
+    }
 
     if (returnType != null) {
       this.checkAssignableType(actualReturnType, returnType, returnLoc, false, returnNullable)
@@ -9621,7 +9699,9 @@ class Checker {
       actualReturnType = functionType.returnType
     }
 
-    this.withScope(() => {
+    const scopeState = this.pushScope()
+
+    try {
       if (functionType != null && expression.params.length > functionType.params.length) {
         this.report(
           'CCJS_ARG_COUNT',
@@ -9821,7 +9901,9 @@ class Checker {
           this.functionDepth = previousFunctionDepth
         }
       }
-    })
+    } finally {
+      this.restoreScope(scopeState)
+    }
 
     expression.returnType = actualReturnType
 
@@ -9942,7 +10024,9 @@ class Checker {
       }
 
       methodNames.add(method.name)
-      this.withScope(() => {
+      const scopeState = this.pushScope()
+
+      try {
         const previousReturnType = this.currentReturnType
         const methodReturnInfo = this.resolveDeclaredType(method.returnType, method.loc)
         this.currentReturnType = methodReturnInfo.valueType
@@ -10015,7 +10099,9 @@ class Checker {
           this.currentClassConstructor = previousClassConstructor
           this.functionDepth = previousFunctionDepth
         }
-      })
+      } finally {
+        this.restoreScope(scopeState)
+      }
     }
   }
 
@@ -10324,7 +10410,9 @@ class Checker {
   }
 
   checkForStatement(statement: AnyNode): void {
-    this.withScope(() => {
+    const scopeState = this.pushScope()
+
+    try {
       if (statement.init != null && statement.init.type === 'VariableDeclaration') {
         this.checkStatement(statement.init)
       } else if (statement.init != null) {
@@ -10339,14 +10427,23 @@ class Checker {
         this.checkExpression(statement.update)
       }
 
-      this.withLoop(() => {
-        const narrowing = this.resolveNullableConditionNarrowing(statement.test)
+      const loopState = this.pushLoop()
 
-        this.withNarrowedNullableNames(narrowing.trueNames, () => {
+      try {
+        const narrowing = this.resolveNullableConditionNarrowing(statement.test)
+        const narrowingState = this.pushNarrowedNullableNames(narrowing.trueNames)
+
+        try {
           this.checkScopedBody(statement.body)
-        })
-      })
-    })
+        } finally {
+          this.restoreNarrowedNullableNames(narrowingState)
+        }
+      } finally {
+        this.restoreLoopDepth(loopState)
+      }
+    } finally {
+      this.restoreScope(scopeState)
+    }
   }
 
   checkForOfStatement(statement: AnyNode): void {
@@ -10461,7 +10558,9 @@ class Checker {
       this.checkAssignableType(elementType, declared.valueType, statement.nameLoc, declared.nullable, false)
     }
 
-    this.withScope(() => {
+    const scopeState = this.pushScope()
+
+    try {
       let declaredNullable = false
       let declaredArrayElementType: ValueType | null = null
       let declaredArrayElementDeclaredType: string | null = null
@@ -10517,10 +10616,16 @@ class Checker {
         statement.nameLoc
       )
 
-      this.withLoop(() => {
+      const loopState = this.pushLoop()
+
+      try {
         this.checkScopedBody(statement.body)
-      })
-    })
+      } finally {
+        this.restoreLoopDepth(loopState)
+      }
+    } finally {
+      this.restoreScope(scopeState)
+    }
   }
 
   createMapEntryShape(mapType: CheckerMapType | null, loc: SourceLocation): ObjectShapeInfo {
@@ -10573,7 +10678,9 @@ class Checker {
       )
     }
 
-    this.withBreakable(() => {
+    const breakableState = this.pushBreakable()
+
+    try {
       for (const item of statement.cases) {
         if (item.test == null) {
           if (hasDefault) {
@@ -10593,11 +10700,17 @@ class Checker {
           }
         }
 
-        this.withScope(() => {
+        const scopeState = this.pushScope()
+
+        try {
           this.checkStatements(item.consequent)
-        })
+        } finally {
+          this.restoreScope(scopeState)
+        }
       }
-    })
+    } finally {
+      this.restoreLoopDepth(breakableState)
+    }
   }
 
   checkBooleanCondition(expression: AnyNode): void {
@@ -10618,9 +10731,14 @@ class Checker {
 
     if (expression.operator === '&&') {
       const left = this.resolveNullableConditionNarrowing(expression.left)
-      const right = this.withNarrowedNullableNames(left.trueNames, () =>
-        this.resolveNullableConditionNarrowing(expression.right)
-      )
+      const narrowingState = this.pushNarrowedNullableNames(left.trueNames)
+      let right: NullableConditionNarrowing = {
+        trueNames: [],
+        falseNames: []
+      }
+
+      right = this.resolveNullableConditionNarrowing(expression.right)
+      this.restoreNarrowedNullableNames(narrowingState)
       const trueNames: string[] = []
       const falseNameCandidates: string[] = []
       const leftTrueNames: string[] = left.trueNames
@@ -10648,9 +10766,14 @@ class Checker {
 
     if (expression.operator === '||') {
       const left = this.resolveNullableConditionNarrowing(expression.left)
-      const right = this.withNarrowedNullableNames(left.falseNames, () =>
-        this.resolveNullableConditionNarrowing(expression.right)
-      )
+      const narrowingState = this.pushNarrowedNullableNames(left.falseNames)
+      let right: NullableConditionNarrowing = {
+        trueNames: [],
+        falseNames: []
+      }
+
+      right = this.resolveNullableConditionNarrowing(expression.right)
+      this.restoreNarrowedNullableNames(narrowingState)
       const trueNameCandidates: string[] = []
       const falseNames: string[] = []
       const leftFalseNames: string[] = left.falseNames
@@ -10777,22 +10900,27 @@ class Checker {
     )
   }
 
-  withNarrowedNullableNames(names: string[], callback: Function): any {
+  pushNarrowedNullableNames(names: string[]): CheckerNarrowingState | null {
     if (names.length === 0) {
-      return callback()
+      return null
     }
 
-    const previous = this.narrowedNullableNames
-    this.narrowedNullableNames = cloneStringSet(previous)
+    const previous = {
+      narrowedNullableNames: this.narrowedNullableNames
+    }
+
+    this.narrowedNullableNames = cloneStringSet(previous.narrowedNullableNames)
 
     for (const name of names) {
       this.narrowedNullableNames.add(name)
     }
 
-    try {
-      return callback()
-    } finally {
-      this.narrowedNullableNames = previous
+    return previous
+  }
+
+  restoreNarrowedNullableNames(previous: CheckerNarrowingState | null): void {
+    if (previous != null) {
+      this.narrowedNullableNames = previous.narrowedNullableNames
     }
   }
 
@@ -10829,9 +10957,13 @@ class Checker {
       return
     }
 
-    this.withScope(() => {
+    const scopeState = this.pushScope()
+
+    try {
       this.checkStatement(statement)
-    })
+    } finally {
+      this.restoreScope(scopeState)
+    }
   }
 
   resolveReference(reference: AnyNode): SymbolInfo | null {
@@ -12411,65 +12543,76 @@ class Checker {
     deleteNullableNarrowingKey(this.narrowedNullableNames, name)
   }
 
-  withScope(callback: CheckerScopeCallback): void {
-    const previous = this.scope
-    const previousNarrowedNullableNames = this.narrowedNullableNames
-    this.scope = new Scope(previous)
-    this.narrowedNullableNames = cloneStringSet(previousNarrowedNullableNames)
-
-    try {
-      callback()
-    } finally {
-      this.scope = previous
-      this.narrowedNullableNames = previousNarrowedNullableNames
+  pushScope(): CheckerScopeState {
+    const previous = {
+      scope: this.scope,
+      narrowedNullableNames: this.narrowedNullableNames
     }
+
+    this.scope = new Scope(previous.scope)
+    this.narrowedNullableNames = cloneStringSet(previous.narrowedNullableNames)
+
+    return previous
   }
 
-  withReturnContext(
+  restoreScope(previous: CheckerScopeState): void {
+    this.scope = previous.scope
+    this.narrowedNullableNames = previous.narrowedNullableNames
+  }
+
+  pushReturnContext(
     returnType: ValueType,
     returnNullable: boolean,
-    returnPromiseValueType: ValueType | null,
-    callback: Function
-  ): void {
-    const previousReturnType = this.currentReturnType
-    const previousReturnNullable = this.currentReturnNullable
-    const previousReturnPromiseValueType = this.currentReturnPromiseValueType
-    const previousReturnAsync = this.currentReturnAsync
-
-    try {
-      this.currentReturnType = returnType
-      this.currentReturnNullable = returnNullable
-      this.currentReturnPromiseValueType = returnPromiseValueType
-      this.currentReturnAsync = false
-      callback()
-    } finally {
-      this.currentReturnType = previousReturnType
-      this.currentReturnNullable = previousReturnNullable
-      this.currentReturnPromiseValueType = previousReturnPromiseValueType
-      this.currentReturnAsync = previousReturnAsync
+    returnPromiseValueType: ValueType | null
+  ): CheckerReturnContextState {
+    const previous = {
+      returnType: this.currentReturnType,
+      returnNullable: this.currentReturnNullable,
+      returnPromiseValueType: this.currentReturnPromiseValueType,
+      returnAsync: this.currentReturnAsync
     }
+
+    this.currentReturnType = returnType
+    this.currentReturnNullable = returnNullable
+    this.currentReturnPromiseValueType = returnPromiseValueType
+    this.currentReturnAsync = false
+
+    return previous
   }
 
-  withBreakable(callback: Function): void {
+  restoreReturnContext(previous: CheckerReturnContextState): void {
+    this.currentReturnType = previous.returnType
+    this.currentReturnNullable = previous.returnNullable
+    this.currentReturnPromiseValueType = previous.returnPromiseValueType
+    this.currentReturnAsync = previous.returnAsync
+  }
+
+  pushBreakable(): CheckerLoopDepthState {
+    const previous = {
+      breakDepth: this.breakDepth,
+      continueDepth: this.continueDepth
+    }
+
     this.breakDepth = this.breakDepth + 1
 
-    try {
-      callback()
-    } finally {
-      this.breakDepth = this.breakDepth - 1
-    }
+    return previous
   }
 
-  withLoop(callback: Function): void {
+  pushLoop(): CheckerLoopDepthState {
+    const previous = {
+      breakDepth: this.breakDepth,
+      continueDepth: this.continueDepth
+    }
+
     this.breakDepth = this.breakDepth + 1
     this.continueDepth = this.continueDepth + 1
 
-    try {
-      callback()
-    } finally {
-      this.continueDepth = this.continueDepth - 1
-      this.breakDepth = this.breakDepth - 1
-    }
+    return previous
+  }
+
+  restoreLoopDepth(previous: CheckerLoopDepthState): void {
+    this.breakDepth = previous.breakDepth
+    this.continueDepth = previous.continueDepth
   }
 
   checkAssignableType(
