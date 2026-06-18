@@ -142,7 +142,20 @@ type RuntimeArrowCaptureScanState = {
   outerScopes: CallbackScope[]
 }
 
+type CallbackTopLevelNodeEntry = {
+  kind: string
+  node: CallbackNode
+}
+
 function callbackNodeAt(values: CallbackNode[], index: number): CallbackNode {
+  return values[index]
+}
+
+function nullableCallbackNodeAt(values: CallbackNode[], index: number): CallbackNode | null {
+  if (index < 0 || index >= values.length) {
+    return null
+  }
+
   return values[index]
 }
 
@@ -159,6 +172,10 @@ function callbackObjectShapeFieldAt(values: CObjectShapeField[], index: number):
 }
 
 function callbackRuntimeArrowCaptureAt(values: CRuntimeArrowCapture[], index: number): CRuntimeArrowCapture {
+  return values[index]
+}
+
+function callbackTopLevelNodeEntryAt(values: CallbackTopLevelNodeEntry[], index: number): CallbackTopLevelNodeEntry {
   return values[index]
 }
 
@@ -560,7 +577,7 @@ export function collectCallbackWrappers(
     const entries = collectIrTopLevelNodeEntries(ir)
 
     for (let entryIndex = 0; entryIndex < entries.length; entryIndex = entryIndex + 1) {
-      const item = entries[entryIndex]
+      const item = callbackTopLevelNodeEntryAt(entries, entryIndex)
 
       if (item.kind === 'function') {
         const scope: CallbackScope = new Map()
@@ -1333,7 +1350,7 @@ function visitPromiseConstructorCallbackExpression(
   const scope: CallbackScope = new Map()
 
   for (let index = 0; index < executor.params.length; index = index + 1) {
-    const param = executor.params[index]
+    const param = callbackNodeAt(executor.params, index)
     declareCallbackBinding(scope, param.name, {
       name: param.name,
       valueType: 'promise-settlement',
@@ -1829,7 +1846,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
 }
 
 function plainArrowCallbackParamName(wrapper: CPlainArrowCallbackWrapper, index: number): string {
-  const param = wrapper.expression.params[index]
+  const param = nullableCallbackNodeAt(wrapper.expression.params, index)
 
   if (param != null) {
     return param.name
@@ -2217,7 +2234,7 @@ function emitRuntimeArrowCallbackParamPrelude(
 }
 
 function runtimeArrowCallbackParamName(wrapper: CRuntimeArrowCallbackWrapper, index: number): string {
-  const param = wrapper.expression.params[index]
+  const param = nullableCallbackNodeAt(wrapper.expression.params, index)
 
   if (param != null) {
     return param.name
