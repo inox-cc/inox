@@ -87,40 +87,6 @@ type SyntaxFeatureProgram = {
   syntaxFeatures: IrSyntaxFeatureUsage[]
 }
 
-const NODE_CHILD_KEYS = [
-  'body',
-  'params',
-  'fields',
-  'methods',
-  'init',
-  'condition',
-  'consequent',
-  'alternate',
-  'test',
-  'update',
-  'iterable',
-  'discriminant',
-  'cases',
-  'block',
-  'handler',
-  'finalizer',
-  'argument',
-  'args',
-  'callee',
-  'object',
-  'index',
-  'target',
-  'value',
-  'valueType',
-  'functionType',
-  'returnShape',
-  'left',
-  'right',
-  'elements',
-  'properties',
-  'expression'
-]
-
 export function collectIrFeatures(program: ProgramNode): IrFeature[] {
   const features = createFeatureSet()
 
@@ -171,10 +137,6 @@ function featureChildNodeAt(nodes: FeatureChildNode[], index: number): FeatureCh
   return nodes[index]
 }
 
-function featureChildKeyAt(keys: string[], index: number): string {
-  return keys[index]
-}
-
 function featureNodeArgsOrEmpty(node: FeatureNode): FeatureChildNode[] {
   const args = node.args
 
@@ -193,16 +155,6 @@ function featureNodeElementsOrEmpty(node: FeatureChildNode): FeatureRawNode[] {
   }
 
   return []
-}
-
-function featureChildValueOrNull(item: ChildNode, key: string): FeatureNode | null {
-  const value = item[key]
-
-  if (value != null) {
-    return value
-  }
-
-  return null
 }
 
 export function collectIrFeatureRequirements(programs: FeatureProgram[]): IrFeature[] {
@@ -500,26 +452,88 @@ function visitNode(node: AnyNode | null, features: IrFeatureSet): void {
   }
 }
 
-function visitSyntaxFeatureChildren(item: ChildNode, usages: IrSyntaxFeatureUsage[]): void {
-  for (let index = 0; index < NODE_CHILD_KEYS.length; index = index + 1) {
-    const key = featureChildKeyAt(NODE_CHILD_KEYS, index)
-    const value = featureChildValueOrNull(item, key)
-
-    if (value != null) {
-      visitSyntaxFeatureUsage(value, usages)
-    }
+function visitSyntaxFeatureChild(value: any, usages: IrSyntaxFeatureUsage[]): void {
+  if (value == null || typeof value !== 'object') {
+    return
   }
+
+  visitSyntaxFeatureUsage(value, usages)
+}
+
+function visitSyntaxFeatureChildren(item: ChildNode, usages: IrSyntaxFeatureUsage[]): void {
+  visitSyntaxFeatureChild(item.body, usages)
+  visitSyntaxFeatureChild(item.params, usages)
+  visitSyntaxFeatureChild(item.fields, usages)
+  visitSyntaxFeatureChild(item.methods, usages)
+  visitSyntaxFeatureChild(item.init, usages)
+  visitSyntaxFeatureChild(item.condition, usages)
+  visitSyntaxFeatureChild(item.consequent, usages)
+  visitSyntaxFeatureChild(item.alternate, usages)
+  visitSyntaxFeatureChild(item.test, usages)
+  visitSyntaxFeatureChild(item.update, usages)
+  visitSyntaxFeatureChild(item.iterable, usages)
+  visitSyntaxFeatureChild(item.discriminant, usages)
+  visitSyntaxFeatureChild(item.cases, usages)
+  visitSyntaxFeatureChild(item.block, usages)
+  visitSyntaxFeatureChild(item.handler, usages)
+  visitSyntaxFeatureChild(item.finalizer, usages)
+  visitSyntaxFeatureChild(item.argument, usages)
+  visitSyntaxFeatureChild(item.args, usages)
+  visitSyntaxFeatureChild(item.callee, usages)
+  visitSyntaxFeatureChild(item.object, usages)
+  visitSyntaxFeatureChild(item.index, usages)
+  visitSyntaxFeatureChild(item.target, usages)
+  visitSyntaxFeatureChild(item.value, usages)
+  visitSyntaxFeatureChild(item.valueType, usages)
+  visitSyntaxFeatureChild(item.functionType, usages)
+  visitSyntaxFeatureChild(item.returnShape, usages)
+  visitSyntaxFeatureChild(item.left, usages)
+  visitSyntaxFeatureChild(item.right, usages)
+  visitSyntaxFeatureChild(item.elements, usages)
+  visitSyntaxFeatureChild(item.properties, usages)
+  visitSyntaxFeatureChild(item.expression, usages)
+}
+
+function visitFeatureChild(value: any, features: IrFeatureSet): void {
+  if (value == null || typeof value !== 'object') {
+    return
+  }
+
+  visitNode(value, features)
 }
 
 function visitFeatureChildren(item: ChildNode, features: IrFeatureSet): void {
-  for (let index = 0; index < NODE_CHILD_KEYS.length; index = index + 1) {
-    const key = featureChildKeyAt(NODE_CHILD_KEYS, index)
-    const value = featureChildValueOrNull(item, key)
-
-    if (value != null) {
-      visitNode(value, features)
-    }
-  }
+  visitFeatureChild(item.body, features)
+  visitFeatureChild(item.params, features)
+  visitFeatureChild(item.fields, features)
+  visitFeatureChild(item.methods, features)
+  visitFeatureChild(item.init, features)
+  visitFeatureChild(item.condition, features)
+  visitFeatureChild(item.consequent, features)
+  visitFeatureChild(item.alternate, features)
+  visitFeatureChild(item.test, features)
+  visitFeatureChild(item.update, features)
+  visitFeatureChild(item.iterable, features)
+  visitFeatureChild(item.discriminant, features)
+  visitFeatureChild(item.cases, features)
+  visitFeatureChild(item.block, features)
+  visitFeatureChild(item.handler, features)
+  visitFeatureChild(item.finalizer, features)
+  visitFeatureChild(item.argument, features)
+  visitFeatureChild(item.args, features)
+  visitFeatureChild(item.callee, features)
+  visitFeatureChild(item.object, features)
+  visitFeatureChild(item.index, features)
+  visitFeatureChild(item.target, features)
+  visitFeatureChild(item.value, features)
+  visitFeatureChild(item.valueType, features)
+  visitFeatureChild(item.functionType, features)
+  visitFeatureChild(item.returnShape, features)
+  visitFeatureChild(item.left, features)
+  visitFeatureChild(item.right, features)
+  visitFeatureChild(item.elements, features)
+  visitFeatureChild(item.properties, features)
+  visitFeatureChild(item.expression, features)
 }
 
 function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {

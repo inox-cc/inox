@@ -56,40 +56,6 @@ type CapabilityUsage = RequiredCapability & {
 
 type StringSet = Set<string>
 
-const NODE_CHILD_KEYS = [
-  'body',
-  'params',
-  'fields',
-  'methods',
-  'init',
-  'condition',
-  'consequent',
-  'alternate',
-  'test',
-  'update',
-  'iterable',
-  'discriminant',
-  'cases',
-  'block',
-  'handler',
-  'finalizer',
-  'argument',
-  'args',
-  'callee',
-  'object',
-  'index',
-  'target',
-  'value',
-  'valueType',
-  'functionType',
-  'returnShape',
-  'left',
-  'right',
-  'elements',
-  'properties',
-  'expression'
-]
-
 function capabilityUsageAt(values: CapabilityUsage[], index: number): CapabilityUsage {
   return values[index]
 }
@@ -99,10 +65,6 @@ function globalUsageAt(values: IrGlobalUsage[], index: number): IrGlobalUsage {
 }
 
 function programAt(values: IrProgram[], index: number): IrProgram {
-  return values[index]
-}
-
-function nodeChildKeyAt(values: string[], index: number): string {
   return values[index]
 }
 
@@ -199,15 +161,46 @@ function visitCapabilityNode(node: AnyNode | NodeList | null | undefined, usages
   visitCapabilityChildren(item, usages)
 }
 
-function visitCapabilityChildren(item: CapabilityNode, usages: CapabilityUsage[]): void {
-  for (let keyIndex = 0; keyIndex < NODE_CHILD_KEYS.length; keyIndex = keyIndex + 1) {
-    const key = nodeChildKeyAt(NODE_CHILD_KEYS, keyIndex)
-    const value = item[key]
-
-    if (value != null) {
-      visitCapabilityNode(value, usages)
-    }
+function visitCapabilityChild(value: any, usages: CapabilityUsage[]): void {
+  if (value == null || typeof value !== 'object') {
+    return
   }
+
+  visitCapabilityNode(value, usages)
+}
+
+function visitCapabilityChildren(item: CapabilityNode, usages: CapabilityUsage[]): void {
+  visitCapabilityChild(item.body, usages)
+  visitCapabilityChild(item.params, usages)
+  visitCapabilityChild(item.fields, usages)
+  visitCapabilityChild(item.methods, usages)
+  visitCapabilityChild(item.init, usages)
+  visitCapabilityChild(item.condition, usages)
+  visitCapabilityChild(item.consequent, usages)
+  visitCapabilityChild(item.alternate, usages)
+  visitCapabilityChild(item.test, usages)
+  visitCapabilityChild(item.update, usages)
+  visitCapabilityChild(item.iterable, usages)
+  visitCapabilityChild(item.discriminant, usages)
+  visitCapabilityChild(item.cases, usages)
+  visitCapabilityChild(item.block, usages)
+  visitCapabilityChild(item.handler, usages)
+  visitCapabilityChild(item.finalizer, usages)
+  visitCapabilityChild(item.argument, usages)
+  visitCapabilityChild(item.args, usages)
+  visitCapabilityChild(item.callee, usages)
+  visitCapabilityChild(item.object, usages)
+  visitCapabilityChild(item.index, usages)
+  visitCapabilityChild(item.target, usages)
+  visitCapabilityChild(item.value, usages)
+  visitCapabilityChild(item.valueType, usages)
+  visitCapabilityChild(item.functionType, usages)
+  visitCapabilityChild(item.returnShape, usages)
+  visitCapabilityChild(item.left, usages)
+  visitCapabilityChild(item.right, usages)
+  visitCapabilityChild(item.elements, usages)
+  visitCapabilityChild(item.properties, usages)
+  visitCapabilityChild(item.expression, usages)
 }
 
 function recordNodeCapabilityUsages(expression: CapabilityNode, usages: CapabilityUsage[]): void {

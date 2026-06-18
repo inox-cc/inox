@@ -34,40 +34,6 @@ type IrProgramWithGlobalUsages = {
 
 type StringSet = Set<string>
 
-const NODE_CHILD_KEYS = [
-  'body',
-  'params',
-  'fields',
-  'methods',
-  'init',
-  'condition',
-  'consequent',
-  'alternate',
-  'test',
-  'update',
-  'iterable',
-  'discriminant',
-  'cases',
-  'block',
-  'handler',
-  'finalizer',
-  'argument',
-  'args',
-  'callee',
-  'object',
-  'index',
-  'target',
-  'value',
-  'valueType',
-  'functionType',
-  'returnShape',
-  'left',
-  'right',
-  'elements',
-  'properties',
-  'expression'
-]
-
 const jsStdGlobalRootNames = [
   'Array',
   'Buffer',
@@ -224,15 +190,46 @@ function visitOptionalGlobalUsageList(nodes: NodeList | null | undefined, usages
   visitGlobalUsageList(nodes, usages)
 }
 
-function visitGlobalUsageChildren(item: GlobalUsageNode, usages: IrGlobalUsage[]): void {
-  for (let index = 0; index < NODE_CHILD_KEYS.length; index = index + 1) {
-    const key = NODE_CHILD_KEYS[index]
-    const value = item[key]
-
-    if (value != null) {
-      visitGlobalUsage(value, usages)
-    }
+function visitGlobalUsageChild(value: any, usages: IrGlobalUsage[]): void {
+  if (value == null || typeof value !== 'object') {
+    return
   }
+
+  visitGlobalUsage(value, usages)
+}
+
+function visitGlobalUsageChildren(item: GlobalUsageNode, usages: IrGlobalUsage[]): void {
+  visitGlobalUsageChild(item.body, usages)
+  visitGlobalUsageChild(item.params, usages)
+  visitGlobalUsageChild(item.fields, usages)
+  visitGlobalUsageChild(item.methods, usages)
+  visitGlobalUsageChild(item.init, usages)
+  visitGlobalUsageChild(item.condition, usages)
+  visitGlobalUsageChild(item.consequent, usages)
+  visitGlobalUsageChild(item.alternate, usages)
+  visitGlobalUsageChild(item.test, usages)
+  visitGlobalUsageChild(item.update, usages)
+  visitGlobalUsageChild(item.iterable, usages)
+  visitGlobalUsageChild(item.discriminant, usages)
+  visitGlobalUsageChild(item.cases, usages)
+  visitGlobalUsageChild(item.block, usages)
+  visitGlobalUsageChild(item.handler, usages)
+  visitGlobalUsageChild(item.finalizer, usages)
+  visitGlobalUsageChild(item.argument, usages)
+  visitGlobalUsageChild(item.args, usages)
+  visitGlobalUsageChild(item.callee, usages)
+  visitGlobalUsageChild(item.object, usages)
+  visitGlobalUsageChild(item.index, usages)
+  visitGlobalUsageChild(item.target, usages)
+  visitGlobalUsageChild(item.value, usages)
+  visitGlobalUsageChild(item.valueType, usages)
+  visitGlobalUsageChild(item.functionType, usages)
+  visitGlobalUsageChild(item.returnShape, usages)
+  visitGlobalUsageChild(item.left, usages)
+  visitGlobalUsageChild(item.right, usages)
+  visitGlobalUsageChild(item.elements, usages)
+  visitGlobalUsageChild(item.properties, usages)
+  visitGlobalUsageChild(item.expression, usages)
 }
 
 function globalUsagePath(expression: GlobalUsageNode | null | undefined): string[] | null {
