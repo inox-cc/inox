@@ -507,12 +507,7 @@ import {
   isRuntimeValueLocalExpression,
   registerRuntimeValueMetadata,
   reportCCollectionHashability,
-  registerErrorChannel,
-  withBreakTarget,
-  withContinueTarget,
-  withErrorTarget,
-  withFinallyFlowTarget,
-  withReturnTarget
+  registerErrorChannel
 } from './values/statements.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import {

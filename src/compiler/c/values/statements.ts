@@ -60,7 +60,6 @@ type CLoopFlowTarget = {
 
 type CStringMap = Map<string, string>
 type CStringSet = Set<string>
-type StatementLinesCallback = () => string[]
 
 type CFunctionContext = {
   arrayShapes: Map<string, CArrayElementInfo[]>
@@ -571,11 +570,11 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const breakLabel = nextCName(context, 'ccjs_break')
   const continueLabel = nextCName(context, 'ccjs_continue')
-  const body = withBreakTarget(context, breakLabel, false, () =>
-    withContinueTarget(context, continueLabel, false, () =>
-      emitScopedStatementBody(statement.body, context, narrowing.trueNames)
-    )
-  )
+  pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
+  pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+  const body = emitScopedStatementBody(statement.body, context, narrowing.trueNames)
+  popFlowTarget(context.continueTargets)
+  popFlowTarget(context.breakTargets)
 
   if (condition.lines.length === 0) {
     const lines: string[] = []
@@ -610,11 +609,11 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.test, context)
     const breakLabel = nextCName(context, 'ccjs_break')
     const continueLabel = nextCName(context, 'ccjs_continue')
-    const body = withBreakTarget(context, breakLabel, false, () =>
-      withContinueTarget(context, continueLabel, false, () =>
-        emitScopedStatementBody(statement.body, context, narrowing.trueNames)
-      )
-    )
+    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
+    pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+    const body = emitScopedStatementBody(statement.body, context, narrowing.trueNames)
+    popFlowTarget(context.continueTargets)
+    popFlowTarget(context.breakTargets)
     const needsPreparedLowering = init.lines.length > 0 || test.lines.length > 0 || update.lines.length > 0
 
     if (!needsPreparedLowering) {
@@ -1806,9 +1805,11 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
 
   try {
     registerForOfElementMetadata(context, statement.name, elementType, statement)
-    const body = withBreakTarget(context, breakLabel, false, () =>
-      withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
-    )
+    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
+    pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+    const body = emitScopedStatementBody(statement.body, context, [])
+    popFlowTarget(context.continueTargets)
+    popFlowTarget(context.breakTargets)
     const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
 
     const getElementStatus = emitStatusCheck(`ccjs_array_get(${arrayName}, ${index}, &${value})`, context)
@@ -1883,9 +1884,11 @@ function emitRuntimeMapForOfStatement(
   try {
     context.variables.set(statement.name, 'object')
     context.objectShapes.set(statement.name, fields)
-    const body = withBreakTarget(context, breakLabel, false, () =>
-      withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
-    )
+    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
+    pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+    const body = emitScopedStatementBody(statement.body, context, [])
+    popFlowTarget(context.continueTargets)
+    popFlowTarget(context.breakTargets)
     const createEntryStatus = emitStatusCheck(
       `ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`,
       context
@@ -2018,9 +2021,11 @@ function emitRuntimeCollectionValueForOfStatement(
 
   try {
     registerForOfElementMetadata(context, statement.name, elementType, statement)
-    const body = withBreakTarget(context, breakLabel, false, () =>
-      withContinueTarget(context, continueLabel, false, () => emitScopedStatementBody(statement.body, context, []))
-    )
+    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
+    pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+    const body = emitScopedStatementBody(statement.body, context, [])
+    popFlowTarget(context.continueTargets)
+    popFlowTarget(context.breakTargets)
     const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
 
     const lines: string[] = []
@@ -2063,7 +2068,9 @@ export function emitSwitchStatement(statement: StatementNode, context: CFunction
       lines.push(`  case ${emitSwitchCaseLabel(item.test, context)}: {`)
     }
 
-    const body = withBreakTarget(context, breakLabel, false, () => emitScopedStatementList(item.consequent, context))
+    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
+    const body = emitScopedStatementList(item.consequent, context)
+    popFlowTarget(context.breakTargets)
     pushIndentedLines(lines, body, '    ')
     lines.push('  }')
   }
@@ -2150,11 +2157,28 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
   const outerBreakTarget = currentBreakTarget(context)
   const outerContinueTarget = currentContinueTarget(context)
   const lines = ['{']
-  const tryBody = withErrorTarget(context, throwTarget, () =>
-    withFinallyFlowTarget(context, finallyLabel, () =>
-      emitScopedStatementBody(statement.block, context, [])
-    )
-  )
+
+  if (throwTarget != null) {
+    pushStringTarget(context.errorTargets, throwTarget)
+  }
+
+  if (finallyLabel != null) {
+    pushStringTarget(context.returnTargets, finallyLabel)
+    pushFlowTarget(context.breakTargets, { label: finallyLabel, throughFinally: true })
+    pushFlowTarget(context.continueTargets, { label: finallyLabel, throughFinally: true })
+  }
+
+  const tryBody = emitScopedStatementBody(statement.block, context, [])
+
+  if (finallyLabel != null) {
+    popFlowTarget(context.continueTargets)
+    popFlowTarget(context.breakTargets)
+    popStringTarget(context.returnTargets)
+  }
+
+  if (throwTarget != null) {
+    popStringTarget(context.errorTargets)
+  }
 
   pushIndentedLines(lines, tryBody, '  ')
   if (finallyLabel != null) {
@@ -2165,31 +2189,38 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
   if (statement.handler != null && catchLabel != null) {
     const catchValueType = statementDeps(context).inferCatchBindingValueType(statement, context)
-    const catchBody = withFinallyFlowTarget(context, finallyLabel, () => {
-      const variableScope = pushVariableScope(context)
+    if (finallyLabel != null) {
+      pushStringTarget(context.returnTargets, finallyLabel)
+      pushFlowTarget(context.breakTargets, { label: finallyLabel, throughFinally: true })
+      pushFlowTarget(context.continueTargets, { label: finallyLabel, throughFinally: true })
+    }
 
-      try {
-        const body: string[] = []
+    const variableScope = pushVariableScope(context)
+    const catchBody: string[] = []
 
-        if (statement.handler.param != null) {
-          if (catchValueType === 'object') {
-            context.variables.set(statement.handler.param, 'object')
-            statementDeps(context).registerErrorObjectShape(context, statement.handler.param)
-            body.push(`ccjs_value ${statement.handler.param} = ccjs_error;`)
-          } else {
-            context.variables.set(statement.handler.param, 'string')
-            context.runtimeStrings.add(statement.handler.param)
-            body.push(`ccjs_string* ${statement.handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
-          }
+    try {
+      if (statement.handler.param != null) {
+        if (catchValueType === 'object') {
+          context.variables.set(statement.handler.param, 'object')
+          statementDeps(context).registerErrorObjectShape(context, statement.handler.param)
+          catchBody.push(`ccjs_value ${statement.handler.param} = ccjs_error;`)
+        } else {
+          context.variables.set(statement.handler.param, 'string')
+          context.runtimeStrings.add(statement.handler.param)
+          catchBody.push(`ccjs_string* ${statement.handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
         }
-
-        pushAllLines(body, emitStatementBody(statement.handler.body, context))
-
-        return body
-      } finally {
-        restoreVariableScope(context, variableScope)
       }
-    })
+
+      pushAllLines(catchBody, emitStatementBody(statement.handler.body, context))
+    } finally {
+      restoreVariableScope(context, variableScope)
+    }
+
+    if (finallyLabel != null) {
+      popFlowTarget(context.continueTargets)
+      popFlowTarget(context.breakTargets)
+      popStringTarget(context.returnTargets)
+    }
 
     lines.push(`${catchLabel}:`)
     lines.push(
@@ -2220,18 +2251,45 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       outerContinueThroughFinally = outerContinueTarget.throughFinally === true
     }
 
-    const finalizerBody = withErrorTarget(context, outerThrowTarget, () =>
-      withReturnTarget(context, outerReturnTarget, () =>
-        withBreakTarget(context, outerBreakLabel, outerBreakThroughFinally, () =>
-          withContinueTarget(
-            context,
-            outerContinueLabel,
-            outerContinueThroughFinally,
-            () => emitScopedStatementBody(statement.finalizer, context, [])
-          )
-        )
-      )
-    )
+    if (outerThrowTarget != null) {
+      pushStringTarget(context.errorTargets, outerThrowTarget)
+    }
+
+    if (outerReturnTarget != null) {
+      pushStringTarget(context.returnTargets, outerReturnTarget)
+    }
+
+    if (outerBreakLabel != null) {
+      pushFlowTarget(context.breakTargets, {
+        label: outerBreakLabel,
+        throughFinally: outerBreakThroughFinally
+      })
+    }
+
+    if (outerContinueLabel != null) {
+      pushFlowTarget(context.continueTargets, {
+        label: outerContinueLabel,
+        throughFinally: outerContinueThroughFinally
+      })
+    }
+
+    const finalizerBody = emitScopedStatementBody(statement.finalizer, context, [])
+
+    if (outerContinueLabel != null) {
+      popFlowTarget(context.continueTargets)
+    }
+
+    if (outerBreakLabel != null) {
+      popFlowTarget(context.breakTargets)
+    }
+
+    if (outerReturnTarget != null) {
+      popStringTarget(context.returnTargets)
+    }
+
+    if (outerThrowTarget != null) {
+      popStringTarget(context.errorTargets)
+    }
 
     lines.push(`${finallyLabel}:`)
     pushIndentedLines(lines, finalizerBody, '  ')
@@ -3399,58 +3457,6 @@ export function currentContinueTarget(context: CFunctionContext): CLoopFlowTarge
   return lastFlowTargetOrNull(context.continueTargets)
 }
 
-export function withBreakTarget(
-  context: CFunctionContext,
-  label: string | null,
-  throughFinally: boolean,
-  callback: StatementLinesCallback
-): string[] {
-  if (label == null) {
-    return callback()
-  }
-
-  pushFlowTarget(context.breakTargets, {
-    label,
-    throughFinally
-  })
-
-  const lines = callback()
-  popFlowTarget(context.breakTargets)
-
-  return lines
-}
-
-export function withContinueTarget(
-  context: CFunctionContext,
-  label: string | null,
-  throughFinally: boolean,
-  callback: StatementLinesCallback
-): string[] {
-  if (label == null) {
-    return callback()
-  }
-
-  pushFlowTarget(context.continueTargets, {
-    label,
-    throughFinally
-  })
-
-  const lines = callback()
-  popFlowTarget(context.continueTargets)
-
-  return lines
-}
-
-export function withFinallyFlowTarget(
-  context: CFunctionContext,
-  label: string | null,
-  callback: StatementLinesCallback
-): string[] {
-  return withReturnTarget(context, label, () =>
-    withBreakTarget(context, label, true, () => withContinueTarget(context, label, true, callback))
-  )
-}
-
 export function emitReturnJump(context: CFunctionContext): string[] {
   const target = currentReturnTarget(context)
 
@@ -3489,38 +3495,4 @@ function registerReturnFlow(context: CFunctionContext): void {
 
 export function currentReturnTarget(context: CFunctionContext): string | null {
   return lastStringOrNull(context.returnTargets)
-}
-
-export function withReturnTarget(
-  context: CFunctionContext,
-  target: string | null,
-  callback: StatementLinesCallback
-): string[] {
-  if (target == null) {
-    return callback()
-  }
-
-  pushStringTarget(context.returnTargets, target)
-
-  const lines = callback()
-  popStringTarget(context.returnTargets)
-
-  return lines
-}
-
-export function withErrorTarget(
-  context: CFunctionContext,
-  target: string | null,
-  callback: StatementLinesCallback
-): string[] {
-  if (target == null) {
-    return callback()
-  }
-
-  pushStringTarget(context.errorTargets, target)
-
-  const lines = callback()
-  popStringTarget(context.errorTargets)
-
-  return lines
 }
