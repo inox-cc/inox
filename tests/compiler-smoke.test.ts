@@ -1051,12 +1051,42 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get\(node, "args", 4, &ccjs_array_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(ccjs_array_value_\d+, \(size_t\)\(index\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(node, "args", 4, &ccjs_(?:array_)?value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_(?:array_)?value_\d+, \(size_t\)\(index\), &ccjs_value_\d+\)/)
   assert.match(result.code, /arg = ccjs_value_\d+;/)
   assert.match(result.code, /!\(arg\.tag == CCJS_TAG_NULL \|\| arg\.tag == CCJS_TAG_UNDEFINED\)/)
   assert.match(result.code, /ccjs_object_get\(arg, "type", 4, &ccjs_value_\d+\)/)
   assert.match(result.code, /memcmp\(\(\(ccjs_string\*\)ccjs_string_cmp_value_\d+\.as\.ref\)->bytes, "Literal", 7\)/)
+})
+
+test('lowers C for of over dynamic object array fields', () => {
+  const result = compileSource(
+    `function countHits(node: object): number {
+  let count = 0
+
+  for (const item of node.items) {
+    if (item.kind === 'hit') {
+      count = count + 1
+    }
+  }
+
+  return count
+}
+
+export function main(): void {
+  console.log(countHits({ items: [{ kind: 'hit' }, { kind: 'miss' }] }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "items", 5, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_for_length_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
+  assert.match(result.code, /ccjs_value item = ccjs_for_value_\d+;/)
+  assert.match(result.code, /ccjs_object_get\(item, "kind", 4, &ccjs_value_\d+\)/)
 })
 
 test('lowers C dynamic runtime array index assignments through runtime set', () => {
@@ -1345,7 +1375,7 @@ export function main(): void {
 
   assert.match(result.code, /double length\(ccjs_value ccjs_param_name\);/)
   assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "Ada", 3, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_(?:expr_)?value_\d+\)/)
   assert.match(result.code, /const double total = \(length\(ccjs_value_\d+\) \+ length\(ccjs_value_\d+\)\);/)
   assert.match(result.code, /printf\("%g %g\\n", \(\(double\)length\(ccjs_value_\d+\)\), \(\(double\)total\)\);/)
 })
@@ -1400,7 +1430,7 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_(?:expr_)?value_\d+\)/)
   assert.match(result.code, /ccjs_return = ccjs_value_\d+;/)
   assert.match(result.code, /return ccjs_return;/)
 })
@@ -1546,7 +1576,7 @@ export function main(): void {
     result.code,
     /const double sameLocal = \(strlen\(name\) == 3 && memcmp\(name, "Ada", strlen\(name\)\) == 0\);/
   )
-  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_(?:expr_)?value_\d+\)/)
   assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_value_\d+\)/)
   assert.match(
     result.code,
@@ -2670,7 +2700,7 @@ test('lowers C nullable string nullish coalescing', () => {
   assert.equal(result.hir.body[0].body[0].nullable, true)
   assert.deepEqual(result.ir.features, ['runtime-values', 'string-bytes'])
   assert.match(result.code, /ccjs_null_value\(\)/)
-  assert.match(result.code, /if \(missing\.tag == CCJS_TAG_NULL\) \{/)
+  assert.match(result.code, /if \(missing\.tag == CCJS_TAG_NULL \|\| missing\.tag == CCJS_TAG_UNDEFINED\) \{/)
   assert.match(result.code, /present\.tag == CCJS_TAG_NULL/)
 })
 
@@ -3093,7 +3123,7 @@ export function main(): void {
 })
 
 
-test('rejects unsupported C nullish coalescing forms', () => {
+test('lowers C unknown nullish coalescing through runtime values', () => {
   const source = `function printValue(value: unknown): void {
   console.log(value ?? 'Ada')
 }
@@ -3102,9 +3132,14 @@ export function main(): void {
   printValue(1)
 }
 `
-  assertDiagnostic(source, 'CCJS_C_NULLISH', {
+  const result = compileSource(source, {
     target: 'c'
   })
+
+  assert.match(result.code, /void printValue\(ccjs_value value\)/)
+  assert.match(result.code, /if \(value\.tag == CCJS_TAG_NULL \|\| value\.tag == CCJS_TAG_UNDEFINED\) \{/)
+  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "Ada", 3, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value_\d+ = value;/)
 })
 
 

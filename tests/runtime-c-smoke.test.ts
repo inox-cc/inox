@@ -8337,6 +8337,62 @@ console.log(
 })
 
 
+test('generated C for of over dynamic object array fields compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-array-for-of-'))
+  const source = join(dir, 'dynamic-object-array-for-of.c')
+  const output = join(dir, 'dynamic-object-array-for-of')
+
+  try {
+    const result = compileSource(
+      `function countHits(node: object): number {
+  let count = 0
+
+  for (const item of node.items) {
+    if (item.kind === 'hit') {
+      count = count + 1
+    }
+  }
+
+  return count
+}
+
+console.log(
+  countHits({ items: [{ kind: 'hit' }, { kind: 'miss' }, { kind: 'hit' }] }),
+  countHits({ items: [] })
+)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '2 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C dynamic object array index null comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

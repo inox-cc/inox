@@ -682,6 +682,10 @@ export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, conte
       return 'unknown'
     }
 
+    if (deps != null && deps.inferExpressionType(expression.object, context) === 'object') {
+      return 'unknown'
+    }
+
     return null
   }
 
@@ -702,6 +706,10 @@ export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, conte
         return field.arrayElementType
       }
 
+      return 'unknown'
+    }
+
+    if (deps != null && deps.inferExpressionType(expression.object, context) === 'object') {
       return 'unknown'
     }
 

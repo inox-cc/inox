@@ -1099,7 +1099,7 @@ function isCForOfArrayElementType(valueType: string): boolean {
 }
 
 function isCForOfValueType(valueType: string): boolean {
-  return valueType === 'number' || valueType === 'boolean' || isManagedRuntimeReturnType(valueType)
+  return valueType === 'unknown' || valueType === 'number' || valueType === 'boolean' || isManagedRuntimeReturnType(valueType)
 }
 
 function registerForOfElementMetadata(
@@ -1135,6 +1135,8 @@ function emitForOfElementDeclaration(
   if (elementType === 'string') {
     declaration = `ccjs_string* ${name} = (ccjs_string*)${value}.as.ref;`
     checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+  } else if (elementType === 'unknown') {
+    declaration = `ccjs_value ${name} = ${value};`
   } else if (elementType === 'boolean') {
     declaration = `double ${name} = ((double)(${value}.as.boolean ? 1 : 0));`
     checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context))
