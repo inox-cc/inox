@@ -15,6 +15,7 @@ export type CompilerHost = {
   normalizePath(path: string): string
   pathToFileUrl(path: string): string
   readFile(path: string): Promise<string>
+  readFileSync(path: string): string | null
   relativePath(from: string, to: string): string
   resolvePath(path: string): string
   shortHash(value: string): string

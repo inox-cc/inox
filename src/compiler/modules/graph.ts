@@ -37,7 +37,7 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
     diagnostics: []
   }
 
-  await visitModuleGraphFile(context, entryPath)
+  visitModuleGraphFile(context, entryPath)
 
   throwDiagnostics(context.diagnostics)
 
@@ -47,8 +47,8 @@ export async function buildModuleGraph(entry: string, options: CompileOptions = 
   }
 }
 
-async function visitModuleGraphFile(context: ModuleGraphContext, file: string): Promise<boolean> {
-  const path = await resolveExistingSource(file, context.host)
+function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolean {
+  const path = resolveExistingSource(file, context.host)
 
   if (context.modules.has(path)) {
     return true
@@ -60,7 +60,13 @@ async function visitModuleGraphFile(context: ModuleGraphContext, file: string): 
 
   context.visiting.add(path)
 
-  const source = await context.host.readFile(path)
+  const source = context.host.readFileSync(path)
+
+  if (source == null) {
+    context.diagnostics.push(diagnostic('CCJS_MODULE_NOT_FOUND', `cannot read module ${path}`, { line: 1, column: 1 }))
+    context.visiting.delete(path)
+    return false
+  }
   const ast = parse(
     tokenize(source, {
       file: path
@@ -117,13 +123,13 @@ async function visitModuleGraphFile(context: ModuleGraphContext, file: string): 
       continue
     }
 
-    const importedPath = await resolveModuleGraphImport(context, path, item.source, item.loc)
+    const importedPath = resolveModuleGraphImport(context, path, item.source, item.loc)
 
     if (importedPath === '') {
       continue
     }
 
-    const importedOk = await visitModuleGraphFile(context, importedPath)
+    const importedOk = visitModuleGraphFile(context, importedPath)
 
     if (!importedOk) {
       continue
@@ -208,13 +214,13 @@ async function visitModuleGraphFile(context: ModuleGraphContext, file: string): 
       continue
     }
 
-    const importedPath = await resolveModuleGraphImport(context, path, item.source, item.loc)
+    const importedPath = resolveModuleGraphImport(context, path, item.source, item.loc)
 
     if (importedPath === '') {
       continue
     }
 
-    const importedOk = await visitModuleGraphFile(context, importedPath)
+    const importedOk = visitModuleGraphFile(context, importedPath)
 
     if (!importedOk) {
       continue
@@ -276,9 +282,9 @@ function moduleProgramForTypeImports(module: ModuleRecord): ProgramNode {
   return module.ast
 }
 
-async function resolveModuleGraphImport(context: ModuleGraphContext, fromPath: string, specifier: string, loc: SourceLocation): Promise<string> {
+function resolveModuleGraphImport(context: ModuleGraphContext, fromPath: string, specifier: string, loc: SourceLocation): string {
   try {
-    return await resolveImportSpecifier(fromPath, specifier, context.host)
+    return resolveImportSpecifier(fromPath, specifier, context.host)
   } catch {
     context.diagnostics.push(diagnostic('CCJS_MODULE_NOT_FOUND', `cannot resolve import ${specifier}`, loc))
     return ''

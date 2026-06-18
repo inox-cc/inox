@@ -59,17 +59,27 @@ class MemoryCompilerHost {
   }
 
   readFile(path: string): Promise<string> {
+    const source = this.readFileSync(path)
+
+    if (source != null) {
+      return Promise.resolve(source)
+    }
+
+    return Promise.reject(new Error(`memory source not found: ${path}`))
+  }
+
+  readFileSync(path: string): string | null {
     const resolved = resolvePosixPath(path, this.root)
 
     for (let index = 0; index < this.sources.length; index = index + 1) {
       const file = this.sources[index]
 
       if (file.path === resolved) {
-        return Promise.resolve(file.source)
+        return file.source
       }
     }
 
-    return Promise.reject(new Error(`memory source not found: ${path}`))
+    return null
   }
 
   relativePath(fromPath: string, toPath: string): string {

@@ -107,8 +107,9 @@ export function main(): void {
 `
     )
 
-    assert.equal(await resolveExistingSource(join(dir, 'dep'), nodeCompilerHost), dep)
-    assert.equal(await resolveImport(entry, './dep', nodeCompilerHost), dep)
+    assert.equal(resolveExistingSource(join(dir, 'dep'), nodeCompilerHost), dep)
+    assert.equal(resolveImport(entry, './dep', nodeCompilerHost), dep)
+    assert.equal(await Promise.resolve(resolveExistingSource(join(dir, 'dep'), nodeCompilerHost)), dep)
 
     const graph = await buildModuleGraph(entry, { target: 'c', host: nodeCompilerHost })
 

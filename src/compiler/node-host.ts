@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { readFileSync as readNodeFileSync } from 'node:fs'
 import { readFile as readNodeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, normalize, posix, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -48,6 +49,14 @@ class NodeCompilerHost {
 
   readFile(path: string): Promise<string> {
     return readNodeFile(path, 'utf8')
+  }
+
+  readFileSync(path: string): string | null {
+    try {
+      return readNodeFileSync(path, 'utf8')
+    } catch {
+      return null
+    }
   }
 
   relativePath(fromPath: string, toPath: string): string {

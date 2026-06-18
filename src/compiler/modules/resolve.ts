@@ -2,7 +2,7 @@ import type { CompilerHost } from '../host.ts'
 
 const sourceExtensions = ['', '.ts', '.js']
 
-export async function resolveExistingSource(path: string, host: CompilerHost): Promise<string> {
+export function resolveExistingSource(path: string, host: CompilerHost): string {
   let resolved = path
 
   if (!host.isAbsolutePath(path)) {
@@ -24,19 +24,18 @@ export async function resolveExistingSource(path: string, host: CompilerHost): P
     candidates.push(normalized)
   }
 
-  for (const candidate of candidates) {
-    try {
-      await host.readFile(candidate)
+  for (let index = 0; index < candidates.length; index = index + 1) {
+    const candidate = candidates[index]
+
+    if (host.readFileSync(candidate) != null) {
       return candidate
-    } catch {
-      // Try next candidate.
     }
   }
 
   throw new Error(`Source not found: ${path}`)
 }
 
-export async function resolveImport(fromPath: string, specifier: string, host: CompilerHost): Promise<string> {
+export function resolveImport(fromPath: string, specifier: string, host: CompilerHost): string {
   return resolveExistingSource(host.joinPath(host.dirname(fromPath), specifier), host)
 }
 

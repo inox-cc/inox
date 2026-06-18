@@ -115,6 +115,7 @@ const patterns: PatternInfo[] = [
 
 const allowedHostImports = new Map<string, Set<string>>([
   ['node:crypto', new Set(['src/compiler/node-host.ts'])],
+  ['node:fs', new Set(['src/compiler/node-host.ts'])],
   ['node:fs/promises', new Set(['src/compiler/node-host.ts'])],
   ['node:path', new Set(['src/compiler/node-host.ts'])],
   ['node:url', new Set(['src/compiler/node-host.ts'])]
@@ -274,7 +275,7 @@ function renderMatrix(report: AuditReport): string {
     '## Work Queue',
     '',
     '1. Keep the first self-hosted target in-memory and compiler-core only.',
-    '2. Put `node:fs/promises`, `node:path`, `node:url` and `node:crypto` host dependencies behind adapters or ccjs stdlib slices.',
+    '2. Put `node:fs`, `node:fs/promises`, `node:path`, `node:url` and `node:crypto` host dependencies behind adapters or ccjs stdlib slices.',
     '3. Extract the remaining large C emitter clusters before trying to compile `src/compiler/c/index.ts` with ccjs.',
     '4. Replace new `AnyNode` mutation surfaces with explicit node shapes as code is touched.',
     '5. Rewrite regex-heavy helpers only when a small scanner is simpler than broad RegExp runtime support.'
