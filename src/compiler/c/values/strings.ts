@@ -103,6 +103,14 @@ type StringMethodCallParts = {
   object: StringMethodNode
 }
 
+function stringNodeAt(values: StringMethodNode[], index: number): StringMethodNode {
+  return values[index]
+}
+
+function stringPathSegment(path: string[], index: number): string {
+  return path[index]
+}
+
 export type StringLoweringDependencies = {
   canLowerCNullishCoalescingExpression(expression: AnyNode, context: StringCContext): boolean
   emitCallExpression(expression: AnyNode, context: StringCContext): string
@@ -410,16 +418,18 @@ export function emitPreparedStringIndexCallExpression(
   const object = call.object
   const args = call.args
 
-  if (!isNodeCandidate(object) || args.length < 1 || args.length > 2 || !isNodeCandidate(args[0])) {
+  const searchArgument = stringNodeAt(args, 0)
+
+  if (!isNodeCandidate(object) || args.length < 1 || args.length > 2 || !isNodeCandidate(searchArgument)) {
     return null
   }
 
-  if (stringDeps(context).inferExpressionType(args[0], context) !== 'string') {
+  if (stringDeps(context).inferExpressionType(searchArgument, context) !== 'string') {
     return null
   }
 
   const value = emitPreparedStringBytesOperand(object, context, 'ccjs_string_index_value')
-  const search = emitPreparedStringBytesOperand(args[0], context, 'ccjs_string_index_search')
+  const search = emitPreparedStringBytesOperand(searchArgument, context, 'ccjs_string_index_search')
   const lines: string[] = []
   let startExpression = '0'
 
@@ -1198,13 +1208,14 @@ export function isStringConversionCall(expression: AnyNode | null | undefined, c
     expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1 ||
-    expression.callee.path[0] !== 'String' ||
+    stringPathSegment(expression.callee.path, 0) !== 'String' ||
     expression.args.length !== 1
   ) {
     return false
   }
 
-  const valueType = stringDeps(context).inferExpressionType(expression.args[0], context)
+  const arg = stringNodeAt(expression.args, 0)
+  const valueType = stringDeps(context).inferExpressionType(arg, context)
 
   return valueType === 'boolean' || valueType === 'null' || valueType === 'number' || valueType === 'string'
 }
@@ -1215,13 +1226,13 @@ export function isNumberConversionCall(expression: AnyNode | null | undefined, c
     expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1 ||
-    expression.callee.path[0] !== 'Number' ||
+    stringPathSegment(expression.callee.path, 0) !== 'Number' ||
     expression.args.length !== 1
   ) {
     return false
   }
 
-  return stringDeps(context).inferExpressionType(expression.args[0], context) === 'string'
+  return stringDeps(context).inferExpressionType(stringNodeAt(expression.args, 0), context) === 'string'
 }
 
 export function isStringTrimCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
