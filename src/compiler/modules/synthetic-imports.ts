@@ -1,5 +1,8 @@
 import type { AnyNode, ProgramNode, SourceLocation } from '../types.ts'
 
+type SyntheticImportNode = AnyNode
+type ExportedDeclarationMap = Map<string, SyntheticImportNode>
+
 export function insertImportSyntheticDeclarations(
   program: ProgramNode,
   declarationsByImport: Map<number, AnyNode[]>
@@ -120,14 +123,27 @@ export function createTypeImportDeclarations(specifier: AnyNode, importedProgram
   return declarations
 }
 
-function findExportedDeclaration(program: ProgramNode, name: string): AnyNode | null {
-  for (const item of program.body) {
-    if (item.exported && item.name === name) {
-      return item
-    }
+function findExportedDeclaration(program: ProgramNode, name: string): SyntheticImportNode | null {
+  const declarations = collectExportedDeclarationMap(program)
+  const declaration = declarations.get(name)
+
+  if (declaration != null) {
+    return declaration
   }
 
   return null
+}
+
+function collectExportedDeclarationMap(program: ProgramNode): ExportedDeclarationMap {
+  const declarations: ExportedDeclarationMap = new Map()
+
+  for (const item of program.body) {
+    if (item.exported === true) {
+      declarations.set(item.name, item)
+    }
+  }
+
+  return declarations
 }
 
 function addTypeImportDependency(
@@ -355,24 +371,6 @@ function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: Sour
     loc,
     valueType: target.returnType
   }
-  let body: AnyNode[] = [
-    {
-      type: 'ReturnStatement',
-      argument: call,
-      loc
-    }
-  ]
-
-  if (target.returnType === 'void') {
-    body = [
-      {
-        type: 'ExpressionStatement',
-        expression: call,
-        loc
-      }
-    ]
-  }
-
   return {
     type: 'FunctionDeclaration',
     exported: false,
@@ -381,8 +379,28 @@ function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: Sour
     loc,
     params,
     returnType: target.returnType,
-    body
+    body: createFunctionAliasBody(target, call, loc)
   }
+}
+
+function createFunctionAliasBody(target: AnyNode, call: AnyNode, loc: SourceLocation): AnyNode[] {
+  if (target.returnType === 'void') {
+    return [
+      {
+        type: 'ExpressionStatement',
+        expression: call,
+        loc
+      }
+    ]
+  }
+
+  return [
+    {
+      type: 'ReturnStatement',
+      argument: call,
+      loc
+    }
+  ]
 }
 
 function cloneTypeAliasFields(fields: AnyNode[]): AnyNode[] {

@@ -90,6 +90,39 @@ test('creates function import aliases for renamed imports', () => {
   assert.equal(alias?.body[0].type, 'ReturnStatement')
 })
 
+test('creates import aliases only from exported declarations', () => {
+  const alias = createImportAliasDeclaration(
+    { imported: 'run', local: 'start' },
+    {
+      type: 'Program',
+      body: [
+        {
+          type: 'FunctionDeclaration',
+          exported: false,
+          async: false,
+          name: 'run',
+          params: [],
+          returnType: 'void',
+          body: []
+        },
+        {
+          type: 'FunctionDeclaration',
+          exported: true,
+          async: false,
+          name: 'run',
+          params: [{ name: 'value', valueType: 'number' }],
+          returnType: 'number',
+          body: []
+        }
+      ]
+    }
+  )
+
+  assert.equal(alias?.type, 'FunctionDeclaration')
+  assert.equal(alias?.returnType, 'number')
+  assert.equal(alias?.body[0].type, 'ReturnStatement')
+})
+
 test('resolves module sources and builds module graphs through split entrypoint', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
 
