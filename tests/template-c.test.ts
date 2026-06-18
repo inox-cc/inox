@@ -22,7 +22,7 @@ test('lowers C console.log template interpolation', () => {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_(?:expr_)?value_\d+\)/)
   assert.match(result.code, /ccjs_object_get_known\(user, 1, &ccjs_expr_value_\d+\)/)
   assert.match(result.code, /ccjs_string_from_bool\(&ccjs_default_allocator, \(ready\) != 0, &ccjs_value_\d+\)/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)ccjs_log_string_\d+->len, ccjs_log_string_\d+->bytes\);/)
@@ -76,6 +76,23 @@ console.log(echo(\`\${str1} \${String(num)}\`))
   assert.match(result.code, /ccjs_string_concat_parts\(&ccjs_default_allocator,/)
   assert.match(result.code, /const ccjs_string\* t = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
   assert.match(result.code, /echo\(ccjs_value_\d+\)/)
+})
+
+test('lowers C template interpolation for unknown runtime values', () => {
+  const result = compileSource(
+    `function label(value: unknown): string {
+  return \`value \${value}\`
+}
+
+console.log(label('Ada'), label(7), label(true), label(null))
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_string_from_value\(&ccjs_default_allocator, value, &ccjs_value_\d+\)/)
+  assert.doesNotMatch(result.code, /template placeholders currently support/)
 })
 
 test('generated C console log template interpolation compiles and runs with runtime sources', async (t) => {
@@ -172,6 +189,52 @@ console.log(echo(\`\${str1} \${String(num)}\`))
 
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, 'ccjs cmake example 123\nccjs cmake example 123\nccjs cmake example 123\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+test('generated C template interpolation formats unknown runtime values', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-template-unknown-'))
+  const source = join(dir, 'template-unknown.c')
+  const output = join(dir, 'template-unknown')
+
+  try {
+    const result = compileSource(
+      `function label(value: unknown): string {
+  return \`value \${value}\`
+}
+
+console.log(label('Ada'))
+console.log(label(7))
+console.log(label(true))
+console.log(label(null))
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'value Ada\nvalue 7\nvalue true\nvalue null\n')
   } finally {
     await rm(dir, {
       recursive: true,

@@ -15,6 +15,7 @@ typedef struct ccjs_string {
 ccjs_status ccjs_string_from_literal(ccjs_allocator* allocator, const char* bytes, size_t len, ccjs_value* out);
 ccjs_status ccjs_string_from_bool(ccjs_allocator* allocator, bool value, ccjs_value* out);
 ccjs_status ccjs_string_from_number(ccjs_allocator* allocator, double value, ccjs_value* out);
+ccjs_status ccjs_string_from_value(ccjs_allocator* allocator, ccjs_value value, ccjs_value* out);
 ccjs_status ccjs_string_to_number(const char* value_bytes, size_t value_len, ccjs_value* out);
 size_t ccjs_string_code_unit_length_parts(const char* value_bytes, size_t value_len);
 ccjs_status ccjs_string_concat_parts(

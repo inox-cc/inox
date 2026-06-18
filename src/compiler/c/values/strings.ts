@@ -20,7 +20,7 @@ import {
   cProcessRuntimeStringPropertyName
 } from '../stdlib/process.ts'
 import { cUnsupportedExpressionCode, isNullishCoalescingExpression, isOptionalChainExpression } from '../syntax.ts'
-import { isNullableScalarType } from '../value-types.ts'
+import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 import { isStringIndexMethod, isStringPredicateMethod, isStringRuntimeMethod } from '../../stdlib/descriptors/collections.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
@@ -1069,7 +1069,7 @@ function emitPreparedTemplatePlaceholderBytesOperand(
     return emitPreparedStringBytesOperand(expression, context, 'ccjs_template_string')
   }
 
-  if (valueType === 'number' || valueType === 'boolean' || valueType === 'null') {
+  if (isTemplatePlaceholderStringifiableValueType(valueType)) {
     const value = emitCStringConversionValueExpression(
       {
         type: 'CallExpression',
@@ -1111,6 +1111,14 @@ function emitPreparedTemplatePlaceholderBytesOperand(
   }
 }
 
+function isTemplatePlaceholderStringifiableValueType(valueType: string): boolean {
+  if (valueType === 'number' || valueType === 'boolean' || valueType === 'null' || valueType === 'unknown') {
+    return true
+  }
+
+  return isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)
+}
+
 export function emitCStringConversionValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
   const arg = expression.args[0]
   const valueType = stringDeps(context).inferExpressionType(arg, context)
@@ -1141,6 +1149,20 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
 
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, "null", 4, &${temp})`, context))
+
+    return {
+      lines,
+      expression: temp
+    }
+  }
+
+  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {
+    const value = stringDeps(context).emitCValueExpression(arg, context)
+    const lines: string[] = []
+
+    pushAllLines(lines, value.lines)
+    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(emitStatusCheck(`ccjs_string_from_value(&ccjs_default_allocator, ${value.expression}, &${temp})`, context))
 
     return {
       lines,

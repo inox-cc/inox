@@ -61,6 +61,55 @@ ccjs_status ccjs_string_from_number(ccjs_allocator* allocator, double value, ccj
   return ccjs_string_from_literal(allocator, buffer, (size_t)len, out);
 }
 
+ccjs_status ccjs_string_from_value(ccjs_allocator* allocator, ccjs_value value, ccjs_value* out) {
+  if (value.tag == CCJS_TAG_UNDEFINED) {
+    return ccjs_string_from_literal(allocator, "undefined", 9, out);
+  }
+
+  if (value.tag == CCJS_TAG_NULL) {
+    return ccjs_string_from_literal(allocator, "null", 4, out);
+  }
+
+  if (value.tag == CCJS_TAG_BOOL) {
+    return ccjs_string_from_bool(allocator, value.as.boolean, out);
+  }
+
+  if (value.tag == CCJS_TAG_NUMBER) {
+    return ccjs_string_from_number(allocator, value.as.number, out);
+  }
+
+  if (value.tag == CCJS_TAG_STRING && value.as.ref != 0) {
+    ccjs_string* string = (ccjs_string*)value.as.ref;
+    return ccjs_string_from_literal(allocator, string->bytes, string->len, out);
+  }
+
+  if (value.tag == CCJS_TAG_ARRAY) {
+    return ccjs_array_join(allocator, value, ",", 1, out);
+  }
+
+  if (value.tag == CCJS_TAG_OBJECT) {
+    return ccjs_string_from_literal(allocator, "[object Object]", 15, out);
+  }
+
+  if (value.tag == CCJS_TAG_MAP) {
+    return ccjs_string_from_literal(allocator, "[object Map]", 12, out);
+  }
+
+  if (value.tag == CCJS_TAG_SET) {
+    return ccjs_string_from_literal(allocator, "[object Set]", 12, out);
+  }
+
+  if (value.tag == CCJS_TAG_BYTES) {
+    return ccjs_string_from_literal(allocator, "[object Uint8Array]", 19, out);
+  }
+
+  if (value.tag == CCJS_TAG_FUNCTION) {
+    return ccjs_string_from_literal(allocator, "[object Function]", 17, out);
+  }
+
+  return CCJS_ERR_TYPE;
+}
+
 static bool ccjs_string_is_trim_space_code_point(uint32_t value) {
   return value == 0x0009u || value == 0x000au || value == 0x000bu || value == 0x000cu || value == 0x000du || value == 0x0020u ||
          value == 0x00a0u || value == 0x1680u || (value >= 0x2000u && value <= 0x200au) || value == 0x2028u || value == 0x2029u ||

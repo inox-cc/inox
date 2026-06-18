@@ -279,6 +279,10 @@ export function normalizeTypeName(name: string): string {
     return 'function'
   }
 
+  if (name === 'true' || name === 'false') {
+    return 'boolean'
+  }
+
   if (name === 'any') {
     return 'unknown'
   }
