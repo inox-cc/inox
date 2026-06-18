@@ -408,6 +408,54 @@ function asyncTaskParamsOrEmpty(params: CAsyncTaskParam[] | null): CAsyncTaskPar
   return []
 }
 
+function asyncTaskNodeAt(nodes: AsyncTaskAstNode[], index: number): AsyncTaskAstNode {
+  return nodes[index]
+}
+
+function maybeAsyncTaskNodeAt(nodes: AsyncTaskAstNode[], index: number): AsyncTaskAstNode | null {
+  if (index >= nodes.length) {
+    return null
+  }
+
+  return asyncTaskNodeAt(nodes, index)
+}
+
+function asyncTaskAwaitStepAt(steps: CAsyncTaskAwaitStep[], index: number): CAsyncTaskAwaitStep {
+  return steps[index]
+}
+
+function asyncTaskPrefixFrameLocalAt(
+  locals: CAsyncTaskPrefixFrameLocal[],
+  index: number
+): CAsyncTaskPrefixFrameLocal {
+  return locals[index]
+}
+
+function asyncTaskAwaitFrameLocalAt(
+  locals: CAsyncTaskAwaitFrameLocal[],
+  index: number
+): CAsyncTaskAwaitFrameLocal {
+  return locals[index]
+}
+
+function asyncTaskFrameLocalAt(locals: CAsyncTaskFrameLocal[], index: number): CAsyncTaskFrameLocal {
+  return locals[index]
+}
+
+function asyncTaskPathSegmentAt(path: string[], index: number): string {
+  return path[index]
+}
+
+function asyncTaskStatementsBeforeLast(statements: AsyncTaskAstNode[]): AsyncTaskAstNode[] {
+  const out: AsyncTaskAstNode[] = []
+
+  for (let index = 0; index < statements.length - 1; index = index + 1) {
+    out.push(asyncTaskNodeAt(statements, index))
+  }
+
+  return out
+}
+
 function createAsyncTaskBodyPlan(body: AsyncTaskBodyDraft): AsyncTaskBodyPlan {
   const successPhases = createAsyncTaskSuccessPhases(body)
   const awaits = body.awaits
@@ -496,7 +544,7 @@ function collectAsyncTaskLiveAcrossSuspensionNames(input: AsyncTaskLiveAcrossSus
   const nodes: AsyncTaskAstNode[] = []
 
   for (let index = 1; index < input.awaits.length; index = index + 1) {
-    const item = input.awaits[index]
+    const item = asyncTaskAwaitStepAt(input.awaits, index)
     const awaitedExpression = item.awaitedExpression
     const awaitedPromiseExpression = item.awaitedPromiseExpression
 
@@ -509,14 +557,22 @@ function collectAsyncTaskLiveAcrossSuspensionNames(input: AsyncTaskLiveAcrossSus
     }
   }
 
-  for (const phase of input.successPhases) {
-    for (const statement of phase.statements) {
+  const successPhases: CAsyncTaskPhase[] = input.successPhases
+
+  for (const phase of successPhases) {
+    const statements: AsyncTaskAstNode[] = phase.statements
+
+    for (const statement of statements) {
       nodes.push(statement)
     }
   }
 
-  for (const phase of input.tryPhases) {
-    for (const statement of phase.statements) {
+  const tryPhases: CAsyncTaskPhase[] = input.tryPhases
+
+  for (const phase of tryPhases) {
+    const statements: AsyncTaskAstNode[] = phase.statements
+
+    for (const statement of statements) {
       nodes.push(statement)
     }
   }
@@ -533,7 +589,9 @@ function appendAsyncTaskTryHandlerReferencedNodes(
   handler: CAsyncTaskTryHandlerPlan | null
 ): void {
   if (handler != null) {
-    for (const statement of handler.statements) {
+    const statements: AsyncTaskAstNode[] = handler.statements
+
+    for (const statement of statements) {
       nodes.push(statement)
     }
 
@@ -550,7 +608,9 @@ function appendAsyncTaskNodeIfPresent(nodes: AsyncTaskAstNode[], node: AsyncTask
 function collectAsyncTaskReferencedNames(nodes: AsyncTaskAstNode[]): AsyncTaskStringSet {
   const names: AsyncTaskStringSet = new Set()
 
-  for (const node of nodes) {
+  const source: AsyncTaskAstNode[] = nodes
+
+  for (const node of source) {
     visitAsyncTaskReferencedValue(node, names)
   }
 
@@ -563,9 +623,7 @@ function visitAsyncTaskReferencedValue(value: AsyncTaskChildValue, names: AsyncT
   }
 
   if (Array.isArray(value)) {
-    for (const item of value) {
-      visitAsyncTaskReferencedValue(item, names)
-    }
+    visitAsyncTaskReferencedNodeArray(value, names)
 
     return
   }
@@ -578,13 +636,21 @@ function visitAsyncTaskReferencedValue(value: AsyncTaskChildValue, names: AsyncT
 
   if (current.type === 'Reference') {
     if (current.path.length === 1) {
-      names.add(current.path[0])
+      names.add(asyncTaskPathSegmentAt(current.path, 0))
     }
 
     return
   }
 
   visitAsyncTaskReferencedChildren(current, names)
+}
+
+function visitAsyncTaskReferencedNodeArray(nodes: AsyncTaskAstNode[], names: AsyncTaskStringSet): void {
+  const source: AsyncTaskAstNode[] = nodes
+
+  for (const item of source) {
+    visitAsyncTaskReferencedValue(item, names)
+  }
 }
 
 function visitAsyncTaskReferencedChildValue(value: AsyncTaskChildValue, names: AsyncTaskStringSet): void {
@@ -825,7 +891,7 @@ function getAsyncTaskStatementsBeforeLast(statements: AsyncTaskAstNode[]): Async
     return []
   }
 
-  return statements.slice(0, statements.length - 1)
+  return asyncTaskStatementsBeforeLast(statements)
 }
 
 function resolveAsyncTaskWrapperParams(
@@ -1129,7 +1195,7 @@ function resolveAsyncTaskNestedTryBodyPlan(
   let handlerSource: AsyncTaskAstNode | null = null
 
   if (handlerIndex >= 0) {
-    handlerSource = tryChain[handlerIndex].handler
+    handlerSource = asyncTaskNodeAt(tryChain, handlerIndex).handler
   }
 
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
@@ -1762,13 +1828,7 @@ function hasUnsupportedAsyncTaskTryControlFlow(value: AsyncTaskChildValue): bool
   }
 
   if (Array.isArray(value)) {
-    for (const item of value) {
-      if (hasUnsupportedAsyncTaskTryControlFlow(item)) {
-        return true
-      }
-    }
-
-    return false
+    return hasUnsupportedAsyncTaskTryControlFlowArray(value)
   }
 
   if (typeof value !== 'object') {
@@ -1782,6 +1842,16 @@ function hasUnsupportedAsyncTaskTryControlFlow(value: AsyncTaskChildValue): bool
   }
 
   return hasUnsupportedAsyncTaskTryControlFlowChildren(current)
+}
+
+function hasUnsupportedAsyncTaskTryControlFlowArray(values: AsyncTaskAstNode[]): boolean {
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (hasUnsupportedAsyncTaskTryControlFlow(asyncTaskNodeAt(values, index))) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function hasUnsupportedAsyncTaskTryControlFlowChild(value: AsyncTaskChildValue): boolean {
@@ -2407,8 +2477,11 @@ export function emitAsyncTaskWrapperDeclaration(
 function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: AsyncTaskEmitContext): string[] {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', 0)
   context.forceRuntimeStringDeclarations = new Set()
+  const prefixLocals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
 
-  for (const local of collectAsyncTaskFrameLocals(wrapper, 'prefix')) {
+  for (let index = 0; index < prefixLocals.length; index = index + 1) {
+    const local = asyncTaskPrefixFrameLocalAt(prefixLocals, index)
+
     if (local.forceRuntimeStringDeclaration === true) {
       context.forceRuntimeStringDeclarations.add(local.name)
     }
@@ -2416,14 +2489,15 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
 
   context.failureStatement = 'goto ccjs_start_error;'
   const prefixScope = asyncTaskDeps(context).pushVariableScope(context)
-  let prefixAndScheduleLines: string[] = []
+  const prefixAndScheduleLines: string[] = []
+  const prefixStatements: AsyncTaskAstNode[] = wrapper.prefixStatements
+  const firstAwait = asyncTaskAwaitStepAt(wrapper.awaits, 0)
 
-  prefixAndScheduleLines = []
-  appendAsyncTaskLines(prefixAndScheduleLines, asyncTaskDeps(context).emitStatementList(wrapper.prefixStatements, context))
+  appendAsyncTaskLines(prefixAndScheduleLines, asyncTaskDeps(context).emitStatementList(prefixStatements, context))
   appendAsyncTaskLines(prefixAndScheduleLines, emitAsyncTaskStorePrefixLocalLines(wrapper))
   appendAsyncTaskLines(
     prefixAndScheduleLines,
-    emitAsyncTaskScheduleAwaitLines(wrapper, wrapper.awaits[0], context, {
+    emitAsyncTaskScheduleAwaitLines(wrapper, firstAwait, context, {
       cleanup: 'start',
       final: wrapper.awaits.length === 1
     })
@@ -2503,21 +2577,35 @@ function registerAsyncTaskParams(wrapper: CAsyncTaskWrapper, context: AsyncTaskF
 }
 
 function registerAsyncTaskAwaitLocals(wrapper: CAsyncTaskWrapper, context: AsyncTaskFunctionContext, count: number): void {
-  for (const item of collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)) {
-    registerAsyncTaskLocalMetadata(item.name, item.type, item, context)
+  const locals: CAsyncTaskAwaitFrameLocal[] = collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)
+
+  for (let index = 0; index < locals.length; index = index + 1) {
+    const item = asyncTaskAwaitFrameLocalAt(locals, index)
+    const name = item.name
+
+    if (name != null) {
+      registerAsyncTaskLocalMetadata(name, item.type, item, context)
+    }
   }
 }
 
 function registerAsyncTaskPrefixLocals(wrapper: CAsyncTaskWrapper, context: AsyncTaskFunctionContext): void {
-  for (const local of collectAsyncTaskFrameLocals(wrapper, 'prefix')) {
+  const locals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
+
+  for (let index = 0; index < locals.length; index = index + 1) {
+    const local = asyncTaskPrefixFrameLocalAt(locals, index)
+
     registerAsyncTaskLocalMetadata(local.name, local.type, local, context)
   }
 }
 
 function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[] {
   const lines: string[] = []
+  const locals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
 
-  for (const local of collectAsyncTaskFrameLocals(wrapper, 'prefix')) {
+  for (let index = 0; index < locals.length; index = index + 1) {
+    const local = asyncTaskPrefixFrameLocalAt(locals, index)
+
     if (local.type === 'string') {
       appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`))
       lines.push(`frame->${local.fieldName}.tag = CCJS_TAG_STRING;`)
@@ -2551,13 +2639,25 @@ function emitAsyncTaskVisibleLocalReads(
   }
 
   if (options == null || options.includePrefixLocals !== false) {
-    for (const local of collectAsyncTaskFrameLocals(wrapper, 'prefix')) {
+    const prefixLocals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
+
+    for (let index = 0; index < prefixLocals.length; index = index + 1) {
+      const local = asyncTaskPrefixFrameLocalAt(prefixLocals, index)
+
       appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(local.name, local.type, local.fieldName))
     }
   }
 
-  for (const item of collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)) {
-    appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(item.name, item.type, item.fieldName))
+  const awaitLocals: CAsyncTaskAwaitFrameLocal[] = collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)
+
+  for (let index = 0; index < awaitLocals.length; index = index + 1) {
+    const item = asyncTaskAwaitFrameLocalAt(awaitLocals, index)
+    const name = item.name
+    const fieldName = item.fieldName
+
+    if (name != null && fieldName != null) {
+      appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(name, item.type, fieldName))
+    }
   }
 
   return lines
@@ -2571,8 +2671,11 @@ function collectAsyncTaskFrameLocals(
   kind: CAsyncTaskFrameLocalKind | 'all' = 'all'
 ): CAsyncTaskFrameLocal[] {
   const locals: CAsyncTaskFrameLocal[] = []
+  const frameLocals: CAsyncTaskFrameLocal[] = wrapper.frameLocals
 
-  for (const local of wrapper.frameLocals) {
+  for (let index = 0; index < frameLocals.length; index = index + 1) {
+    const local = asyncTaskFrameLocalAt(frameLocals, index)
+
     if (kind === 'all' || local.kind === kind) {
       locals.push(local)
     }
@@ -2586,8 +2689,11 @@ function collectAsyncTaskVisibleAwaitFrameLocals(
   count: number
 ): CAsyncTaskAwaitFrameLocal[] {
   const locals: CAsyncTaskAwaitFrameLocal[] = []
+  const source: CAsyncTaskAwaitFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'await')
 
-  for (const local of collectAsyncTaskFrameLocals(wrapper, 'await')) {
+  for (let index = 0; index < source.length; index = index + 1) {
+    const local = asyncTaskAwaitFrameLocalAt(source, index)
+
     if (local.index < count && local.name != null) {
       locals.push(local)
     }
@@ -2823,13 +2929,13 @@ function asyncTaskMemberObjectOrNull(expression: AsyncTaskAstNode): AsyncTaskAst
 }
 
 function asyncTaskFirstArgumentOrNull(expression: AsyncTaskAstNode): AsyncTaskAstNode | null {
-  const args = expression.args
+  const args: AsyncTaskAstNode[] = expression.args
 
   if (args.length === 0) {
     return null
   }
 
-  const argument = args[0]
+  const argument = maybeAsyncTaskNodeAt(args, 0)
 
   if (argument == null) {
     return null
