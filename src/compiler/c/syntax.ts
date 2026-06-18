@@ -8,40 +8,6 @@ type VariableDeclarationInitNode = {
   type?: string | null
 }
 
-const NODE_CHILD_KEYS = [
-  'body',
-  'params',
-  'fields',
-  'methods',
-  'init',
-  'condition',
-  'consequent',
-  'alternate',
-  'test',
-  'update',
-  'iterable',
-  'discriminant',
-  'cases',
-  'block',
-  'handler',
-  'finalizer',
-  'argument',
-  'args',
-  'callee',
-  'object',
-  'index',
-  'target',
-  'value',
-  'valueType',
-  'functionType',
-  'returnShape',
-  'left',
-  'right',
-  'elements',
-  'properties',
-  'expression'
-]
-
 export function emitCOperator(operator: string): string {
   if (operator === '===' || operator === '==') {
     return '=='
@@ -114,15 +80,51 @@ export function containsAwaitExpression(node: AnyNode | AnyNode[] | null | undef
     return true
   }
 
-  for (const key of NODE_CHILD_KEYS) {
-    const value = current[key]
+  return containsAwaitChildExpression(current)
+}
 
-    if (value != null && containsAwaitExpression(value)) {
-      return true
-    }
+function containsAwaitChild(value: any): boolean {
+  if (value == null || typeof value !== 'object') {
+    return false
   }
 
-  return false
+  return containsAwaitExpression(value)
+}
+
+function containsAwaitChildExpression(current: any): boolean {
+  return (
+    containsAwaitChild(current.body) ||
+    containsAwaitChild(current.params) ||
+    containsAwaitChild(current.fields) ||
+    containsAwaitChild(current.methods) ||
+    containsAwaitChild(current.init) ||
+    containsAwaitChild(current.condition) ||
+    containsAwaitChild(current.consequent) ||
+    containsAwaitChild(current.alternate) ||
+    containsAwaitChild(current.test) ||
+    containsAwaitChild(current.update) ||
+    containsAwaitChild(current.iterable) ||
+    containsAwaitChild(current.discriminant) ||
+    containsAwaitChild(current.cases) ||
+    containsAwaitChild(current.block) ||
+    containsAwaitChild(current.handler) ||
+    containsAwaitChild(current.finalizer) ||
+    containsAwaitChild(current.argument) ||
+    containsAwaitChild(current.args) ||
+    containsAwaitChild(current.callee) ||
+    containsAwaitChild(current.object) ||
+    containsAwaitChild(current.index) ||
+    containsAwaitChild(current.target) ||
+    containsAwaitChild(current.value) ||
+    containsAwaitChild(current.valueType) ||
+    containsAwaitChild(current.functionType) ||
+    containsAwaitChild(current.returnShape) ||
+    containsAwaitChild(current.left) ||
+    containsAwaitChild(current.right) ||
+    containsAwaitChild(current.elements) ||
+    containsAwaitChild(current.properties) ||
+    containsAwaitChild(current.expression)
+  )
 }
 
 export function isOptionalChainExpression(expression: AnyNode | null | undefined): boolean {
