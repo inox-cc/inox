@@ -34,18 +34,29 @@ function pushBinaryLines(target: string[], lines: string[]): void {
   }
 }
 
+function binaryNodeAt(values: AnyNode[], index: number): AnyNode {
+  return values[index]
+}
+
+function binaryStringAt(values: string[], index: number): string {
+  return values[index]
+}
+
 export function binaryRuntimeMethodName(callee: AnyNode): string | null {
   if (callee.type !== 'MemberExpression') {
     return null
   }
 
+  let root: string | null = null
+
+  if (callee.object != null && callee.object.type === 'Reference' && callee.object.path.length === 1) {
+    root = binaryStringAt(callee.object.path, 0)
+  }
+
   if (
-    callee.object != null &&
-    callee.object.type === 'Reference' &&
-    callee.object.path.length === 1 &&
-    callee.object.path[0] === 'Buffer'
+    root === 'Buffer'
   ) {
-    return binaryStaticRuntimeMethodNameFromPath([callee.object.path[0], callee.property])
+    return binaryStaticRuntimeMethodNameFromPath([root, callee.property])
   }
 
   return binaryInstanceRuntimeMethodName(callee.property)
@@ -155,7 +166,7 @@ function emitCBytesAllocValueExpression(
     lines.push(emitStatusCheck(`ccjs_bytes_new(&ccjs_default_allocator, ${elements.length}, &${temp})`, context))
 
     for (let index = 0; index < elements.length; index = index + 1) {
-      const element = elements[index]
+      const element = binaryNodeAt(elements, index)
       const value = dependencies.emitPreparedNumberExpression(element, context)
 
       pushBinaryLines(lines, value.lines)

@@ -77,6 +77,10 @@ function nullableBooleanValueIsTrue(value: boolean | null | undefined): boolean 
   return false
 }
 
+function nullableStringAt(values: string[], index: number): string {
+  return values[index]
+}
+
 export type NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression(
     expression: AnyNode,
@@ -273,7 +277,7 @@ function resolveNullableScalarNullCheckNarrowing(
     return emptyNullableScalarNarrowing()
   }
 
-  const name = nullable.path[0]
+  const name = nullableStringAt(nullable.path, 0)
 
   if (!context.nullableVariables.has(name) || !isRuntimeNullableType(context.variables.get(name))) {
     return emptyNullableScalarNarrowing()
@@ -329,12 +333,16 @@ function intersectNames(left: string[], right: string[]): string[] {
 }
 
 export function isNarrowedNullableScalarReference(expression: AnyNode, context: NullableFunctionContext): boolean {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return false
+  }
+
+  const name = nullableStringAt(expression.path, 0)
+
   return (
-    expression.type === 'Reference' &&
-    expression.path.length === 1 &&
-    context.narrowedNullableScalars.has(expression.path[0]) &&
-    context.nullableVariables.has(expression.path[0]) &&
-    isNullableScalarType(context.variables.get(expression.path[0]))
+    context.narrowedNullableScalars.has(name) &&
+    context.nullableVariables.has(name) &&
+    isNullableScalarType(context.variables.get(name))
   )
 }
 
@@ -372,7 +380,9 @@ export function canLowerCScalarNullishCoalescingExpression(expression: AnyNode, 
 
 export function isNullableRuntimeExpression(expression: AnyNode, context: NullableFunctionContext): boolean {
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    return context.nullableVariables.has(expression.path[0])
+    const name = nullableStringAt(expression.path, 0)
+
+    return context.nullableVariables.has(name)
   }
 
   if (nullableDeps(context).isNumberConversionCall(expression, context)) {
@@ -384,7 +394,9 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1
   ) {
-    return nullableBooleanValueIsTrue(context.functionReturnNullables.get(expression.callee.path[0]))
+    const name = nullableStringAt(expression.callee.path, 0)
+
+    return nullableBooleanValueIsTrue(context.functionReturnNullables.get(name))
   }
 
   if (expression.type === 'OptionalCallExpression') {
@@ -708,7 +720,8 @@ function resolveNullableOptionalRuntimeArrayIndex(
 
 function resolveNullableRuntimeArrayElementType(expression: AnyNode, context: NullableFunctionContext): string | null {
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const runtimeElementType = context.runtimeArrayElementTypes.get(expression.path[0])
+    const name = nullableStringAt(expression.path, 0)
+    const runtimeElementType = context.runtimeArrayElementTypes.get(name)
 
     if (runtimeElementType == null) {
       return null
@@ -795,7 +808,7 @@ function resolveNullableFunctionReturnNameFromCall(expression: AnyNode): string 
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1
   ) {
-    return expression.callee.path[0]
+    return nullableStringAt(expression.callee.path, 0)
   }
 
   return null

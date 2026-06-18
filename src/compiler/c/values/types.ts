@@ -66,14 +66,18 @@ function cValueTypeOrUnknown(expression: AnyNode): string {
   return 'unknown'
 }
 
+function cStringAt(values: string[], index: number): string {
+  return values[index]
+}
+
 function cDottedPath(path: string[]): string {
   let output = ''
 
   for (let index = 0; index < path.length; index = index + 1) {
     if (index === 0) {
-      output = path[index]
+      output = cStringAt(path, index)
     } else {
-      output = `${output}.${path[index]}`
+      output = `${output}.${cStringAt(path, index)}`
     }
   }
 
@@ -122,16 +126,17 @@ function isBooleanBinaryOperator(operator: string): boolean {
 
 function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext): string {
   const variableType = context.variables.get(cDottedPath(expression.path))
+  const name = cStringAt(expression.path, 0)
 
   if (variableType != null) {
     return variableType
   }
 
-  if (context.functionNames.has(expression.path[0])) {
+  if (context.functionNames.has(name)) {
     return 'function'
   }
 
-  if (isCJsGlobalRoot(expression.path[0], context)) {
+  if (isCJsGlobalRoot(name, context)) {
     return 'js-global'
   }
 
@@ -537,7 +542,8 @@ export function inferExpressionType(
     }
 
     if (expression.callee.type === 'Reference') {
-      const returnType = context.functionReturnTypes.get(expression.callee.path[0])
+      const name = cStringAt(expression.callee.path, 0)
+      const returnType = context.functionReturnTypes.get(name)
 
       if (returnType != null) {
         return returnType

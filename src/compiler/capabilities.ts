@@ -56,6 +56,10 @@ type CapabilityUsage = RequiredCapability & {
 
 type StringSet = Set<string>
 
+function capabilityNodeAt(values: NodeList, index: number): AnyNode {
+  return values[index]
+}
+
 function capabilityUsageAt(values: CapabilityUsage[], index: number): CapabilityUsage {
   return values[index]
 }
@@ -149,7 +153,7 @@ function visitCapabilityNode(node: AnyNode | NodeList | null | undefined, usages
 
   if (Array.isArray(node)) {
     for (let index = 0; index < node.length; index = index + 1) {
-      const item = node[index]
+      const item = capabilityNodeAt(node, index)
       visitCapabilityNode(item, usages)
     }
     return

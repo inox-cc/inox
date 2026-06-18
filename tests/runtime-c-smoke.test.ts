@@ -5437,6 +5437,7 @@ console.log(
   astral.lastIndexOf('😀'),
   astral.lastIndexOf('é', 2),
   astral.includes('😀', 2),
+  astral.includes('😀', 5),
   '|' + padded.trimStart() + '|',
   '|' + padded.trimEnd() + '|',
   '|' + padded.trimLeft() + '|',
@@ -5458,7 +5459,7 @@ console.log(
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '1 3 -1 5 3 2 1 1 0 6 3 4 4 -1 1 |Ada | | Ada| |Ada | | Ada|\n')
+    assert.equal(run.stdout, '1 3 -1 5 3 2 1 1 0 6 3 4 4 -1 1 0 |Ada | | Ada| |Ada | | Ada|\n')
   } finally {
     await rm(dir, {
       recursive: true,

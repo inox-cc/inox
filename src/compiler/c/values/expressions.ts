@@ -328,6 +328,10 @@ function functionParamAt(params: CFunctionParam[], expectedIndex: number): CFunc
   return null
 }
 
+function stringValueAt(values: string[], index: number): string {
+  return values[index]
+}
+
 function wrappedCExpression(expression: string): string {
   if (isWrappedCExpression(expression)) {
     return expression
@@ -905,7 +909,13 @@ function emitThrowingCallStatusCheck(status: string, context: CFunctionContext, 
 }
 
 export function isThrowingFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {
-  return callee.type === 'Reference' && callee.path.length === 1 && isThrowingFunctionName(callee.path[0], context)
+  if (callee.type !== 'Reference' || callee.path.length !== 1) {
+    return false
+  }
+
+  const name = stringValueAt(callee.path, 0)
+
+  return isThrowingFunctionName(name, context)
 }
 
 export function isThrowingFunctionName(name: string, context: CEmitContext): boolean {
@@ -920,18 +930,20 @@ export function emitCallee(callee: AnyNode, context: CFunctionContext): string {
   }
 
   if (callee.type === 'Reference' && callee.path.length === 1) {
-    if (isCJsGlobalRoot(callee.path[0], context)) {
+    const name = stringValueAt(callee.path, 0)
+
+    if (isCJsGlobalRoot(name, context)) {
       reportCJsGlobalDiagnostic(context.diagnostics, callee.loc)
       return '_'
     }
 
-    const functionName = context.functionNames.get(callee.path[0])
+    const functionName = context.functionNames.get(name)
 
     if (functionName != null) {
       return functionName
     }
 
-    return callee.path[0]
+    return name
   }
 
   if (usesCJsGlobal(callee, context)) {
@@ -1081,7 +1093,7 @@ export function emitPreparedNumberExpression(
   }
 
   if (isNarrowedNullableScalarReference(expression, context)) {
-    const name = expression.path[0]
+    const name = stringValueAt(expression.path, 0)
     const resolvedType = context.variables.get(name)
     let valueType = 'number'
 
@@ -2139,7 +2151,7 @@ function runtimeValueReferenceName(expression: CValueNode, context: CFunctionCon
     return null
   }
 
-  const name = expression.path[0]
+  const name = stringValueAt(expression.path, 0)
   const valueType = context.variables.get(name)
 
   if (valueType !== 'unknown' && !isManagedRuntimeReturnType(valueType) && !isOpaqueRuntimeValueType(valueType)) {
@@ -2260,7 +2272,7 @@ function emitPreparedNumericCastExpression(
     return null
   }
 
-  const cast = expression.callee.path[0]
+  const cast = stringValueAt(expression.callee.path, 0)
   const value = emitPreparedNumberExpression(expression.args[0], context, deps)
 
   if (cast === 'f64') {
@@ -2310,9 +2322,14 @@ function isNumericCastCall(expression: AnyNode, context: CFunctionContext, deps:
     expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1 ||
-    !isNumericCastName(expression.callee.path[0]) ||
     expression.args.length !== 1
   ) {
+    return false
+  }
+
+  const cast = stringValueAt(expression.callee.path, 0)
+
+  if (!isNumericCastName(cast)) {
     return false
   }
 

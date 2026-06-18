@@ -63,6 +63,14 @@ function httpTopLevelNodeEntryAt(entries: HttpTopLevelNodeEntry[], index: number
   return entries[index]
 }
 
+function httpNodeAt(values: HttpAstNode[], index: number): HttpAstNode {
+  return values[index]
+}
+
+function httpStringAt(values: string[], index: number): string {
+  return values[index]
+}
+
 function pushHttpLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
@@ -809,18 +817,22 @@ export function emitHttpServerCallStatement(
   }
 
   if (isHttpServerMethodCall(expression, 'listen', context)) {
-    const serverName = expression.callee.object.path[0]
+    const serverName = httpStringAt(expression.callee.object.path, 0)
     registerEventLoop(context)
 
     return emitHttpServerListenLines(serverName, expression.args, context, deps)
   }
 
   if (isHttpServerMethodCall(expression, 'on', context)) {
-    return emitHttpServerOnRequestLines(expression.callee.object.path[0], expression.args, context)
+    const serverName = httpStringAt(expression.callee.object.path, 0)
+
+    return emitHttpServerOnRequestLines(serverName, expression.args, context)
   }
 
   if (isHttpServerMethodCall(expression, 'close', context)) {
-    return emitHttpServerCloseLines(expression.callee.object.path[0], expression.args, context, deps)
+    const serverName = httpStringAt(expression.callee.object.path, 0)
+
+    return emitHttpServerCloseLines(serverName, expression.args, context, deps)
   }
 
   return null
@@ -913,7 +925,8 @@ function emitHttpServerListenLines(
     )
   }
 
-  const port = deps.emitPreparedNumberExpression(args[0], context)
+  const portArg = httpNodeAt(args, 0)
+  const port = deps.emitPreparedNumberExpression(portArg, context)
   const host = emitHttpListenHostExpression(hostArg, context)
   const lines: string[] = []
 
@@ -1069,10 +1082,13 @@ function isHttpServerMethodCall(expression: AnyNode, method: string, context: CF
     return false
   }
 
-  return (
-    expression.callee.object.path.length === 1 &&
-    context.variables.get(expression.callee.object.path[0]) === 'http-server'
-  )
+  if (expression.callee.object.path.length !== 1) {
+    return false
+  }
+
+  const serverName = httpStringAt(expression.callee.object.path, 0)
+
+  return context.variables.get(serverName) === 'http-server'
 }
 
 function isHttpCreateServerCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
@@ -1084,7 +1100,7 @@ function isHttpCreateServerCall(expression: AnyNode | null | undefined, context:
     expression.callee != null &&
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1 &&
-    context.httpCreateServerNames.has(expression.callee.path[0])
+    context.httpCreateServerNames.has(httpStringAt(expression.callee.path, 0))
   ) {
     return true
   }
@@ -1096,7 +1112,7 @@ function isHttpCreateServerCall(expression: AnyNode | null | undefined, context:
     expression.callee.object != null &&
     expression.callee.object.type === 'Reference' &&
     expression.callee.object.path.length === 1 &&
-    context.httpImportNames.has(expression.callee.object.path[0])
+    context.httpImportNames.has(httpStringAt(expression.callee.object.path, 0))
   )
 }
 
