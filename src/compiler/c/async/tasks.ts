@@ -446,6 +446,22 @@ function asyncTaskPathSegmentAt(path: string[], index: number): string {
   return path[index]
 }
 
+function asyncTaskStringEquals(left: string, right: string): boolean {
+  return left === right
+}
+
+function asyncTaskStringOrEmpty(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
+function asyncTaskDeclarationName(declaration: IrFunctionDeclaration): string {
+  return declaration.name
+}
+
 function asyncTaskStatementsBeforeLast(statements: AsyncTaskAstNode[]): AsyncTaskAstNode[] {
   const out: AsyncTaskAstNode[] = []
 
@@ -898,16 +914,18 @@ function resolveAsyncTaskWrapperParams(
   declaration: IrFunctionDeclaration,
   context: AsyncTaskPlannerContext
 ): CAsyncTaskParam[] | null {
+  const functionName = asyncTaskDeclarationName(declaration)
+
   if (
     declaration.async !== true ||
     declaration.returnType !== 'promise' ||
-    asyncTaskDeps(context).isThrowingFunctionName(declaration.name, context)
+    asyncTaskDeps(context).isThrowingFunctionName(functionName, context)
   ) {
     return null
   }
 
   const params = asyncTaskDeps(context).resolveFunctionDeclarationParams(
-    declaration.name,
+    functionName,
     declaration.params as CFunctionParam[],
     context
   )
@@ -957,10 +975,12 @@ function resolveAsyncTaskBodyPlan(
   context: AsyncTaskPlannerContext,
   params: CAsyncTaskParam[]
 ): AsyncTaskBodyPlan | null {
+  const functionName = asyncTaskDeclarationName(declaration)
+
   if (
     declaration.async !== true ||
     declaration.returnType !== 'promise' ||
-    asyncTaskDeps(context).isThrowingFunctionName(declaration.name, context)
+    asyncTaskDeps(context).isThrowingFunctionName(functionName, context)
   ) {
     return null
   }
@@ -2355,9 +2375,9 @@ function resolvedAsyncFunctionAwaitValueType(
   expression: AsyncTaskAstNode,
   context: AsyncTaskPlannerContext
 ): string {
-  const resolvedValueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context)
+  const resolvedValueType = asyncTaskStringOrEmpty(resolveCAsyncFunctionAwaitValueType(expression.callee, context))
 
-  if (resolvedValueType != null) {
+  if (!asyncTaskStringEquals(resolvedValueType, '')) {
     return resolvedValueType
   }
 
@@ -2676,7 +2696,7 @@ function collectAsyncTaskFrameLocals(
   for (let index = 0; index < frameLocals.length; index = index + 1) {
     const local = asyncTaskFrameLocalAt(frameLocals, index)
 
-    if (kind === 'all' || local.kind === kind) {
+    if (asyncTaskStringEquals(kind, 'all') || asyncTaskStringEquals(local.kind, kind)) {
       locals.push(local)
     }
   }
@@ -3875,7 +3895,7 @@ function collectAsyncTaskTryPhaseStatements(wrapper: CAsyncTaskWrapper, kind: CA
   const statements: AsyncTaskAstNode[] = []
 
   for (const phase of wrapper.tryPhases) {
-    if (phase.kind === kind) {
+    if (asyncTaskStringEquals(phase.kind, kind)) {
       appendAsyncTaskNodes(statements, phase.statements)
     }
   }
@@ -3884,9 +3904,9 @@ function collectAsyncTaskTryPhaseStatements(wrapper: CAsyncTaskWrapper, kind: CA
 }
 
 function emitAsyncTaskFulfilledValueCheck(wrapper: CAsyncTaskWrapper, item: CAsyncTaskAwaitStep): string[] {
-  const expectedTag = cRuntimeValueTag(item.type)
+  const expectedTag = asyncTaskStringOrEmpty(cRuntimeValueTag(item.type))
 
-  if (expectedTag == null) {
+  if (asyncTaskStringEquals(expectedTag, '')) {
     return []
   }
 

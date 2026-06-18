@@ -111,6 +111,10 @@ function stringPathSegment(path: string[], index: number): string {
   return path[index]
 }
 
+function stringMethodNameEquals(left: string, right: string): boolean {
+  return left === right
+}
+
 export type StringLoweringDependencies = {
   canLowerCNullishCoalescingExpression(expression: AnyNode, context: StringCContext): boolean
   emitCallExpression(expression: AnyNode, context: StringCContext): string
@@ -526,14 +530,18 @@ function resolveStringMethodCallParts(expression: any, method: string): StringMe
     return null
   }
 
-  if (callee.type === 'MemberExpression' && callee.property === method) {
+  if (callee.type === 'MemberExpression' && stringMethodNameEquals(callee.property, method)) {
     return {
       args,
       object: callee.object
     }
   }
 
-  if (callee.type === 'Reference' && callee.path.length >= 2 && callee.path[callee.path.length - 1] === method) {
+  if (
+    callee.type === 'Reference' &&
+    callee.path.length >= 2 &&
+    stringMethodNameEquals(stringPathSegment(callee.path, callee.path.length - 1), method)
+  ) {
     return {
       args,
       object: {
