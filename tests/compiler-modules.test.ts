@@ -299,6 +299,74 @@ export function main(): void {
   assert.match(modules.files.find((file) => file.path === 'index.c')?.code ?? '', /#include "math\.h"/)
 })
 
+test('lowers imported class method throws through C module status ABI', async () => {
+  const files = [
+    {
+      path: '/project/worker.ts',
+      source: `class TicketError {
+  name: string
+  message: string
+
+  constructor(message: string) {
+    this.name = 'TicketError'
+    this.message = message
+  }
+}
+
+class TicketWorker {
+  read(): string {
+    throw new TicketError('empty')
+  }
+}
+
+export function read(): string {
+  const worker = new TicketWorker()
+  return worker.read()
+}
+`
+    },
+    {
+      path: '/project/index.ts',
+      source: `import { read } from './worker'
+
+export function main(): void {
+  try {
+    console.log(read())
+  } catch (error) {
+    console.log(error)
+  }
+}
+`
+    }
+  ]
+
+  const modules = await compileMemoryPackageToCModules('/project/index.ts', files, {
+    sourceRoot: '/project',
+    target: 'c'
+  })
+  const workerHeader = modules.files.find((file) => file.path === 'worker.h')?.code ?? ''
+  const workerSource = modules.files.find((file) => file.path === 'worker.c')?.code ?? ''
+  const indexSource = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
+
+  assert.match(
+    workerHeader,
+    /ccjs_status ccjs_mod_worker_ts_[a-f0-9]+_read\(ccjs_value\* ccjs_out, ccjs_value\* ccjs_error_out\);/
+  )
+  assert.match(
+    workerSource,
+    /static ccjs_status ccjs_method_TicketWorker_read\(ccjs_value this, ccjs_value\* ccjs_out, ccjs_value\* ccjs_error_out\);/
+  )
+  assert.match(
+    workerSource,
+    /ccjs_status ccjs_method_status_\d+ = ccjs_method_TicketWorker_read\(worker, &ccjs_method_result_\d+, &ccjs_error\);/
+  )
+  assert.match(
+    indexSource,
+    /ccjs_status ccjs_call_status_\d+ = ccjs_mod_worker_ts_[a-f0-9]+_read\(&ccjs_call_result_\d+, &ccjs_error\);/
+  )
+  assert.doesNotMatch(indexSource, /ccjs_value_\d+ = ccjs_mod_worker_ts_[a-f0-9]+_read\(\);/)
+})
+
 test('lowers module-scope captures in object function field arrows', async () => {
   const files = [
     {

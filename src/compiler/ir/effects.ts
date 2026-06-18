@@ -2,6 +2,7 @@ import { collectIrTopLevelNodes } from './top-level.ts'
 import type { AnyNode, IrFunctionEffect, IrThrowValueType, IrTopLevelItem } from '../types.ts'
 
 type ThrowValueTypeMap = Map<string, IrThrowValueType[]>
+type StringMap = Map<string, string>
 type StringSet = Set<string>
 
 export type IrLocalThrowValueTypeOptions = {
@@ -32,6 +33,7 @@ type EffectNode = EffectChildNode & {
   block?: EffectChildNode | null
   body?: any
   callee?: EffectChildNode | null
+  className?: string | null
   cases?: EffectCaseNode[]
   condition?: EffectChildNode | null
   consequent?: EffectChildNode | null
@@ -44,9 +46,11 @@ type EffectNode = EffectChildNode & {
   init?: EffectChildNode | null
   iterable?: EffectChildNode | null
   left?: EffectChildNode | null
+  methods?: EffectChildList
   name?: string | null
   object?: EffectChildNode | null
   path?: string[]
+  property?: string | null
   properties?: EffectPropertyNode[]
   right?: EffectChildNode | null
   target?: EffectChildNode | null
@@ -69,14 +73,66 @@ type StoredFunctionEffectProgram = {
 }
 
 export function collectIrFunctionEffects(programs: FunctionEffectProgram[]): IrFunctionEffect[] {
+  return collectFunctionEffects(collectFunctionEffectNodes(programs, false), [], false)
+}
+
+export function collectIrFunctionEffectsWithExternalEffects(
+  programs: FunctionEffectProgram[],
+  externalEffects: IrFunctionEffect[],
+  includeClassMethods: boolean
+): IrFunctionEffect[] {
+  return collectFunctionEffects(collectFunctionEffectNodes(programs, includeClassMethods), externalEffects, includeClassMethods)
+}
+
+export function irClassMethodEffectName(className: string, methodName: string): string {
+  return `${className}.${methodName}`
+}
+
+function collectFunctionEffectNodes(
+  programs: FunctionEffectProgram[],
+  includeClassMethods: boolean
+): NodeList {
   const functions: NodeList = []
 
   for (let index = 0; index < programs.length; index = index + 1) {
     const program = programs[index]
     pushNodes(functions, collectIrTopLevelNodes(program, 'function'))
+
+    if (includeClassMethods) {
+      pushNodes(functions, collectClassMethodEffectNodes(program))
+    }
   }
 
-  return collectFunctionEffects(functions)
+  return functions
+}
+
+function collectClassMethodEffectNodes(program: FunctionEffectProgram): NodeList {
+  const functions: NodeList = []
+  const classes = collectIrTopLevelNodes(program, 'class')
+
+  for (let classIndex = 0; classIndex < classes.length; classIndex = classIndex + 1) {
+    const classNode: EffectNode = classes[classIndex]
+    const className = nodeName(classNode)
+    const methods = nodeList(classNode.methods)
+
+    for (let methodIndex = 0; methodIndex < methods.length; methodIndex = methodIndex + 1) {
+      const method: EffectNode = methods[methodIndex]
+
+      if (method.name === 'constructor') {
+        continue
+      }
+
+      const functionNode: EffectNode = {
+        type: method.type,
+        body: method.body,
+        className,
+        name: irClassMethodEffectName(className, nodeName(method))
+      }
+      functions.push(functionNode)
+    }
+  }
+
+  return functions
 }
 
 export function collectIrStoredFunctionEffects(programs: StoredFunctionEffectProgram[]): IrFunctionEffect[] {
@@ -90,6 +146,20 @@ export function collectIrStoredFunctionEffects(programs: StoredFunctionEffectPro
       const effect = functionEffects[effectIndex]
       effects.push(effect)
     }
+  }
+
+  return effects
+}
+
+export function mergeIrFunctionEffects(left: IrFunctionEffect[], right: IrFunctionEffect[]): IrFunctionEffect[] {
+  const effects: IrFunctionEffect[] = []
+
+  for (let index = 0; index < left.length; index = index + 1) {
+    pushMergedIrFunctionEffect(effects, left[index])
+  }
+
+  for (let index = 0; index < right.length; index = index + 1) {
+    pushMergedIrFunctionEffect(effects, right[index])
   }
 
   return effects
@@ -109,21 +179,37 @@ export function collectIrLocalThrowValueTypes(
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
+      createStringMap(),
+      false,
       false
     )
   )
 }
 
-function collectFunctionEffects(functions: NodeList): IrFunctionEffect[] {
+function collectFunctionEffects(
+  functions: NodeList,
+  externalEffects: IrFunctionEffect[],
+  includeClassMethods: boolean
+): IrFunctionEffect[] {
   const functionNames = createStringSet()
+  const externalFunctionNames = createStringSet()
   const functionThrowValueTypes = createFunctionThrowValueTypeMap()
   let changed = true
+
+  for (let index = 0; index < externalEffects.length; index = index + 1) {
+    const effect = externalEffects[index]
+    externalFunctionNames.add(effect.name)
+    functionNames.add(effect.name)
+    functionThrowValueTypes.set(effect.name, normalizedEffectThrowValueTypes(effect))
+  }
 
   for (let index = 0; index < functions.length; index = index + 1) {
     const item: EffectNode = functions[index]
     const name = nodeName(item)
     functionNames.add(name)
-    functionThrowValueTypes.set(name, [])
+    if (!functionThrowValueTypes.has(name)) {
+      functionThrowValueTypes.set(name, [])
+    }
   }
 
   while (changed) {
@@ -132,12 +218,25 @@ function collectFunctionEffects(functions: NodeList): IrFunctionEffect[] {
     for (let index = 0; index < functions.length; index = index + 1) {
       const item: EffectNode = functions[index]
       const name = nodeName(item)
+
+      if (externalFunctionNames.has(name)) {
+        continue
+      }
+
+      const classInstanceTypes = createStringMap()
+
+      if (item.className != null) {
+        classInstanceTypes.set('this', item.className)
+      }
+
       const types = uniqueThrowValueTypes(
         collectEscapingThrowValueTypesFromStatements(
           nodeList(item.body),
           functionThrowValueTypes,
           functionNames,
           createStringSet(),
+          classInstanceTypes,
+          includeClassMethods,
           false
         )
       )
@@ -172,6 +271,8 @@ function collectEscapingThrowValueTypesFromStatements(
   functionThrowValueTypes: ThrowValueTypeMap,
   functionNames: StringSet,
   errorObjectNames: StringSet,
+  classInstanceTypes: StringMap,
+  includeClassMethods: boolean,
   hasErrorTarget: boolean
 ): IrThrowValueType[] {
   const types: IrThrowValueType[] = []
@@ -185,6 +286,8 @@ function collectEscapingThrowValueTypesFromStatements(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -198,6 +301,8 @@ function collectEscapingThrowValueTypesFromStatement(
   functionThrowValueTypes: ThrowValueTypeMap,
   functionNames: StringSet,
   errorObjectNames: StringSet,
+  classInstanceTypes: StringMap,
+  includeClassMethods: boolean,
   hasErrorTarget: boolean
 ): IrThrowValueType[] {
   const types: IrThrowValueType[] = []
@@ -222,6 +327,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -234,6 +341,14 @@ function collectEscapingThrowValueTypesFromStatement(
       }
     }
 
+    if (statement.init != null && statement.init.className != null) {
+      const name = nodeName(statement)
+
+      if (name !== '') {
+        classInstanceTypes.set(name, statement.init.className)
+      }
+    }
+
     return types
   }
 
@@ -243,6 +358,8 @@ function collectEscapingThrowValueTypesFromStatement(
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
+      classInstanceTypes,
+      includeClassMethods,
       hasErrorTarget
     )
   }
@@ -253,6 +370,8 @@ function collectEscapingThrowValueTypesFromStatement(
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
+      classInstanceTypes,
+      includeClassMethods,
       hasErrorTarget
     )
   }
@@ -263,6 +382,8 @@ function collectEscapingThrowValueTypesFromStatement(
       functionThrowValueTypes,
       functionNames,
       cloneStringSet(errorObjectNames),
+      cloneStringMap(classInstanceTypes),
+      includeClassMethods,
       hasErrorTarget
     )
   }
@@ -275,6 +396,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -285,6 +408,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         cloneStringSet(errorObjectNames),
+        cloneStringMap(classInstanceTypes),
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -295,6 +420,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         cloneStringSet(errorObjectNames),
+        cloneStringMap(classInstanceTypes),
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -310,6 +437,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -320,6 +449,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         cloneStringSet(errorObjectNames),
+        cloneStringMap(classInstanceTypes),
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -338,6 +469,8 @@ function collectEscapingThrowValueTypesFromStatement(
           functionThrowValueTypes,
           functionNames,
           cloneStringSet(errorObjectNames),
+          cloneStringMap(classInstanceTypes),
+          includeClassMethods,
           hasErrorTarget
         )
       )
@@ -349,6 +482,8 @@ function collectEscapingThrowValueTypesFromStatement(
           functionThrowValueTypes,
           functionNames,
           errorObjectNames,
+          classInstanceTypes,
+          includeClassMethods,
           hasErrorTarget
         )
       )
@@ -361,6 +496,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -371,6 +508,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -381,6 +520,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         cloneStringSet(errorObjectNames),
+        cloneStringMap(classInstanceTypes),
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -396,6 +537,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -406,6 +549,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         cloneStringSet(errorObjectNames),
+        cloneStringMap(classInstanceTypes),
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -421,6 +566,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -436,6 +583,8 @@ function collectEscapingThrowValueTypesFromStatement(
           functionThrowValueTypes,
           functionNames,
           errorObjectNames,
+          classInstanceTypes,
+          includeClassMethods,
           hasErrorTarget
         )
       )
@@ -446,6 +595,8 @@ function collectEscapingThrowValueTypesFromStatement(
           functionThrowValueTypes,
           functionNames,
           cloneStringSet(errorObjectNames),
+          cloneStringMap(classInstanceTypes),
+          includeClassMethods,
           hasErrorTarget
         )
       )
@@ -468,6 +619,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         cloneStringSet(errorObjectNames),
+        cloneStringMap(classInstanceTypes),
+        includeClassMethods,
         blockHasTarget
       )
     )
@@ -482,6 +635,8 @@ function collectEscapingThrowValueTypesFromStatement(
           functionThrowValueTypes,
           functionNames,
           cloneStringSet(errorObjectNames),
+          cloneStringMap(classInstanceTypes),
+          includeClassMethods,
           hasErrorTarget
         )
       )
@@ -494,6 +649,8 @@ function collectEscapingThrowValueTypesFromStatement(
         functionThrowValueTypes,
         functionNames,
         cloneStringSet(errorObjectNames),
+        cloneStringMap(classInstanceTypes),
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -509,6 +666,8 @@ function collectEscapingThrowValueTypesFromExpression(
   functionThrowValueTypes: ThrowValueTypeMap,
   functionNames: StringSet,
   errorObjectNames: StringSet,
+  classInstanceTypes: StringMap,
+  includeClassMethods: boolean,
   hasErrorTarget: boolean
 ): IrThrowValueType[] {
   const types: IrThrowValueType[] = []
@@ -519,7 +678,7 @@ function collectEscapingThrowValueTypesFromExpression(
 
   if (expression.type === 'CallExpression') {
     const callee = expression.callee
-    const functionName = singleReferenceName(callee)
+    const functionName = callEffectName(callee, classInstanceTypes, includeClassMethods)
 
     if (!hasErrorTarget && functionName != null && functionNames.has(functionName)) {
       pushThrowValueTypes(types, functionThrowValueTypes.get(functionName) ?? [])
@@ -532,6 +691,8 @@ function collectEscapingThrowValueTypesFromExpression(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -541,6 +702,8 @@ function collectEscapingThrowValueTypesFromExpression(
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
+      classInstanceTypes,
+      includeClassMethods,
       hasErrorTarget
     )
 
@@ -555,6 +718,8 @@ function collectEscapingThrowValueTypesFromExpression(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -564,6 +729,8 @@ function collectEscapingThrowValueTypesFromExpression(
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
+      classInstanceTypes,
+      includeClassMethods,
       hasErrorTarget
     )
 
@@ -576,6 +743,8 @@ function collectEscapingThrowValueTypesFromExpression(
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
+      classInstanceTypes,
+      includeClassMethods,
       hasErrorTarget
     )
   }
@@ -588,6 +757,8 @@ function collectEscapingThrowValueTypesFromExpression(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -598,6 +769,8 @@ function collectEscapingThrowValueTypesFromExpression(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -613,6 +786,8 @@ function collectEscapingThrowValueTypesFromExpression(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -623,6 +798,8 @@ function collectEscapingThrowValueTypesFromExpression(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -638,6 +815,8 @@ function collectEscapingThrowValueTypesFromExpression(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -648,6 +827,8 @@ function collectEscapingThrowValueTypesFromExpression(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -665,6 +846,8 @@ function collectEscapingThrowValueTypesFromExpression(
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
+      classInstanceTypes,
+      includeClassMethods,
       hasErrorTarget
     )
   }
@@ -676,6 +859,8 @@ function collectEscapingThrowValueTypesFromExpression(
       functionThrowValueTypes,
       functionNames,
       errorObjectNames,
+      classInstanceTypes,
+      includeClassMethods,
       hasErrorTarget
     )
 
@@ -694,6 +879,8 @@ function collectEscapingThrowValueTypesFromExpression(
           functionThrowValueTypes,
           functionNames,
           errorObjectNames,
+          classInstanceTypes,
+          includeClassMethods,
           hasErrorTarget
         )
       )
@@ -748,6 +935,10 @@ function isErrorConstructorExpression(expression: MaybeNode): boolean {
     return false
   }
 
+  if (expression.className != null) {
+    return true
+  }
+
   if (expression.callee == null) {
     return false
   }
@@ -790,6 +981,59 @@ function propertyList(values: EffectPropertyNode[] | null | undefined): EffectPr
   return values
 }
 
+function callEffectName(
+  callee: EffectChildNode | null | undefined,
+  classInstanceTypes: StringMap,
+  includeClassMethods: boolean
+): string | null {
+  const directName = singleReferenceName(callee)
+
+  if (directName != null) {
+    return directName
+  }
+
+  if (!includeClassMethods || callee == null) {
+    return null
+  }
+
+  const member = callee as EffectNode
+
+  if (member.type !== 'MemberExpression' || member.property == null) {
+    return null
+  }
+
+  const className = classNameForEffectReceiver(member.object, classInstanceTypes)
+
+  if (className == null) {
+    return null
+  }
+
+  return irClassMethodEffectName(className, member.property)
+}
+
+function classNameForEffectReceiver(
+  expression: EffectChildNode | null | undefined,
+  classInstanceTypes: StringMap
+): string | null {
+  if (expression == null) {
+    return null
+  }
+
+  const node = expression as EffectNode
+
+  if (node.className != null) {
+    return node.className
+  }
+
+  const name = singleReferenceName(expression)
+
+  if (name != null) {
+    return classInstanceTypes.get(name) ?? null
+  }
+
+  return null
+}
+
 function singleReferenceName(expression: EffectChildNode | null | undefined): string | null {
   if (expression == null) {
     return null
@@ -823,6 +1067,11 @@ function createFunctionThrowValueTypeMap(): ThrowValueTypeMap {
 
 function createStringSet(): StringSet {
   const result: StringSet = new Set()
+  return result
+}
+
+function createStringMap(): StringMap {
+  const result: StringMap = new Map()
   return result
 }
 
@@ -861,6 +1110,10 @@ function cloneStringSet(source: StringSet): StringSet {
   return new Set(source)
 }
 
+function cloneStringMap(source: StringMap): StringMap {
+  return new Map(source)
+}
+
 function pushNodes(target: NodeList, values: NodeList): void {
   for (let index = 0; index < values.length; index = index + 1) {
     const value = values[index]
@@ -874,6 +1127,8 @@ function pushExpressionListThrowValueTypes(
   functionThrowValueTypes: ThrowValueTypeMap,
   functionNames: StringSet,
   errorObjectNames: StringSet,
+  classInstanceTypes: StringMap,
+  includeClassMethods: boolean,
   hasErrorTarget: boolean
 ): void {
   for (let index = 0; index < expressions.length; index = index + 1) {
@@ -885,6 +1140,8 @@ function pushExpressionListThrowValueTypes(
         functionThrowValueTypes,
         functionNames,
         errorObjectNames,
+        classInstanceTypes,
+        includeClassMethods,
         hasErrorTarget
       )
     )
@@ -937,4 +1194,38 @@ function throwValueTypesInclude(values: IrThrowValueType[], item: IrThrowValueTy
   }
 
   return false
+}
+
+function pushMergedIrFunctionEffect(target: IrFunctionEffect[], effect: IrFunctionEffect): void {
+  const effectThrowValueTypes = normalizedEffectThrowValueTypes(effect)
+
+  for (let index = 0; index < target.length; index = index + 1) {
+    const existing = target[index]
+
+    if (existing.name === effect.name) {
+      const throwValueTypes = uniqueThrowValueTypes(existing.throwValueTypes)
+      pushThrowValueTypes(throwValueTypes, effectThrowValueTypes)
+      target[index] = {
+        name: existing.name,
+        throws: existing.throws || effect.throws || throwValueTypes.length > 0,
+        throwValueTypes
+      }
+      return
+    }
+  }
+
+  target.push({
+    name: effect.name,
+    throws: effect.throws,
+    throwValueTypes: effectThrowValueTypes
+  })
+}
+
+function normalizedEffectThrowValueTypes(effect: IrFunctionEffect): IrThrowValueType[] {
+  if (effect.throws && effect.throwValueTypes.length === 0) {
+    const throwValueTypes: IrThrowValueType[] = ['other']
+    return throwValueTypes
+  }
+
+  return effect.throwValueTypes
 }

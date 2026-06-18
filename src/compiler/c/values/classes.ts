@@ -1,5 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import {
+  emitFailureStatement,
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
   nextCName,
@@ -8,7 +9,7 @@ import {
 import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
-import { cRuntimeValueTag, isManagedRuntimeReturnType } from '../value-types.ts'
+import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type {
@@ -53,13 +54,18 @@ type ClassFunctionContext = {
   classLoweringDependencies?: ClassLoweringDependencies
   cleanupEnabled: boolean
   diagnostics: Diagnostic[]
+  errorChannelUsed?: boolean
+  errorTargets?: string[]
   failureStatement?: string | null
   failureStatementUsed?: boolean
+  functionErrorOut?: string | null
+  functionReturnOut?: string | null
   nextId: number
   objectShapes: CObjectShapeFieldMap
   ownedValues: string[]
   returnType?: string
   statusReturn: boolean
+  throwingFunctions?: CStringSet
   throwingFunction: boolean
   usedCleanupGoto: boolean
   variables: CStringMap
@@ -860,6 +866,10 @@ function emitKnownPreparedClassMethodCallExpression(
   pushAllLines(callLines, call.objectLines)
   pushAllLines(callLines, prepared.lines)
 
+  if (isThrowingClassMethod(call.info, method, context)) {
+    return emitPreparedThrowingClassMethodCallExpression(call, method, callLines, prepared, context)
+  }
+
   if (isManagedRuntimeReturnType(method.returnType)) {
     const value = nextCName(context, 'ccjs_method_value')
     const tag = cRuntimeValueTag(method.returnType)
@@ -886,6 +896,103 @@ function emitKnownPreparedClassMethodCallExpression(
     lines: callLines,
     expression: expressionText
   }
+}
+
+function emitPreparedThrowingClassMethodCallExpression(
+  call: ClassMethodCallInfo,
+  method: AnyNode,
+  callLines: string[],
+  prepared: PreparedCallArgs,
+  context: ClassFunctionContext
+): PreparedExpression {
+  const callArgs: string[] = [call.objectExpression]
+  const lines: string[] = []
+  let result = ''
+
+  for (const arg of prepared.args) {
+    callArgs.push(arg)
+  }
+
+  pushAllLines(lines, callLines)
+  registerClassMethodErrorChannel(context)
+  pushAllLines(lines, emitPrepareOwnedValueWrite('ccjs_error'))
+
+  if (method.returnType !== 'void') {
+    result = nextCName(context, 'ccjs_method_result')
+
+    if (isThrowingClassMethodRuntimeOut(method)) {
+      lines.push(`ccjs_value ${result} = ccjs_undefined_value();`)
+    } else {
+      lines.push(`double ${result} = 0;`)
+    }
+
+    callArgs.push(`&${result}`)
+  }
+
+  callArgs.push('&ccjs_error')
+
+  const status = nextCName(context, 'ccjs_method_status')
+  lines.push(`ccjs_status ${status} = ${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(callArgs, ', ')});`)
+  pushAllLines(lines, emitThrowingClassMethodStatusCheck(status, context))
+
+  return {
+    lines,
+    expression: result
+  }
+}
+
+function isThrowingClassMethodRuntimeOut(method: AnyNode): boolean {
+  return (
+    method.returnType === 'unknown' ||
+    isManagedRuntimeReturnType(method.returnType) ||
+    isOpaqueRuntimeValueType(method.returnType) ||
+    (method.returnNullable === true && isNullableScalarType(method.returnType))
+  )
+}
+
+function emitThrowingClassMethodStatusCheck(status: string, context: ClassFunctionContext): string[] {
+  const target = currentClassErrorTarget(context)
+  const lines = [`if (${status} == CCJS_ERR_THROW) {`, '  ccjs_error_active = 1;']
+
+  if (target != null) {
+    lines.push(`  goto ${target};`)
+  } else if (context.throwingFunction) {
+    lines.push('  ccjs_status_result = CCJS_ERR_THROW;')
+    lines.push('  goto ccjs_cleanup;')
+  } else {
+    lines.push(`  ${emitFailureStatement(context)}`)
+  }
+
+  lines.push('}')
+  lines.push(`if (${status} != CCJS_OK) ${emitFailureStatement(context)}`)
+
+  return lines
+}
+
+function currentClassErrorTarget(context: ClassFunctionContext): string | null {
+  const targets = context.errorTargets
+
+  if (targets == null || targets.length === 0) {
+    return null
+  }
+
+  return targets[targets.length - 1]
+}
+
+function registerClassMethodErrorChannel(context: ClassFunctionContext): void {
+  context.errorChannelUsed = true
+  registerOwnedValue(context, 'ccjs_error')
+}
+
+function isThrowingClassMethod(info: CClassInfo, method: AnyNode, context: ClassFunctionContext): boolean {
+  const throwingFunctions = context.throwingFunctions
+
+  if (throwingFunctions == null) {
+    return false
+  }
+
+  const methodEffectName = `${info.name}.${method.name}`
+  return throwingFunctions.has(methodEffectName)
 }
 
 function emitClassMethodCallExpression(call: ClassMethodCallInfo, method: AnyNode, prepared: PreparedCallArgs): string {

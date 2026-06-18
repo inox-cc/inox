@@ -31,8 +31,11 @@ export {
 export { collectIrGlobalRoots, collectIrGlobalUsages } from './ir/globals.ts'
 export {
   collectIrFunctionEffects,
+  collectIrFunctionEffectsWithExternalEffects,
   collectIrLocalThrowValueTypes,
-  collectIrStoredFunctionEffects
+  collectIrStoredFunctionEffects,
+  irClassMethodEffectName,
+  mergeIrFunctionEffects
 } from './ir/effects.ts'
 
 export function lowerHirToIr(program: ProgramNode): IrProgram {

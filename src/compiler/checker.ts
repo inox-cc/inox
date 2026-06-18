@@ -925,7 +925,8 @@ class Checker {
 
   resolveClassConstructorFieldType(expression: AnyNode, constructorParams: AnyNode[]): ValueType {
     if (expression.type === 'Reference' && expression.path.length === 1) {
-      const param = this.findParamByName(constructorParams, expression.path[0])
+      const path: string[] = expression.path
+      const param = this.findParamByName(constructorParams, path[0])
 
       if (param != null) {
         return param.valueType
@@ -1648,8 +1649,9 @@ class Checker {
       expression.className = null
 
       if (symbol != null) {
+        const path: string[] = expression.path
         valueType = symbol.valueType
-        expression.nullable = symbol.nullable === true && !this.narrowedNullableNames.has(expression.path[0])
+        expression.nullable = symbol.nullable === true && !this.narrowedNullableNames.has(path[0])
         expression.valueType = valueType
 
         if (symbol.arrayElementType != null) {
@@ -1941,9 +1943,10 @@ class Checker {
 
     if (symbol != null) {
       if (expression.target.path.length === 1 && symbol.mutable !== true) {
+        const path: string[] = expression.target.path
         this.report(
           'CCJS_ASSIGN_CONST',
-          `cannot assign to ${symbol.kind} binding ${expression.target.path[0]}`,
+          `cannot assign to ${symbol.kind} binding ${path[0]}`,
           expression.target.loc
         )
       }
@@ -1988,9 +1991,10 @@ class Checker {
 
       if (symbol != null) {
         if (expression.argument.path.length === 1 && symbol.mutable !== true) {
+          const path: string[] = expression.argument.path
           this.report(
             'CCJS_ASSIGN_CONST',
-            `cannot assign to ${symbol.kind} binding ${expression.argument.path[0]}`,
+            `cannot assign to ${symbol.kind} binding ${path[0]}`,
             expression.argument.loc
           )
         }
@@ -3156,9 +3160,10 @@ class Checker {
     }
 
     if (!this.acceptsArgumentCount(params, expression.args.length)) {
+      const path: string[] = expression.callee.path
       this.report(
         'CCJS_ARG_COUNT',
-        this.argumentCountMessage(`function ${expression.callee.path[0]}`, params, expression.args.length),
+        this.argumentCountMessage(`function ${path[0]}`, params, expression.args.length),
         expression.loc
       )
     }
@@ -7773,11 +7778,21 @@ class Checker {
     const mapMethod = mapRuntimeMethodName(property)
 
     if (objectType === 'map' && mapMethod != null) {
-      const mapType = this.resolveExpressionMapType(expression.callee.object) ?? {
-        key: 'unknown',
-        value: 'unknown'
+      const mapType = this.resolveExpressionMapType(expression.callee.object)
+      let mapKeyType: ValueType = 'unknown'
+      let mapRawValueType: ValueType = 'unknown'
+
+      if (mapType != null) {
+        if (mapType.key != null) {
+          mapKeyType = mapType.key
+        }
+
+        if (mapType.value != null) {
+          mapRawValueType = mapType.value
+        }
       }
-      const mapValueType = resolvedConcreteValueTypeMetadata(mapType.value, 'unknown')
+
+      const mapValueType = resolvedConcreteValueTypeMetadata(mapRawValueType, 'unknown')
 
       if (mapMethod === 'clear') {
         this.checkCollectionArgCount(expression, 'map.clear', 0)
@@ -7789,12 +7804,13 @@ class Checker {
         this.checkCollectionArgCount(expression, `map.${mapMethod}`, 1)
 
         if (expression.args[0] != null) {
+          const keyArg = checkerNodeAt(expression.args, 0)
           this.checkAssignableType(
-            this.checkExpression(expression.args[0]),
-            mapType.key,
-            expression.args[0].loc,
+            this.checkExpression(keyArg),
+            mapKeyType,
+            keyArg.loc,
             false,
-            this.expressionCanBeNull(expression.args[0])
+            this.expressionCanBeNull(keyArg)
           )
         }
 
@@ -7817,22 +7833,24 @@ class Checker {
       this.checkCollectionArgCount(expression, 'map.set', 2)
 
       if (expression.args[0] != null) {
+        const keyArg = checkerNodeAt(expression.args, 0)
         this.checkAssignableType(
-          this.checkExpression(expression.args[0]),
-          mapType.key,
-          expression.args[0].loc,
+          this.checkExpression(keyArg),
+          mapKeyType,
+          keyArg.loc,
           false,
-          this.expressionCanBeNull(expression.args[0])
+          this.expressionCanBeNull(keyArg)
         )
       }
 
       if (expression.args[1] != null) {
+        const valueArg = checkerNodeAt(expression.args, 1)
         this.checkAssignableType(
-          this.checkExpression(expression.args[1]),
-          mapType.value,
-          expression.args[1].loc,
+          this.checkExpression(valueArg),
+          mapRawValueType,
+          valueArg.loc,
           false,
-          this.expressionCanBeNull(expression.args[1])
+          this.expressionCanBeNull(valueArg)
         )
       }
 
@@ -7843,8 +7861,8 @@ class Checker {
       }
 
       expression.valueType = 'map'
-      expression.mapKeyType = mapType.key
-      expression.mapValueType = mapType.value
+      expression.mapKeyType = mapKeyType
+      expression.mapValueType = mapRawValueType
 
       return 'map'
     }
@@ -7962,7 +7980,9 @@ class Checker {
     this.checkTimerCallbackArg(expression, 0)
 
     if (expression.args[1] != null) {
-      this.checkAssignableType(this.checkExpression(expression.args[1]), 'number', expression.args[1].loc, false, false)
+      const delayArg = checkerNodeAt(expression.args, 1)
+      const delayType = this.checkExpression(delayArg)
+      this.checkAssignableType(delayType, 'number', delayArg.loc, false, false)
     }
 
     expression.valueType = 'timer'
@@ -10967,7 +10987,8 @@ class Checker {
   }
 
   resolveReference(reference: AnyNode): SymbolInfo | null {
-    const root = reference.path[0]
+    const path: string[] = reference.path
+    const root = path[0]
     let symbol = this.scope.resolve(root)
 
     if (symbol == null) {
@@ -12637,7 +12658,9 @@ class Checker {
   }
 
   report(code: string, message: string, loc: SourceLocation): void {
-    this.diagnostics.push(diagnostic(code, message, loc))
+    const item = diagnostic(code, message, loc)
+    const diagnostics = this.diagnostics
+    diagnostics.push(item)
   }
 }
 

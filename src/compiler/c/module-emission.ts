@@ -3,12 +3,15 @@ import {
   collectIrFunctionNodeEntries,
   collectIrGlobalRoots,
   collectIrGlobalUsages,
+  collectIrFunctionEffectsWithExternalEffects,
   collectIrRuntimeRequirements,
   collectIrStoredFunctionEffects,
   collectIrSyntaxFeatureUsages,
-  collectIrTopLevelNodes
+  collectIrTopLevelNodes,
+  irClassMethodEffectName,
+  mergeIrFunctionEffects
 } from '../ir.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrRuntimeRequirement } from '../types.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import type { CFunctionParam, CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
 import {
   collectCallbackWrappers,
@@ -119,6 +122,49 @@ function pushIrFunctionDeclaration(target: IrFunctionDeclaration[], declaration:
 
 function pushIrFunctionEffect(target: IrFunctionEffect[], effect: IrFunctionEffect): void {
   target.push(effect)
+}
+
+function pushCModuleClassMethodFunctionDeclarations(
+  target: IrFunctionDeclaration[],
+  programs: IrProgram[]
+): void {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const program = programs[programIndex]
+    const classes = collectIrTopLevelNodes(program, 'class')
+
+    for (let classIndex = 0; classIndex < classes.length; classIndex = classIndex + 1) {
+      const classNode = cModuleNodeAt(classes, classIndex)
+      const methods: CModuleNode[] = classNode.methods
+
+      for (let methodIndex = 0; methodIndex < methods.length; methodIndex = methodIndex + 1) {
+        const method = cModuleNodeAt(methods, methodIndex)
+
+        if (method.name === 'constructor') {
+          continue
+        }
+
+        const methodEffectName = irClassMethodEffectName(classNode.name, method.name)
+        const declaration: IrFunctionDeclaration = {
+          name: methodEffectName,
+          exported: false,
+          async: method.async === true,
+          params: method.params,
+          returnType: method.returnType,
+          returnNullable: method.returnNullable === true,
+          returnArrayElementType: method.returnArrayElementType,
+          returnArrayElementDeclaredType: method.returnArrayElementDeclaredType,
+          returnMapKeyType: method.returnMapKeyType,
+          returnMapValueType: method.returnMapValueType,
+          returnPromiseValueType: method.returnPromiseValueType,
+          returnSetElementType: method.returnSetElementType,
+          returnShape: method.returnShape,
+          loc: method.loc
+        }
+
+        target.push(declaration)
+      }
+    }
+  }
 }
 
 function cModuleClassMethodAt(values: CClassMethod[], index: number): CClassMethod {
@@ -570,7 +616,6 @@ function createCModuleBaseContext(
   const functionEntries = collectIrFunctionNodeEntries(irPrograms)
   const functions: AnyNode[] = []
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
-  const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalRoots = collectIrGlobalRoots(irPrograms)
   const jsGlobalRoots = stringSetFromArray(globalRoots)
 
@@ -590,7 +635,16 @@ function createCModuleBaseContext(
     pushIrFunctionDeclaration(functionDeclarations, declaration)
   }
 
+  pushCModuleClassMethodFunctionDeclarations(functionDeclarations, irPrograms)
+
   const importedEffects = collectImportedCModuleFunctionEffects(plan)
+  const inferredFunctionEffects = collectIrFunctionEffectsWithExternalEffects(
+    irPrograms,
+    importedEffects,
+    true
+  )
+  const storedFunctionEffects = collectIrStoredFunctionEffects(irPrograms)
+  const functionEffects = mergeIrFunctionEffects(inferredFunctionEffects, storedFunctionEffects)
 
   for (let effectIndex = 0; effectIndex < importedEffects.length; effectIndex = effectIndex + 1) {
     const effect = cModuleFunctionEffectAt(importedEffects, effectIndex)
@@ -981,6 +1035,43 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
 }
 
 function collectImportedCModuleFunctionEffects(plan: CModulePlan): IrFunctionEffect[] {
+  const visiting: Set<string> = new Set()
+  return collectImportedCModuleFunctionEffectsWithVisited(plan, visiting)
+}
+
+function collectCModulePlanFunctionEffectsWithVisited(
+  plan: CModulePlan,
+  visiting: Set<string>
+): IrFunctionEffect[] {
+  if (visiting.has(plan.record.path)) {
+    return []
+  }
+
+  visiting.add(plan.record.path)
+
+  const irPrograms: IrProgram[] = []
+  irPrograms.push(plan.ir)
+
+  const importedEffects = collectImportedCModuleFunctionEffectsWithVisited(plan, visiting)
+  const inferredEffects = collectIrFunctionEffectsWithExternalEffects(irPrograms, importedEffects, true)
+  const storedEffects = collectIrStoredFunctionEffects(irPrograms)
+  const effects = mergeIrFunctionEffects(inferredEffects, storedEffects)
+
+  for (let effectIndex = 0; effectIndex < importedEffects.length; effectIndex = effectIndex + 1) {
+    const effect = cModuleFunctionEffectAt(importedEffects, effectIndex)
+
+    pushIrFunctionEffect(effects, effect)
+  }
+
+  visiting.delete(plan.record.path)
+
+  return effects
+}
+
+function collectImportedCModuleFunctionEffectsWithVisited(
+  plan: CModulePlan,
+  visiting: Set<string>
+): IrFunctionEffect[] {
   const effects: IrFunctionEffect[] = []
 
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
@@ -995,7 +1086,7 @@ function collectImportedCModuleFunctionEffects(plan: CModulePlan): IrFunctionEff
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = cModuleNodeAt(specifiers, specifierIndex)
-      const sourceEffects = importedModule.ir.functionEffects
+      const sourceEffects = collectCModulePlanFunctionEffectsWithVisited(importedModule, visiting)
 
       for (let effectIndex = 0; effectIndex < sourceEffects.length; effectIndex = effectIndex + 1) {
         const effect = cModuleFunctionEffectAt(sourceEffects, effectIndex)

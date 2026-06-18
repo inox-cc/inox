@@ -487,11 +487,15 @@ export function emitClassMethodDeclaration(
   const params = method.params
 
   context.returnShape = null
+  context.throwingFunction = isThrowingClassMethod(info, method, baseContext)
   context.functionReturnOut = 'ccjs_out'
   context.functionErrorOut = 'ccjs_error_out'
   context.variables.set('this', 'object')
   context.classInstanceTypes.set('this', info.name)
   registerClassObjectShape(context, 'this', info)
+  if (context.throwingFunction) {
+    registerErrorChannel(context)
+  }
   registerFunctionParamsInContext(method, params, context)
 
   const bodyLines: string[] = []
@@ -501,6 +505,7 @@ export function emitClassMethodDeclaration(
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(method.body, context))
 
   lines.push(`${emitClassMethodHead(info, method, context)} {`)
+  pushIndentedDeclarationLines(lines, emitThrowingFunctionPrelude(context))
   pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitStatusResultDeclarations(context))
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
@@ -513,6 +518,7 @@ export function emitClassMethodDeclaration(
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('ccjs_cleanup:')
+    pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
     pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
@@ -534,13 +540,29 @@ export function emitClassMethodDeclaration(
 
 export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CEmitContext): string {
   const params = ['ccjs_value this']
+  const name = emitCClassMethodName(info.name, method.name)
 
   for (let index = 0; index < method.params.length; index = index + 1) {
     params.push(emitClassMethodParam(method.params[index], index, method, context))
     pushObjectFunctionFieldParams(params, method.params[index], context)
   }
 
-  return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${emitCClassMethodName(info.name, method.name)}(${joinDeclarationParams(params)})`
+  if (isThrowingClassMethod(info, method, context)) {
+    if (method.returnType !== 'void') {
+      params.push(`${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true)}* ccjs_out`)
+    }
+
+    params.push('ccjs_value* ccjs_error_out')
+
+    return `static ccjs_status ${name}(${joinDeclarationParams(params)})`
+  }
+
+  return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${name}(${joinDeclarationParams(params)})`
+}
+
+function isThrowingClassMethod(info: CClassInfo, method: CNode, context: CEmitContext): boolean {
+  const methodEffectName = `${info.name}.${method.name}`
+  return isThrowingFunctionName(methodEffectName, context)
 }
 
 function emitClassMethodParam(param: CFunctionParam, index: number, method: CNode, context: CEmitContext): string {

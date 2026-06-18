@@ -3748,6 +3748,60 @@ export function main(): void {
 })
 
 
+test('lowers C class method throws through status error ABI', () => {
+  const source = `class TicketError {
+  name: string
+  message: string
+
+  constructor(message: string) {
+    this.name = 'TicketError'
+    this.message = message
+  }
+}
+
+class TicketParser {
+  read(): string {
+    throw new TicketError('missing')
+  }
+}
+
+export function parseTicket(): string {
+  const parser = new TicketParser()
+  return parser.read()
+}
+
+export function main(): void {
+  try {
+    console.log(parseTicket())
+  } catch (error) {
+    console.log(error)
+  }
+}
+`
+  const result = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(
+    result.code,
+    /static ccjs_status ccjs_method_TicketParser_read\(ccjs_value this, ccjs_value\* ccjs_out, ccjs_value\* ccjs_error_out\);/
+  )
+  assert.match(
+    result.code,
+    /static ccjs_status ccjs_method_TicketParser_read\(ccjs_value this, ccjs_value\* ccjs_out, ccjs_value\* ccjs_error_out\) \{/
+  )
+  assert.match(result.code, /ccjs_status parseTicket\(ccjs_value \*ccjs_out, ccjs_value \*ccjs_error_out\);/)
+  assert.match(
+    result.code,
+    /ccjs_status ccjs_method_status_\d+ = ccjs_method_TicketParser_read\(parser, &ccjs_method_result_\d+, &ccjs_error\);/
+  )
+  assert.match(
+    result.code,
+    /ccjs_status ccjs_call_status_\d+ = parseTicket\(&ccjs_call_result_\d+, &ccjs_error\);\n {4}if \(ccjs_call_status_\d+ == CCJS_ERR_THROW\) \{/
+  )
+})
+
+
 test('compiles arrow functions and chain calls to C', () => {
   const source = `export function main(): void {
   const values = [3, 1, 2]

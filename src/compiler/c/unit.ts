@@ -1,13 +1,16 @@
 import { throwDiagnostics } from '../diagnostics.ts'
 import {
   collectIrFunctionDeclarations,
+  collectIrFunctionEffectsWithExternalEffects,
   collectIrFunctionNodeEntries,
   collectIrGlobalRoots,
   collectIrGlobalUsages,
   collectIrRuntimeRequirements,
   collectIrStoredFunctionEffects,
   collectIrSyntaxFeatureUsages,
-  collectIrTopLevelNodesFromPrograms
+  collectIrTopLevelNodesFromPrograms,
+  irClassMethodEffectName,
+  mergeIrFunctionEffects
 } from '../ir.ts'
 import type {
   AnyNode,
@@ -158,8 +161,50 @@ function unitRuntimeRequirementAt(values: IrRuntimeRequirement[], index: number)
   return values[index]
 }
 
+function unitNodeAt(values: AnyNode[], index: number): AnyNode {
+  return values[index]
+}
+
 function unitStringAt(values: string[], index: number): string {
   return values[index]
+}
+
+function pushCUnitClassMethodFunctionDeclarations(
+  target: IrFunctionDeclaration[],
+  classes: AnyNode[]
+): void {
+  for (let classIndex = 0; classIndex < classes.length; classIndex = classIndex + 1) {
+    const classNode = unitNodeAt(classes, classIndex)
+    const methods: AnyNode[] = classNode.methods
+
+    for (let methodIndex = 0; methodIndex < methods.length; methodIndex = methodIndex + 1) {
+      const method = unitNodeAt(methods, methodIndex)
+
+      if (method.name === 'constructor') {
+        continue
+      }
+
+      const methodEffectName = irClassMethodEffectName(classNode.name, method.name)
+      const declaration: IrFunctionDeclaration = {
+        name: methodEffectName,
+        exported: false,
+        async: method.async === true,
+        params: method.params,
+        returnType: method.returnType,
+        returnNullable: method.returnNullable === true,
+        returnArrayElementType: method.returnArrayElementType,
+        returnArrayElementDeclaredType: method.returnArrayElementDeclaredType,
+        returnMapKeyType: method.returnMapKeyType,
+        returnMapValueType: method.returnMapValueType,
+        returnPromiseValueType: method.returnPromiseValueType,
+        returnSetElementType: method.returnSetElementType,
+        returnShape: method.returnShape,
+        loc: method.loc
+      }
+
+      target.push(declaration)
+    }
+  }
 }
 
 function runtimeRequirementSetFromArray(values: IrRuntimeRequirement[]): Set<IrRuntimeRequirement> {
@@ -193,12 +238,16 @@ export function emitCUnit(
   const functionEntries = collectIrFunctionNodeEntries(irPrograms)
   const functions = collectUnitFunctionNodes(functionEntries)
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
-  const functionEffects = collectIrStoredFunctionEffects(irPrograms)
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const globalRoots = collectIrGlobalRoots(irPrograms)
   const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const classes = collectIrTopLevelNodesFromPrograms(irPrograms, 'class')
+  pushCUnitClassMethodFunctionDeclarations(functionDeclarations, classes)
+  const externalFunctionEffects: IrFunctionEffect[] = []
+  const inferredFunctionEffects = collectIrFunctionEffectsWithExternalEffects(irPrograms, externalFunctionEffects, true)
+  const storedFunctionEffects = collectIrStoredFunctionEffects(irPrograms)
+  const functionEffects = mergeIrFunctionEffects(inferredFunctionEffects, storedFunctionEffects)
   const topLevelNodes = collectCUnitTopLevelNodes(irPrograms)
   const jsGlobalRoots = stringSetFromArray(globalRoots)
   const baseContext = deps.createBaseContext(

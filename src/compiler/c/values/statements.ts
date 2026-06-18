@@ -2334,7 +2334,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
     return []
   }
 
-  const isErrorObject = statementDeps(context).isErrorValueExpression(statement.argument, context)
+  const isErrorObject = isThrowableObjectExpression(statement.argument, context)
 
   if (statementDeps(context).inferExpressionType(statement.argument, context) !== 'string' && !isErrorObject) {
     pushDiagnostic(context,
@@ -2377,6 +2377,25 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   }
 
   return lines
+}
+
+function isThrowableObjectExpression(expression: StatementNode, context: CFunctionContext): boolean {
+  const deps = statementDeps(context)
+
+  if (deps.isErrorValueExpression(expression, context)) {
+    return true
+  }
+
+  if (deps.isClassConstructorExpression(expression, context)) {
+    return true
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+    return context.classInstanceTypes.has(name)
+  }
+
+  return false
 }
 
 export function emitReturnStatement(statement: StatementNode, context: CFunctionContext): string[] {
