@@ -50,6 +50,14 @@ function classStringEquals(left: string, right: string): boolean {
   return left === right
 }
 
+function classStringOrEmpty(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
 function classStringDiffers(left: string, right: string): boolean {
   return !classStringEquals(left, right)
 }
@@ -899,9 +907,9 @@ function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFu
     return null
   }
 
-  const objectName = resolveCObjectExpressionName(expression.callee.object)
+  const objectName = classStringOrEmpty(resolveCObjectExpressionName(expression.callee.object))
 
-  if (objectName != null) {
+  if (classStringDiffers(objectName, '')) {
     const className = classNameForObject(context, objectName)
 
     if (className != null) {

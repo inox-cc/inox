@@ -83,6 +83,10 @@ function callbackBooleanValueIsTrue(value: boolean | null | undefined): boolean 
   return false
 }
 
+function callbackFunctionReturnType(functionType: CFunctionType): string {
+  return functionType.returnType
+}
+
 export type CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions(expression: AnyNode): AnyNode[]
   createFunctionContext(
@@ -1803,7 +1807,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   baseContext: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
-  const returnType = wrapper.functionType.returnType
+  const returnType = callbackFunctionReturnType(wrapper.functionType)
   const params = wrapper.functionType.params
 
   const context = deps.createFunctionContext(baseContext, returnType, false)

@@ -75,6 +75,7 @@ type AsyncTaskPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHand
 type AsyncTaskStringMap = Map<string, string>
 type AsyncTaskStringNullableMap = Map<string, string | null>
 type AsyncTaskStringSet = Set<string>
+type AsyncTaskMetadataItem = CAsyncTaskFrameLocal | CAsyncTaskAwaitStep | CAsyncTaskParam | CAsyncTaskPrefixLocal
 
 type AsyncTaskEmitContext = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
@@ -456,6 +457,36 @@ function asyncTaskStringOrEmpty(value: string | null | undefined): string {
   }
 
   return value
+}
+
+function asyncTaskContextReturnType(context: AsyncTaskPlannerContext): string {
+  return context.returnType
+}
+
+function asyncTaskAwaitStepType(item: CAsyncTaskAwaitStep): string {
+  return item.type
+}
+
+function asyncTaskMetadataStringOrUnknown(value: string | null | undefined): string {
+  const resolved = asyncTaskStringOrEmpty(value)
+
+  if (asyncTaskStringEquals(resolved, '')) {
+    return 'unknown'
+  }
+
+  return resolved
+}
+
+function asyncTaskMapKeyType(item: AsyncTaskMetadataItem): string {
+  return asyncTaskMetadataStringOrUnknown(item.mapKeyType)
+}
+
+function asyncTaskMapValueType(item: AsyncTaskMetadataItem): string {
+  return asyncTaskMetadataStringOrUnknown(item.mapValueType)
+}
+
+function asyncTaskWrapperFinalizerName(wrapper: CAsyncTaskWrapper): string {
+  return wrapper.finalizerName
 }
 
 function asyncTaskDeclarationName(declaration: IrFunctionDeclaration): string {
@@ -1766,7 +1797,11 @@ function createAsyncTaskExpressionContext(
   params: CAsyncTaskParam[],
   awaits: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>
 ): AsyncTaskPlannerContext {
-  const result = asyncTaskDeps(context).createFunctionContext(context, context.returnType, context.returnNullable)
+  const result = asyncTaskDeps(context).createFunctionContext(
+    context,
+    asyncTaskContextReturnType(context),
+    context.returnNullable
+  )
 
   result.arrayShapes = context.arrayShapes
   result.breakFlowUsed = context.breakFlowUsed
@@ -2743,16 +2778,8 @@ function registerAsyncTaskLocalMetadata(
 
     context.runtimeArrayElementTypes.set(name, arrayElementType)
   } else if (valueType === 'map') {
-    let mapKeyType = item.mapKeyType
-    let mapValueType = item.mapValueType
-
-    if (mapKeyType == null) {
-      mapKeyType = 'unknown'
-    }
-
-    if (mapValueType == null) {
-      mapValueType = 'unknown'
-    }
+    const mapKeyType = asyncTaskMapKeyType(item)
+    const mapValueType = asyncTaskMapValueType(item)
 
     context.mapTypes.set(name, {
       key: mapKeyType,
@@ -2814,7 +2841,7 @@ function emitAsyncTaskScheduleAwaitLines(
   let finalizer = '0'
 
   if (options.final) {
-    finalizer = wrapper.finalizerName
+    finalizer = asyncTaskWrapperFinalizerName(wrapper)
   }
 
   let cleanupLines = options.cleanupLines
@@ -3545,7 +3572,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
   }
 
   if (sourceType == null) {
-    sourceType = item.type
+    sourceType = asyncTaskAwaitStepType(item)
   }
 
   const value = emitPreparedAsyncTaskValueExpression(receiver.args[0], sourceType, context)

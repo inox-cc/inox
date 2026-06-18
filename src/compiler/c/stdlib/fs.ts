@@ -60,6 +60,14 @@ type FsSyncStatementDescriptor = {
   tempPrefix?: string
 }
 
+function fsStringOrEmpty(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
 function fsPromiseResultTypeForMethod(method: string | null): string | null {
   if (
     method === 'access' ||
@@ -455,9 +463,9 @@ export function emitPreparedFsSyncValueExpression(
   }
 
   const valueType = dependencies.inferExpressionType(expression, context)
-  const expectedTag = cRuntimeValueTag(valueType)
+  const expectedTag = fsStringOrEmpty(cRuntimeValueTag(valueType))
 
-  if (expectedTag == null) {
+  if (expectedTag === '') {
     return null
   }
 

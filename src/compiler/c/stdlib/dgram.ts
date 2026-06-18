@@ -1542,7 +1542,9 @@ function isDgramSocketMethodCall(expression: AnyNode, method: string, context: C
     return false
   }
 
-  return callee.property === method
+  const property: string = callee.property
+
+  return property === method
 }
 
 function isDgramSocketAnyMethodCall(expression: AnyNode, context: CFunctionContext): boolean {

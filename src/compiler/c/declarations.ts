@@ -82,6 +82,10 @@ function cBooleanValueIsTrue(value: boolean | null | undefined): boolean {
   return false
 }
 
+function declarationClassName(info: CClassInfo): string {
+  return info.name
+}
+
 export function resolveFunctionReturnType(name: string, fallback: string, context: CEmitContext): string {
   const returnType = context.functionReturnTypes.get(name)
 
@@ -424,7 +428,7 @@ export function emitClassMethodDeclaration(
   context.functionReturnOut = 'ccjs_out'
   context.functionErrorOut = 'ccjs_error_out'
   context.variables.set('this', 'object')
-  context.classInstanceTypes.set('this', info.name)
+  context.classInstanceTypes.set('this', declarationClassName(info))
   registerClassObjectShape(context, 'this', info)
   registerFunctionParamsInContext(method, params, context)
 

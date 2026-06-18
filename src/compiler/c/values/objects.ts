@@ -94,10 +94,6 @@ function appendLines(out: string[], lines: string[]): void {
   }
 }
 
-function objectStringEquals(left: string, right: string): boolean {
-  return left === right
-}
-
 function objectStringOrEmpty(value: string | null | undefined): string {
   if (value == null) {
     return ''
@@ -112,7 +108,7 @@ function objectStringAt(values: string[], index: number): string {
 
 function findObjectShapeFieldIndex(fields: CObjectShapeField[], key: string): number {
   for (let index = 0; index < fields.length; index = index + 1) {
-    if (objectStringEquals(fields[index].name, key)) {
+    if (fields[index].name === key) {
       return index
     }
   }
@@ -132,7 +128,9 @@ function objectShapeFieldAt(fields: CObjectShapeField[], expectedIndex: number):
 
 function findObjectProperty(properties: ObjectPropertyNode[], key: string): ObjectPropertyNode | null {
   for (const property of properties) {
-    if (objectStringEquals(property.key, key)) {
+    const propertyKey: string = property.key
+
+    if (propertyKey === key) {
       return property
     }
   }
@@ -720,19 +718,19 @@ function isRuntimeValueReferenceExpression(expression: ObjectFieldNode, context:
   const valueType = objectStringOrEmpty(context.variables.get(name))
 
   if (
-    !objectStringEquals(valueType, 'unknown') &&
-    !objectStringEquals(valueType, 'object') &&
+    valueType !== 'unknown' &&
+    valueType !== 'object' &&
     !isOpaqueRuntimeValueType(valueType)
   ) {
     return false
   }
 
-  if (objectStringEquals(valueType, 'unknown') || isOpaqueRuntimeValueType(valueType)) {
+  if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)) {
     return true
   }
 
   for (const value of context.ownedValues) {
-    if (objectStringEquals(value, name)) {
+    if (value === name) {
       return true
     }
   }
@@ -789,25 +787,25 @@ function dynamicRuntimeObjectFieldAccess(expression: ObjectFieldNode): CDynamicO
 }
 
 function isScalarObjectFieldValueType(valueType: string): boolean {
-  return objectStringEquals(valueType, 'number') || objectStringEquals(valueType, 'boolean')
+  return valueType === 'number' || valueType === 'boolean'
 }
 
 function isManagedObjectFieldValueType(valueType: string): boolean {
   return (
-    objectStringEquals(valueType, 'number') ||
-    objectStringEquals(valueType, 'boolean') ||
-    objectStringEquals(valueType, 'bytes') ||
-    objectStringEquals(valueType, 'array') ||
-    objectStringEquals(valueType, 'map') ||
-    objectStringEquals(valueType, 'set') ||
-    objectStringEquals(valueType, 'object') ||
-    objectStringEquals(valueType, 'string')
+    valueType === 'number' ||
+    valueType === 'boolean' ||
+    valueType === 'bytes' ||
+    valueType === 'array' ||
+    valueType === 'map' ||
+    valueType === 'set' ||
+    valueType === 'object' ||
+    valueType === 'string'
   )
 }
 
 function isSupportedObjectFieldStorageType(valueType: string): boolean {
   return (
-    objectStringEquals(valueType, 'unknown') ||
+    valueType === 'unknown' ||
     isManagedRuntimeReturnType(valueType) ||
     isNullableScalarType(valueType) ||
     isOpaqueRuntimeValueType(valueType)
@@ -815,7 +813,7 @@ function isSupportedObjectFieldStorageType(valueType: string): boolean {
 }
 
 function unsupportedObjectFieldStorageMessage(valueType: string): string {
-  if (objectStringEquals(valueType, 'function')) {
+  if (valueType === 'function') {
     return 'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
   }
 

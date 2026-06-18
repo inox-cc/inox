@@ -970,8 +970,10 @@ function collectImportedCModuleFunctionEffects(plan: CModulePlan): IrFunctionEff
 
       for (let effectIndex = 0; effectIndex < sourceEffects.length; effectIndex = effectIndex + 1) {
         const effect = cModuleFunctionEffectAt(sourceEffects, effectIndex)
+        const effectName: string = effect.name
+        const importedName: string = specifier.imported
 
-        if (effect.name === specifier.imported) {
+        if (effectName === importedName) {
           effects.push(cloneImportedCModuleFunctionEffect(effect, specifier.local))
         }
       }

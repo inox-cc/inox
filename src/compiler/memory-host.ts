@@ -299,15 +299,5 @@ function shortStableHash(value: string): string {
 }
 
 function shortHashHex(value: number): string {
-  let hex = value.toString(16)
-
-  while (hex.length < 8) {
-    hex = `0${hex}`
-  }
-
-  if (hex.length > 8) {
-    return hex.slice(0, 8)
-  }
-
-  return hex
+  return (value + 4294967296).toString(16).slice(1, 9)
 }

@@ -263,7 +263,10 @@ function hasWeakOwnershipMarker(fields: LowerTypeNode[], fieldName: string): boo
   const markerName = `${fieldName}Ownership`
 
   for (const field of fields) {
-    if (field.name === markerName && field.optional === true && field.valueType === 'string') {
+    const name: string = field.name
+    const valueType: string = field.valueType
+
+    if (name === markerName && field.optional === true && valueType === 'string') {
       return true
     }
   }

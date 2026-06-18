@@ -284,6 +284,14 @@ function stringOrUnknown(value: string | null | undefined): string {
   return 'unknown'
 }
 
+function statementStringOrEmpty(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
 function isUnsignedIntegerLiteral(value: string): boolean {
   if (value.length === 0) {
     return false
@@ -886,9 +894,9 @@ function resolveRuntimeArrayMetadataElementType(
     return declaration.arrayElementType
   }
 
-  const resolvedElementType = resolveRuntimeArrayElementType(expression, context)
+  const resolvedElementType = statementStringOrEmpty(resolveRuntimeArrayElementType(expression, context))
 
-  if (resolvedElementType != null) {
+  if (resolvedElementType !== '') {
     return resolvedElementType
   }
 
@@ -2636,73 +2644,74 @@ function isRuntimeValueDeclarationValueType(valueType: string | null | undefined
 
 export function emitExpressionStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const deps = statementDeps(context)
+  const expression: StatementNode = statement.expression
 
-  if (deps.isConsoleLog(statement.expression)) {
-    return deps.emitConsoleLogStatement(statement.expression.callee.property, statement.expression.args, context)
+  if (deps.isConsoleLog(expression)) {
+    return deps.emitConsoleLogStatement(expression.callee.property, expression.args, context)
   }
 
-  const promiseSettlement = deps.emitPromiseConstructorSettlementCall(statement.expression, context)
+  const promiseSettlement = deps.emitPromiseConstructorSettlementCall(expression, context)
 
   if (promiseSettlement != null) {
     return promiseSettlement
   }
 
-  if (statement.expression.type === 'CallExpression') {
-    const dgramSocketCall = deps.emitDgramSocketCallStatement(statement.expression, context)
+  if (expression.type === 'CallExpression') {
+    const dgramSocketCall = deps.emitDgramSocketCallStatement(expression, context)
 
     if (dgramSocketCall != null) {
       return dgramSocketCall
     }
 
-    const httpServerCall = deps.emitHttpServerCallStatement(statement.expression, context)
+    const httpServerCall = deps.emitHttpServerCallStatement(expression, context)
 
     if (httpServerCall != null) {
       return httpServerCall
     }
 
-    const netServerCall = deps.emitNetServerCallStatement(statement.expression, context)
+    const netServerCall = deps.emitNetServerCallStatement(expression, context)
 
     if (netServerCall != null) {
       return netServerCall
     }
 
-    const netSocketCall = deps.emitNetSocketCallStatement(statement.expression, context)
+    const netSocketCall = deps.emitNetSocketCallStatement(expression, context)
 
     if (netSocketCall != null) {
       return netSocketCall
     }
 
-    const arrayPopCall = deps.emitPreparedArrayPopCallExpression(statement.expression, context, preparedCallDiscard())
+    const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, preparedCallDiscard())
 
     if (arrayPopCall != null) {
       return arrayPopCall.lines
     }
 
-    const arrayPushCall = deps.emitPreparedArrayPushCallExpression(statement.expression, context)
+    const arrayPushCall = deps.emitPreparedArrayPushCallExpression(expression, context)
 
     if (arrayPushCall != null) {
       return arrayPushCall.lines
     }
 
-    const arrayMapCall = deps.emitPreparedArrayMapCallExpression(statement.expression, context)
+    const arrayMapCall = deps.emitPreparedArrayMapCallExpression(expression, context)
 
     if (arrayMapCall != null) {
       return arrayMapCall.lines
     }
 
-    const arrayFilterCall = deps.emitPreparedArrayFilterCallExpression(statement.expression, context)
+    const arrayFilterCall = deps.emitPreparedArrayFilterCallExpression(expression, context)
 
     if (arrayFilterCall != null) {
       return arrayFilterCall.lines
     }
 
-    const arraySortCall = deps.emitPreparedArraySortCallExpression(statement.expression, context)
+    const arraySortCall = deps.emitPreparedArraySortCallExpression(expression, context)
 
     if (arraySortCall != null) {
       return arraySortCall.lines
     }
 
-    const classMethodCall = deps.emitPreparedClassMethodCallExpression(statement.expression, context)
+    const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context)
 
     if (classMethodCall != null) {
       if (classMethodCall.expression === '') {
@@ -2715,13 +2724,13 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return lines
     }
 
-    const fetchAbortCall = deps.emitFetchAbortControllerAbortStatement(statement.expression, context)
+    const fetchAbortCall = deps.emitFetchAbortControllerAbortStatement(expression, context)
 
     if (fetchAbortCall != null) {
       return fetchAbortCall
     }
 
-    if (deps.isArrayMethodCall(statement.expression)) {
+    if (deps.isArrayMethodCall(expression)) {
       pushDiagnostic(context,
         diagnostic(
           'CCJS_C_ARRAY_METHOD',
@@ -2732,79 +2741,79 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return []
     }
 
-    const processExit = deps.emitProcessExitStatement(statement.expression, context)
+    const processExit = deps.emitProcessExitStatement(expression, context)
 
     if (processExit != null) {
       return processExit
     }
 
-    const collectionCall = deps.emitPreparedCollectionCallExpression(statement.expression, context)
+    const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
 
     if (collectionCall != null) {
       return collectionCall.lines
     }
 
-    const debugMemoryCall = deps.emitPreparedDebugMemoryCallExpression(statement.expression, context, preparedCallDiscard())
+    const debugMemoryCall = deps.emitPreparedDebugMemoryCallExpression(expression, context, preparedCallDiscard())
 
     if (debugMemoryCall != null) {
       return debugMemoryCall.lines
     }
 
-    const cryptoCall = deps.emitPreparedCryptoCallExpression(statement.expression, context, preparedCallDiscard())
+    const cryptoCall = deps.emitPreparedCryptoCallExpression(expression, context, preparedCallDiscard())
 
     if (cryptoCall != null) {
       return cryptoCall.lines
     }
 
-    const cryptoNumberCall = deps.emitPreparedCryptoNumberCallExpression(statement.expression, context)
+    const cryptoNumberCall = deps.emitPreparedCryptoNumberCallExpression(expression, context)
 
     if (cryptoNumberCall != null) {
       return cryptoNumberCall.lines
     }
 
-    const fetchCall = deps.emitPreparedFetchCallExpression(statement.expression, context)
+    const fetchCall = deps.emitPreparedFetchCallExpression(expression, context)
 
     if (fetchCall != null) {
       return fetchCall.lines
     }
 
-    const fsCall = deps.emitPreparedFsCallExpression(statement.expression, context)
+    const fsCall = deps.emitPreparedFsCallExpression(expression, context)
 
     if (fsCall != null) {
       return fsCall.lines
     }
 
-    const fsSyncCall = deps.emitPreparedFsSyncStatementExpression(statement.expression, context)
+    const fsSyncCall = deps.emitPreparedFsSyncStatementExpression(expression, context)
 
     if (fsSyncCall != null) {
       return fsSyncCall.lines
     }
 
-    const timerCall = deps.emitPreparedTimerCallExpression(statement.expression, context)
+    const timerCall = deps.emitPreparedTimerCallExpression(expression, context)
 
     if (timerCall != null) {
       return timerCall.lines
     }
 
-    const cryptoHashCall = deps.emitPreparedCryptoHashCallExpression(statement.expression, context)
+    const cryptoHashCall = deps.emitPreparedCryptoHashCallExpression(expression, context)
 
     if (cryptoHashCall != null) {
       return cryptoHashCall.lines
     }
 
-    const cryptoHmacCall = deps.emitPreparedCryptoHmacCallExpression(statement.expression, context)
+    const cryptoHmacCall = deps.emitPreparedCryptoHmacCallExpression(expression, context)
 
     if (cryptoHmacCall != null) {
       return cryptoHmacCall.lines
     }
 
-    const promise = deps.emitPreparedPromiseStaticExpression(statement.expression, context)
+    const promise = deps.emitPreparedPromiseStaticExpression(expression, context)
 
     if (promise != null) {
       return promise.lines
     }
 
-    const call = deps.emitPreparedCallExpression(statement.expression, context)
+    const call = deps.emitPreparedCallExpression(expression, context)
 
     if (call.expression === '') {
       return call.lines
@@ -2816,14 +2825,14 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
     return lines
   }
 
-  if (statement.expression.type === 'AwaitExpression') {
-    const value = deps.emitCAwaitValueExpression(statement.expression, context)
+  if (expression.type === 'AwaitExpression') {
+    const value = deps.emitCAwaitValueExpression(expression, context)
 
     return value.lines
   }
 
-  if (statement.expression.type === 'UpdateExpression') {
-    const value = deps.emitPreparedUpdateExpression(statement.expression, context)
+  if (expression.type === 'UpdateExpression') {
+    const value = deps.emitPreparedUpdateExpression(expression, context)
 
     const lines: string[] = []
     pushAllLines(lines, value.lines)
@@ -2831,97 +2840,97 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
     return lines
   }
 
-  if (statement.expression.type === 'AssignmentExpression') {
-    const processExitCodeAssignment = deps.emitProcessExitCodeAssignment(statement.expression, context)
+  if (expression.type === 'AssignmentExpression') {
+    const processExitCodeAssignment = deps.emitProcessExitCodeAssignment(expression, context)
 
     if (processExitCodeAssignment != null) {
       return processExitCodeAssignment
     }
 
-    const mapIndexAssignment = deps.emitPreparedMapIndexAssignment(statement.expression, context)
+    const mapIndexAssignment = deps.emitPreparedMapIndexAssignment(expression, context)
 
     if (mapIndexAssignment != null) {
       return mapIndexAssignment.lines
     }
 
-    const urlFieldAssignment = deps.emitUrlObjectFieldAssignment(statement.expression, context)
+    const urlFieldAssignment = deps.emitUrlObjectFieldAssignment(expression, context)
 
     if (urlFieldAssignment != null) {
       return urlFieldAssignment
     }
 
-    if (statement.expression.target.type === 'MemberExpression') {
-      const member = deps.resolveKnownObjectMember(statement.expression.target, context)
+    if (expression.target.type === 'MemberExpression') {
+      const member = deps.resolveKnownObjectMember(expression.target, context)
 
       if (member != null) {
-        return deps.emitKnownObjectMemberAssignment(statement.expression, member, context)
+        return deps.emitKnownObjectMemberAssignment(expression, member, context)
       }
     }
 
-    if (statement.expression.target.type === 'IndexExpression') {
-      const bytesIndexAssignment = deps.emitPreparedBytesIndexAssignment(statement.expression, context)
+    if (expression.target.type === 'IndexExpression') {
+      const bytesIndexAssignment = deps.emitPreparedBytesIndexAssignment(expression, context)
 
       if (bytesIndexAssignment != null) {
         return bytesIndexAssignment.lines
       }
 
-      const element = deps.resolveKnownArrayIndex(statement.expression.target, context)
+      const element = deps.resolveKnownArrayIndex(expression.target, context)
 
       if (element != null) {
-        return deps.emitKnownArrayIndexAssignment(statement.expression, element, context)
+        return deps.emitKnownArrayIndexAssignment(expression, element, context)
       }
 
-      const runtimeArrayAssignment = emitRuntimeArrayIndexAssignment(statement.expression, context)
+      const runtimeArrayAssignment = emitRuntimeArrayIndexAssignment(expression, context)
 
       if (runtimeArrayAssignment != null) {
         return runtimeArrayAssignment
       }
 
-      const field = deps.resolveKnownObjectIndex(statement.expression.target, context)
+      const field = deps.resolveKnownObjectIndex(expression.target, context)
 
       if (field != null) {
-        return deps.emitDynamicObjectMemberAssignment(statement.expression, field, context)
+        return deps.emitDynamicObjectMemberAssignment(expression, field, context)
       }
     }
 
-    const dynamicObjectFieldAssignment = deps.emitDynamicObjectFieldAssignment(statement.expression, context)
+    const dynamicObjectFieldAssignment = deps.emitDynamicObjectFieldAssignment(expression, context)
 
     if (dynamicObjectFieldAssignment != null) {
       return dynamicObjectFieldAssignment
     }
 
-    const valueType = deps.inferExpressionType(statement.expression.value, context)
+    const valueType = deps.inferExpressionType(expression.value, context)
 
-    if (deps.isNullableRuntimeValueAssignment(statement.expression, context)) {
-      return deps.emitNullableRuntimeValueAssignment(statement.expression, context)
+    if (deps.isNullableRuntimeValueAssignment(expression, context)) {
+      return deps.emitNullableRuntimeValueAssignment(expression, context)
     }
 
-    if (deps.isBoxedRuntimeValueAssignment(statement.expression, context)) {
-      return deps.emitBoxedRuntimeValueAssignment(statement.expression, context)
+    if (deps.isBoxedRuntimeValueAssignment(expression, context)) {
+      return deps.emitBoxedRuntimeValueAssignment(expression, context)
     }
 
-    const runtimeStringAssignment = emitRuntimeStringAssignment(statement.expression, context)
+    const runtimeStringAssignment = emitRuntimeStringAssignment(expression, context)
 
     if (runtimeStringAssignment != null) {
       return runtimeStringAssignment
     }
 
     if (valueType === 'number' || valueType === 'boolean') {
-      const value = deps.emitPreparedNumberExpression(statement.expression.value, context)
+      const value = deps.emitPreparedNumberExpression(expression.value, context)
 
       const lines: string[] = []
       pushAllLines(lines, value.lines)
-      lines.push(`${deps.emitReference(statement.expression.target, context)} = ${value.expression};`)
+      lines.push(`${deps.emitReference(expression.target, context)} = ${value.expression};`)
       return lines
     }
 
     return [
-      `${deps.emitReference(statement.expression.target, context)} = ${deps.emitCExpression(statement.expression.value, context)};`
+      `${deps.emitReference(expression.target, context)} = ${deps.emitCExpression(expression.value, context)};`
     ]
   }
 
-  if (statement.expression.type === 'OptionalCallExpression') {
-    return deps.emitOptionalRuntimeCallbackCallExpression(statement.expression, context)
+  if (expression.type === 'OptionalCallExpression') {
+    return deps.emitOptionalRuntimeCallbackCallExpression(expression, context)
   }
 
   return []

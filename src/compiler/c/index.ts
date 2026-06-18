@@ -2749,7 +2749,7 @@ function emitKnownArrayIndexVariableDeclaration(
   element: CKnownArrayElement,
   context: CFunctionContext
 ): string[] {
-  if (element.valueType === 'string') {
+  if (cStringEquals(element.valueType, 'string')) {
     return emitKnownArrayStringIndexVariableDeclaration(statement, element, context)
   }
 

@@ -444,6 +444,14 @@ function arrayStringEquals(left: string, right: string): boolean {
   return left === right
 }
 
+function arrayStringOrEmpty(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
 function arrayStringDiffers(left: string, right: string): boolean {
   return !arrayStringEquals(left, right)
 }
@@ -810,9 +818,9 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
       }
     }
 
-    const tag = cRuntimeValueTag(runtimeElement.valueType)
+    const tag = arrayStringOrEmpty(cRuntimeValueTag(runtimeElement.valueType))
 
-    if (tag == null) {
+    if (arrayStringEquals(tag, '')) {
       return value
     }
 
@@ -1006,7 +1014,7 @@ export function updateKnownArrayElementValueType(
   valueType: string,
   context: ArrayFunctionContext
 ): void {
-  if (valueType === 'unknown') {
+  if (arrayStringEquals(valueType, 'unknown')) {
     return
   }
 

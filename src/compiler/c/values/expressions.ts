@@ -348,6 +348,16 @@ function functionParamValueType(param: CFunctionParam): string {
   return param.valueType
 }
 
+function expressionKnownObjectName(field: CKnownObjectField): string {
+  const objectName = field.objectName
+
+  if (objectName == null) {
+    return ''
+  }
+
+  return objectName
+}
+
 function wrappedCExpression(expression: string): string {
   if (isWrappedCExpression(expression)) {
     return expression
@@ -1383,7 +1393,8 @@ export function emitPreparedNumberExpression(
 
     if (member != null && isNumberOrBooleanValueType(member.valueType)) {
       const value = nextCName(context, 'ccjs_expr_value')
-      const getCall = `ccjs_object_get_known(${deps.emitObjectValueReference(member.objectName, context)}, ${member.index}, &${value})`
+      const objectReference = deps.emitObjectValueReference(expressionKnownObjectName(member), context)
+      const getCall = `ccjs_object_get_known(${objectReference}, ${member.index}, &${value})`
 
       return emitPreparedRuntimeNumberValue(member.valueType, value, getCall, context)
     }
@@ -1412,7 +1423,8 @@ export function emitPreparedNumberExpression(
 
     if (field != null && isNumberOrBooleanValueType(field.valueType)) {
       const value = nextCName(context, 'ccjs_expr_value')
-      const getCall = `ccjs_object_get(${deps.emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
+      const objectReference = deps.emitObjectValueReference(expressionKnownObjectName(field), context)
+      const getCall = `ccjs_object_get(${objectReference}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
 
       return emitPreparedRuntimeNumberValue(field.valueType, value, getCall, context)
     }

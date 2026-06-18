@@ -267,7 +267,10 @@ function relativeCModuleSourcePath(sourceRoot: string, file: string, host: CModu
     return toCPath(relativePath, host)
   }
 
-  return toCPath(host.joinPath('external', `${shortCModuleHash(file, host)}_${emitCIdentifier(file)}`), host)
+  const externalName = `${shortCModuleHash(file, host)}_${emitCIdentifier(file)}`
+  const externalPath = host.joinPath('external', externalName)
+
+  return toCPath(externalPath, host)
 }
 
 function replaceCModuleExtension(path: string, extension: CModuleExtension, host: CModuleHost): string {
