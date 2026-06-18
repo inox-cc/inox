@@ -75,3 +75,47 @@ export function main(): void {
   assert.match(result.code, /ccjs_array_len/)
   assert.match(result.code, /ccjs_array_get/)
 })
+
+test('compiles typed object shape field lookup through helper result', () => {
+  const result = compileSource(
+    `type ShapeField = {
+  name: string
+  valueType: string
+  arrayElementType?: string | null
+  mapKeyType?: string | null
+  mapValueType?: string | null
+  setElementType?: string | null
+}
+
+function shapeFieldAt(fields: ShapeField[], expectedIndex: number): ShapeField | null {
+  for (let index = 0; index < fields.length; index = index + 1) {
+    if (index === expectedIndex) {
+      return fields[index]
+    }
+  }
+
+  return null
+}
+
+function valueTypeAt(fields: ShapeField[], expectedIndex: number): string {
+  const field = shapeFieldAt(fields, expectedIndex)
+
+  if (field == null) {
+    return 'unknown'
+  }
+
+  return field.valueType
+}
+
+export function main(): void {
+  console.log(valueTypeAt([{ name: 'score', valueType: 'number' }], 0))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_array_get/)
+  assert.match(result.code, /ccjs_object_get_known/)
+})

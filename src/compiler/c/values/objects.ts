@@ -45,6 +45,11 @@ type ObjectFunctionContext = ObjectShapeContext & ObjectNameContext & {
 }
 
 type ObjectFieldNode = AnyNode
+type ObjectPropertyNode = {
+  key: string
+  loc?: any
+  value: ObjectFieldNode
+}
 
 export type ObjectVariableDeclarationDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
@@ -103,7 +108,7 @@ function objectShapeFieldAt(fields: CObjectShapeField[], expectedIndex: number):
   return null
 }
 
-function findObjectProperty(properties: AnyNode[], key: string): AnyNode | null {
+function findObjectProperty(properties: ObjectPropertyNode[], key: string): ObjectPropertyNode | null {
   for (const property of properties) {
     if (property.key === key) {
       return property
@@ -287,7 +292,7 @@ function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: strin
     return null
   }
 
-  const field = fields[index]
+  const field = objectShapeFieldAt(fields, index)
 
   if (field == null) {
     return null
@@ -862,7 +867,9 @@ function objectVariableShapeFields(
 
   const fields: CObjectShapeField[] = []
 
-  for (const property of statement.init.properties) {
+  const initProperties = objectNodeProperties(statement.init)
+
+  for (const property of initProperties) {
     fields.push({
       name: property.key,
       readonlyField: false,
@@ -871,4 +878,8 @@ function objectVariableShapeFields(
   }
 
   return fields
+}
+
+function objectNodeProperties(node: ObjectFieldNode): ObjectPropertyNode[] {
+  return node.properties
 }
