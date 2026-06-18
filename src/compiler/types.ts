@@ -153,6 +153,8 @@ export type FunctionTypeInfo = {
   kind: 'function'
   params: AnyNode[]
   returnType: ValueType
+  returnNullable?: boolean
+  returnShape?: ObjectShapeInfo | null
   [key: string]: any
 }
 
@@ -193,14 +195,14 @@ export type SymbolInfo = {
   returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
   returnSetElementType?: ValueType | null
-  returnShape?: any
+  returnShape?: ObjectShapeInfo | null
   async?: boolean
   className?: string | null
   classMethods?: AnyNode[]
   constructable?: boolean
   constructorParams?: AnyNode[]
   functionType?: any
-  shape?: any
+  shape?: ObjectShapeInfo | null
   loc?: SourceLocation
 }
 

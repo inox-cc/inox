@@ -152,6 +152,40 @@ export function main(): void {
   assert.match(c.code, /ccjs_object_set_known\(this, 1, ccjs_value_\d+\)/)
 })
 
+test('lowers constructor field reads through the current class object', () => {
+  const source = `function normalizeRoot(root: string): string {
+  return root
+}
+
+class Host {
+  root: string
+  sourceRoot: string
+
+  constructor(root: string) {
+    this.root = root
+    this.sourceRoot = normalizeRoot(this.root)
+  }
+
+  label(): string {
+    return this.sourceRoot
+  }
+}
+
+export function main(): void {
+  const host = new Host('src')
+  console.log(host.label())
+}
+`
+  const c = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(c.code, /ccjs_object_init_known\(host, 0, ccjs_value_\d+\)/)
+  assert.match(c.code, /ccjs_object_get_known\(host, 0, &ccjs_value_\d+\)/)
+  assert.match(c.code, /normalizeRoot\(ccjs_value_\d+\)/)
+  assert.match(c.code, /ccjs_object_init_known\(host, 1, ccjs_value_\d+\)/)
+})
+
 
 test('lowers class method calls through class-typed object fields', () => {
   const source = `class Inner {

@@ -559,7 +559,7 @@ function emitCClassObjectInitLines(
       continue
     }
 
-    const valueExpression = substituteClassConstructorParams(assignment.value, constructorArgs)
+    const valueExpression = substituteClassConstructorParams(assignment.value, constructorArgs, target)
     const value = emitClassValueExpression(context, valueExpression)
     pushAllLines(lines, value.lines)
     lines.push(emitStatusCheck(`ccjs_object_init_known(${target}, ${fieldIndex}, ${value.expression})`, context))
@@ -623,10 +623,21 @@ function classConstructorParams(info: CClassInfo): AnyNode[] {
   return []
 }
 
-function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstructorArgMap): AnyNode {
+function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstructorArgMap, target: string): AnyNode {
   if (node == null) {
     return {
       type: 'InvalidExpression'
+    }
+  }
+
+  if (node.type === 'ThisExpression') {
+    return {
+      type: 'Reference',
+      path: [target],
+      valueType: node.valueType,
+      shape: node.shape,
+      className: node.className,
+      loc: node.loc
     }
   }
 
@@ -640,17 +651,17 @@ function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstruct
   }
 
   if (node.type === 'ArrayLiteral') {
-    return substituteArrayLiteral(node, args)
+    return substituteArrayLiteral(node, args, target)
   }
 
   if (node.type === 'ObjectLiteral') {
-    return substituteObjectLiteral(node, args)
+    return substituteObjectLiteral(node, args, target)
   }
 
   if (node.type === 'MemberExpression') {
     return {
       type: node.type,
-      object: substituteClassConstructorParams(node.object, args),
+      object: substituteClassConstructorParams(node.object, args, target),
       property: node.property,
       valueType: node.valueType,
       loc: node.loc
@@ -660,23 +671,23 @@ function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstruct
   if (node.type === 'IndexExpression') {
     return {
       type: node.type,
-      object: substituteClassConstructorParams(node.object, args),
-      index: substituteClassConstructorParams(node.index, args),
+      object: substituteClassConstructorParams(node.object, args, target),
+      index: substituteClassConstructorParams(node.index, args, target),
       valueType: node.valueType,
       loc: node.loc
     }
   }
 
   if (node.type === 'CallExpression' || node.type === 'NewExpression') {
-    return substituteCallLikeExpression(node, args)
+    return substituteCallLikeExpression(node, args, target)
   }
 
   if (node.type === 'BinaryExpression') {
     return {
       type: node.type,
       operator: node.operator,
-      left: substituteClassConstructorParams(node.left, args),
-      right: substituteClassConstructorParams(node.right, args),
+      left: substituteClassConstructorParams(node.left, args, target),
+      right: substituteClassConstructorParams(node.right, args, target),
       valueType: node.valueType,
       loc: node.loc
     }
@@ -686,7 +697,7 @@ function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstruct
     return {
       type: node.type,
       operator: node.operator,
-      argument: substituteClassConstructorParams(node.argument, args),
+      argument: substituteClassConstructorParams(node.argument, args, target),
       valueType: node.valueType,
       loc: node.loc
     }
@@ -695,7 +706,7 @@ function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstruct
   if (node.type === 'TypeAssertionExpression') {
     return {
       type: node.type,
-      expression: substituteClassConstructorParams(node.expression, args),
+      expression: substituteClassConstructorParams(node.expression, args, target),
       valueType: node.valueType,
       loc: node.loc
     }
@@ -704,12 +715,12 @@ function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstruct
   return node
 }
 
-function substituteArrayLiteral(node: AnyNode, args: CConstructorArgMap): AnyNode {
+function substituteArrayLiteral(node: AnyNode, args: CConstructorArgMap, target: string): AnyNode {
   const elements: AnyNode[] = []
   const sourceElements: ClassExpressionNode[] = node.elements
 
   for (const element of sourceElements) {
-    elements.push(substituteClassConstructorParams(element, args))
+    elements.push(substituteClassConstructorParams(element, args, target))
   }
 
   return {
@@ -720,14 +731,14 @@ function substituteArrayLiteral(node: AnyNode, args: CConstructorArgMap): AnyNod
   }
 }
 
-function substituteObjectLiteral(node: AnyNode, args: CConstructorArgMap): AnyNode {
+function substituteObjectLiteral(node: AnyNode, args: CConstructorArgMap, target: string): AnyNode {
   const properties: AnyNode[] = []
   const sourceProperties: ClassExpressionNode[] = node.properties
 
   for (const property of sourceProperties) {
     properties.push({
       key: property.key,
-      value: substituteClassConstructorParams(property.value, args),
+      value: substituteClassConstructorParams(property.value, args, target),
       loc: property.loc
     })
   }
@@ -741,17 +752,17 @@ function substituteObjectLiteral(node: AnyNode, args: CConstructorArgMap): AnyNo
   }
 }
 
-function substituteCallLikeExpression(node: AnyNode, args: CConstructorArgMap): AnyNode {
+function substituteCallLikeExpression(node: AnyNode, args: CConstructorArgMap, target: string): AnyNode {
   const callArgs: AnyNode[] = []
   const sourceArgs: ClassExpressionNode[] = node.args
 
   for (const arg of sourceArgs) {
-    callArgs.push(substituteClassConstructorParams(arg, args))
+    callArgs.push(substituteClassConstructorParams(arg, args, target))
   }
 
   return {
     type: node.type,
-    callee: substituteClassConstructorParams(node.callee, args),
+    callee: substituteClassConstructorParams(node.callee, args, target),
     args: callArgs,
     valueType: node.valueType,
     loc: node.loc

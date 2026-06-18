@@ -61,3 +61,66 @@ test('allows JavaScript null equality checks on non-nullable values', () => {
     )
   })
 })
+
+test('narrows nullable object fields checked through member paths', () => {
+  assert.doesNotThrow(() => {
+    compileSource(
+      `type Shape = {
+  id: number
+}
+
+type Holder = {
+  shape?: Shape
+}
+
+function read(holder: Holder | null): number {
+  if (holder != null && holder.shape != null) {
+    return holder.shape.id
+  }
+
+  return 0
+}
+
+export function main(): void {
+  console.log(read({ shape: { id: 7 } }))
+}
+`,
+      { target: 'c' }
+    )
+  })
+})
+
+test('clears member-path narrowing after base assignment', () => {
+  assert.throws(
+    () => {
+      compileSource(
+        `type Shape = {
+  id: number
+}
+
+type Holder = {
+  shape?: Shape
+}
+
+function read(holder: Holder | null, fallback: Holder): number {
+  if (holder != null && holder.shape != null) {
+    holder = fallback
+    const shape: Shape = holder.shape
+    return shape.id
+  }
+
+  return 0
+}
+
+export function main(): void {
+  console.log(read({ shape: { id: 7 } }, {}))
+}
+`,
+        { target: 'c' }
+      )
+    },
+    (error: any) =>
+      Array.isArray(error?.diagnostics) &&
+      error.diagnostics.some((item: any) => item.code === 'CCJS_TYPE_MISMATCH')
+  )
+})

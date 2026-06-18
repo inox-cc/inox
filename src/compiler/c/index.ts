@@ -1396,7 +1396,7 @@ function emitCUnit(
   entryIrProgram: IrProgram | null,
   options: CEmitOptions,
   entryIrPrograms: IrProgram[]
-) {
+): string {
   return emitCUnitWithDependencies(irPrograms, entryIrProgram, options, entryIrPrograms, cUnitDependencies)
 }
 

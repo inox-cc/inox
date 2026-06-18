@@ -313,6 +313,16 @@ function firstPathSegment(path: readonly string[]): string {
   return path[0]
 }
 
+function nullableNarrowingKey(expression: AnyNode | null | undefined): string | null {
+  const path = memberExpressionPath(expression)
+
+  if (path.length === 0) {
+    return null
+  }
+
+  return joinStrings(path, '.')
+}
+
 function resolvedObjectShapeMetadata(
   value: ObjectShapeInfo | null | undefined,
   fallback: ObjectShapeInfo | null | undefined
@@ -387,6 +397,23 @@ function stringSetFromArray(values: string[]): Set<string> {
 
 function cloneStringSet(values: Set<string>): Set<string> {
   return new Set(values)
+}
+
+function deleteNullableNarrowingKey(values: Set<string>, key: string): void {
+  values.delete(key)
+
+  const prefix = `${key}.`
+  const stale: string[] = []
+
+  for (const value of values) {
+    if (value.startsWith(prefix)) {
+      stale.push(value)
+    }
+  }
+
+  for (const value of stale) {
+    values.delete(value)
+  }
 }
 
 function resolvedTypeListHasNullable(infos: ResolvedTypeInfo[]): boolean {
@@ -1887,7 +1914,7 @@ class Checker {
 
       if (expression.target.path.length === 1) {
         if (symbol.nullable === true) {
-          this.narrowedNullableNames.delete(firstPathSegment(expression.target.path))
+          deleteNullableNarrowingKey(this.narrowedNullableNames, firstPathSegment(expression.target.path))
         }
       }
     }
@@ -2045,6 +2072,13 @@ class Checker {
     const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
     expression.nullable = resolvedFieldNullableMetadata(field, fieldType)
+
+    const narrowedKey = nullableNarrowingKey(expression)
+
+    if (narrowedKey != null && this.narrowedNullableNames.has(narrowedKey)) {
+      expression.nullable = false
+    }
+
     expression.valueType = valueType
     expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.arrayElementDeclaredType = resolvedStringMetadata(
@@ -2184,6 +2218,12 @@ class Checker {
     const targetValueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
     expression.target.nullable = resolvedFieldNullableMetadata(field, fieldType)
+    const narrowedKey = nullableNarrowingKey(expression.target)
+
+    if (narrowedKey != null) {
+      deleteNullableNarrowingKey(this.narrowedNullableNames, narrowedKey)
+    }
+
     expression.target.valueType = targetValueType
     expression.target.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.target.arrayElementDeclaredType = resolvedStringMetadata(
@@ -10457,23 +10497,16 @@ class Checker {
       maybeNull = expression.left
     }
 
-    if (
-      maybeNull == null ||
-      maybeNull.type !== 'NullLiteral' ||
-      nullable == null ||
-      nullable.type !== 'Reference' ||
-      nullable.path.length !== 1
-    ) {
+    if (maybeNull == null || maybeNull.type !== 'NullLiteral' || nullable == null) {
       return {
         trueNames: [],
         falseNames: []
       }
     }
 
-    const name = firstPathSegment(nullable.path)
-    const symbol = this.scope.resolve(name)
+    const key = nullableNarrowingKey(nullable)
 
-    if (symbol == null || symbol.nullable !== true) {
+    if (key == null || nullable.nullable !== true) {
       return {
         trueNames: [],
         falseNames: []
@@ -10482,14 +10515,14 @@ class Checker {
 
     if (expression.operator === '!==' || expression.operator === '!=') {
       return {
-        trueNames: [name],
+        trueNames: [key],
         falseNames: []
       }
     }
 
     return {
       trueNames: [],
-      falseNames: [name]
+      falseNames: [key]
     }
   }
 
@@ -12120,7 +12153,7 @@ class Checker {
     }
 
     this.scope.bindings.set(name, symbol)
-    this.narrowedNullableNames.delete(name)
+    deleteNullableNarrowingKey(this.narrowedNullableNames, name)
   }
 
   withScope(callback: Function): void {
