@@ -557,6 +557,31 @@ export function main(): void {
 })
 
 
+test('lowers C string comparisons over object expression fields', () => {
+  const result = compileSource(
+    `type User = {
+  name: string
+}
+
+function makeUser(): User {
+  return { name: 'Ada' }
+}
+
+export function main(): void {
+  console.log(makeUser().name === 'Ada', makeUser()['name'] !== 'Grace')
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get_known\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_cmp_string_\d+->len == 3 && memcmp\(ccjs_cmp_string_\d+->bytes, "Ada", ccjs_cmp_string_\d+->len\) == 0/)
+  assert.match(result.code, /!\(ccjs_cmp_string_\d+->len == 5 && memcmp\(ccjs_cmp_string_\d+->bytes, "Grace", ccjs_cmp_string_\d+->len\) == 0\)/)
+})
+
+
 test('lowers C string charCodeAt calls to byte reads', () => {
   const result = compileSource(
     `function isLower(ch: string): boolean {

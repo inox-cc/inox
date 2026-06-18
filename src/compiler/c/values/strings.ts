@@ -92,7 +92,15 @@ type TemplateReferenceValidationState = {
 }
 
 type StringMethodNode = {
+  args?: StringMethodNode[]
+  argsOwnership?: 'weak'
+  callee?: StringMethodNode
+  calleeOwnership?: 'weak'
+  index?: StringMethodNode
+  indexOwnership?: 'weak'
   loc?: SourceLocation | null
+  object?: StringMethodNode
+  objectOwnership?: 'weak'
   path?: string[]
   property?: string
   type?: string
@@ -102,6 +110,11 @@ type StringMethodNode = {
 type StringIndexNode = StringMethodNode & {
   object?: StringMethodNode
   index?: StringMethodNode
+}
+
+type StringCallNode = StringMethodNode & {
+  args?: StringMethodNode[]
+  callee?: StringMethodNode
 }
 
 type StringMethodCallParts = {
@@ -118,6 +131,8 @@ export type StringLoweringDependencies = {
   emitCallExpression(expression: AnyNode, context: StringCContext): string
   emitCValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression
   emitObjectValueReference(name: string, context: StringCContext): string
+  emitPreparedObjectExpressionIndexValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
+  emitPreparedObjectExpressionMemberValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: AnyNode, context: StringCContext): PreparedExpression
   emitReference(expression: AnyNode, context: StringCContext): string
   inferExpressionType(expression: AnyNode, context: StringCContext): string
@@ -556,31 +571,34 @@ function isStringIndexExpression(expression: StringIndexNode | null | undefined,
   return stringDeps(context).inferExpressionType(index, context) === 'number'
 }
 
-function resolveStringMethodCallParts(expression: any, method: string): StringMethodCallParts | null {
+function resolveStringMethodCallParts(expression: StringCallNode, method: string): StringMethodCallParts | null {
   const callee = expression.callee
   const args = expression.args
 
-  if (!isNodeCandidate(callee) || args == null) {
+  if (callee == null || args == null) {
     return null
   }
 
-  if (callee.type === 'MemberExpression' && callee.property === method) {
+  if (callee.type === 'MemberExpression' && callee.property === method && callee.object != null) {
     return {
       args,
       object: callee.object
     }
   }
 
+  const path = callee.path
+
   if (
     callee.type === 'Reference' &&
-    callee.path.length >= 2 &&
-    callee.path[callee.path.length - 1] === method
+    path != null &&
+    path.length >= 2 &&
+    path[path.length - 1] === method
   ) {
     return {
       args,
       object: {
         loc: callee.loc,
-        path: callee.path.slice(0, callee.path.length - 1),
+        path: path.slice(0, path.length - 1),
         type: 'Reference',
         valueType: callee.valueType
       }
@@ -697,6 +715,12 @@ export function emitPreparedStringBytesOperand(
     return knownObjectString
   }
 
+  const objectExpressionString = emitPreparedObjectExpressionStringBytesOperand(expression, context, tempPrefix)
+
+  if (objectExpressionString != null) {
+    return objectExpressionString
+  }
+
   const dynamicRuntimeString = emitPreparedDynamicRuntimeStringBytesOperand(expression, context, tempPrefix)
 
   if (dynamicRuntimeString != null) {
@@ -788,6 +812,37 @@ function knownObjectStringField(expression: AnyNode, context: StringCContext): C
   }
 
   return field
+}
+
+function emitPreparedObjectExpressionStringBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  let value: PreparedExpression | null = null
+
+  if (stringDeps(context).isMemberAccessExpression(expression)) {
+    value = stringDeps(context).emitPreparedObjectExpressionMemberValueExpression(expression, context)
+  } else if (expression.type === 'IndexExpression') {
+    value = stringDeps(context).emitPreparedObjectExpressionIndexValueExpression(expression, context)
+  }
+
+  if (value == null || value.valueType !== 'string') {
+    return null
+  }
+
+  const string = nextCName(context, tempPrefix)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+  lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
 }
 
 function emitPreparedDynamicRuntimeStringBytesOperand(

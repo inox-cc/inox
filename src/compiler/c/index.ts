@@ -866,6 +866,10 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   emitCallExpression,
   emitCValueExpression,
   emitObjectValueReference,
+  emitPreparedObjectExpressionIndexValueExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedObjectExpressionIndexValueExpression(expression, context, objectExpressionFieldDependencies),
+  emitPreparedObjectExpressionMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedNumberExpression,
   emitReference,
   inferExpressionType,
