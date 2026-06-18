@@ -401,7 +401,9 @@ function emitUrlObjectShape(context: CFunctionContext): PreparedExpression {
   const lines: string[] = []
 
   lines.push(`static const ccjs_field_info ${fieldsName}[] = {`)
-  for (const field of urlObjectFields) {
+  const fields: string[] = urlObjectFields
+
+  for (const field of fields) {
     lines.push(`  { ${cStringLiteral(field)}, CCJS_FIELD_READONLY },`)
   }
 
@@ -423,7 +425,9 @@ function emitUrlSearchParamsObjectShape(context: CFunctionContext): PreparedExpr
   const lines: string[] = []
 
   lines.push(`static const ccjs_field_info ${fieldsName}[] = {`)
-  for (const field of urlSearchParamsObjectFields) {
+  const fields: string[] = urlSearchParamsObjectFields
+
+  for (const field of fields) {
     lines.push(`  { ${cStringLiteral(field)}, 0 },`)
   }
 

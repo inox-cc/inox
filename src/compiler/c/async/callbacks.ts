@@ -1998,9 +1998,10 @@ export function emitRuntimeCallbackWrapperDeclaration(
   lines.push(emitIndentedRuntimeArgCountCheck(wrapper.functionType.params.length))
   lines.push('  *out = ccjs_undefined_value();')
   const args: string[] = []
+  const params: CFunctionParam[] = wrapper.functionType.params
   let index = 0
 
-  for (const param of wrapper.functionType.params) {
+  for (const param of params) {
     pushIndentedLines(lines, emitRuntimeCallbackWrapperArgChecks(param, index))
     args.push(emitRuntimeCallbackWrapperArg(param, index))
     index = index + 1

@@ -13,6 +13,7 @@ import {
   collectIrTopLevelNodes,
   findIrEntryProgram
 } from '../ir.ts'
+import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
 import {
   createFunctionContext,
   emitBoxedValueCleanup,
@@ -541,7 +542,8 @@ type CDynamicObjectFieldNode = AnyNode
 type CAccessorNode = CDynamicObjectFieldNode
 type CObjectLiteralPropertyNode = {
   key: string
-  value?: AnyNode | null
+  loc?: SourceLocation
+  value: AnyNode
 }
 type CStringMap = Map<string, string>
 type CNameSet = Set<string>
@@ -1947,8 +1949,9 @@ function emitStatement(statement: AnyNode, context: CFunctionContext): string[] 
   if (statement.type === 'BlockStatement') {
     const snapshot = pushVariableScope(context)
     const lines = ['{']
+    const bodyLines: string[] = emitStatementBody(statement, context)
 
-    for (const line of emitStatementBody(statement, context)) {
+    for (const line of bodyLines) {
       lines.push(`  ${line}`)
     }
 
@@ -2011,16 +2014,17 @@ function emitStatement(statement: AnyNode, context: CFunctionContext): string[] 
 
 function inferCatchBindingValueType(statement: AnyNode, context: CFunctionContext): string {
   const types: string[] = []
-  const localThrowTypes = collectIrLocalThrowValueTypes(statement.block, {
+  const throwOptions: IrLocalThrowValueTypeOptions = {
     errorObjectNames: context.errorObjectNames,
     functionThrowValueTypes: context.functionThrowValueTypes
-  })
+  }
+  const localThrowTypes: IrThrowValueType[] = collectIrLocalThrowValueTypes(statement.block, throwOptions)
 
   for (const throwType of localThrowTypes) {
     types.push(throwType)
   }
 
-  const localAwaitTypes = collectLocalAwaitRejectionValueTypes(statement.block, context)
+  const localAwaitTypes: string[] = collectLocalAwaitRejectionValueTypes(statement.block, context)
 
   for (const awaitType of localAwaitTypes) {
     types.push(awaitType)
@@ -2170,8 +2174,9 @@ function collectLocalAwaitRejectionValueTypesWithState(
 
   if (Array.isArray(node)) {
     const types: string[] = []
+    const items: AnyNode[] = node
 
-    for (const item of node) {
+    for (const item of items) {
       pushAll(
         types,
         collectLocalAwaitRejectionValueTypesWithState(
@@ -2624,14 +2629,17 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
   }
   const temp = nextCName(context, 'ccjs_nullable_value')
   const lines: string[] = []
+  const valueLines: string[] = value.lines
 
-  for (const line of value.lines) {
+  for (const line of valueLines) {
     lines.push(line)
   }
 
   lines.push(`ccjs_value ${temp} = ${value.expression};`)
 
-  for (const line of emitRuntimeNullableValueCheck(temp, expectedTag, context)) {
+  const checkLines: string[] = emitRuntimeNullableValueCheck(temp, expectedTag, context)
+
+  for (const line of checkLines) {
     lines.push(line)
   }
 
@@ -2639,7 +2647,9 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
   lines.push(`ccjs_release(${name});`)
   lines.push(`${name} = ${temp};`)
 
-  for (const line of clearNullableScalarNarrowing(name, context)) {
+  const narrowingLines: string[] = clearNullableScalarNarrowing(name, context)
+
+  for (const line of narrowingLines) {
     lines.push(line)
   }
 
@@ -2659,8 +2669,9 @@ function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunction
   }
 
   const lines: string[] = []
+  const valueLines: string[] = value.lines
 
-  for (const line of value.lines) {
+  for (const line of valueLines) {
     lines.push(line)
   }
 
@@ -2697,7 +2708,9 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   if (statement.shape != null) {
     fields = statement.shape.fields
   } else {
-    for (const property of statement.init.properties) {
+    const properties: CObjectLiteralPropertyNode[] = statement.init.properties
+
+    for (const property of properties) {
       fields.push({
         name: property.key,
         readonlyField: false,
@@ -3756,7 +3769,9 @@ function errorConstructorExpressions(
     }
   }
 
-  for (const property of options.properties) {
+  const properties: CObjectLiteralPropertyNode[] = options.properties
+
+  for (const property of properties) {
     if (property.key === 'code') {
       if (inferExpressionType(property.value, context) !== 'string') {
         let loc = property.loc
@@ -4444,8 +4459,9 @@ function emitPreparedDebugMemoryCallExpression(
   const shapeName = nextCName(context, 'ccjs_shape_debug_memory')
   const fieldsName = `${shapeName}_fields`
   const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+  const fields: DebugMemoryStatsField[] = debugMemoryStatsFields
 
-  for (const field of debugMemoryStatsFields) {
+  for (const field of fields) {
     lines.push(`  { ${cStringLiteral(field.name)}, CCJS_FIELD_READONLY },`)
   }
 
@@ -4746,7 +4762,9 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
 
   const managedResultResetLines: string[] = []
   if (managedResult && result != null) {
-    for (const line of emitPrepareOwnedValueWrite(result)) {
+    const resetLines: string[] = emitPrepareOwnedValueWrite(result)
+
+    for (const line of resetLines) {
       managedResultResetLines.push(`  ${line}`)
     }
   }

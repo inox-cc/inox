@@ -4,7 +4,7 @@ import type { AnyNode, IrFunctionEffect, IrThrowValueType, IrTopLevelItem } from
 type ThrowValueTypeMap = Map<string, IrThrowValueType[]>
 type StringSet = Set<string>
 
-type IrLocalThrowValueTypeOptions = {
+export type IrLocalThrowValueTypeOptions = {
   errorObjectNames?: StringSet | null
   functionThrowValueTypes?: ThrowValueTypeMap | null
 }

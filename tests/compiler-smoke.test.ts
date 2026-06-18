@@ -2055,6 +2055,93 @@ export function main(): void {
   assert.match(result.code, /ccjs_object_init_known\(emitOptions, 2, ccjs_value_\d+\)/)
 })
 
+test('preserves typed object-field array traversal metadata', () => {
+  const result = compileSource(
+    `type Param = {
+  name: string
+}
+
+type FunctionType = {
+  params: Param[]
+}
+
+type Wrapper = {
+  functionType: FunctionType
+}
+
+function countNamed(wrapper: Wrapper, name: string): number {
+  let count = 0
+  const params: Param[] = wrapper.functionType.params
+
+  for (const param of params) {
+    if (param.name === name) {
+      count = count + 1
+    }
+  }
+
+  return count
+}
+
+export function main(): void {
+  const functionType: FunctionType = { params: [{ name: 'a' }, { name: 'b' }] }
+  const wrapper: Wrapper = { functionType }
+
+  console.log(countNamed(wrapper, 'a'))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get_known\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_len\(params, &ccjs_for_length_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(params, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
+})
+
+test('preserves typed Map and Set option object forwarding', () => {
+  const result = compileSource(
+    `type ThrowOptions = {
+  names?: Set<string> | null
+  values?: Map<string, string[]> | null
+}
+
+function collect(options: ThrowOptions = {}): number {
+  let count = 0
+
+  if (options.names != null) {
+    count = count + options.names.size
+  }
+
+  if (options.values != null) {
+    count = count + options.values.size
+  }
+
+  return count
+}
+
+function infer(names: Set<string>, values: Map<string, string[]>): number {
+  const options: ThrowOptions = {
+    names,
+    values
+  }
+
+  return collect(options)
+}
+
+export function main(): void {
+  console.log(infer(new Set(['a']), new Map([['b', ['c']]])))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_init_known\(options, 0, names\)/)
+  assert.match(result.code, /ccjs_object_init_known\(options, 1, values\)/)
+})
+
 
 test('rejects unsupported C for of iterables with a stable diagnostic', () => {
   assertDiagnostic(

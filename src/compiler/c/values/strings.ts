@@ -2148,7 +2148,9 @@ function visitTemplatePlaceholderValue(
   state: TemplateReferenceValidationState
 ): void {
   if (Array.isArray(value)) {
-    for (const item of value) {
+    const items: AnyNode[] = value
+
+    for (const item of items) {
       visitTemplatePlaceholderValue(item, parent, key, state)
     }
 
@@ -2306,7 +2308,9 @@ function shiftTemplatePlaceholderExpressionLocations(
   prefixLength: number
 ): void {
   if (Array.isArray(value)) {
-    for (const item of value) {
+    const items: AnyNode[] = value
+
+    for (const item of items) {
       shiftTemplatePlaceholderExpressionLocations(item, loc, prefixLength)
     }
 

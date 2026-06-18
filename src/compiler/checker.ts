@@ -176,8 +176,14 @@ type OptionalParamInfo = {
   [key: string]: unknown
 }
 
+type CheckerScopeCallback = () => void
 type CheckerNode = AnyNode
 type NullableNode = AnyNode | null
+type CheckerObjectPropertyNode = CheckerNode & {
+  key: string
+  loc: SourceLocation
+  value: CheckerNode
+}
 
 type FunctionTypeParamMetadata = {
   name: string
@@ -4265,7 +4271,9 @@ class Checker {
           continue
         }
 
-        for (const envProperty of property.value.properties) {
+        const envProperties: CheckerObjectPropertyNode[] = property.value.properties
+
+        for (const envProperty of envProperties) {
           this.checkAssignableType(this.checkExpression(envProperty.value), 'string', envProperty.value.loc, false, false)
         }
         continue
@@ -5779,7 +5787,9 @@ class Checker {
         continue
       }
 
-      for (const header of property.value.properties) {
+      const headers: CheckerObjectPropertyNode[] = property.value.properties
+
+      for (const header of headers) {
         this.checkAssignableType(
           this.checkExpression(header.value),
           'string',
@@ -6837,7 +6847,9 @@ class Checker {
       return result
     }
 
-    for (const property of arg.properties) {
+    const properties: CheckerObjectPropertyNode[] = arg.properties
+
+    for (const property of properties) {
       let allowedOption = false
 
       for (const allowedName of allowed) {
@@ -9195,7 +9207,9 @@ class Checker {
         }
 
         if (expression.args[0].type === 'ObjectLiteral') {
-          for (const property of expression.args[0].properties) {
+          const properties: CheckerObjectPropertyNode[] = expression.args[0].properties
+
+          for (const property of properties) {
             let propertyValueType = property.value.valueType
 
             if (propertyValueType == null) {
@@ -9535,7 +9549,9 @@ class Checker {
       return
     }
 
-    for (const property of options.properties) {
+    const properties: CheckerObjectPropertyNode[] = options.properties
+
+    for (const property of properties) {
       if (property.key !== 'code' && property.key !== 'cause') {
         this.report('CCJS_UNKNOWN_FIELD', `unknown Error option ${property.key}`, property.loc)
         continue
@@ -10607,17 +10623,20 @@ class Checker {
       )
       const trueNames: string[] = []
       const falseNameCandidates: string[] = []
+      const leftTrueNames: string[] = left.trueNames
+      const rightTrueNames: string[] = right.trueNames
+      const rightFalseNames: string[] = right.falseNames
 
-      for (const name of left.trueNames) {
+      for (const name of leftTrueNames) {
         trueNames.push(name)
         falseNameCandidates.push(name)
       }
 
-      for (const name of right.trueNames) {
+      for (const name of rightTrueNames) {
         trueNames.push(name)
       }
 
-      for (const name of right.falseNames) {
+      for (const name of rightFalseNames) {
         falseNameCandidates.push(name)
       }
 
@@ -10634,17 +10653,20 @@ class Checker {
       )
       const trueNameCandidates: string[] = []
       const falseNames: string[] = []
+      const leftFalseNames: string[] = left.falseNames
+      const rightTrueNames: string[] = right.trueNames
+      const rightFalseNames: string[] = right.falseNames
 
-      for (const name of left.falseNames) {
+      for (const name of leftFalseNames) {
         trueNameCandidates.push(name)
         falseNames.push(name)
       }
 
-      for (const name of right.trueNames) {
+      for (const name of rightTrueNames) {
         trueNameCandidates.push(name)
       }
 
-      for (const name of right.falseNames) {
+      for (const name of rightFalseNames) {
         falseNames.push(name)
       }
 
@@ -12389,7 +12411,7 @@ class Checker {
     deleteNullableNarrowingKey(this.narrowedNullableNames, name)
   }
 
-  withScope(callback: Function): void {
+  withScope(callback: CheckerScopeCallback): void {
     const previous = this.scope
     const previousNarrowedNullableNames = this.narrowedNullableNames
     this.scope = new Scope(previous)
