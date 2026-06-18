@@ -116,6 +116,7 @@ export function emitCPrelude(
     }
     if (needsCollectionRuntime) {
       lines.push('#include "ccjs/array.h"')
+      lines.push('#include "ccjs/hash.h"')
     }
     if (needsAsyncRuntime) {
       lines.push('#include "ccjs/loop.h"')

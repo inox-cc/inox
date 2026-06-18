@@ -6600,6 +6600,56 @@ console.log(initials.length, initials[0], initials[1])
 })
 
 
+test('generated C Array.includes compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-includes-'))
+  const source = join(dir, 'array-includes.c')
+  const output = join(dir, 'array-includes')
+
+  try {
+    const result = compileSource(
+      `type Box = {
+  names: string[],
+  flags: boolean[]
+}
+
+const box: Box = { names: ['Ada', 'Grace'], flags: [false, true] }
+const values = [1, 2, 3]
+console.log(values.includes(2), values.includes(4))
+console.log(box.names.includes('Grace'), box.names.includes('Linus'))
+console.log(box['flags'].includes(true), box['flags'].includes(false))
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 0\n1 0\n1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C array length lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

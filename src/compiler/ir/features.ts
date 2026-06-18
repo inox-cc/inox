@@ -1090,15 +1090,19 @@ function arrayMethodCallName(expression: FeatureNode): string | null {
     return null
   }
 
-  if (property === 'slice') {
-    const object = callee.object
+  const method = arrayRuntimeMethodName(property)
 
-    if (object == null || object.valueType !== 'array') {
-      return null
-    }
+  if (method == null) {
+    return null
   }
 
-  return arrayRuntimeMethodName(property)
+  const object = callee.object
+
+  if (object == null || object.valueType !== 'array') {
+    return null
+  }
+
+  return method
 }
 
 function isStringConversionCall(expression: FeatureNode): boolean {

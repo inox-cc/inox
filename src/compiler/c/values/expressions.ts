@@ -704,6 +704,7 @@ export type CScalarExpressionDependencies = {
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitObjectValueReference(name: string, context: CFunctionContext): string
   emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArrayIncludesCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBinaryNumberCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBytesIndexExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBytesLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -1686,6 +1687,12 @@ export function emitPreparedNumberExpression(
 
     if (deps.isStringPredicateCall(expression, context)) {
       return deps.emitPreparedStringPredicateCall(expression, context)
+    }
+
+    const arrayIncludesCall = deps.emitPreparedArrayIncludesCallExpression(expression, context)
+
+    if (arrayIncludesCall != null) {
+      return arrayIncludesCall
     }
 
     const stringCharCodeAt = deps.emitPreparedStringCharCodeAtExpression(expression, context)

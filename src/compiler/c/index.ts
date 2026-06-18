@@ -382,6 +382,7 @@ import {
   emitArrayMapVariableDeclaration,
   emitArraySliceVariableDeclaration,
   emitArraySortVariableDeclaration,
+  emitPreparedArrayIncludesCallExpression,
   emitPreparedKnownArrayIndexValueExpression,
   emitPreparedArrayFilterCallExpression,
   emitPreparedArrayJoinCallExpression,
@@ -393,6 +394,7 @@ import {
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedArraySliceCallExpression,
   emitPreparedArraySortCallExpression,
+  isArrayIncludesCall,
   isArrayLengthExpression,
   isArrayMethodCall,
   resolveForOfElementType,
@@ -1123,6 +1125,7 @@ const cScalarExpressionDependencies = {
   emitCValueExpression,
   emitObjectValueReference,
   emitPreparedArrayLengthExpression,
+  emitPreparedArrayIncludesCallExpression,
   emitPreparedArrayIsArrayCallExpression,
   emitPreparedBinaryNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBinaryNumberCallExpression(expression, context, binaryLoweringDependencies),
@@ -2344,7 +2347,7 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     return functionScalarDeclaration
   }
 
-  if (isArrayMethodCall(statement.init)) {
+  if (isArrayMethodCall(statement.init) && !isArrayIncludesCall(statement.init)) {
     pushDiagnostic(context,
       diagnostic('CCJS_C_ARRAY_METHOD', 'array methods are not supported by the current C backend slice', statement.loc)
     )

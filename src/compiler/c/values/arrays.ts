@@ -471,6 +471,16 @@ export function isArrayMethodCall(expression: ArrayMaybeNode): boolean {
   return arrayRuntimeMethodName(callee.property) != null
 }
 
+export function isArrayIncludesCall(expression: ArrayMaybeNode): boolean {
+  if (expression == null || expression.type !== 'CallExpression') {
+    return false
+  }
+
+  const callee = expression.callee
+
+  return callee.type === 'MemberExpression' && callee.property === 'includes'
+}
+
 export function isArrayLengthExpression(expression: ArrayMaybeNode, context: ArrayFunctionContext): boolean {
   if (expression == null) {
     return false
@@ -1290,6 +1300,71 @@ export function emitPreparedArrayJoinCallExpression(
   return {
     lines,
     expression: out
+  }
+}
+
+export function emitPreparedArrayIncludesCallExpression(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): PreparedExpression | null {
+  if (expression == null || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  if (!isArrayIncludesCall(expression) || expression.args.length !== 1) {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression') {
+    return null
+  }
+
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
+
+  if (receiver == null) {
+    return null
+  }
+
+  const search = expression.args[0]
+
+  if (search == null) {
+    return null
+  }
+
+  let searchType = receiver.elementType
+
+  if (searchType === 'unknown') {
+    searchType = arrayDeps(context).inferExpressionType(search, context)
+  }
+  const searchValue = emitPreparedArrayElementValue(search, searchType, context)
+  const found = nextCName(context, 'ccjs_array_includes')
+  const length = nextCName(context, 'ccjs_array_includes_length')
+  const index = nextCName(context, 'ccjs_array_includes_index')
+  const value = nextCName(context, 'ccjs_array_includes_value')
+  const readStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)
+  const lines: string[] = []
+
+  registerOwnedValue(context, value)
+  appendLines(lines, receiver.lines)
+  appendLines(lines, searchValue.lines)
+  lines.push(`double ${found} = 0;`)
+  lines.push(`size_t ${length} = 0;`)
+  lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context))
+  lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
+  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
+  lines.push(`  ${readStatus}`)
+  lines.push(`  if (ccjs_hash_value_equal(${value}, ${searchValue.expression})) {`)
+  lines.push(`    ${found} = 1;`)
+  lines.push('    break;')
+  lines.push('  }')
+  lines.push('}')
+  appendLines(lines, emitPrepareOwnedValueWrite(value))
+
+  return {
+    lines,
+    expression: found
   }
 }
 

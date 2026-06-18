@@ -351,6 +351,85 @@ export function main(): void {
 })
 
 
+test('lowers C Array.includes calls for primitive runtime arrays', () => {
+  const result = compileSource(
+    `type Box = {
+  names: string[],
+  flags: boolean[]
+}
+
+function hasValue(values: number[], value: number): boolean {
+  return values.includes(value)
+}
+
+export function main(): void {
+  const box: Box = { names: ['Ada', 'Grace'], flags: [false, true] }
+  const values = [1, 2, 3]
+  const hasTwo = hasValue(values, 2)
+  const hasName = box.names.includes('Grace')
+  const hasFlag = box['flags'].includes(true)
+  console.log(hasTwo, hasName, hasFlag)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const hasValue = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'hasValue')
+  const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
+  const hasTwo = main?.body.find((item) => item.name === 'hasTwo')
+  assert.equal(hasValue?.returnType, 'boolean')
+  assert.equal(hasTwo?.valueType, 'boolean')
+  assert.match(result.code, /#include "ccjs\/hash\.h"/)
+  assert.match(result.code, /ccjs_array_len\(values, &ccjs_array_includes_length_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\(values, ccjs_array_includes_index_\d+, &ccjs_array_includes_value_\d+\)/)
+  assert.match(result.code, /ccjs_hash_value_equal\(ccjs_array_includes_value_\d+, ccjs_number_value\(value\)\)/)
+  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_hash_value_equal\(ccjs_array_includes_value_\d+, ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get\(box, "flags", 5, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_hash_value_equal\(ccjs_array_includes_value_\d+, ccjs_bool_value\(\(1\) != 0\)\)/)
+})
+
+
+test('checks Array.includes calls as boolean array methods', () => {
+  const result = compileSource(
+    `function hasName(names: string[], name: string): boolean {
+  return names.includes(name)
+}
+
+export function main(): void {
+  console.log(hasName(['Ada'], 'Ada'))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const hasName = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'hasName')
+  assert.equal(hasName?.returnType, 'boolean')
+
+  assertDiagnostic(
+    `export function main(): void {
+  const values = [1, 2, 3]
+  values.includes('2')
+}
+`,
+    'CCJS_TYPE_MISMATCH'
+  )
+
+  assertDiagnostic(
+    `export function main(): void {
+  const values = [1, 2, 3]
+  values.includes()
+}
+`,
+    'CCJS_ARG_COUNT'
+  )
+})
+
+
 test('lowers C Array.slice calls to runtime arrays', () => {
   const result = compileSource(
     `export function main(): void {

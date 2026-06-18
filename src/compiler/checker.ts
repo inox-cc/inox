@@ -7885,6 +7885,34 @@ class Checker {
       return 'string'
     }
 
+    if (expression.callee.property === 'includes') {
+      expression.valueType = 'boolean'
+
+      if (expression.args.length !== 1) {
+        this.report('CCJS_ARG_COUNT', `array.includes expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      }
+
+      if (expression.args[0] != null) {
+        const searchType = this.checkExpression(expression.args[0])
+
+        if (elementType !== 'unknown') {
+          this.checkAssignableType(
+            searchType,
+            elementType,
+            expression.args[0].loc,
+            false,
+            this.expressionCanBeNull(expression.args[0])
+          )
+        }
+      }
+
+      for (let index = 1; index < expression.args.length; index++) {
+        this.checkExpression(expression.args[index])
+      }
+
+      return 'boolean'
+    }
+
     expression.valueType = 'array'
 
     if (expression.callee.property === 'slice') {
