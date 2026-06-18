@@ -1,5 +1,7 @@
 import type { AnyNode } from '../types.ts'
 
+type SyntaxNode = AnyNode
+
 type VariableDeclarationCodeNode = {
   init?: VariableDeclarationInitNode | null
 }
@@ -59,13 +61,19 @@ export function cUnsupportedVariableDeclarationCode(statement: AnyNode, valueTyp
   return cUnsupportedExpressionCode(valueType)
 }
 
-export function containsAwaitExpression(node: AnyNode | AnyNode[] | null | undefined): boolean {
+function syntaxNodeAt(nodes: SyntaxNode[], index: number): SyntaxNode {
+  return nodes[index]
+}
+
+export function containsAwaitExpression(node: SyntaxNode | SyntaxNode[] | null | undefined): boolean {
   if (node == null) {
     return false
   }
 
   if (Array.isArray(node)) {
-    for (const item of node) {
+    for (let index = 0; index < node.length; index = index + 1) {
+      const item = syntaxNodeAt(node, index)
+
       if (containsAwaitExpression(item)) {
         return true
       }
