@@ -29,16 +29,21 @@ type DgramSocketCreateOptions = {
 }
 
 export type DgramLoweringDependencies = {
-  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedNumberExpression: (expression: DgramAstNode, context: CFunctionContext) => PreparedExpression
   emitPreparedStringBytesOperand: (expression: AnyNode, context: CFunctionContext, tempPrefix: string) => PreparedStringBytesOperand
-  emitReference: (expression: AnyNode, context: CFunctionContext) => string
-  emitStatementList: (body: AnyNode[], context: CFunctionContext) => string[]
-  findObjectLiteralPropertyValue: (expression: AnyNode, key: string) => AnyNode | null
-  staticObjectBooleanPropertyValue: (expression: AnyNode, key: string) => boolean | null
-  staticObjectStringPropertyValue: (expression: AnyNode, key: string) => string | null
+  emitReference: (expression: DgramAstNode, context: CFunctionContext) => string
+  emitStatementList: (body: DgramAstNode[], context: CFunctionContext) => string[]
+  findObjectLiteralPropertyValue: (expression: DgramAstNode, key: string) => DgramAstNode | null
+  staticObjectBooleanPropertyValue: (expression: DgramAstNode, key: string) => boolean | null
+  staticObjectStringPropertyValue: (expression: DgramAstNode, key: string) => string | null
 }
 
-function dgramNodeLoc(node: AnyNode | null | undefined): SourceLocation | null {
+type DgramTopLevelNodeEntry = {
+  kind: string
+  node: DgramAstNode
+}
+
+function dgramNodeLoc(node: DgramAstNode | null | undefined): SourceLocation | null {
   if (node == null) {
     return null
   }
@@ -62,13 +67,17 @@ function dgramArgumentAt(args: DgramAstNode[], index: number): DgramAstNode | nu
   return args[index]
 }
 
+function dgramTopLevelNodeEntryAt(entries: DgramTopLevelNodeEntry[], index: number): DgramTopLevelNodeEntry {
+  return entries[index]
+}
+
 function pushDgramLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
   }
 }
 
-function pushDgramNodes(target: AnyNode[], nodes: AnyNode[]): void {
+function pushDgramNodes(target: DgramAstNode[], nodes: DgramAstNode[]): void {
   for (const node of nodes) {
     target.push(node)
   }
@@ -418,11 +427,18 @@ export function collectDgramMessageHandlers(
   context: CEmitContext
 ): Map<string, CDgramMessageHandler> {
   const handlers: Map<string, CDgramMessageHandler> = new Map()
+  const programs: IrProgram[] = irPrograms
 
-  for (const ir of irPrograms) {
-    for (const item of collectIrTopLevelNodeEntries(ir)) {
+  for (const ir of programs) {
+    const items: DgramTopLevelNodeEntry[] = collectIrTopLevelNodeEntries(ir)
+
+    for (let itemIndex = 0; itemIndex < items.length; itemIndex = itemIndex + 1) {
+      const item = dgramTopLevelNodeEntryAt(items, itemIndex)
+
       if (item.kind === 'function') {
-        for (const statement of item.node.body) {
+        const statements: DgramAstNode[] = item.node.body
+
+        for (const statement of statements) {
           visitDgramMessageHandlerStatement(handlers, context, statement)
         }
       } else if (item.kind === 'statement') {
@@ -515,7 +531,9 @@ function visitDgramMessageHandlerStatement(
   }
 
   if (statement.type === 'BlockStatement') {
-    for (const item of statement.body) {
+    const statements: DgramAstNode[] = statement.body
+
+    for (const item of statements) {
       visitDgramMessageHandlerStatement(handlers, context, item)
     }
     return
@@ -555,9 +573,13 @@ function visitDgramMessageHandlerStatement(
 
   if (statement.type === 'SwitchStatement') {
     visitDgramMessageHandlerExpression(handlers, context, statement.discriminant)
-    for (const item of statement.cases) {
+    const cases: DgramAstNode[] = statement.cases
+
+    for (const item of cases) {
       visitDgramMessageHandlerExpression(handlers, context, item.test)
-      for (const consequent of item.consequent) {
+      const consequents: DgramAstNode[] = item.consequent
+
+      for (const consequent of consequents) {
         visitDgramMessageHandlerStatement(handlers, context, consequent)
       }
     }
@@ -602,7 +624,9 @@ function visitDgramMessageHandlerExpression(
     }
 
     visitDgramMessageHandlerExpression(handlers, context, callee)
-    for (const arg of expression.args) {
+    const args: DgramAstNode[] = expression.args
+
+    for (const arg of args) {
       visitDgramMessageHandlerExpression(handlers, context, arg)
     }
     return
@@ -610,7 +634,9 @@ function visitDgramMessageHandlerExpression(
 
   if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
     visitDgramMessageHandlerExpression(handlers, context, expression.callee)
-    for (const arg of expression.args) {
+    const args: DgramAstNode[] = expression.args
+
+    for (const arg of args) {
       visitDgramMessageHandlerExpression(handlers, context, arg)
     }
     return
@@ -620,7 +646,9 @@ function visitDgramMessageHandlerExpression(
     if (expression.expressionBody) {
       visitDgramMessageHandlerExpression(handlers, context, expression.body)
     } else {
-      for (const statement of expression.body) {
+      const statements: DgramAstNode[] = expression.body
+
+      for (const statement of statements) {
         visitDgramMessageHandlerStatement(handlers, context, statement)
       }
     }
@@ -661,14 +689,18 @@ function visitDgramMessageHandlerExpression(
   }
 
   if (expression.type === 'ArrayLiteral') {
-    for (const element of expression.elements) {
+    const elements: DgramAstNode[] = expression.elements
+
+    for (const element of elements) {
       visitDgramMessageHandlerExpression(handlers, context, element)
     }
     return
   }
 
   if (expression.type === 'ObjectLiteral') {
-    for (const property of expression.properties) {
+    const properties: DgramAstNode[] = expression.properties
+
+    for (const property of properties) {
       visitDgramMessageHandlerExpression(handlers, context, property.value)
     }
   }
@@ -686,8 +718,9 @@ function emitDgramMessageHandlerStatement(
 
   if (statement.type === 'BlockStatement') {
     const lines = ['{']
+    const statements: DgramAstNode[] = statement.body
 
-    for (const item of statement.body) {
+    for (const item of statements) {
       pushIndentedDgramLines(lines, emitDgramMessageHandlerStatement(item, dgramContext, context, deps))
     }
 
