@@ -11,6 +11,7 @@ import {
   irClassMethodEffectName,
   mergeIrFunctionEffects
 } from '../ir.ts'
+import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import type { CFunctionParam, CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
 import {
@@ -762,8 +763,9 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
         continue
       }
 
-      context.moduleValueNames.set(specifier.local, emitCModuleValueName(importedModule, specifier.imported))
-      context.moduleValueTypes.set(specifier.local, cModuleValueType(exported))
+      const localName = cModuleImportedBindingName(item.declaration, specifier)
+      context.moduleValueNames.set(localName, emitCModuleValueName(importedModule, specifier.imported))
+      context.moduleValueTypes.set(localName, cModuleValueType(exported))
     }
   }
 }
@@ -1026,7 +1028,8 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
       )
 
       if (declaration != null) {
-        declarations.push(cloneImportedCModuleFunctionDeclaration(declaration, specifier.local))
+        const localName = cModuleImportedBindingName(item.declaration, specifier)
+        declarations.push(cloneImportedCModuleFunctionDeclaration(declaration, localName))
       }
     }
   }
@@ -1036,13 +1039,21 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
 
 function collectImportedCModuleFunctionEffects(plan: CModulePlan): IrFunctionEffect[] {
   const visiting: Set<string> = new Set()
-  return collectImportedCModuleFunctionEffectsWithVisited(plan, visiting)
+  const cache: Map<string, IrFunctionEffect[]> = new Map()
+  return collectImportedCModuleFunctionEffectsWithVisited(plan, visiting, cache)
 }
 
 function collectCModulePlanFunctionEffectsWithVisited(
   plan: CModulePlan,
-  visiting: Set<string>
+  visiting: Set<string>,
+  cache: Map<string, IrFunctionEffect[]>
 ): IrFunctionEffect[] {
+  const cached = cache.get(plan.record.path)
+
+  if (cached != null) {
+    return cached
+  }
+
   if (visiting.has(plan.record.path)) {
     return []
   }
@@ -1052,7 +1063,7 @@ function collectCModulePlanFunctionEffectsWithVisited(
   const irPrograms: IrProgram[] = []
   irPrograms.push(plan.ir)
 
-  const importedEffects = collectImportedCModuleFunctionEffectsWithVisited(plan, visiting)
+  const importedEffects = collectImportedCModuleFunctionEffectsWithVisited(plan, visiting, cache)
   const inferredEffects = collectIrFunctionEffectsWithExternalEffects(irPrograms, importedEffects, true)
   const storedEffects = collectIrStoredFunctionEffects(irPrograms)
   const effects = mergeIrFunctionEffects(inferredEffects, storedEffects)
@@ -1064,13 +1075,15 @@ function collectCModulePlanFunctionEffectsWithVisited(
   }
 
   visiting.delete(plan.record.path)
+  cache.set(plan.record.path, effects)
 
   return effects
 }
 
 function collectImportedCModuleFunctionEffectsWithVisited(
   plan: CModulePlan,
-  visiting: Set<string>
+  visiting: Set<string>,
+  cache: Map<string, IrFunctionEffect[]>
 ): IrFunctionEffect[] {
   const effects: IrFunctionEffect[] = []
 
@@ -1086,7 +1099,7 @@ function collectImportedCModuleFunctionEffectsWithVisited(
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = cModuleNodeAt(specifiers, specifierIndex)
-      const sourceEffects = collectCModulePlanFunctionEffectsWithVisited(importedModule, visiting)
+      const sourceEffects = collectCModulePlanFunctionEffectsWithVisited(importedModule, visiting, cache)
 
       for (let effectIndex = 0; effectIndex < sourceEffects.length; effectIndex = effectIndex + 1) {
         const effect = cModuleFunctionEffectAt(sourceEffects, effectIndex)
@@ -1094,7 +1107,8 @@ function collectImportedCModuleFunctionEffectsWithVisited(
         const importedName: string = specifier.imported
 
         if (effectName === importedName) {
-          effects.push(cloneImportedCModuleFunctionEffect(effect, specifier.local))
+          const localName = cModuleImportedBindingName(item.declaration, specifier)
+          effects.push(cloneImportedCModuleFunctionEffect(effect, localName))
         }
       }
     }
@@ -1184,11 +1198,17 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const importedBindingName = cModuleImportedBindingName(item.declaration, specifier)
+      const importedFunctionName = emitCModuleFunctionName(importedModule, specifier.imported)
 
-      names.set(specifier.imported, emitCModuleFunctionName(importedModule, specifier.imported))
+      names.set(importedBindingName, importedFunctionName)
 
-      if (!localNames.has(specifier.local)) {
-        names.set(specifier.local, emitCModuleFunctionName(importedModule, specifier.imported))
+      if (item.declaration.type !== 'ExportDeclaration') {
+        names.set(specifier.imported, importedFunctionName)
+
+        if (!localNames.has(specifier.local)) {
+          names.set(specifier.local, importedFunctionName)
+        }
       }
     }
   }
@@ -1198,6 +1218,14 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
 
 function emitCModuleFunctionName(plan: CModulePlan, name: string): string {
   return `${plan.symbolPrefix}_${emitCFunctionName(name)}`
+}
+
+function cModuleImportedBindingName(declaration: AnyNode, specifier: AnyNode): string {
+  if (declaration.type === 'ExportDeclaration') {
+    return reexportImportAliasName(specifier.local)
+  }
+
+  return specifier.local
 }
 
 function emitCModuleValueName(plan: CModulePlan, name: string): string {

@@ -11,6 +11,7 @@ import type { AnyNode, CompileOptions, Diagnostic, ModuleGraph, ModuleRecord, Pr
 import { collectExports } from './exports.ts'
 import { isRelativeSpecifier, resolveExistingSource, resolveImport as resolveImportSpecifier } from './resolve.ts'
 import {
+  createExportAliasDeclaration,
   createImportAliasDeclaration,
   createTypeImportDeclarations,
   insertImportSyntheticDeclarations
@@ -95,6 +96,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     hir: null,
     ir: null,
     imports,
+    reexports,
     exports: collectExports(ast)
   }
 
@@ -102,6 +104,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
   const importAliasDeclarations: Map<number, AnyNode[]> = new Map()
   const importTypeDeclarations: Map<number, AnyNode[]> = new Map()
+  const reexportAliasDeclarations: AnyNode[] = []
 
   let importIndex = 0
 
@@ -259,16 +262,49 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
       }
 
       module.exports.set(specifier.local, exported)
+
+      if (!item.typeOnly && importedModule.hir != null) {
+        const alias = createExportAliasDeclaration(specifier, importedModule.hir)
+
+        if (alias != null) {
+          reexportAliasDeclarations.push(alias)
+        }
+      }
     }
   }
 
   const checked = checkProgram(insertImportSyntheticDeclarations(ast, importTypeDeclarations), context.options)
-  module.hir = insertImportSyntheticDeclarations(lowerProgram(checked.ast), importAliasDeclarations)
+  module.hir = appendSyntheticDeclarations(
+    insertImportSyntheticDeclarations(lowerProgram(checked.ast), importAliasDeclarations),
+    reexportAliasDeclarations
+  )
   module.ir = lowerHirToIr(module.hir)
   context.visiting.delete(path)
   context.order.push(module)
 
   return true
+}
+
+function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode[]): ProgramNode {
+  if (declarations.length === 0) {
+    return program
+  }
+
+  const body: AnyNode[] = []
+
+  for (const item of program.body) {
+    body.push(item)
+  }
+
+  for (const declaration of declarations) {
+    body.push(declaration)
+  }
+
+  return {
+    type: program.type,
+    loc: program.loc,
+    body
+  }
 }
 
 function requireModuleGraphRecord(context: ModuleGraphContext, path: string): ModuleRecord {

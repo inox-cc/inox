@@ -3,7 +3,7 @@ import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
 import { formatGeneratedC } from './format.ts'
 import { emitCIdentifier } from './identifiers.ts'
 import type { CompilerHost } from '../host.ts'
-import type { AnyNode, Diagnostic, ModuleGraph } from '../types.ts'
+import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord } from '../types.ts'
 import type { CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
 
 const cModuleSourceExtensions = ['', '.ts', '.js']
@@ -108,7 +108,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
 
   for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
     const plan = plans[planIndex]
-    const declarations: CModuleNode[] = plan.record.imports
+    const declarations = collectCModuleImportDeclarations(plan.record)
     const imports: CModuleImportPlan[] = []
 
     for (const declaration of declarations) {
@@ -149,6 +149,20 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
   }
 
   return plans
+}
+
+function collectCModuleImportDeclarations(record: ModuleRecord): CModuleNode[] {
+  const declarations: CModuleNode[] = []
+
+  for (const declaration of record.imports) {
+    declarations.push(declaration)
+  }
+
+  for (const declaration of record.reexports) {
+    declarations.push(declaration)
+  }
+
+  return declarations
 }
 
 function pushCModuleOutputFiles(target: CModuleOutputFile[], source: CModuleOutputFile[]): void {

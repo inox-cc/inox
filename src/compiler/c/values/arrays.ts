@@ -473,6 +473,22 @@ export function isArrayIncludesCall(expression: ArrayMaybeNode): boolean {
   return callee.type === 'MemberExpression' && callee.property === 'includes'
 }
 
+export function isArrayJoinCall(expression: ArrayMaybeNode, context: ArrayFunctionContext): boolean {
+  if (expression == null || expression.type !== 'CallExpression' || expression.args.length > 1) {
+    return false
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression' || callee.property !== 'join') {
+    return false
+  }
+
+  const elementType = resolveArrayJoinReceiverElementType(callee.object, context)
+
+  return elementType != null && isSupportedRuntimeArrayElementType(elementType)
+}
+
 export function isArrayUnshiftCall(expression: ArrayMaybeNode): boolean {
   if (expression == null || expression.type !== 'CallExpression') {
     return false
@@ -2560,6 +2576,55 @@ function emitPreparedArrayReceiver(
     }
 
     return null
+  }
+
+  return null
+}
+
+function resolveArrayJoinReceiverElementType(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {
+  if (expression == null) {
+    return null
+  }
+
+  if (expression.type === 'ArrayLiteral') {
+    const elements: CArrayElementInfo[] = []
+
+    for (const element of expression.elements) {
+      elements.push({
+        valueType: arrayDeps(context).inferExpressionType(element, context)
+      })
+    }
+
+    return resolveForOfElementType(elements)
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+
+    if (context.variables.get(name) !== 'array') {
+      return null
+    }
+
+    const elementType = context.runtimeArrayElementTypes.get(name)
+
+    if (elementType != null) {
+      return elementType
+    }
+
+    const shape = findArrayShape(context, name)
+
+    if (shape == null) {
+      return resolveForOfElementType([])
+    }
+
+    return resolveForOfElementType(shape)
+  }
+
+  if (
+    (expression.type === 'MemberExpression' || expression.type === 'IndexExpression' || expression.type === 'CallExpression') &&
+    arrayDeps(context).inferExpressionType(expression, context) === 'array'
+  ) {
+    return resolvePreparedArrayReceiverElementType(expression, context)
   }
 
   return null

@@ -260,6 +260,46 @@ export function main(): void {
   assert.match(indexSource, /ccjs_mod_dep_ts_[a-f0-9]+_answer/)
 })
 
+test('emits C module wrappers for re-exported functions', async () => {
+  const files = [
+    {
+      path: '/project/dep.ts',
+      source: `export function value(): number {
+  return 7
+}
+`
+    },
+    {
+      path: '/project/barrel.ts',
+      source: `export { value } from './dep'
+`
+    },
+    {
+      path: '/project/index.ts',
+      source: `import { value } from './barrel'
+
+export function main(): void {
+  console.log(value())
+}
+`
+    }
+  ]
+
+  const modules = await compileMemoryPackageToCModules('/project/index.ts', files, {
+    sourceRoot: '/project',
+    target: 'c'
+  })
+  const barrelHeader = modules.files.find((file) => file.path === 'barrel.h')?.code ?? ''
+  const barrelSource = modules.files.find((file) => file.path === 'barrel.c')?.code ?? ''
+  const indexSource = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
+
+  assert.match(barrelHeader, /double ccjs_mod_barrel_ts_[a-f0-9]+_value\(void\);/)
+  assert.match(barrelSource, /double ccjs_mod_barrel_ts_[a-f0-9]+_value\(void\) \{/)
+  assert.match(barrelSource, /ccjs_return = ccjs_mod_dep_ts_[a-f0-9]+_value\(\);/)
+  assert.match(indexSource, /ccjs_mod_barrel_ts_[a-f0-9]+_value\(\)/)
+  assert.doesNotMatch(barrelSource, /ccjs_return = ccjs_mod_barrel_ts_[a-f0-9]+_value\(\);/)
+})
+
 test('compiles memory packages through self-hosting entrypoints', async () => {
   const files = [
     {

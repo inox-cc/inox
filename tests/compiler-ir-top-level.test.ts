@@ -80,9 +80,9 @@ test('collects IR module records from module graph', () => {
   const graph: ModuleGraph = {
     entry: '/entry.ts',
     modules: [
-      { path: '/entry.ts', source: '', ast: { body: [] }, hir: null, ir: entryIr, imports: [], exports: new Map() },
-      { path: '/ignored.ts', source: '', ast: { body: [] }, hir: null, ir: null, imports: [], exports: new Map() },
-      { path: '/other.ts', source: '', ast: { body: [] }, hir: null, ir: otherIr, imports: [], exports: new Map() }
+      { path: '/entry.ts', source: '', ast: { body: [] }, hir: null, ir: entryIr, imports: [], reexports: [], exports: new Map() },
+      { path: '/ignored.ts', source: '', ast: { body: [] }, hir: null, ir: null, imports: [], reexports: [], exports: new Map() },
+      { path: '/other.ts', source: '', ast: { body: [] }, hir: null, ir: otherIr, imports: [], reexports: [], exports: new Map() }
     ]
   }
   const records = collectIrModuleRecords(graph)

@@ -65,29 +65,46 @@ function collectProgramTypeDeclarationNames(program: ProgramNode): Set<string> {
 }
 
 export function createImportAliasDeclaration(specifier: AnyNode, importedProgram: ProgramNode): AnyNode | null {
-  const exported = findExportedDeclaration(importedProgram, specifier.imported)
+  return createAliasDeclaration(specifier, importedProgram, false, specifier.imported)
+}
 
-  if (exported == null) {
+export function createExportAliasDeclaration(specifier: AnyNode, importedProgram: ProgramNode): AnyNode | null {
+  return createAliasDeclaration(specifier, importedProgram, true, reexportImportAliasName(specifier.local))
+}
+
+export function reexportImportAliasName(name: string): string {
+  return `__ccjs_reexport_${name}`
+}
+
+function createAliasDeclaration(
+  specifier: AnyNode,
+  importedProgram: ProgramNode,
+  exported: boolean,
+  targetName: string
+): AnyNode | null {
+  const declaration = findExportedDeclaration(importedProgram, specifier.imported)
+
+  if (declaration == null) {
     return null
   }
 
-  if (exported.type === 'FunctionDeclaration') {
-    return createFunctionAliasDeclaration(specifier.local, exported, specifier.loc)
+  if (declaration.type === 'FunctionDeclaration') {
+    return createFunctionAliasDeclaration(specifier.local, targetName, declaration, specifier.loc, exported)
   }
 
   return {
     type: 'VariableDeclaration',
     kind: 'const',
-    exported: false,
+    exported,
     name: specifier.local,
     loc: specifier.loc,
-    declaredType: nullableNodeValue(exported.declaredType),
-    valueType: fallbackString(exported.valueType, 'unknown'),
+    declaredType: nullableNodeValue(declaration.declaredType),
+    valueType: fallbackString(declaration.valueType, 'unknown'),
     init: {
       type: 'Reference',
-      path: [specifier.imported],
+      path: [targetName],
       loc: specifier.loc,
-      valueType: fallbackString(exported.valueType, 'unknown')
+      valueType: fallbackString(declaration.valueType, 'unknown')
     }
   }
 }
@@ -346,7 +363,13 @@ function cloneTypeAliasValue(valueType: AnyNode): AnyNode {
   }
 }
 
-function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: SourceLocation): AnyNode {
+function createFunctionAliasDeclaration(
+  name: string,
+  targetName: string,
+  target: AnyNode,
+  loc: SourceLocation,
+  exported: boolean
+): AnyNode {
   const params = cloneParams(target.params)
   const args: AnyNode[] = []
 
@@ -363,7 +386,7 @@ function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: Sour
     type: 'CallExpression',
     callee: {
       type: 'Reference',
-      path: [target.name],
+      path: [targetName],
       loc,
       valueType: 'function'
     },
@@ -373,7 +396,7 @@ function createFunctionAliasDeclaration(name: string, target: AnyNode, loc: Sour
   }
   return {
     type: 'FunctionDeclaration',
-    exported: false,
+    exported,
     async: target.async,
     name,
     loc,

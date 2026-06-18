@@ -214,6 +214,7 @@ export type ModuleRecord = {
   hir: ProgramNode | null
   ir: IrProgram | null
   imports: AnyNode[]
+  reexports: AnyNode[]
   exports: Map<string, AnyNode>
 }
 

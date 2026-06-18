@@ -95,6 +95,26 @@ console.log(label('Ada'), label(7), label(true), label(null))
   assert.doesNotMatch(result.code, /template placeholders currently support/)
 })
 
+test('lowers C template interpolation for array join runtime strings', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const features = ['parser', 'checker']
+  console.log(\`features \${features.join(', ')}\`)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, features, ", ", 2, &ccjs_array_join_\d+\)/)
+  assert.match(result.code, /ccjs_template_string_\d+ = \(ccjs_string\*\)ccjs_array_join_\d+\.as\.ref;/)
+  assert.doesNotMatch(
+    result.code,
+    /ccjs_string_from_number\(&ccjs_default_allocator, ccjs_array_join_\d+, &ccjs_value_\d+\)/
+  )
+})
+
 test('generated C console log template interpolation compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
