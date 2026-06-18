@@ -126,6 +126,18 @@ function cBooleanValueIsTrue(value: boolean | null | undefined): boolean {
   return false
 }
 
+function expressionStringEquals(left: string, right: string): boolean {
+  return left === right
+}
+
+function expressionStringOrEmpty(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
 type NullableScalarNarrowingSnapshot = {
   active: boolean
   narrowedNullableScalars: CStringSet
@@ -176,7 +188,7 @@ function joinStrings(values: string[], separator: string): string {
 }
 
 function isNumberOrBooleanValueType(valueType: string): boolean {
-  return valueType === 'number' || valueType === 'boolean'
+  return expressionStringEquals(valueType, 'number') || expressionStringEquals(valueType, 'boolean')
 }
 
 function isNumericCastName(name: string): boolean {
@@ -303,7 +315,7 @@ function scalarRuntimeValueExpression(value: string, valueType: string): string 
 }
 
 function boxedScalarRuntimeValueExpression(value: string, valueType: string): string {
-  if (valueType === 'boolean') {
+  if (expressionStringEquals(valueType, 'boolean')) {
     return `ccjs_bool_value((${value}) != 0)`
   }
 
@@ -330,6 +342,10 @@ function functionParamAt(params: CFunctionParam[], expectedIndex: number): CFunc
 
 function stringValueAt(values: string[], index: number): string {
   return values[index]
+}
+
+function functionParamValueType(param: CFunctionParam): string {
+  return param.valueType
 }
 
 function wrappedCExpression(expression: string): string {
@@ -689,9 +705,9 @@ function emitPreparedMathCallExpression(
   context: CFunctionContext,
   deps: CCallExpressionDependencies
 ): PreparedExpression | null {
-  const method = mathRuntimeMethodName(expression.callee)
+  const method = expressionStringOrEmpty(mathRuntimeMethodName(expression.callee))
 
-  if (method == null) {
+  if (expressionStringEquals(method, '')) {
     return null
   }
 
@@ -725,37 +741,39 @@ export function emitPreparedCallArgs(
     const param = functionParamAt(params, index)
 
     if (param != null) {
+      const paramValueType = functionParamValueType(param)
+
       if (isNullableScalarParam(param)) {
         const value = deps.emitNullableScalarValueExpression(arg, context)
 
         appendLines(lines, value.lines)
         args.push(value.expression)
-      } else if (deps.isNullableFunctionType(param.valueType, cBooleanValueIsTrue(param.nullable))) {
+      } else if (deps.isNullableFunctionType(paramValueType, cBooleanValueIsTrue(param.nullable))) {
         const value = deps.emitNullableFunctionValueExpression(arg, param.functionType, context)
 
         appendLines(lines, value.lines)
         args.push(value.expression)
-      } else if (param.valueType === 'unknown' || isOpaqueRuntimeValueType(param.valueType)) {
+      } else if (expressionStringEquals(paramValueType, 'unknown') || isOpaqueRuntimeValueType(paramValueType)) {
         const value = deps.emitCValueExpression(arg, context)
 
         appendLines(lines, value.lines)
         args.push(value.expression)
-      } else if (param.valueType === 'string') {
+      } else if (expressionStringEquals(paramValueType, 'string')) {
         const value = deps.emitCValueExpression(arg, context)
 
         appendLines(lines, value.lines)
         args.push(value.expression)
-      } else if (param.valueType === 'object') {
+      } else if (expressionStringEquals(paramValueType, 'object')) {
         const value = deps.emitCValueExpression(arg, context)
 
         appendLines(lines, value.lines)
         args.push(value.expression)
-      } else if (isManagedRuntimeReturnType(param.valueType)) {
+      } else if (isManagedRuntimeReturnType(paramValueType)) {
         const value = deps.emitCValueExpression(arg, context)
 
         appendLines(lines, value.lines)
         args.push(value.expression)
-      } else if (param.valueType === 'function') {
+      } else if (expressionStringEquals(paramValueType, 'function')) {
         const runtimeFunctionType = deps.resolveRuntimeFunctionArgumentType(expression.callee, index, param, context)
 
         if (runtimeFunctionType != null) {
@@ -923,9 +941,9 @@ export function isThrowingFunctionName(name: string, context: CEmitContext): boo
 }
 
 export function emitCallee(callee: AnyNode, context: CFunctionContext): string {
-  const timeRuntimeCall = cTimeRuntimeCallName(callee)
+  const timeRuntimeCall = expressionStringOrEmpty(cTimeRuntimeCallName(callee))
 
-  if (timeRuntimeCall != null) {
+  if (!expressionStringEquals(timeRuntimeCall, '')) {
     return timeRuntimeCall
   }
 
@@ -2725,7 +2743,7 @@ export function emitCValueExpression(
 
   if (expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
-    const valueType = context.variables.get(name)
+    const valueType = expressionStringOrEmpty(context.variables.get(name))
 
     if (context.nullableVariables.has(name)) {
       return {
@@ -2737,7 +2755,7 @@ export function emitCValueExpression(
     if (deps.isBoxedRuntimeValueName(name, context)) {
       let tag = 'CCJS_TAG_OBJECT'
 
-      if (valueType === 'string') {
+      if (expressionStringEquals(valueType, 'string')) {
         tag = 'CCJS_TAG_STRING'
       }
 
@@ -2747,7 +2765,7 @@ export function emitCValueExpression(
       }
     }
 
-    if (valueType === 'string' && context.runtimeStrings.has(name)) {
+    if (expressionStringEquals(valueType, 'string') && context.runtimeStrings.has(name)) {
       const temp = nextCName(context, 'ccjs_value')
 
       return {
@@ -2760,35 +2778,39 @@ export function emitCValueExpression(
       }
     }
 
-    if (valueType === 'bytes' || valueType === 'object' || valueType === 'array') {
+    if (
+      expressionStringEquals(valueType, 'bytes') ||
+      expressionStringEquals(valueType, 'object') ||
+      expressionStringEquals(valueType, 'array')
+    ) {
       return {
         lines: [],
         expression: name
       }
     }
 
-    if (valueType === 'map' || valueType === 'set') {
+    if (expressionStringEquals(valueType, 'map') || expressionStringEquals(valueType, 'set')) {
       return {
         lines: [],
         expression: name
       }
     }
 
-    if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)) {
+    if (expressionStringEquals(valueType, 'unknown') || isOpaqueRuntimeValueType(valueType)) {
       return {
         lines: [],
         expression: name
       }
     }
 
-    if (valueType === 'number') {
+    if (expressionStringEquals(valueType, 'number')) {
       return {
         lines: [],
         expression: `ccjs_number_value(${name})`
       }
     }
 
-    if (valueType === 'boolean') {
+    if (expressionStringEquals(valueType, 'boolean')) {
       return {
         lines: [],
         expression: `ccjs_bool_value(${name})`

@@ -2445,7 +2445,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       continue
     }
 
-    const value = emitCValueExpression(nodeOrEmpty(propertyValue), context)
+    const value = emitObjectFieldInitializerValue(field, nodeOrEmpty(propertyValue), context)
 
     for (const line of value.lines) {
       lines.push(line)
@@ -2878,6 +2878,51 @@ function unsupportedArrayElementMessage(valueType: string): string {
   return 'this array element type is not supported by the current C backend slice'
 }
 
+function isSupportedObjectFieldStorageType(valueType: string): boolean {
+  return (
+    cStringEquals(valueType, 'unknown') ||
+    isManagedRuntimeReturnType(valueType) ||
+    isNullableScalarType(valueType) ||
+    isOpaqueRuntimeValueType(valueType)
+  )
+}
+
+function unsupportedObjectFieldStorageMessage(valueType: string): string {
+  if (cStringEquals(valueType, 'function')) {
+    return 'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
+  }
+
+  return 'this object field type is not supported by the current C backend slice'
+}
+
+function unsupportedObjectFieldValueExpression(
+  valueType: string,
+  loc: CSourceLocation,
+  context: CFunctionContext
+): PreparedExpression {
+  pushDiagnostic(
+    context,
+    diagnostic(cUnsupportedExpressionCode(valueType), unsupportedObjectFieldStorageMessage(valueType), loc)
+  )
+
+  return {
+    lines: [],
+    expression: 'ccjs_undefined_value()'
+  }
+}
+
+function emitObjectFieldInitializerValue(
+  field: CObjectShapeField,
+  propertyValue: AnyNode,
+  context: CFunctionContext
+): PreparedExpression {
+  if (!isSupportedObjectFieldStorageType(field.valueType)) {
+    return unsupportedObjectFieldValueExpression(field.valueType, propertyValue.loc, context)
+  }
+
+  return emitCValueExpression(propertyValue, context)
+}
+
 function emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   return emitCValueExpressionWithDependencies(expression, context, cValueExpressionDependencies)
 }
@@ -3154,7 +3199,7 @@ function emitCObjectLiteralValueExpression(
       continue
     }
 
-    const value = emitCValueExpression(nodeOrEmpty(propertyValue), context)
+    const value = emitObjectFieldInitializerValue(field, nodeOrEmpty(propertyValue), context)
 
     pushAll(lines, value.lines)
     lines.push(emitStatusCheck(`ccjs_object_init_known(${temp}, ${index}, ${value.expression})`, context))

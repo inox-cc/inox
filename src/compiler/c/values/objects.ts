@@ -8,8 +8,14 @@ import {
 import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
+import { cUnsupportedExpressionCode } from '../syntax.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
-import { cRuntimeValueTag, isOpaqueRuntimeValueType } from '../value-types.ts'
+import {
+  cRuntimeValueTag,
+  isManagedRuntimeReturnType,
+  isNullableScalarType,
+  isOpaqueRuntimeValueType
+} from '../value-types.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
 import type {
   CKnownObjectField,
@@ -88,9 +94,25 @@ function appendLines(out: string[], lines: string[]): void {
   }
 }
 
+function objectStringEquals(left: string, right: string): boolean {
+  return left === right
+}
+
+function objectStringOrEmpty(value: string | null | undefined): string {
+  if (value == null) {
+    return ''
+  }
+
+  return value
+}
+
+function objectStringAt(values: string[], index: number): string {
+  return values[index]
+}
+
 function findObjectShapeFieldIndex(fields: CObjectShapeField[], key: string): number {
   for (let index = 0; index < fields.length; index = index + 1) {
-    if (fields[index].name === key) {
+    if (objectStringEquals(fields[index].name, key)) {
       return index
     }
   }
@@ -110,7 +132,7 @@ function objectShapeFieldAt(fields: CObjectShapeField[], expectedIndex: number):
 
 function findObjectProperty(properties: ObjectPropertyNode[], key: string): ObjectPropertyNode | null {
   for (const property of properties) {
-    if (property.key === key) {
+    if (objectStringEquals(property.key, key)) {
       return property
     }
   }
@@ -694,19 +716,23 @@ function isRuntimeValueReferenceExpression(expression: ObjectFieldNode, context:
     return false
   }
 
-  const name = expression.path[0]
-  const valueType = context.variables.get(name)
+  const name = objectStringAt(expression.path, 0)
+  const valueType = objectStringOrEmpty(context.variables.get(name))
 
-  if (valueType !== 'unknown' && valueType !== 'object' && !isOpaqueRuntimeValueType(valueType)) {
+  if (
+    !objectStringEquals(valueType, 'unknown') &&
+    !objectStringEquals(valueType, 'object') &&
+    !isOpaqueRuntimeValueType(valueType)
+  ) {
     return false
   }
 
-  if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)) {
+  if (objectStringEquals(valueType, 'unknown') || isOpaqueRuntimeValueType(valueType)) {
     return true
   }
 
   for (const value of context.ownedValues) {
-    if (value === name) {
+    if (objectStringEquals(value, name)) {
       return true
     }
   }
@@ -763,20 +789,65 @@ function dynamicRuntimeObjectFieldAccess(expression: ObjectFieldNode): CDynamicO
 }
 
 function isScalarObjectFieldValueType(valueType: string): boolean {
-  return valueType === 'number' || valueType === 'boolean'
+  return objectStringEquals(valueType, 'number') || objectStringEquals(valueType, 'boolean')
 }
 
 function isManagedObjectFieldValueType(valueType: string): boolean {
   return (
-    valueType === 'number' ||
-    valueType === 'boolean' ||
-    valueType === 'bytes' ||
-    valueType === 'array' ||
-    valueType === 'map' ||
-    valueType === 'set' ||
-    valueType === 'object' ||
-    valueType === 'string'
+    objectStringEquals(valueType, 'number') ||
+    objectStringEquals(valueType, 'boolean') ||
+    objectStringEquals(valueType, 'bytes') ||
+    objectStringEquals(valueType, 'array') ||
+    objectStringEquals(valueType, 'map') ||
+    objectStringEquals(valueType, 'set') ||
+    objectStringEquals(valueType, 'object') ||
+    objectStringEquals(valueType, 'string')
   )
+}
+
+function isSupportedObjectFieldStorageType(valueType: string): boolean {
+  return (
+    objectStringEquals(valueType, 'unknown') ||
+    isManagedRuntimeReturnType(valueType) ||
+    isNullableScalarType(valueType) ||
+    isOpaqueRuntimeValueType(valueType)
+  )
+}
+
+function unsupportedObjectFieldStorageMessage(valueType: string): string {
+  if (objectStringEquals(valueType, 'function')) {
+    return 'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
+  }
+
+  return 'this object field type is not supported by the current C backend slice'
+}
+
+function unsupportedObjectFieldValueExpression(
+  valueType: string,
+  loc: AnyNode['loc'],
+  context: ObjectFunctionContext
+): PreparedExpression {
+  context.diagnostics.push(
+    diagnostic(cUnsupportedExpressionCode(valueType), unsupportedObjectFieldStorageMessage(valueType), loc)
+  )
+
+  return {
+    lines: [],
+    expression: 'ccjs_undefined_value()'
+  }
+}
+
+function emitObjectFieldInitializerValue(
+  field: CObjectShapeField,
+  property: ObjectPropertyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): PreparedExpression {
+  if (!isSupportedObjectFieldStorageType(field.valueType)) {
+    return unsupportedObjectFieldValueExpression(field.valueType, property.value.loc, context)
+  }
+
+  return dependencies.emitCValueExpression(property.value, context)
 }
 
 function knownObjectFieldReadCall(
@@ -843,7 +914,7 @@ export function emitObjectVariableDeclaration(
     const property = findObjectProperty(properties, field.name)
 
     if (property != null) {
-      const value = dependencies.emitCValueExpression(property.value, context)
+      const value = emitObjectFieldInitializerValue(field, property, context, dependencies)
       appendLines(lines, value.lines)
       lines.push(emitStatusCheck(`ccjs_object_init_known(${statement.name}, ${index}, ${value.expression})`, context))
     } else {
