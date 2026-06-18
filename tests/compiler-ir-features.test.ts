@@ -51,6 +51,31 @@ test('collects IR features from runtime-shaped nodes', () => {
   ])
 })
 
+test('collects runtime constructor features from single-segment globals', () => {
+  const program: ProgramNode = {
+    type: 'Program',
+    body: [
+      {
+        type: 'NewExpression',
+        callee: { type: 'Reference', path: ['Map'] },
+        args: []
+      },
+      {
+        type: 'NewExpression',
+        callee: { type: 'Reference', path: ['Set'] },
+        args: []
+      },
+      {
+        type: 'NewExpression',
+        callee: { type: 'Reference', path: ['Error'] },
+        args: []
+      }
+    ]
+  }
+
+  assert.deepEqual(collectIrFeatures(program), ['collections', 'objects', 'runtime-values'])
+})
+
 test('maps and aggregates IR runtime requirements', () => {
   assert.deepEqual(collectRuntimeRequirements(['array-pop-null', 'crypto', 'fs', 'number-from-string-null']), [
     'async-runtime',

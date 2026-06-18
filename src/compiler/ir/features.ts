@@ -129,7 +129,7 @@ function featureNodeAt(nodes: FeatureRawNode[], index: number): FeatureRawNode {
   return nodes[index]
 }
 
-function featureArrayNodeAt(nodes: FeatureNode, index: number): FeatureNode {
+function featureArrayNodeAt(nodes: FeatureRawNode[], index: number): FeatureRawNode {
   return nodes[index]
 }
 
@@ -382,7 +382,7 @@ function createRuntimeRequirementSet(): IrRuntimeRequirementSet {
   return new Set()
 }
 
-function visitSyntaxFeatureUsage(node: AnyNode | null, usages: IrSyntaxFeatureUsage[]): void {
+function visitSyntaxFeatureUsage(node: FeatureRawNode | FeatureRawNode[] | null, usages: IrSyntaxFeatureUsage[]): void {
   if (node != null) {
     if (Array.isArray(node)) {
       for (let index = 0; index < node.length; index = index + 1) {
@@ -411,7 +411,7 @@ function visitSyntaxFeatureUsage(node: AnyNode | null, usages: IrSyntaxFeatureUs
   }
 }
 
-function visitNode(node: AnyNode | null, features: IrFeatureSet): void {
+function visitNode(node: FeatureRawNode | FeatureRawNode[] | null, features: IrFeatureSet): void {
   if (node != null) {
     if (Array.isArray(node)) {
       for (let index = 0; index < node.length; index = index + 1) {
@@ -840,14 +840,20 @@ function runtimeConstructorName(expression: FeatureNode): string | null {
     return null
   }
 
-  if (calleePath[0] === 'Error') {
-    return 'Error'
-  }
+  if (calleePath.length === 1) {
+    const root = calleePath[0]
 
-  const collectionName = collectionConstructorNameFromPath(calleePath)
+    if (root === 'Error') {
+      return 'Error'
+    }
 
-  if (collectionName != null) {
-    return collectionName
+    if (root === 'Map') {
+      return 'Map'
+    }
+
+    if (root === 'Set') {
+      return 'Set'
+    }
   }
 
   return binaryConstructorNameFromPath(calleePath)
