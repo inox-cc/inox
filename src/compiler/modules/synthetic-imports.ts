@@ -19,7 +19,13 @@ export function insertImportSyntheticDeclarations(
       const declarations = declarationsByImport.get(importIndex)
 
       if (declarations != null) {
-        for (const declaration of declarations) {
+        for (
+          let declarationIndex = 0;
+          declarationIndex < declarations.length;
+          declarationIndex = declarationIndex + 1
+        ) {
+          const declaration = declarations[declarationIndex]
+
           if (declaration.type === 'TypeAliasDeclaration') {
             if (declaredTypes.has(declaration.name)) {
               continue
@@ -188,7 +194,9 @@ function collectTypeAliasDependencyNames(valueType: AnyNode, names: string[]): v
   }
 
   if (valueType.kind === 'function') {
-    for (const param of valueType.params) {
+    for (let paramIndex = 0; paramIndex < valueType.params.length; paramIndex = paramIndex + 1) {
+      const param = valueType.params[paramIndex]
+
       collectTypeNameDependencyNames(param.valueType, names)
     }
 
@@ -199,11 +207,13 @@ function collectTypeAliasDependencyNames(valueType: AnyNode, names: string[]): v
   if (valueType.kind === 'object') {
     const baseTypes = stringArray(valueType.baseTypes)
 
-    for (const base of baseTypes) {
-      collectTypeNameDependencyNames(base, names)
+    for (let baseIndex = 0; baseIndex < baseTypes.length; baseIndex = baseIndex + 1) {
+      collectTypeNameDependencyNames(baseTypes[baseIndex], names)
     }
 
-    for (const field of valueType.fields) {
+    for (let fieldIndex = 0; fieldIndex < valueType.fields.length; fieldIndex = fieldIndex + 1) {
+      const field = valueType.fields[fieldIndex]
+
       collectTypeNameDependencyNames(field.valueType, names)
 
       if (field.functionType != null) {
