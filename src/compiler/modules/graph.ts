@@ -75,7 +75,9 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
   const imports: AnyNode[] = []
   const reexports: AnyNode[] = []
 
-  for (const item of ast.body) {
+  for (let itemIndex = 0; itemIndex < ast.body.length; itemIndex = itemIndex + 1) {
+    const item = ast.body[itemIndex]
+
     if (item.type === 'ImportDeclaration') {
       imports.push(item)
       continue
@@ -140,7 +142,8 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     const types: AnyNode[] = []
     const typeNames: Set<string> = new Set()
 
-    for (const specifier of item.specifiers) {
+    for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
+      const specifier = item.specifiers[specifierIndex]
       const exported = importedModule.exports.get(specifier.imported)
 
       if (exported == null) {
@@ -163,8 +166,11 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
         }
 
         const importedProgram = moduleProgramForTypeImports(importedModule)
+        const declarations = createTypeImportDeclarations(specifier, importedProgram)
 
-        for (const declaration of createTypeImportDeclarations(specifier, importedProgram)) {
+        for (let declarationIndex = 0; declarationIndex < declarations.length; declarationIndex = declarationIndex + 1) {
+          const declaration = declarations[declarationIndex]
+
           if (!typeNames.has(declaration.name)) {
             typeNames.add(declaration.name)
             types.push(declaration)
@@ -228,7 +234,8 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
     const importedModule = requireModuleGraphRecord(context, importedPath)
 
-    for (const specifier of item.specifiers) {
+    for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
+      const specifier = item.specifiers[specifierIndex]
       const exported = importedModule.exports.get(specifier.imported)
 
       if (exported == null) {
