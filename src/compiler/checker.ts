@@ -1685,7 +1685,7 @@ class Checker {
           let name = 'callable'
 
           if (expression.callee.type === 'Reference') {
-            name = expression.callee.path[0]
+            name = firstPathSegment(expression.callee.path)
           }
 
           this.report(
@@ -1857,7 +1857,7 @@ class Checker {
 
       if (expression.target.path.length === 1) {
         if (symbol.nullable === true) {
-          this.narrowedNullableNames.delete(expression.target.path[0])
+          this.narrowedNullableNames.delete(firstPathSegment(expression.target.path))
         }
       }
     }
@@ -8152,7 +8152,7 @@ class Checker {
     if (
       expression.callee.type !== 'Reference' ||
       expression.callee.path.length !== 1 ||
-      expression.callee.path[0] !== 'String'
+      firstPathSegment(expression.callee.path) !== 'String'
     ) {
       return null
     }
@@ -8181,7 +8181,7 @@ class Checker {
     if (
       expression.callee.type !== 'Reference' ||
       expression.callee.path.length !== 1 ||
-      expression.callee.path[0] !== 'Number'
+      firstPathSegment(expression.callee.path) !== 'Number'
     ) {
       return null
     }
@@ -8214,11 +8214,13 @@ class Checker {
   }
 
   checkNumericCastCall(expression: AnyNode): ValueType | null {
-    if (
-      expression.callee.type !== 'Reference' ||
-      expression.callee.path.length !== 1 ||
-      !numericCastNames.has(expression.callee.path[0])
-    ) {
+    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+      return null
+    }
+
+    const castName = firstPathSegment(expression.callee.path)
+
+    if (!numericCastNames.has(castName)) {
       return null
     }
 
@@ -8231,12 +8233,12 @@ class Checker {
     }
 
     expression.valueType = 'number'
-    expression.numericCast = expression.callee.path[0]
+    expression.numericCast = castName
 
     if (expression.args.length !== 1) {
       this.report(
         'CCJS_ARG_COUNT',
-        `${expression.callee.path[0]} expects 1 argument(s), got ${expression.args.length}`,
+        `${castName} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
       return 'number'
@@ -8551,6 +8553,7 @@ class Checker {
     }
 
     const collectionConstructor = collectionConstructorNameFromPath(expression.callee.path)
+    const constructorName = firstPathSegment(expression.callee.path)
 
     if (collectionConstructor === 'Map') {
       expression.valueType = 'map'
@@ -8589,7 +8592,7 @@ class Checker {
       return 'set'
     }
 
-    if (expression.callee.path[0] === 'AbortController' && this.scope.resolve('AbortController') == null) {
+    if (constructorName === 'AbortController' && this.scope.resolve('AbortController') == null) {
       this.requireLibuvBackend('AbortController', expression.loc)
 
       if (expression.args.length !== 0) {
@@ -8635,17 +8638,17 @@ class Checker {
       return 'bytes'
     }
 
-    if (expression.callee.path[0] === 'Error') {
+    if (constructorName === 'Error') {
       this.checkErrorConstructorExpression(expression, argTypes)
       expression.valueType = 'object'
       expression.shape = errorObjectShape
       return 'object'
     }
 
-    let symbol = this.scope.resolve(expression.callee.path[0])
+    let symbol = this.scope.resolve(constructorName)
 
     if (symbol == null) {
-      const globalSymbol = globals.get(expression.callee.path[0])
+      const globalSymbol = globals.get(constructorName)
 
       if (globalSymbol != null) {
         symbol = globalSymbol
@@ -8653,7 +8656,7 @@ class Checker {
     }
 
     if (symbol == null || (symbol.kind !== 'class' && symbol.constructable !== true)) {
-      this.report('CCJS_UNKNOWN_NAME', `unknown class ${expression.callee.path[0]}`, expression.callee.loc)
+      this.report('CCJS_UNKNOWN_NAME', `unknown class ${constructorName}`, expression.callee.loc)
       return 'object'
     }
 
@@ -8671,7 +8674,7 @@ class Checker {
     if (constructorParams.length !== expression.args.length) {
       this.report(
         'CCJS_ARG_COUNT',
-        `class ${expression.callee.path[0]} constructor expects ${constructorParams.length} argument(s), got ${expression.args.length}`,
+        `class ${constructorName} constructor expects ${constructorParams.length} argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
@@ -8690,7 +8693,7 @@ class Checker {
       }
     }
 
-    expression.className = expression.callee.path[0]
+    expression.className = constructorName
     expression.shape = null
 
     if (symbol.shape != null) {
@@ -8705,7 +8708,7 @@ class Checker {
       return null
     }
 
-    const symbol = this.scope.resolve(expression.callee.path[0])
+    const symbol = this.scope.resolve(firstPathSegment(expression.callee.path))
     let importedName: string | null = null
 
     if (symbol != null && symbol.importedName != null) {
@@ -8831,7 +8834,7 @@ class Checker {
     if (
       expression.callee.type !== 'Reference' ||
       expression.callee.path.length !== 1 ||
-      expression.callee.path[0] !== 'Promise' ||
+      firstPathSegment(expression.callee.path) !== 'Promise' ||
       this.scope.resolve('Promise') != null
     ) {
       return null
@@ -8865,8 +8868,8 @@ class Checker {
 
     let resolveName: string | null = null
 
-    if (executor.params[0] != null) {
-      resolveName = executor.params[0].name
+    if (executor.params.length > 0) {
+      resolveName = checkerNodeAt(executor.params, 0).name
     }
 
     if (resolveName != null) {
@@ -10191,7 +10194,7 @@ class Checker {
       }
     }
 
-    const name = nullable.path[0]
+    const name = firstPathSegment(nullable.path)
     const symbol = this.scope.resolve(name)
 
     if (symbol == null || symbol.nullable !== true) {
@@ -12053,7 +12056,7 @@ function promiseStaticMethodName(callee: AnyNode): string | null {
     return null
   }
 
-  if (callee.object.path[0] !== 'Promise') {
+  if (firstPathSegment(callee.object.path) !== 'Promise') {
     return null
   }
 
