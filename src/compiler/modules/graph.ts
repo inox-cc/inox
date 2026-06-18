@@ -208,7 +208,9 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     }
   }
 
-  for (const item of reexports) {
+  for (let reexportIndex = 0; reexportIndex < reexports.length; reexportIndex = reexportIndex + 1) {
+    const item = reexports[reexportIndex]
+
     if (!isRelativeSpecifier(item.source)) {
       context.diagnostics.push(
         diagnostic(
