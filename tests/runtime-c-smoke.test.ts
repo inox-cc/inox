@@ -8864,6 +8864,66 @@ console.log(maybeValues?.[0] ?? 5, emptyValues?.[0] ?? 5)
 })
 
 
+test('generated C nullable boolean literal comparisons compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-boolean-compare-'))
+  const source = join(dir, 'nullable-boolean-compare.c')
+  const output = join(dir, 'nullable-boolean-compare')
+
+  try {
+    const result = compileSource(
+      `function maybe(value: number): boolean | null {
+  if (value === 1) {
+    return true
+  }
+  if (value === 2) {
+    return false
+  }
+  return null
+}
+
+const values: Map<string, boolean> = new Map()
+values.set('x', true)
+
+console.log(
+  maybe(1) === true,
+  maybe(2) === true,
+  maybe(3) !== false,
+  values.get('x') === true,
+  values.get('missing') !== false
+)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 0 1 1 1\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C nullable scalar truthiness compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

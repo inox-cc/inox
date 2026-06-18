@@ -670,6 +670,31 @@ if (item != null) {
 })
 
 
+test('lowers C nullable boolean literal comparisons', () => {
+  const result = compileSource(
+    `function maybe(value: number): boolean | null {
+  if (value === 1) {
+    return true
+  }
+  if (value === 2) {
+    return false
+  }
+  return null
+}
+
+console.log(maybe(1) === true, maybe(2) === true, maybe(3) !== false)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_nullable_value_\d+\.tag == CCJS_TAG_BOOL/)
+  assert.match(result.code, /\(ccjs_nullable_value_\d+\.as\.boolean \? 1 : 0\) == 1/)
+  assert.match(result.code, /!\(ccjs_nullable_value_\d+\.tag == CCJS_TAG_BOOL/)
+})
+
+
 test('lowers C string charCodeAt calls to byte reads', () => {
   const result = compileSource(
     `function isLower(ch: string): boolean {

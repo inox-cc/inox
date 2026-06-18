@@ -1543,6 +1543,16 @@ export function emitPreparedNumberExpression(
       return nullableNullCompare
     }
 
+    const nullableBooleanLiteralCompare = emitPreparedNullableBooleanLiteralCompareExpression(
+      expression,
+      context,
+      deps
+    )
+
+    if (nullableBooleanLiteralCompare != null) {
+      return nullableBooleanLiteralCompare
+    }
+
     const dynamicObjectNullCompare = emitPreparedDynamicObjectNullCompareExpression(expression, context, deps)
 
     if (dynamicObjectNullCompare != null) {
@@ -2199,6 +2209,52 @@ function emitPreparedNullableNullCompareExpression(
 
   if (isPositiveEqualityOperator(expression.operator)) {
     result = equals
+  }
+
+  return {
+    lines: value.lines,
+    expression: result
+  }
+}
+
+function emitPreparedNullableBooleanLiteralCompareExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (!isEqualityOperator(expression.operator)) {
+    return null
+  }
+
+  let nullable = expression.left
+  let literal = expression.right
+
+  if (expression.left.type === 'BooleanLiteral') {
+    nullable = expression.right
+    literal = expression.left
+  }
+
+  if (
+    literal.type !== 'BooleanLiteral' ||
+    deps.inferExpressionType(nullable, context) !== 'boolean' ||
+    !isNullableRuntimeExpression(nullable, context)
+  ) {
+    return null
+  }
+
+  const value = deps.emitCValueExpression(nullable, context)
+  let expected = '0'
+
+  if (literal.value) {
+    expected = '1'
+  }
+
+  const equals =
+    `(${value.expression}.tag == CCJS_TAG_BOOL && (${value.expression}.as.boolean ? 1 : 0) == ${expected})`
+  let result = equals
+
+  if (!isPositiveEqualityOperator(expression.operator)) {
+    result = `(!${equals})`
   }
 
   return {
