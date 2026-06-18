@@ -1,6 +1,39 @@
 import type { AnyNode } from '../types.ts'
 
-type SyntaxNode = AnyNode
+type SyntaxNode = {
+  type?: string | null
+  body?: any
+  params?: any
+  fields?: any
+  methods?: any
+  init?: any
+  condition?: any
+  consequent?: any
+  alternate?: any
+  test?: any
+  update?: any
+  iterable?: any
+  discriminant?: any
+  cases?: any
+  block?: any
+  handler?: any
+  finalizer?: any
+  argument?: any
+  args?: any
+  callee?: any
+  object?: any
+  index?: any
+  target?: any
+  value?: any
+  valueType?: any
+  functionType?: any
+  returnShape?: any
+  left?: any
+  right?: any
+  elements?: any
+  properties?: any
+  expression?: any
+}
 
 type VariableDeclarationCodeNode = {
   init?: VariableDeclarationInitNode | null
@@ -61,25 +94,13 @@ export function cUnsupportedVariableDeclarationCode(statement: AnyNode, valueTyp
   return cUnsupportedExpressionCode(valueType)
 }
 
-function syntaxNodeAt(nodes: SyntaxNode[], index: number): SyntaxNode {
-  return nodes[index]
-}
-
 export function containsAwaitExpression(node: SyntaxNode | SyntaxNode[] | null | undefined): boolean {
   if (node == null) {
     return false
   }
 
   if (Array.isArray(node)) {
-    for (let index = 0; index < node.length; index = index + 1) {
-      const item = syntaxNodeAt(node, index)
-
-      if (containsAwaitExpression(item)) {
-        return true
-      }
-    }
-
-    return false
+    return containsAwaitExpressionList(node)
   }
 
   const current = node
@@ -91,6 +112,16 @@ export function containsAwaitExpression(node: SyntaxNode | SyntaxNode[] | null |
   return containsAwaitChildExpression(current)
 }
 
+function containsAwaitExpressionList(nodes: SyntaxNode[]): boolean {
+  for (const item of nodes) {
+    if (containsAwaitExpression(item)) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function containsAwaitChild(value: any): boolean {
   if (value == null || typeof value !== 'object') {
     return false
@@ -99,7 +130,7 @@ function containsAwaitChild(value: any): boolean {
   return containsAwaitExpression(value)
 }
 
-function containsAwaitChildExpression(current: any): boolean {
+function containsAwaitChildExpression(current: SyntaxNode): boolean {
   return (
     containsAwaitChild(current.body) ||
     containsAwaitChild(current.params) ||
