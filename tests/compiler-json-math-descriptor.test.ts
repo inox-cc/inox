@@ -3,6 +3,7 @@ import test from 'node:test'
 import { isJsonRuntimeMethod, jsonRuntimeMethodNameFromPath } from '../src/compiler/stdlib/descriptors/json.ts'
 import {
   isMathRuntimeMethod,
+  knownMathRuntimeArgCount,
   mathRuntimeArgCount,
   mathRuntimeMethodNameFromPath
 } from '../src/compiler/stdlib/descriptors/math.ts'
@@ -26,4 +27,7 @@ test('maps Math paths and arity to runtime methods', () => {
   assert.equal(mathRuntimeArgCount('floor'), 1)
   assert.equal(mathRuntimeArgCount('min'), 2)
   assert.equal(mathRuntimeArgCount('pow'), null)
+  assert.equal(knownMathRuntimeArgCount('random'), 0)
+  assert.equal(knownMathRuntimeArgCount('floor'), 1)
+  assert.equal(knownMathRuntimeArgCount('min'), 2)
 })

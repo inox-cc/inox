@@ -40,6 +40,18 @@ export function mathRuntimeArgCount(method: string): number | null {
   return null
 }
 
+export function knownMathRuntimeArgCount(method: string): number {
+  if (hasString(mathNullaryMethods, method)) {
+    return 0
+  }
+
+  if (hasString(mathUnaryMethods, method)) {
+    return 1
+  }
+
+  return 2
+}
+
 function hasString(values: string[], expected: string): boolean {
   for (const value of values) {
     if (value === expected) {

@@ -89,7 +89,7 @@ import {
   isUnsupportedEventsRuntimeExport,
   unsupportedEventsRuntimeExportReason
 } from './stdlib/descriptors/events.ts'
-import { mathRuntimeArgCount } from './stdlib/descriptors/math.ts'
+import { knownMathRuntimeArgCount } from './stdlib/descriptors/math.ts'
 import {
   isNodeStreamImportSource,
   isUnsupportedStreamRuntimeExport,
@@ -2779,63 +2779,63 @@ class Checker {
     }
 
     let returnType: ValueType = 'unknown'
-    const symbolReturnType = symbol?.returnType ?? null
+    const symbolReturnType = symbol.returnType ?? null
 
     if (symbolReturnType != null) {
       returnType = symbolReturnType
     }
 
     let returnArrayElementType: ValueType | null = null
-    const symbolReturnArrayElementType = symbol?.returnArrayElementType ?? null
+    const symbolReturnArrayElementType = symbol.returnArrayElementType ?? null
 
     if (symbolReturnArrayElementType != null) {
       returnArrayElementType = symbolReturnArrayElementType
     }
 
     let returnArrayElementDeclaredType: string | null = null
-    const symbolReturnArrayElementDeclaredType = symbol?.returnArrayElementDeclaredType ?? null
+    const symbolReturnArrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
 
     if (symbolReturnArrayElementDeclaredType != null) {
       returnArrayElementDeclaredType = symbolReturnArrayElementDeclaredType
     }
 
     let returnMapKeyType: ValueType | null = null
-    const symbolReturnMapKeyType = symbol?.returnMapKeyType ?? null
+    const symbolReturnMapKeyType = symbol.returnMapKeyType ?? null
 
     if (symbolReturnMapKeyType != null) {
       returnMapKeyType = symbolReturnMapKeyType
     }
 
     let returnMapValueType: ValueType | null = null
-    const symbolReturnMapValueType = symbol?.returnMapValueType ?? null
+    const symbolReturnMapValueType = symbol.returnMapValueType ?? null
 
     if (symbolReturnMapValueType != null) {
       returnMapValueType = symbolReturnMapValueType
     }
 
     let returnPromiseValueType: ValueType | null = null
-    const symbolReturnPromiseValueType = symbol?.returnPromiseValueType ?? null
+    const symbolReturnPromiseValueType = symbol.returnPromiseValueType ?? null
 
     if (symbolReturnPromiseValueType != null) {
       returnPromiseValueType = symbolReturnPromiseValueType
     }
 
     let returnSetElementType: ValueType | null = null
-    const symbolReturnSetElementType = symbol?.returnSetElementType ?? null
+    const symbolReturnSetElementType = symbol.returnSetElementType ?? null
 
     if (symbolReturnSetElementType != null) {
       returnSetElementType = symbolReturnSetElementType
     }
 
     let returnShape: ObjectShapeInfo | null = null
-    const symbolReturnShape = symbol?.returnShape ?? null
+    const symbolReturnShape = symbol.returnShape
 
     if (symbolReturnShape != null) {
       returnShape = symbolReturnShape
     }
 
     expression.valueType = returnType
-    expression.nullable = symbol?.returnNullable === true
+    expression.nullable = symbol.returnNullable === true
     expression.arrayElementType = returnArrayElementType
     expression.arrayElementDeclaredType = returnArrayElementDeclaredType
     expression.mapKeyType = returnMapKeyType
@@ -2844,7 +2844,7 @@ class Checker {
     expression.setElementType = returnSetElementType
     expression.shape = returnShape
 
-    const params = symbol?.params ?? null
+    const params = symbol.params ?? null
 
     if (params == null) {
       return returnType
@@ -5186,12 +5186,7 @@ class Checker {
     }
 
     const method = expression.callee.property
-    let expectedArgCount = 0
-    const runtimeArgCount = mathRuntimeArgCount(method)
-
-    if (runtimeArgCount != null) {
-      expectedArgCount = runtimeArgCount
-    }
+    const expectedArgCount = knownMathRuntimeArgCount(method)
 
     expression.mathRuntimeMethod = method
     expression.valueType = 'number'
@@ -5318,7 +5313,13 @@ class Checker {
     const types: ValueType[] = []
 
     for (const field of shape.fields) {
-      types.push(field.valueType ?? 'unknown')
+      let valueType: ValueType = 'unknown'
+
+      if (field.valueType != null) {
+        valueType = field.valueType
+      }
+
+      types.push(valueType)
     }
 
     return commonValueType(types)
@@ -9225,25 +9226,31 @@ class Checker {
   resolveExpressionShape(expression: AnyNode): ObjectShapeInfo | null {
     if (expression.type === 'ThisExpression') {
       const thisSymbol = this.scope.resolve('this')
-      const thisShape = thisSymbol?.shape ?? null
 
-      if (thisShape != null) {
-        return thisShape
+      if (thisSymbol != null && thisSymbol.shape != null) {
+        return thisSymbol.shape
       }
 
-      return expression.shape ?? null
+      if (expression.shape != null) {
+        return expression.shape
+      }
+
+      return null
     }
 
     if (expression.type !== 'Reference' || expression.path.length !== 1) {
-      return expression.shape ?? null
+      if (expression.shape != null) {
+        return expression.shape
+      }
+
+      return null
     }
 
     const name = firstPathSegment(expression.path)
     const symbol = this.scope.resolve(name)
-    const symbolShape = symbol?.shape ?? null
 
-    if (symbolShape != null) {
-      return symbolShape
+    if (symbol != null && symbol.shape != null) {
+      return symbol.shape
     }
 
     if (symbol != null && symbol.valueType === 'object') {
@@ -9254,7 +9261,11 @@ class Checker {
       }
     }
 
-    return expression.shape ?? null
+    if (expression.shape != null) {
+      return expression.shape
+    }
+
+    return null
   }
 
   resolveArrayElementObjectShape(
@@ -10580,7 +10591,14 @@ class Checker {
       })
     }
 
-    const resolvedBaseTypes: string[] = shape?.baseTypes ?? []
+    const resolvedBaseTypes: string[] = []
+    const baseTypes = shape.baseTypes
+
+    if (baseTypes != null) {
+      for (let index = 0; index < baseTypes.length; index = index + 1) {
+        resolvedBaseTypes.push(baseTypes[index])
+      }
+    }
 
     const resolvedShape: ObjectShapeInfo = {
       kind: 'object',
@@ -10604,7 +10622,22 @@ class Checker {
       return null
     }
 
-    const typeLoc = functionType.loc ?? loc ?? { line: 1, column: 1 }
+    let typeLine = 1
+    let typeColumn = 1
+
+    if (loc != null) {
+      typeLine = loc.line
+      typeColumn = loc.column
+    }
+
+    const functionTypeLoc = functionType.loc
+
+    if (functionTypeLoc != null) {
+      typeLine = functionTypeLoc.line
+      typeColumn = functionTypeLoc.column
+    }
+
+    const typeLoc: SourceLocation = { line: typeLine, column: typeColumn }
     const returnInfo = this.resolveDeclaredType(functionType.returnType, typeLoc)
     const params: FunctionTypeParamMetadata[] = []
     let returnPromiseValueType: ValueType | null = null
