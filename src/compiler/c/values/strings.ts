@@ -1330,6 +1330,13 @@ export function isRuntimeProducedStringExpression(
     return true
   }
 
+  if (
+    (stringDeps(context).isMemberAccessExpression(expression) || expression.type === 'IndexExpression') &&
+    stringDeps(context).inferExpressionType(expression, context) === 'string'
+  ) {
+    return true
+  }
+
   if (expression.type === 'AwaitExpression' && stringDeps(context).inferExpressionType(expression, context) === 'string') {
     return true
   }

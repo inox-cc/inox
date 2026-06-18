@@ -949,6 +949,34 @@ test('lowers C runtime string references for object and array assignments', () =
 })
 
 
+test('lowers C nested object string field reads to runtime strings', () => {
+  const result = compileSource(
+    `type FunctionType = {
+  returnType: string
+}
+
+type Wrapper = {
+  functionType: FunctionType
+}
+
+export function main(): void {
+  const wrapper: Wrapper = { functionType: { returnType: 'number' } }
+  const returnType = wrapper.functionType.returnType
+  console.log(returnType)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get_known\(wrapper, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /const ccjs_string\* returnType = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /printf\("%\.\*s\\n", \(int\)returnType->len, returnType->bytes\);/)
+})
+
+
 test('lowers C string-returning calls for object and array assignments', () => {
   const result = compileSource(
     `function getName(): string {

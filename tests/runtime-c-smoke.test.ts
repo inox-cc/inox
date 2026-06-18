@@ -9989,6 +9989,57 @@ console.log(readType({ valueType: 'number' }))
 })
 
 
+test('generated C nested runtime string field reads compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nested-runtime-string-field-'))
+  const source = join(dir, 'nested-runtime-string-field.c')
+  const output = join(dir, 'nested-runtime-string-field')
+
+  try {
+    const result = compileSource(
+      `type FunctionType = {
+  returnType: string
+}
+
+type Wrapper = {
+  functionType: FunctionType
+}
+
+const wrapper: Wrapper = { functionType: { returnType: 'number' } }
+const returnType = wrapper.functionType.returnType
+console.log(returnType)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'number\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string-returning assignment calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
