@@ -10,7 +10,7 @@ import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { isNullishCoalescingExpression } from '../syntax.ts'
-import { cRuntimeValueTag, isNullableScalarType, isRuntimeNullableType } from '../value-types.ts'
+import { cRuntimeValueTag, isNullableScalarType, isOpaqueRuntimeValueType, isRuntimeNullableType } from '../value-types.ts'
 import {
   emitObjectValueReference,
   registerObjectShape,
@@ -359,7 +359,7 @@ export function canLowerCNullishCoalescingExpression(expression: AnyNode, contex
 
   const resultType = nullableDeps(context).inferExpressionType(expression, context)
 
-  return resultType === 'unknown' || isRuntimeNullableType(resultType)
+  return resultType === 'unknown' || isRuntimeNullableType(resultType) || isOpaqueRuntimeValueType(resultType)
 }
 
 export function canLowerCScalarNullishCoalescingExpression(expression: AnyNode, context: NullableFunctionContext): boolean {

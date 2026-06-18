@@ -644,6 +644,32 @@ test('lowers C dynamic object string literal comparisons without string guards',
 })
 
 
+test('lowers C opaque object index nullish coalescing', () => {
+  const result = compileSource(
+    `type Descriptor = {
+  code: number
+}
+
+const descriptors: Record<string, Descriptor> = {
+  read: { code: 7 }
+}
+
+const item = descriptors['read'] ?? null
+if (item != null) {
+  console.log(item.code)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(descriptors, "read", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value_\d+\.tag == CCJS_TAG_NULL \|\| ccjs_value_\d+\.tag == CCJS_TAG_UNDEFINED/)
+  assert.match(result.code, /item = ccjs_value_\d+/)
+})
+
+
 test('lowers C string charCodeAt calls to byte reads', () => {
   const result = compileSource(
     `function isLower(ch: string): boolean {

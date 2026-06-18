@@ -8690,6 +8690,58 @@ console.log(display, name !== null)
 })
 
 
+test('generated C opaque object index nullish coalescing compiles and runs with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-opaque-nullish-'))
+  const source = join(dir, 'opaque-nullish.c')
+  const output = join(dir, 'opaque-nullish')
+
+  try {
+    const result = compileSource(
+      `type Descriptor = {
+  code: number
+}
+
+const descriptors: Record<string, Descriptor> = {
+  read: { code: 7 }
+}
+
+const item = descriptors['read'] ?? null
+if (item != null) {
+  console.log(item.code)
+}
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '7\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C nullable runtime optional access compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

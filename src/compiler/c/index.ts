@@ -1882,12 +1882,21 @@ function resolveFunctionValueType(expression: AnyNode, context: CFunctionContext
     return null
   }
 
+  const returnMapType = context.functionReturnMapTypes.get(name)
+  let returnMapKeyType: string | null = null
+  let returnMapValueType: string | null = null
+
+  if (returnMapType != null) {
+    returnMapKeyType = returnMapType.key
+    returnMapValueType = returnMapType.value
+  }
+
   return {
     kind: 'function',
     params,
     returnArrayElementType: context.functionReturnArrayElementTypes.get(name) ?? null,
-    returnMapKeyType: context.functionReturnMapTypes.get(name)?.key ?? null,
-    returnMapValueType: context.functionReturnMapTypes.get(name)?.value ?? null,
+    returnMapKeyType,
+    returnMapValueType,
     returnNullable: context.functionReturnNullables.get(name) === true,
     returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
     returnSetElementType: context.functionReturnSetElementTypes.get(name) ?? null,
