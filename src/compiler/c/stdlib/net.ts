@@ -16,6 +16,8 @@ import type {
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
 
+type NetAstNode = AnyNode
+
 type NetHandlerContext = {
   kind: string
   dataName: string | null
@@ -46,14 +48,19 @@ type NetServerCreateOptions = {
 
 export type NetLoweringDependencies = {
   createFunctionContext: (baseContext: CEmitContext, returnType: string, returnNullable: boolean) => CFunctionContext
-  emitConsoleLogStatement: (method: string, args: AnyNode[], context: CFunctionContext) => string[]
-  emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringBytesOperand: (expression: AnyNode, context: CFunctionContext, tempPrefix: string) => PreparedStringBytesOperand
-  emitStatementList: (body: AnyNode[], context: CFunctionContext) => string[]
-  findObjectLiteralPropertyValue: (expression: AnyNode, key: string) => AnyNode | null
+  emitConsoleLogStatement: (method: string, args: NetAstNode[], context: CFunctionContext) => string[]
+  emitPreparedNumberExpression: (expression: NetAstNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedStringBytesOperand: (expression: NetAstNode, context: CFunctionContext, tempPrefix: string) => PreparedStringBytesOperand
+  emitStatementList: (body: NetAstNode[], context: CFunctionContext) => string[]
+  findObjectLiteralPropertyValue: (expression: NetAstNode, key: string) => NetAstNode | null
 }
 
-function netNodeLoc(node: AnyNode | null | undefined): SourceLocation | null {
+type NetTopLevelNodeEntry = {
+  kind: string
+  node: NetAstNode
+}
+
+function netNodeLoc(node: NetAstNode | null | undefined): SourceLocation | null {
   if (node == null) {
     return null
   }
@@ -61,12 +68,16 @@ function netNodeLoc(node: AnyNode | null | undefined): SourceLocation | null {
   return node.loc
 }
 
-function lastNetArgument(args: AnyNode[]): AnyNode | null {
+function lastNetArgument(args: NetAstNode[]): NetAstNode | null {
   if (args.length === 0) {
     return null
   }
 
   return args[args.length - 1]
+}
+
+function netTopLevelNodeEntryAt(entries: NetTopLevelNodeEntry[], index: number): NetTopLevelNodeEntry {
+  return entries[index]
 }
 
 function pushNetLines(target: string[], lines: string[]): void {
@@ -75,7 +86,7 @@ function pushNetLines(target: string[], lines: string[]): void {
   }
 }
 
-function pushNetNodes(target: AnyNode[], nodes: AnyNode[]): void {
+function pushNetNodes(target: NetAstNode[], nodes: NetAstNode[]): void {
   for (const node of nodes) {
     target.push(node)
   }
@@ -89,7 +100,7 @@ function firstNetReferencePathSegment(path: string[]): string | null {
   return null
 }
 
-function netReferenceName(expression: AnyNode | null | undefined): string | null {
+function netReferenceName(expression: NetAstNode | null | undefined): string | null {
   if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
     return null
   }
@@ -97,7 +108,7 @@ function netReferenceName(expression: AnyNode | null | undefined): string | null
   return firstNetReferencePathSegment(expression.path)
 }
 
-function netMemberObjectReferenceName(callee: AnyNode | null | undefined): string | null {
+function netMemberObjectReferenceName(callee: NetAstNode | null | undefined): string | null {
   if (callee == null || callee.type !== 'MemberExpression') {
     return null
   }
@@ -219,7 +230,7 @@ export function emitNetHandlerDeclaration(
     context.variables.set(dataName, 'string')
   }
 
-  const body: AnyNode[] = []
+  const body: NetAstNode[] = []
 
   if (expression.expressionBody) {
     body.push({
@@ -276,8 +287,9 @@ function emitNetHandlerStatement(
 
   if (statement.type === 'BlockStatement') {
     const lines = ['{']
+    const statements: NetAstNode[] = statement.body
 
-    for (const item of statement.body) {
+    for (const item of statements) {
       pushIndentedNetLines(lines, emitNetHandlerStatement(item, netContext, context, deps))
     }
 
@@ -1373,7 +1385,7 @@ function emitNetZeroArgCallbackLines(
     return []
   }
 
-  const body: AnyNode[] = []
+  const body: NetAstNode[] = []
 
   if (callback.expressionBody) {
     body.push({
@@ -1900,11 +1912,18 @@ function findNetHandler(
 
 export function collectNetHandlers(irPrograms: IrProgram[], context: CEmitContext): Map<string, CNetHandler> {
   const handlers: Map<string, CNetHandler> = new Map()
+  const programs: IrProgram[] = irPrograms
 
-  for (const ir of irPrograms) {
-    for (const item of collectIrTopLevelNodeEntries(ir)) {
+  for (const ir of programs) {
+    const items: NetTopLevelNodeEntry[] = collectIrTopLevelNodeEntries(ir)
+
+    for (let itemIndex = 0; itemIndex < items.length; itemIndex = itemIndex + 1) {
+      const item = netTopLevelNodeEntryAt(items, itemIndex)
+
       if (item.kind === 'function') {
-        for (const statement of item.node.body) {
+        const statements: NetAstNode[] = item.node.body
+
+        for (const statement of statements) {
           visitNetHandlerStatement(handlers, context, statement)
         }
       } else if (item.kind === 'statement') {
@@ -2040,7 +2059,9 @@ function visitNetHandlerStatement(
   }
 
   if (statement.type === 'BlockStatement') {
-    for (const item of statement.body) {
+    const statements: NetAstNode[] = statement.body
+
+    for (const item of statements) {
       visitNetHandlerStatement(handlers, context, item)
     }
     return
@@ -2080,9 +2101,13 @@ function visitNetHandlerStatement(
 
   if (statement.type === 'SwitchStatement') {
     visitNetHandlerExpression(handlers, context, statement.discriminant)
-    for (const item of statement.cases) {
+    const cases: NetAstNode[] = statement.cases
+
+    for (const item of cases) {
       visitNetHandlerExpression(handlers, context, item.test)
-      for (const consequent of item.consequent) {
+      const consequents: NetAstNode[] = item.consequent
+
+      for (const consequent of consequents) {
         visitNetHandlerStatement(handlers, context, consequent)
       }
     }
@@ -2121,7 +2146,9 @@ function visitNetHandlerExpression(
     registerNetSocketEventListener(handlers, expression)
     registerNetSocketWriteCallback(handlers, expression)
     visitNetHandlerExpression(handlers, context, expression.callee)
-    for (const arg of expression.args) {
+    const args: NetAstNode[] = expression.args
+
+    for (const arg of args) {
       visitNetHandlerExpression(handlers, context, arg)
     }
     return
@@ -2129,7 +2156,9 @@ function visitNetHandlerExpression(
 
   if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
     visitNetHandlerExpression(handlers, context, expression.callee)
-    for (const arg of expression.args) {
+    const args: NetAstNode[] = expression.args
+
+    for (const arg of args) {
       visitNetHandlerExpression(handlers, context, arg)
     }
     return
@@ -2139,7 +2168,9 @@ function visitNetHandlerExpression(
     if (expression.expressionBody) {
       visitNetHandlerExpression(handlers, context, expression.body)
     } else {
-      for (const statement of expression.body) {
+      const statements: NetAstNode[] = expression.body
+
+      for (const statement of statements) {
         visitNetHandlerStatement(handlers, context, statement)
       }
     }
@@ -2180,14 +2211,18 @@ function visitNetHandlerExpression(
   }
 
   if (expression.type === 'ArrayLiteral') {
-    for (const element of expression.elements) {
+    const elements: NetAstNode[] = expression.elements
+
+    for (const element of elements) {
       visitNetHandlerExpression(handlers, context, element)
     }
     return
   }
 
   if (expression.type === 'ObjectLiteral') {
-    for (const property of expression.properties) {
+    const properties: NetAstNode[] = expression.properties
+
+    for (const property of properties) {
       visitNetHandlerExpression(handlers, context, property.value)
     }
   }
