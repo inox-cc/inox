@@ -24,6 +24,9 @@ typedef struct ccjs_json_parser {
   const char* bytes;
   size_t len;
   size_t pos;
+  const char* error_message;
+  size_t error_pos;
+  bool has_error;
 } ccjs_json_parser;
 
 typedef struct ccjs_json_stringify_stack {
@@ -138,6 +141,81 @@ static bool ccjs_json_match_literal(ccjs_json_parser* parser, const char* litera
   return true;
 }
 
+static void ccjs_json_set_error_at(ccjs_json_parser* parser, const char* message, size_t pos) {
+  if (parser == 0 || parser->has_error) {
+    return;
+  }
+
+  parser->error_message = message;
+  parser->error_pos = pos > parser->len ? parser->len : pos;
+  parser->has_error = true;
+}
+
+static void ccjs_json_set_error(ccjs_json_parser* parser, const char* message) {
+  if (parser == 0) {
+    return;
+  }
+
+  ccjs_json_set_error_at(parser, message, parser->pos);
+}
+
+static void ccjs_json_error_location(const char* bytes, size_t len, size_t pos, size_t* line_out, size_t* column_out) {
+  size_t line = 1;
+  size_t column = 1;
+  size_t limit = pos > len ? len : pos;
+
+  for (size_t index = 0; index < limit; index += 1) {
+    if (bytes[index] == '\n') {
+      line += 1;
+      column = 1;
+    } else {
+      column += 1;
+    }
+  }
+
+  if (line_out != 0) {
+    *line_out = line;
+  }
+
+  if (column_out != 0) {
+    *column_out = column;
+  }
+}
+
+static ccjs_status ccjs_json_make_syntax_error(ccjs_allocator* allocator, const ccjs_json_parser* parser, ccjs_value* out) {
+  if (allocator == 0 || parser == 0 || out == 0) {
+    return CCJS_ERR_TYPE;
+  }
+
+  const char* message = parser->has_error ? parser->error_message : "Unexpected token";
+  size_t position = parser->has_error ? parser->error_pos : parser->pos;
+  size_t line = 1;
+  size_t column = 1;
+  char buffer[256];
+
+  if (position > parser->len) {
+    position = parser->len;
+  }
+
+  ccjs_json_error_location(parser->bytes, parser->len, position, &line, &column);
+
+  int written = snprintf(
+    buffer,
+    sizeof(buffer),
+    "SyntaxError: %s in JSON at position %zu (line %zu column %zu)",
+    message,
+    position,
+    line,
+    column
+  );
+
+  if (written < 0 || (size_t)written >= sizeof(buffer)) {
+    return CCJS_ERR_TYPE;
+  }
+
+  return ccjs_string_from_literal(allocator, buffer, (size_t)written, out);
+}
+
 static int ccjs_json_hex_value(char value) {
   if (value >= '0' && value <= '9') {
     return value - '0';
@@ -208,6 +286,7 @@ static ccjs_status ccjs_json_buffer_push_utf8(ccjs_json_buffer* buffer, uint32_t
 static ccjs_status
 ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t* out_len, bool nul_terminated) {
   if (parser == 0 || out_bytes == 0 || out_len == 0 || !ccjs_json_match_byte(parser, '"')) {
+    ccjs_json_set_error(parser, "Expected string");
     return CCJS_ERR_TYPE;
   }
 
@@ -236,6 +315,7 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
 
     if (value < 0x20) {
       ccjs_json_buffer_dispose(&buffer);
+      ccjs_json_set_error_at(parser, "Bad control character in string literal", parser->pos - 1);
       return CCJS_ERR_TYPE;
     }
 
@@ -252,6 +332,7 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
 
     if (parser->pos >= parser->len) {
       ccjs_json_buffer_dispose(&buffer);
+      ccjs_json_set_error(parser, "Unterminated string");
       return CCJS_ERR_TYPE;
     }
 
@@ -275,6 +356,7 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
     } else if (escaped == 'u') {
       if (parser->pos + 4 > parser->len) {
         ccjs_json_buffer_dispose(&buffer);
+        ccjs_json_set_error(parser, "Bad Unicode escape");
         return CCJS_ERR_TYPE;
       }
 
@@ -282,6 +364,7 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
 
       if (!ccjs_json_parse_hex4(parser->bytes + parser->pos, &codepoint)) {
         ccjs_json_buffer_dispose(&buffer);
+        ccjs_json_set_error(parser, "Bad Unicode escape");
         return CCJS_ERR_TYPE;
       }
 
@@ -290,6 +373,7 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
       if (codepoint >= 0xd800 && codepoint <= 0xdbff) {
         if (parser->pos + 6 > parser->len || parser->bytes[parser->pos] != '\\' || parser->bytes[parser->pos + 1] != 'u') {
           ccjs_json_buffer_dispose(&buffer);
+          ccjs_json_set_error(parser, "Bad Unicode escape");
           return CCJS_ERR_TYPE;
         }
 
@@ -297,6 +381,7 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
 
         if (!ccjs_json_parse_hex4(parser->bytes + parser->pos + 2, &low) || low < 0xdc00 || low > 0xdfff) {
           ccjs_json_buffer_dispose(&buffer);
+          ccjs_json_set_error(parser, "Bad Unicode escape");
           return CCJS_ERR_TYPE;
         }
 
@@ -304,6 +389,7 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
         codepoint = 0x10000 + ((codepoint - 0xd800) << 10) + (low - 0xdc00);
       } else if (codepoint >= 0xdc00 && codepoint <= 0xdfff) {
         ccjs_json_buffer_dispose(&buffer);
+        ccjs_json_set_error(parser, "Bad Unicode escape");
         return CCJS_ERR_TYPE;
       }
 
@@ -317,6 +403,7 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
       has_output = false;
     } else {
       ccjs_json_buffer_dispose(&buffer);
+      ccjs_json_set_error_at(parser, "Bad escaped character in JSON string", parser->pos - 1);
       return CCJS_ERR_TYPE;
     }
 
@@ -333,6 +420,7 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
   }
 
   ccjs_json_buffer_dispose(&buffer);
+  ccjs_json_set_error(parser, "Unterminated string");
   return CCJS_ERR_TYPE;
 }
 
@@ -364,6 +452,7 @@ static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* 
   }
 
   if (parser->pos >= parser->len) {
+    ccjs_json_set_error(parser, "No number after minus sign");
     return CCJS_ERR_TYPE;
   }
 
@@ -374,6 +463,7 @@ static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* 
       parser->pos += 1;
     }
   } else {
+    ccjs_json_set_error(parser, "Unexpected token");
     return CCJS_ERR_TYPE;
   }
 
@@ -381,6 +471,7 @@ static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* 
     parser->pos += 1;
 
     if (parser->pos >= parser->len || parser->bytes[parser->pos] < '0' || parser->bytes[parser->pos] > '9') {
+      ccjs_json_set_error(parser, "Unterminated fractional number");
       return CCJS_ERR_TYPE;
     }
 
@@ -397,6 +488,7 @@ static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* 
     }
 
     if (parser->pos >= parser->len || parser->bytes[parser->pos] < '0' || parser->bytes[parser->pos] > '9') {
+      ccjs_json_set_error(parser, "Exponent part is missing a number");
       return CCJS_ERR_TYPE;
     }
 
@@ -443,6 +535,7 @@ static void ccjs_json_free_names(ccjs_allocator* allocator, char** names, size_t
 
 static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth, ccjs_value* out) {
   if (!ccjs_json_match_byte(parser, '{')) {
+    ccjs_json_set_error(parser, "Expected object");
     return CCJS_ERR_TYPE;
   }
 
@@ -491,6 +584,13 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
 
       char* key = 0;
       size_t key_len = 0;
+
+      if (parser->pos >= parser->len || parser->bytes[parser->pos] != '"') {
+        ccjs_json_set_error(parser, "Expected property name or '}'");
+        status = CCJS_ERR_TYPE;
+        break;
+      }
+
       status = ccjs_json_parse_string_bytes(parser, &key, &key_len, true);
 
       if (status != CCJS_OK) {
@@ -507,6 +607,7 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
 
       if (!ccjs_json_match_byte(parser, ':')) {
         allocator->free(allocator->user, key, key_len + 1, _Alignof(char));
+        ccjs_json_set_error(parser, "Expected ':' after property name");
         status = CCJS_ERR_TYPE;
         break;
       }
@@ -530,6 +631,7 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
       }
 
       if (!ccjs_json_match_byte(parser, ',')) {
+        ccjs_json_set_error(parser, "Expected ',' or '}' after property value");
         status = CCJS_ERR_TYPE;
         break;
       }
@@ -626,6 +728,7 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
 
 static ccjs_status ccjs_json_parse_array(ccjs_json_parser* parser, size_t depth, ccjs_value* out) {
   if (!ccjs_json_match_byte(parser, '[')) {
+    ccjs_json_set_error(parser, "Expected array");
     return CCJS_ERR_TYPE;
   }
 
@@ -670,6 +773,7 @@ static ccjs_status ccjs_json_parse_array(ccjs_json_parser* parser, size_t depth,
     if (!ccjs_json_match_byte(parser, ',')) {
       ccjs_release(*out);
       *out = ccjs_undefined_value();
+      ccjs_json_set_error(parser, "Expected ',' or ']' after array element");
       return CCJS_ERR_TYPE;
     }
   }
@@ -683,6 +787,7 @@ static ccjs_status ccjs_json_parse_value(ccjs_json_parser* parser, size_t depth,
   ccjs_json_skip_ws(parser);
 
   if (parser->pos >= parser->len) {
+    ccjs_json_set_error(parser, "Unexpected end of JSON input");
     return CCJS_ERR_TYPE;
   }
 
@@ -715,10 +820,21 @@ static ccjs_status ccjs_json_parse_value(ccjs_json_parser* parser, size_t depth,
     return CCJS_OK;
   }
 
-  return ccjs_json_parse_number(parser, out);
+  if (value == '-' || (value >= '0' && value <= '9')) {
+    return ccjs_json_parse_number(parser, out);
+  }
+
+  ccjs_json_set_error(parser, "Unexpected token");
+  return CCJS_ERR_TYPE;
 }
 
-ccjs_status ccjs_json_parse(ccjs_allocator* allocator, const char* bytes, size_t len, ccjs_value* out) {
+ccjs_status ccjs_json_parse_with_error(
+  ccjs_allocator* allocator,
+  const char* bytes,
+  size_t len,
+  ccjs_value* out,
+  ccjs_value* error_out
+) {
   if (
     allocator == 0 || allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0 || out == 0 ||
     (bytes == 0 && len != 0)
@@ -728,12 +844,25 @@ ccjs_status ccjs_json_parse(ccjs_allocator* allocator, const char* bytes, size_t
 
   *out = ccjs_undefined_value();
 
+  if (error_out != 0) {
+    *error_out = ccjs_undefined_value();
+  }
+
   ccjs_json_parser parser = { .allocator = allocator, .bytes = bytes == 0 ? "" : bytes, .len = len };
   ccjs_status status = ccjs_json_parse_value(&parser, 0, out);
 
   if (status != CCJS_OK) {
     ccjs_release(*out);
     *out = ccjs_undefined_value();
+
+    if (status == CCJS_ERR_TYPE && error_out != 0) {
+      ccjs_status error_status = ccjs_json_make_syntax_error(allocator, &parser, error_out);
+
+      if (error_status != CCJS_OK) {
+        return error_status;
+      }
+    }
+
     return status;
   }
 
@@ -742,10 +871,24 @@ ccjs_status ccjs_json_parse(ccjs_allocator* allocator, const char* bytes, size_t
   if (parser.pos != parser.len) {
     ccjs_release(*out);
     *out = ccjs_undefined_value();
+    ccjs_json_set_error(&parser, "Unexpected non-whitespace character after JSON");
+
+    if (error_out != 0) {
+      ccjs_status error_status = ccjs_json_make_syntax_error(allocator, &parser, error_out);
+
+      if (error_status != CCJS_OK) {
+        return error_status;
+      }
+    }
+
     return CCJS_ERR_TYPE;
   }
 
   return CCJS_OK;
+}
+
+ccjs_status ccjs_json_parse(ccjs_allocator* allocator, const char* bytes, size_t len, ccjs_value* out) {
+  return ccjs_json_parse_with_error(allocator, bytes, len, out, 0);
 }
 
 static ccjs_status

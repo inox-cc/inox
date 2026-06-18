@@ -93,7 +93,16 @@ function currentJsonErrorTarget(context: CFunctionContext): string | null {
   return targets[targets.length - 1]
 }
 
-function pushJsonParseStatusLines(target: string[], call: string, context: CFunctionContext): void {
+function shouldUseDetailedJsonParseError(context: CFunctionContext): boolean {
+  return currentJsonErrorTarget(context) != null || context.throwingFunction === true
+}
+
+function pushJsonParseStatusLines(
+  target: string[],
+  call: string,
+  context: CFunctionContext,
+  detailedError: string | null
+): void {
   const errorTarget = currentJsonErrorTarget(context)
 
   if (errorTarget == null && context.throwingFunction !== true) {
@@ -103,21 +112,40 @@ function pushJsonParseStatusLines(target: string[], call: string, context: CFunc
 
   const status = nextCName(context, 'ccjs_json_status')
   const message = 'JSON.parse failed'
+  const messageLiteral = cStringLiteral(message)
+  const messageLength = utf8ByteLength(message)
+  const failureStatement = emitFailureStatement(context)
+  const fallbackErrorLine = `if (ccjs_string_from_literal(&ccjs_default_allocator, ${messageLiteral}, ${messageLength}, &ccjs_error) != CCJS_OK) ${failureStatement}`
+  let gotoTarget = 'ccjs_cleanup'
+
+  if (errorTarget != null) {
+    gotoTarget = errorTarget
+  }
 
   target.push(`ccjs_status ${status} = ${call};`)
   target.push(`if (${status} != CCJS_OK) {`)
   target.push('  ccjs_release(ccjs_error);')
   target.push('  ccjs_error = ccjs_undefined_value();')
-  target.push(
-    `  if (ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(message)}, ${utf8ByteLength(message)}, &ccjs_error) != CCJS_OK) ${emitFailureStatement(context)}`
-  )
+
+  if (detailedError != null) {
+    target.push(`  if (${detailedError}.tag == CCJS_TAG_STRING && ${detailedError}.as.ref != 0) {`)
+    target.push(`    ccjs_error = ${detailedError};`)
+    target.push(`    ${detailedError} = ccjs_undefined_value();`)
+    target.push('  } else {')
+    target.push(`    ${fallbackErrorLine}`)
+    target.push(`    ccjs_release(${detailedError});`)
+    target.push(`    ${detailedError} = ccjs_undefined_value();`)
+    target.push('  }')
+  } else {
+    target.push(`  ${fallbackErrorLine}`)
+  }
 
   if (errorTarget == null) {
     target.push('  ccjs_status_result = CCJS_ERR_THROW;')
   }
 
   target.push('  ccjs_error_active = 1;')
-  target.push(`  goto ${errorTarget ?? 'ccjs_cleanup'};`)
+  target.push(`  goto ${gotoTarget};`)
   target.push('}')
 }
 
@@ -222,12 +250,26 @@ export function emitPreparedJsonCallExpression(
   if (method === 'parse') {
     const text = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_json_text')
     const expectedTag = cRuntimeValueTag(dependencies.inferExpressionType(expression, context))
+    let detailedError: string | null = null
 
     const lines: string[] = []
 
     pushJsonLines(lines, text.lines)
     pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
-    pushJsonParseStatusLines(lines, `ccjs_json_parse(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out})`, context)
+
+    if (shouldUseDetailedJsonParseError(context)) {
+      detailedError = nextCName(context, 'ccjs_json_error')
+      registerOwnedValue(context, detailedError)
+      pushJsonLines(lines, emitPrepareOwnedValueWrite(detailedError))
+    }
+
+    let parseCall = `ccjs_json_parse(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out})`
+
+    if (detailedError != null) {
+      parseCall = `ccjs_json_parse_with_error(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out}, &${detailedError})`
+    }
+
+    pushJsonParseStatusLines(lines, parseCall, context, detailedError)
 
     if (expectedTag != null) {
       lines.push(emitRuntimeValueCheck(out, expectedTag, context))

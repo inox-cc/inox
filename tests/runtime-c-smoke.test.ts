@@ -290,7 +290,7 @@ test('generated C invalid JSON.parse is caught and execution continues', async (
   try {
     const result = compileSource(
       `try {
-  const value = JSON.parse('{"items":[}')
+  const value = JSON.parse('[1 2]')
   console.log(value)
 } catch (error) {
   console.log(error)
@@ -313,7 +313,10 @@ console.log('after')
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'JSON.parse failed\nafter\n')
+    assert.equal(
+      run.stdout,
+      "SyntaxError: Expected ',' or ']' after array element in JSON at position 3 (line 1 column 4)\nafter\n"
+    )
   } finally {
     await rm(dir, {
       recursive: true,

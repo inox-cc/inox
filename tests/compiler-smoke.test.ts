@@ -365,7 +365,7 @@ test('lowers invalid JSON.parse inside C try catch as a local throw', () => {
   const result = compileSource(
     `export function main(): void {
   try {
-    const value = JSON.parse('{"items":[}')
+    const value = JSON.parse('[1 2]')
     console.log(value)
   } catch (error) {
     console.log(error)
@@ -383,7 +383,12 @@ test('lowers invalid JSON.parse inside C try catch as a local throw', () => {
     result.ir.globalUsages.map((usage) => usage.path.join('.')),
     ['JSON.parse']
   )
-  assert.match(result.code, /ccjs_status ccjs_json_status_\d+ = ccjs_json_parse\(&ccjs_default_allocator, "\{\\"items\\":\[\}", 11, &ccjs_json_value_\d+\);/)
+  assert.match(
+    result.code,
+    /ccjs_status ccjs_json_status_\d+ = ccjs_json_parse_with_error\(&ccjs_default_allocator, "\[1 2\]", 5, &ccjs_json_value_\d+, &ccjs_json_error_\d+\);/
+  )
+  assert.match(result.code, /if \(ccjs_json_error_\d+\.tag == CCJS_TAG_STRING && ccjs_json_error_\d+\.as\.ref != 0\)/)
+  assert.match(result.code, /ccjs_error = ccjs_json_error_\d+;/)
   assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "JSON\.parse failed", 17, &ccjs_error\)/)
   assert.match(result.code, /ccjs_error_active = 1;\n {4}goto ccjs_try_\d+_catch;/)
 })
