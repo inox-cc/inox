@@ -96,11 +96,7 @@ export function cPromiseRuntimeCallName(callee: AnyNode | null | undefined): str
     return null
   }
 
-  if (callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
-    return null
-  }
-
-  if (callee.object.path[0] !== 'Promise') {
+  if (promiseMemberObjectReferenceName(callee) !== 'Promise') {
     return null
   }
 
@@ -120,11 +116,7 @@ export function isPromiseConstructorExpression(expression: AnyNode | null | unde
     return false
   }
 
-  if (expression.callee == null || expression.callee.type !== 'Reference') {
-    return false
-  }
-
-  return expression.callee.path.length === 1 && expression.callee.path[0] === 'Promise'
+  return promiseReferenceName(expression.callee) === 'Promise'
 }
 
 export function isPromiseMethodAst(expression: AnyNode | null | undefined): boolean {
@@ -154,31 +146,29 @@ export function functionTakesEventLoopParam(name: string, context: PromiseEventL
 }
 
 export function isPromiseReturningFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEventLoopFunctionContext): boolean {
-  if (callee == null || callee.type !== 'Reference') {
-    return false
-  }
+  const name = promiseReferenceName(callee)
 
-  return callee.path.length === 1 && isPlainPromiseReturningFunctionName(callee.path[0], context)
+  return name != null && isPlainPromiseReturningFunctionName(name, context)
 }
 
 export function isExternalEventLoopFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEventLoopFunctionContext): boolean {
-  if (callee == null || callee.type !== 'Reference') {
-    return false
-  }
+  const name = promiseReferenceName(callee)
 
-  return callee.path.length === 1 && context.externalEventLoopFunctions.has(callee.path[0])
+  return name != null && context.externalEventLoopFunctions.has(name)
 }
 
 export function resolvePromiseReturningFunctionValueType(callee: AnyNode | null | undefined, context: PromiseEmitContext): string {
-  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
+  const name = promiseReferenceName(callee)
+
+  if (name == null) {
     return 'unknown'
   }
 
-  if (!isPlainPromiseReturningFunctionName(callee.path[0], context)) {
+  if (!isPlainPromiseReturningFunctionName(name, context)) {
     return 'unknown'
   }
 
-  const valueType = context.functionReturnPromiseValueTypes.get(callee.path[0])
+  const valueType = context.functionReturnPromiseValueTypes.get(name)
 
   if (valueType != null) {
     return valueType
@@ -211,8 +201,10 @@ export function resolvePromiseExpressionValueType(
     }
   }
 
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    return knownValueType(context.promiseValueTypes.get(expression.path[0]))
+  const expressionName = promiseReferenceName(expression)
+
+  if (expressionName != null) {
+    return knownValueType(context.promiseValueTypes.get(expressionName))
   }
 
   return null
@@ -239,26 +231,26 @@ function optionalBoolean(value: boolean | null | undefined): boolean {
 }
 
 export function isAsyncFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEmitContext): boolean {
-  if (callee == null || callee.type !== 'Reference') {
-    return false
-  }
+  const name = promiseReferenceName(callee)
 
-  return callee.path.length === 1 && promiseBooleanValueIsTrue(context.functionAsyncFlags.get(callee.path[0]))
+  return name != null && promiseBooleanValueIsTrue(context.functionAsyncFlags.get(name))
 }
 
 export function resolveCAsyncFunctionAwaitValueType(
   callee: AnyNode | null | undefined,
   context: PromiseEmitContext
 ): string | null {
-  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
+  const name = promiseReferenceName(callee)
+
+  if (name == null) {
     return null
   }
 
-  if (!promiseBooleanValueIsTrue(context.functionAsyncFlags.get(callee.path[0]))) {
+  if (!promiseBooleanValueIsTrue(context.functionAsyncFlags.get(name))) {
     return null
   }
 
-  const valueType = context.functionReturnPromiseValueTypes.get(callee.path[0])
+  const valueType = context.functionReturnPromiseValueTypes.get(name)
 
   if (valueType != null) {
     return valueType
@@ -356,6 +348,11 @@ type PromiseChainArrowBody = {
   statements: PromiseNode[]
 }
 
+type PromiseTopLevelNodeEntry = {
+  kind: string
+  node: PromiseNode
+}
+
 type PromiseCallbackContext = {
   lines: string[]
   expression: string
@@ -387,6 +384,34 @@ function promiseRuntimeArrowCaptureAt(values: CRuntimeArrowCapture[], index: num
 
 function promiseStringAt(values: string[], index: number): string {
   return values[index]
+}
+
+function promiseTopLevelNodeEntryAt(values: PromiseTopLevelNodeEntry[], index: number): PromiseTopLevelNodeEntry {
+  return values[index]
+}
+
+function firstPromiseReferencePathSegment(path: string[]): string | null {
+  for (const segment of path) {
+    return segment
+  }
+
+  return null
+}
+
+function promiseReferenceName(expression: PromiseNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  return firstPromiseReferencePathSegment(expression.path)
+}
+
+function promiseMemberObjectReferenceName(expression: PromiseNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'MemberExpression') {
+    return null
+  }
+
+  return promiseReferenceName(expression.object)
 }
 
 function promiseChainArrowBodyKind(body: PromiseChainArrowBody | null | undefined): string {
@@ -535,15 +560,13 @@ export function emitPromiseConstructorSettlementCall(
     return null
   }
 
-  if (expression.callee == null || expression.callee.type !== 'Reference') {
+  const handlerName = promiseReferenceName(expression.callee)
+
+  if (handlerName == null) {
     return null
   }
 
-  if (expression.callee.path.length !== 1) {
-    return null
-  }
-
-  const handler = context.promiseConstructorHandlers.get(expression.callee.path[0])
+  const handler = context.promiseConstructorHandlers.get(handlerName)
 
   if (handler == null) {
     return null
@@ -705,15 +728,15 @@ export function emitPreparedPromiseExpression(
     return promiseCall
   }
 
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
+  const expressionName = promiseReferenceName(expression)
 
-    if (context.variables.get(name) === 'promise') {
+  if (expressionName != null) {
+    if (context.variables.get(expressionName) === 'promise') {
       return {
         lines: [],
-        expression: name,
-        valueType: promiseContextValueType(context, name),
-        rejectionValueType: promiseContextRejectionValueType(context, name)
+        expression: expressionName,
+        valueType: promiseContextValueType(context, expressionName),
+        rejectionValueType: promiseContextRejectionValueType(context, expressionName)
       }
     }
   }
@@ -1265,12 +1288,9 @@ function visitPromiseConstructorRejectionNode(
 
   if (
     current.type === 'CallExpression' &&
-    current.callee != null &&
-    current.callee.type === 'Reference' &&
-    current.callee.path.length === 1 &&
-    current.callee.path[0] === rejectName
+    promiseReferenceName(current.callee) === rejectName
   ) {
-    types.push(dependencies.inferRejectedValueType(current.args[0], context))
+    types.push(dependencies.inferRejectedValueType(promiseNodeAt(current.args, 0), context))
   }
 
   visitPromiseConstructorRejectionChildren(current, rejectName, types, context, dependencies)
@@ -1515,7 +1535,7 @@ export function collectPromiseChainWrappers(
     const entries = collectIrTopLevelNodeEntries(ir)
 
     for (let entryIndex = 0; entryIndex < entries.length; entryIndex = entryIndex + 1) {
-      const item = entries[entryIndex]
+      const item = promiseTopLevelNodeEntryAt(entries, entryIndex)
 
       if (item.kind === 'function') {
         const scope: CallbackScope = new Map()
@@ -1594,8 +1614,10 @@ function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScop
     return false
   }
 
-  if (statement.init != null && statement.init.type === 'Reference' && statement.init.path.length === 1) {
-    const binding = lookupPromiseCallbackBinding(statement.init.path[0], scopes)
+  const initName = promiseReferenceName(statement.init)
+
+  if (initName != null) {
+    const binding = lookupPromiseCallbackBinding(initName, scopes)
 
     if (binding != null && binding.runtimeManaged === true) {
       return true
