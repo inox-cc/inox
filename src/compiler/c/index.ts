@@ -529,6 +529,18 @@ type CErrorConstructorParts = {
   cause: AnyNode
 }
 
+function cNodeAt(values: any[], index: number): any {
+  return values[index]
+}
+
+function cPathSegment(path: string[], index: number): string {
+  return path[index]
+}
+
+function debugMemoryStatsFieldAt(index: number): (typeof debugMemoryStatsFields)[number] {
+  return debugMemoryStatsFields[index]
+}
+
 let objectVariableDeclarationDependencies = {} as ObjectVariableDeclarationDependencies
 let objectExpressionFieldDependencies: ObjectExpressionFieldDependencies = {
   emitCValueExpression,
@@ -2203,7 +2215,7 @@ function isBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionCo
     expression.target != null &&
     expression.target.type === 'Reference' &&
     expression.target.path.length === 1 &&
-    isBoxedRuntimeValueName(expression.target.path[0], context)
+    isBoxedRuntimeValueName(cPathSegment(expression.target.path, 0), context)
   )
 }
 
@@ -2212,7 +2224,7 @@ function isNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctio
     expression.target != null &&
     expression.target.type === 'Reference' &&
     expression.target.path.length === 1 &&
-    context.nullableVariables.has(expression.target.path[0])
+    context.nullableVariables.has(cPathSegment(expression.target.path, 0))
   )
 }
 
@@ -2224,7 +2236,7 @@ function emptyPreparedExpression(): PreparedExpression {
 }
 
 function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
-  const name = expression.target.path[0]
+  const name = cPathSegment(expression.target.path, 0)
   const expectedTag = cRuntimeValueTag(context.variables.get(name))
   const targetType = context.variables.get(name)
   let value = emptyPreparedExpression()
@@ -2272,7 +2284,7 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
 }
 
 function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
-  const name = expression.target.path[0]
+  const name = cPathSegment(expression.target.path, 0)
   const expected = context.variables.get(name)
   const value = emitCValueExpression(expression.value, context)
   const temp = nextCName(context, 'ccjs_box_value')
@@ -2800,7 +2812,7 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
   }
 
   for (let index = 0; index < statement.init.elements.length; index++) {
-    const element = statement.init.elements[index]
+    const element = cNodeAt(statement.init.elements, index)
     const value = emitCValueExpression(element, context)
 
     pushAll(lines, value.lines)
@@ -3941,7 +3953,7 @@ function emitPreparedDebugMemoryCallExpression(
   lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${out})`, context))
 
   for (let index = 0; index < debugMemoryStatsFields.length; index++) {
-    const field = debugMemoryStatsFields[index]
+    const field = debugMemoryStatsFieldAt(index)
 
     lines.push(
       emitStatusCheck(
@@ -4078,7 +4090,7 @@ function emitPreparedAsyncTaskPromiseCallExpression(
     return null
   }
 
-  const wrapper = context.asyncTaskWrappers.get(expression.callee.path[0])
+  const wrapper = context.asyncTaskWrappers.get(cPathSegment(expression.callee.path, 0))
 
   if (wrapper == null) {
     return null
