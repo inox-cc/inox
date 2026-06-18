@@ -2101,6 +2101,20 @@ function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, con
   return inferred
 }
 
+function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionContext): string {
+  const declared = knownValueType(statement.valueType)
+
+  if (declared != null) {
+    return declared
+  }
+
+  if (statement.init == null) {
+    return 'unknown'
+  }
+
+  return inferExpressionType(statement.init, context)
+}
+
 function isDynamicObjectFieldInitializer(expression: CDynamicObjectFieldNode, context: CFunctionContext): boolean {
   if (isMemberAccessExpression(expression)) {
     if (
@@ -2128,11 +2142,7 @@ function isDynamicObjectFieldInitializer(expression: CDynamicObjectFieldNode, co
 }
 
 function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
-  let inferred = knownValueType(statement.valueType)
-
-  if (inferred == null) {
-    inferred = 'unknown'
-  }
+  const inferred = firstKnownValueTypeOrUnknown(statement.valueType, null, null)
 
   context.variables.set(statement.name, inferred)
 
@@ -2177,15 +2187,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     return emitScalarVariableDeclaration(statement, context)
   }
 
-  let inferred = knownValueType(statement.valueType)
-
-  if (inferred == null && statement.init != null) {
-    inferred = inferExpressionType(statement.init, context)
-  }
-
-  if (inferred == null) {
-    inferred = 'unknown'
-  }
+  const inferred = inferModuleValueAssignmentType(statement, context)
 
   context.variables.set(statement.name, inferred)
   context.moduleValueTypes.set(statement.name, inferred)
