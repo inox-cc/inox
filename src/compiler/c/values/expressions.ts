@@ -1583,6 +1583,16 @@ export function emitPreparedNumberExpression(
       return typeofCompare
     }
 
+    const dynamicObjectStringLiteralCompare = emitPreparedDynamicObjectStringLiteralCompareExpression(
+      expression,
+      context,
+      deps
+    )
+
+    if (dynamicObjectStringLiteralCompare != null) {
+      return dynamicObjectStringLiteralCompare
+    }
+
     if (
       isEqualityOperator(expression.operator) &&
       deps.canEmitStringBytesOperand(expression.left, context) &&
@@ -1924,6 +1934,42 @@ function emitPreparedOptionalRuntimeObjectFieldValueExpression(
   }
 }
 
+function emitPreparedDynamicObjectStringLiteralCompareExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (!isEqualityOperator(expression.operator)) {
+    return null
+  }
+
+  const leftLiteral = stringLiteralValue(expression.left)
+
+  if (leftLiteral != null) {
+    if (isDynamicReferenceObjectFieldExpression(expression.right, context, deps)) {
+      const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression.right, context, deps)
+
+      if (value != null) {
+        return emitPreparedRuntimePreparedValueStringLiteralCompare(value, leftLiteral, expression.operator, context)
+      }
+    }
+  }
+
+  const rightLiteral = stringLiteralValue(expression.right)
+
+  if (rightLiteral != null) {
+    if (isDynamicReferenceObjectFieldExpression(expression.left, context, deps)) {
+      const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression.left, context, deps)
+
+      if (value != null) {
+        return emitPreparedRuntimePreparedValueStringLiteralCompare(value, rightLiteral, expression.operator, context)
+      }
+    }
+  }
+
+  return null
+}
+
 function emitPreparedRuntimeStringLiteralCompareExpression(
   expression: CValueNode,
   context: CFunctionContext,
@@ -1967,6 +2013,14 @@ function emitPreparedRuntimeValueStringLiteralCompare(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
+  if (isDynamicReferenceObjectFieldExpression(valueExpression, context, deps)) {
+    const objectFieldValue = emitPreparedOptionalDynamicObjectFieldValueExpression(valueExpression, context, deps)
+
+    if (objectFieldValue != null) {
+      return emitPreparedRuntimePreparedValueStringLiteralCompare(objectFieldValue, literal, operator, context)
+    }
+  }
+
   const dynamicValue = emitPreparedDynamicRuntimeValueExpression(valueExpression, context, deps)
 
   if (dynamicValue != null) {
@@ -1976,6 +2030,24 @@ function emitPreparedRuntimeValueStringLiteralCompare(
   const value = deps.emitCValueExpression(valueExpression, context)
 
   return emitPreparedRuntimePreparedValueStringLiteralCompare(value, literal, operator, context)
+}
+
+function isDynamicReferenceObjectFieldExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): boolean {
+  const access = dynamicObjectFieldAccess(expression, context, deps)
+
+  if (access == null || access.object.type !== 'Reference') {
+    return false
+  }
+
+  if (deps.resolveKnownObjectMember(expression, context) != null) {
+    return false
+  }
+
+  return deps.resolveKnownObjectIndex(expression, context) == null
 }
 
 function emitPreparedRuntimePreparedValueStringLiteralCompare(

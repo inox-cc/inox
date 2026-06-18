@@ -530,6 +530,16 @@ type CDynamicObjectFieldNode = AnyNode
 type CAccessorNode = CDynamicObjectFieldNode
 type CStringMap = Map<string, string>
 type CNameSet = Set<string>
+type CKnownArrayIndexDeclaration = {
+  name: string
+  kind?: string
+  loc?: SourceLocation
+  shape?: CObjectShape | null
+  arrayElementType?: string | null
+  mapKeyType?: string | null
+  mapValueType?: string | null
+  setElementType?: string | null
+}
 type TempValueEmitter = (temp: string) => string
 
 type CThrowingFunctionInfo = {
@@ -3018,12 +3028,16 @@ function emitDynamicObjectMemberAssignment(
 }
 
 function emitKnownArrayIndexVariableDeclaration(
-  statement: AnyNode,
+  statement: CKnownArrayIndexDeclaration,
   element: CKnownArrayElement,
   context: CFunctionContext
 ): string[] {
   if (element.valueType === 'string') {
     return emitKnownArrayStringIndexVariableDeclaration(statement, element, context)
+  }
+
+  if (isManagedRuntimeReturnType(element.valueType)) {
+    return emitKnownArrayRuntimeIndexVariableDeclaration(statement, element, context)
   }
 
   if (!isNullableScalarType(element.valueType)) {
@@ -3060,8 +3074,71 @@ function emitKnownArrayIndexVariableDeclaration(
   return lines
 }
 
+function emitKnownArrayRuntimeIndexVariableDeclaration(
+  statement: CKnownArrayIndexDeclaration,
+  element: CKnownArrayElement,
+  context: CFunctionContext
+): string[] {
+  const name = statement.name
+
+  registerOwnedValue(context, name)
+  const tag = cRuntimeValueTag(element.valueType)
+  const lines: string[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(name))
+  lines.push(emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${name})`, context))
+
+  if (tag != null) {
+    lines.push(emitRuntimeTypeCheck(`${name}.tag != ${tag} || ${name}.as.ref == 0`, context))
+  }
+
+  context.variables.set(name, element.valueType)
+
+  if (element.valueType === 'object' && statement.shape != null) {
+    registerObjectShape(context, name, statement.shape)
+  } else if (element.valueType === 'array') {
+    let arrayElementType = 'unknown'
+    const statementArrayElementType = statement.arrayElementType
+
+    if (statementArrayElementType != null) {
+      arrayElementType = statementArrayElementType
+    }
+
+    context.runtimeArrayElementTypes.set(name, arrayElementType)
+  } else if (element.valueType === 'map') {
+    let keyType = 'unknown'
+    let valueType = 'unknown'
+    const statementMapKeyType = statement.mapKeyType
+    const statementMapValueType = statement.mapValueType
+
+    if (statementMapKeyType != null) {
+      keyType = statementMapKeyType
+    }
+
+    if (statementMapValueType != null) {
+      valueType = statementMapValueType
+    }
+
+    context.mapTypes.set(name, {
+      key: keyType,
+      value: valueType
+    })
+  } else if (element.valueType === 'set') {
+    let elementType = 'unknown'
+    const statementSetElementType = statement.setElementType
+
+    if (statementSetElementType != null) {
+      elementType = statementSetElementType
+    }
+
+    context.setElementTypes.set(name, elementType)
+  }
+
+  return lines
+}
+
 function emitKnownArrayStringIndexVariableDeclaration(
-  statement: AnyNode,
+  statement: CKnownArrayIndexDeclaration,
   element: CKnownArrayElement,
   context: CFunctionContext
 ): string[] {

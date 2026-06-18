@@ -139,6 +139,26 @@ export function main(): void {
   )
 })
 
+test('lowers C known object array index declarations', () => {
+  const result = compileSource(
+    `type User = {
+  name: string
+}
+
+const users: User[] = [{ name: 'Ada' }]
+const user = users[0]
+console.log(user.name)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_array_get\(users, 0, &user\)/)
+  assert.match(result.code, /user\.tag != CCJS_TAG_OBJECT \|\| user\.as\.ref == 0/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_(?:log_)?value_\d+\)/)
+})
+
 
 test('lowers C runtime array locals from object fields', () => {
   const result = compileSource(
@@ -604,6 +624,23 @@ export function main(): void {
   assert.match(result.code, /ccjs_object_get_known\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_cmp_string_\d+->len == 3 && memcmp\(ccjs_cmp_string_\d+->bytes, "Ada", ccjs_cmp_string_\d+->len\) == 0/)
   assert.match(result.code, /!\(ccjs_cmp_string_\d+->len == 5 && memcmp\(ccjs_cmp_string_\d+->bytes, "Grace", ccjs_cmp_string_\d+->len\) == 0\)/)
+})
+
+
+test('lowers C dynamic object string literal comparisons without string guards', () => {
+  const result = compileSource(
+    `function isNotReference(node: object): boolean {
+  return node.type !== 'Reference'
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "type", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /!\(ccjs_string_cmp_value_\d+\.tag == CCJS_TAG_STRING/)
+  assert.doesNotMatch(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_value_\d+\.as\.ref == 0/)
 })
 
 

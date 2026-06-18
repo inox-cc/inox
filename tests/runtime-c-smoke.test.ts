@@ -6737,6 +6737,53 @@ console.log(box.values[1], box.flags[0], name)
 })
 
 
+test('generated C known object array index declarations compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-array-index-'))
+  const source = join(dir, 'object-array-index.c')
+  const output = join(dir, 'object-array-index')
+
+  try {
+    const result = compileSource(
+      `type User = {
+  name: string
+}
+
+const users: User[] = [{ name: 'Ada' }]
+const user = users[0]
+console.log(user.name)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C runtime array locals compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
