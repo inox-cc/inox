@@ -417,6 +417,62 @@ function statementPathSegment(path: string[], index: number): string {
   return path[index]
 }
 
+function runtimeMapMetadata(key: string, value: string): RuntimeMapMetadata {
+  return {
+    key,
+    value
+  }
+}
+
+function preparedCallOut(name: string): PreparedCallOptions {
+  return {
+    out: name
+  }
+}
+
+function preparedCallDiscard(): PreparedCallOptions {
+  return {
+    discard: true
+  }
+}
+
+function preparedPromiseReturnOptions(): PreparedCallOptions {
+  return {
+    out: 'ccjs_return',
+    owned: false
+  }
+}
+
+function returnStatementWithArgument(statement: StatementNode, argument: StatementNode | null | undefined): StatementNode {
+  return {
+    type: statement.type,
+    argument,
+    loc: statement.loc
+  }
+}
+
+function arrayVariableDeclarationNode(name: string, init: StatementNode): StatementNode {
+  return {
+    kind: 'const',
+    name,
+    init
+  }
+}
+
+function referenceNode(name: string): StatementNode {
+  return {
+    type: 'Reference',
+    path: [name]
+  }
+}
+
+function nullRuntimeValueExpression(): PreparedExpression {
+  return {
+    lines: [],
+    expression: 'ccjs_null_value()'
+  }
+}
+
 function emitScopedStatementBody(statement: StatementNode, context: CFunctionContext, narrowedNames: string[]): string[] {
   const variableScope = pushVariableScope(context)
   const nullableScope = pushNullableScalarNarrowing(context, narrowedNames)
@@ -797,10 +853,13 @@ export function registerRuntimeValueMetadata(
       mapType = resolveRuntimeMapType(expression, context)
     }
 
-    context.mapTypes.set(name, {
-      key: resolveRuntimeMapMetadataKeyType(declaration, expression, mapType),
-      value: resolveRuntimeMapMetadataValueType(declaration, expression, mapType)
-    })
+    context.mapTypes.set(
+      name,
+      runtimeMapMetadata(
+        resolveRuntimeMapMetadataKeyType(declaration, expression, mapType),
+        resolveRuntimeMapMetadataValueType(declaration, expression, mapType)
+      )
+    )
   } else if (valueType === 'set') {
     context.setElementTypes.set(name, resolveRuntimeSetMetadataElementType(declaration, expression, context))
   }
@@ -1006,10 +1065,7 @@ function registerForOfElementMetadata(
   } else if (elementType === 'array') {
     context.runtimeArrayElementTypes.set(name, stringOrUnknown(statement.arrayElementType))
   } else if (elementType === 'map') {
-    context.mapTypes.set(name, {
-      key: stringOrUnknown(statement.mapKeyType),
-      value: stringOrUnknown(statement.mapValueType)
-    })
+    context.mapTypes.set(name, runtimeMapMetadata(stringOrUnknown(statement.mapKeyType), stringOrUnknown(statement.mapValueType)))
   } else if (elementType === 'set') {
     context.setElementTypes.set(name, stringOrUnknown(statement.setElementType))
   }
@@ -1079,10 +1135,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
     const mapKeyType = stringOrUnknown(statement.mapKeyType)
     const mapValueType = stringOrUnknown(statement.mapValueType)
     context.variables.set(statement.name, 'map')
-    context.mapTypes.set(statement.name, {
-      key: mapKeyType,
-      value: mapValueType
-    })
+    context.mapTypes.set(statement.name, runtimeMapMetadata(mapKeyType, mapValueType))
     reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
 
     const copied = emitCollectionVariableCopyConstructor(statement, context)
@@ -1175,12 +1228,14 @@ function emitMapConstructorEntries(
       continue
     }
 
-    const key = deps.emitCValueExpression(entry.elements[0], context)
-    const value = deps.emitCValueExpression(entry.elements[1], context)
+    const keyNode = statementNodeAt(entry.elements, 0)
+    const valueNode = statementNodeAt(entry.elements, 1)
+    const key = deps.emitCValueExpression(keyNode, context)
+    const value = deps.emitCValueExpression(valueNode, context)
     reportCCollectionHashability(
-      deps.inferExpressionType(entry.elements[0], context),
+      deps.inferExpressionType(keyNode, context),
       'Map keys',
-      nodeLocOrFallback(entry.elements[0], nodeLocOrFallback(entry, loc)),
+      nodeLocOrFallback(keyNode, nodeLocOrFallback(entry, loc)),
       context
     )
 
@@ -1286,9 +1341,7 @@ function emitPreparedForInitializer(init: StatementNode | null | undefined, cont
 
 function emitPreparedForVariableDeclaration(statement: StatementNode, context: CFunctionContext): PreparedExpression {
   const deps = statementDeps(context)
-  const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (fetchCall != null) {
     return {
@@ -1297,9 +1350,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (fsCall != null) {
     return {
@@ -1308,9 +1359,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(statement.init, context, {
-    out: statement.name
-  })
+  const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseConstructor != null) {
     return {
@@ -1319,9 +1368,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, {
-    out: statement.name
-  })
+  const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promise != null) {
     return {
@@ -1330,9 +1377,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  const promiseCall = deps.emitPreparedPromiseReturningCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const promiseCall = deps.emitPreparedPromiseReturningCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseCall != null) {
     return {
@@ -1596,22 +1641,9 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
       const name = nextCName(context, 'ccjs_for_array')
       pushAllLines(
         setup,
-        statementDeps(context).emitArrayVariableDeclaration(
-          {
-            kind: 'const',
-            name,
-            init: iterable
-          },
-          context
-        )
+        statementDeps(context).emitArrayVariableDeclaration(arrayVariableDeclarationNode(name, iterable), context)
       )
-      array = statementDeps(context).resolveKnownForOfArray(
-        {
-          type: 'Reference',
-          path: [name]
-        },
-        context
-      )
+      array = statementDeps(context).resolveKnownForOfArray(referenceNode(name), context)
     }
   }
 
@@ -2219,11 +2251,7 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
   let returnStatement = statement
 
   if (argument !== statement.argument) {
-    returnStatement = {
-      type: statement.type,
-      argument,
-      loc: statement.loc
-    }
+    returnStatement = returnStatementWithArgument(statement, argument)
   }
 
   if (isRuntimeCallbackReturnContext(context)) {
@@ -2356,9 +2384,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return deps.emitScalarVariableDeclaration(statement, context)
   }
 
-  const childProcessObject = deps.emitPreparedChildProcessCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const childProcessObject = deps.emitPreparedChildProcessCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (
     childProcessObject != null &&
@@ -2368,81 +2394,69 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return childProcessObject.lines
   }
 
-  const pathObject = deps.emitPreparedPathObjectCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const pathObject = deps.emitPreparedPathObjectCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (pathObject != null) {
     return pathObject.lines
   }
 
-  const urlObject = deps.emitPreparedUrlObjectExpression(statement.init, context, {
-    out: statement.name
-  })
+  const urlObject = deps.emitPreparedUrlObjectExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (urlObject != null) {
     return urlObject.lines
   }
 
-  const urlSearchParamsObject = deps.emitPreparedUrlSearchParamsObjectExpression(statement.init, context, {
-    out: statement.name
-  })
+  const urlSearchParamsObject = deps.emitPreparedUrlSearchParamsObjectExpression(
+    statement.init,
+    context,
+    preparedCallOut(statement.name)
+  )
 
   if (urlSearchParamsObject != null) {
     return urlSearchParamsObject.lines
   }
 
-  const asyncPromiseCall = deps.emitPreparedAsyncFunctionPromiseCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const asyncPromiseCall = deps.emitPreparedAsyncFunctionPromiseCallExpression(
+    statement.init,
+    context,
+    preparedCallOut(statement.name)
+  )
 
   if (asyncPromiseCall != null) {
     return asyncPromiseCall.lines
   }
 
-  const promiseMethod = deps.emitPreparedPromiseMethodExpression(statement.init, context, {
-    out: statement.name
-  })
+  const promiseMethod = deps.emitPreparedPromiseMethodExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseMethod != null) {
     return promiseMethod.lines
   }
 
-  const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (fetchCall != null) {
     return fetchCall.lines
   }
 
-  const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (fsCall != null) {
     return fsCall.lines
   }
 
-  const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(statement.init, context, {
-    out: statement.name
-  })
+  const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseConstructor != null) {
     return promiseConstructor.lines
   }
 
-  const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, {
-    out: statement.name
-  })
+  const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promise != null) {
     return promise.lines
   }
 
-  const promiseCall = deps.emitPreparedPromiseReturningCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const promiseCall = deps.emitPreparedPromiseReturningCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseCall != null) {
     return promiseCall.lines
@@ -2470,9 +2484,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return deps.emitArraySortVariableDeclaration(statement, arraySortCall, context)
   }
 
-  const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(statement.init, context, {
-    out: statement.name
-  })
+  const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (fetchHeadersCall != null && statement.valueType === 'boolean') {
     context.variables.set(statement.name, 'boolean')
@@ -2663,9 +2675,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return netSocketCall
     }
 
-    const arrayPopCall = deps.emitPreparedArrayPopCallExpression(statement.expression, context, {
-      discard: true
-    })
+    const arrayPopCall = deps.emitPreparedArrayPopCallExpression(statement.expression, context, preparedCallDiscard())
 
     if (arrayPopCall != null) {
       return arrayPopCall.lines
@@ -2737,17 +2747,13 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return collectionCall.lines
     }
 
-    const debugMemoryCall = deps.emitPreparedDebugMemoryCallExpression(statement.expression, context, {
-      discard: true
-    })
+    const debugMemoryCall = deps.emitPreparedDebugMemoryCallExpression(statement.expression, context, preparedCallDiscard())
 
     if (debugMemoryCall != null) {
       return debugMemoryCall.lines
     }
 
-    const cryptoCall = deps.emitPreparedCryptoCallExpression(statement.expression, context, {
-      discard: true
-    })
+    const cryptoCall = deps.emitPreparedCryptoCallExpression(statement.expression, context, preparedCallDiscard())
 
     if (cryptoCall != null) {
       return cryptoCall.lines
@@ -3009,10 +3015,11 @@ function isRuntimeValueReturnType(valueType: string | null | undefined): boolean
 }
 
 function emitPromiseReturnStatement(statement: StatementNode, context: CFunctionContext): string[] {
-  const promise = statementDeps(context).emitPreparedPromiseExpression(statement.argument, context, {
-    out: 'ccjs_return',
-    owned: false
-  })
+  const promise = statementDeps(context).emitPreparedPromiseExpression(
+    statement.argument,
+    context,
+    preparedPromiseReturnOptions()
+  )
 
   if (promise == null) {
     pushDiagnostic(context,
@@ -3140,10 +3147,7 @@ function emitNullableScalarReturnStatement(statement: StatementNode, context: CF
   let value: PreparedExpression;
 
   if (statement.argument == null) {
-    value = {
-      lines: [],
-      expression: 'ccjs_null_value()'
-    }
+    value = nullRuntimeValueExpression()
   } else {
     value = statementDeps(context).emitNullableScalarValueExpression(statement.argument, context)
   }
