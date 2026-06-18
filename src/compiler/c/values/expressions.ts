@@ -3206,6 +3206,20 @@ export function emitCValueExpression(
       }
     }
 
+    if (valueType === 'string') {
+      const temp = nextCName(context, 'ccjs_value')
+      const lines: string[] = []
+
+      registerOwnedValue(context, temp)
+      appendLines(lines, emitPrepareOwnedValueWrite(temp))
+      lines.push(emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, ${name}, strlen(${name}), &${temp})`, context))
+
+      return {
+        lines,
+        expression: temp
+      }
+    }
+
     if (
       valueType === 'bytes' ||
       valueType === 'object' ||

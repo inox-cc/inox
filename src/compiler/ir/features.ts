@@ -780,6 +780,11 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
     features.add('string-bytes')
   }
 
+  if (plainFunctionCallHasStringArgument(expression)) {
+    features.add('runtime-values')
+    features.add('string-bytes')
+  }
+
   if (timerRuntimeCallName(expression) != null) {
     features.add('timers')
   }
@@ -831,6 +836,39 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
       features.add('collections')
     }
   }
+}
+
+function plainFunctionCallHasStringArgument(expression: FeatureNode): boolean {
+  const calleePath = simpleReferencePath(expression.callee)
+
+  if (calleePath == null || calleePath.length !== 1) {
+    return false
+  }
+
+  if (
+    isStringConversionCall(expression) ||
+    isNumberConversionCall(expression) ||
+    isNumericCastCall(expression) ||
+    timerRuntimeCallName(expression) != null
+  ) {
+    return false
+  }
+
+  const args = expression.args
+
+  if (args == null) {
+    return false
+  }
+
+  for (let index = 0; index < args.length; index = index + 1) {
+    const arg = featureNodeAt(args, index)
+
+    if (arg.valueType === 'string') {
+      return true
+    }
+  }
+
+  return false
 }
 
 function runtimeConstructorName(expression: FeatureNode): string | null {

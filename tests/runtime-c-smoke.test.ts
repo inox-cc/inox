@@ -10233,6 +10233,57 @@ console.log(joined, digits, flags)
 })
 
 
+test('generated C plain string local params compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-plain-string-params-'))
+  const source = join(dir, 'plain-string-params.c')
+  const output = join(dir, 'plain-string-params')
+
+  try {
+    const result = compileSource(
+      `function greet(name: string): void {
+  console.log(name)
+}
+
+function echo(name: string): string {
+  return name
+}
+
+const local = 'Ada'
+greet(local)
+console.log(echo(local))
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'Ada\nAda\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C runtime string return compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

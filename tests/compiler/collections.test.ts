@@ -839,6 +839,24 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "null", 4, &ccjs_value_\d+\)/)
 })
 
+test('lowers C plain string locals as string parameter values', () => {
+  const result = compileSource(
+    `function echo(value: string): string {
+  return value
+}
+
+const local = 'Ada'
+console.log(echo(local))
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, local, strlen\(local\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value echo\(ccjs_value ccjs_param_value\);/)
+})
+
 
 test('lowers C Number conversion to nullable number parsing', () => {
   const result = compileSource(
