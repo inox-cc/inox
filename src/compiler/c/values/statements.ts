@@ -14,7 +14,7 @@ import {
 } from '../context.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import { diagnostic } from '../../diagnostics.ts'
-import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
+import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
 import {
   cRuntimeValueTag,
@@ -1090,10 +1090,7 @@ function emitForOfElementDeclaration(
     const expectedTag = cRuntimeValueTag(elementType)
 
     declaration = `ccjs_value ${name} = ${value};`
-
-    if (expectedTag != null) {
-      checks.push(emitRuntimeTypeCheck(`${value}.tag != ${expectedTag} || ${value}.as.ref == 0`, context))
-    }
+    pushAllLines(checks, emitRuntimeValueCheckLines(value, expectedTag, context))
   } else {
     checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context))
   }

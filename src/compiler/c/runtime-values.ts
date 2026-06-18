@@ -43,6 +43,20 @@ export function emitRuntimeValueCheck(name: string, expectedTag: string | null, 
   return emitRuntimeTypeCheck(`${name}.tag != ${expectedTag} || ${name}.as.ref == 0`, context)
 }
 
+export function emitRuntimeValueCheckLines(
+  name: string,
+  expectedTag: string | null,
+  context: RuntimeValueCheckContext
+): string[] {
+  const check = emitRuntimeValueCheck(name, expectedTag, context)
+
+  if (check === '') {
+    return []
+  }
+
+  return [check]
+}
+
 export function emitRuntimeFieldValueCheck(
   value: string,
   expectedTag: string | null,
@@ -53,10 +67,5 @@ export function emitRuntimeFieldValueCheck(
     return emitRuntimeNullableValueCheck(value, expectedTag, context)
   }
 
-  const check = emitRuntimeValueCheck(value, expectedTag, context)
-  if (check === '') {
-    return []
-  }
-
-  return [check]
+  return emitRuntimeValueCheckLines(value, expectedTag, context)
 }

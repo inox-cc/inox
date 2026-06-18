@@ -7,7 +7,7 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
+import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
 import type { CFunctionContext } from '../context.ts'
 import type { AnyNode } from '../../types.ts'
@@ -213,11 +213,7 @@ export function emitJsonParseVariableDeclaration(
     if (field.nullable === true) {
       pushJsonLines(lines, emitRuntimeNullableValueCheck(value, tag, context))
     } else {
-      const check = emitRuntimeValueCheck(value, tag, context)
-
-      if (check != null) {
-        lines.push(check)
-      }
+      pushJsonLines(lines, emitRuntimeValueCheckLines(value, tag, context))
     }
     lines.push(emitStatusCheck(`ccjs_object_init_known(${statement.name}, ${index}, ${value})`, context))
   }
@@ -271,9 +267,7 @@ export function emitPreparedJsonCallExpression(
 
     pushJsonParseStatusLines(lines, parseCall, context, detailedError)
 
-    if (expectedTag != null) {
-      lines.push(emitRuntimeValueCheck(out, expectedTag, context))
-    }
+    pushJsonLines(lines, emitRuntimeValueCheckLines(out, expectedTag, context))
 
     return {
       lines: lines,
