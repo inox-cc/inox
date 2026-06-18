@@ -155,12 +155,13 @@ type ResolvedTypeInfo = {
   setElementType: ValueType | null
 }
 
-type ResolvedTypeInfoValueKey =
-  | 'arrayElementType'
-  | 'mapKeyType'
-  | 'mapValueType'
-  | 'promiseValueType'
-  | 'setElementType'
+type ResolvedTypeInfoValueKind = number
+
+const resolvedArrayElementTypeKind: ResolvedTypeInfoValueKind = 0
+const resolvedMapKeyTypeKind: ResolvedTypeInfoValueKind = 1
+const resolvedMapValueTypeKind: ResolvedTypeInfoValueKind = 2
+const resolvedPromiseValueTypeKind: ResolvedTypeInfoValueKind = 3
+const resolvedSetElementTypeKind: ResolvedTypeInfoValueKind = 4
 
 type OwnershipGraphEdge = {
   from: string
@@ -366,6 +367,10 @@ function optionalParamAt(values: OptionalParamInfo[], index: number): OptionalPa
   return values[index]
 }
 
+function resolvedTypeInfoAt(values: ResolvedTypeInfo[], index: number): ResolvedTypeInfo {
+  return values[index]
+}
+
 function stringSetFromArray(values: string[]): Set<string> {
   const result: Set<string> = new Set()
 
@@ -391,30 +396,51 @@ function resolvedTypeListHasNullable(infos: ResolvedTypeInfo[]): boolean {
 }
 
 function commonResolvedArrayElementType(infos: ResolvedTypeInfo[]): ValueType | null {
-  return commonResolvedOptionalValueType(infos, 'arrayElementType')
+  return commonResolvedOptionalValueType(infos, resolvedArrayElementTypeKind)
 }
 
 function commonResolvedMapKeyType(infos: ResolvedTypeInfo[]): ValueType | null {
-  return commonResolvedOptionalValueType(infos, 'mapKeyType')
+  return commonResolvedOptionalValueType(infos, resolvedMapKeyTypeKind)
 }
 
 function commonResolvedMapValueType(infos: ResolvedTypeInfo[]): ValueType | null {
-  return commonResolvedOptionalValueType(infos, 'mapValueType')
+  return commonResolvedOptionalValueType(infos, resolvedMapValueTypeKind)
 }
 
 function commonResolvedPromiseValueType(infos: ResolvedTypeInfo[]): ValueType | null {
-  return commonResolvedOptionalValueType(infos, 'promiseValueType')
+  return commonResolvedOptionalValueType(infos, resolvedPromiseValueTypeKind)
 }
 
 function commonResolvedSetElementType(infos: ResolvedTypeInfo[]): ValueType | null {
-  return commonResolvedOptionalValueType(infos, 'setElementType')
+  return commonResolvedOptionalValueType(infos, resolvedSetElementTypeKind)
 }
 
-function commonResolvedOptionalValueType(infos: ResolvedTypeInfo[], key: ResolvedTypeInfoValueKey): ValueType | null {
+function resolvedTypeInfoValue(info: ResolvedTypeInfo, kind: ResolvedTypeInfoValueKind): ValueType | null {
+  if (kind === resolvedArrayElementTypeKind) {
+    return info.arrayElementType
+  }
+
+  if (kind === resolvedMapKeyTypeKind) {
+    return info.mapKeyType
+  }
+
+  if (kind === resolvedMapValueTypeKind) {
+    return info.mapValueType
+  }
+
+  if (kind === resolvedPromiseValueTypeKind) {
+    return info.promiseValueType ?? null
+  }
+
+  return info.setElementType
+}
+
+function commonResolvedOptionalValueType(infos: ResolvedTypeInfo[], kind: ResolvedTypeInfoValueKind): ValueType | null {
   const values: ValueType[] = []
 
   for (let index = 0; index < infos.length; index = index + 1) {
-    const value = infos[index][key]
+    const info = resolvedTypeInfoAt(infos, index)
+    const value = resolvedTypeInfoValue(info, kind)
 
     if (value == null) {
       return null
@@ -5407,10 +5433,16 @@ class Checker {
   }
 
   checkFetchCall(expression: AnyNode): ValueType | null {
+    let calleeName = ''
+
+    if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
+      calleeName = firstPathSegment(expression.callee.path)
+    }
+
     if (
       expression.callee.type !== 'Reference' ||
       expression.callee.path.length !== 1 ||
-      expression.callee.path[0] !== 'fetch' ||
+      calleeName !== 'fetch' ||
       this.scope.resolve('fetch') != null
     ) {
       return null
@@ -7669,6 +7701,7 @@ class Checker {
 
     if (path.length === 2) {
       const rootName = firstPathSegment(path)
+      const methodName = stringAt(path, 1)
       const symbol = this.scope.resolve(rootName)
 
       if (
@@ -7677,10 +7710,9 @@ class Checker {
         symbol.importSource != null &&
         isNodeTimerImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'timers') &&
-        path[1] != null &&
-        isTimerRuntimeMethod(path[1])
+        isTimerRuntimeMethod(methodName)
       ) {
-        return path[1]
+        return methodName
       }
     }
 

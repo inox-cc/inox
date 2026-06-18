@@ -807,7 +807,7 @@ function emitPreparedThrowingCallExpression(
   context: CFunctionContext,
   deps: CCallExpressionDependencies
 ): PreparedExpression {
-  const name = expression.callee.path[0]
+  const name = stringValueAt(expression.callee.path, 0)
   const returnInfo = resolveCFunctionCallReturnInfo(name, context)
   const returnType = returnInfo.returnType
   const returnNullable = returnInfo.returnNullable
