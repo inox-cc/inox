@@ -307,15 +307,15 @@ export function main(): void {
   )
 
   assert.match(result.code, /#include <string\.h>/)
-  assert.match(result.code, /ccjs_string_code_point_length_parts\(name->bytes, name->len\)/)
+  assert.match(result.code, /ccjs_string_code_unit_length_parts\(name->bytes, name->len\)/)
   assert.match(result.code, /ccjs_return = \(\(double\)ccjs_string_length_\d+\);/)
   assert.match(result.code, /ccjs_string \*ccjs_length_string_\d+ = \(ccjs_string \*\)ccjs_value_\d+\.as\.ref;/)
-  assert.match(result.code, /ccjs_string_code_point_length_parts\("Ada", 3\)/)
+  assert.match(result.code, /ccjs_string_code_unit_length_parts\("Ada", 3\)/)
   assert.match(
     result.code,
-    /ccjs_string_code_point_length_parts\(ccjs_length_string_\d+->bytes, ccjs_length_string_\d+->len\)/
+    /ccjs_string_code_unit_length_parts\(ccjs_length_string_\d+->bytes, ccjs_length_string_\d+->len\)/
   )
-  assert.match(result.code, /ccjs_string_code_point_length_parts\(message->bytes, message->len\)/)
+  assert.match(result.code, /ccjs_string_code_unit_length_parts\(message->bytes, message->len\)/)
 })
 
 
@@ -403,7 +403,7 @@ export function main(): void {
   )
   assert.match(
     result.code,
-    /ccjs_string_last_index_of_parts\(name->bytes, name->len, "a", 1, ccjs_string_code_point_length_parts\(name->bytes, name->len\)\)/
+    /ccjs_string_last_index_of_parts\(name->bytes, name->len, "a", 1, ccjs_string_code_unit_length_parts\(name->bytes, name->len\)\)/
   )
   assert.match(
     result.code,
@@ -542,7 +542,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /size_t ccjs_slice_length_\d+ = ccjs_string_code_point_length_parts\(name->bytes, name->len\);/
+    /size_t ccjs_slice_length_\d+ = ccjs_string_code_unit_length_parts\(name->bytes, name->len\);/
   )
   assert.match(result.code, /double ccjs_slice_start_raw_\d+ = 1;/)
   assert.match(result.code, /double ccjs_slice_start_raw_\d+ = \(-2\);/)
@@ -1423,7 +1423,7 @@ test('checks string length as a readonly number field', () => {
   const size = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'size')
 
   assert.equal(size?.valueType, 'number')
-  assert.match(result.code, /ccjs_string_code_point_length_parts\(name, strlen\(name\)\)/)
+  assert.match(result.code, /ccjs_string_code_unit_length_parts\(name, strlen\(name\)\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -1768,7 +1768,7 @@ test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   assert.doesNotMatch(result.code, /ccjs_filter_array_\d+/)
   assert.match(result.code, /for \(;;\) \{/)
   assert.match(result.code, /ccjs_array_get\(names, \(size_t\)\(__ccjs_filter_index_\d+\), &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_code_point_length_parts\(__ccjs_filter_item_\d+->bytes, __ccjs_filter_item_\d+->len\)/)
+  assert.match(result.code, /ccjs_string_code_unit_length_parts\(__ccjs_filter_item_\d+->bytes, __ccjs_filter_item_\d+->len\)/)
   assert.match(
     result.code,
     /if \(__ccjs_filter_item_\d+ == __ccjs_filter_item_\d+\) \{\s*ccjs_logical_\d+ = \(__ccjs_filter_item_\d+ != 0\);/s

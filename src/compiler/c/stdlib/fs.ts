@@ -48,62 +48,10 @@ export type FsLoweringDependencies = {
   inferExpressionType(expression: AnyNode, context: FsFunctionContext): string
 }
 
-const fsPromiseResultTypes: Record<string, string> = {
-  access: 'void',
-  appendFile: 'void',
-  appendFileBytes: 'void',
-  copyFile: 'void',
-  lstat: 'object',
-  mkdir: 'void',
-  readDir: 'array',
-  readDirDirents: 'array',
-  readFile: 'string',
-  readFileBytes: 'bytes',
-  readlink: 'string',
-  realpath: 'string',
-  rename: 'void',
-  rm: 'void',
-  stat: 'object',
-  symlink: 'void',
-  unlink: 'void',
-  writeFile: 'void',
-  writeFileBytes: 'void'
-}
-
 type FsAsyncCallDescriptor = {
   callName: string
   kind: string
   tempPrefix?: string
-}
-
-const fsAsyncCallDescriptors: Record<string, FsAsyncCallDescriptor> = {
-  appendFile: { kind: 'string-bytes-out', callName: 'ccjs_fs_append_file' },
-  appendFileBytes: { kind: 'bytes-value-out', callName: 'ccjs_fs_append_file_bytes' },
-  copyFile: { kind: 'path-arg-out', callName: 'ccjs_fs_copy_file', tempPrefix: 'ccjs_fs_dest_path' },
-  lstat: { kind: 'path-out', callName: 'ccjs_fs_lstat' },
-  readDir: { kind: 'path-out', callName: 'ccjs_fs_read_dir' },
-  readDirDirents: { kind: 'path-out', callName: 'ccjs_fs_read_dir_dirents' },
-  readFile: { kind: 'path-out', callName: 'ccjs_fs_read_file' },
-  readFileBytes: { kind: 'path-out', callName: 'ccjs_fs_read_file_bytes' },
-  readlink: { kind: 'path-out', callName: 'ccjs_fs_readlink' },
-  realpath: { kind: 'path-out', callName: 'ccjs_fs_realpath' },
-  rename: { kind: 'path-arg-out', callName: 'ccjs_fs_rename', tempPrefix: 'ccjs_fs_new_path' },
-  stat: { kind: 'path-out', callName: 'ccjs_fs_stat' },
-  symlink: { kind: 'path-arg-out', callName: 'ccjs_fs_symlink', tempPrefix: 'ccjs_fs_link_path' },
-  unlink: { kind: 'path-out', callName: 'ccjs_fs_unlink' },
-  writeFile: { kind: 'string-bytes-out', callName: 'ccjs_fs_write_file' },
-  writeFileBytes: { kind: 'bytes-value-out', callName: 'ccjs_fs_write_file_bytes' }
-}
-
-const fsSyncValueCallNames: Record<string, string> = {
-  lstatSync: 'ccjs_fs_lstat_sync',
-  readDirDirentsSync: 'ccjs_fs_read_dir_dirents_sync',
-  readDirSync: 'ccjs_fs_read_dir_sync',
-  readFileBytesSync: 'ccjs_fs_read_file_bytes_sync',
-  readFileSync: 'ccjs_fs_read_file_sync',
-  readlinkSync: 'ccjs_fs_readlink_sync',
-  realpathSync: 'ccjs_fs_realpath_sync',
-  statSync: 'ccjs_fs_stat_sync'
 }
 
 type FsSyncStatementDescriptor = {
@@ -112,15 +60,180 @@ type FsSyncStatementDescriptor = {
   tempPrefix?: string
 }
 
-const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
-  appendFileBytesSync: { kind: 'bytes-value', callName: 'ccjs_fs_append_file_bytes_sync' },
-  appendFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_append_file_sync' },
-  copyFileSync: { kind: 'path-arg', callName: 'ccjs_fs_copy_file_sync', tempPrefix: 'ccjs_fs_dest_path' },
-  renameSync: { kind: 'path-arg', callName: 'ccjs_fs_rename_sync', tempPrefix: 'ccjs_fs_new_path' },
-  symlinkSync: { kind: 'path-arg', callName: 'ccjs_fs_symlink_sync', tempPrefix: 'ccjs_fs_link_path' },
-  unlinkSync: { kind: 'path', callName: 'ccjs_fs_unlink_sync' },
-  writeFileBytesSync: { kind: 'bytes-value', callName: 'ccjs_fs_write_file_bytes_sync' },
-  writeFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_write_file_sync' }
+function fsPromiseResultTypeForMethod(method: string | null): string | null {
+  if (
+    method === 'access' ||
+    method === 'appendFile' ||
+    method === 'appendFileBytes' ||
+    method === 'copyFile' ||
+    method === 'mkdir' ||
+    method === 'rename' ||
+    method === 'rm' ||
+    method === 'symlink' ||
+    method === 'unlink' ||
+    method === 'writeFile' ||
+    method === 'writeFileBytes'
+  ) {
+    return 'void'
+  }
+
+  if (method === 'lstat' || method === 'stat') {
+    return 'object'
+  }
+
+  if (method === 'readDir' || method === 'readDirDirents') {
+    return 'array'
+  }
+
+  if (method === 'readFile' || method === 'readlink' || method === 'realpath') {
+    return 'string'
+  }
+
+  if (method === 'readFileBytes') {
+    return 'bytes'
+  }
+
+  return null
+}
+
+function fsAsyncCallDescriptorForMethod(method: string | null): FsAsyncCallDescriptor | null {
+  if (method === 'appendFile') {
+    return { kind: 'string-bytes-out', callName: 'ccjs_fs_append_file' }
+  }
+
+  if (method === 'appendFileBytes') {
+    return { kind: 'bytes-value-out', callName: 'ccjs_fs_append_file_bytes' }
+  }
+
+  if (method === 'copyFile') {
+    return { kind: 'path-arg-out', callName: 'ccjs_fs_copy_file', tempPrefix: 'ccjs_fs_dest_path' }
+  }
+
+  if (method === 'lstat') {
+    return { kind: 'path-out', callName: 'ccjs_fs_lstat' }
+  }
+
+  if (method === 'readDir') {
+    return { kind: 'path-out', callName: 'ccjs_fs_read_dir' }
+  }
+
+  if (method === 'readDirDirents') {
+    return { kind: 'path-out', callName: 'ccjs_fs_read_dir_dirents' }
+  }
+
+  if (method === 'readFile') {
+    return { kind: 'path-out', callName: 'ccjs_fs_read_file' }
+  }
+
+  if (method === 'readFileBytes') {
+    return { kind: 'path-out', callName: 'ccjs_fs_read_file_bytes' }
+  }
+
+  if (method === 'readlink') {
+    return { kind: 'path-out', callName: 'ccjs_fs_readlink' }
+  }
+
+  if (method === 'realpath') {
+    return { kind: 'path-out', callName: 'ccjs_fs_realpath' }
+  }
+
+  if (method === 'rename') {
+    return { kind: 'path-arg-out', callName: 'ccjs_fs_rename', tempPrefix: 'ccjs_fs_new_path' }
+  }
+
+  if (method === 'stat') {
+    return { kind: 'path-out', callName: 'ccjs_fs_stat' }
+  }
+
+  if (method === 'symlink') {
+    return { kind: 'path-arg-out', callName: 'ccjs_fs_symlink', tempPrefix: 'ccjs_fs_link_path' }
+  }
+
+  if (method === 'unlink') {
+    return { kind: 'path-out', callName: 'ccjs_fs_unlink' }
+  }
+
+  if (method === 'writeFile') {
+    return { kind: 'string-bytes-out', callName: 'ccjs_fs_write_file' }
+  }
+
+  if (method === 'writeFileBytes') {
+    return { kind: 'bytes-value-out', callName: 'ccjs_fs_write_file_bytes' }
+  }
+
+  return null
+}
+
+function fsSyncValueCallNameForMethod(method: string | null): string | null {
+  if (method === 'lstatSync') {
+    return 'ccjs_fs_lstat_sync'
+  }
+
+  if (method === 'readDirDirentsSync') {
+    return 'ccjs_fs_read_dir_dirents_sync'
+  }
+
+  if (method === 'readDirSync') {
+    return 'ccjs_fs_read_dir_sync'
+  }
+
+  if (method === 'readFileBytesSync') {
+    return 'ccjs_fs_read_file_bytes_sync'
+  }
+
+  if (method === 'readFileSync') {
+    return 'ccjs_fs_read_file_sync'
+  }
+
+  if (method === 'readlinkSync') {
+    return 'ccjs_fs_readlink_sync'
+  }
+
+  if (method === 'realpathSync') {
+    return 'ccjs_fs_realpath_sync'
+  }
+
+  if (method === 'statSync') {
+    return 'ccjs_fs_stat_sync'
+  }
+
+  return null
+}
+
+function fsSyncStatementDescriptorForMethod(method: string | null): FsSyncStatementDescriptor | null {
+  if (method === 'appendFileBytesSync') {
+    return { kind: 'bytes-value', callName: 'ccjs_fs_append_file_bytes_sync' }
+  }
+
+  if (method === 'appendFileSync') {
+    return { kind: 'string-bytes', callName: 'ccjs_fs_append_file_sync' }
+  }
+
+  if (method === 'copyFileSync') {
+    return { kind: 'path-arg', callName: 'ccjs_fs_copy_file_sync', tempPrefix: 'ccjs_fs_dest_path' }
+  }
+
+  if (method === 'renameSync') {
+    return { kind: 'path-arg', callName: 'ccjs_fs_rename_sync', tempPrefix: 'ccjs_fs_new_path' }
+  }
+
+  if (method === 'symlinkSync') {
+    return { kind: 'path-arg', callName: 'ccjs_fs_symlink_sync', tempPrefix: 'ccjs_fs_link_path' }
+  }
+
+  if (method === 'unlinkSync') {
+    return { kind: 'path', callName: 'ccjs_fs_unlink_sync' }
+  }
+
+  if (method === 'writeFileBytesSync') {
+    return { kind: 'bytes-value', callName: 'ccjs_fs_write_file_bytes_sync' }
+  }
+
+  if (method === 'writeFileSync') {
+    return { kind: 'string-bytes', callName: 'ccjs_fs_write_file_sync' }
+  }
+
+  return null
 }
 
 export function cFsRuntimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
@@ -212,7 +325,7 @@ export function emitPreparedFsCallExpression(
   const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
   const lines: string[] = []
   appendLines(lines, path.lines)
-  const descriptor = fsAsyncCallDescriptors[method]
+  const descriptor = fsAsyncCallDescriptorForMethod(method)
 
   if (descriptor != null) {
     return emitPreparedFsAsyncDescriptorExpression(expression, context, dependencies, path, lines, out, descriptor)
@@ -335,12 +448,7 @@ export function emitPreparedFsSyncValueExpression(
   dependencies: FsLoweringDependencies
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
-
-  let callName: string | null = null
-
-  if (method != null) {
-    callName = fsSyncValueCallNames[method]
-  }
+  const callName = fsSyncValueCallNameForMethod(method)
 
   if (callName == null) {
     return null
@@ -375,11 +483,7 @@ export function emitPreparedFsSyncStatementExpression(
   dependencies: FsLoweringDependencies
 ): PreparedStatement | null {
   const method = cFsRuntimeExpressionMethod(expression)
-  let descriptor: FsSyncStatementDescriptor | null = null
-
-  if (method != null) {
-    descriptor = fsSyncStatementDescriptors[method]
-  }
+  const descriptor = fsSyncStatementDescriptorForMethod(method)
   const specialMethod = method === 'accessSync' || method === 'mkdirSync' || method === 'rmSync'
 
   if (method == null || (descriptor == null && !specialMethod)) {
@@ -570,7 +674,7 @@ function fsPromiseValueType(expression: AnyNode, method: string | null): string 
     return 'string'
   }
 
-  const valueType = fsPromiseResultTypes[method]
+  const valueType = fsPromiseResultTypeForMethod(method)
 
   if (valueType != null) {
     return valueType

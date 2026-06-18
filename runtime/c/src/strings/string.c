@@ -187,6 +187,10 @@ static uint32_t ccjs_utf8_code_point_at(const char* bytes, size_t len, size_t in
          (uint32_t)(fourth & 0x3fu);
 }
 
+static size_t ccjs_string_utf16_code_units(uint32_t code_point) {
+  return code_point > 0xffffu ? 2 : 1;
+}
+
 static void ccjs_string_trim_span(const char* bytes, size_t len, size_t* start_out, size_t* end_out) {
   size_t start = 0;
   size_t end = 0;
@@ -223,7 +227,7 @@ static void ccjs_string_trim_span(const char* bytes, size_t len, size_t* start_o
   }
 }
 
-size_t ccjs_string_code_point_length_parts(const char* value_bytes, size_t value_len) {
+size_t ccjs_string_code_unit_length_parts(const char* value_bytes, size_t value_len) {
   if (value_bytes == 0 && value_len != 0) {
     return 0;
   }
@@ -233,54 +237,70 @@ size_t ccjs_string_code_point_length_parts(const char* value_bytes, size_t value
   size_t length = 0;
 
   while (index < value_len) {
-    size_t step = ccjs_utf8_next_len(bytes, value_len, index);
-
-    if (step == 0) {
-      step = 1;
-    }
+    size_t step = 0;
+    const uint32_t code_point = ccjs_utf8_code_point_at(bytes, value_len, index, &step);
 
     index += step;
-    length += 1;
+    length += ccjs_string_utf16_code_units(code_point);
   }
 
   return length;
 }
 
-static size_t ccjs_string_code_point_to_byte_offset(const char* bytes, size_t value_len, size_t offset) {
+static size_t ccjs_string_code_unit_to_byte_offset_floor(const char* bytes, size_t value_len, size_t offset) {
   size_t index = 0;
   size_t current = 0;
 
   while (index < value_len && current < offset) {
-    size_t step = ccjs_utf8_next_len(bytes, value_len, index);
+    size_t step = 0;
+    const uint32_t code_point = ccjs_utf8_code_point_at(bytes, value_len, index, &step);
+    const size_t units = ccjs_string_utf16_code_units(code_point);
 
-    if (step == 0) {
-      step = 1;
+    if (current + units > offset) {
+      return index;
     }
 
     index += step;
-    current += 1;
+    current += units;
   }
 
   return index;
 }
 
-static size_t ccjs_string_code_point_index_of_byte_offset(const char* bytes, size_t value_len, size_t offset) {
+static size_t ccjs_string_code_unit_to_byte_offset_ceiling(const char* bytes, size_t value_len, size_t offset) {
+  size_t index = 0;
+  size_t current = 0;
+
+  while (index < value_len && current < offset) {
+    size_t step = 0;
+    const uint32_t code_point = ccjs_utf8_code_point_at(bytes, value_len, index, &step);
+    const size_t units = ccjs_string_utf16_code_units(code_point);
+
+    if (current + units > offset) {
+      return index + step;
+    }
+
+    index += step;
+    current += units;
+  }
+
+  return index;
+}
+
+static size_t ccjs_string_code_unit_index_of_byte_offset(const char* bytes, size_t value_len, size_t offset) {
   size_t index = 0;
   size_t current = 0;
 
   while (index < value_len && index < offset) {
-    size_t step = ccjs_utf8_next_len(bytes, value_len, index);
-
-    if (step == 0) {
-      step = 1;
-    }
+    size_t step = 0;
+    const uint32_t code_point = ccjs_utf8_code_point_at(bytes, value_len, index, &step);
 
     if (index + step > offset) {
       break;
     }
 
     index += step;
-    current += 1;
+    current += ccjs_string_utf16_code_units(code_point);
   }
 
   return current;
@@ -538,8 +558,8 @@ ccjs_status ccjs_string_slice_parts(
   }
 
   const char* bytes = value_bytes == 0 ? "" : value_bytes;
-  const size_t start_byte = ccjs_string_code_point_to_byte_offset(bytes, value_len, start);
-  size_t end_byte = ccjs_string_code_point_to_byte_offset(bytes, value_len, end);
+  const size_t start_byte = ccjs_string_code_unit_to_byte_offset_ceiling(bytes, value_len, start);
+  size_t end_byte = ccjs_string_code_unit_to_byte_offset_ceiling(bytes, value_len, end);
 
   if (end_byte < start_byte) {
     end_byte = start_byte;
@@ -655,7 +675,7 @@ double ccjs_string_index_of_parts(
 
   const char* bytes = value_bytes == 0 ? "" : value_bytes;
   const char* search = search_bytes == 0 ? "" : search_bytes;
-  const size_t length = ccjs_string_code_point_length_parts(bytes, value_len);
+  const size_t length = ccjs_string_code_unit_length_parts(bytes, value_len);
 
   if (start > length) {
     start = length;
@@ -665,7 +685,7 @@ double ccjs_string_index_of_parts(
     return (double)start;
   }
 
-  const size_t start_byte = ccjs_string_code_point_to_byte_offset(bytes, value_len, start);
+  const size_t start_byte = ccjs_string_code_unit_to_byte_offset_ceiling(bytes, value_len, start);
 
   if (search_len > value_len - start_byte) {
     return -1;
@@ -675,7 +695,7 @@ double ccjs_string_index_of_parts(
 
   for (size_t index = start_byte; index <= max_start;) {
     if (memcmp(bytes + index, search, search_len) == 0) {
-      return (double)ccjs_string_code_point_index_of_byte_offset(bytes, value_len, index);
+      return (double)ccjs_string_code_unit_index_of_byte_offset(bytes, value_len, index);
     }
 
     size_t step = ccjs_utf8_next_len(bytes, value_len, index);
@@ -703,7 +723,7 @@ double ccjs_string_last_index_of_parts(
 
   const char* bytes = value_bytes == 0 ? "" : value_bytes;
   const char* search = search_bytes == 0 ? "" : search_bytes;
-  const size_t length = ccjs_string_code_point_length_parts(bytes, value_len);
+  const size_t length = ccjs_string_code_unit_length_parts(bytes, value_len);
 
   if (start > length) {
     start = length;
@@ -717,7 +737,7 @@ double ccjs_string_last_index_of_parts(
     return -1;
   }
 
-  const size_t start_byte = ccjs_string_code_point_to_byte_offset(bytes, value_len, start);
+  const size_t start_byte = ccjs_string_code_unit_to_byte_offset_floor(bytes, value_len, start);
   const size_t max_start = value_len - search_len;
   double last_match = -1;
 
@@ -727,7 +747,7 @@ double ccjs_string_last_index_of_parts(
     }
 
     if (memcmp(bytes + index, search, search_len) == 0) {
-      last_match = (double)ccjs_string_code_point_index_of_byte_offset(bytes, value_len, index);
+      last_match = (double)ccjs_string_code_unit_index_of_byte_offset(bytes, value_len, index);
     }
 
     size_t step = ccjs_utf8_next_len(bytes, value_len, index);

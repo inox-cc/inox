@@ -289,7 +289,7 @@ export function emitPreparedStringLengthExpression(
   const lines: string[] = []
 
   pushAllLines(lines, operand.lines)
-  lines.push(`size_t ${length} = ccjs_string_code_point_length_parts(${operand.bytes}, ${operand.length});`)
+  lines.push(`size_t ${length} = ccjs_string_code_unit_length_parts(${operand.bytes}, ${operand.length});`)
 
   return {
     lines,
@@ -442,7 +442,7 @@ export function emitPreparedStringIndexCallExpression(
     pushAllLines(lines, emitNonNegativeStringPositionLines(startRaw, startIndex))
     startExpression = startIndex
   } else if (method === 'lastIndexOf') {
-    startExpression = `ccjs_string_code_point_length_parts(${value.bytes}, ${value.length})`
+    startExpression = `ccjs_string_code_unit_length_parts(${value.bytes}, ${value.length})`
   }
 
   const helper = cStringIndexHelperName(method)
@@ -1061,7 +1061,7 @@ export function emitCStringSliceValueExpression(expression: AnyNode, context: St
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, start.lines)
-  lines.push(`size_t ${lengthName} = ccjs_string_code_point_length_parts(${value.bytes}, ${value.length});`)
+  lines.push(`size_t ${lengthName} = ccjs_string_code_unit_length_parts(${value.bytes}, ${value.length});`)
   pushAllLines(lines, end.lines)
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${end.expression};`)

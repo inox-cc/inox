@@ -5334,7 +5334,7 @@ console.log('Ada'.length, length(name), user.name.length, getName().length, mess
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '3 3 3 5 4 3\n')
+    assert.equal(run.stdout, '3 3 3 5 4 4\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -5416,6 +5416,7 @@ test('generated C string index and trim variants compile and run with UTF-8 stri
     const result = compileSource(
       `const text = 'banana'
 const wide = 'AéБ'
+const astral = 'A😀é😀'
 const padded = ' Ada '
 console.log(
   text.indexOf('a'),
@@ -5427,6 +5428,12 @@ console.log(
   wide.lastIndexOf('é'),
   wide.includes('Б', 2),
   wide.includes('Б', 3),
+  astral.length,
+  astral.indexOf('é'),
+  astral.indexOf('😀', 2),
+  astral.lastIndexOf('😀'),
+  astral.lastIndexOf('é', 2),
+  astral.includes('😀', 2),
   '|' + padded.trimStart() + '|',
   '|' + padded.trimEnd() + '|',
   '|' + padded.trimLeft() + '|',
@@ -5448,7 +5455,7 @@ console.log(
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '1 3 -1 5 3 2 1 1 0 |Ada | | Ada| |Ada | | Ada|\n')
+    assert.equal(run.stdout, '1 3 -1 5 3 2 1 1 0 6 3 4 4 -1 1 |Ada | | Ada| |Ada | | Ada|\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -5648,7 +5655,7 @@ const user: User = { name: 'Ada' }
 const name = user.name
 const message = name + '!'
 const unicode = 'A😀é'
-console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99), unicode.slice(1, 2), unicode.slice(2), name.slice(-2), name.slice(-99, 2), unicode.slice(-2, -1))
+console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().slice(1, 4), message.slice(3), name.slice(0, 99), unicode.slice(1, 3), unicode.slice(3), name.slice(-2), name.slice(-99, 2), unicode.slice(-3, -1))
 
 `,
       {
