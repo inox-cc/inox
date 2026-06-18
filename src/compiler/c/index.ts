@@ -513,11 +513,13 @@ export type { CModuleOutputFile } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 type CDynamicObjectFieldNode = AnyNode
+type CStringMap = Map<string, string>
+type CNameSet = Set<string>
 type TempValueEmitter = (temp: string) => string
 
 type CThrowingFunctionInfo = {
   functionThrowValueTypes: Map<string, IrThrowValueType[]>
-  throwingFunctions: Set<string>
+  throwingFunctions: CNameSet
 }
 
 type CErrorConstructorParts = {
@@ -1296,7 +1298,7 @@ function createThrowingFunctionInfo(
   functionEffects: IrFunctionEffect[]
 ): CThrowingFunctionInfo {
   const functionThrowValueTypes: Map<string, IrThrowValueType[]> = new Map()
-  const throwingFunctions: Set<string> = new Set()
+  const throwingFunctions: CNameSet = new Set()
 
   for (const item of functionDeclarations) {
     functionThrowValueTypes.set(item.name, [])
@@ -1356,10 +1358,10 @@ function createBaseContext(
   diagnostics: Diagnostic[],
   functionDeclarations: IrFunctionDeclaration[],
   functionEffects: IrFunctionEffect[],
-  jsGlobalRoots: Set<string>
+  jsGlobalRoots: CNameSet
 ): CEmitContext {
   const throwing = createThrowingFunctionInfo(functionDeclarations, functionEffects)
-  const functionNames: Map<string, string> = new Map()
+  const functionNames: CStringMap = new Map()
   const functionParams: Map<string, CFunctionParam[]> = new Map()
   const functionReturnArrayElementTypes: Map<string, any> = new Map()
   const functionReturnArrayElementDeclaredTypes: Map<string, any> = new Map()
@@ -1368,7 +1370,7 @@ function createBaseContext(
   const functionReturnPromiseValueTypes: Map<string, any> = new Map()
   const functionReturnShapes: Map<string, any> = new Map()
   const functionReturnSetElementTypes: Map<string, any> = new Map()
-  const functionReturnTypes: Map<string, string> = new Map()
+  const functionReturnTypes: CStringMap = new Map()
   const functionAsyncFlags: Map<string, boolean> = new Map()
   const unhandledRejectionFlag: string | null = null
 
@@ -1476,9 +1478,9 @@ function createBaseContext(
   }
 }
 
-function collectExternalEventLoopFunctions(functions: AnyNode[]): Set<string> {
+function collectExternalEventLoopFunctions(functions: AnyNode[]): CNameSet {
   const functionsByName: Map<string, AnyNode> = new Map()
-  const names: Set<string> = new Set()
+  const names: CNameSet = new Set()
   let changed = true
 
   for (const item of functions) {
@@ -1666,30 +1668,6 @@ function inferCatchBindingValueType(statement: AnyNode, context: CFunctionContex
   return 'object'
 }
 
-const LOCAL_AWAIT_REJECTION_CHILD_KEYS = [
-  'body',
-  'init',
-  'argument',
-  'args',
-  'callee',
-  'object',
-  'index',
-  'properties',
-  'value',
-  'left',
-  'right',
-  'consequent',
-  'alternate',
-  'test',
-  'update',
-  'iterable',
-  'cases',
-  'block',
-  'handler',
-  'finalizer',
-  'expression'
-]
-
 function pushAll(target: string[], values: string[]): void {
   for (const value of values) {
     target.push(value)
@@ -1763,11 +1741,11 @@ function asyncTaskWrapperFunctionParams(wrapper: CAsyncTaskWrapper | null): CFun
   return params
 }
 
-function copyStringSet(source: Set<string>): Set<string> {
+function copyStringSet(source: CNameSet): CNameSet {
   return new Set(source)
 }
 
-function copyStringMap(source: Map<string, string>): Map<string, string> {
+function copyStringMap(source: CStringMap): CStringMap {
   return new Map(source)
 }
 
@@ -1783,13 +1761,39 @@ function collectLocalAwaitRejectionValueTypes(
   )
 }
 
+function pushLocalAwaitRejectionChildValueTypes(
+  target: string[],
+  value: unknown,
+  context: CFunctionContext,
+  localPromiseRejectionValueTypes: CStringMap,
+  localErrorObjectNames: CNameSet
+): void {
+  if (value == null) {
+    return
+  }
+
+  pushAll(
+    target,
+    collectLocalAwaitRejectionValueTypesWithState(
+      value,
+      context,
+      localPromiseRejectionValueTypes,
+      localErrorObjectNames
+    )
+  )
+}
+
 function collectLocalAwaitRejectionValueTypesWithState(
   node: unknown,
   context: CFunctionContext,
-  localPromiseRejectionValueTypes: Map<string, string>,
-  localErrorObjectNames: Set<string>
+  localPromiseRejectionValueTypes: CStringMap,
+  localErrorObjectNames: CNameSet
 ): string[] {
   if (node == null) {
+    return []
+  }
+
+  if (typeof node !== 'object') {
     return []
   }
 
@@ -1867,23 +1871,27 @@ function collectLocalAwaitRejectionValueTypesWithState(
 
   const types: string[] = []
 
-  for (const key of LOCAL_AWAIT_REJECTION_CHILD_KEYS) {
-    const value = current[key]
-
-    if (value == null) {
-      continue
-    }
-
-    pushAll(
-      types,
-      collectLocalAwaitRejectionValueTypesWithState(
-        value,
-        context,
-        localPromiseRejectionValueTypes,
-        localErrorObjectNames
-      )
-    )
-  }
+  pushLocalAwaitRejectionChildValueTypes(types, current.body, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.init, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.argument, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.args, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.callee, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.object, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.index, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.properties, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.value, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.left, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.right, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.consequent, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.alternate, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.test, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.update, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.iterable, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.cases, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.block, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.handler, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.finalizer, context, localPromiseRejectionValueTypes, localErrorObjectNames)
+  pushLocalAwaitRejectionChildValueTypes(types, current.expression, context, localPromiseRejectionValueTypes, localErrorObjectNames)
 
   return types
 }
@@ -1891,8 +1899,8 @@ function collectLocalAwaitRejectionValueTypesWithState(
 function inferPromiseRejectionValueType(
   expression: AnyNode,
   context: CFunctionContext,
-  localPromiseRejectionValueTypes: Map<string, string>,
-  localErrorObjectNames: Set<string>
+  localPromiseRejectionValueTypes: CStringMap,
+  localErrorObjectNames: CNameSet
 ): string {
   if (expression.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'reject') {
     return inferRejectedValueTypeWithErrors(expression.args[0], context, localErrorObjectNames)
@@ -1935,7 +1943,7 @@ function inferRejectedValueType(
 function inferRejectedValueTypeWithErrors(
   expression: AnyNode,
   context: CFunctionContext,
-  localErrorObjectNames: Set<string>
+  localErrorObjectNames: CNameSet
 ): string {
   if (isKnownErrorValueExpression(expression, context, localErrorObjectNames)) {
     return 'error'
@@ -5113,7 +5121,7 @@ function isErrorValueExpression(expression: AnyNode, context: CFunctionContext):
 function isKnownErrorValueExpression(
   expression: AnyNode,
   context: CFunctionContext,
-  errorObjectNames: Set<string>
+  errorObjectNames: CNameSet
 ): boolean {
   if (isErrorConstructorExpression(expression)) {
     return true

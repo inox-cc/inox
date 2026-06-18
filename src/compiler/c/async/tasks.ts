@@ -293,44 +293,6 @@ type AsyncTaskLiveAcrossSuspensionInput = {
 
 type AsyncTaskChildValue = AsyncTaskAstNode | AsyncTaskAstNode[] | string | number | boolean | null | undefined
 
-type AsyncTaskChildNode = {
-  [key: string]: AsyncTaskChildValue
-}
-
-const ASYNC_TASK_NODE_CHILD_KEYS = [
-  'body',
-  'params',
-  'fields',
-  'methods',
-  'init',
-  'condition',
-  'consequent',
-  'alternate',
-  'test',
-  'update',
-  'iterable',
-  'discriminant',
-  'cases',
-  'block',
-  'handler',
-  'finalizer',
-  'argument',
-  'args',
-  'callee',
-  'object',
-  'index',
-  'target',
-  'value',
-  'valueType',
-  'functionType',
-  'returnShape',
-  'left',
-  'right',
-  'elements',
-  'properties',
-  'expression'
-]
-
 type AsyncTaskPlannerContext = AsyncTaskFunctionContext
 
 type AsyncTaskScheduleOptions = {
@@ -483,7 +445,7 @@ function createAsyncTaskBodyPlan(body: AsyncTaskBodyDraft): AsyncTaskBodyPlan {
 function createAsyncTaskFrameLocals(
   prefixLocals: CAsyncTaskPrefixLocal[],
   awaits: CAsyncTaskAwaitStep[],
-  livePrefixLocalNames: Set<string>
+  livePrefixLocalNames: AsyncTaskStringSet
 ): CAsyncTaskFrameLocal[] {
   const frameLocals: CAsyncTaskFrameLocal[] = []
 
@@ -530,7 +492,7 @@ function createAsyncTaskFrameLocals(
   return frameLocals
 }
 
-function collectAsyncTaskLiveAcrossSuspensionNames(input: AsyncTaskLiveAcrossSuspensionInput): Set<string> {
+function collectAsyncTaskLiveAcrossSuspensionNames(input: AsyncTaskLiveAcrossSuspensionInput): AsyncTaskStringSet {
   const nodes: AsyncTaskAstNode[] = []
 
   for (let index = 1; index < input.awaits.length; index = index + 1) {
@@ -585,8 +547,8 @@ function appendAsyncTaskNodeIfPresent(nodes: AsyncTaskAstNode[], node: AsyncTask
   }
 }
 
-function collectAsyncTaskReferencedNames(nodes: AsyncTaskAstNode[]): Set<string> {
-  const names: Set<string> = new Set()
+function collectAsyncTaskReferencedNames(nodes: AsyncTaskAstNode[]): AsyncTaskStringSet {
+  const names: AsyncTaskStringSet = new Set()
 
   for (const node of nodes) {
     visitAsyncTaskReferencedValue(node, names)
@@ -595,7 +557,7 @@ function collectAsyncTaskReferencedNames(nodes: AsyncTaskAstNode[]): Set<string>
   return names
 }
 
-function visitAsyncTaskReferencedValue(value: AsyncTaskChildValue, names: Set<string>): void {
+function visitAsyncTaskReferencedValue(value: AsyncTaskChildValue, names: AsyncTaskStringSet): void {
   if (value == null) {
     return
   }
@@ -605,6 +567,10 @@ function visitAsyncTaskReferencedValue(value: AsyncTaskChildValue, names: Set<st
       visitAsyncTaskReferencedValue(item, names)
     }
 
+    return
+  }
+
+  if (typeof value !== 'object') {
     return
   }
 
@@ -618,13 +584,49 @@ function visitAsyncTaskReferencedValue(value: AsyncTaskChildValue, names: Set<st
     return
   }
 
-  const childNode = current as AsyncTaskChildNode
+  visitAsyncTaskReferencedChildren(current, names)
+}
 
-  for (const key of ASYNC_TASK_NODE_CHILD_KEYS) {
-    const child = childNode[key]
-
-    visitAsyncTaskReferencedValue(child, names)
+function visitAsyncTaskReferencedChildValue(value: AsyncTaskChildValue, names: AsyncTaskStringSet): void {
+  if (value == null || typeof value !== 'object') {
+    return
   }
+
+  visitAsyncTaskReferencedValue(value, names)
+}
+
+function visitAsyncTaskReferencedChildren(current: AsyncTaskAstNode, names: AsyncTaskStringSet): void {
+  visitAsyncTaskReferencedChildValue(current.body, names)
+  visitAsyncTaskReferencedChildValue(current.params, names)
+  visitAsyncTaskReferencedChildValue(current.fields, names)
+  visitAsyncTaskReferencedChildValue(current.methods, names)
+  visitAsyncTaskReferencedChildValue(current.init, names)
+  visitAsyncTaskReferencedChildValue(current.condition, names)
+  visitAsyncTaskReferencedChildValue(current.consequent, names)
+  visitAsyncTaskReferencedChildValue(current.alternate, names)
+  visitAsyncTaskReferencedChildValue(current.test, names)
+  visitAsyncTaskReferencedChildValue(current.update, names)
+  visitAsyncTaskReferencedChildValue(current.iterable, names)
+  visitAsyncTaskReferencedChildValue(current.discriminant, names)
+  visitAsyncTaskReferencedChildValue(current.cases, names)
+  visitAsyncTaskReferencedChildValue(current.block, names)
+  visitAsyncTaskReferencedChildValue(current.handler, names)
+  visitAsyncTaskReferencedChildValue(current.finalizer, names)
+  visitAsyncTaskReferencedChildValue(current.argument, names)
+  visitAsyncTaskReferencedChildValue(current.args, names)
+  visitAsyncTaskReferencedChildValue(current.callee, names)
+  visitAsyncTaskReferencedChildValue(current.object, names)
+  visitAsyncTaskReferencedChildValue(current.index, names)
+  visitAsyncTaskReferencedChildValue(current.target, names)
+  visitAsyncTaskReferencedChildValue(current.value, names)
+  visitAsyncTaskReferencedChildValue(current.valueType, names)
+  visitAsyncTaskReferencedChildValue(current.functionType, names)
+  visitAsyncTaskReferencedChildValue(current.returnShape, names)
+  visitAsyncTaskReferencedChildValue(current.left, names)
+  visitAsyncTaskReferencedChildValue(current.right, names)
+  visitAsyncTaskReferencedChildValue(current.elements, names)
+  visitAsyncTaskReferencedChildValue(current.properties, names)
+  visitAsyncTaskReferencedChildValue(current.expression, names)
 }
 
 function createAsyncTaskSuccessPhases(body: AsyncTaskBodyDraft): CAsyncTaskPhase[] {
@@ -1769,19 +1771,59 @@ function hasUnsupportedAsyncTaskTryControlFlow(value: AsyncTaskChildValue): bool
     return false
   }
 
+  if (typeof value !== 'object') {
+    return false
+  }
+
   const current = value as AsyncTaskAstNode
 
   if (current.type != null && isUnsupportedAsyncTaskTryControlFlowType(current.type)) {
     return true
   }
 
-  const childNode = current as AsyncTaskChildNode
+  return hasUnsupportedAsyncTaskTryControlFlowChildren(current)
+}
 
-  for (const key of ASYNC_TASK_NODE_CHILD_KEYS) {
-    if (hasUnsupportedAsyncTaskTryControlFlow(childNode[key])) {
-      return true
-    }
+function hasUnsupportedAsyncTaskTryControlFlowChild(value: AsyncTaskChildValue): boolean {
+  if (value == null || typeof value !== 'object') {
+    return false
   }
+
+  return hasUnsupportedAsyncTaskTryControlFlow(value)
+}
+
+function hasUnsupportedAsyncTaskTryControlFlowChildren(current: AsyncTaskAstNode): boolean {
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.body)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.params)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.fields)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.methods)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.init)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.condition)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.consequent)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.alternate)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.test)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.update)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.iterable)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.discriminant)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.cases)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.block)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.handler)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.finalizer)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.argument)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.args)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.callee)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.object)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.index)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.target)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.value)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.valueType)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.functionType)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.returnShape)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.left)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.right)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.elements)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.properties)) return true
+  if (hasUnsupportedAsyncTaskTryControlFlowChild(current.expression)) return true
 
   return false
 }
