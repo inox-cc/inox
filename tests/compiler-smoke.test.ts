@@ -341,6 +341,26 @@ test('infers JSON.parse object fields with array values for C iteration', () => 
   assert.match(result.code, /ccjs_object_values\(&ccjs_default_allocator, item, &ccjs_object_values_\d+\)/)
 })
 
+test('infers JSON.parse object fields with escaped string values', () => {
+  const result = compileSource(
+    `export function main(): void {
+  const user = JSON.parse('{"name":"Ada\\\\nLovelace","score":7}')
+  console.log(user.name, user.score)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.deepEqual(
+    result.ir.globalUsages.map((usage) => usage.path.join('.')),
+    ['JSON.parse']
+  )
+  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_[a-z_]+_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(user, 1, &ccjs_[a-z_]+_\d+\)/)
+})
+
 test('lowers invalid JSON.parse inside C try catch as a local throw', () => {
   const result = compileSource(
     `export function main(): void {

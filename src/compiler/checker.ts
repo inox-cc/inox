@@ -225,8 +225,14 @@ type JsonParseLiteralTypeInfo = {
   arrayElementDeclaredType: string | null
 }
 
-type JsonLiteralObject = {
-  [key: string]: unknown
+type JsonParseLiteralResult = {
+  info: JsonParseLiteralTypeInfo
+  index: number
+}
+
+type JsonParseStringResult = {
+  value: string
+  index: number
 }
 
 type NullableConditionNarrowing = {
@@ -697,7 +703,7 @@ class Checker {
       }
     }
 
-    const fields: AnyNode[] = []
+    const fields: CheckerNode[] = []
     const seen: Set<string> = new Set()
     const constructorMethod = this.findClassConstructorMethod(statement)
 
@@ -6722,104 +6728,438 @@ class Checker {
       return null
     }
 
-    try {
-      return this.inferJsonLiteralType(JSON.parse(arg.value))
-    } catch {
+    const result = this.parseJsonLiteralType(arg.value, 0)
+
+    if (result == null) {
       return null
     }
+
+    const end = this.skipJsonWhitespace(arg.value, result.index)
+
+    if (end !== arg.value.length) {
+      return null
+    }
+
+    return result.info
   }
 
-  inferJsonLiteralType(value: unknown): JsonParseLiteralTypeInfo {
-    if (Array.isArray(value)) {
-      const elementTypes: ValueType[] = []
+  parseJsonLiteralType(source: string, index: number): JsonParseLiteralResult | null {
+    const nextIndex = this.skipJsonWhitespace(source, index)
+    const char = source[nextIndex]
 
-      for (const element of value) {
-        elementTypes.push(this.inferJsonLiteralType(element).valueType)
-      }
+    if (char === '[') {
+      return this.parseJsonArrayLiteralType(source, nextIndex + 1)
+    }
 
-      const arrayElementType = commonArrayElementType(elementTypes)
-      let arrayElementDeclaredType: string | null = null
+    if (char === '{') {
+      return this.parseJsonObjectLiteralType(source, nextIndex + 1)
+    }
 
-      if (arrayElementType !== 'unknown') {
-        arrayElementDeclaredType = arrayElementType
+    if (char === '"') {
+      const stringResult = this.parseJsonStringLiteral(source, nextIndex, false)
+
+      if (stringResult == null) {
+        return null
       }
 
       return {
-        valueType: 'array',
-        shape: null,
-        arrayElementType,
-        arrayElementDeclaredType
+        info: this.jsonLiteralTypeInfo('string'),
+        index: stringResult.index
       }
     }
 
-    if (value != null && typeof value === 'object') {
-      const fields: AnyNode[] = []
+    if (char === '-' || this.isJsonDigit(char)) {
+      const numberEnd = this.parseJsonNumberEnd(source, nextIndex)
 
-      const record = value as JsonLiteralObject
-      const names = Object.keys(record)
-
-      for (let index = 0; index < names.length; index = index + 1) {
-        const name = names[index]
-        const fieldValue = record[name]
-        const fieldType = this.inferJsonLiteralType(fieldValue)
-
-        fields.push({
-          type: 'Field',
-          name,
-          valueType: fieldType.valueType,
-          nullable: fieldType.valueType === 'unknown',
-          arrayElementType: fieldType.arrayElementType,
-          arrayElementDeclaredType: fieldType.arrayElementDeclaredType,
-          mapKeyType: null,
-          mapValueType: null,
-          promiseValueType: null,
-          setElementType: null,
-          shape: fieldType.shape,
-          loc: { line: 1, column: 1 }
-        })
+      if (numberEnd == null) {
+        return null
       }
 
       return {
-        valueType: 'object',
-        shape: {
-          kind: 'object',
-          dynamic: true,
-          fields
-        },
-        arrayElementType: null,
-        arrayElementDeclaredType: null
+        info: this.jsonLiteralTypeInfo('number'),
+        index: numberEnd
       }
     }
 
-    if (typeof value === 'number') {
+    if (this.sourceStartsWith(source, nextIndex, 'true')) {
       return {
-        valueType: 'number',
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null
+        info: this.jsonLiteralTypeInfo('boolean'),
+        index: nextIndex + 4
       }
     }
 
-    if (typeof value === 'boolean') {
+    if (this.sourceStartsWith(source, nextIndex, 'false')) {
       return {
-        valueType: 'boolean',
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null
+        info: this.jsonLiteralTypeInfo('boolean'),
+        index: nextIndex + 5
       }
     }
 
-    if (typeof value === 'string') {
+    if (this.sourceStartsWith(source, nextIndex, 'null')) {
       return {
-        valueType: 'string',
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null
+        info: this.jsonLiteralTypeInfo('unknown'),
+        index: nextIndex + 4
       }
+    }
+
+    return null
+  }
+
+  parseJsonArrayLiteralType(source: string, index: number): JsonParseLiteralResult | null {
+    const elementTypes: ValueType[] = []
+    let nextIndex = this.skipJsonWhitespace(source, index)
+
+    if (source[nextIndex] === ']') {
+      return {
+        info: this.jsonArrayLiteralTypeInfo(elementTypes),
+        index: nextIndex + 1
+      }
+    }
+
+    while (nextIndex < source.length) {
+      const element = this.parseJsonLiteralType(source, nextIndex)
+
+      if (element == null) {
+        return null
+      }
+
+      elementTypes.push(element.info.valueType)
+      nextIndex = this.skipJsonWhitespace(source, element.index)
+
+      if (source[nextIndex] === ']') {
+        return {
+          info: this.jsonArrayLiteralTypeInfo(elementTypes),
+          index: nextIndex + 1
+        }
+      }
+
+      if (source[nextIndex] !== ',') {
+        return null
+      }
+
+      nextIndex = this.skipJsonWhitespace(source, nextIndex + 1)
+    }
+
+    return null
+  }
+
+  parseJsonObjectLiteralType(source: string, index: number): JsonParseLiteralResult | null {
+    const fields: AnyNode[] = []
+    let nextIndex = this.skipJsonWhitespace(source, index)
+
+    if (source[nextIndex] === '}') {
+      return {
+        info: this.jsonObjectLiteralTypeInfo(fields),
+        index: nextIndex + 1
+      }
+    }
+
+    while (nextIndex < source.length) {
+      const key = this.parseJsonStringLiteral(source, nextIndex, true)
+
+      if (key == null) {
+        return null
+      }
+
+      nextIndex = this.skipJsonWhitespace(source, key.index)
+
+      if (source[nextIndex] !== ':') {
+        return null
+      }
+
+      const value = this.parseJsonLiteralType(source, nextIndex + 1)
+
+      if (value == null) {
+        return null
+      }
+
+      fields.push(this.jsonObjectLiteralField(key.value, value.info))
+      nextIndex = this.skipJsonWhitespace(source, value.index)
+
+      if (source[nextIndex] === '}') {
+        return {
+          info: this.jsonObjectLiteralTypeInfo(fields),
+          index: nextIndex + 1
+        }
+      }
+
+      if (source[nextIndex] !== ',') {
+        return null
+      }
+
+      nextIndex = this.skipJsonWhitespace(source, nextIndex + 1)
+    }
+
+    return null
+  }
+
+  parseJsonStringLiteral(source: string, index: number, captureValue: boolean): JsonParseStringResult | null {
+    if (source[index] !== '"') {
+      return null
+    }
+
+    let nextIndex = index + 1
+    let value = ''
+
+    while (nextIndex < source.length) {
+      const char = source[nextIndex]
+
+      if (char === '"') {
+        return {
+          value,
+          index: nextIndex + 1
+        }
+      }
+
+      if (char === '\\') {
+        const escaped = source[nextIndex + 1]
+
+        if (escaped === 'u') {
+          if (!this.isJsonHexEscape(source, nextIndex + 2)) {
+            return null
+          }
+
+          if (captureValue) {
+            return null
+          }
+
+          nextIndex = nextIndex + 6
+          continue
+        }
+
+        if (!this.isJsonSimpleEscape(escaped)) {
+          return null
+        }
+
+        if (captureValue) {
+          value = `${value}${this.jsonSimpleEscapeValue(escaped)}`
+        }
+
+        nextIndex = nextIndex + 2
+        continue
+      }
+
+      if (char.charCodeAt(0) < 32) {
+        return null
+      }
+
+      if (captureValue) {
+        value = `${value}${char}`
+      }
+
+      nextIndex = nextIndex + 1
+    }
+
+    return null
+  }
+
+  parseJsonNumberEnd(source: string, index: number): number | null {
+    let nextIndex = index
+
+    if (source[nextIndex] === '-') {
+      nextIndex = nextIndex + 1
+    }
+
+    if (source[nextIndex] === '0') {
+      nextIndex = nextIndex + 1
+    } else if (this.isJsonNonZeroDigit(source[nextIndex])) {
+      nextIndex = nextIndex + 1
+
+      while (this.isJsonDigit(source[nextIndex])) {
+        nextIndex = nextIndex + 1
+      }
+    } else {
+      return null
+    }
+
+    if (source[nextIndex] === '.') {
+      nextIndex = nextIndex + 1
+
+      if (!this.isJsonDigit(source[nextIndex])) {
+        return null
+      }
+
+      while (this.isJsonDigit(source[nextIndex])) {
+        nextIndex = nextIndex + 1
+      }
+    }
+
+    if (source[nextIndex] === 'e' || source[nextIndex] === 'E') {
+      nextIndex = nextIndex + 1
+
+      if (source[nextIndex] === '+' || source[nextIndex] === '-') {
+        nextIndex = nextIndex + 1
+      }
+
+      if (!this.isJsonDigit(source[nextIndex])) {
+        return null
+      }
+
+      while (this.isJsonDigit(source[nextIndex])) {
+        nextIndex = nextIndex + 1
+      }
+    }
+
+    return nextIndex
+  }
+
+  skipJsonWhitespace(source: string, index: number): number {
+    let nextIndex = index
+
+    while (
+      source[nextIndex] === ' ' ||
+      source[nextIndex] === '\n' ||
+      source[nextIndex] === '\r' ||
+      source[nextIndex] === '\t'
+    ) {
+      nextIndex = nextIndex + 1
+    }
+
+    return nextIndex
+  }
+
+  isJsonDigit(value: string | null | undefined): boolean {
+    return value === '0' || this.isJsonNonZeroDigit(value)
+  }
+
+  isJsonNonZeroDigit(value: string | null | undefined): boolean {
+    return (
+      value === '1' ||
+      value === '2' ||
+      value === '3' ||
+      value === '4' ||
+      value === '5' ||
+      value === '6' ||
+      value === '7' ||
+      value === '8' ||
+      value === '9'
+    )
+  }
+
+  isJsonHexEscape(source: string, index: number): boolean {
+    for (let offset = 0; offset < 4; offset = offset + 1) {
+      if (!this.isJsonHexDigit(source[index + offset])) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  isJsonHexDigit(value: string | null | undefined): boolean {
+    return (
+      this.isJsonDigit(value) ||
+      value === 'a' ||
+      value === 'b' ||
+      value === 'c' ||
+      value === 'd' ||
+      value === 'e' ||
+      value === 'f' ||
+      value === 'A' ||
+      value === 'B' ||
+      value === 'C' ||
+      value === 'D' ||
+      value === 'E' ||
+      value === 'F'
+    )
+  }
+
+  isJsonSimpleEscape(value: string | null | undefined): boolean {
+    return (
+      value === '"' ||
+      value === '\\' ||
+      value === '/' ||
+      value === 'b' ||
+      value === 'f' ||
+      value === 'n' ||
+      value === 'r' ||
+      value === 't'
+    )
+  }
+
+  jsonSimpleEscapeValue(value: string): string {
+    if (value === 'b') {
+      return '\b'
+    }
+
+    if (value === 'f') {
+      return '\f'
+    }
+
+    if (value === 'n') {
+      return '\n'
+    }
+
+    if (value === 'r') {
+      return '\r'
+    }
+
+    if (value === 't') {
+      return '\t'
+    }
+
+    return value
+  }
+
+  sourceStartsWith(source: string, index: number, expected: string): boolean {
+    for (let offset = 0; offset < expected.length; offset = offset + 1) {
+      if (source[index + offset] !== expected[offset]) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  jsonArrayLiteralTypeInfo(elementTypes: ValueType[]): JsonParseLiteralTypeInfo {
+    const arrayElementType = commonArrayElementType(elementTypes)
+    let arrayElementDeclaredType: string | null = null
+
+    if (arrayElementType !== 'unknown') {
+      arrayElementDeclaredType = arrayElementType
     }
 
     return {
-      valueType: 'unknown',
+      valueType: 'array',
+      shape: null,
+      arrayElementType,
+      arrayElementDeclaredType
+    }
+  }
+
+  jsonObjectLiteralTypeInfo(fields: CheckerNode[]): JsonParseLiteralTypeInfo {
+    return {
+      valueType: 'object',
+      shape: {
+        kind: 'object',
+        dynamic: true,
+        fields
+      },
+      arrayElementType: null,
+      arrayElementDeclaredType: null
+    }
+  }
+
+  jsonObjectLiteralField(name: string, fieldType: JsonParseLiteralTypeInfo): CheckerNode {
+    return {
+      type: 'Field',
+      name,
+      valueType: fieldType.valueType,
+      nullable: fieldType.valueType === 'unknown',
+      arrayElementType: fieldType.arrayElementType,
+      arrayElementDeclaredType: fieldType.arrayElementDeclaredType,
+      mapKeyType: null,
+      mapValueType: null,
+      promiseValueType: null,
+      setElementType: null,
+      shape: fieldType.shape,
+      loc: { line: 1, column: 1 }
+    }
+  }
+
+  jsonLiteralTypeInfo(valueType: ValueType): JsonParseLiteralTypeInfo {
+    return {
+      valueType,
       shape: null,
       arrayElementType: null,
       arrayElementDeclaredType: null
