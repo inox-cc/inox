@@ -71,6 +71,7 @@ import {
 } from './module-emission.ts'
 import type { CModuleEmissionDependencies } from './module-emission.ts'
 import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
+import type { CModuleFileEmitters } from './modules.ts'
 import { emitCUnit as emitCUnitWithDependencies } from './unit.ts'
 import type { CUnitDependencies } from './unit.ts'
 import {
@@ -558,6 +559,19 @@ type CKnownArrayIndexDeclaration = {
   setElementType?: string | null
 }
 type TempValueEmitter = (temp: string) => string
+type RuntimeLogGetSource =
+  | {
+      kind: 'known-array'
+      element: CKnownArrayElement
+    }
+  | {
+      kind: 'known-object'
+      member: CKnownObjectField
+    }
+  | {
+      kind: 'known-object-index'
+      field: CKnownObjectIndexField
+    }
 
 type CThrowingFunctionInfo = {
   functionThrowValueTypes: Map<string, IrThrowValueType[]>
@@ -1382,17 +1396,29 @@ export function emitCBundleFromIrModules(
 }
 
 export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEmitOptions): CModuleOutputFile[] {
-  return emitCModuleFilesFromGraphWithEmitters(graph, options, {
-    emitHeader: (plan: CModulePlan, plans: CModulePlan[], diagnostics: Diagnostic[]) =>
-      emitCModuleHeaderWithDependencies(plan, plans, diagnostics, cModuleEmissionDependencies),
-    emitSource: (
-      plan: CModulePlan,
-      plans: CModulePlan[],
-      emitOptions: CModuleEmitOptions,
-      diagnostics: Diagnostic[]
-    ) =>
-      emitCModuleSourceWithDependencies(plan, plans, emitOptions, diagnostics, cModuleEmissionDependencies)
-  })
+  const emitters: CModuleFileEmitters = {
+    emitHeader: emitCModuleHeaderForGraph,
+    emitSource: emitCModuleSourceForGraph
+  }
+
+  return emitCModuleFilesFromGraphWithEmitters(graph, options, emitters)
+}
+
+function emitCModuleHeaderForGraph(
+  plan: CModulePlan,
+  plans: CModulePlan[],
+  diagnostics: Diagnostic[]
+): string {
+  return emitCModuleHeaderWithDependencies(plan, plans, diagnostics, cModuleEmissionDependencies)
+}
+
+function emitCModuleSourceForGraph(
+  plan: CModulePlan,
+  plans: CModulePlan[],
+  emitOptions: CModuleEmitOptions,
+  diagnostics: Diagnostic[]
+): string {
+  return emitCModuleSourceWithDependencies(plan, plans, emitOptions, diagnostics, cModuleEmissionDependencies)
 }
 
 function emitCUnit(
@@ -4062,11 +4088,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     const member = resolveKnownObjectMember(expression, context)
 
     if (member != null && member.valueType === 'string') {
-      return emitRuntimeStringLogValue(
-        (temp: string) =>
-          `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
-        context
-      )
+      return emitRuntimeStringLogValue({ kind: 'known-object', member }, context)
     }
   }
 
@@ -4074,20 +4096,13 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     const element = resolveKnownArrayIndex(expression, context)
 
     if (element != null && element.valueType === 'string') {
-      return emitRuntimeStringLogValue(
-        (temp: string) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
-        context
-      )
+      return emitRuntimeStringLogValue({ kind: 'known-array', element }, context)
     }
 
     const field = resolveKnownObjectIndex(expression, context)
 
     if (field != null && field.valueType === 'string') {
-      return emitRuntimeStringLogValue(
-        (temp: string) =>
-          `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
-        context
-      )
+      return emitRuntimeStringLogValue({ kind: 'known-object-index', field }, context)
     }
 
     const runtimeElement = resolveRuntimeArrayIndex(expression, context)
@@ -4192,12 +4207,7 @@ function emitNumberLogValue(expression: AnyNode, valueType: string, context: CFu
     const member = resolveKnownObjectMember(expression, context)
 
     if (member != null && isNullableScalarType(member.valueType)) {
-      return emitRuntimeNumberLogValue(
-        member.valueType,
-        (temp: string) =>
-          `ccjs_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`,
-        context
-      )
+      return emitRuntimeNumberLogValue(member.valueType, { kind: 'known-object', member }, context)
     }
   }
 
@@ -4205,22 +4215,13 @@ function emitNumberLogValue(expression: AnyNode, valueType: string, context: CFu
     const element = resolveKnownArrayIndex(expression, context)
 
     if (element != null && isNullableScalarType(element.valueType)) {
-      return emitRuntimeNumberLogValue(
-        element.valueType,
-        (temp: string) => `ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`,
-        context
-      )
+      return emitRuntimeNumberLogValue(element.valueType, { kind: 'known-array', element }, context)
     }
 
     const field = resolveKnownObjectIndex(expression, context)
 
     if (field != null && isNullableScalarType(field.valueType)) {
-      return emitRuntimeNumberLogValue(
-        field.valueType,
-        (temp: string) =>
-          `ccjs_object_get(${emitObjectValueReference(field.objectName, context)}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
-        context
-      )
+      return emitRuntimeNumberLogValue(field.valueType, { kind: 'known-object-index', field }, context)
     }
 
     const runtimeElement = resolveRuntimeArrayIndex(expression, context)
@@ -4250,10 +4251,7 @@ function emitNumberLogValue(expression: AnyNode, valueType: string, context: CFu
   }
 }
 
-function emitRuntimeStringLogValue(
-  emitGetCall: TempValueEmitter,
-  context: CFunctionContext
-): ConsoleLogValue {
+function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFunctionContext): ConsoleLogValue {
   const value = nextCName(context, 'ccjs_log_value')
   const string = nextCName(context, 'ccjs_log_string')
   const lines: string[] = []
@@ -4261,7 +4259,7 @@ function emitRuntimeStringLogValue(
   registerOwnedValue(context, value)
 
   pushAll(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(emitGetCall(value), context))
+  lines.push(emitStatusCheck(emitRuntimeLogGetCall(source, value, context), context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
   lines.push(`ccjs_string* ${string} = (ccjs_string*)${value}.as.ref;`)
 
@@ -4274,7 +4272,7 @@ function emitRuntimeStringLogValue(
 
 function emitRuntimeNumberLogValue(
   valueType: string,
-  emitGetCall: TempValueEmitter,
+  source: RuntimeLogGetSource,
   context: CFunctionContext
 ): ConsoleLogValue {
   const value = nextCName(context, 'ccjs_log_value')
@@ -4288,13 +4286,31 @@ function emitRuntimeNumberLogValue(
   }
 
   pushAll(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(emitGetCall(value), context))
+  lines.push(emitStatusCheck(emitRuntimeLogGetCall(source, value, context), context))
 
   return {
     lines,
     format: '%g',
     values: [formattedValue]
   }
+}
+
+function emitRuntimeLogGetCall(source: RuntimeLogGetSource, temp: string, context: CFunctionContext): string {
+  if (source.kind === 'known-array') {
+    return `ccjs_array_get(${source.element.arrayName}, ${source.element.index}, &${temp})`
+  }
+
+  if (source.kind === 'known-object-index') {
+    const object = emitObjectValueReference(source.field.objectName, context)
+    const key = cStringLiteral(source.field.key)
+    const keyLength = utf8ByteLength(source.field.key)
+
+    return `ccjs_object_get(${object}, ${key}, ${keyLength}, &${temp})`
+  }
+
+  const object = emitObjectValueReference(source.member.objectName, context)
+
+  return `ccjs_object_get_known(${object}, ${source.member.index}, &${temp})`
 }
 
 function emitRuntimeErrorLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
