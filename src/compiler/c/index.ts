@@ -1508,9 +1508,12 @@ function collectExternalEventLoopFunctions(functions: AnyNode[]): CNameSet {
   while (changed) {
     changed = false
 
-    for (const entry of functionsByName) {
-      const name = entry[0]
-      const item = entry[1]
+    for (const name of functionsByName.keys()) {
+      const item = functionsByName.get(name)
+
+      if (item == null) {
+        continue
+      }
 
       if (names.has(name)) {
         continue
@@ -1917,7 +1920,7 @@ function inferPromiseRejectionValueType(
   localErrorObjectNames: CNameSet
 ): string {
   if (expression.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'reject') {
-    return inferRejectedValueTypeWithErrors(expression.args[0], context, localErrorObjectNames)
+    return inferRejectedValueTypeWithErrors(cNodeAt(expression.args, 0), context, localErrorObjectNames)
   }
 
   if (expression.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression) != null) {
@@ -1929,13 +1932,14 @@ function inferPromiseRejectionValueType(
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const localValueType = localPromiseRejectionValueTypes.get(expression.path[0])
+    const name = cPathSegment(expression.path, 0)
+    const localValueType = localPromiseRejectionValueTypes.get(name)
 
     if (localValueType != null) {
       return localValueType
     }
 
-    const contextValueType = context.promiseRejectionValueTypes.get(expression.path[0])
+    const contextValueType = context.promiseRejectionValueTypes.get(name)
 
     if (contextValueType != null) {
       return contextValueType
@@ -2321,7 +2325,7 @@ function isBoxedRuntimeStringReference(expression: AnyNode, context: CFunctionCo
   return (
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
-    isBoxedRuntimeStringName(expression.path[0], context)
+    isBoxedRuntimeStringName(cPathSegment(expression.path, 0), context)
   )
 }
 
@@ -2880,15 +2884,14 @@ function emitPreparedNullableScalarRuntimeValueExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression {
-  if (
-    expression?.type === 'Reference' &&
-    expression.path.length === 1 &&
-    context.nullableVariables.has(expression.path[0]) &&
-    isNullableScalarType(context.variables.get(expression.path[0]))
-  ) {
-    return {
-      lines: [],
-      expression: expression.path[0]
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    const name = cPathSegment(expression.path, 0)
+
+    if (context.nullableVariables.has(name) && isNullableScalarType(context.variables.get(name))) {
+      return {
+        lines: [],
+        expression: name
+      }
     }
   }
 
@@ -3021,15 +3024,14 @@ function emitNullableFunctionValueExpression(
     }
   }
 
-  if (
-    expression?.type === 'Reference' &&
-    expression.path.length === 1 &&
-    context.nullableVariables.has(expression.path[0]) &&
-    context.variables.get(expression.path[0]) === 'function'
-  ) {
-    return {
-      lines: [],
-      expression: expression.path[0]
+  if (expression?.type === 'Reference' && expression.path.length === 1) {
+    const name = cPathSegment(expression.path, 0)
+
+    if (context.nullableVariables.has(name) && context.variables.get(name) === 'function') {
+      return {
+        lines: [],
+        expression: name
+      }
     }
   }
 
@@ -3191,8 +3193,10 @@ function errorConstructorExpressions(
   let code = cStringLiteralNode('', expression.loc)
   let cause = cNullLiteralNode(expression.loc)
 
-  if (expression.args[0] != null) {
-    message = expression.args[0]
+  const messageArg = cNodeAt(expression.args, 0)
+
+  if (messageArg != null) {
+    message = messageArg
   }
 
   if (inferExpressionType(message, context) !== 'string') {
@@ -3471,7 +3475,7 @@ function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionCon
     return false
   }
 
-  const name = expression.path[0]
+  const name = cPathSegment(expression.path, 0)
 
   return context.variables.get(name) === 'unknown' && context.ownedValues.includes(name)
 }
@@ -3805,7 +3809,7 @@ function emitErrorLogObjectExpression(expression: AnyNode, context: CFunctionCon
   if (expression?.type === 'Reference' && expression.path.length === 1) {
     return {
       lines: [],
-      expression: emitObjectValueReference(expression.path[0], context)
+      expression: emitObjectValueReference(cPathSegment(expression.path, 0), context)
     }
   }
 
@@ -4280,7 +4284,7 @@ function resolveCFunctionRejectionValueType(callee: AnyNode, context: CFunctionC
   }
 
   let types: IrThrowValueType[] = []
-  const storedTypes = context.functionThrowValueTypes.get(callee.path[0])
+  const storedTypes = context.functionThrowValueTypes.get(cPathSegment(callee.path, 0))
 
   if (storedTypes != null) {
     types = storedTypes
@@ -4458,7 +4462,7 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
     return null
   }
 
-  if (callExpression.callee.type === 'Reference' && context.asyncTaskWrappers.has(callExpression.callee.path[0])) {
+  if (callExpression.callee.type === 'Reference' && context.asyncTaskWrappers.has(cPathSegment(callExpression.callee.path, 0))) {
     return null
   }
 
@@ -4563,7 +4567,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
+    const name = cPathSegment(expression.path, 0)
 
     if (context.variables.get(name) === 'function') {
       return name
@@ -4596,7 +4600,7 @@ function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionCon
     return null
   }
 
-  const name = callee.path[0]
+  const name = cPathSegment(callee.path, 0)
 
   if (!context.runtimeCallbacks.has(name)) {
     return null
@@ -4630,11 +4634,13 @@ function emitRuntimeCallbackValue(
   if (
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
-    context.runtimeCallbacks.has(expression.path[0])
+    context.runtimeCallbacks.has(cPathSegment(expression.path, 0))
   ) {
+    const name = cPathSegment(expression.path, 0)
+
     return {
       lines: [],
-      expression: expression.path[0]
+      expression: name
     }
   }
 
@@ -4656,12 +4662,13 @@ function emitRuntimeCallbackValueInto(
   if (
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
-    context.runtimeCallbacks.has(expression.path[0])
+    context.runtimeCallbacks.has(cPathSegment(expression.path, 0))
   ) {
+    const name = cPathSegment(expression.path, 0)
     const lines: string[] = []
 
     pushAll(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(`${out} = ${expression.path[0]};`)
+    lines.push(`${out} = ${name};`)
     lines.push(`ccjs_retain(${out});`)
 
     return lines
@@ -4687,7 +4694,7 @@ function emitRuntimeCallbackValueInto(
   if (
     expression.type !== 'Reference' ||
     expression.path.length !== 1 ||
-    !context.functionNames.has(expression.path[0])
+    !context.functionNames.has(cPathSegment(expression.path, 0))
   ) {
     const loc = expression.loc
 
@@ -4701,7 +4708,8 @@ function emitRuntimeCallbackValueInto(
     return emitUndefinedRuntimeCallbackValueInto(out)
   }
 
-  const wrapper = runtimeCallbackWrapperFor(expression.path[0], normalizeFunctionType(functionType), context)
+  const functionName = cPathSegment(expression.path, 0)
+  const wrapper = runtimeCallbackWrapperFor(functionName, normalizeFunctionType(functionType), context)
 
   if (wrapper == null) {
     pushDiagnostic(context,
@@ -4716,7 +4724,7 @@ function emitRuntimeCallbackValueInto(
 
   let callbackContext = '0'
 
-  if (functionTakesEventLoopParam(expression.path[0], context)) {
+  if (functionTakesEventLoopParam(functionName, context)) {
     callbackContext = emitEventLoopReference(context)
   }
 
@@ -5032,7 +5040,7 @@ function resolveFunctionParams(callee: AnyNode, context: FunctionParamContext): 
     return null
   }
 
-  return context.functionParams.get(callee.path[0]) ?? null
+  return context.functionParams.get(cPathSegment(callee.path, 0)) ?? null
 }
 
 function inferExpressionType(expression: AnyNode, context: CFunctionContext): string {
@@ -5044,7 +5052,7 @@ function isErrorConstructorExpression(expression: AnyNode): boolean {
     expression?.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1 &&
-    expression.callee.path[0] === 'Error'
+    cPathSegment(expression.callee.path, 0) === 'Error'
   )
 }
 
@@ -5053,7 +5061,7 @@ function isFetchAbortControllerConstructorExpression(expression: AnyNode): boole
     expression?.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1 &&
-    expression.callee.path[0] === 'AbortController'
+    cPathSegment(expression.callee.path, 0) === 'AbortController'
   )
 }
 
@@ -5069,7 +5077,7 @@ function isArrayIsArrayCall(expression: AnyNode): boolean {
     callee.property === 'isArray' &&
     callee.object.type === 'Reference' &&
     callee.object.path.length === 1 &&
-    callee.object.path[0] === 'Array'
+    cPathSegment(callee.object.path, 0) === 'Array'
   )
 }
 
@@ -5078,7 +5086,7 @@ function emitPreparedArrayIsArrayCallExpression(expression: AnyNode, context: CF
     return null
   }
 
-  const value = emitCValueExpression(expression.args[0], context)
+  const value = emitCValueExpression(cNodeAt(expression.args, 0), context)
 
   return {
     lines: value.lines,
@@ -5113,7 +5121,7 @@ function emitPreparedObjectValuesCallExpression(expression: AnyNode, context: CF
     return null
   }
 
-  const object = emitCValueExpression(expression.args[0], context)
+  const object = emitCValueExpression(cNodeAt(expression.args, 0), context)
   const temp = nextCName(context, `ccjs_object_${method}`)
   const lines: string[] = []
 
@@ -5142,7 +5150,7 @@ function isKnownErrorValueExpression(
   }
 
   if (expression?.type === 'Reference' && expression.path.length === 1) {
-    return errorObjectNames.has(expression.path[0])
+    return errorObjectNames.has(cPathSegment(expression.path, 0))
   }
 
   return false
