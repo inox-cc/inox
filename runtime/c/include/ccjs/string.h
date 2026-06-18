@@ -42,7 +42,30 @@ ccjs_status ccjs_string_split_parts(
   size_t separator_len,
   ccjs_value* out
 );
+ccjs_status ccjs_string_trim_start_parts(ccjs_allocator* allocator, const char* value_bytes, size_t value_len, ccjs_value* out);
+ccjs_status ccjs_string_trim_end_parts(ccjs_allocator* allocator, const char* value_bytes, size_t value_len, ccjs_value* out);
 bool ccjs_string_includes_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len);
+bool ccjs_string_includes_from_parts(
+  const char* value_bytes,
+  size_t value_len,
+  const char* search_bytes,
+  size_t search_len,
+  size_t start
+);
+double ccjs_string_index_of_parts(
+  const char* value_bytes,
+  size_t value_len,
+  const char* search_bytes,
+  size_t search_len,
+  size_t start
+);
+double ccjs_string_last_index_of_parts(
+  const char* value_bytes,
+  size_t value_len,
+  const char* search_bytes,
+  size_t search_len,
+  size_t start
+);
 bool ccjs_string_starts_with_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len);
 bool ccjs_string_ends_with_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len);
 

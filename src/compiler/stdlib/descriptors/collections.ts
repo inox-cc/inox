@@ -4,9 +4,23 @@ export const arrayMethods: string[] = ['filter', 'find', 'map', 'pop', 'push', '
 export const collectionConstructors: string[] = ['Map', 'Set']
 export const mapMethods: string[] = ['clear', 'delete', 'get', 'has', 'set']
 export const setMethods: string[] = ['add', 'clear', 'delete', 'has']
-export const stringTransformMethods: string[] = ['slice', 'split', 'trim']
+export const stringTransformMethods: string[] = ['slice', 'split', 'trim', 'trimEnd', 'trimLeft', 'trimRight', 'trimStart']
+export const stringIndexMethods: string[] = ['indexOf', 'lastIndexOf']
 export const stringPredicateMethods: string[] = ['endsWith', 'includes', 'startsWith']
-export const stringRuntimeMethods: string[] = ['slice', 'split', 'trim', 'endsWith', 'includes', 'startsWith']
+export const stringRuntimeMethods: string[] = [
+  'slice',
+  'split',
+  'trim',
+  'trimEnd',
+  'trimLeft',
+  'trimRight',
+  'trimStart',
+  'indexOf',
+  'lastIndexOf',
+  'endsWith',
+  'includes',
+  'startsWith'
+]
 
 export function arrayRuntimeMethodName(method: string): string | null {
   if (isArrayMethod(method)) {
@@ -78,6 +92,10 @@ export function isStringPredicateMethod(method: string): boolean {
   return stringListIncludes(stringPredicateMethods, method)
 }
 
+export function isStringIndexMethod(method: string): boolean {
+  return stringListIncludes(stringIndexMethods, method)
+}
+
 export function isStringRuntimeMethod(method: string): boolean {
   return stringListIncludes(stringRuntimeMethods, method)
 }
@@ -89,6 +107,10 @@ export function stringRuntimeReturnType(method: string): string | null {
 
   if (isStringPredicateMethod(method)) {
     return 'boolean'
+  }
+
+  if (isStringIndexMethod(method)) {
+    return 'number'
   }
 
   if (isStringRuntimeMethod(method)) {

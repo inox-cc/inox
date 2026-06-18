@@ -407,6 +407,7 @@ export type CScalarExpressionDependencies = {
   ): PreparedExpression
   emitPreparedStringCompareExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitPreparedStringCharCodeAtExpression(expression: any, context: CFunctionContext): PreparedExpression | null
+  emitPreparedStringIndexCallExpression(expression: any, context: CFunctionContext): PreparedExpression | null
   emitPreparedStringLengthExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedStringPredicateCall(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitPreparedUrlSearchParamsCallExpression(expression: AnyNode, context: CFunctionContext): PreparedUrlSearchParamsExpression | null
@@ -1294,6 +1295,12 @@ export function emitPreparedNumberExpression(
 
     if (stringCharCodeAt != null) {
       return stringCharCodeAt
+    }
+
+    const stringIndexCall = deps.emitPreparedStringIndexCallExpression(expression, context)
+
+    if (stringIndexCall != null) {
+      return stringIndexCall
     }
 
     const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)

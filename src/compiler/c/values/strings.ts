@@ -21,7 +21,7 @@ import {
 } from '../stdlib/process.ts'
 import { cUnsupportedExpressionCode, isNullishCoalescingExpression, isOptionalChainExpression } from '../syntax.ts'
 import { isNullableScalarType } from '../value-types.ts'
-import { isStringPredicateMethod, isStringRuntimeMethod } from '../../stdlib/descriptors/collections.ts'
+import { isStringIndexMethod, isStringPredicateMethod, isStringRuntimeMethod } from '../../stdlib/descriptors/collections.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type {
@@ -322,13 +322,26 @@ export function emitPreparedStringPredicateCall(expression: AnyNode, context: St
   const search = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_string_method_search')
   const helper = cStringPredicateHelperName(expression.callee.property)
   const lines: string[] = []
+  let helperCall = `${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length})`
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, search.lines)
 
+  if (expression.callee.property === 'includes' && expression.args.length > 1) {
+    const positionArgument = expression.args[1]
+    const position = stringDeps(context).emitPreparedNumberExpression(positionArgument, context)
+    const positionRaw = nextCName(context, 'ccjs_string_includes_position_raw')
+    const positionIndex = nextCName(context, 'ccjs_string_includes_position')
+
+    pushAllLines(lines, position.lines)
+    lines.push(`double ${positionRaw} = ${position.expression};`)
+    pushAllLines(lines, emitNonNegativeStringPositionLines(positionRaw, positionIndex))
+    helperCall = `ccjs_string_includes_from_parts(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}, ${positionIndex})`
+  }
+
   return {
     lines,
-    expression: `(${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}) ? 1 : 0)`
+    expression: `(${helperCall} ? 1 : 0)`
   }
 }
 
@@ -371,6 +384,72 @@ export function emitPreparedStringCharCodeAtExpression(
   return {
     lines,
     expression: `((${offset} < ${value.length}) ? (double)((unsigned char)${value.bytes}[${offset}]) : 0)`
+  }
+}
+
+export function emitPreparedStringIndexCallExpression(
+  expression: any,
+  context: StringCContext
+): PreparedExpression | null {
+  if (!isNodeCandidate(expression) || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  const method = stringIndexMethodName(expression)
+
+  if (method == null) {
+    return null
+  }
+
+  const call = resolveStringMethodCallParts(expression, method)
+
+  if (call == null) {
+    return null
+  }
+
+  const object = call.object
+  const args = call.args
+
+  if (!isNodeCandidate(object) || args.length < 1 || args.length > 2 || !isNodeCandidate(args[0])) {
+    return null
+  }
+
+  if (stringDeps(context).inferExpressionType(args[0], context) !== 'string') {
+    return null
+  }
+
+  const value = emitPreparedStringBytesOperand(object, context, 'ccjs_string_index_value')
+  const search = emitPreparedStringBytesOperand(args[0], context, 'ccjs_string_index_search')
+  const lines: string[] = []
+  let startExpression = '0'
+
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, search.lines)
+
+  if (args.length > 1) {
+    const startArgument = args[1]
+
+    if (stringDeps(context).inferExpressionType(startArgument, context) !== 'number') {
+      return null
+    }
+
+    const start = stringDeps(context).emitPreparedNumberExpression(startArgument, context)
+    const startRaw = nextCName(context, 'ccjs_string_index_start_raw')
+    const startIndex = nextCName(context, 'ccjs_string_index_start')
+
+    pushAllLines(lines, start.lines)
+    lines.push(`double ${startRaw} = ${start.expression};`)
+    pushAllLines(lines, emitNonNegativeStringPositionLines(startRaw, startIndex))
+    startExpression = startIndex
+  } else if (method === 'lastIndexOf') {
+    startExpression = `ccjs_string_code_point_length_parts(${value.bytes}, ${value.length})`
+  }
+
+  const helper = cStringIndexHelperName(method)
+
+  return {
+    lines,
+    expression: `${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}, ${startExpression})`
   }
 }
 
@@ -939,6 +1018,7 @@ export function emitCNumberConversionValueExpression(
 
 export function emitCStringTrimValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_trim_string')
+  const helper = cStringTrimHelperName(expression.callee.property)
   const temp = nextCName(context, 'ccjs_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
@@ -947,7 +1027,7 @@ export function emitCStringTrimValueExpression(expression: AnyNode, context: Str
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `ccjs_string_trim_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
+      `${helper}(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
       context
     )
   )
@@ -1149,13 +1229,40 @@ export function isStringTrimCall(expression: AnyNode | null | undefined, context
     expression == null ||
     expression.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'trim' ||
+    !isStringTrimMethod(expression.callee.property) ||
     expression.args.length !== 0
   ) {
     return false
   }
 
   return isStringLengthObject(expression.callee.object, context)
+}
+
+export function isStringIndexCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
+  if (
+    expression == null ||
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    !isStringIndexMethod(expression.callee.property) ||
+    expression.args.length < 1 ||
+    expression.args.length > 2
+  ) {
+    return false
+  }
+
+  if (!isStringLengthObject(expression.callee.object, context)) {
+    return false
+  }
+
+  if (stringDeps(context).inferExpressionType(expression.args[0], context) !== 'string') {
+    return false
+  }
+
+  if (expression.args.length > 1) {
+    return stringDeps(context).inferExpressionType(expression.args[1], context) === 'number'
+  }
+
+  return true
 }
 
 export function isStringSliceCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
@@ -1205,16 +1312,38 @@ export function isStringPredicateCall(expression: AnyNode | null | undefined, co
     expression == null ||
     expression.type !== 'CallExpression' ||
     expression.callee.type !== 'MemberExpression' ||
-    !isStringPredicateMethod(expression.callee.property) ||
-    expression.args.length !== 1
+    !isStringPredicateMethod(expression.callee.property)
   ) {
     return false
   }
 
-  return (
-    isStringLengthObject(expression.callee.object, context) &&
-    stringDeps(context).inferExpressionType(expression.args[0], context) === 'string'
-  )
+  const method = expression.callee.property
+  let maxArgs = 1
+
+  if (method === 'includes') {
+    maxArgs = 2
+  }
+
+  if (
+    expression.args.length < 1 ||
+    expression.args.length > maxArgs
+  ) {
+    return false
+  }
+
+  if (!isStringLengthObject(expression.callee.object, context)) {
+    return false
+  }
+
+  if (stringDeps(context).inferExpressionType(expression.args[0], context) !== 'string') {
+    return false
+  }
+
+  if (expression.args.length > 1) {
+    return stringDeps(context).inferExpressionType(expression.args[1], context) === 'number'
+  }
+
+  return true
 }
 
 function cStringPredicateHelperName(method: string): string {
@@ -1227,6 +1356,56 @@ function cStringPredicateHelperName(method: string): string {
   }
 
   return 'ccjs_string_includes_parts'
+}
+
+function cStringIndexHelperName(method: string): string {
+  if (method === 'lastIndexOf') {
+    return 'ccjs_string_last_index_of_parts'
+  }
+
+  return 'ccjs_string_index_of_parts'
+}
+
+function cStringTrimHelperName(method: string): string {
+  if (method === 'trimStart' || method === 'trimLeft') {
+    return 'ccjs_string_trim_start_parts'
+  }
+
+  if (method === 'trimEnd' || method === 'trimRight') {
+    return 'ccjs_string_trim_end_parts'
+  }
+
+  return 'ccjs_string_trim_parts'
+}
+
+function emitNonNegativeStringPositionLines(raw: string, target: string): string[] {
+  return [
+    `size_t ${target} = 0;`,
+    `if (${raw} > 0) ${target} = ${raw} > (double)((size_t)-1) ? ((size_t)-1) : (size_t)${raw};`
+  ]
+}
+
+function isStringTrimMethod(method: string): boolean {
+  return (
+    method === 'trim' ||
+    method === 'trimEnd' ||
+    method === 'trimLeft' ||
+    method === 'trimRight' ||
+    method === 'trimStart'
+  )
+}
+
+function stringIndexMethodName(expression: any): string | null {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.callee == null ||
+    expression.callee.type !== 'MemberExpression' ||
+    !isStringIndexMethod(expression.callee.property)
+  ) {
+    return null
+  }
+
+  return expression.callee.property
 }
 
 function isStringLengthObject(expression: AnyNode | null | undefined, context: StringCContext): boolean {

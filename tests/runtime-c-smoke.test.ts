@@ -5363,7 +5363,7 @@ test('generated C string predicate methods compile and run with runtime sources'
 }
 
 function hasAda(name: string): boolean {
-  return name.includes('d') && name.startsWith('A') && name.endsWith('a')
+  return name.includes('d', 1) && name.startsWith('A') && name.endsWith('a')
 }
 
 function getName(): string {
@@ -5373,7 +5373,7 @@ function getName(): string {
 const user: User = { name: 'Ada' }
 const name = user.name
 const message = name + '!'
-console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getName().endsWith('e'), message.endsWith('!'), name.includes('z'))
+console.log('Ada'.includes('d'), 'Ada'.includes('d', 2), hasAda(name), user.name.startsWith('A'), getName().endsWith('e'), message.endsWith('!'), name.includes('z'))
 
 `,
       {
@@ -5390,7 +5390,65 @@ console.log('Ada'.includes('d'), hasAda(name), user.name.startsWith('A'), getNam
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, '1 1 1 1 1 0\n')
+    assert.equal(run.stdout, '1 0 1 1 1 1 0\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
+test('generated C string index and trim variants compile and run with UTF-8 strings', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-index-trim-'))
+  const source = join(dir, 'string-index-trim.c')
+  const output = join(dir, 'string-index-trim')
+
+  try {
+    const result = compileSource(
+      `const text = 'banana'
+const wide = 'AéБ'
+const padded = ' Ada '
+console.log(
+  text.indexOf('a'),
+  text.indexOf('a', 2),
+  text.indexOf('z'),
+  text.lastIndexOf('a'),
+  text.lastIndexOf('a', 3),
+  wide.indexOf('Б'),
+  wide.lastIndexOf('é'),
+  wide.includes('Б', 2),
+  wide.includes('Б', 3),
+  '|' + padded.trimStart() + '|',
+  '|' + padded.trimEnd() + '|',
+  '|' + padded.trimLeft() + '|',
+  '|' + padded.trimRight() + '|'
+)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, '1 3 -1 5 3 2 1 1 0 |Ada | | Ada| |Ada | | Ada|\n')
   } finally {
     await rm(dir, {
       recursive: true,

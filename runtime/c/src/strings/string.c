@@ -264,6 +264,28 @@ static size_t ccjs_string_code_point_to_byte_offset(const char* bytes, size_t va
   return index;
 }
 
+static size_t ccjs_string_code_point_index_of_byte_offset(const char* bytes, size_t value_len, size_t offset) {
+  size_t index = 0;
+  size_t current = 0;
+
+  while (index < value_len && index < offset) {
+    size_t step = ccjs_utf8_next_len(bytes, value_len, index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    if (index + step > offset) {
+      break;
+    }
+
+    index += step;
+    current += 1;
+  }
+
+  return current;
+}
+
 ccjs_status ccjs_string_to_number(const char* value_bytes, size_t value_len, ccjs_value* out) {
   if (out != 0) {
     *out = ccjs_null_value();
@@ -458,6 +480,43 @@ ccjs_status ccjs_string_trim_parts(ccjs_allocator* allocator, const char* value_
   return ccjs_string_from_literal(allocator, bytes + start, end - start, out);
 }
 
+ccjs_status ccjs_string_trim_start_parts(ccjs_allocator* allocator, const char* value_bytes, size_t value_len, ccjs_value* out) {
+  if (value_bytes == 0 && value_len != 0) {
+    if (out != 0) {
+      *out = ccjs_undefined_value();
+    }
+
+    return CCJS_ERR_TYPE;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  size_t start = 0;
+  size_t end = value_len;
+  ccjs_string_trim_span(bytes, value_len, &start, &end);
+
+  if (end == 0) {
+    return ccjs_string_from_literal(allocator, "", 0, out);
+  }
+
+  return ccjs_string_from_literal(allocator, bytes + start, value_len - start, out);
+}
+
+ccjs_status ccjs_string_trim_end_parts(ccjs_allocator* allocator, const char* value_bytes, size_t value_len, ccjs_value* out) {
+  if (value_bytes == 0 && value_len != 0) {
+    if (out != 0) {
+      *out = ccjs_undefined_value();
+    }
+
+    return CCJS_ERR_TYPE;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  size_t end = value_len;
+  ccjs_string_trim_span(bytes, value_len, 0, &end);
+
+  return ccjs_string_from_literal(allocator, bytes, end, out);
+}
+
 ccjs_status ccjs_string_slice_parts(
   ccjs_allocator* allocator,
   const char* value_bytes,
@@ -583,28 +642,118 @@ ccjs_status ccjs_string_split_parts(
   return status;
 }
 
-bool ccjs_string_includes_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len) {
+double ccjs_string_index_of_parts(
+  const char* value_bytes,
+  size_t value_len,
+  const char* search_bytes,
+  size_t search_len,
+  size_t start
+) {
   if ((value_bytes == 0 && value_len != 0) || (search_bytes == 0 && search_len != 0)) {
-    return false;
+    return -1;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  const char* search = search_bytes == 0 ? "" : search_bytes;
+  const size_t length = ccjs_string_code_point_length_parts(bytes, value_len);
+
+  if (start > length) {
+    start = length;
   }
 
   if (search_len == 0) {
-    return true;
+    return (double)start;
   }
 
-  if (search_len > value_len) {
-    return false;
+  const size_t start_byte = ccjs_string_code_point_to_byte_offset(bytes, value_len, start);
+
+  if (search_len > value_len - start_byte) {
+    return -1;
   }
 
   const size_t max_start = value_len - search_len;
 
-  for (size_t index = 0; index <= max_start; index += 1) {
-    if (memcmp(value_bytes + index, search_bytes, search_len) == 0) {
-      return true;
+  for (size_t index = start_byte; index <= max_start;) {
+    if (memcmp(bytes + index, search, search_len) == 0) {
+      return (double)ccjs_string_code_point_index_of_byte_offset(bytes, value_len, index);
     }
+
+    size_t step = ccjs_utf8_next_len(bytes, value_len, index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
   }
 
-  return false;
+  return -1;
+}
+
+double ccjs_string_last_index_of_parts(
+  const char* value_bytes,
+  size_t value_len,
+  const char* search_bytes,
+  size_t search_len,
+  size_t start
+) {
+  if ((value_bytes == 0 && value_len != 0) || (search_bytes == 0 && search_len != 0)) {
+    return -1;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  const char* search = search_bytes == 0 ? "" : search_bytes;
+  const size_t length = ccjs_string_code_point_length_parts(bytes, value_len);
+
+  if (start > length) {
+    start = length;
+  }
+
+  if (search_len == 0) {
+    return (double)start;
+  }
+
+  if (search_len > value_len) {
+    return -1;
+  }
+
+  const size_t start_byte = ccjs_string_code_point_to_byte_offset(bytes, value_len, start);
+  const size_t max_start = value_len - search_len;
+  double last_match = -1;
+
+  for (size_t index = 0; index <= max_start;) {
+    if (index > start_byte) {
+      break;
+    }
+
+    if (memcmp(bytes + index, search, search_len) == 0) {
+      last_match = (double)ccjs_string_code_point_index_of_byte_offset(bytes, value_len, index);
+    }
+
+    size_t step = ccjs_utf8_next_len(bytes, value_len, index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
+  }
+
+  return last_match;
+}
+
+bool ccjs_string_includes_from_parts(
+  const char* value_bytes,
+  size_t value_len,
+  const char* search_bytes,
+  size_t search_len,
+  size_t start
+) {
+  return ccjs_string_index_of_parts(value_bytes, value_len, search_bytes, search_len, start) >= 0;
+}
+
+bool ccjs_string_includes_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len) {
+  return ccjs_string_includes_from_parts(value_bytes, value_len, search_bytes, search_len, 0);
 }
 
 bool ccjs_string_starts_with_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len) {

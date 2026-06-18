@@ -71,6 +71,7 @@ import {
 import {
   collectionConstructorNameFromPath,
   isArrayMethod,
+  isStringIndexMethod,
   isStringPredicateMethod,
   mapRuntimeMethodName,
   setRuntimeMethodName,
@@ -2587,6 +2588,12 @@ class Checker {
 
     if (stringCharCodeAtType != null) {
       return stringCharCodeAtType
+    }
+
+    const stringIndexType = this.checkStringIndexCall(expression)
+
+    if (stringIndexType != null) {
+      return stringIndexType
     }
 
     const stringTrimType = this.checkStringTrimCall(expression)
@@ -8290,7 +8297,7 @@ class Checker {
       method = stringRuntimeMethodName(expression.callee.property)
     }
 
-    if (method !== 'trim') {
+    if (!isStringTrimMethod(method)) {
       return null
     }
 
@@ -8307,13 +8314,65 @@ class Checker {
     }
 
     if (expression.args.length !== 0) {
-      this.report('CCJS_ARG_COUNT', `string.trim expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report('CCJS_ARG_COUNT', `string.${method} expects 0 argument(s), got ${expression.args.length}`, expression.loc)
     }
 
     expression.valueType = 'string'
     expression.stringRuntimeMethod = method
 
     return 'string'
+  }
+
+  checkStringIndexCall(expression: AnyNode): ValueType | null {
+    let method: string | null = null
+
+    if (expression.callee.type === 'MemberExpression') {
+      method = stringRuntimeMethodName(expression.callee.property)
+    }
+
+    if (method == null || !isStringIndexMethod(method)) {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+    const argTypes: ValueType[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      argTypes.push(this.checkExpression(arg))
+    }
+
+    if (objectType !== 'string') {
+      return null
+    }
+
+    if (expression.args.length < 1 || expression.args.length > 2) {
+      this.report(
+        'CCJS_ARG_COUNT',
+        `string.${method} expects 1 or 2 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (expression.args[0] != null) {
+      this.checkAssignableType(
+        argTypes[0],
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+    }
+
+    if (expression.args.length > 1) {
+      this.checkAssignableType(argTypes[1], 'number', expression.args[1].loc, false, false)
+    }
+
+    expression.valueType = 'number'
+    expression.stringRuntimeMethod = method
+
+    return 'number'
   }
 
   checkStringSliceCall(expression: AnyNode): ValueType | null {
@@ -8411,6 +8470,13 @@ class Checker {
       return null
     }
 
+    const method = expression.callee.property
+    let maxArgs = 1
+
+    if (method === 'includes') {
+      maxArgs = 2
+    }
+
     const objectType = this.checkExpression(expression.callee.object)
     const argTypes: ValueType[] = []
 
@@ -8424,10 +8490,10 @@ class Checker {
       return null
     }
 
-    if (expression.args.length !== 1) {
+    if (expression.args.length < 1 || expression.args.length > maxArgs) {
       this.report(
         'CCJS_ARG_COUNT',
-        `string.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`,
+        stringPredicateArgCountMessage(method, expression.args.length),
         expression.loc
       )
     }
@@ -8442,8 +8508,12 @@ class Checker {
       )
     }
 
+    if (expression.args.length > 1) {
+      this.checkAssignableType(argTypes[1], 'number', expression.args[1].loc, false, false)
+    }
+
     expression.valueType = 'boolean'
-    expression.stringRuntimeMethod = expression.callee.property
+    expression.stringRuntimeMethod = method
 
     return 'boolean'
   }
@@ -11906,6 +11976,24 @@ function asciiLowerCharCode(value: string, index: number): number {
   }
 
   return code
+}
+
+function isStringTrimMethod(method: string | null): boolean {
+  return (
+    method === 'trim' ||
+    method === 'trimEnd' ||
+    method === 'trimLeft' ||
+    method === 'trimRight' ||
+    method === 'trimStart'
+  )
+}
+
+function stringPredicateArgCountMessage(method: string, actual: number): string {
+  if (method === 'includes') {
+    return `string.includes expects 1 or 2 argument(s), got ${actual}`
+  }
+
+  return `string.${method} expects 1 argument(s), got ${actual}`
 }
 
 function isPromiseMethod(name: string): boolean {

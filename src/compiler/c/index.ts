@@ -408,6 +408,7 @@ import {
   emitPreparedStringBytesOperand,
   emitPreparedStringCompareExpression,
   emitPreparedStringLengthExpression,
+  emitPreparedStringIndexCallExpression,
   emitPreparedStringPredicateCall,
   emitStringExpression,
   isCStringRuntimeMethodName,
@@ -1077,6 +1078,7 @@ const cScalarExpressionDependencies = {
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedStringCharCodeAtExpression,
   emitPreparedStringCompareExpression,
+  emitPreparedStringIndexCallExpression,
   emitPreparedStringLengthExpression,
   emitPreparedStringPredicateCall,
   emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) =>

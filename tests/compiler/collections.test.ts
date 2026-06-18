@@ -326,7 +326,7 @@ test('lowers C string predicate methods for literals and runtime strings', () =>
 }
 
 function hasAda(name: string): boolean {
-  return name.includes('d') && name.startsWith('A') && name.endsWith('a')
+  return name.includes('d', 1) && name.startsWith('A') && name.endsWith('a')
 }
 
 function getName(): string {
@@ -346,11 +346,73 @@ export function main(): void {
   )
 
   assert.match(result.code, /#include "ccjs\/string\.h"/)
-  assert.match(result.code, /ccjs_string_includes_parts\(name->bytes, name->len, "d", 1\)/)
+  assert.match(result.code, /ccjs_string_includes_from_parts\(name->bytes, name->len, "d", 1, ccjs_string_includes_position_\d+\)/)
   assert.match(result.code, /ccjs_string_starts_with_parts\(name->bytes, name->len, "A", 1\)/)
   assert.match(result.code, /ccjs_string_ends_with_parts\(name->bytes, name->len, "a", 1\)/)
   assert.match(result.code, /ccjs_string_includes_parts\("Ada", 3, "d", 1\)/)
   assert.match(result.code, /ccjs_string_ends_with_parts\(message->bytes, message->len, "!", 1\)/)
+})
+
+
+test('lowers C string index methods and trim variants', () => {
+  const result = compileSource(
+    `function first(name: string): number {
+  return name.indexOf('a', 2)
+}
+
+function last(name: string): number {
+  return name.lastIndexOf('a')
+}
+
+function lastBefore(name: string): number {
+  return name.lastIndexOf('a', 3)
+}
+
+function cleanStart(name: string): string {
+  return name.trimStart()
+}
+
+function cleanEnd(name: string): string {
+  return name.trimEnd()
+}
+
+function cleanLeft(name: string): string {
+  return name.trimLeft()
+}
+
+function cleanRight(name: string): string {
+  return name.trimRight()
+}
+
+export function main(): void {
+  console.log('ok')
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(
+    result.code,
+    /ccjs_string_index_of_parts\(name->bytes, name->len, "a", 1, ccjs_string_index_start_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /ccjs_string_last_index_of_parts\(name->bytes, name->len, "a", 1, ccjs_string_index_start_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /ccjs_string_last_index_of_parts\(name->bytes, name->len, "a", 1, ccjs_string_code_point_length_parts\(name->bytes, name->len\)\)/
+  )
+  assert.match(
+    result.code,
+    /ccjs_string_trim_start_parts\(&ccjs_default_allocator, name->bytes, name->len, &ccjs_value_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /ccjs_string_trim_end_parts\(&ccjs_default_allocator, name->bytes, name->len, &ccjs_value_\d+\)/
+  )
 })
 
 
@@ -2161,7 +2223,7 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
 test('checks string predicate methods as boolean calls', () => {
   const result = compileSource(
     `function hasAda(name: string): boolean {
-  return name.includes('Ada') && name.startsWith('A') && name.endsWith('a')
+  return name.includes('Ada', 1) && name.startsWith('A') && name.endsWith('a')
 }
 
 export function main(): void {
@@ -2188,7 +2250,72 @@ export function main(): void {
   assertDiagnostic(
     `export function main(): void {
   const name = 'Ada'
+  name.includes('d', '1')
+}
+`,
+    'CCJS_TYPE_MISMATCH'
+  )
+
+  assertDiagnostic(
+    `export function main(): void {
+  const name = 'Ada'
+  name.includes()
+}
+`,
+    'CCJS_ARG_COUNT'
+  )
+
+  assertDiagnostic(
+    `export function main(): void {
+  const name = 'Ada'
   name.startsWith()
+}
+`,
+    'CCJS_ARG_COUNT'
+  )
+})
+
+
+test('checks string index methods as number calls', () => {
+  const result = compileSource(
+    `function findAda(name: string): number {
+  return name.indexOf('d', 1) + name.lastIndexOf('a')
+}
+
+export function main(): void {
+  console.log(findAda('Ada'))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  const findAda = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'findAda')
+  assert.equal(findAda?.returnType, 'number')
+
+  assertDiagnostic(
+    `export function main(): void {
+  const name = 'Ada'
+  name.indexOf(1)
+}
+`,
+    'CCJS_TYPE_MISMATCH'
+  )
+
+  assertDiagnostic(
+    `export function main(): void {
+  const name = 'Ada'
+  name.lastIndexOf('a', '1')
+}
+`,
+    'CCJS_TYPE_MISMATCH'
+  )
+
+  assertDiagnostic(
+    `export function main(): void {
+  const name = 'Ada'
+  name.indexOf()
 }
 `,
     'CCJS_ARG_COUNT'
@@ -2271,7 +2398,7 @@ test('checks string split as a string array call', () => {
 test('checks string trim as a string call', () => {
   const result = compileSource(
     `function clean(name: string): string {
-  return name.trim()
+  return name.trimStart().trimEnd().trimLeft().trimRight().trim()
 }
 
 export function main(): void {
@@ -2289,7 +2416,7 @@ export function main(): void {
   assertDiagnostic(
     `export function main(): void {
   const name = 'Ada'
-  name.trim(1)
+  name.trimStart(1)
 }
 `,
     'CCJS_ARG_COUNT'
