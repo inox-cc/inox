@@ -72,6 +72,64 @@ function useDeps(deps: Deps): number {
   assert.equal(assignment.value.left.valueType, 'number')
 })
 
+test('preserves typed dynamic object value shapes for variable indexes', () => {
+  const compiled = compileSourceToIr(
+    `type Descriptor = {
+  code: number
+}
+
+type IndexSignatureTable = {
+  [name: string]: Descriptor
+}
+
+const recordTable: Record<string, Descriptor> = {
+  read: { code: 7 }
+}
+
+const signatureTable: IndexSignatureTable = {
+  write: { code: 9 }
+}
+
+function readRecord(name: string): number {
+  const item = recordTable[name] ?? null
+  if (item != null) {
+    return item.code
+  }
+  return 0
+}
+
+function readSignature(name: string): number {
+  const item = signatureTable[name] ?? null
+  if (item != null) {
+    return item.code
+  }
+  return 0
+}
+`,
+    { target: 'c' }
+  )
+
+  const recordFunction = compiled.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'readRecord')
+  const signatureFunction = compiled.hir.body.find(
+    (item) => item.type === 'FunctionDeclaration' && item.name === 'readSignature'
+  )
+
+  assert.ok(recordFunction)
+  assert.ok(signatureFunction)
+
+  const recordItem = recordFunction.body[0]
+  const signatureItem = signatureFunction.body[0]
+  const recordReturn = recordFunction.body[1].consequent.body[0]
+  const signatureReturn = signatureFunction.body[1].consequent.body[0]
+
+  assert.equal(recordItem.valueType, 'object')
+  assert.equal(recordItem.shape?.fields[0]?.name, 'code')
+  assert.equal(recordReturn.argument.valueType, 'number')
+  assert.equal(signatureItem.valueType, 'object')
+  assert.equal(signatureItem.shape?.fields[0]?.name, 'code')
+  assert.equal(signatureReturn.argument.valueType, 'number')
+})
+
 test('compiles module graphs to IR modules before target bundle emission', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-pipeline-'))
 

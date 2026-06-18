@@ -133,11 +133,17 @@ export function createAliasType(valueType: string): AnyNode {
   }
 }
 
-export function createObjectType(fields: AnyNode[], baseTypes: string[], dynamic: boolean): AnyNode {
+export function createObjectType(
+  fields: AnyNode[],
+  baseTypes: string[],
+  dynamic: boolean,
+  dynamicField: AnyNode | null = null
+): AnyNode {
   return {
     kind: 'object',
     baseTypes,
     dynamic,
+    dynamicField,
     fields
   }
 }

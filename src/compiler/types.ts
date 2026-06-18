@@ -162,6 +162,7 @@ export type ObjectShapeInfo = {
   kind: 'object'
   baseTypes?: string[]
   dynamic?: boolean
+  dynamicField?: AnyNode | null
   fields: AnyNode[]
   [key: string]: any
 }

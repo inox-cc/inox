@@ -42,6 +42,7 @@ import {
   mapTypeNamesFromTypeName,
   nullableTypeNameFromKnownTypeName,
   promiseValueTypeNameFromKnownTypeName,
+  recordTypeNamesFromTypeName,
   setElementTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from './type-names.ts'
@@ -244,6 +245,7 @@ type NullableConditionNarrowing = {
 
 type ObjectShapeBases = {
   dynamic: boolean
+  dynamicField: AnyNode | null
   fields: AnyNode[]
 }
 
@@ -1984,7 +1986,62 @@ class Checker {
     expression.valueType = valueType
     expression.nullable = expression.operator === '??' && this.expressionCanBeNull(expression.right)
 
+    if (expression.operator === '??') {
+      this.applyNullishCoalescingMetadata(expression, valueType)
+    }
+
     return valueType
+  }
+
+  applyNullishCoalescingMetadata(expression: AnyNode, valueType: ValueType): void {
+    if (valueType === 'array') {
+      expression.arrayElementType =
+        this.resolveExpressionArrayElementType(expression.left) ?? this.resolveExpressionArrayElementType(expression.right)
+      expression.arrayElementDeclaredType =
+        this.resolveExpressionArrayElementDeclaredType(expression.left) ??
+        this.resolveExpressionArrayElementDeclaredType(expression.right)
+      return
+    }
+
+    if (valueType === 'map') {
+      const leftMap = this.resolveExpressionMapType(expression.left)
+      const rightMap = this.resolveExpressionMapType(expression.right)
+      let mapKeyType: ValueType | null = null
+      let mapValueType: ValueType | null = null
+
+      if (leftMap != null) {
+        mapKeyType = leftMap.key
+        mapValueType = leftMap.value
+      } else if (rightMap != null) {
+        mapKeyType = rightMap.key
+        mapValueType = rightMap.value
+      }
+
+      expression.mapKeyType = mapKeyType
+      expression.mapValueType = mapValueType
+      return
+    }
+
+    if (valueType === 'set') {
+      expression.setElementType =
+        this.resolveExpressionSetElementType(expression.left) ?? this.resolveExpressionSetElementType(expression.right)
+      return
+    }
+
+    if (valueType === 'promise') {
+      expression.promiseValueType =
+        this.resolveExpressionPromiseValueType(expression.left) ?? this.resolveExpressionPromiseValueType(expression.right)
+      return
+    }
+
+    if (valueType === 'object') {
+      expression.shape = this.resolveExpressionShape(expression.left) ?? this.resolveExpressionShape(expression.right)
+      return
+    }
+
+    if (valueType === 'function') {
+      expression.functionType = expression.left.functionType ?? expression.right.functionType ?? null
+    }
   }
 
   expressionCanBeNull(expression: AnyNode | null): boolean {
@@ -2357,6 +2414,48 @@ class Checker {
         return valueType
       }
 
+      if (objectType === 'object') {
+        const shape = this.resolveExpressionShape(expression.object)
+
+        if (shape != null && shape.dynamic === true) {
+          this.checkAssignableType(
+            indexType,
+            'string',
+            expression.index.loc,
+            false,
+            this.expressionCanBeNull(expression.index)
+          )
+
+          const field = this.findShapeField(shape, '')
+
+          if (field != null) {
+            const fieldType = this.resolveFieldDeclaredType(field)
+            const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
+
+            expression.nullable = resolvedFieldNullableMetadata(field, fieldType)
+            expression.valueType = valueType
+            expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
+            expression.arrayElementDeclaredType = resolvedStringMetadata(
+              field.arrayElementDeclaredType,
+              fieldType.arrayElementDeclaredType
+            )
+            expression.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
+            expression.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+            expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+            expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
+            expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+            expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
+            expression.className = null
+
+            if (field.className != null) {
+              expression.className = field.className
+            }
+
+            return valueType
+          }
+        }
+      }
+
       return 'unknown'
     }
 
@@ -2511,6 +2610,56 @@ class Checker {
     }
 
     if (expression.target.index.type !== 'StringLiteral') {
+      if (objectType === 'object') {
+        const shape = this.resolveExpressionShape(expression.target.object)
+
+        if (shape != null && shape.dynamic === true) {
+          this.checkAssignableType(
+            indexType,
+            'string',
+            expression.target.index.loc,
+            false,
+            this.expressionCanBeNull(expression.target.index)
+          )
+
+          const field = this.findShapeField(shape, '')
+
+          if (field != null) {
+            const fieldType = this.resolveFieldDeclaredType(field)
+            const targetValueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
+
+            expression.target.nullable = resolvedFieldNullableMetadata(field, fieldType)
+            expression.target.valueType = targetValueType
+            expression.target.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
+            expression.target.arrayElementDeclaredType = resolvedStringMetadata(
+              field.arrayElementDeclaredType,
+              fieldType.arrayElementDeclaredType
+            )
+            expression.target.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
+            expression.target.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+            expression.target.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+            expression.target.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
+            expression.target.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+            expression.target.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
+            expression.target.className = null
+
+            if (field.className != null) {
+              expression.target.className = field.className
+            }
+
+            this.checkAssignableType(
+              valueType,
+              fieldType.valueType,
+              expression.value.loc,
+              false,
+              this.expressionCanBeNull(expression.value)
+            )
+
+            return valueType
+          }
+        }
+      }
+
       return valueType
     }
 
@@ -10032,13 +10181,41 @@ class Checker {
     }
 
     if (shape.dynamic === true) {
-      return this.dynamicShapeField(name)
+      return this.dynamicShapeField(shape, name)
     }
 
     return null
   }
 
-  dynamicShapeField(name: string) {
+  dynamicShapeField(shape: ObjectShapeInfo, name: string) {
+    if (shape.dynamicField != null) {
+      const field = shape.dynamicField
+
+      return {
+        name,
+        optional: field.optional,
+        readonly: field.readonly,
+        ownership: field.ownership,
+        weakLoc: field.weakLoc,
+        static: field.static,
+        staticLoc: field.staticLoc,
+        weakTypeValidated: field.weakTypeValidated,
+        loc: field.loc,
+        declaredType: field.declaredType,
+        valueType: field.valueType,
+        nullable: field.nullable,
+        arrayElementType: field.arrayElementType,
+        arrayElementDeclaredType: field.arrayElementDeclaredType,
+        mapKeyType: field.mapKeyType,
+        mapValueType: field.mapValueType,
+        promiseValueType: field.promiseValueType,
+        setElementType: field.setElementType,
+        functionType: field.functionType,
+        shape: field.shape,
+        className: field.className
+      }
+    }
+
     return {
       name,
       optional: true,
@@ -10994,6 +11171,47 @@ class Checker {
       }
     }
 
+    const recordTypeNames = recordTypeNamesFromTypeName(name)
+
+    if (recordTypeNames != null) {
+      const valueInfo = this.resolveDeclaredType(recordTypeNames.value, loc)
+
+      return {
+        valueType: 'object',
+        nullable: false,
+        functionType: null,
+        shape: {
+          kind: 'object',
+          dynamic: true,
+          dynamicField: {
+            name: '',
+            optional: false,
+            readonly: false,
+            ownership: 'strong',
+            declaredType: recordTypeNames.value,
+            valueType: valueInfo.valueType,
+            nullable: valueInfo.nullable,
+            arrayElementType: valueInfo.arrayElementType,
+            arrayElementDeclaredType: valueInfo.arrayElementDeclaredType,
+            mapKeyType: valueInfo.mapKeyType,
+            mapValueType: valueInfo.mapValueType,
+            promiseValueType: valueInfo.promiseValueType,
+            setElementType: valueInfo.setElementType,
+            functionType: valueInfo.functionType,
+            shape: valueInfo.shape,
+            loc
+          },
+          fields: []
+        },
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null
+      }
+    }
+
     if (name === 'set') {
       return {
         valueType: 'set',
@@ -11274,43 +11492,7 @@ class Checker {
     mergeShapeFields(fields, shape.fields)
 
     for (const field of fields) {
-      const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
-      let fieldInfo = this.resolveFieldDeclaredType(field)
-
-      if (weakField) {
-        fieldInfo = this.resolveWeakTargetShapeFieldType(field)
-      }
-
-      let promiseValueType: ValueType | null = null
-      const functionType = resolvedFunctionTypeMetadata(fieldInfo.functionType, field.functionType)
-
-      if (fieldInfo.promiseValueType != null) {
-        promiseValueType = fieldInfo.promiseValueType
-      }
-
-      resolvedFields.push({
-        type: field.type,
-        name: field.name,
-        optional: field.optional,
-        readonly: field.readonly,
-        ownership: field.ownership,
-        weakLoc: field.weakLoc,
-        static: field.static,
-        staticLoc: field.staticLoc,
-        weakTypeValidated: field.weakTypeValidated,
-        loc: field.loc,
-        declaredType: field.valueType,
-        valueType: fieldInfo.valueType,
-        nullable: fieldInfo.nullable || weakField || field.optional === true,
-        arrayElementType: fieldInfo.arrayElementType,
-        arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
-        mapKeyType: fieldInfo.mapKeyType,
-        mapValueType: fieldInfo.mapValueType,
-        promiseValueType,
-        setElementType: fieldInfo.setElementType,
-        functionType,
-        shape: fieldInfo.shape
-      })
+      resolvedFields.push(this.resolveObjectShapeField(field, fields))
     }
 
     const resolvedBaseTypes: string[] = []
@@ -11326,7 +11508,12 @@ class Checker {
       kind: 'object',
       baseTypes: resolvedBaseTypes,
       dynamic: shape.dynamic === true || bases.dynamic,
+      dynamicField: bases.dynamicField,
       fields: resolvedFields
+    }
+
+    if (shape.dynamicField != null) {
+      resolvedShape.dynamicField = this.resolveObjectShapeField(shape.dynamicField, [shape.dynamicField])
     }
 
     if (shape.builtin != null) {
@@ -11334,6 +11521,46 @@ class Checker {
     }
 
     return resolvedShape
+  }
+
+  resolveObjectShapeField(field: AnyNode, fields: AnyNode[]): AnyNode {
+    const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
+    let fieldInfo = this.resolveFieldDeclaredType(field)
+
+    if (weakField) {
+      fieldInfo = this.resolveWeakTargetShapeFieldType(field)
+    }
+
+    let promiseValueType: ValueType | null = null
+    const functionType = resolvedFunctionTypeMetadata(fieldInfo.functionType, field.functionType)
+
+    if (fieldInfo.promiseValueType != null) {
+      promiseValueType = fieldInfo.promiseValueType
+    }
+
+    return {
+      type: field.type,
+      name: field.name,
+      optional: field.optional,
+      readonly: field.readonly,
+      ownership: field.ownership,
+      weakLoc: field.weakLoc,
+      static: field.static,
+      staticLoc: field.staticLoc,
+      weakTypeValidated: field.weakTypeValidated,
+      loc: field.loc,
+      declaredType: field.valueType,
+      valueType: fieldInfo.valueType,
+      nullable: fieldInfo.nullable || weakField || field.optional === true,
+      arrayElementType: fieldInfo.arrayElementType,
+      arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
+      mapKeyType: fieldInfo.mapKeyType,
+      mapValueType: fieldInfo.mapValueType,
+      promiseValueType,
+      setElementType: fieldInfo.setElementType,
+      functionType,
+      shape: fieldInfo.shape
+    }
   }
 
   resolveFunctionTypeMetadata(
@@ -11414,6 +11641,7 @@ class Checker {
   resolveObjectShapeBases(shape: ObjectShapeInfo): ObjectShapeBases {
     const fields: AnyNode[] = []
     let dynamic = false
+    let dynamicField: AnyNode | null = null
 
     const baseTypes: string[] = shape?.baseTypes ?? []
 
@@ -11431,10 +11659,15 @@ class Checker {
       }
 
       dynamic = dynamic || resolved.dynamic === true
+
+      if (resolved.dynamicField != null) {
+        dynamicField = resolved.dynamicField
+      }
     }
 
     return {
       dynamic,
+      dynamicField,
       fields
     }
   }

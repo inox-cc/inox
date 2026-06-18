@@ -207,6 +207,30 @@ export function normalizeTypeName(name: string): string {
     return 'map'
   }
 
+  const normalizedRecordInner = genericTypeInner(name, 'record')
+
+  if (normalizedRecordInner != null) {
+    const args = splitGenericArgs(normalizedRecordInner)
+
+    if (args.length === 2) {
+      return `record<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
+    }
+
+    return 'object'
+  }
+
+  const recordInner = genericTypeInner(name, 'Record')
+
+  if (recordInner != null) {
+    const args = splitGenericArgs(recordInner)
+
+    if (args.length === 2) {
+      return `record<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
+    }
+
+    return 'object'
+  }
+
   const normalizedSetInner = genericTypeInner(name, 'set')
 
   if (normalizedSetInner != null) {

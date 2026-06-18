@@ -809,6 +809,36 @@ if (item != null) {
   assert.match(result.code, /item = ccjs_value_\d+/)
 })
 
+test('lowers C Record object reads through variable string keys', () => {
+  const result = compileSource(
+    `type Descriptor = {
+  code: number
+}
+
+const descriptors: Record<string, Descriptor> = {
+  read: { code: 7 },
+  write: { code: 9 }
+}
+
+function readCode(method: string): number {
+  const item = descriptors[method] ?? null
+  if (item != null) {
+    return item.code
+  }
+  return 0
+}
+
+console.log(readCode('write'))
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(descriptors, method->bytes, method->len, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_get_known\(item, 0, &ccjs_expr_value_\d+\)/)
+})
+
 
 test('lowers C nullable boolean literal comparisons', () => {
   const result = compileSource(

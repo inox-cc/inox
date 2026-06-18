@@ -3,6 +3,11 @@ export type MapTypeNames = {
   value: string
 }
 
+export type RecordTypeNames = {
+  key: string
+  value: string
+}
+
 export function arrayElementTypeNameFromTypeName(name: string): string | null {
   return genericTypeInner(name, 'array')
 }
@@ -44,6 +49,25 @@ export function mapTypeNamesFromTypeName(name: string): MapTypeNames | null {
   }
 
   return null
+}
+
+export function recordTypeNamesFromTypeName(name: string): RecordTypeNames | null {
+  const inner = genericTypeInner(name, 'record')
+
+  if (inner == null) {
+    return null
+  }
+
+  const args = splitGenericArgs(inner)
+
+  if (args.length !== 2) {
+    return null
+  }
+
+  return {
+    key: args[0],
+    value: args[1]
+  }
 }
 
 export function setElementTypeNameFromTypeName(name: string): string | null {

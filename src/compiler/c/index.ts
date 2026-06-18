@@ -603,6 +603,7 @@ function debugMemoryStatsFieldAt(index: number): DebugMemoryStatsField {
 let objectVariableDeclarationDependencies = {} as ObjectVariableDeclarationDependencies
 let objectExpressionFieldDependencies: ObjectExpressionFieldDependencies = {
   emitCValueExpression,
+  emitPreparedStringBytesOperand,
   inferExpressionType
 }
 let jsonDeclarationDependencies = {} as JsonDeclarationDependencies
@@ -1174,6 +1175,7 @@ const cScalarExpressionDependencies = {
   emitPreparedProcessNumberExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedStringCharCodeAtExpression,
+  emitPreparedStringBytesOperand,
   emitPreparedStringCompareExpression,
   emitPreparedStringIndexCallExpression,
   emitPreparedStringLengthExpression,

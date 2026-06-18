@@ -392,13 +392,14 @@ class Parser {
     const actualBaseTypes = stringArrayOrEmpty(baseTypes)
     const fields: AnyNode[] = []
     let dynamic = false
+    let dynamicField: AnyNode | null = null
 
     this.expectValue('{', 'CCJS_EXPECTED_TYPE', 'expected { in object type')
 
     while (!this.isValue('}') && !this.is('eof')) {
-      if (this.matchValue('[')) {
+      if (this.isValue('[')) {
         dynamic = true
-        this.skipTypeIndexSignature()
+        dynamicField = this.parseTypeIndexSignature()
         this.matchValue(',')
         this.matchValue(';')
         continue
@@ -464,7 +465,7 @@ class Parser {
     this.expectValue('}', 'CCJS_EXPECTED_TYPE', 'expected } after object type')
     this.matchValue(';')
 
-    return createObjectType(fields, actualBaseTypes, dynamic)
+    return createObjectType(fields, actualBaseTypes, dynamic, dynamicField)
   }
 
   parseObjectTypeMethodSignature() {
@@ -494,17 +495,30 @@ class Parser {
     return createFunctionType(params, returnType)
   }
 
-  skipTypeIndexSignature(): void {
+  parseTypeIndexSignature(): AnyNode | null {
+    const start = this.expectValue('[', 'CCJS_EXPECTED_TYPE', 'expected [ in type index signature')
+
     while (!this.is('eof') && !this.isValue(']')) {
       this.advance()
     }
 
     this.expectValue(']', 'CCJS_EXPECTED_TYPE', 'expected ] after type index signature')
 
+    let valueType = 'unknown'
+
     if (this.matchValue(':')) {
-      this.parseTypeAnnotation([',', ';', '}'], {
+      valueType = this.parseTypeAnnotation([',', ';', '}'], {
         stopAtLineBreak: true
       })
+    }
+
+    return {
+      name: '',
+      optional: false,
+      readonly: false,
+      ownership: 'strong',
+      valueType,
+      loc: locFromToken(start)
     }
   }
 

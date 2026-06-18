@@ -52,6 +52,7 @@ import type {
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand,
   CRuntimeArrayElement
 } from '../types.ts'
 
@@ -739,6 +740,11 @@ export type CScalarExpressionDependencies = {
     tempPrefix: string
   ): PreparedExpression
   emitPreparedStringCompareExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitPreparedStringBytesOperand(
+    expression: CValueNode,
+    context: CFunctionContext,
+    tempPrefix: string
+  ): PreparedStringBytesOperand
   emitPreparedStringCharCodeAtExpression(expression: any, context: CFunctionContext): PreparedExpression | null
   emitPreparedStringIndexCallExpression(expression: any, context: CFunctionContext): PreparedExpression | null
   emitPreparedStringLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null

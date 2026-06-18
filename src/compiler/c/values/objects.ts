@@ -26,7 +26,8 @@ import type {
   CObjectShape,
   CObjectIndexFieldInfo,
   CObjectShapeField,
-  CPreparedExpression as PreparedExpression
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
 
 type ObjectShapeContext = {
@@ -89,6 +90,11 @@ export type ObjectVariableDeclarationDependencies = {
 
 export type ObjectExpressionFieldDependencies = {
   emitCValueExpression(expression: ObjectFieldNode, context: ObjectFunctionContext): PreparedExpression
+  emitPreparedStringBytesOperand(
+    expression: ObjectFieldNode,
+    context: ObjectFunctionContext,
+    tempPrefix: string
+  ): PreparedStringBytesOperand
   inferExpressionType(expression: ObjectFieldNode, context: ObjectFunctionContext): string
 }
 
@@ -588,8 +594,12 @@ export function emitPreparedDynamicObjectIndexValueExpression(
   context: ObjectFunctionContext,
   dependencies: ObjectExpressionFieldDependencies
 ): PreparedExpression | null {
-  if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
+  if (!isIndexAccessExpression(expression)) {
     return null
+  }
+
+  if (expression.index.type !== 'StringLiteral') {
+    return emitPreparedDynamicObjectIndexExpressionValueExpression(expression, context, dependencies)
   }
 
   return emitPreparedDynamicObjectFieldValueExpression(
@@ -599,6 +609,40 @@ export function emitPreparedDynamicObjectIndexValueExpression(
     context,
     dependencies
   )
+}
+
+function emitPreparedDynamicObjectIndexExpressionValueExpression(
+  expression: ObjectFieldNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  if (dependencies.inferExpressionType(expression.object, context) !== 'object') {
+    return null
+  }
+
+  if (dependencies.inferExpressionType(expression.index, context) !== 'string') {
+    return null
+  }
+
+  const object = dependencies.emitCValueExpression(expression.object, context)
+  const key = dependencies.emitPreparedStringBytesOperand(expression.index, context, 'ccjs_object_key')
+  const temp = nextCName(context, 'ccjs_value')
+  const tag = cRuntimeValueTag(expression.valueType)
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+
+  appendLines(lines, object.lines)
+  appendLines(lines, key.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(emitStatusCheck(`ccjs_object_get(${object.expression}, ${key.bytes}, ${key.length}, &${temp})`, context))
+  appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+
+  return {
+    lines,
+    expression: temp,
+    valueType: expression.valueType
+  }
 }
 
 export function emitDynamicObjectFieldAssignment(
@@ -1193,21 +1237,51 @@ function objectVariableShapeFields(
   context: ObjectFunctionContext,
   dependencies: ObjectVariableDeclarationDependencies
 ): CObjectShapeField[] {
-  if (statement.shape != null && statement.shape.fields != null) {
-    return statement.shape.fields
-  }
-
   const fields: CObjectShapeField[] = []
+
+  if (statement.shape != null && statement.shape.fields != null) {
+    for (const field of statement.shape.fields) {
+      fields.push(field)
+    }
+
+    if (statement.shape.dynamic !== true) {
+      return fields
+    }
+  }
 
   const initProperties = objectNodeProperties(statement.init)
 
   for (const property of initProperties) {
+    if (findObjectShapeFieldIndex(fields, property.key) !== -1) {
+      continue
+    }
+
+    let valueType = dependencies.inferExpressionType(property.value, context)
+    let shape = property.value.shape
+    let functionType = dependencies.resolveFunctionValueType(property.value, context)
+
+    if (statement.shape != null && statement.shape.dynamicField != null) {
+      const dynamicField = statement.shape.dynamicField
+
+      if (dynamicField.valueType != null) {
+        valueType = dynamicField.valueType
+      }
+
+      if (dynamicField.shape != null) {
+        shape = dynamicField.shape
+      }
+
+      if (dynamicField.functionType != null) {
+        functionType = dynamicField.functionType
+      }
+    }
+
     fields.push({
       name: property.key,
       readonlyField: false,
-      valueType: dependencies.inferExpressionType(property.value, context),
-      shape: property.value.shape,
-      functionType: dependencies.resolveFunctionValueType(property.value, context)
+      valueType,
+      shape,
+      functionType
     })
   }
 
