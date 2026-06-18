@@ -537,6 +537,32 @@ function cPathSegment(path: string[], index: number): string {
   return path[index]
 }
 
+function firstKnownValueTypeOrUnknown(
+  first: string | null | undefined,
+  second: string | null | undefined,
+  third: string | null | undefined
+): string {
+  const firstKnown = knownValueType(first)
+
+  if (firstKnown != null) {
+    return firstKnown
+  }
+
+  const secondKnown = knownValueType(second)
+
+  if (secondKnown != null) {
+    return secondKnown
+  }
+
+  const thirdKnown = knownValueType(third)
+
+  if (thirdKnown != null) {
+    return thirdKnown
+  }
+
+  return 'unknown'
+}
+
 function debugMemoryStatsFieldAt(index: number): (typeof debugMemoryStatsFields)[number] {
   return debugMemoryStatsFields[index]
 }
@@ -4305,18 +4331,11 @@ function emitPreparedAwaitPromiseExpression(expression: AnyNode, context: CFunct
   const promiseExpression = emitPreparedPromiseExpression(expression, context, promiseLoweringDependencies)
 
   if (promiseExpression != null) {
-    let valueType = 'unknown'
-    const promisedValueType = knownValueType(promiseExpression.valueType)
-    const expressionPromiseValueType = knownValueType(expression.promiseValueType)
-    const resolvedValueType = resolvePromiseExpressionValueType(expression, context)
-
-    if (promisedValueType != null) {
-      valueType = promisedValueType
-    } else if (expressionPromiseValueType != null) {
-      valueType = expressionPromiseValueType
-    } else if (resolvedValueType != null) {
-      valueType = resolvedValueType
-    }
+    const valueType = firstKnownValueTypeOrUnknown(
+      promiseExpression.valueType,
+      expression.promiseValueType,
+      resolvePromiseExpressionValueType(expression, context)
+    )
 
     return {
       lines: promiseExpression.lines,
@@ -4362,18 +4381,11 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
 
   registerEventLoop(context)
 
-  let valueType = 'unknown'
-  const expressionValueType = knownValueType(expression.valueType)
-  const promiseValueType = knownValueType(preparedPromise.valueType)
-  const resolvedValueType = resolvePromiseExpressionValueType(expression.argument, context)
-
-  if (expressionValueType != null) {
-    valueType = expressionValueType
-  } else if (promiseValueType != null) {
-    valueType = promiseValueType
-  } else if (resolvedValueType != null) {
-    valueType = resolvedValueType
-  }
+  const valueType = firstKnownValueTypeOrUnknown(
+    expression.valueType,
+    preparedPromise.valueType,
+    resolvePromiseExpressionValueType(expression.argument, context)
+  )
 
   const value = nextCName(context, 'ccjs_await_value')
   const valueTag = cRuntimeValueTag(valueType)
@@ -4466,15 +4478,11 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
     return null
   }
 
-  let valueType = 'unknown'
-  const expressionValueType = knownValueType(expression.valueType)
-  const awaitedValueType = knownValueType(resolveCAsyncFunctionAwaitValueType(callExpression.callee, context))
-
-  if (expressionValueType != null) {
-    valueType = expressionValueType
-  } else if (awaitedValueType != null) {
-    valueType = awaitedValueType
-  }
+  const valueType = firstKnownValueTypeOrUnknown(
+    expression.valueType,
+    resolveCAsyncFunctionAwaitValueType(callExpression.callee, context),
+    null
+  )
 
   const call = emitPreparedCallExpression(callExpression, context)
 

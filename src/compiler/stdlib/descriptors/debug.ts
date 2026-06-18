@@ -1,4 +1,9 @@
-export const debugMemoryStatsFields = [
+export type DebugMemoryStatsField = {
+  name: string
+  cField: string
+}
+
+export const debugMemoryStatsFields: DebugMemoryStatsField[] = [
   {
     name: 'allocCount',
     cField: 'alloc_count'
