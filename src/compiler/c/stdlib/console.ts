@@ -1,40 +1,6 @@
 import { memberExpressionPath } from '../../member-paths.ts'
 import type { IrProgram, AnyNode } from '../../types.ts'
 
-const CONSOLE_RUNTIME_CHILD_KEYS = [
-  'body',
-  'params',
-  'fields',
-  'methods',
-  'init',
-  'condition',
-  'consequent',
-  'alternate',
-  'test',
-  'update',
-  'iterable',
-  'discriminant',
-  'cases',
-  'block',
-  'handler',
-  'finalizer',
-  'argument',
-  'args',
-  'callee',
-  'object',
-  'index',
-  'target',
-  'value',
-  'valueType',
-  'functionType',
-  'returnShape',
-  'left',
-  'right',
-  'elements',
-  'properties',
-  'expression'
-]
-
 export function isConsoleLog(expression: AnyNode): boolean {
   if (expression.type !== 'CallExpression') {
     return false
@@ -84,24 +50,53 @@ function containsConsoleRuntimeCall(node: AnyNode | null | undefined): boolean {
     return true
   }
 
-  for (const key of CONSOLE_RUNTIME_CHILD_KEYS) {
-    const value = node[key]
+  return containsConsoleRuntimeCallChildren(node)
+}
 
-    if (value == null) {
-      continue
-    }
-
-    if (Array.isArray(value)) {
-      if (containsConsoleRuntimeCallList(value)) {
-        return true
-      }
-      continue
-    }
-
-    if (containsConsoleRuntimeCall(value)) {
-      return true
-    }
+function containsConsoleRuntimeCallChild(value: any): boolean {
+  if (value == null || typeof value !== 'object') {
+    return false
   }
+
+  if (Array.isArray(value)) {
+    return containsConsoleRuntimeCallList(value)
+  }
+
+  return containsConsoleRuntimeCall(value)
+}
+
+function containsConsoleRuntimeCallChildren(node: any): boolean {
+  if (containsConsoleRuntimeCallChild(node.body)) return true
+  if (containsConsoleRuntimeCallChild(node.params)) return true
+  if (containsConsoleRuntimeCallChild(node.fields)) return true
+  if (containsConsoleRuntimeCallChild(node.methods)) return true
+  if (containsConsoleRuntimeCallChild(node.init)) return true
+  if (containsConsoleRuntimeCallChild(node.condition)) return true
+  if (containsConsoleRuntimeCallChild(node.consequent)) return true
+  if (containsConsoleRuntimeCallChild(node.alternate)) return true
+  if (containsConsoleRuntimeCallChild(node.test)) return true
+  if (containsConsoleRuntimeCallChild(node.update)) return true
+  if (containsConsoleRuntimeCallChild(node.iterable)) return true
+  if (containsConsoleRuntimeCallChild(node.discriminant)) return true
+  if (containsConsoleRuntimeCallChild(node.cases)) return true
+  if (containsConsoleRuntimeCallChild(node.block)) return true
+  if (containsConsoleRuntimeCallChild(node.handler)) return true
+  if (containsConsoleRuntimeCallChild(node.finalizer)) return true
+  if (containsConsoleRuntimeCallChild(node.argument)) return true
+  if (containsConsoleRuntimeCallChild(node.args)) return true
+  if (containsConsoleRuntimeCallChild(node.callee)) return true
+  if (containsConsoleRuntimeCallChild(node.object)) return true
+  if (containsConsoleRuntimeCallChild(node.index)) return true
+  if (containsConsoleRuntimeCallChild(node.target)) return true
+  if (containsConsoleRuntimeCallChild(node.value)) return true
+  if (containsConsoleRuntimeCallChild(node.valueType)) return true
+  if (containsConsoleRuntimeCallChild(node.functionType)) return true
+  if (containsConsoleRuntimeCallChild(node.returnShape)) return true
+  if (containsConsoleRuntimeCallChild(node.left)) return true
+  if (containsConsoleRuntimeCallChild(node.right)) return true
+  if (containsConsoleRuntimeCallChild(node.elements)) return true
+  if (containsConsoleRuntimeCallChild(node.properties)) return true
+  if (containsConsoleRuntimeCallChild(node.expression)) return true
 
   return false
 }
