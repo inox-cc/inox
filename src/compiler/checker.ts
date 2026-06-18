@@ -2258,6 +2258,12 @@ class Checker {
     }
 
     if (expression.index.type !== 'StringLiteral') {
+      if (objectType === 'string') {
+        this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
+        expression.valueType = 'string'
+        return 'string'
+      }
+
       if (objectType === 'bytes') {
         this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
         expression.valueType = 'number'

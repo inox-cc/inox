@@ -622,6 +622,11 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
     features.add('map-get-null')
   }
 
+  if (isStringIndexExpression(node)) {
+    features.add('runtime-values')
+    features.add('string-bytes')
+  }
+
   if (node.type === 'AssignmentExpression') {
     const target = node.target
 
@@ -985,6 +990,17 @@ function isObjectFieldExpression(expression: FeatureNode | null | undefined): bo
   const shape = object.shape
 
   return shape != null && shape.kind === 'object' && expression.collectionKind !== 'map'
+}
+
+function isStringIndexExpression(expression: FeatureNode | null | undefined): boolean {
+  if (expression == null || expression.type !== 'IndexExpression') {
+    return false
+  }
+
+  const object = expression.object
+  const index = expression.index
+
+  return object != null && index != null && object.valueType === 'string' && index.valueType === 'number'
 }
 
 function collectionMethodCallName(expression: FeatureNode): string | null {

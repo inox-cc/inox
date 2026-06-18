@@ -2389,6 +2389,7 @@ export type CValueExpressionDependencies = {
   emitCOptionalMemberValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitCStringConcatValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitCStringConversionValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitCStringIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitCStringSliceValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitCStringSplitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitCStringTrimValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
@@ -2626,6 +2627,12 @@ export function emitCValueExpression(
 
   if (deps.isStringConcatExpression(expression, context)) {
     return deps.emitCStringConcatValueExpression(expression, context)
+  }
+
+  const stringIndex = deps.emitCStringIndexValueExpression(expression, context)
+
+  if (stringIndex != null) {
+    return stringIndex
   }
 
   if (expression.type === 'TemplateLiteral') {

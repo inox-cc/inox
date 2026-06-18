@@ -93,6 +93,11 @@ type StringMethodNode = {
   valueType?: string | null
 }
 
+type StringIndexNode = StringMethodNode & {
+  object?: StringMethodNode
+  index?: StringMethodNode
+}
+
 type StringMethodCallParts = {
   args: StringMethodNode[]
   object: StringMethodNode
@@ -367,6 +372,61 @@ export function emitPreparedStringCharCodeAtExpression(
     lines,
     expression: `((${offset} < ${value.length}) ? (double)((unsigned char)${value.bytes}[${offset}]) : 0)`
   }
+}
+
+export function emitCStringIndexValueExpression(expression: StringIndexNode, context: StringCContext): PreparedExpression | null {
+  if (!isStringIndexExpression(expression, context)) {
+    return null
+  }
+
+  const object = expression.object
+  const indexExpression = expression.index
+
+  if (object == null || indexExpression == null) {
+    return null
+  }
+
+  const value = emitPreparedStringBytesOperand(object, context, 'ccjs_string_index_value')
+  const index = stringDeps(context).emitPreparedNumberExpression(indexExpression, context)
+  const offset = nextCName(context, 'ccjs_string_index')
+  const temp = nextCName(context, 'ccjs_value')
+  const lines: string[] = []
+  registerOwnedValue(context, temp)
+
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, index.lines)
+  lines.push(`size_t ${offset} = (size_t)(${index.expression});`)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `ccjs_string_from_literal(&ccjs_default_allocator, (${offset} < ${value.length}) ? ${value.bytes} + ${offset} : "", (${offset} < ${value.length}) ? 1 : 0, &${temp})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: temp
+  }
+}
+
+function isStringIndexExpression(expression: StringIndexNode | null | undefined, context: StringCContext): boolean {
+  if (expression == null || expression.type !== 'IndexExpression') {
+    return false
+  }
+
+  const object = expression.object
+  const index = expression.index
+
+  if (object == null || index == null) {
+    return false
+  }
+
+  if (stringDeps(context).inferExpressionType(object, context) !== 'string') {
+    return false
+  }
+
+  return stringDeps(context).inferExpressionType(index, context) === 'number'
 }
 
 function resolveStringMethodCallParts(expression: any, method: string): StringMethodCallParts | null {
@@ -1022,6 +1082,10 @@ export function isRuntimeProducedStringExpression(
   }
 
   if (isStringConcatExpression(expression, context)) {
+    return true
+  }
+
+  if (isStringIndexExpression(expression, context)) {
     return true
   }
 

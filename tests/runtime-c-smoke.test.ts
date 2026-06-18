@@ -5510,6 +5510,56 @@ console.log(isLower('m'), isLower('M'), sumCodes('AZ'))
 })
 
 
+test('generated C string index expressions compile and run with runtime sources', async (t) => {
+  const probe = await runCommand('cc', ['--version'])
+
+  if (probe.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-index-'))
+  const source = join(dir, 'string-index.c')
+  const output = join(dir, 'string-index')
+
+  try {
+    const result = compileSource(
+      `function pick(source: string, index: number): string {
+  const ch = source[index]
+  return ch
+}
+
+const name = 'Ada'
+const first = name[0]
+const second = pick('Ada', 1)
+const third = name[2]
+console.log(first, second, third)
+
+`,
+      {
+        target: 'c'
+      }
+    )
+
+    await writeFile(source, result.code)
+
+    const compile = await compileRuntimeProgram(source, output)
+
+    assert.equal(compile.code, 0, compile.stderr)
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.stdout, 'A d a\n')
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
+
 test('generated C string slice compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

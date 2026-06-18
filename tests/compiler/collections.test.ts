@@ -421,6 +421,37 @@ export function main(): void {
 })
 
 
+test('lowers C string index expressions to runtime one-byte strings', () => {
+  const result = compileSource(
+    `function pick(source: string, index: number): string {
+  const ch = source[index]
+  return ch
+}
+
+const name = 'Ada'
+const first = name[0]
+const second = pick('Ada', 1)
+const third = name[2]
+console.log(first, second, third)
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.deepEqual(result.ir.features, ['runtime-values', 'string-bytes'])
+  assert.deepEqual(result.ir.runtimeRequirements, ['managed-values', 'string-bytes'])
+  assert.match(
+    result.code,
+    /ccjs_string_from_literal\(\n\s+&ccjs_default_allocator,\n\s+\(ccjs_string_index_\d+ < source->len\) \? source->bytes \+ ccjs_string_index_\d+ : "",\n\s+\(ccjs_string_index_\d+ < source->len\) \? 1 : 0,\n\s+&ccjs_value_\d+\n\s+\)/
+  )
+  assert.match(
+    result.code,
+    /ccjs_string_from_literal\(\n\s+&ccjs_default_allocator,\n\s+\(ccjs_string_index_\d+ < strlen\(name\)\) \? name \+ ccjs_string_index_\d+ : "",\n\s+\(ccjs_string_index_\d+ < strlen\(name\)\) \? 1 : 0,\n\s+&ccjs_value_\d+\n\s+\)/
+  )
+})
+
+
 test('lowers C string slice for literals and runtime strings', () => {
   const result = compileSource(
     `type User = {

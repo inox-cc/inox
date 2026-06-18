@@ -905,6 +905,10 @@ function inferIndexExpressionType(object: LowerExpressionNode): string {
     return fallbackString(object.arrayElementType, 'unknown')
   }
 
+  if (object.valueType === 'string') {
+    return 'string'
+  }
+
   return 'unknown'
 }
 
