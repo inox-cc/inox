@@ -130,7 +130,9 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
   const compiled = await compileGraphToIrModules(entry, options)
   const irModules: IrProgram[] = []
 
-  for (const module of compiled.irModules) {
+  for (let moduleIndex = 0; moduleIndex < compiled.irModules.length; moduleIndex = moduleIndex + 1) {
+    const module = compiled.irModules[moduleIndex]
+
     irModules.push(module.ir)
   }
 
@@ -154,7 +156,9 @@ export async function compileFileToCModules(
   const compiled = await compileGraphToIrModules(entry, cModuleOptionsWithHostAndTarget(options, host, 'c'))
   const irModules: IrProgram[] = []
 
-  for (const module of compiled.irModules) {
+  for (let moduleIndex = 0; moduleIndex < compiled.irModules.length; moduleIndex = moduleIndex + 1) {
+    const module = compiled.irModules[moduleIndex]
+
     irModules.push(module.ir)
   }
 
