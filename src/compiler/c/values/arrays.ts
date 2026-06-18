@@ -121,7 +121,8 @@ type RuntimeForOfArray = {
   lines: string[]
 }
 
-type ArrayMaybeNode = AnyNode | null | undefined
+type ArrayNode = AnyNode
+type ArrayMaybeNode = ArrayNode | null | undefined
 
 type ArrayCallbackBody =
   | {
@@ -419,8 +420,42 @@ function arrayElementInfoAt(elements: CArrayElementInfo[], index: number): CArra
   return elements[index]
 }
 
-function arrayCallbackStatementAt(statements: AnyNode[], index: number): AnyNode {
+function arrayCallbackStatementAt(statements: ArrayNode[], index: number): ArrayNode {
   return statements[index]
+}
+
+function arrayNodeAt(nodes: ArrayNode[], index: number): ArrayNode {
+  return nodes[index]
+}
+
+function maybeArrayNodeAt(nodes: ArrayNode[], index: number): ArrayNode | null {
+  if (index >= nodes.length) {
+    return null
+  }
+
+  return arrayNodeAt(nodes, index)
+}
+
+function arrayPathSegmentAt(path: string[], index: number): string {
+  return path[index]
+}
+
+function arrayStringEquals(left: string, right: string): boolean {
+  return left === right
+}
+
+function arrayStringDiffers(left: string, right: string): boolean {
+  return !arrayStringEquals(left, right)
+}
+
+function arrayElementInfoWithoutLast(elements: CArrayElementInfo[]): CArrayElementInfo[] {
+  const out: CArrayElementInfo[] = []
+
+  for (let index = 0; index < elements.length - 1; index = index + 1) {
+    out.push(arrayElementInfoAt(elements, index))
+  }
+
+  return out
 }
 
 export function isArrayMethodCall(expression: ArrayMaybeNode): boolean {
@@ -468,7 +503,7 @@ export function resolveKnownArrayIndex(
     return null
   }
 
-  const arrayName = object.path[0]
+  const arrayName = arrayPathSegmentAt(object.path, 0)
   const elements = findArrayShape(context, arrayName)
 
   if (elements != null) {
@@ -671,7 +706,7 @@ function resolveFunctionReturnNameFromCall(expression: ArrayMaybeNode): string |
     return null
   }
 
-  return callee.path[0]
+  return arrayPathSegmentAt(callee.path, 0)
 }
 
 export function emitPreparedRuntimeArrayIndexValue(
@@ -808,7 +843,8 @@ export function resolveKnownArrayLength(expression: ArrayMaybeNode, context: Arr
     return null
   }
 
-  const elements = findArrayShape(context, expression.object.path[0])
+  const arrayName = arrayPathSegmentAt(expression.object.path, 0)
+  const elements = findArrayShape(context, arrayName)
 
   if (elements == null) {
     return null
@@ -954,8 +990,10 @@ export function resolveForOfElementType(elements: CArrayElementInfo[]): string {
     return 'unknown'
   }
 
-  for (const element of elements) {
-    if (element.valueType !== firstValueType) {
+  const sourceElements: CArrayElementInfo[] = elements
+
+  for (const element of sourceElements) {
+    if (arrayStringDiffers(element.valueType, firstValueType)) {
       return 'unknown'
     }
   }
@@ -1225,7 +1263,6 @@ function emitPreparedArrayComparatorSortCallExpression(
   const input = emitPreparedArraySortComparatorInput(callback, receiver, left, right, context)
   const result = arrayDeps(context).emitPreparedNumberExpression(returnExpression, context)
 
-  body = []
   appendLines(body, input)
   appendLines(body, result.lines)
   body.push(`double ${compare} = ${result.expression};`)
@@ -1318,7 +1355,6 @@ export function emitPreparedArrayMapCallExpression(
     if (!isSupportedRuntimeArrayElementType(mappedElementType)) {
       bodyReady = false
     } else {
-      body = []
       appendLines(body, input)
       appendLines(body, emitArrayMapCallbackBodyLines(callbackBody, mappedElementType, out, context))
       bodyReady = true
@@ -1416,7 +1452,6 @@ export function emitPreparedArrayFilterCallExpression(
       } else {
         const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
 
-        body = []
         appendLines(body, input)
         appendLines(body, emitArrayFilterCallbackBodyLines(callbackBody, out, value, context))
       }
@@ -1623,7 +1658,8 @@ function resolveArrayCallbackReturnType(body: ArrayCallbackBody, context: ArrayF
     return 'unknown'
   }
 
-  const firstType = arrayDeps(context).inferExpressionType(expressions[0], context)
+  const firstExpression = arrayNodeAt(expressions, 0)
+  const firstType = arrayDeps(context).inferExpressionType(firstExpression, context)
 
   if (firstType === 'unknown') {
     return 'unknown'
@@ -1649,7 +1685,9 @@ function collectArrayCallbackReturnExpressions(body: ArrayCallbackBody): AnyNode
 
   const expressions: AnyNode[] = []
 
-  for (const statement of body.statements) {
+  const statements: ArrayNode[] = body.statements
+
+  for (const statement of statements) {
     collectArrayCallbackReturnExpressionsFromStatement(statement, expressions)
   }
 
@@ -1673,7 +1711,9 @@ function collectArrayCallbackReturnExpressionsFromStatement(
   }
 
   if (statement.type === 'BlockStatement') {
-    for (const child of statement.body) {
+    const body: ArrayNode[] = statement.body
+
+    for (const child of body) {
       collectArrayCallbackReturnExpressionsFromStatement(child, expressions)
     }
 
@@ -1919,8 +1959,8 @@ function emitPreparedArrayCallbackInput(
   context: ArrayFunctionContext
 ): string[] {
   const lines: string[] = []
-  const valueParam = callback.params[0]
-  const indexParam = callback.params[1]
+  const valueParam = maybeArrayNodeAt(callback.params, 0)
+  const indexParam = maybeArrayNodeAt(callback.params, 1)
 
   if (valueParam != null) {
     context.variables.set(valueParam.name, receiver.elementType)
@@ -1997,7 +2037,7 @@ function updatePoppedArrayMetadata(receiver: ArrayMaybeNode, context: ArrayFunct
   const elements = findArrayShape(context, name)
 
   if (elements != null) {
-    ensureArrayShapes(context).set(name, elements.slice(0, -1))
+    ensureArrayShapes(context).set(name, arrayElementInfoWithoutLast(elements))
   }
 }
 
@@ -2035,8 +2075,8 @@ function emitPreparedArraySortComparatorInput(
   context: ArrayFunctionContext
 ): string[] {
   const lines: string[] = []
-  const leftParam = callback.params[0]
-  const rightParam = callback.params[1]
+  const leftParam = maybeArrayNodeAt(callback.params, 0)
+  const rightParam = maybeArrayNodeAt(callback.params, 1)
 
   if (leftParam != null) {
     appendLines(lines, emitPreparedArraySortComparatorParam(leftParam.name, receiver.elementType, left, context))
@@ -2087,7 +2127,9 @@ function emitPreparedArrayReceiver(
     const value = arrayDeps(context).emitCArrayLiteralValueExpression(expression, context)
     const elements: CArrayElementInfo[] = []
 
-    for (const element of expression.elements) {
+    const sourceElements: ArrayNode[] = expression.elements
+
+    for (const element of sourceElements) {
       elements.push({
         valueType: arrayDeps(context).inferExpressionType(element, context)
       })
