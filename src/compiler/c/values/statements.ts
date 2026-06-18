@@ -60,6 +60,7 @@ type CLoopFlowTarget = {
 
 type CStringMap = Map<string, string>
 type CStringSet = Set<string>
+type StatementLinesCallback = () => string[]
 
 type CFunctionContext = {
   arrayShapes: Map<string, CArrayElementInfo[]>
@@ -1292,8 +1293,9 @@ function emitMapConstructorEntries(
       continue
     }
 
-    const keyNode = entry.elements[0]
-    const valueNode = entry.elements[1]
+    const entryElements: StatementNode[] = entry.elements
+    const keyNode = entryElements[0]
+    const valueNode = entryElements[1]
     const key = deps.emitCValueExpression(keyNode, context)
     const value = deps.emitCValueExpression(valueNode, context)
     reportCCollectionHashability(
@@ -3401,7 +3403,7 @@ export function withBreakTarget(
   context: CFunctionContext,
   label: string | null,
   throughFinally: boolean,
-  callback: any
+  callback: StatementLinesCallback
 ): string[] {
   if (label == null) {
     return callback()
@@ -3422,7 +3424,7 @@ export function withContinueTarget(
   context: CFunctionContext,
   label: string | null,
   throughFinally: boolean,
-  callback: any
+  callback: StatementLinesCallback
 ): string[] {
   if (label == null) {
     return callback()
@@ -3442,7 +3444,7 @@ export function withContinueTarget(
 export function withFinallyFlowTarget(
   context: CFunctionContext,
   label: string | null,
-  callback: any
+  callback: StatementLinesCallback
 ): string[] {
   return withReturnTarget(context, label, () =>
     withBreakTarget(context, label, true, () => withContinueTarget(context, label, true, callback))
@@ -3492,7 +3494,7 @@ export function currentReturnTarget(context: CFunctionContext): string | null {
 export function withReturnTarget(
   context: CFunctionContext,
   target: string | null,
-  callback: any
+  callback: StatementLinesCallback
 ): string[] {
   if (target == null) {
     return callback()
@@ -3509,7 +3511,7 @@ export function withReturnTarget(
 export function withErrorTarget(
   context: CFunctionContext,
   target: string | null,
-  callback: any
+  callback: StatementLinesCallback
 ): string[] {
   if (target == null) {
     return callback()

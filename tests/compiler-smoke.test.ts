@@ -1926,6 +1926,135 @@ export function main(): void {
   assert.match(result.code, /memcmp\(ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->len\) == 0/)
 })
 
+test('preserves explicit local metadata for open node array entries', () => {
+  const result = compileSource(
+    `type ElementNode = {
+  type?: string
+  [key: string]: any
+}
+
+type EntryNode = {
+  type?: string
+  elements?: ElementNode[]
+  [key: string]: any
+}
+
+type ExpressionNode = {
+  elements?: EntryNode[]
+  [key: string]: any
+}
+
+function countLiteralPairs(expression: ExpressionNode): number {
+  if (expression.elements == null) {
+    return 0
+  }
+
+  let count = 0
+  const entries: EntryNode[] = expression.elements
+
+  for (const entry of entries) {
+    if (entry.type !== 'ArrayLiteral' || entry.elements == null || entry.elements.length !== 2) {
+      continue
+    }
+
+    const entryElements: ElementNode[] = entry.elements
+    const keyNode = entryElements[0]
+    const valueNode = entryElements[1]
+
+    if (keyNode.type === 'StringLiteral' && valueNode.type === 'StringLiteral') {
+      count = count + 1
+    }
+  }
+
+  return count
+}
+
+export function main(): void {
+  console.log(countLiteralPairs({ elements: [{ type: 'ArrayLiteral', elements: [{ type: 'StringLiteral' }, { type: 'StringLiteral' }] }] }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_array_get\((?:entries|ccjs_value_\d+), ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\((?:entryElements|ccjs_value_\d+), 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\((?:entryElements|ccjs_value_\d+), 1, &ccjs_value_\d+\)/)
+})
+
+test('preserves typed options objects for C emitter forwarding', () => {
+  const result = compileSource(
+    `type RandomOptions = {
+  seed?: number
+}
+
+type CompileOptions = {
+  random?: RandomOptions
+  sourceRoot?: string
+}
+
+type CEmitOptions = {
+  random?: RandomOptions
+}
+
+type Host = {
+  root: string
+}
+
+type CModuleEmitOptions = {
+  host: Host
+  random?: RandomOptions
+  sourceRoot?: string
+}
+
+function emitOne(options: CEmitOptions): string {
+  if (options.random != null && options.random.seed != null) {
+    return 'seeded'
+  }
+
+  return 'plain'
+}
+
+function emitModule(options: CModuleEmitOptions): string {
+  if (options.sourceRoot != null) {
+    return options.sourceRoot
+  }
+
+  return options.host.root
+}
+
+function compileOne(options: CompileOptions = {}): string {
+  const emitOptions: CEmitOptions = options
+
+  return emitOne(emitOptions)
+}
+
+function compileModule(host: Host, options: CompileOptions = {}): string {
+  const emitOptions: CModuleEmitOptions = {
+    host,
+    random: options.random,
+    sourceRoot: options.sourceRoot
+  }
+
+  return emitModule(emitOptions)
+}
+
+export function main(): void {
+  console.log(compileOne({ random: { seed: 7 } }))
+  console.log(compileModule({ root: '/src' }, { sourceRoot: '/project' }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_init_known\(emitOptions, 0, host\)/)
+  assert.match(result.code, /ccjs_object_init_known\(emitOptions, 1, ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_object_init_known\(emitOptions, 2, ccjs_value_\d+\)/)
+})
+
 
 test('rejects unsupported C for of iterables with a stable diagnostic', () => {
   assertDiagnostic(

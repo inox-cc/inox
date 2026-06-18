@@ -2292,7 +2292,13 @@ function resolveAsyncTaskAwaitedPromiseExpression(
     awaited = awaitStatement.init.argument
   }
 
-  if (awaited == null || awaited.type !== 'Reference' || awaited.path.length !== 1 || awaited.path[0] !== promiseStatement.name) {
+  if (awaited == null || awaited.type !== 'Reference') {
+    return null
+  }
+
+  const awaitedPath: string[] = awaited.path
+
+  if (awaitedPath.length !== 1 || awaitedPath[0] !== promiseStatement.name) {
     return null
   }
 

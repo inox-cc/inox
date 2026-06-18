@@ -26,7 +26,7 @@ import type {
   SourceCompileResult,
   TlsBackend
 } from './types.ts'
-import type { CModuleOutputFile } from './c/types.ts'
+import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile } from './c/types.ts'
 import type { MemoryCompilerSourceFile } from './memory-host.ts'
 
 export type CModuleCompileOptions = {
@@ -118,9 +118,9 @@ export function compileSourceToIr(source: string, options: CompileOptions = {}):
 
 export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: CompileOptions = {}): string {
   if (target === 'c') {
-    return emitCFromIr(ir, {
-      random: options.random
-    })
+    const emitOptions: CEmitOptions = options
+
+    return emitCFromIr(ir, emitOptions)
   }
 
   throw new Error(`Unsupported target ${target}`)
@@ -142,9 +142,7 @@ export async function compileFile(entry: string, options: CompileOptions = {}): 
     target: compiled.target,
     graph: compiled.graph,
     irRuntimeRequirements: collectIrRuntimeRequirements(irModules),
-    code: emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, {
-      random: options.random
-    })
+    code: emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, options)
   }
 }
 
@@ -164,14 +162,16 @@ export async function compileFileToCModules(
 
   runCStaticChecks(irModules, options)
 
+  const emitOptions: CModuleEmitOptions = {
+    host,
+    random: options.random,
+    sourceRoot: options.sourceRoot
+  }
+
   return {
     target: 'c',
     graph: compiled.graph,
-    files: emitCModuleFilesFromGraph(compiled.graph, {
-      host,
-      random: options.random,
-      sourceRoot: options.sourceRoot
-    })
+    files: emitCModuleFilesFromGraph(compiled.graph, emitOptions)
   }
 }
 
