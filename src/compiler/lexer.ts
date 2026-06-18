@@ -15,71 +15,6 @@ type LexerState = {
   column: number
 }
 
-const keywords = new Set([
-  'async',
-  'await',
-  'break',
-  'case',
-  'catch',
-  'class',
-  'const',
-  'constructor',
-  'continue',
-  'default',
-  'export',
-  'false',
-  'finally',
-  'for',
-  'function',
-  'from',
-  'else',
-  'if',
-  'in',
-  'import',
-  'let',
-  'new',
-  'null',
-  'of',
-  'readonly',
-  'return',
-  'switch',
-  'this',
-  'true',
-  'throw',
-  'typeof',
-  'type',
-  'try',
-  'var',
-  'while'
-])
-
-const threeCharPunctuators = new Set(['===', '!=='])
-const twoCharPunctuators = new Set(['==', '!=', '<=', '>=', '&&', '||', '??', '?.', '=>', '++', '--'])
-const punctuators = new Set([
-  '(',
-  ')',
-  '{',
-  '}',
-  '[',
-  ']',
-  ':',
-  ';',
-  '.',
-  ',',
-  '=',
-  '+',
-  '-',
-  '*',
-  '/',
-  '%',
-  '<',
-  '>',
-  '!',
-  '&',
-  '|',
-  '?'
-])
-
 export function tokenize(source: string, options: TokenizeOptions): Token[] {
   const state: LexerState = {
     source,
@@ -138,7 +73,7 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
       continue
     }
 
-    if (punctuators.has(char)) {
+    if (isPunctuatorStart(char)) {
       state.tokens.push(readPunctuatorToken(state))
       continue
     }
@@ -279,7 +214,7 @@ function readIdentifierToken(state: LexerState): Token {
 
   let tokenType = 'identifier'
 
-  if (keywords.has(value)) {
+  if (isKeyword(value)) {
     tokenType = 'keyword'
   }
 
@@ -294,13 +229,14 @@ function readPunctuatorToken(state: LexerState): Token {
   const two = state.source.slice(state.index, state.index + 2)
   let value = lexerCurrentChar(state)
 
-  if (threeCharPunctuators.has(three)) {
+  if (isThreeCharPunctuator(three)) {
     value = three
-  } else if (twoCharPunctuators.has(two)) {
+  } else if (isTwoCharPunctuator(two)) {
     value = two
   }
 
-  for (const char of value) {
+  for (let index = 0; index < value.length; index = index + 1) {
+    const char = value[index]
     advanceLexer(state, char)
   }
 
@@ -413,4 +349,91 @@ function isIdentifierStart(ch: string): boolean {
 
 function isIdentifierPart(ch: string): boolean {
   return isIdentifierStart(ch) || isDigit(ch)
+}
+
+function isKeyword(value: string): boolean {
+  return (
+    value === 'async' ||
+    value === 'await' ||
+    value === 'break' ||
+    value === 'case' ||
+    value === 'catch' ||
+    value === 'class' ||
+    value === 'const' ||
+    value === 'constructor' ||
+    value === 'continue' ||
+    value === 'default' ||
+    value === 'export' ||
+    value === 'false' ||
+    value === 'finally' ||
+    value === 'for' ||
+    value === 'function' ||
+    value === 'from' ||
+    value === 'else' ||
+    value === 'if' ||
+    value === 'in' ||
+    value === 'import' ||
+    value === 'let' ||
+    value === 'new' ||
+    value === 'null' ||
+    value === 'of' ||
+    value === 'readonly' ||
+    value === 'return' ||
+    value === 'switch' ||
+    value === 'this' ||
+    value === 'true' ||
+    value === 'throw' ||
+    value === 'typeof' ||
+    value === 'type' ||
+    value === 'try' ||
+    value === 'var' ||
+    value === 'while'
+  )
+}
+
+function isThreeCharPunctuator(value: string): boolean {
+  return value === '===' || value === '!=='
+}
+
+function isTwoCharPunctuator(value: string): boolean {
+  return (
+    value === '==' ||
+    value === '!=' ||
+    value === '<=' ||
+    value === '>=' ||
+    value === '&&' ||
+    value === '||' ||
+    value === '??' ||
+    value === '?.' ||
+    value === '=>' ||
+    value === '++' ||
+    value === '--'
+  )
+}
+
+function isPunctuatorStart(value: string): boolean {
+  return (
+    value === '(' ||
+    value === ')' ||
+    value === '{' ||
+    value === '}' ||
+    value === '[' ||
+    value === ']' ||
+    value === ':' ||
+    value === ';' ||
+    value === '.' ||
+    value === ',' ||
+    value === '=' ||
+    value === '+' ||
+    value === '-' ||
+    value === '*' ||
+    value === '/' ||
+    value === '%' ||
+    value === '<' ||
+    value === '>' ||
+    value === '!' ||
+    value === '&' ||
+    value === '|' ||
+    value === '?'
+  )
 }
