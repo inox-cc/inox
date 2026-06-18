@@ -406,6 +406,7 @@ import {
 } from './values/arrays.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import {
+  canEmitStringBytesOperand,
   collectTemplatePlaceholderExpressions,
   emitCNumberConversionValueExpression,
   emitCStringConcatValueExpression,
@@ -864,6 +865,7 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   canLowerCNullishCoalescingExpression,
   emitCallExpression,
   emitCValueExpression,
+  emitObjectValueReference,
   emitPreparedNumberExpression,
   emitReference,
   inferExpressionType,
@@ -1098,6 +1100,7 @@ const cCallExpressionDependencies = {
 }
 
 const cScalarExpressionDependencies = {
+  canEmitStringBytesOperand,
   cFsRuntimeConstantExpression,
   emitCAwaitValueExpression,
   emitCValueExpression,

@@ -117,6 +117,7 @@ export type StringLoweringDependencies = {
   canLowerCNullishCoalescingExpression(expression: AnyNode, context: StringCContext): boolean
   emitCallExpression(expression: AnyNode, context: StringCContext): string
   emitCValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression
+  emitObjectValueReference(name: string, context: StringCContext): string
   emitPreparedNumberExpression(expression: AnyNode, context: StringCContext): PreparedExpression
   emitReference(expression: AnyNode, context: StringCContext): string
   inferExpressionType(expression: AnyNode, context: StringCContext): string
@@ -326,6 +327,40 @@ export function emitPreparedStringCompareExpression(expression: AnyNode, context
     lines,
     expression: resultExpression
   }
+}
+
+export function canEmitStringBytesOperand(expression: AnyNode | null | undefined, context: StringCContext): boolean {
+  if (expression == null) {
+    return false
+  }
+
+  if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
+    return true
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const variables = context.variables
+    const runtimeStrings = context.runtimeStrings
+    const name = expression.path[0]
+
+    if ((variables != null && variables.get(name) === 'string') || (runtimeStrings != null && runtimeStrings.has(name))) {
+      return true
+    }
+  }
+
+  if (stringDeps(context).resolveNetAddressStringMember(expression, context) != null) {
+    return true
+  }
+
+  if (knownObjectStringField(expression, context) != null) {
+    return true
+  }
+
+  if (isDynamicRuntimeStringFieldExpression(expression, context)) {
+    return true
+  }
+
+  return stringDeps(context).inferExpressionType(expression, context) === 'string'
 }
 
 export function emitPreparedStringPredicateCall(expression: AnyNode, context: StringCContext): PreparedExpression {
@@ -656,6 +691,12 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
+  const knownObjectString = emitPreparedKnownObjectStringBytesOperand(expression, context, tempPrefix)
+
+  if (knownObjectString != null) {
+    return knownObjectString
+  }
+
   const dynamicRuntimeString = emitPreparedDynamicRuntimeStringBytesOperand(expression, context, tempPrefix)
 
   if (dynamicRuntimeString != null) {
@@ -690,6 +731,63 @@ export function emitPreparedStringBytesOperand(
     bytes: '""',
     length: '0'
   }
+}
+
+function emitPreparedKnownObjectStringBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  const field = knownObjectStringField(expression, context)
+
+  if (field == null) {
+    return null
+  }
+
+  const objectName = field.objectName
+
+  if (objectName == null) {
+    return null
+  }
+
+  const value = nextCName(context, 'ccjs_expr_value')
+  const string = nextCName(context, tempPrefix)
+  const object = stringDeps(context).emitObjectValueReference(objectName, context)
+  const lines: string[] = []
+  let getCall = `ccjs_object_get_known(${object}, ${field.index}, &${value})`
+
+  if (field.key != null) {
+    getCall = `ccjs_object_get(${object}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
+  }
+
+  registerOwnedValue(context, value)
+
+  pushAllLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(emitStatusCheck(getCall, context))
+  lines.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+  lines.push(`ccjs_string* ${string} = (ccjs_string*)${value}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
+}
+
+function knownObjectStringField(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null {
+  let field: CObjectFieldInfo | null = null
+
+  if (stringDeps(context).isMemberAccessExpression(expression)) {
+    field = stringDeps(context).resolveKnownObjectMember(expression, context)
+  } else if (expression.type === 'IndexExpression') {
+    field = stringDeps(context).resolveKnownObjectIndex(expression, context)
+  }
+
+  if (field == null || field.valueType !== 'string') {
+    return null
+  }
+
+  return field
 }
 
 function emitPreparedDynamicRuntimeStringBytesOperand(

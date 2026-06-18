@@ -363,20 +363,8 @@ function checkerNodeAt(values: CheckerNode[], index: number): CheckerNode {
   return values[index]
 }
 
-function stringEquals(left: string, right: string): boolean {
-  return left === right
-}
-
-function stringOrEmpty(value: string | null | undefined): string {
-  if (value == null) {
-    return ''
-  }
-
-  return value
-}
-
 function nodeNameEquals(node: AnyNode, name: string): boolean {
-  return stringEquals(node.name, name)
+  return node.name === name
 }
 
 function optionalParamAt(values: OptionalParamInfo[], index: number): OptionalParamInfo {
@@ -5658,7 +5646,7 @@ class Checker {
 
       const propertyType = resolvedConcreteValueTypeMetadata(processRuntimePropertyValueType(importedName), 'unknown')
 
-      if (!stringEquals(propertyType, 'unknown')) {
+      if (propertyType !== 'unknown') {
         return propertyType
       }
 
@@ -5950,9 +5938,9 @@ class Checker {
     const method = info.method
     const promisesApi = info.viaPromises || this.isFsPromisesImportRoot(info.root)
     const label = joinStrings(info.path, '.')
-    const unsupportedMessage = stringOrEmpty(unsupportedFsRuntimeMethodMessage(info, promisesApi))
+    const unsupportedMessage = unsupportedFsRuntimeMethodMessage(info, promisesApi)
 
-    if (!stringEquals(unsupportedMessage, '')) {
+    if (unsupportedMessage != null) {
       this.report('CCJS_FS_UNSUPPORTED', unsupportedMessage, expression.loc)
       expression.valueType = 'unknown'
 
@@ -6686,9 +6674,9 @@ class Checker {
   }
 
   checkJsonCall(expression: AnyNode, declared?: ResolvedTypeInfo | null): ValueType | null {
-    const method = stringOrEmpty(jsonRuntimeMethodName(expression.callee))
+    const method = jsonRuntimeMethodName(expression.callee)
 
-    if (stringEquals(method, '')) {
+    if (method == null) {
       return null
     }
 
@@ -7481,9 +7469,9 @@ class Checker {
     const property = expression.callee.property
     const objectType = this.checkExpression(expression.callee.object)
 
-    const mapMethod = stringOrEmpty(mapRuntimeMethodName(property))
+    const mapMethod = mapRuntimeMethodName(property)
 
-    if (stringEquals(objectType, 'map') && !stringEquals(mapMethod, '')) {
+    if (objectType === 'map' && mapMethod != null) {
       const mapType = this.resolveExpressionMapType(expression.callee.object) ?? {
         key: 'unknown',
         value: 'unknown'
@@ -7560,9 +7548,9 @@ class Checker {
       return 'map'
     }
 
-    const setMethod = stringOrEmpty(setRuntimeMethodName(property))
+    const setMethod = setRuntimeMethodName(property)
 
-    if (stringEquals(objectType, 'set') && !stringEquals(setMethod, '')) {
+    if (objectType === 'set' && setMethod != null) {
       const elementType = this.resolveExpressionSetElementType(expression.callee.object) ?? 'unknown'
 
       if (setMethod === 'clear') {
@@ -7682,9 +7670,9 @@ class Checker {
   }
 
   resolveTimerRuntimeMethod(callee: AnyNode): string | null {
-    const globalMethod = stringOrEmpty(timerRuntimeMethodName(callee))
+    const globalMethod = timerRuntimeMethodName(callee)
 
-    if (!stringEquals(globalMethod, '')) {
+    if (globalMethod != null) {
       return globalMethod
     }
 
@@ -8037,7 +8025,7 @@ class Checker {
     return (
       expression.type === 'Reference' &&
       expression.path.length === 1 &&
-      stringEquals(firstPathSegment(expression.path), 'Boolean')
+      firstPathSegment(expression.path) === 'Boolean'
     )
   }
 
@@ -8976,7 +8964,7 @@ class Checker {
       node.callee != null &&
       node.callee.type === 'Reference' &&
       node.callee.path.length === 1 &&
-      stringEquals(firstPathSegment(node.callee.path), resolveName)
+      firstPathSegment(node.callee.path) === resolveName
     ) {
       let resolvedType: ValueType = 'void'
 
@@ -9796,7 +9784,7 @@ class Checker {
       expression?.type === 'ThisExpression' ||
       (expression?.type === 'Reference' &&
         expression.path.length === 1 &&
-        stringEquals(firstPathSegment(expression.path), 'this'))
+        firstPathSegment(expression.path) === 'this')
     )
   }
 
@@ -10494,13 +10482,13 @@ class Checker {
       let cycleStart = -1
 
       for (let index = 0; index < path.length; index++) {
-        if (stringEquals(path[index].from, edge.to)) {
+        if (path[index].from === edge.to) {
           cycleStart = index
           break
         }
       }
 
-      if (stringEquals(edge.to, node) || cycleStart >= 0) {
+      if (edge.to === node || cycleStart >= 0) {
         const cycle: OwnershipGraphEdge[] = []
 
         if (cycleStart >= 0) {
@@ -10586,7 +10574,7 @@ class Checker {
     fields: AnyNode[]
   ): void {
     for (const field of fields) {
-      if (stringEquals(owner, 'Scope') && nodeNameEquals(field, 'parent')) {
+      if (owner === 'Scope' && nodeNameEquals(field, 'parent')) {
         continue
       }
 

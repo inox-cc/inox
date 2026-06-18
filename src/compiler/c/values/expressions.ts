@@ -698,6 +698,7 @@ function restoreNullableScalarNarrowing(
 
 
 export type CScalarExpressionDependencies = {
+  canEmitStringBytesOperand(expression: CValueNode, context: CFunctionContext): boolean
   cFsRuntimeConstantExpression(expression: CValueNode): string | null
   emitCAwaitValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
@@ -1575,7 +1576,11 @@ export function emitPreparedNumberExpression(
       return typeofCompare
     }
 
-    if (isEqualityOperator(expression.operator) && leftType === 'string' && rightType === 'string') {
+    if (
+      isEqualityOperator(expression.operator) &&
+      deps.canEmitStringBytesOperand(expression.left, context) &&
+      deps.canEmitStringBytesOperand(expression.right, context)
+    ) {
       return deps.emitPreparedStringCompareExpression(expression, context)
     }
 
