@@ -64,6 +64,10 @@ type CStringMap = Map<string, string>
 type CStringNullableMap = Map<string, string | null>
 type CStringSet = Set<string>
 type CValueNode = AnyNode
+type CObjectLiteralPropertyNode = {
+  key: string
+  value?: CValueNode | null
+}
 
 type ObjectFunctionArgumentSource = {
   expression: CValueNode | null
@@ -441,7 +445,9 @@ function objectLiteralPropertyValue(expression: CValueNode, key: string): CValue
     return null
   }
 
-  for (const property of expression.properties) {
+  const properties: CObjectLiteralPropertyNode[] = expression.properties
+
+  for (const property of properties) {
     if (property.key === key && property.value != null) {
       return property.value
     }

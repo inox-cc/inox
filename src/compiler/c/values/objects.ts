@@ -835,7 +835,8 @@ function isRuntimeValueReferenceExpression(expression: ObjectFieldNode, context:
     return false
   }
 
-  const name = expression.path[0]
+  const path: string[] = expression.path
+  const name: string = path[0]
   const valueType = context.variables.get(name) ?? ''
 
   if (

@@ -539,6 +539,10 @@ export type { CModuleOutputFile } from './types.ts'
 type CSourceLocation = SourceLocation | null | undefined
 type CDynamicObjectFieldNode = AnyNode
 type CAccessorNode = CDynamicObjectFieldNode
+type CObjectLiteralPropertyNode = {
+  key: string
+  value?: AnyNode | null
+}
 type CStringMap = Map<string, string>
 type CNameSet = Set<string>
 type CKnownArrayIndexDeclaration = {
@@ -1751,10 +1755,12 @@ function objectAccessorExpressionReturnPathPrefix(
   params: CFunctionParam[]
 ): CObjectAccessorReturnPath | null {
   if (expression.type === 'Reference' && expression.path.length === 1) {
+    const expressionPath: string[] = expression.path
+
     for (let index = 0; index < params.length; index = index + 1) {
       const param = params[index]
 
-      if (param.name === expression.path[0]) {
+      if (param.name === expressionPath[0]) {
         return {
           fields: [],
           paramIndex: index
@@ -1820,7 +1826,9 @@ function findObjectLiteralPropertyValue(expression: AnyNode, key: string): AnyNo
     return null
   }
 
-  for (const property of expression.properties) {
+  const properties: CObjectLiteralPropertyNode[] = expression.properties
+
+  for (const property of properties) {
     if (property.key === key) {
       if (property.value != null) {
         return property.value

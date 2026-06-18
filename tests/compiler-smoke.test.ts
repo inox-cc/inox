@@ -1863,6 +1863,70 @@ export function main(): void {
 })
 
 
+test('preserves explicit local metadata for open node string scans', () => {
+  const result = compileSource(
+    `type AnyNode = {
+  type?: string
+  [key: string]: any
+}
+
+type Property = {
+  key: string
+  value?: object | null
+}
+
+type Param = {
+  name: string
+}
+
+function findValue(expression: AnyNode, key: string): object | null {
+  if (expression.properties == null) {
+    return null
+  }
+
+  const properties: Property[] = expression.properties
+
+  for (const property of properties) {
+    if (property.key === key && property.value != null) {
+      return property.value
+    }
+  }
+
+  return null
+}
+
+function hasParam(expression: AnyNode, params: Param[]): boolean {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const path: string[] = expression.path
+
+    for (const param of params) {
+      if (param.name === path[0]) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+export function main(): void {
+  console.log(findValue({ properties: [{ key: 'name', value: {} }] }, 'name') != null)
+  console.log(hasParam({ type: 'Reference', path: ['name'] }, [{ name: 'name' }]))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(expression, "properties", 10, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_array_get\((?:properties|ccjs_value_\d+), ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
+  assert.match(result.code, /memcmp\(ccjs_cmp_string_\d+->bytes, key->bytes, ccjs_cmp_string_\d+->len\) == 0/)
+  assert.match(result.code, /ccjs_object_get\(expression, "path", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /memcmp\(ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->len\) == 0/)
+})
+
+
 test('rejects unsupported C for of iterables with a stable diagnostic', () => {
   assertDiagnostic(
     `export function main(): void {
