@@ -22,6 +22,8 @@ type DgramMessageContext = {
   stringLocals: Map<string, string>
 }
 
+type DgramAstNode = AnyNode
+
 type DgramSocketCreateOptions = {
   declare: boolean | undefined
 }
@@ -52,6 +54,14 @@ function lastDgramArgument(args: AnyNode[]): AnyNode | null {
   return args[args.length - 1]
 }
 
+function dgramArgumentAt(args: DgramAstNode[], index: number): DgramAstNode | null {
+  if (index < 0 || index >= args.length) {
+    return null
+  }
+
+  return args[index]
+}
+
 function pushDgramLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
@@ -62,6 +72,30 @@ function pushDgramNodes(target: AnyNode[], nodes: AnyNode[]): void {
   for (const node of nodes) {
     target.push(node)
   }
+}
+
+function firstDgramReferencePathSegment(path: string[]): string | null {
+  for (const segment of path) {
+    return segment
+  }
+
+  return null
+}
+
+function dgramReferenceName(expression: DgramAstNode | null | undefined): string | null {
+  if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  return firstDgramReferencePathSegment(expression.path)
+}
+
+function dgramMemberObjectReferenceName(callee: DgramAstNode | null | undefined): string | null {
+  if (callee == null || callee.type !== 'MemberExpression') {
+    return null
+  }
+
+  return dgramReferenceName(callee.object)
 }
 
 function pushIndentedDgramLines(target: string[], lines: string[]): void {
@@ -163,7 +197,12 @@ export function emitDgramAddressVariableDeclaration(statement: AnyNode, context:
     return null
   }
 
-  const socketName = statement.init.callee.object.path[0]
+  const socketName = dgramMemberObjectReferenceName(statement.init.callee)
+
+  if (socketName == null) {
+    return null
+  }
+
   let runtime = 'ccjs_dgram_socket_address'
 
   if (statement.init.callee.property === 'remoteAddress') {
@@ -189,16 +228,17 @@ export function emitDgramNumberVariableDeclaration(
     init == null ||
     init.type !== 'CallExpression' ||
     init.callee == null ||
-    init.callee.type !== 'MemberExpression' ||
-    init.callee.object == null ||
-    init.callee.object.type !== 'Reference' ||
-    init.callee.object.path.length !== 1 ||
-    context.variables.get(init.callee.object.path[0]) !== 'dgram-socket'
+    init.callee.type !== 'MemberExpression'
   ) {
     return null
   }
 
-  const socketName = init.callee.object.path[0]
+  const socketName = dgramMemberObjectReferenceName(init.callee)
+
+  if (socketName == null || context.variables.get(socketName) !== 'dgram-socket') {
+    return null
+  }
+
   const method = init.callee.property
   let runtime: string | null = null
 
@@ -256,26 +296,55 @@ export function emitDgramSocketCallStatement(
   }
 
   if (isDgramSocketMethodCall(expression, 'bind', context)) {
-    const socketName = expression.callee.object.path[0]
+    const socketName = dgramMemberObjectReferenceName(expression.callee)
+
+    if (socketName == null) {
+      return null
+    }
+
     registerEventLoop(context)
 
     return emitDgramBindLines(socketName, expression.args, context, deps)
   }
 
   if (isDgramSocketMethodCall(expression, 'on', context)) {
-    return emitDgramOnLines(expression.callee.object.path[0], expression.args, context)
+    const socketName = dgramMemberObjectReferenceName(expression.callee)
+
+    if (socketName == null) {
+      return null
+    }
+
+    return emitDgramOnLines(socketName, expression.args, context)
   }
 
   if (isDgramSocketMethodCall(expression, 'connect', context)) {
-    return emitDgramConnectLines(expression.callee.object.path[0], expression.args, context, deps)
+    const socketName = dgramMemberObjectReferenceName(expression.callee)
+
+    if (socketName == null) {
+      return null
+    }
+
+    return emitDgramConnectLines(socketName, expression.args, context, deps)
   }
 
   if (isDgramSocketMethodCall(expression, 'disconnect', context)) {
-    return emitDgramDisconnectLines(expression.callee.object.path[0], expression.args, context)
+    const socketName = dgramMemberObjectReferenceName(expression.callee)
+
+    if (socketName == null) {
+      return null
+    }
+
+    return emitDgramDisconnectLines(socketName, expression.args, context)
   }
 
   if (isDgramSocketMethodCall(expression, 'send', context)) {
-    return emitDgramSendLines(expression.callee.object.path[0], expression.args, context, deps, null)
+    const socketName = dgramMemberObjectReferenceName(expression.callee)
+
+    if (socketName == null) {
+      return null
+    }
+
+    return emitDgramSendLines(socketName, expression.args, context, deps, null)
   }
 
   const optionCall = emitDgramSocketOptionCallStatement(expression, context, deps)
@@ -285,7 +354,13 @@ export function emitDgramSocketCallStatement(
   }
 
   if (isDgramSocketMethodCall(expression, 'close', context)) {
-    return emitDgramCloseLines(expression.callee.object.path[0], expression.args, context, deps)
+    const socketName = dgramMemberObjectReferenceName(expression.callee)
+
+    if (socketName == null) {
+      return null
+    }
+
+    return emitDgramCloseLines(socketName, expression.args, context, deps)
   }
 
   if (isDgramSocketAnyMethodCall(expression, context)) {
@@ -321,20 +396,20 @@ export function emitPreparedDgramAddressPortExpression(
     return null
   }
 
+  const addressName = dgramReferenceName(expression.object)
+
   if (
     expression.type !== 'MemberExpression' ||
     expression.property !== 'port' ||
-    expression.object == null ||
-    expression.object.type !== 'Reference' ||
-    expression.object.path.length !== 1 ||
-    context.variables.get(expression.object.path[0]) !== 'dgram-address'
+    addressName == null ||
+    context.variables.get(addressName) !== 'dgram-address'
   ) {
     return null
   }
 
   return {
     lines: [],
-    expression: expression.object.path[0] + '.port'
+    expression: addressName + '.port'
   }
 }
 
@@ -982,19 +1057,18 @@ function emitDgramSocketOptionCallStatement(
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): string[] | null {
+  const socketName = dgramMemberObjectReferenceName(expression.callee)
+
   if (
     expression.type !== 'CallExpression' ||
     expression.callee == null ||
     expression.callee.type !== 'MemberExpression' ||
-    expression.callee.object == null ||
-    expression.callee.object.type !== 'Reference' ||
-    expression.callee.object.path.length !== 1 ||
-    context.variables.get(expression.callee.object.path[0]) !== 'dgram-socket'
+    socketName == null ||
+    context.variables.get(socketName) !== 'dgram-socket'
   ) {
     return null
   }
 
-  const socketName = expression.callee.object.path[0]
   const method = expression.callee.property
 
   if (method === 'setBroadcast') {
@@ -1107,8 +1181,13 @@ function emitDgramSendLines(
   let hostArg = args[2]
 
   if (hasOffsetLength) {
-    portArg = args[3]
-    hostArg = args[4]
+    const offsetPortArg = dgramArgumentAt(args, 3)
+    const offsetHostArg = dgramArgumentAt(args, 4)
+
+    if (offsetPortArg != null && offsetHostArg != null) {
+      portArg = offsetPortArg
+      hostArg = offsetHostArg
+    }
   }
 
   if (hasOffsetLength) {
@@ -1192,12 +1271,12 @@ function emitDgramBytesOperand(
   context: CFunctionContext,
   deps: DgramLoweringDependencies
 ): PreparedStringBytesOperand {
+  const expressionName = dgramReferenceName(expression)
+
   if (
     dgramContext != null &&
     dgramContext.messageName != null &&
-    expression.type === 'Reference' &&
-    expression.path.length === 1 &&
-    expression.path[0] === dgramContext.messageName
+    expressionName === dgramContext.messageName
   ) {
     return {
       lines: [],
@@ -1273,11 +1352,9 @@ function emitDgramHostExpression(
     return cStringLiteral(expression.raw.slice(1, -1))
   }
 
-  if (
-    expression.type === 'Reference' &&
-    expression.path.length === 1 &&
-    context.variables.get(expression.path[0]) === 'string'
-  ) {
+  const expressionName = dgramReferenceName(expression)
+
+  if (expressionName != null && context.variables.get(expressionName) === 'string') {
     return deps.emitReference(expression, context)
   }
 
@@ -1300,37 +1377,40 @@ function isDgramRinfoProperty(property: string): boolean {
 }
 
 function resolveDgramAddressStringMember(expression: AnyNode, context: CFunctionContext): string | null {
+  const addressName = dgramReferenceName(expression.object)
+
   if (
     expression.type !== 'MemberExpression' ||
     !isDgramAddressStringProperty(expression.property) ||
-    expression.object == null ||
-    expression.object.type !== 'Reference' ||
-    expression.object.path.length !== 1 ||
-    context.variables.get(expression.object.path[0]) !== 'dgram-address'
+    addressName == null ||
+    context.variables.get(addressName) !== 'dgram-address'
   ) {
     return null
   }
 
   if (expression.property === 'family') {
-    return `${expression.object.path[0]}.family`
+    return `${addressName}.family`
   }
 
-  return `${expression.object.path[0]}.address`
+  return `${addressName}.address`
 }
 
 function resolveDgramRinfoMember(
   expression: AnyNode | null | undefined,
   dgramContext: DgramMessageContext | null
 ): string | null {
+  let objectName: string | null = null
+
+  if (expression != null) {
+    objectName = dgramReferenceName(expression.object)
+  }
+
   if (
     dgramContext == null ||
     dgramContext.rinfoName == null ||
     expression == null ||
     expression.type !== 'MemberExpression' ||
-    expression.object == null ||
-    expression.object.type !== 'Reference' ||
-    expression.object.path.length !== 1 ||
-    expression.object.path[0] !== dgramContext.rinfoName
+    objectName !== dgramContext.rinfoName
   ) {
     return null
   }
@@ -1368,7 +1448,13 @@ function emitDgramStaticStringValue(
 }
 
 function emitDgramStaticStringLocalValue(expression: AnyNode, dgramContext: DgramMessageContext): string | null {
-  const value = dgramContext.stringLocals.get(expression.path[0])
+  const name = dgramReferenceName(expression)
+
+  if (name == null) {
+    return null
+  }
+
+  const value = dgramContext.stringLocals.get(name)
 
   if (value != null) {
     return value
@@ -1413,7 +1499,17 @@ function emitDgramZeroArgCallbackLines(
 }
 
 function isDgramSocketMethodCall(expression: AnyNode, method: string, context: CFunctionContext): boolean {
-  return isDgramSocketAnyMethodCall(expression, context) && expression.callee.property === method
+  if (!isDgramSocketAnyMethodCall(expression, context)) {
+    return false
+  }
+
+  const callee = expression.callee
+
+  if (callee == null || callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  return callee.property === method
 }
 
 function isDgramSocketAnyMethodCall(expression: AnyNode, context: CFunctionContext): boolean {
@@ -1425,14 +1521,9 @@ function isDgramSocketAnyMethodCall(expression: AnyNode, context: CFunctionConte
     return false
   }
 
-  if (expression.callee.object == null || expression.callee.object.type !== 'Reference') {
-    return false
-  }
+  const socketName = dgramMemberObjectReferenceName(expression.callee)
 
-  return (
-    expression.callee.object.path.length === 1 &&
-    context.variables.get(expression.callee.object.path[0]) === 'dgram-socket'
-  )
+  return socketName != null && context.variables.get(socketName) === 'dgram-socket'
 }
 
 function isDgramAddressCall(expression: AnyNode | null | undefined, context: CFunctionContext): boolean {
@@ -1448,14 +1539,9 @@ function isDgramAddressCall(expression: AnyNode | null | undefined, context: CFu
     return false
   }
 
-  if (expression.callee.object == null || expression.callee.object.type !== 'Reference') {
-    return false
-  }
+  const socketName = dgramMemberObjectReferenceName(expression.callee)
 
-  return (
-    expression.callee.object.path.length === 1 &&
-    context.variables.get(expression.callee.object.path[0]) === 'dgram-socket'
-  )
+  return socketName != null && context.variables.get(socketName) === 'dgram-socket'
 }
 
 function isDgramCreateSocketCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
@@ -1463,23 +1549,20 @@ function isDgramCreateSocketCall(expression: AnyNode | null | undefined, context
     return false
   }
 
-  if (
-    expression.callee != null &&
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    context.dgramCreateSocketNames.has(expression.callee.path[0])
-  ) {
+  const calleeName = dgramReferenceName(expression.callee)
+
+  if (calleeName != null && context.dgramCreateSocketNames.has(calleeName)) {
     return true
   }
+
+  const importName = dgramMemberObjectReferenceName(expression.callee)
 
   return (
     expression.callee != null &&
     expression.callee.type === 'MemberExpression' &&
     expression.callee.property === 'createSocket' &&
-    expression.callee.object != null &&
-    expression.callee.object.type === 'Reference' &&
-    expression.callee.object.path.length === 1 &&
-    context.dgramImportNames.has(expression.callee.object.path[0])
+    importName != null &&
+    context.dgramImportNames.has(importName)
   )
 }
 
