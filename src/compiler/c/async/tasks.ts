@@ -146,6 +146,7 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   runtimeCallbackReturnShape?: CObjectShape | null
   runtimeCallbackReturnType?: string
   runtimeCallbacks: AsyncTaskStringSet
+  runtimeStringValues: AsyncTaskStringMap
   runtimeStrings: AsyncTaskStringSet
   setElementTypes: AsyncTaskStringMap
   statusReturn: boolean
@@ -160,6 +161,7 @@ type AsyncTaskLocalMetadataContext = {
   objectDeclaredTypes: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
   runtimeArrayElementTypes: AsyncTaskStringMap
+  runtimeStringValues: AsyncTaskStringMap
   runtimeStrings: AsyncTaskStringSet
   setElementTypes: AsyncTaskStringMap
   variables: AsyncTaskStringMap
@@ -182,6 +184,7 @@ type AsyncTaskVariableScopeSnapshot = {
   promiseValueTypes: AsyncTaskStringMap
   runtimeArrayElementTypes: AsyncTaskStringMap
   runtimeCallbacks: AsyncTaskStringSet
+  runtimeStringValues: AsyncTaskStringMap
   runtimeStrings: AsyncTaskStringSet
   setElementTypes: AsyncTaskStringMap
   variables: AsyncTaskStringMap

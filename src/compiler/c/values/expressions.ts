@@ -14,7 +14,7 @@ import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { mathRuntimeMethodName } from '../runtime-methods.ts'
-import { emitRuntimeValueCheck } from '../runtime-values.ts'
+import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import {
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
@@ -621,6 +621,12 @@ function objectFunctionArgumentSourceShape(
     if (fields != null) {
       return { fields }
     }
+
+    const moduleFields = context.moduleObjectShapes.get(pathName)
+
+    if (moduleFields != null) {
+      return { fields: moduleFields }
+    }
   }
 
   if (expression.shape != null) {
@@ -635,8 +641,14 @@ function objectFunctionArgumentSourceShapeKnown(
   pathName: string | null,
   context: CFunctionContext
 ): boolean {
-  if (pathName != null && context.objectShapes.get(pathName) != null) {
-    return true
+  if (pathName != null) {
+    if (context.objectShapes.get(pathName) != null) {
+      return true
+    }
+
+    if (context.moduleObjectShapes.get(pathName) != null) {
+      return true
+    }
   }
 
   return expression.shape != null
@@ -918,7 +930,10 @@ function appendObjectShapeFunctionFieldArguments(
         continue
       }
 
-      if (isMissingOptionalObjectLiteralField(source, field) || isUnavailableOptionalObjectFieldSource(source, field)) {
+      if (
+        isMissingOptionalObjectLiteralField(source, field) ||
+        isUnavailableOptionalObjectFieldSource(source, field, context)
+      ) {
         const pushedTypes = pushSeenDeclaredType(seenTypes, field.declaredType)
 
         appendDefaultObjectShapeFunctionFieldArguments(args, field.shape, seenTypes)
@@ -1016,8 +1031,20 @@ function isMissingOptionalObjectLiteralField(source: ObjectFunctionArgumentSourc
   )
 }
 
-function isUnavailableOptionalObjectFieldSource(source: ObjectFunctionArgumentSource, field: CObjectShapeField): boolean {
-  return field.optional === true && source.expression != null && source.pathName == null
+function isUnavailableOptionalObjectFieldSource(
+  source: ObjectFunctionArgumentSource,
+  field: CObjectShapeField,
+  context: CFunctionContext
+): boolean {
+  if (field.optional !== true || source.expression == null) {
+    return false
+  }
+
+  if (source.pathName == null) {
+    return true
+  }
+
+  return context.moduleValueNames.has(source.pathName) && objectShapeFieldAt(source.shape?.fields, field.name) == null
 }
 
 function appendDefaultObjectShapeFunctionFieldArguments(
@@ -4358,7 +4385,12 @@ export function emitCValueExpression(
     appendLines(lines, call.lines)
     appendLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(`${temp} = ${call.expression};`)
-    lines.push(emitRuntimeValueCheck(temp, tag, context))
+
+    if (callExpressionReturnsNullableScalar(expression, valueType, context)) {
+      appendLines(lines, emitRuntimeNullableValueCheck(temp, tag, context))
+    } else {
+      lines.push(emitRuntimeValueCheck(temp, tag, context))
+    }
 
     return {
       lines,
@@ -4367,6 +4399,23 @@ export function emitCValueExpression(
   }
 
   return emitUnsupportedCValueExpression(expression, context, deps)
+}
+
+function callExpressionReturnsNullableScalar(
+  expression: CValueNode,
+  valueType: string,
+  context: CFunctionContext
+): boolean {
+  if (!isNullableScalarType(valueType)) {
+    return false
+  }
+
+  if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return false
+  }
+
+  const path = expression.callee.path
+  return cBooleanValueIsTrue(context.functionReturnNullables.get(path[0]))
 }
 
 function emitUnsupportedCValueExpression(

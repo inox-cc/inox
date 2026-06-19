@@ -1316,7 +1316,13 @@ export function main(): void {
   assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "unknown", 7, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_object_get\(symbol, "valueType", 9, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_value_\d+\.as\.ref == 0/)
-  assert.match(result.code, /valueType = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /ccjs_value valueType_value_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(
+    result.code,
+    /ccjs_object_get\(symbol, "valueType", 9, &ccjs_value_\d+\)[\s\S]*ccjs_retain\(ccjs_value_\d+\);\n  ccjs_release\(valueType_value_\d+\);\n  valueType_value_\d+ = ccjs_undefined_value\(\);\n  valueType_value_\d+ = ccjs_value_\d+;/
+  )
+  assert.match(result.code, /valueType = \(ccjs_string\*\)valueType_value_\d+\.as\.ref;/)
+  assert.doesNotMatch(result.code, /valueType = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
   assert.match(result.code, /ccjs_string\* ccjs_log_string_\d+ = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)ccjs_log_string_\d+->len, ccjs_log_string_\d+->bytes\);/)
 })

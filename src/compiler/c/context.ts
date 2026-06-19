@@ -234,6 +234,7 @@ type CVariableScopeContext = {
   promiseValueTypes: CStringMap
   runtimeArrayElementTypes: CStringMap
   runtimeCallbacks: CStringSet
+  runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
   setElementTypes: CStringMap
   variables: CStringMap
@@ -288,6 +289,7 @@ export type CFunctionContext = CEmitContext & {
   runtimeCallbackReturnType?: string
   runtimeCallbacks: CStringSet
   runtimeArrayElementTypes: CStringMap
+  runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
   setElementTypes: CStringMap
   statusReturn: boolean
@@ -314,6 +316,7 @@ export type CVariableScopeSnapshot = {
   promiseValueTypes: CStringMap
   runtimeArrayElementTypes: CStringMap
   runtimeCallbacks: CStringSet
+  runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
   setElementTypes: CStringMap
   variables: CStringMap
@@ -422,6 +425,7 @@ export function createFunctionContext(
     returnTargets: [],
     runtimeCallbacks: new Set(),
     runtimeArrayElementTypes: new Map(),
+    runtimeStringValues: new Map(),
     setElementTypes: new Map(),
     runtimeStrings: new Set(),
     statusReturn: false,
@@ -965,6 +969,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousPromiseValueTypes = context.promiseValueTypes
   const previousRuntimeCallbacks = context.runtimeCallbacks
   const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
+  const previousRuntimeStringValues = context.runtimeStringValues
   const previousSetElementTypes = context.setElementTypes
   const previousRuntimeStrings = context.runtimeStrings
 
@@ -985,6 +990,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.promiseValueTypes = cloneCStringMap(previousPromiseValueTypes)
   context.runtimeCallbacks = cloneCStringSet(previousRuntimeCallbacks)
   context.runtimeArrayElementTypes = cloneCStringMap(previousRuntimeArrayElementTypes)
+  context.runtimeStringValues = cloneCStringMap(previousRuntimeStringValues)
   context.setElementTypes = cloneCStringMap(previousSetElementTypes)
   context.runtimeStrings = cloneCStringSet(previousRuntimeStrings)
 
@@ -1005,6 +1011,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     promiseValueTypes: previousPromiseValueTypes,
     runtimeArrayElementTypes: previousRuntimeArrayElementTypes,
     runtimeCallbacks: previousRuntimeCallbacks,
+    runtimeStringValues: previousRuntimeStringValues,
     runtimeStrings: previousRuntimeStrings,
     setElementTypes: previousSetElementTypes,
     variables: previousVariables
@@ -1029,6 +1036,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.promiseValueTypes = snapshot.promiseValueTypes
   context.runtimeCallbacks = snapshot.runtimeCallbacks
   context.runtimeArrayElementTypes = snapshot.runtimeArrayElementTypes
+  context.runtimeStringValues = snapshot.runtimeStringValues
   context.setElementTypes = snapshot.setElementTypes
   context.runtimeStrings = snapshot.runtimeStrings
 }

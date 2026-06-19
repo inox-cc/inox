@@ -4080,11 +4080,15 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
 
   const valueType = inferExpressionType(expression, context)
 
+  if (valueType === 'string') {
+    return emitCValueExpression(expression, context)
+  }
+
   if (!isNullableScalarType(valueType)) {
     pushDiagnostic(context,
       diagnostic(
         'CCJS_C_NULLISH',
-        'nullable scalar values currently support only number, boolean and null values in C',
+        'nullable scalar values currently support only number, boolean, string and null values in C',
         expression.loc
       )
     )

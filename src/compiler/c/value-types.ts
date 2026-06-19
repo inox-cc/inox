@@ -56,7 +56,7 @@ export function isOpaqueRuntimeValueType(valueType: CValueTypeInput): boolean {
 }
 
 export function isNullableScalarType(valueType: CValueTypeInput): boolean {
-  return valueType === 'number' || valueType === 'boolean'
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
 }
 
 export function emitCType(valueType: CValueTypeInput): string {

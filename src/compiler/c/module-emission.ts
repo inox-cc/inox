@@ -1524,10 +1524,6 @@ function isCModuleImportFunctionWrapper(plan: CModulePlan, node: AnyNode): boole
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
     const item = cModuleImportPlanAt(plan.imports, importIndex)
 
-    if (item.declaration.type === 'ExportDeclaration') {
-      continue
-    }
-
     const specifiers = item.declaration.specifiers
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
@@ -1768,15 +1764,18 @@ function cloneImportedCModuleFunctionEffect(effect: IrFunctionEffect, name: stri
 function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
   const names: Map<string, string> = new Map()
   const localNames: Set<string> = new Set()
+  const localFunctionNodes = collectIrTopLevelNodes(plan.ir, 'function')
 
   for (
-    let declarationIndex = 0;
-    declarationIndex < plan.ir.functionDeclarations.length;
-    declarationIndex = declarationIndex + 1
+    let functionIndex = 0;
+    functionIndex < localFunctionNodes.length;
+    functionIndex = functionIndex + 1
   ) {
-    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+    const node = cModuleNodeAt(localFunctionNodes, functionIndex)
 
-    localNames.add(declaration.name)
+    if (!isCModuleImportFunctionWrapper(plan, node)) {
+      localNames.add(node.name)
+    }
   }
 
   for (
@@ -1804,7 +1803,9 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
       const importedBindingName = cModuleImportedBindingName(item.declaration, specifier)
       const importedFunctionName = emitCModuleFunctionName(importedModule, specifier.imported)
 
-      names.set(importedBindingName, importedFunctionName)
+      if (!localNames.has(importedBindingName)) {
+        names.set(importedBindingName, importedFunctionName)
+      }
 
       if (item.declaration.type !== 'ExportDeclaration') {
         if (!localNames.has(specifier.imported)) {

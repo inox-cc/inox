@@ -173,6 +173,7 @@ type CFunctionContext = {
   runtimeCallbackReturnType?: string
   runtimeCallbacks: CStringSet
   runtimeStrings: CStringSet
+  runtimeStringValues: CStringMap
   runtimeFunctionParams: Map<string, CFunctionType>
   setElementTypes: CStringMap
   statementLoweringDependencies: StatementLoweringDependencies
@@ -754,9 +755,14 @@ export function emitRuntimeStringVariableDeclaration(
   context: CFunctionContext
 ): string[] {
   const value = statementDeps(context).emitCValueExpression(expression, context)
+  const storage = registerRuntimeStringStorage(statement.name, context)
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${constPrefix(statement.kind === 'const')}ccjs_string* ${statement.name} = (ccjs_string*)${value.expression}.as.ref;`)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(storage))
+  lines.push(`ccjs_retain(${value.expression});`)
+  lines.push(`${storage} = ${value.expression};`)
+  lines.push(emitRuntimeValueCheck(storage, 'CCJS_TAG_STRING', context))
+  lines.push(`${constPrefix(statement.kind === 'const')}ccjs_string* ${statement.name} = (ccjs_string*)${storage}.as.ref;`)
 
   context.variables.set(statement.name, 'string')
   context.runtimeStrings.add(statement.name)
@@ -967,10 +973,15 @@ export function emitRuntimeValueVariableDeclaration(
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${value.expression};`)
-  const valueCheck = emitRuntimeValueCheck(statement.name, expectedTag, context)
 
-  if (valueCheck !== '') {
-    lines.push(valueCheck)
+  if (statement.nullable === true && isNullableScalarType(valueType)) {
+    pushAllLines(lines, emitRuntimeNullableValueCheck(statement.name, expectedTag, context))
+  } else {
+    const valueCheck = emitRuntimeValueCheck(statement.name, expectedTag, context)
+
+    if (valueCheck !== '') {
+      lines.push(valueCheck)
+    }
   }
 
   lines.push(`ccjs_retain(${statement.name});`)
@@ -2961,13 +2972,31 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
   }
 
   const value = deps.emitCValueExpression(expression.value, context)
+  const storage = registerRuntimeStringStorage(target, context)
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
   lines.push(emitRuntimeValueCheck(value.expression, 'CCJS_TAG_STRING', context))
-  lines.push(`${target} = (ccjs_string*)${value.expression}.as.ref;`)
+  lines.push(`ccjs_retain(${value.expression});`)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(storage))
+  lines.push(`${storage} = ${value.expression};`)
+  lines.push(`${target} = (ccjs_string*)${storage}.as.ref;`)
 
   return lines
+}
+
+function registerRuntimeStringStorage(name: string, context: CFunctionContext): string {
+  const current = context.runtimeStringValues.get(name)
+
+  if (current != null) {
+    return current
+  }
+
+  const storage = nextCName(context, `${name}_value`)
+  registerOwnedValue(context, storage)
+  context.runtimeStringValues.set(name, storage)
+
+  return storage
 }
 
 function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[] | null {
