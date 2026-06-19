@@ -69,7 +69,7 @@ export function main(): void {
   const child: Child = { parent }
   const maybe = child.parent
 
-  if (maybe != null) {
+  if (maybe !== null) {
     console.log('alive')
   }
 }
@@ -163,7 +163,7 @@ export function main(): void {
   const param: Param = { functionType: fn }
   const maybe = param.functionType
 
-  if (maybe != null) {
+  if (maybe !== null) {
     console.log(maybe.params.length)
   }
 }
@@ -229,7 +229,7 @@ export function main(): void {
   const child: Child = { parent }
   const maybe = child.parent
 
-  if (maybe != null) {
+  if (maybe !== null) {
     console.log(maybe.name)
   }
 }
@@ -273,7 +273,7 @@ export function main(): void {
   const child = new Node(root)
   const maybe = child.parent
 
-  if (maybe != null) {
+  if (maybe !== null) {
     console.log('alive')
   }
 }

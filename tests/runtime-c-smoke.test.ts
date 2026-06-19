@@ -1708,7 +1708,7 @@ const parent: Parent = { name: 'Ada' }
 const child: Child = { parent }
 const maybe = child.parent
 
-if (maybe != null) {
+if (maybe !== null) {
   console.log('alive')
 }
 `)
@@ -1766,7 +1766,7 @@ const parent: Parent = { name: 'Ada' }
 const child: Child = { parent }
 const maybe = child.parent
 
-if (maybe != null) {
+if (maybe !== null) {
   console.log(maybe.name)
 }
 
@@ -1958,7 +1958,7 @@ test('generated C class method assignment into runtime value local compiles and 
   read(node: object): void {
     let value = node.name
 
-    if (value == null) {
+    if (value === null) {
       value = this.fallback()
     }
 
@@ -8061,11 +8061,11 @@ test('generated C dynamic object field null comparisons compile and run with run
   try {
     const result = compileSource(
       `function hasInit(node: object): boolean {
-  return node.init != null
+  return node.init !== null
 }
 
 function missingInit(node: object): boolean {
-  return null == node['init']
+  return node['init'] === null
 }
 
 console.log(hasInit({ init: { type: 'StringLiteral' } }), hasInit({ init: null }), missingInit({ init: null }))
@@ -8272,7 +8272,7 @@ test('generated C dynamic object array index null comparisons compile and run wi
   try {
     const result = compileSource(
       `function hasFirst(node: object): boolean {
-  return node.args[0] != null
+  return node.args[0] !== null
 }
 
 console.log(hasFirst({ args: [{ type: 'Literal' }] }), hasFirst({ args: [] }))
@@ -8316,7 +8316,7 @@ test('generated C dynamic object array item field comparisons compile and run wi
   try {
     const result = compileSource(
       `function isLiteral(node: object): boolean {
-  if (node.args[0] != null) {
+  if (node.args[0] !== null) {
     return node.args[0].type === 'Literal'
   }
 
@@ -8369,7 +8369,7 @@ test('generated C dynamic object array index variable declarations compile and r
     const result = compileSource(
       `function isLiteral(node: object, index: number): boolean {
   const arg = node.args[index]
-  if (arg != null) {
+  if (arg !== null) {
     return arg.type === 'Literal'
   }
 
@@ -8872,7 +8872,7 @@ const descriptors: Record<string, Descriptor> = {
 }
 
 const item = descriptors['read'] ?? null
-if (item != null) {
+if (item !== null) {
   console.log(item.code)
 }
 
@@ -8924,7 +8924,7 @@ function readCode(method: string): number {
     write: { code: 9 }
   }
   const item = descriptors[method] ?? null
-  if (item != null) {
+  if (item !== null) {
     return item.code
   }
   return 0

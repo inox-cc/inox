@@ -15,8 +15,6 @@ export function inferBinaryExpressionType(operator: string, left: ValueType, rig
   if (
     operator === '===' ||
     operator === '!==' ||
-    operator === '==' ||
-    operator === '!=' ||
     operator === '<' ||
     operator === '<=' ||
     operator === '>' ||
@@ -43,7 +41,7 @@ export function inferBinaryExpressionType(operator: string, left: ValueType, rig
 }
 
 export function isEqualityOperator(operator: string): boolean {
-  return operator === '===' || operator === '!==' || operator === '==' || operator === '!='
+  return operator === '===' || operator === '!=='
 }
 
 export function isEqualityComparableType(left: ValueType, right: ValueType): boolean {

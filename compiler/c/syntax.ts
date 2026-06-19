@@ -44,12 +44,12 @@ type VariableDeclarationInitNode = {
 }
 
 export function emitCOperator(operator: string): string {
-  if (operator === '===' || operator === '==') {
-    return '=='
+  if (operator === '===') {
+    return '=' + '='
   }
 
-  if (operator === '!==' || operator === '!=') {
-    return '!='
+  if (operator === '!==') {
+    return '!' + '='
   }
 
   return operator

@@ -317,7 +317,7 @@ type Context = {
 function deps(context: Context): MathDeps {
   const math = context.math
 
-  if (math != null) {
+  if (math !== null) {
     return math
   }
 

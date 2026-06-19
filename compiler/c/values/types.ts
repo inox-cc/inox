@@ -98,14 +98,6 @@ function isBooleanBinaryOperator(operator: string): boolean {
     return true
   }
 
-  if (operator === '==') {
-    return true
-  }
-
-  if (operator === '!=') {
-    return true
-  }
-
   if (operator === '<') {
     return true
   }

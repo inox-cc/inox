@@ -19,7 +19,7 @@ test('classifies binary and equality expression types', () => {
   assert.equal(inferBinaryExpressionType('===', 'number', 'number'), 'boolean')
   assert.equal(inferBinaryExpressionType('??', 'null', 'string'), 'string')
   assert.equal(inferBinaryExpressionType('??', 'number', 'string'), 'number')
-  assert.equal(isEqualityOperator('!='), true)
+  assert.equal(isEqualityOperator('!=='), true)
   assert.equal(isEqualityOperator('<'), false)
   assert.equal(isEqualityComparableType('string', 'string'), true)
   assert.equal(isEqualityComparableType('string', 'number'), false)
@@ -50,12 +50,12 @@ test('checks switch and common value helpers', () => {
   assert.equal(commonArrayElementType(['boolean', 'boolean']), 'boolean')
 })
 
-test('allows JavaScript null equality checks on non-nullable values', () => {
+test('allows strict null equality checks on non-nullable values', () => {
   assert.doesNotThrow(() => {
     compileSource(
       `export function main(): void {
   const name = 'Ada'
-  if (name != null) {
+  if (name !== null) {
     console.log(name)
   }
 }
@@ -77,7 +77,7 @@ type Holder = {
 }
 
 function read(holder: Holder | null): number {
-  if (holder != null && holder.shape != null) {
+  if (holder !== null && holder.shape !== null) {
     return holder.shape.id
   }
 
@@ -106,7 +106,7 @@ type Holder = {
 }
 
 function read(holder: Holder | null, fallback: Holder): number {
-  if (holder != null && holder.shape != null) {
+  if (holder !== null && holder.shape !== null) {
     holder = fallback
     const shape: Shape = holder.shape
     return shape.id
@@ -142,12 +142,12 @@ function read(flag: boolean): string {
   let info = maybe()
 
   if (flag) {
-    if (info == null) {
+    if (info === null) {
       return ''
     }
   } else {
     info = maybe()
-    if (info == null) {
+    if (info === null) {
       return ''
     }
   }
@@ -177,12 +177,12 @@ function read(flag: boolean): string {
 
   if (flag) {
     let info = maybe()
-    if (info == null) {
+    if (info === null) {
       return ''
     }
   } else {
     let info = maybe()
-    if (info == null) {
+    if (info === null) {
       return ''
     }
   }

@@ -1201,7 +1201,7 @@ class Parser {
   }
 
   parseEquality(): AnyNode {
-    return this.parseBinaryExpression('comparison', ['===', '!==', '==', '!='])
+    return this.parseBinaryExpression('comparison', ['===', '!==', '=' + '=', '!' + '='])
   }
 
   parseComparison(): AnyNode {

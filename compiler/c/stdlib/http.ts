@@ -491,11 +491,11 @@ function emitHttpConditionExpression(
 }
 
 function isHttpEqualityOperator(operator: string): boolean {
-  return operator === '===' || operator === '==' || operator === '!==' || operator === '!='
+  return operator === '===' || operator === '!=='
 }
 
 function isHttpNegativeEqualityOperator(operator: string): boolean {
-  return operator === '!==' || operator === '!='
+  return operator === '!=='
 }
 
 function emitHttpRequestStringCompareExpression(

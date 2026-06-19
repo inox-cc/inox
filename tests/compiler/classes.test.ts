@@ -206,7 +206,7 @@ test('lowers string class method assignments into runtime value locals', () => {
   read(node: object): void {
     let value = node.name
 
-    if (value == null) {
+    if (value === null) {
       value = this.fallback()
     }
 

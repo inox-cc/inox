@@ -512,20 +512,24 @@ export function main(): void {
   assert.doesNotMatch(result.code, /unknownas/)
 })
 
-test('treats double equality as C equality aliases', () => {
-  const source = `export function main(): void {
+test('rejects loose equality operators', () => {
+  assertDiagnostic(
+    `export function main(): void {
   const same = 1 == 1
-  const different = 'Ada' != 'Grace'
-  console.log(same, different)
+  console.log(same)
 }
-`
-  const c = compileSource(source, {
-    target: 'c'
-  })
+`,
+    'INOX_UNSUPPORTED_OPERATOR'
+  )
 
-  assert.match(c.code, /#include <string\.h>/)
-  assert.match(c.code, /const double same = \(1 == 1\);/)
-  assert.match(c.code, /const double different = \(!\(3 == 5 && memcmp\("Ada", "Grace", 3\) == 0\)\);/)
+  assertDiagnostic(
+    `export function main(): void {
+  const different = 'Ada' != 'Grace'
+  console.log(different)
+}
+`,
+    'INOX_UNSUPPORTED_OPERATOR'
+  )
 })
 
 test('lowers C object literals to runtime calls', () => {
@@ -991,11 +995,11 @@ export function main(): void {
 test('lowers C dynamic object field null comparisons through runtime lookup', () => {
   const result = compileSource(
     `function hasInit(node: object): boolean {
-  return node.init != null
+  return node.init !== null
 }
 
 function missingInit(node: object): boolean {
-  return null == node['init']
+  return node['init'] === null
 }
 
 export function main(): void {
@@ -1065,7 +1069,7 @@ export function main(): void {
 test('lowers C dynamic object array index null comparisons through runtime lookup', () => {
   const result = compileSource(
     `function hasFirst(node: object): boolean {
-  return node.args[0] != null
+  return node.args[0] !== null
 }
 
 export function main(): void {
@@ -1087,7 +1091,7 @@ export function main(): void {
 test('lowers C dynamic object array item field comparisons through runtime lookup', () => {
   const result = compileSource(
     `function isLiteral(node: object): boolean {
-  if (node.args[0] != null) {
+  if (node.args[0] !== null) {
     return node.args[0].type === 'Literal'
   }
 
@@ -1113,7 +1117,7 @@ test('lowers C dynamic object array index variable declarations through runtime 
   const result = compileSource(
     `function isLiteral(node: object, index: number): boolean {
   const arg = node.args[index]
-  if (arg != null) {
+  if (arg !== null) {
     return arg.type === 'Literal'
   }
 
@@ -1992,14 +1996,14 @@ type Param = {
 }
 
 function findValue(expression: AnyNode, key: string): object | null {
-  if (expression.properties == null) {
+  if (expression.properties === null) {
     return null
   }
 
   const properties: Property[] = expression.properties
 
   for (const property of properties) {
-    if (property.key === key && property.value != null) {
+    if (property.key === key && property.value !== null) {
       return property.value
     }
   }
@@ -2022,7 +2026,7 @@ function hasParam(expression: AnyNode, params: Param[]): boolean {
 }
 
 export function main(): void {
-  console.log(findValue({ properties: [{ key: 'name', value: {} }] }, 'name') != null)
+  console.log(findValue({ properties: [{ key: 'name', value: {} }] }, 'name') !== null)
   console.log(hasParam({ type: 'Reference', path: ['name'] }, [{ name: 'name' }]))
 }
 `,
@@ -2060,7 +2064,7 @@ type ExpressionNode = {
 }
 
 function countLiteralPairs(expression: ExpressionNode): number {
-  if (expression.elements == null) {
+  if (expression.elements === null) {
     return 0
   }
 
@@ -2068,7 +2072,7 @@ function countLiteralPairs(expression: ExpressionNode): number {
   const entries: EntryNode[] = expression.elements
 
   for (const entry of entries) {
-    if (entry.type !== 'ArrayLiteral' || entry.elements == null || entry.elements.length !== 2) {
+    if (entry.type !== 'ArrayLiteral' || entry.elements === null || entry.elements.length !== 2) {
       continue
     }
 
@@ -2124,7 +2128,7 @@ type CModuleEmitOptions = {
 }
 
 function emitOne(options: CEmitOptions): string {
-  if (options.random != null && options.random.seed != null) {
+  if (options.random !== null && options.random.seed !== null) {
     return 'seeded'
   }
 
@@ -2132,7 +2136,7 @@ function emitOne(options: CEmitOptions): string {
 }
 
 function emitModule(options: CModuleEmitOptions): string {
-  if (options.sourceRoot != null) {
+  if (options.sourceRoot !== null) {
     return options.sourceRoot
   }
 
@@ -2224,11 +2228,11 @@ test('preserves typed Map and Set option object forwarding', () => {
 function collect(options: ThrowOptions = {}): number {
   let count = 0
 
-  if (options.names != null) {
+  if (options.names !== null) {
     count = count + options.names.size
   }
 
-  if (options.values != null) {
+  if (options.values !== null) {
     count = count + options.values.size
   }
 
@@ -2932,7 +2936,7 @@ test('uses zero function companions for omitted default object option fields', (
 type Options = { host?: Host }
 
 function load(options: Options = {}): string {
-  if (options.host != null) {
+  if (options.host !== null) {
     return options.host.read()
   }
 
@@ -2964,7 +2968,7 @@ function normalize(options: Options): Options {
 }
 
 function load(options: Options): string {
-  if (options.host != null) {
+  if (options.host !== null) {
     return options.host.read()
   }
 
@@ -3108,7 +3112,7 @@ export function main(): void {
   const context: Context = { dep }
   const result = runner.lookup(context)
 
-  if (result != null) {
+  if (result !== null) {
     console.log(result)
   }
 }
@@ -3331,7 +3335,7 @@ function resolveDeclaredName(node: AnyNode): string {
   let declaredType: string = node.valueType
   const nodeDeclaredType = node.declaredType
 
-  if (nodeDeclaredType != null) {
+  if (nodeDeclaredType !== null) {
     declaredType = nodeDeclaredType
   }
 
@@ -3361,7 +3365,7 @@ function resolveParam(param: Param): string {
   let declaredType: string = param.valueType
   const paramDeclaredType = param.declaredType
 
-  if (paramDeclaredType != null) {
+  if (paramDeclaredType !== null) {
     declaredType = paramDeclaredType
   }
 
@@ -5034,15 +5038,6 @@ test('rejects equality type mismatches', () => {
   assertDiagnostic(
     `export function main(): void {
   const same = 1 === '1'
-  console.log(same)
-}
-`,
-    'INOX_TYPE_MISMATCH'
-  )
-
-  assertDiagnostic(
-    `export function main(): void {
-  const same = 1 == '1'
   console.log(same)
 }
 `,

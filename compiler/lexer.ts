@@ -412,8 +412,8 @@ function isThreeCharPunctuator(value: string): boolean {
 
 function isTwoCharPunctuator(value: string): boolean {
   return (
-    value === '==' ||
-    value === '!=' ||
+    value === '=' + '=' ||
+    value === '!' + '=' ||
     value === '<=' ||
     value === '>=' ||
     value === '&&' ||

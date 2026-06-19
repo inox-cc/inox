@@ -1263,7 +1263,7 @@ function isRuntimeFunctionType(functionType: FeatureFunctionType | null | undefi
 }
 
 function isFeatureEqualityOperator(operator: string): boolean {
-  return operator === '===' || operator === '!==' || operator === '==' || operator === '!='
+  return operator === '===' || operator === '!=='
 }
 
 function isRuntimeCallableReturnType(valueType: string): boolean {

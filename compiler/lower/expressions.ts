@@ -1035,7 +1035,7 @@ function inferBinaryExpressionType(operator: string, left: LowerExpressionNode, 
 }
 
 function isBooleanBinaryOperator(operator: string): boolean {
-  if (operator === '===' || operator === '!==' || operator === '==' || operator === '!=') {
+  if (operator === '===' || operator === '!==') {
     return true
   }
 

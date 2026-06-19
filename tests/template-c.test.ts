@@ -142,7 +142,7 @@ export function main(): void {
 test('lowers C nullable string parameters through runtime values until narrowed', () => {
   const result = compileSource(
     `function ok(value: string | null | undefined): boolean {
-  if (value == null) {
+  if (value === null) {
     return false
   }
 

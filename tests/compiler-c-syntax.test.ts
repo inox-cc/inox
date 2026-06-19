@@ -38,7 +38,7 @@ test('compiles typed recursive syntax list traversal with C for-of', () => {
 }
 
 function hasAwait(node: SyntaxNode | SyntaxNode[] | null | undefined): boolean {
-  if (node == null) {
+  if (node === null) {
     return false
   }
 
@@ -100,7 +100,7 @@ function shapeFieldAt(fields: ShapeField[], expectedIndex: number): ShapeField |
 function valueTypeAt(fields: ShapeField[], expectedIndex: number): string {
   const field = shapeFieldAt(fields, expectedIndex)
 
-  if (field == null) {
+  if (field === null) {
     return 'unknown'
   }
 

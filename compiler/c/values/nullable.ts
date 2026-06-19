@@ -164,7 +164,7 @@ function appendUniqueNames(out: string[], names: string[]): void {
 }
 
 function isEqualityOperator(operator: string): boolean {
-  return operator === '===' || operator === '!==' || operator === '==' || operator === '!='
+  return operator === '===' || operator === '!=='
 }
 
 function nullableString(value: string | null | undefined): string | null {
@@ -320,7 +320,7 @@ function resolveNullableScalarNullCheckNarrowing(
     return emptyNullableScalarNarrowing()
   }
 
-  if (expression.operator === '!==' || expression.operator === '!=') {
+  if (expression.operator === '!==') {
     return {
       trueNames: [name],
       falseNames: []

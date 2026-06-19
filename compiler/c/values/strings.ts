@@ -377,7 +377,7 @@ export function emitPreparedStringCompareExpression(expression: AnyNode, context
   pushAllLines(lines, left.lines)
   pushAllLines(lines, right.lines)
 
-  if (expression.operator === '===' || expression.operator === '==') {
+  if (expression.operator === '===') {
     resultExpression = equals
   }
 

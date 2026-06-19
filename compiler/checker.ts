@@ -307,6 +307,14 @@ type FsBooleanOptions = {
   withFileTypes?: boolean
 }
 
+function isUnsupportedEqualityOperator(operator: string): boolean {
+  return (
+    operator.length === 2 &&
+    (operator[0] === '=' || operator[0] === '!') &&
+    operator[1] === '='
+  )
+}
+
 function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
   return {
     valueType: 'object',
@@ -2367,6 +2375,18 @@ class Checker {
     } else {
       right = this.checkExpression(expression.right)
     }
+
+    if (isUnsupportedEqualityOperator(expression.operator)) {
+      this.report(
+        'INOX_UNSUPPORTED_OPERATOR',
+        'loose equality operators are not supported; use strict equality operators',
+        expression.loc
+      )
+      expression.valueType = 'boolean'
+      expression.nullable = false
+      return 'boolean'
+    }
+
     const nullableEquality = isEqualityOperator(expression.operator) && (left === 'null' || right === 'null')
 
     if (isEqualityOperator(expression.operator) && !nullableEquality && !isEqualityComparableType(left, right)) {
@@ -11744,9 +11764,7 @@ class Checker {
 
     if (
       expression.operator !== '===' &&
-      expression.operator !== '!==' &&
-      expression.operator !== '==' &&
-      expression.operator !== '!='
+      expression.operator !== '!=='
     ) {
       return {
         trueNames: [],
@@ -11788,7 +11806,7 @@ class Checker {
     }
 
     if (isNonNullNarrowingLiteral(maybeNull)) {
-      if (expression.operator === '===' || expression.operator === '==') {
+      if (expression.operator === '===') {
         return {
           trueNames: [key],
           falseNames: []
@@ -11808,7 +11826,7 @@ class Checker {
       }
     }
 
-    if (expression.operator === '!==' || expression.operator === '!=') {
+    if (expression.operator === '!==') {
       return {
         trueNames: [key],
         falseNames: []

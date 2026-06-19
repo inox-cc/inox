@@ -243,11 +243,11 @@ function isNumericCastName(name: string): boolean {
 }
 
 function isEqualityOperator(operator: string): boolean {
-  return operator === '===' || operator === '!==' || operator === '==' || operator === '!='
+  return operator === '===' || operator === '!=='
 }
 
 function isPositiveEqualityOperator(operator: string): boolean {
-  return operator === '===' || operator === '=='
+  return operator === '==='
 }
 
 function isRuntimeReferenceEqualityType(valueType: string): boolean {
@@ -3172,7 +3172,7 @@ function emitPreparedRuntimePreparedValueStringLiteralCompare(
   appendLines(lines, value.lines)
   lines.push(`inox_value ${temp} = ${value.expression};`)
 
-  if (operator === '===' || operator === '==') {
+  if (operator === '===') {
     resultExpression = equals
   }
 

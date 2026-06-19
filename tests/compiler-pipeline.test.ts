@@ -92,7 +92,7 @@ const signatureTable: IndexSignatureTable = {
 
 function readRecord(name: string): number {
   const item = recordTable[name] ?? null
-  if (item != null) {
+  if (item !== null) {
     return item.code
   }
   return 0
@@ -100,7 +100,7 @@ function readRecord(name: string): number {
 
 function readSignature(name: string): number {
   const item = signatureTable[name] ?? null
-  if (item != null) {
+  if (item !== null) {
     return item.code
   }
   return 0

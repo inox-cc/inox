@@ -808,7 +808,7 @@ const descriptors: Record<string, Descriptor> = {
 }
 
 const item = descriptors['read'] ?? null
-if (item != null) {
+if (item !== null) {
   console.log(item.code)
 }
 `,
@@ -835,7 +835,7 @@ const descriptors: Record<string, Descriptor> = {
 
 function readCode(method: string): number {
   const item = descriptors[method] ?? null
-  if (item != null) {
+  if (item !== null) {
     return item.code
   }
   return 0
@@ -2140,7 +2140,7 @@ test('lowers C Array.find declarations to nullable loop results', () => {
   const values = [1, 2, 3]
   const found = values.find((value, index) => value > index + 1)
 
-  if (found != null) {
+  if (found !== null) {
     console.log(found)
   }
 }
