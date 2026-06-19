@@ -13,17 +13,23 @@ import {
 } from '../ir.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrProgram, IrRuntimeRequirement } from '../types.ts'
-import type { CFunctionParam, CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
+import type { CFunctionParam, CObjectShapeField, CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
 import {
   collectCallbackWrappers,
+  collectFunctionPointerParamNames,
+  emitFunctionPointerParams,
+  emitFunctionPointerNamedParams,
+  emitFunctionPointerReturnType,
   emitPlainArrowCallbackWrapperDeclaration,
   emitPlainArrowCallbackWrapperHead,
   emitRuntimeArrowCallbackContextType,
   emitRuntimeCallbackWrapperDeclaration,
   emitRuntimeCallbackWrapperHead,
+  isPlainFunctionPointerType,
   isPromiseChainCallbackWrapperWithContext,
   isRuntimeArrowCallbackWrapperWithContext,
-  isRuntimeCallbackWrapper
+  isRuntimeCallbackWrapper,
+  isRuntimeFunctionType
 } from './async/callbacks.ts'
 import type { CallbackLoweringDependencies } from './async/callbacks.ts'
 import {
@@ -59,7 +65,7 @@ import {
 } from './context.ts'
 import type { CEmitContext, CFunctionContext } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
-import { emitCFunctionName, emitCIdentifier } from './identifiers.ts'
+import { emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
 import { emitCPrelude } from './prelude.ts'
 import {
@@ -87,7 +93,14 @@ import {
   emitNetHandlerHead
 } from './stdlib/net.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
-import type { CClassInfo, CClassMethod, CModuleEmitOptions, CModuleImportPlan, CModulePlan } from './types.ts'
+import type {
+  CClassInfo,
+  CClassMethod,
+  CFunctionPointerAdapter,
+  CModuleEmitOptions,
+  CModuleImportPlan,
+  CModulePlan
+} from './types.ts'
 import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType } from './value-types.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
 
@@ -96,6 +109,11 @@ type CModuleValueDeclaration = {
   name: string
   symbolName: string
   valueType: string
+}
+
+type CModuleFunctionNodeEntry = {
+  declaration: IrFunctionDeclaration
+  node: AnyNode
 }
 
 type CModuleNode = AnyNode
@@ -289,7 +307,7 @@ export function emitCModuleSource(
   deps: CModuleEmissionDependencies
 ): string {
   const irPrograms = [plan.ir]
-  const functionEntries = collectIrFunctionNodeEntries(irPrograms)
+  const functionEntries = collectCModuleFunctionNodeEntries(plan, irPrograms)
   const functions: AnyNode[] = []
   const context = createCModuleBaseContext(plan, plans, diagnostics, deps)
   const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
@@ -376,47 +394,49 @@ export function emitCModuleSource(
   )
 
   emitCModuleValueDefinitions(lines, moduleValues)
-  emitCModuleDeclarations(lines, functions, classMethods, context, deps)
+  emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
+
+  const bodyLines: string[] = []
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
-    pushCModuleLines(lines, emitAsyncTaskWrapperDeclaration(wrapper, context, deps.asyncTaskLoweringDependencies))
-    lines.push('')
+    pushCModuleLines(bodyLines, emitAsyncTaskWrapperDeclaration(wrapper, context, deps.asyncTaskLoweringDependencies))
+    bodyLines.push('')
   }
 
   for (const wrapper of context.callbackWrappers.values()) {
     if (wrapper.kind === 'plain-arrow') {
-      pushCModuleLines(lines, emitPlainArrowCallbackWrapperDeclaration(wrapper, context, deps.callbackLoweringDependencies))
+      pushCModuleLines(bodyLines, emitPlainArrowCallbackWrapperDeclaration(wrapper, context, deps.callbackLoweringDependencies))
     } else {
-      pushCModuleLines(lines, emitRuntimeCallbackWrapperDeclaration(wrapper, context, deps.callbackLoweringDependencies))
+      pushCModuleLines(bodyLines, emitRuntimeCallbackWrapperDeclaration(wrapper, context, deps.callbackLoweringDependencies))
     }
-    lines.push('')
+    bodyLines.push('')
   }
 
   for (const wrapper of context.promiseChainWrappers.values()) {
-    pushCModuleLines(lines, emitPromiseChainCallbackWrapperDeclaration(wrapper, context, deps.promiseChainLoweringDependencies))
-    lines.push('')
+    pushCModuleLines(bodyLines, emitPromiseChainCallbackWrapperDeclaration(wrapper, context, deps.promiseChainLoweringDependencies))
+    bodyLines.push('')
   }
 
   for (const wrapper of context.dgramMessageHandlers.values()) {
-    pushCModuleLines(lines, emitDgramMessageHandlerDeclaration(wrapper, context, deps.dgramLoweringDependencies))
-    lines.push('')
+    pushCModuleLines(bodyLines, emitDgramMessageHandlerDeclaration(wrapper, context, deps.dgramLoweringDependencies))
+    bodyLines.push('')
   }
 
   for (const wrapper of context.httpHandlers.values()) {
-    pushCModuleLines(lines, emitHttpHandlerDeclaration(wrapper, context, deps.httpLoweringDependencies))
-    lines.push('')
+    pushCModuleLines(bodyLines, emitHttpHandlerDeclaration(wrapper, context, deps.httpLoweringDependencies))
+    bodyLines.push('')
   }
 
   for (const wrapper of context.netHandlers.values()) {
-    pushCModuleLines(lines, emitNetHandlerDeclaration(wrapper, context, deps.netLoweringDependencies))
-    lines.push('')
+    pushCModuleLines(bodyLines, emitNetHandlerDeclaration(wrapper, context, deps.netLoweringDependencies))
+    bodyLines.push('')
   }
 
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
     const item = cModuleNodeAt(functions, functionIndex)
 
-    pushCModuleLines(lines, deps.emitFunctionDeclaration(item, context))
-    lines.push('')
+    pushCModuleLines(bodyLines, deps.emitFunctionDeclaration(item, context))
+    bodyLines.push('')
   }
 
   for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
@@ -424,15 +444,19 @@ export function emitCModuleSource(
     const info = item.info
     const method = item.method
 
-    pushCModuleLines(lines, deps.emitClassMethodDeclaration(info, method, context))
-    lines.push('')
+    pushCModuleLines(bodyLines, deps.emitClassMethodDeclaration(info, method, context))
+    bodyLines.push('')
   }
 
   if (!plan.isEntry && plan.initName != null) {
-    pushCModuleLines(lines, emitCModuleInitFunction(plan, context, deps))
+    pushCModuleLines(bodyLines, emitCModuleInitFunction(plan, context, deps))
   } else {
-    pushCModuleLines(lines, emitCModuleMainFunction(plan, context, deps))
+    pushCModuleLines(bodyLines, emitCModuleMainFunction(plan, context, deps))
   }
+
+  emitCModuleDeclarations(lines, functions, classMethods, context, deps)
+  emitCModuleFunctionPointerAdapterDefinitions(lines, context)
+  pushCModuleLines(lines, bodyLines)
 
   return joinCModuleLines(lines)
 }
@@ -490,6 +514,20 @@ function joinCModuleLines(lines: string[]): string {
   }
 
   return `${result}\n`
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 function emitCModuleDeclarations(
@@ -605,6 +643,131 @@ function emitCModuleDeclarations(
   }
 }
 
+function emitCModuleFunctionPointerAdapterDefinitions(lines: string[], context: CEmitContext): void {
+  if (context.functionPointerAdapters.length === 0) {
+    return
+  }
+
+  for (const adapter of context.functionPointerAdapters) {
+    pushCModuleLines(lines, emitCModuleFunctionPointerAdapterDefinition(adapter))
+    lines.push('')
+  }
+}
+
+function emitCModuleFunctionPointerAdapterDefinition(adapter: CFunctionPointerAdapter): string[] {
+  const lines = [`${emitCModuleFunctionPointerAdapterHead(adapter)} {`]
+  const expectedNames = collectFunctionPointerParamNames(adapter.functionType, adapter.seenTypes)
+  const targetNames = collectFunctionPointerParamNames(adapter.targetFunctionType, adapter.targetSeenTypes)
+  const targetNameSet = stringSetFromArray(targetNames)
+  const targetArgs = emitFunctionPointerAdapterTargetArgs(adapter, expectedNames, targetNames)
+
+  for (const name of expectedNames) {
+    if (!targetNameSet.has(name)) {
+      lines.push(`  (void)${name};`)
+    }
+  }
+
+  const call = `${adapter.target}(${joinStrings(targetArgs, ', ')})`
+
+  if (emitFunctionPointerReturnType(adapter.functionType) === 'void') {
+    lines.push(`  ${call};`)
+  } else {
+    lines.push(`  return ${call};`)
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function emitFunctionPointerAdapterTargetArgs(
+  adapter: CFunctionPointerAdapter,
+  expectedNames: string[],
+  targetNames: string[]
+): string[] {
+  const expectedNameSet = stringSetFromArray(expectedNames)
+  const args: string[] = []
+
+  for (const name of targetNames) {
+    if (expectedNameSet.has(name)) {
+      args.push(name)
+      continue
+    }
+
+    const defaultArg = emitFunctionPointerAdapterDefaultTargetArg(name, adapter)
+
+    if (defaultArg != null) {
+      args.push(defaultArg)
+      continue
+    }
+
+    args.push(name)
+  }
+
+  return args
+}
+
+function emitFunctionPointerAdapterDefaultTargetArg(
+  name: string,
+  adapter: CFunctionPointerAdapter
+): string | null {
+  for (let index = adapter.functionType.params.length; index < adapter.targetFunctionType.params.length; index = index + 1) {
+    if (name !== `ccjs_arg_${index}`) {
+      continue
+    }
+
+    const param = adapter.targetFunctionType.params[index]
+
+    if (param.optional !== true && param.defaultValue == null) {
+      return null
+    }
+
+    return emitFunctionPointerAdapterDefaultParamValue(param)
+  }
+
+  return null
+}
+
+function emitFunctionPointerAdapterDefaultParamValue(param: CFunctionParam): string {
+  const value = param.defaultValue
+
+  if (value != null) {
+    if (value.type === 'NullLiteral') {
+      return 'ccjs_null_value()'
+    }
+
+    if (value.type === 'BooleanLiteral') {
+      if (value.value === true) {
+        return '1'
+      }
+
+      return '0'
+    }
+
+    if (value.type === 'NumberLiteral') {
+      return `${value.value}`
+    }
+  }
+
+  if (
+    param.nullable === true ||
+    param.valueType === 'unknown' ||
+    isManagedRuntimeReturnType(param.valueType) ||
+    isOpaqueRuntimeValueType(param.valueType)
+  ) {
+    return 'ccjs_undefined_value()'
+  }
+
+  return '0'
+}
+
+function emitCModuleFunctionPointerAdapterHead(adapter: CFunctionPointerAdapter): string {
+  return `static ${emitFunctionPointerReturnType(adapter.functionType)} ${adapter.name}(${emitFunctionPointerNamedParams(
+    adapter.functionType,
+    adapter.seenTypes
+  )})`
+}
+
 function createCModuleBaseContext(
   plan: CModulePlan,
   plans: CModulePlan[],
@@ -614,7 +777,7 @@ function createCModuleBaseContext(
   const ir = plan.ir
   const irPrograms = [ir]
   const importedDeclarations = collectCModuleImportedFunctionDeclarations(plan)
-  const functionEntries = collectIrFunctionNodeEntries(irPrograms)
+  const functionEntries = collectCModuleFunctionNodeEntries(plan, irPrograms)
   const functions: AnyNode[] = []
   const functionDeclarations = collectIrFunctionDeclarations(irPrograms)
   const globalRoots = collectIrGlobalRoots(irPrograms)
@@ -833,6 +996,81 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
   lines.push('')
 }
 
+function emitCModuleValueFunctionFieldDefinitions(
+  lines: string[],
+  values: CModuleValueDeclaration[],
+  context: CEmitContext
+): void {
+  let emitted = false
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = cModuleValueDeclarationAt(values, index)
+    const fields = context.moduleObjectShapes.get(item.name)
+
+    if (fields == null) {
+      continue
+    }
+
+    if (emitCModuleObjectFunctionFieldDefinitions(lines, item.name, fields, [])) {
+      emitted = true
+    }
+  }
+
+  if (emitted) {
+    lines.push('')
+  }
+}
+
+function emitCModuleObjectFunctionFieldDefinitions(
+  lines: string[],
+  objectName: string,
+  fields: CObjectShapeField[],
+  seenTypes: string[]
+): boolean {
+  let emitted = false
+
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      const name = emitCObjectFunctionFieldName(objectName, field.name)
+
+      if (isPlainFunctionPointerType(field.functionType)) {
+        lines.push(
+          `static ${emitFunctionPointerReturnType(field.functionType)} (*${name})(${emitFunctionPointerParams(
+            field.functionType,
+            [],
+            seenTypes
+          )}) = 0;`
+        )
+        emitted = true
+      } else if (isRuntimeFunctionType(field.functionType)) {
+        lines.push(`static ccjs_value ${name};`)
+        emitted = true
+      }
+    } else if (field.valueType === 'object' && field.shape != null && field.shape.fields != null) {
+      if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+        continue
+      }
+
+      let pushedType = false
+
+      if (field.declaredType != null) {
+        seenTypes.push(field.declaredType)
+        pushedType = true
+      }
+
+      if (emitCModuleObjectFunctionFieldDefinitions(lines, `${objectName}_${field.name}`, field.shape.fields, seenTypes)) {
+        emitted = true
+      }
+
+      if (pushedType) {
+        seenTypes.pop()
+      }
+    }
+  }
+
+  return emitted
+}
+
 function cModuleValueType(node: AnyNode): string {
   const valueType = node.valueType
 
@@ -975,6 +1213,87 @@ function emitCModuleImportInitCalls(plan: CModulePlan): string[] {
   }
 
   return calls
+}
+
+function collectCModuleFunctionNodeEntries(
+  plan: CModulePlan,
+  programs: IrProgram[]
+): CModuleFunctionNodeEntry[] {
+  const entries = collectIrFunctionNodeEntries(programs)
+  const filtered: CModuleFunctionNodeEntry[] = []
+
+  for (let index = 0; index < entries.length; index = index + 1) {
+    const entry = cModuleFunctionEntryAt(entries, index)
+
+    if (!isCModuleImportFunctionWrapper(plan, entry.node)) {
+      filtered.push(entry)
+    }
+  }
+
+  return filtered
+}
+
+function isCModuleImportFunctionWrapper(plan: CModulePlan, node: AnyNode): boolean {
+  if (node.type !== 'FunctionDeclaration') {
+    return false
+  }
+
+  for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
+    const item = cModuleImportPlanAt(plan.imports, importIndex)
+
+    if (item.declaration.type === 'ExportDeclaration') {
+      continue
+    }
+
+    const specifiers = item.declaration.specifiers
+
+    for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
+      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const localName = cModuleImportedBindingName(item.declaration, specifier)
+
+      if (node.name === localName && isCModuleImportFunctionWrapperBody(node, specifier.imported)) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+function isCModuleImportFunctionWrapperBody(node: AnyNode, importedName: string): boolean {
+  if (node.body.length !== 1) {
+    return false
+  }
+
+  const statement = cModuleNodeAt(node.body, 0)
+  let expression: AnyNode | null = null
+
+  if (statement.type === 'ReturnStatement') {
+    expression = statement.argument
+  } else if (statement.type === 'ExpressionStatement') {
+    expression = statement.expression
+  }
+
+  if (expression == null || expression.type !== 'CallExpression') {
+    return false
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'Reference' || callee.path.length !== 1) {
+    return false
+  }
+
+  let calleeName = ''
+  const path: string[] = callee.path
+
+  for (const segment of path) {
+    const pathSegment: string = segment
+    calleeName = pathSegment
+    break
+  }
+
+  return calleeName === importedName
 }
 
 function collectCModuleExportedFunctions(plan: CModulePlan): AnyNode[] {
@@ -1147,6 +1466,7 @@ function cloneImportedCModuleFunctionDeclaration(
     returnArrayElementDeclaredType: declaration.returnArrayElementDeclaredType,
     returnMapKeyType: declaration.returnMapKeyType,
     returnMapValueType: declaration.returnMapValueType,
+    declaredReturnType: declaration.declaredReturnType,
     returnPromiseValueType: declaration.returnPromiseValueType,
     returnSetElementType: declaration.returnSetElementType,
     returnShape: declaration.returnShape,

@@ -481,9 +481,12 @@ function hydrateFunctionType(functionType: LowerTypeNode, context: LowerContext)
 function hydrateFunctionParam(param: LowerTypeNode, context: LowerContext): LowerTypeNode {
   let shape = nullableNode(param.shape)
 
-  if (param.valueType === 'object' && shape == null && param.declaredType != null && !context.resolvingTypes.has(param.declaredType)) {
+  if (param.valueType === 'object' && param.declaredType != null && !context.resolvingTypes.has(param.declaredType)) {
     const declared = resolveDeclaredType(param.declaredType, context)
-    shape = declared.shape
+
+    if (declared.shape != null) {
+      shape = declared.shape
+    }
   }
 
   return {

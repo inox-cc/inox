@@ -5,9 +5,9 @@ import {
   isDebugRuntimeMethodPath
 } from '../../src/compiler/stdlib/descriptors/debug.ts'
 
-test('lowers ccjs.__debug.memory to C debug memory snapshots', () => {
+test('lowers inox.__debug.memory to C debug memory snapshots', () => {
   const result = compileSource(
-    `const stats = ccjs.__debug.memory()
+    `const stats = inox.__debug.memory()
 console.log(stats.liveBytes, stats.liveWeakCells)
 `,
     {
@@ -24,12 +24,14 @@ console.log(stats.liveBytes, stats.liveWeakCells)
   assert.match(result.code, /ccjs_object_get_known\(stats, 10, &ccjs_log_value_\d+\)/)
 })
 
-test('checks ccjs.__debug.memory argument count', () => {
-  assertDiagnostic('ccjs.__debug.memory(1)', 'CCJS_ARG_COUNT')
+test('checks inox.__debug.memory argument count', () => {
+  assertDiagnostic('inox.__debug.memory(1)', 'CCJS_ARG_COUNT')
 })
 
-test('recognizes debug runtime method paths', () => {
+test('recognizes debug runtime method paths and legacy ccjs alias', () => {
+  assert.equal(isDebugRuntimeMethodPath(['inox', '__debug', 'memory']), true)
+  assert.equal(debugRuntimeMethodNameFromKnownPath(['inox', '__debug', 'memory']), 'memory')
   assert.equal(isDebugRuntimeMethodPath(['ccjs', '__debug', 'memory']), true)
   assert.equal(debugRuntimeMethodNameFromKnownPath(['ccjs', '__debug', 'memory']), 'memory')
-  assert.equal(isDebugRuntimeMethodPath(['ccjs', '__debug', 'gc']), false)
+  assert.equal(isDebugRuntimeMethodPath(['inox', '__debug', 'gc']), false)
 })

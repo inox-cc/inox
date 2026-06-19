@@ -3000,6 +3000,35 @@ export function main(): void {
 })
 
 
+test('uses finite plain companions for recursive object function fields', () => {
+  const result = compileSource(
+    `type Dep = { emit: (context: Context) => string }
+type Context = { dep: Dep }
+
+function emit(context: Context): string {
+  return 'ok'
+}
+
+function run(context: Context): string {
+  return context.dep.emit(context)
+}
+
+export function main(): void {
+  console.log(run({ dep: { emit } }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_value run\(ccjs_value context, ccjs_value \(\*ccjs_objfn_context_dep_emit\)\(ccjs_value\)\)/)
+  assert.match(result.code, /ccjs_value_\d+ = ccjs_objfn_context_dep_emit\(context\);/)
+  assert.match(result.code, /run\(ccjs_object_\d+, emit\)/)
+  assert.doesNotMatch(result.code, /ccjs_value ccjs_objfn_context_dep_emit/)
+})
+
+
 test('keeps explicitly typed object locals on object assignments in C', () => {
   const result = compileSource(
     `type Loc = { line: number, column: number }

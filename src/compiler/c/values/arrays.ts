@@ -18,6 +18,7 @@ import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
+import type { CFunctionContext } from '../context.ts'
 import type {
   CArrayElementInfo,
   CFunctionReturnMapType,
@@ -40,37 +41,7 @@ type CStringMap = Map<string, string>
 type CStringNullableMap = Map<string, string | null>
 type CStringSet = Set<string>
 
-type ArrayFunctionContext = {
-  arrayLoweringDependencies?: ArrayLoweringDependencies
-  arrayShapes?: Map<string, CArrayElementInfo[]>
-  boxedVariables: CStringSet
-  classInstanceTypes?: CStringMap
-  cleanupEnabled: boolean
-  diagnostics: Diagnostic[]
-  errorObjectNames?: CStringSet
-  failureStatement?: string | null
-  failureStatementUsed?: boolean
-  functionReturnArrayElementTypes?: CStringNullableMap
-  functionTypes: CFunctionTypeMap
-  mapTypes: CFunctionReturnMapTypeMap
-  narrowedNullableScalars: CStringSet
-  nextId: number
-  nullableVariables: CStringSet
-  objectShapes: CObjectShapeFieldMap
-  ownedValues: string[]
-  promiseConstructorHandlers?: CPromiseConstructorHandlerMap
-  promiseRejectionValueTypes?: CStringMap
-  promiseValueTypes?: CStringMap
-  returnType?: string
-  runtimeArrayElementTypes: CStringMap
-  runtimeCallbacks: CStringSet
-  runtimeStrings: CStringSet
-  setElementTypes: CStringMap
-  statusReturn: boolean
-  throwingFunction: boolean
-  usedCleanupGoto: boolean
-  variables: CStringMap
-}
+type ArrayFunctionContext = CFunctionContext
 
 type ArrayVariableScopeSnapshot = {
   arrayShapes: Map<string, CArrayElementInfo[]>

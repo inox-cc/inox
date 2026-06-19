@@ -78,6 +78,7 @@ export function createTypeAssertionExpression(expression: AnyNode, valueType: st
   return {
     type: 'TypeAssertionExpression',
     expression,
+    declaredType: valueType,
     valueType,
     loc: expression.loc
   }

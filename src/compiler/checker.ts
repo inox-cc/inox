@@ -5402,9 +5402,15 @@ class Checker {
     expression.debugRuntimeMethod = method
 
     if (expression.args.length !== 0) {
+      let rootName = 'inox'
+
+      if (path[0] === 'ccjs') {
+        rootName = 'ccjs'
+      }
+
       this.report(
         'CCJS_ARG_COUNT',
-        `function ccjs.__debug.memory expects 0 argument(s), got ${expression.args.length}`,
+        `function ${rootName}.__debug.memory expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }

@@ -85,7 +85,7 @@ async function checkFixtureStdout(file: string, rel: string, target: CompileTarg
     return
   }
 
-  const result = await runCommand(process.execPath, ['bin/ccjs.ts', 'run', file, '--target', target])
+  const result = await runCommand(process.execPath, ['bin/inox.ts', 'run', file, '--target', target])
   const expectedStdout = expected === '' ? '' : `${expected}\n`
   const stdout = normalizeNewlines(result.stdout)
 

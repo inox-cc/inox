@@ -12,6 +12,7 @@ import { isReadonlyCObjectShapeField } from '../types.ts'
 import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
+import type { CFunctionContext } from '../context.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -47,29 +48,7 @@ type ClassEmitContext = {
   classInfos: CClassInfoMap
 }
 
-type ClassFunctionContext = {
-  boxedVariables: CStringSet
-  classInfos?: CClassInfoMap
-  classInstanceTypes?: CStringMap
-  classLoweringDependencies?: ClassLoweringDependencies
-  cleanupEnabled: boolean
-  diagnostics: Diagnostic[]
-  errorChannelUsed?: boolean
-  errorTargets?: string[]
-  failureStatement?: string | null
-  failureStatementUsed?: boolean
-  functionErrorOut?: string | null
-  functionReturnOut?: string | null
-  nextId: number
-  objectShapes: CObjectShapeFieldMap
-  ownedValues: string[]
-  returnType?: string
-  statusReturn: boolean
-  throwingFunctions?: CStringSet
-  throwingFunction: boolean
-  usedCleanupGoto: boolean
-  variables: CStringMap
-}
+type ClassFunctionContext = CFunctionContext
 
 function emitFallbackClassFieldFlags(_field: CObjectShapeField): string {
   return '0'

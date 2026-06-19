@@ -130,10 +130,12 @@ import {
   functionUsesExternalEventLoop,
   hasRuntimeArrowCallbackContext,
   isNullableFunctionType,
+  isPlainFunctionPointerType,
   isPromiseChainCallbackWrapperWithContext,
   isRetainedRuntimeArrowCapture,
   isRuntimeArrowCallbackWrapperWithContext,
   isRuntimeCallbackWrapper,
+  isRuntimeFunctionType,
   isSupportedMutableRuntimeArrowCapture,
   isSupportedRuntimeCallbackType,
   markRuntimeFunctionParam,
@@ -804,10 +806,12 @@ const classLoweringDependencies: ClassLoweringDependencies = {
 
 objectVariableDeclarationDependencies = {
   emitCFieldFlags,
-  emitFunctionPointerVariable: (name, init, context, isConst, functionType, loc) =>
-    emitFunctionPointerVariable(name, init, context as CFunctionContext, isConst, functionType, loc),
-  emitFunctionPointerVariableWithCInitializer: (name, init, context, isConst, functionType, loc) =>
-    emitFunctionPointerVariableWithCInitializer(name, init, context as CFunctionContext, isConst, functionType, loc),
+  emitFunctionPointerVariable: (name, init, context, isConst, functionType, loc, seenTypes) =>
+    emitFunctionPointerVariable(name, init, context as CFunctionContext, isConst, functionType, loc, seenTypes),
+  emitFunctionPointerVariableWithCInitializer: (name, init, context, isConst, functionType, loc, seenTypes) =>
+    emitFunctionPointerVariableWithCInitializer(name, init, context as CFunctionContext, isConst, functionType, loc, seenTypes),
+  emitRuntimeCallbackValueInto: (expression, functionType, out, context) =>
+    emitRuntimeCallbackValueInto(expression, functionType, out, context as CFunctionContext),
   emitCValueExpression,
   inferExpressionType,
   resolveFunctionValueType: (expression, context) => resolveFunctionValueType(expression, context as CFunctionContext)
@@ -1079,6 +1083,7 @@ const expressionTypeDependencies = {
   isNumberConversionCall,
   isNumberToStringCall,
   isPromiseConstructorExpression,
+  isPromiseReturningFunctionCallee,
   isStringCaseCall,
   isStringConversionCall,
   isStringPadStartCall,
@@ -1102,6 +1107,7 @@ const cCallExpressionDependencies = {
   emitCExpression,
   emitCNumberConversionValueExpression,
   emitCValueExpression,
+  emitFunctionPointerAdapter,
   emitFunctionValueExpression,
   emitNullableFunctionValueExpression,
   emitNullableScalarValueExpression,
@@ -1146,6 +1152,7 @@ const cCallExpressionDependencies = {
   isNullableFunctionType,
   isPromiseReturningFunctionCallee,
   registerErrorChannel: (context: unknown) => registerErrorChannel(context as CFunctionContext),
+  resolveFunctionValueType,
   resolveFunctionParams,
   resolveRuntimeCallbackCalleeType,
   resolveRuntimeFunctionArgumentType
@@ -1500,6 +1507,7 @@ function createBaseContext(
   const functionParams: Map<string, CFunctionParam[]> = new Map()
   const functionReturnArrayElementTypes: Map<string, any> = new Map()
   const functionReturnArrayElementDeclaredTypes: Map<string, any> = new Map()
+  const functionReturnDeclaredTypes: Map<string, any> = new Map()
   const functionReturnMapTypes: Map<string, CFunctionReturnMapType> = new Map()
   const functionReturnNullables: Map<string, boolean> = new Map()
   const functionReturnPromiseValueTypes: Map<string, any> = new Map()
@@ -1507,7 +1515,6 @@ function createBaseContext(
   const functionReturnSetElementTypes: Map<string, any> = new Map()
   const functionReturnTypes: CStringMap = new Map()
   const functionAsyncFlags: Map<string, boolean> = new Map()
-  const moduleObjectShapes = collectModuleObjectShapes(topLevelNodes)
   const objectAccessorReturnPaths = collectObjectAccessorReturnPaths(topLevelNodes)
   const unhandledRejectionFlag: string | null = null
 
@@ -1555,6 +1562,7 @@ function createBaseContext(
     functionParams.set(item.name, item.params as CFunctionParam[])
     functionReturnArrayElementTypes.set(item.name, returnArrayElementType)
     functionReturnArrayElementDeclaredTypes.set(item.name, returnArrayElementDeclaredType)
+    functionReturnDeclaredTypes.set(item.name, item.declaredReturnType ?? null)
     functionReturnMapTypes.set(item.name, returnMapType)
     functionReturnNullables.set(item.name, item.returnNullable === true)
     functionReturnPromiseValueTypes.set(item.name, returnPromiseValueType)
@@ -1563,6 +1571,18 @@ function createBaseContext(
     functionReturnTypes.set(item.name, item.returnType)
     functionAsyncFlags.set(item.name, item.async === true)
   }
+
+  const moduleObjectShapes = collectModuleObjectShapes(
+    topLevelNodes,
+    functionParams,
+    functionReturnArrayElementTypes,
+    functionReturnMapTypes,
+    functionReturnNullables,
+    functionReturnPromiseValueTypes,
+    functionReturnSetElementTypes,
+    functionReturnShapes,
+    functionReturnTypes
+  )
 
   return {
     boxedMutableCaptureDeclarations: new Set(),
@@ -1584,8 +1604,11 @@ function createBaseContext(
     functionThrowValueTypes: throwing.functionThrowValueTypes,
     functionNames,
     functionParams,
+    functionPointerAdapterNames: new Map(),
+    functionPointerAdapters: [],
     functionReturnArrayElementTypes,
     functionReturnArrayElementDeclaredTypes,
+    functionReturnDeclaredTypes,
     functionReturnMapTypes,
     functionReturnNullables,
     functionReturnPromiseValueTypes,
@@ -1617,7 +1640,17 @@ function createBaseContext(
   }
 }
 
-function collectModuleObjectShapes(statements: CAccessorNode[]): Map<string, CObjectShapeField[]> {
+function collectModuleObjectShapes(
+  statements: CAccessorNode[],
+  functionParams: Map<string, CFunctionParam[]>,
+  functionReturnArrayElementTypes: Map<string, any>,
+  functionReturnMapTypes: Map<string, CFunctionReturnMapType>,
+  functionReturnNullables: Map<string, boolean>,
+  functionReturnPromiseValueTypes: Map<string, any>,
+  functionReturnSetElementTypes: Map<string, any>,
+  functionReturnShapes: Map<string, any>,
+  functionReturnTypes: CStringMap
+): Map<string, CObjectShapeField[]> {
   const result: Map<string, CObjectShapeField[]> = new Map()
 
   for (const statement of statements) {
@@ -1627,11 +1660,247 @@ function collectModuleObjectShapes(statements: CAccessorNode[]): Map<string, COb
       statement.shape != null &&
       statement.shape.fields != null
     ) {
-      result.set(statement.name, statement.shape.fields)
+      registerModuleObjectShape(result, statement.name, statement.shape.fields)
+      continue
+    }
+
+    if (
+      statement.type === 'VariableDeclaration' &&
+      statement.valueType === 'object' &&
+      statement.init != null &&
+      statement.init.type === 'ObjectLiteral'
+    ) {
+      const fields = collectModuleObjectLiteralShapeFields(
+        statement.init,
+        functionParams,
+        functionReturnArrayElementTypes,
+        functionReturnMapTypes,
+        functionReturnNullables,
+        functionReturnPromiseValueTypes,
+        functionReturnSetElementTypes,
+        functionReturnShapes,
+        functionReturnTypes
+      )
+
+      if (fields.length > 0) {
+        registerModuleObjectShape(result, statement.name, fields)
+      }
+
+      continue
+    }
+
+    const assignmentName = moduleObjectAssignmentName(statement)
+
+    if (assignmentName == null) {
+      continue
+    }
+
+    const expression = statement.expression
+
+    if (expression.value.type !== 'ObjectLiteral') {
+      continue
+    }
+
+    const fields = collectModuleObjectLiteralShapeFields(
+      expression.value,
+      functionParams,
+      functionReturnArrayElementTypes,
+      functionReturnMapTypes,
+      functionReturnNullables,
+      functionReturnPromiseValueTypes,
+      functionReturnSetElementTypes,
+      functionReturnShapes,
+      functionReturnTypes
+    )
+
+    if (fields.length > 0) {
+      registerModuleObjectShape(result, assignmentName, fields)
     }
   }
 
   return result
+}
+
+function moduleObjectAssignmentName(statement: CAccessorNode): string | null {
+  if (statement.type !== 'ExpressionStatement' || statement.expression == null) {
+    return null
+  }
+
+  const expression = statement.expression
+
+  if (expression.type !== 'AssignmentExpression') {
+    return null
+  }
+
+  const target = expression.target
+
+  if (target == null || target.type !== 'Reference' || target.path.length !== 1) {
+    return null
+  }
+
+  if (expression.value == null || expression.value.type !== 'ObjectLiteral') {
+    return null
+  }
+
+  return joinStrings(target.path, '')
+}
+
+function registerModuleObjectShape(
+  shapes: Map<string, CObjectShapeField[]>,
+  name: string,
+  fields: CObjectShapeField[]
+): void {
+  const existing = shapes.get(name)
+
+  if (existing == null) {
+    shapes.set(name, fields)
+  } else {
+    for (const field of fields) {
+      if (moduleObjectShapeFieldIndex(existing, field.name) === -1) {
+        existing.push(field)
+      }
+    }
+  }
+
+  for (const field of fields) {
+    if (field.valueType === 'object' && field.shape != null && field.shape.fields != null) {
+      registerModuleObjectShape(shapes, `${name}_${field.name}`, field.shape.fields)
+    }
+  }
+}
+
+function moduleObjectShapeFieldIndex(fields: CObjectShapeField[], name: string): number {
+  for (let index = 0; index < fields.length; index = index + 1) {
+    if (fields[index].name === name) {
+      return index
+    }
+  }
+
+  return -1
+}
+
+function collectModuleObjectLiteralShapeFields(
+  expression: CAccessorNode,
+  functionParams: Map<string, CFunctionParam[]>,
+  functionReturnArrayElementTypes: Map<string, any>,
+  functionReturnMapTypes: Map<string, CFunctionReturnMapType>,
+  functionReturnNullables: Map<string, boolean>,
+  functionReturnPromiseValueTypes: Map<string, any>,
+  functionReturnSetElementTypes: Map<string, any>,
+  functionReturnShapes: Map<string, any>,
+  functionReturnTypes: CStringMap
+): CObjectShapeField[] {
+  const fields: CObjectShapeField[] = []
+
+  if (expression.properties == null) {
+    return fields
+  }
+
+  const properties: CObjectLiteralPropertyNode[] = expression.properties
+
+  for (const property of properties) {
+    if (property.value == null) {
+      continue
+    }
+
+    const value = property.value
+    const functionType = resolveModuleObjectFunctionType(
+      value,
+      functionParams,
+      functionReturnArrayElementTypes,
+      functionReturnMapTypes,
+      functionReturnNullables,
+      functionReturnPromiseValueTypes,
+      functionReturnSetElementTypes,
+      functionReturnShapes,
+      functionReturnTypes
+    )
+
+    if (functionType != null) {
+      fields.push({
+        name: property.key,
+        readonlyField: false,
+        valueType: 'function',
+        functionType
+      })
+      continue
+    }
+
+    if (value.type === 'ObjectLiteral') {
+      const nestedFields = collectModuleObjectLiteralShapeFields(
+        value,
+        functionParams,
+        functionReturnArrayElementTypes,
+        functionReturnMapTypes,
+        functionReturnNullables,
+        functionReturnPromiseValueTypes,
+        functionReturnSetElementTypes,
+        functionReturnShapes,
+        functionReturnTypes
+      )
+
+      if (nestedFields.length > 0) {
+        fields.push({
+          name: property.key,
+          readonlyField: false,
+          valueType: 'object',
+          shape: { fields: nestedFields }
+        })
+      }
+    }
+  }
+
+  return fields
+}
+
+function resolveModuleObjectFunctionType(
+  expression: CAccessorNode,
+  functionParams: Map<string, CFunctionParam[]>,
+  functionReturnArrayElementTypes: Map<string, any>,
+  functionReturnMapTypes: Map<string, CFunctionReturnMapType>,
+  functionReturnNullables: Map<string, boolean>,
+  functionReturnPromiseValueTypes: Map<string, any>,
+  functionReturnSetElementTypes: Map<string, any>,
+  functionReturnShapes: Map<string, any>,
+  functionReturnTypes: CStringMap
+): CFunctionType | null {
+  if (expression.functionType != null) {
+    return expression.functionType
+  }
+
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.path[0]
+  const params = functionParams.get(name)
+  const returnType = functionReturnTypes.get(name)
+
+  if (params == null || returnType == null) {
+    return null
+  }
+
+  const returnMapType = functionReturnMapTypes.get(name)
+  let returnMapKeyType: string | null = null
+  let returnMapValueType: string | null = null
+
+  if (returnMapType != null) {
+    returnMapKeyType = returnMapType.key
+    returnMapValueType = returnMapType.value
+  }
+
+  return {
+    kind: 'function',
+    params,
+    returnArrayElementType: functionReturnArrayElementTypes.get(name) ?? null,
+    returnMapKeyType,
+    returnMapValueType,
+    returnNullable: functionReturnNullables.get(name) === true,
+    returnPromiseValueType: functionReturnPromiseValueTypes.get(name) ?? null,
+    returnSetElementType: functionReturnSetElementTypes.get(name) ?? null,
+    returnShape: functionReturnShapes.get(name) ?? null,
+    returnType
+  }
 }
 
 function collectObjectAccessorReturnPaths(statements: CAccessorNode[]): Map<string, CObjectAccessorReturnPath> {
@@ -1939,13 +2208,57 @@ function staticObjectBooleanPropertyValue(expression: AnyNode, key: string): boo
   return null
 }
 
+function emitFunctionPointerAdapter(
+  target: string,
+  targetFunctionType: CFunctionType,
+  functionType: CFunctionType,
+  context: CFunctionContext,
+  seenTypes: string[],
+  targetSeenTypes: string[]
+): string {
+  const expectedParams = emitFunctionPointerParams(functionType, [], seenTypes)
+  const targetParams = emitFunctionPointerParams(targetFunctionType, [], targetSeenTypes)
+  const key = `${target}:${emitFunctionPointerReturnType(functionType)}:${expectedParams}:${emitFunctionPointerReturnType(targetFunctionType)}:${targetParams}`
+  const existingName = context.functionPointerAdapterNames.get(key)
+
+  if (existingName != null) {
+    return existingName
+  }
+
+  const name = `ccjs_function_pointer_adapter_${context.functionPointerAdapters.length}`
+  const adapterSeenTypes: string[] = []
+
+  for (const seenType of seenTypes) {
+    adapterSeenTypes.push(seenType)
+  }
+
+  const adapterTargetSeenTypes: string[] = []
+
+  for (const seenType of targetSeenTypes) {
+    adapterTargetSeenTypes.push(seenType)
+  }
+
+  context.functionPointerAdapterNames.set(key, name)
+  context.functionPointerAdapters.push({
+    functionType,
+    name,
+    seenTypes: adapterSeenTypes,
+    target,
+    targetFunctionType,
+    targetSeenTypes: adapterTargetSeenTypes
+  })
+
+  return name
+}
+
 function emitFunctionPointerVariable(
   name: string,
   init: AnyNode,
   context: CFunctionContext,
   isConst: boolean,
   functionType: CFunctionType | null | undefined,
-  loc: CSourceLocation
+  loc: CSourceLocation,
+  seenTypes: string[] = []
 ): string {
   return emitFunctionPointerVariableWithCInitializer(
     name,
@@ -1953,7 +2266,8 @@ function emitFunctionPointerVariable(
     context,
     isConst,
     functionType,
-    loc
+    loc,
+    seenTypes
   )
 }
 
@@ -1963,7 +2277,8 @@ function emitFunctionPointerVariableWithCInitializer(
   context: CFunctionContext,
   isConst: boolean,
   functionType: CFunctionType | null | undefined,
-  loc: CSourceLocation
+  loc: CSourceLocation,
+  seenTypes: string[] = []
 ): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
   let constPrefix = ''
@@ -1972,7 +2287,7 @@ function emitFunctionPointerVariableWithCInitializer(
     constPrefix = 'const '
   }
 
-  return `${emitFunctionPointerReturnType(functionType)} (*${constPrefix}${name})(${emitFunctionPointerParams(functionType)}) = ${init}`
+  return `${emitFunctionPointerReturnType(functionType)} (*${constPrefix}${name})(${emitFunctionPointerParams(functionType, [], seenTypes)}) = ${init}`
 }
 
 function resolveFunctionValueType(expression: AnyNode, context: CFunctionContext): CFunctionType | null {
@@ -2591,9 +2906,9 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   }
 
   const inferred = inferModuleValueAssignmentType(statement, context)
+  const moduleValueType = context.moduleValueTypes.get(statement.name) ?? inferred
 
   context.variables.set(statement.name, inferred)
-  context.moduleValueTypes.set(statement.name, inferred)
 
   if (statement.init == null) {
     return [`${name} = ${moduleValueDefaultExpression(inferred)};`]
@@ -2609,17 +2924,180 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   }
 
   if (inferred === 'string') {
+    if (moduleValueType === 'unknown' && statement.init.type === 'AwaitExpression') {
+      const value = emitCValueExpression(statement.init, context)
+      const lines: string[] = []
+
+      context.variables.set(statement.name, 'unknown')
+      context.moduleValueTypes.set(statement.name, 'unknown')
+      registerOwnedValue(context, statement.name)
+      pushAll(lines, value.lines)
+      lines.push(`${name} = ${value.expression};`)
+      lines.push(`ccjs_retain(${name});`)
+      return lines
+    }
+
+    context.moduleValueTypes.set(statement.name, inferred)
     return [`${name} = ${emitStringExpression(statement.init, context)};`]
   }
 
   const value = emitCValueExpression(statement.init, context)
   const lines: string[] = []
 
+  context.moduleValueTypes.set(statement.name, inferred)
   pushAll(lines, value.lines)
+  pushAll(lines, emitModuleObjectFunctionFieldAssignments(statement.name, statement.init, context))
   lines.push(`${name} = ${value.expression};`)
 
   if (inferred === 'unknown' || isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred)) {
     lines.push(`ccjs_retain(${name});`)
+  }
+
+  return lines
+}
+
+function emitModuleObjectFunctionFieldAssignments(
+  objectName: string,
+  expression: AnyNode,
+  context: CFunctionContext
+): string[] {
+  if (expression.type !== 'ObjectLiteral') {
+    return []
+  }
+
+  const fields = context.objectShapes.get(objectName)
+
+  if (fields == null) {
+    return []
+  }
+
+  return emitModuleObjectFunctionFieldAssignmentsFromShape(objectName, expression, fields, context, [])
+}
+
+function emitModuleObjectFunctionFieldAssignmentsFromShape(
+  objectName: string,
+  expression: AnyNode,
+  fields: CObjectShapeField[],
+  context: CFunctionContext,
+  seenTypes: string[]
+): string[] {
+  const lines: string[] = []
+
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      const value = findObjectLiteralPropertyValue(expression, field.name)
+      const fieldName = emitCObjectFunctionFieldName(objectName, field.name)
+
+      if (isPlainFunctionPointerType(field.functionType)) {
+        if (value == null) {
+          lines.push(`${fieldName} = 0;`)
+        } else {
+          const target = emitFunctionValueExpression(value, context)
+          const targetFunctionType = resolveFunctionValueType(value, context)
+
+          lines.push(
+            `${fieldName} = ${emitAdaptedModuleFunctionPointerExpression(
+              target,
+              targetFunctionType,
+              field.functionType,
+              context,
+              seenTypes,
+              []
+            )};`
+          )
+        }
+      } else if (isRuntimeFunctionType(field.functionType)) {
+        if (value == null) {
+          pushAll(lines, emitUndefinedRuntimeCallbackValueInto(fieldName))
+        } else {
+          pushAll(lines, emitRuntimeCallbackValueInto(value, field.functionType, fieldName, context))
+        }
+      }
+    } else if (field.valueType === 'object') {
+      const value = findObjectLiteralPropertyValue(expression, field.name)
+      let nestedFields: CObjectShapeField[] | null = null
+
+      if (field.shape != null && field.shape.fields != null) {
+        nestedFields = field.shape.fields
+      }
+
+      if (nestedFields == null) {
+        continue
+      }
+
+      let pushedType = false
+
+      if (field.declaredType != null) {
+        if (seenTypes.includes(field.declaredType)) {
+          continue
+        }
+
+        seenTypes.push(field.declaredType)
+        pushedType = true
+      }
+
+      if (value != null && value.type === 'ObjectLiteral') {
+        pushAll(
+          lines,
+          emitModuleObjectFunctionFieldAssignmentsFromShape(
+            `${objectName}_${field.name}`,
+            value,
+            nestedFields,
+            context,
+            seenTypes
+          )
+        )
+      } else {
+        pushAll(lines, emitModuleObjectFunctionFieldDefaultAssignments(`${objectName}_${field.name}`, nestedFields))
+      }
+
+      if (pushedType) {
+        seenTypes.pop()
+      }
+    }
+  }
+
+  return lines
+}
+
+function emitAdaptedModuleFunctionPointerExpression(
+  target: string,
+  targetFunctionType: CFunctionType | null | undefined,
+  functionType: CFunctionType | null | undefined,
+  context: CFunctionContext,
+  seenTypes: string[],
+  targetSeenTypes: string[]
+): string {
+  if (targetFunctionType == null || functionType == null) {
+    return target
+  }
+
+  if (
+    emitFunctionPointerReturnType(targetFunctionType) === emitFunctionPointerReturnType(functionType) &&
+    emitFunctionPointerParams(targetFunctionType, [], targetSeenTypes) === emitFunctionPointerParams(functionType, [], seenTypes)
+  ) {
+    return target
+  }
+
+  return emitFunctionPointerAdapter(target, targetFunctionType, functionType, context, seenTypes, targetSeenTypes)
+}
+
+function emitModuleObjectFunctionFieldDefaultAssignments(
+  objectName: string,
+  fields: CObjectShapeField[]
+): string[] {
+  const lines: string[] = []
+
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      if (isPlainFunctionPointerType(field.functionType)) {
+        lines.push(`${emitCObjectFunctionFieldName(objectName, field.name)} = 0;`)
+      } else if (isRuntimeFunctionType(field.functionType)) {
+        pushAll(lines, emitUndefinedRuntimeCallbackValueInto(emitCObjectFunctionFieldName(objectName, field.name)))
+      }
+    } else if (field.valueType === 'object' && field.shape != null && field.shape.fields != null) {
+      pushAll(lines, emitModuleObjectFunctionFieldDefaultAssignments(`${objectName}_${field.name}`, field.shape.fields))
+    }
   }
 
   return lines
@@ -2774,9 +3252,10 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
   const fieldsName = `${shapeName}_fields`
   let fields: CObjectShapeField[] = []
+  const shape: CObjectShape | null | undefined = statement.shape
 
-  if (statement.shape != null) {
-    fields = statement.shape.fields
+  if (shape != null && shape.fields != null) {
+    fields = shape.fields
   } else {
     const properties: CObjectLiteralPropertyNode[] = statement.init.properties
 
@@ -2837,6 +3316,11 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   lines.push(`if (${statement.name} == 0) ${emitFailureStatement(context)}`)
   lines.push(`*${statement.name} = ccjs_undefined_value();`)
   lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, ${statement.name})`, context))
+  const seenTypes: string[] = []
+
+  if (statement.declaredType != null) {
+    seenTypes.push(statement.declaredType)
+  }
 
   for (let index = 0; index < fields.length; index++) {
     const field = fields[index]
@@ -2850,16 +3334,25 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     }
 
     if (field.valueType === 'function') {
-      lines.push(
-        `${emitFunctionPointerVariable(
-          emitCObjectFunctionFieldName(statement.name, field.name),
-          nodeOrEmpty(propertyValue),
-          context,
-          true,
-          field.functionType,
-          propertyValue.loc
-        )};`
-      )
+      const fieldName = emitCObjectFunctionFieldName(statement.name, field.name)
+
+      if (!isPlainFunctionPointerType(field.functionType) && isRuntimeFunctionType(field.functionType)) {
+        registerOwnedValue(context, fieldName)
+        pushAll(lines, emitRuntimeCallbackValueInto(nodeOrEmpty(propertyValue), field.functionType, fieldName, context))
+      } else {
+        lines.push(
+          `${emitFunctionPointerVariable(
+            fieldName,
+            nodeOrEmpty(propertyValue),
+            context,
+            true,
+            field.functionType,
+            propertyValue.loc,
+            seenTypes
+          )};`
+        )
+      }
+
       continue
     }
 
@@ -3777,19 +4270,19 @@ function errorConstructorExpressions(
     )
   }
 
-  let message = cStringLiteralNode('', expression.loc)
-  const options = expression.args[1]
-  let code = cStringLiteralNode('', expression.loc)
-  let cause = cNullLiteralNode(expression.loc)
+  let message: AnyNode = cStringLiteralNode('', expression.loc)
+  const options: AnyNode | null | undefined = expression.args[1]
+  let code: AnyNode = cStringLiteralNode('', expression.loc)
+  let cause: AnyNode = cNullLiteralNode(expression.loc)
 
-  const messageArg = expression.args[0]
+  const messageArg: AnyNode | null | undefined = expression.args[0]
 
   if (messageArg != null) {
     message = messageArg
   }
 
   if (inferExpressionType(message, context) !== 'string') {
-    let loc = expression.loc
+    let loc: CSourceLocation = expression.loc
 
     if (message.loc != null) {
       loc = message.loc
@@ -3819,7 +4312,7 @@ function errorConstructorExpressions(
   }
 
   if (options.type !== 'ObjectLiteral') {
-    let loc = expression.loc
+    let loc: CSourceLocation = expression.loc
 
     if (options.loc != null) {
       loc = options.loc
@@ -3843,12 +4336,14 @@ function errorConstructorExpressions(
   const properties: CObjectLiteralPropertyNode[] = options.properties
 
   for (const property of properties) {
-    if (property.key === 'code') {
-      if (inferExpressionType(property.value, context) !== 'string') {
-        let loc = property.loc
+    const propertyValue: AnyNode = property.value
 
-        if (property.value.loc != null) {
-          loc = property.value.loc
+    if (property.key === 'code') {
+      if (inferExpressionType(propertyValue, context) !== 'string') {
+        let loc: CSourceLocation = property.loc
+
+        if (propertyValue.loc != null) {
+          loc = propertyValue.loc
         }
 
         pushDiagnostic(context,
@@ -3859,16 +4354,16 @@ function errorConstructorExpressions(
           )
         )
       } else {
-        code = property.value
+        code = propertyValue
       }
     } else if (property.key === 'cause') {
-      if (property.value.type === 'NullLiteral' || isErrorValueExpression(property.value, context)) {
-        cause = property.value
+      if (propertyValue.type === 'NullLiteral' || isErrorValueExpression(propertyValue, context)) {
+        cause = propertyValue
       } else {
-        let loc = property.loc
+        let loc: CSourceLocation = property.loc
 
-        if (property.value.loc != null) {
-          loc = property.value.loc
+        if (propertyValue.loc != null) {
+          loc = propertyValue.loc
         }
 
         pushDiagnostic(context,
@@ -3880,7 +4375,7 @@ function errorConstructorExpressions(
         )
       }
     } else {
-      let loc = options.loc
+      let loc: CSourceLocation = options.loc
 
       if (property.loc != null) {
         loc = property.loc
@@ -5494,7 +5989,7 @@ function emitRuntimeCallbackCall(
 
   return {
     lines,
-    expression: ''
+    expression: out
   }
 }
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { defaultEmitOutput, parseCliArgs } from '../scripts/lib/cli-args.ts'
 
-test('ccjs index.ts defaults to run command', () => {
+test('inox index.ts defaults to run command', () => {
   const result = parseCliArgs(['index.ts'])
 
   assert.equal(result.ok, true)
@@ -20,7 +20,7 @@ test('ccjs index.ts defaults to run command', () => {
   })
 })
 
-test('ccjs index.ts --emit c compiles source without running', () => {
+test('inox index.ts --emit c compiles source without running', () => {
   const result = parseCliArgs(['index.ts', '--emit', 'c'])
 
   assert.equal(result.ok, true)

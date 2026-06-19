@@ -11,7 +11,7 @@ if(CCJS_TLS_BACKEND STREQUAL "boringssl")
   enable_language(CXX)
 endif()
 
-set(CCJS_CLI "../bin/ccjs.ts")
+set(CCJS_CLI "../bin/inox.ts")
 set(CCJS_ENTRY "src/index.ts")
 set(CCJS_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 

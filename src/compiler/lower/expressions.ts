@@ -1,5 +1,6 @@
 import type { AnyNode } from '../types.ts'
-import type { LowerContext } from './type-resolution.ts'
+import { resolveDeclaredType } from './type-resolution.ts'
+import type { LowerContext, LowerResolvedType } from './type-resolution.ts'
 
 type LowerExpressionNode = AnyNode
 
@@ -35,7 +36,7 @@ function lowerExpressionWithContext(expression: LowerExpressionNode, context: Lo
   }
 
   if (expression.type === 'TypeAssertionExpression') {
-    return lowerExpressionWithContext(expression.expression, context)
+    return lowerTypeAssertionExpression(expression, context)
   }
 
   if (expression.type === 'ThisExpression') {
@@ -156,6 +157,85 @@ function lowerExpressionWithContext(expression: LowerExpressionNode, context: Lo
   }
 
   return cloneUnknownExpression(expression)
+}
+
+function lowerTypeAssertionExpression(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode {
+  const lowered = lowerExpressionWithContext(expression.expression, context)
+  let declaredType = expression.valueType
+
+  if (expression.declaredType != null) {
+    declaredType = expression.declaredType
+  }
+
+  const declared = resolveDeclaredType(declaredType, context)
+
+  return applyResolvedTypeAssertion(lowered, declaredType, declared)
+}
+
+function applyResolvedTypeAssertion(
+  expression: LowerExpressionNode,
+  declaredType: string,
+  declared: LowerResolvedType
+): LowerExpressionNode {
+  let arrayElementType = expression.arrayElementType
+  let arrayElementDeclaredType = expression.arrayElementDeclaredType
+  let mapKeyType = expression.mapKeyType
+  let mapValueType = expression.mapValueType
+  let promiseValueType = expression.promiseValueType
+  let setElementType = expression.setElementType
+  let shape = expression.shape
+  let functionType = expression.functionType
+  let valueType = expression.valueType
+
+  if (declared.arrayElementType != null) {
+    arrayElementType = declared.arrayElementType
+  }
+
+  if (declared.arrayElementDeclaredType != null) {
+    arrayElementDeclaredType = declared.arrayElementDeclaredType
+  }
+
+  if (declared.mapKeyType != null) {
+    mapKeyType = declared.mapKeyType
+  }
+
+  if (declared.mapValueType != null) {
+    mapValueType = declared.mapValueType
+  }
+
+  if (declared.promiseValueType != null) {
+    promiseValueType = declared.promiseValueType
+  }
+
+  if (declared.setElementType != null) {
+    setElementType = declared.setElementType
+  }
+
+  if (declared.shape != null) {
+    shape = declared.shape
+  }
+
+  if (declared.functionType != null) {
+    functionType = declared.functionType
+  }
+
+  if (declared.valueType != null) {
+    valueType = declared.valueType
+  }
+
+  expression.declaredType = declaredType
+  expression.nullable = declared.nullable
+  expression.arrayElementType = arrayElementType
+  expression.arrayElementDeclaredType = arrayElementDeclaredType
+  expression.mapKeyType = mapKeyType
+  expression.mapValueType = mapValueType
+  expression.promiseValueType = promiseValueType
+  expression.setElementType = setElementType
+  expression.shape = shape
+  expression.functionType = functionType
+  expression.valueType = valueType
+
+  return expression
 }
 
 function fallbackString(value: string | null | undefined, fallback: string): string {

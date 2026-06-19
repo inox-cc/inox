@@ -214,7 +214,7 @@ export const pathParseObjectShape: ObjectShapeInfo = {
 
 export const debugMemoryStatsObjectShape: ObjectShapeInfo = {
   kind: 'object',
-  builtin: 'ccjs.DebugMemoryStats',
+  builtin: 'inox.DebugMemoryStats',
   fields: readonlyDebugMemoryStatsFields(debugMemoryStatsFields)
 }
 
@@ -236,6 +236,14 @@ export const libuvOnlyRuntimeImports = new Map([
 ])
 
 export const globals: Map<string, SymbolInfo> = new Map([
+  [
+    'inox',
+    {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  ],
   [
     'ccjs',
     {

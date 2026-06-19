@@ -182,6 +182,8 @@ function addTypeImportDependency(
   const dependency = aliases.get(name)
 
   if (dependency == null) {
+    declarations.push(createUnknownTypeAliasDeclaration(name))
+    added.add(name)
     return
   }
 
@@ -210,6 +212,21 @@ function cloneTypeAliasDeclaration(exported: AnyNode, name: string, loc: SourceL
     syntheticTypeImport: true,
     importedName,
     valueType: cloneTypeAliasValue(exported.valueType)
+  }
+}
+
+function createUnknownTypeAliasDeclaration(name: string): AnyNode {
+  return {
+    type: 'TypeAliasDeclaration',
+    exported: false,
+    name,
+    loc: null,
+    syntheticTypeImport: true,
+    importedName: name,
+    valueType: {
+      kind: 'alias',
+      valueType: 'unknown'
+    }
   }
 }
 

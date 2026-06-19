@@ -87,6 +87,7 @@ export type IrFunctionDeclaration = {
   exported: boolean
   async: boolean
   params: AnyNode[]
+  declaredReturnType?: string | null
   returnType: string
   returnNullable: boolean
   returnArrayElementType?: ValueType | null
@@ -216,6 +217,7 @@ export type ModuleRecord = {
   imports: AnyNode[]
   reexports: AnyNode[]
   exports: Map<string, AnyNode>
+  typeImportDeclarations: Map<number, AnyNode[]>
 }
 
 export type ModuleGraph = {

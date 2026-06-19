@@ -9,5 +9,5 @@ async function load(path: string): Promise<string> {
   return fs.promises.readFile(path, 'utf8')
 }
 
-const text = await load('/tmp/ccjs-example-async-fs.txt')
+const text = await load('/tmp/inox-example-async-fs.txt')
 console.log(text)

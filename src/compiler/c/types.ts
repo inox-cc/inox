@@ -147,6 +147,15 @@ export type CFunctionType = {
   returnType: string
 }
 
+export type CFunctionPointerAdapter = {
+  functionType: CFunctionType
+  name: string
+  seenTypes: string[]
+  target: string
+  targetFunctionType: CFunctionType
+  targetSeenTypes: string[]
+}
+
 export type CFunctionReturnMapType = {
   key: string | null
   value: string | null

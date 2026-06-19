@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 export const rootDir = fileURLToPath(new URL('../../', import.meta.url))
 
 const requiredFiles: string[] = [
+  'bin/inox.ts',
   'bin/ccjs.ts',
   'LICENSE',
   'PLAN.md',

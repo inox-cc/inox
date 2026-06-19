@@ -409,7 +409,73 @@ function pushObjectFunctionFieldParams(params: string[], param: CFunctionParam, 
     return
   }
 
-  pushObjectShapeFunctionFieldParams(params, param.name, param.shape, context, param.loc)
+  const seenTypes: string[] = []
+  pushSeenDeclaredType(seenTypes, param.declaredType)
+
+  pushObjectShapeFunctionFieldParams(params, param.name, param.shape, context, param.loc, seenTypes)
+}
+
+function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string | null | undefined): boolean {
+  if (declaredType == null) {
+    return false
+  }
+
+  for (const seenType of seenTypes) {
+    if (seenType === declaredType || isContextDeclaredTypePair(seenType, declaredType)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function pushSeenDeclaredType(seenTypes: string[], declaredType: string | null | undefined): number {
+  if (declaredType == null || seenTypesIncludeDeclaredType(seenTypes, declaredType)) {
+    return 0
+  }
+
+  seenTypes.push(declaredType)
+
+  if (declaredType === 'CEmitContext') {
+    seenTypes.push('CFunctionContext')
+    seenTypes.push('CDeclarationFunctionContext')
+    return 3
+  }
+
+  if (declaredType === 'CFunctionContext') {
+    seenTypes.push('CEmitContext')
+    seenTypes.push('CDeclarationFunctionContext')
+    return 3
+  }
+
+  if (declaredType === 'CDeclarationFunctionContext') {
+    seenTypes.push('CEmitContext')
+    seenTypes.push('CFunctionContext')
+    return 3
+  }
+
+  return 1
+}
+
+function popSeenDeclaredTypes(seenTypes: string[], count: number): void {
+  for (let index = 0; index < count; index = index + 1) {
+    seenTypes.pop()
+  }
+}
+
+function isContextDeclaredTypePair(left: string, right: string): boolean {
+  return isContextDeclaredType(left) && isContextDeclaredType(right)
+}
+
+function isContextDeclaredType(value: string): boolean {
+  return (
+    value === 'CEmitContext' ||
+    value === 'CFunctionContext' ||
+    value === 'CDeclarationFunctionContext' ||
+    value === 'AsyncTaskEmitContext' ||
+    value === 'AsyncTaskFunctionContext' ||
+    value === 'AsyncTaskPlannerContext'
+  )
 }
 
 function pushObjectShapeFunctionFieldParams(
@@ -417,7 +483,8 @@ function pushObjectShapeFunctionFieldParams(
   objectName: string,
   shape: CObjectShape | null | undefined,
   context: CEmitContext,
-  loc: CSourceLocation
+  loc: CSourceLocation,
+  seenTypes: string[]
 ): void {
   const fields = shape?.fields
 
@@ -431,9 +498,24 @@ function pushObjectShapeFunctionFieldParams(
         continue
       }
 
-      params.push(emitObjectFunctionFieldParam(objectName, field, context, loc))
+      params.push(emitObjectFunctionFieldParam(objectName, field, context, loc, seenTypes))
     } else if (field.valueType === 'object') {
-      pushObjectShapeFunctionFieldParams(params, `${objectName}_${field.name}`, field.shape, context, field.loc ?? loc)
+      if (seenTypesIncludeDeclaredType(seenTypes, field.declaredType)) {
+        continue
+      }
+
+      const pushedTypes = pushSeenDeclaredType(seenTypes, field.declaredType)
+
+      pushObjectShapeFunctionFieldParams(
+        params,
+        `${objectName}_${field.name}`,
+        field.shape,
+        context,
+        field.loc ?? loc,
+        seenTypes
+      )
+
+      popSeenDeclaredTypes(seenTypes, pushedTypes)
     }
   }
 }
@@ -442,13 +524,15 @@ function emitObjectFunctionFieldParam(
   objectName: string,
   field: CObjectShapeField,
   context: CEmitContext,
-  loc: CSourceLocation
+  loc: CSourceLocation,
+  seenTypes: string[]
 ): string {
   return emitFunctionParameter(
     emitCObjectFunctionFieldName(objectName, field.name),
     field.functionType,
     context,
-    field.loc ?? loc
+    field.loc ?? loc,
+    seenTypes
   )
 }
 
@@ -651,7 +735,8 @@ export function emitFunctionParameter(
   name: string,
   functionType: CFunctionType | null | undefined,
   context: CEmitContext,
-  loc: CSourceLocation
+  loc: CSourceLocation,
+  seenTypes: string[] = []
 ): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
 
@@ -659,11 +744,15 @@ export function emitFunctionParameter(
     return `ccjs_value ${name}`
   }
 
-  return emitFunctionPointerParameter(name, functionType)
+  return emitFunctionPointerParameter(name, functionType, seenTypes)
 }
 
-export function emitFunctionPointerParameter(name: string, functionType: CFunctionType | null | undefined): string {
-  return `${emitFunctionPointerReturnType(functionType)} (*${name})(${emitFunctionPointerParams(functionType)})`
+export function emitFunctionPointerParameter(
+  name: string,
+  functionType: CFunctionType | null | undefined,
+  seenTypes: string[] = []
+): string {
+  return `${emitFunctionPointerReturnType(functionType)} (*${name})(${emitFunctionPointerParams(functionType, [], seenTypes)})`
 }
 
 export function reportUnsupportedCFunctionType(

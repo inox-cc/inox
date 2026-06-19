@@ -44,6 +44,7 @@ export type CExpressionTypeDependencies = {
   isNumberConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isNumberToStringCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isPromiseConstructorExpression: (expression: AnyNode) => boolean
+  isPromiseReturningFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
   isStringCaseCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringPadStartCall: (expression: AnyNode, context: CFunctionContext) => boolean
@@ -321,6 +322,10 @@ export function inferExpressionType(
   }
 
   if (deps.isPromiseConstructorExpression(expression)) {
+    return 'promise'
+  }
+
+  if (expression.type === 'CallExpression' && deps.isPromiseReturningFunctionCallee(expression.callee, context)) {
     return 'promise'
   }
 

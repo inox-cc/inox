@@ -15,7 +15,12 @@ import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { mathRuntimeMethodName } from '../runtime-methods.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import { isPlainFunctionPointerType, isRuntimeFunctionType } from '../async/callbacks.ts'
+import {
+  emitFunctionPointerParams,
+  emitFunctionPointerReturnType,
+  isPlainFunctionPointerType,
+  isRuntimeFunctionType
+} from '../async/callbacks.ts'
 import {
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
@@ -38,7 +43,13 @@ import {
   isNullableScalarRuntimeExpression,
   resolveNullableScalarConditionNarrowing
 } from './nullable.ts'
+import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
+import type { ArrayLoweringDependencies } from './arrays.ts'
+import type { ClassLoweringDependencies } from './classes.ts'
+import type { CollectionLoweringDependencies } from './collections.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
+import type { StatementLoweringDependencies } from './statements.ts'
+import type { StringLoweringDependencies } from './strings.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type {
   CKnownArrayElement,
@@ -79,6 +90,13 @@ type ObjectFunctionArgumentSource = {
   expression: CValueNode | null
   loc?: SourceLocation
   pathName: string | null
+  shape: CObjectShape | null
+  shapeKnown: boolean
+}
+
+type RuntimeObjectFunctionCallee = {
+  functionType: CFunctionType
+  name: string
 }
 
 type CDynamicObjectArrayIndexDependencies = {
@@ -98,10 +116,14 @@ type CEmitContext = {
 }
 
 type CFunctionContext = CEmitContext & {
+  arrayLoweringDependencies: ArrayLoweringDependencies
   boxedVariables: CStringSet
   cleanupEnabled: boolean
   diagnostics: Diagnostic[]
   eventLoopUsed: boolean
+  asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
+  classLoweringDependencies: ClassLoweringDependencies
+  collectionLoweringDependencies: CollectionLoweringDependencies
   externalEventLoop: boolean
   externalEventLoopFunctions: CStringSet
   failureStatement?: string | null
@@ -110,6 +132,7 @@ type CFunctionContext = CEmitContext & {
   functionNames: CStringMap
   functionParams: Map<string, CFunctionParam[]>
   functionReturnArrayElementTypes: CStringNullableMap
+  functionReturnDeclaredTypes: CStringNullableMap
   functionReturnNullables: CBooleanMap
   functionReturnPromiseValueTypes: CStringNullableMap
   functionReturnShapes: Map<string, CObjectShape | null>
@@ -117,6 +140,7 @@ type CFunctionContext = CEmitContext & {
   functionTypes: CFunctionTypeMap
   jsGlobalRoots: CStringSet
   mapTypes: CFunctionReturnMapTypeMap
+  moduleObjectShapes: CObjectShapeFieldMap
   moduleValueNames: CStringMap
   narrowedNullableScalars: CStringSet
   nextId: number
@@ -132,6 +156,8 @@ type CFunctionContext = CEmitContext & {
   runtimeStrings: CStringSet
   setElementTypes: CStringMap
   statusReturn: boolean
+  statementLoweringDependencies: StatementLoweringDependencies
+  stringLoweringDependencies: StringLoweringDependencies
   throwingFunction: boolean
   usedCleanupGoto: boolean
   variables: CStringMap
@@ -521,20 +547,25 @@ function objectLiteralPropertyValue(expression: CValueNode, key: string): CValue
 }
 
 function objectFunctionArgumentSource(expression: CValueNode, context: CFunctionContext): ObjectFunctionArgumentSource {
+  const pathName = objectExpressionPathName(expression, context)
+
   return {
     expression,
     loc: expression.loc,
-    pathName: objectExpressionPathName(expression, context)
+    pathName,
+    shape: objectFunctionArgumentSourceShape(expression, pathName, context),
+    shapeKnown: objectFunctionArgumentSourceShapeKnown(expression, pathName, context)
   }
 }
 
 function nestedObjectFunctionArgumentSource(
   source: ObjectFunctionArgumentSource,
-  fieldName: string,
+  field: CObjectShapeField,
   context: CFunctionContext
 ): ObjectFunctionArgumentSource {
   let expression: CValueNode | null = null
   const sourceExpression = source.expression
+  const fieldName = field.name
 
   if (sourceExpression != null) {
     expression = objectLiteralPropertyValue(sourceExpression, fieldName)
@@ -546,14 +577,27 @@ function nestedObjectFunctionArgumentSource(
     return {
       expression,
       loc: expression.loc ?? source.loc,
-      pathName: pathName ?? nestedObjectPathName(source.pathName, fieldName)
+      pathName: pathName ?? nestedObjectPathName(source.pathName, fieldName),
+      shape: objectFunctionArgumentSourceShape(expression, pathName, context),
+      shapeKnown: objectFunctionArgumentSourceShapeKnown(expression, pathName, context)
     }
+  }
+
+  const sourceShapeField = objectShapeFieldAt(source.shape?.fields, fieldName)
+  let shape: CObjectShape | null = null
+  let shapeKnown = false
+
+  if (source.shapeKnown) {
+    shape = sourceShapeField?.shape ?? null
+    shapeKnown = true
   }
 
   return {
     expression: null,
     loc: source.loc,
-    pathName: nestedObjectPathName(source.pathName, fieldName)
+    pathName: nestedObjectPathName(source.pathName, fieldName),
+    shape,
+    shapeKnown
   }
 }
 
@@ -565,31 +609,152 @@ function nestedObjectPathName(pathName: string | null, fieldName: string): strin
   return `${pathName}_${fieldName}`
 }
 
+function objectFunctionArgumentSourceShape(
+  expression: CValueNode,
+  pathName: string | null,
+  context: CFunctionContext
+): CObjectShape | null {
+  if (pathName != null) {
+    const fields = context.objectShapes.get(pathName)
+
+    if (fields != null) {
+      return { fields }
+    }
+  }
+
+  if (expression.shape != null) {
+    return expression.shape
+  }
+
+  return null
+}
+
+function objectFunctionArgumentSourceShapeKnown(
+  expression: CValueNode,
+  pathName: string | null,
+  context: CFunctionContext
+): boolean {
+  if (pathName != null && context.objectShapes.get(pathName) != null) {
+    return true
+  }
+
+  return expression.shape != null
+}
+
+function objectShapeFieldAt(fields: CObjectShapeField[] | null | undefined, fieldName: string): CObjectShapeField | null {
+  if (fields == null) {
+    return null
+  }
+
+  for (const field of fields) {
+    if (field.name === fieldName) {
+      return field
+    }
+  }
+
+  return null
+}
+
+function appendDefaultObjectFunctionFieldArgument(args: string[], field: CObjectShapeField): void {
+  if (isRuntimeObjectFunctionField(field)) {
+    args.push('ccjs_null_value()')
+  } else {
+    args.push('0')
+  }
+}
+
 function emitObjectFunctionFieldArgument(
   source: ObjectFunctionArgumentSource,
   field: CObjectShapeField,
   context: CFunctionContext,
-  deps: CCallExpressionDependencies
-): string {
+  deps: CCallExpressionDependencies,
+  seenTypes: string[]
+): PreparedExpression {
   let literalValue: CValueNode | null = null
   const expression = source.expression
+  const sourceField = objectFunctionFieldAt(source.shape?.fields, field.name)
 
   if (expression != null) {
     literalValue = objectLiteralPropertyValue(expression, field.name)
   }
 
+  if (isRuntimeObjectFunctionField(field)) {
+    if (literalValue != null) {
+      return deps.emitRuntimeCallbackValue(literalValue, field.functionType, context)
+    }
+
+    const objectName = source.pathName
+
+    if (objectName != null) {
+      return {
+        lines: [],
+        expression: emitCObjectFunctionFieldName(objectName, field.name)
+      }
+    }
+
+    if (field.optional === true) {
+      return {
+        lines: [],
+        expression: 'ccjs_null_value()'
+      }
+    }
+
+    context.diagnostics.push(
+      diagnostic(
+        'CCJS_C_FUNCTION_VALUE',
+        `object function field ${field.name} is not available as a runtime C callback value`,
+        source.loc
+      )
+    )
+
+    return {
+      lines: [],
+      expression: 'ccjs_undefined_value()'
+    }
+  }
+
   if (literalValue != null) {
-    return deps.emitFunctionValueExpression(literalValue, context)
+    const targetFunctionType = deps.resolveFunctionValueType(literalValue, context)
+    const target = deps.emitFunctionValueExpression(literalValue, context)
+
+    return {
+      lines: [],
+      expression: emitAdaptedFunctionPointerExpression(
+        target,
+        targetFunctionType,
+        field.functionType,
+        context,
+        deps,
+        seenTypes,
+        []
+      )
+    }
   }
 
   const objectName = source.pathName
 
   if (objectName != null) {
-    return emitCObjectFunctionFieldName(objectName, field.name)
+    const target = emitCObjectFunctionFieldName(objectName, field.name)
+
+    return {
+      lines: [],
+      expression: emitAdaptedFunctionPointerExpression(
+        target,
+        sourceField?.functionType ?? null,
+        field.functionType,
+        context,
+        deps,
+        seenTypes,
+        objectFunctionArgumentSourceSeenTypes(source, context, seenTypes)
+      )
+    }
   }
 
   if (field.optional === true) {
-    return '0'
+    return {
+      lines: [],
+      expression: '0'
+    }
   }
 
   context.diagnostics.push(
@@ -600,29 +765,123 @@ function emitObjectFunctionFieldArgument(
     )
   )
 
-  return '0'
+  return {
+    lines: [],
+    expression: '0'
+  }
+}
+
+function emitAdaptedFunctionPointerExpression(
+  target: string,
+  targetFunctionType: CFunctionType | null | undefined,
+  functionType: CFunctionType | null | undefined,
+  context: CFunctionContext,
+  deps: CCallExpressionDependencies,
+  seenTypes: string[],
+  targetSeenTypes: string[]
+): string {
+  if (targetFunctionType == null || functionType == null) {
+    return target
+  }
+
+  if (functionPointerSignaturesMatch(targetFunctionType, functionType, seenTypes, targetSeenTypes)) {
+    return target
+  }
+
+  return deps.emitFunctionPointerAdapter(target, targetFunctionType, functionType, context, seenTypes, targetSeenTypes)
+}
+
+function functionPointerSignaturesMatch(
+  targetFunctionType: CFunctionType,
+  functionType: CFunctionType,
+  seenTypes: string[],
+  targetSeenTypes: string[]
+): boolean {
+  if (emitFunctionPointerReturnType(targetFunctionType) !== emitFunctionPointerReturnType(functionType)) {
+    return false
+  }
+
+  return emitFunctionPointerParams(targetFunctionType, [], targetSeenTypes) === emitFunctionPointerParams(functionType, [], seenTypes)
+}
+
+function objectFunctionArgumentSourceSeenTypes(
+  source: ObjectFunctionArgumentSource,
+  context: CFunctionContext,
+  expectedSeenTypes: string[]
+): string[] {
+  if (source.pathName != null && context.moduleObjectShapes.get(source.pathName) == null) {
+    return copyStringArray(expectedSeenTypes)
+  }
+
+  if (source.expression == null) {
+    return []
+  }
+
+  return objectFunctionCalleeSeenTypes(source.expression, context)
+}
+
+function copyStringArray(values: string[]): string[] {
+  const result: string[] = []
+
+  for (const value of values) {
+    result.push(value)
+  }
+
+  return result
 }
 
 function appendObjectFunctionFieldArguments(
+  lines: string[],
   args: string[],
   expression: CValueNode,
   param: CFunctionParam,
   context: CFunctionContext,
-  deps: CCallExpressionDependencies
+  deps: CCallExpressionDependencies,
+  calleeSeenTypes: string[]
 ): void {
-  appendObjectShapeFunctionFieldArguments(args, objectFunctionArgumentSource(expression, context), param.shape, context, deps)
+  const seenTypes: string[] = []
+
+  for (const seenType of calleeSeenTypes) {
+    seenTypes.push(seenType)
+  }
+
+  if (param.declaredType != null && !seenTypes.includes(param.declaredType)) {
+    seenTypes.push(param.declaredType)
+  }
+
+  appendObjectShapeFunctionFieldArguments(
+    lines,
+    args,
+    objectFunctionArgumentSource(expression, context),
+    param.shape,
+    context,
+    deps,
+    seenTypes
+  )
 }
 
-function appendDefaultObjectFunctionFieldArguments(args: string[], param: CFunctionParam): void {
-  appendDefaultObjectShapeFunctionFieldArguments(args, param.shape)
+function appendDefaultObjectFunctionFieldArguments(args: string[], param: CFunctionParam, calleeSeenTypes: string[]): void {
+  const seenTypes: string[] = []
+
+  for (const seenType of calleeSeenTypes) {
+    seenTypes.push(seenType)
+  }
+
+  if (param.declaredType != null && !seenTypes.includes(param.declaredType)) {
+    seenTypes.push(param.declaredType)
+  }
+
+  appendDefaultObjectShapeFunctionFieldArguments(args, param.shape, seenTypes)
 }
 
 function appendObjectShapeFunctionFieldArguments(
+  lines: string[],
   args: string[],
   source: ObjectFunctionArgumentSource,
   shape: CObjectShape | null | undefined,
   context: CFunctionContext,
-  deps: CCallExpressionDependencies
+  deps: CCallExpressionDependencies,
+  seenTypes: string[]
 ): void {
   const fields = shape?.fields
 
@@ -636,18 +895,54 @@ function appendObjectShapeFunctionFieldArguments(
         continue
       }
 
-      args.push(emitObjectFunctionFieldArgument(source, field, context, deps))
+      if (source.shapeKnown && objectFunctionFieldAt(source.shape?.fields, field.name) == null) {
+        appendDefaultObjectFunctionFieldArgument(args, field)
+        continue
+      }
+
+      const value = emitObjectFunctionFieldArgument(source, field, context, deps, seenTypes)
+
+      appendLines(lines, value.lines)
+      args.push(value.expression)
     } else if (field.valueType === 'object') {
+      if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+        continue
+      }
+
       if (isMissingOptionalObjectLiteralField(source, field) || isUnavailableOptionalObjectFieldSource(source, field)) {
-        appendDefaultObjectShapeFunctionFieldArguments(args, field.shape)
+        let pushedType = false
+
+        if (field.declaredType != null) {
+          seenTypes.push(field.declaredType)
+          pushedType = true
+        }
+
+        appendDefaultObjectShapeFunctionFieldArguments(args, field.shape, seenTypes)
+
+        if (pushedType) {
+          seenTypes.pop()
+        }
       } else {
+        let pushedType = false
+
+        if (field.declaredType != null) {
+          seenTypes.push(field.declaredType)
+          pushedType = true
+        }
+
         appendObjectShapeFunctionFieldArguments(
+          lines,
           args,
-          nestedObjectFunctionArgumentSource(source, field.name, context),
+          nestedObjectFunctionArgumentSource(source, field, context),
           field.shape,
           context,
-          deps
+          deps,
+          seenTypes
         )
+
+        if (pushedType) {
+          seenTypes.pop()
+        }
       }
     }
   }
@@ -670,7 +965,8 @@ function isUnavailableOptionalObjectFieldSource(source: ObjectFunctionArgumentSo
 
 function appendDefaultObjectShapeFunctionFieldArguments(
   args: string[],
-  shape: CObjectShape | null | undefined
+  shape: CObjectShape | null | undefined,
+  seenTypes: string[]
 ): void {
   const fields = shape?.fields
 
@@ -684,15 +980,38 @@ function appendDefaultObjectShapeFunctionFieldArguments(
         continue
       }
 
-      args.push('0')
+      if (isRuntimeObjectFunctionField(field)) {
+        args.push('ccjs_null_value()')
+      } else {
+        args.push('0')
+      }
     } else if (field.valueType === 'object') {
-      appendDefaultObjectShapeFunctionFieldArguments(args, field.shape)
+      if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+        continue
+      }
+
+      let pushedType = false
+
+      if (field.declaredType != null) {
+        seenTypes.push(field.declaredType)
+        pushedType = true
+      }
+
+      appendDefaultObjectShapeFunctionFieldArguments(args, field.shape, seenTypes)
+
+      if (pushedType) {
+        seenTypes.pop()
+      }
     }
   }
 }
 
 function isSupportedObjectFunctionField(field: CObjectShapeField): boolean {
   return isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)
+}
+
+function isRuntimeObjectFunctionField(field: CObjectShapeField): boolean {
+  return !isPlainFunctionPointerType(field.functionType) && isRuntimeFunctionType(field.functionType)
 }
 
 function objectFunctionFieldCallee(callee: CValueNode, context: CFunctionContext): string | null {
@@ -741,6 +1060,195 @@ function objectFunctionFieldCallee(callee: CValueNode, context: CFunctionContext
   }
 
   return emitCObjectFunctionFieldName(objectName, fieldName)
+}
+
+function runtimeObjectFunctionFieldCallee(
+  callee: CValueNode,
+  context: CFunctionContext
+): RuntimeObjectFunctionCallee | null {
+  let object: CValueNode | null = null
+  let fieldName: string | null = null
+
+  if (callee.type === 'MemberExpression') {
+    object = callee.object
+    fieldName = callee.property
+  } else if (callee.type === 'IndexExpression' && callee.index.type === 'StringLiteral') {
+    object = callee.object
+    fieldName = callee.index.value
+  }
+
+  if (object == null || fieldName == null) {
+    return null
+  }
+
+  const objectName = objectExpressionName(object, context)
+
+  if (objectName == null) {
+    return null
+  }
+
+  let fields = context.objectShapes.get(objectName)
+
+  if (fields == null && object.type === 'Reference' && object.path.length === 1) {
+    const directObjectName = object.path[0]
+    fields = context.objectShapes.get(directObjectName)
+  }
+
+  if (fields == null && object.shape != null) {
+    fields = object.shape.fields
+  }
+
+  if (fields == null) {
+    const returnShape = objectFunctionReturnShape(object, context)
+
+    if (returnShape != null && returnShape.fields != null) {
+      fields = returnShape.fields
+    }
+  }
+
+  const field = objectFunctionFieldAt(fields, fieldName)
+
+  if (field == null || field.functionType == null) {
+    return null
+  }
+
+  const seenTypes = objectFunctionCalleeSeenTypes(object, context)
+
+  if (!isRuntimeObjectFunctionField(field)) {
+    return null
+  }
+
+  return {
+    functionType: field.functionType,
+    name: emitCObjectFunctionFieldName(objectName, fieldName)
+  }
+}
+
+function objectFunctionCalleeSeenTypes(object: CValueNode, context: CFunctionContext): string[] {
+  const seenTypes: string[] = []
+
+  appendObjectFunctionCalleeSeenTypes(seenTypes, object, context)
+
+  return seenTypes
+}
+
+function objectFunctionCalleeArgumentSeenTypes(callee: CValueNode, context: CFunctionContext): string[] {
+  if (callee.type === 'MemberExpression') {
+    return objectFunctionCalleeSeenTypes(callee.object, context)
+  }
+
+  if (callee.type === 'IndexExpression' && callee.index.type === 'StringLiteral') {
+    return objectFunctionCalleeSeenTypes(callee.object, context)
+  }
+
+  return []
+}
+
+function appendObjectFunctionCalleeSeenTypes(seenTypes: string[], object: CValueNode, context: CFunctionContext): void {
+  if (object.type === 'MemberExpression') {
+    appendObjectFunctionCalleeSeenTypes(seenTypes, object.object, context)
+    appendObjectFunctionFieldDeclaredType(seenTypes, object.object, object.property, context)
+    return
+  }
+
+  if (object.type === 'IndexExpression' && object.index.type === 'StringLiteral') {
+    appendObjectFunctionCalleeSeenTypes(seenTypes, object.object, context)
+    appendObjectFunctionFieldDeclaredType(seenTypes, object.object, object.index.value, context)
+    return
+  }
+
+  if (object.type === 'CallExpression' && object.callee.type === 'Reference') {
+    const calleeName = objectExpressionPathName(object.callee, context)
+
+    if (calleeName == null) {
+      return
+    }
+
+    const accessor = context.objectAccessorReturnPaths.get(calleeName)
+
+    if (accessor != null) {
+      const argument = functionCallArgumentAt(object.args, accessor.paramIndex)
+
+      if (argument != null) {
+        appendObjectFunctionCalleeSeenTypes(seenTypes, argument, context)
+      }
+    }
+
+    const declaredReturnType = context.functionReturnDeclaredTypes.get(calleeName)
+
+    if (declaredReturnType != null && !seenTypes.includes(declaredReturnType)) {
+      seenTypes.push(declaredReturnType)
+    }
+
+    return
+  }
+
+  if (object.declaredType != null && !seenTypes.includes(object.declaredType)) {
+    seenTypes.push(object.declaredType)
+  }
+}
+
+function appendObjectFunctionFieldDeclaredType(
+  seenTypes: string[],
+  object: CValueNode,
+  fieldName: string,
+  context: CFunctionContext
+): void {
+  const objectName = objectExpressionName(object, context)
+  let fields: CObjectShapeField[] | null | undefined = null
+
+  if (objectName != null) {
+    fields = context.objectShapes.get(objectName)
+  }
+
+  if (fields == null && object.shape != null) {
+    fields = object.shape.fields
+  }
+
+  const field = objectShapeFieldAt(fields, fieldName)
+
+  if (field != null && field.declaredType != null) {
+    const declaredType = field.declaredType
+
+    if (!seenTypes.includes(declaredType)) {
+      seenTypes.push(declaredType)
+    }
+  }
+}
+
+function emitRuntimeObjectFunctionFieldCall(
+  expression: CValueNode,
+  callee: RuntimeObjectFunctionCallee,
+  context: CFunctionContext,
+  deps: CCallExpressionDependencies
+): PreparedExpression {
+  const lines: string[] = []
+  const args: string[] = []
+
+  for (const arg of expression.args) {
+    const value = deps.emitCValueExpression(arg, context)
+
+    appendLines(lines, value.lines)
+    args.push(value.expression)
+  }
+
+  const out = nextCName(context, 'ccjs_callback_out')
+  registerOwnedValue(context, out)
+  appendLines(lines, emitPrepareOwnedValueWrite(out))
+
+  if (args.length === 0) {
+    lines.push(emitStatusCheck(`ccjs_callback_call(${callee.name}, 0, 0, &${out})`, context))
+  } else {
+    const argArray = nextCName(context, 'ccjs_callback_args')
+
+    lines.push(`ccjs_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
+    lines.push(emitStatusCheck(`ccjs_callback_call(${callee.name}, ${argArray}, ${args.length}, &${out})`, context))
+  }
+
+  return {
+    lines,
+    expression: out
+  }
 }
 
 function objectFunctionReturnShape(object: CValueNode, context: CFunctionContext): CObjectShape | null {
@@ -870,6 +1378,14 @@ export type CCallExpressionDependencies = {
   emitCNumberConversionValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitFunctionValueExpression(expression: CValueNode, context: CFunctionContext): string
+  emitFunctionPointerAdapter(
+    target: string,
+    targetFunctionType: CFunctionType,
+    functionType: CFunctionType,
+    context: CFunctionContext,
+    seenTypes: string[],
+    targetSeenTypes: string[]
+  ): string
   emitNullableFunctionValueExpression(
     expression: CValueNode,
     functionType: CFunctionType | null | undefined,
@@ -912,6 +1428,7 @@ export type CCallExpressionDependencies = {
   isNullableFunctionType(valueType: string | null | undefined, nullable: boolean | null | undefined): boolean
   isPromiseReturningFunctionCallee(callee: CValueNode, context: CFunctionContext): boolean
   registerErrorChannel(context: CFunctionContext): void
+  resolveFunctionValueType(expression: CValueNode, context: CFunctionContext): CFunctionType | null
   resolveFunctionParams(callee: CValueNode, context: CFunctionContext): CFunctionParam[] | null
   resolveRuntimeCallbackCalleeType(callee: CValueNode, context: CFunctionContext): CFunctionType | null
   resolveRuntimeFunctionArgumentType(
@@ -1083,6 +1600,12 @@ export function emitPreparedCallExpression(
     return deps.emitRuntimeCallbackCall(expression, callbackType, context)
   }
 
+  const objectCallback = runtimeObjectFunctionFieldCallee(expression.callee, context)
+
+  if (objectCallback != null) {
+    return emitRuntimeObjectFunctionFieldCall(expression, objectCallback, context, deps)
+  }
+
   const params = deps.resolveFunctionParams(expression.callee, context)
 
   if (params == null) {
@@ -1092,7 +1615,7 @@ export function emitPreparedCallExpression(
     }
   }
 
-  const prepared = emitPreparedCallArgs(expression, params, context, deps)
+  const prepared = emitPreparedCallArgs(expression, params, context, deps, objectFunctionCalleeArgumentSeenTypes(expression.callee, context))
   const lines = prepared.lines
   const args = prepared.args
 
@@ -1163,7 +1686,8 @@ export function emitPreparedCallArgs(
   expression: CValueNode,
   params: CFunctionParam[],
   context: CFunctionContext,
-  deps: CCallExpressionDependencies
+  deps: CCallExpressionDependencies,
+  calleeSeenTypes: string[] = []
 ): PreparedCallArgs {
   const lines: string[] = []
   const args: string[] = []
@@ -1173,7 +1697,7 @@ export function emitPreparedCallArgs(
     const param = functionParamAt(params, index)
 
     if (param != null) {
-      appendPreparedCallArg(lines, args, expression, arg, param, index, context, deps)
+      appendPreparedCallArg(lines, args, expression, arg, param, index, context, deps, calleeSeenTypes)
     } else {
       args.push(deps.emitCExpression(arg, context))
     }
@@ -1184,10 +1708,10 @@ export function emitPreparedCallArgs(
 
     if (param.optional === true) {
       if (param.defaultValue != null) {
-        appendPreparedCallArg(lines, args, expression, param.defaultValue, param, index, context, deps)
+        appendPreparedCallArg(lines, args, expression, param.defaultValue, param, index, context, deps, calleeSeenTypes)
       } else {
         args.push(emitDefaultOptionalArg(param))
-        appendDefaultObjectFunctionFieldArguments(args, param)
+        appendDefaultObjectFunctionFieldArguments(args, param, calleeSeenTypes)
       }
     }
   }
@@ -1206,7 +1730,8 @@ function appendPreparedCallArg(
   param: CFunctionParam,
   index: number,
   context: CFunctionContext,
-  deps: CCallExpressionDependencies
+  deps: CCallExpressionDependencies,
+  calleeSeenTypes: string[]
 ): void {
   const paramValueType = param.valueType
 
@@ -1235,7 +1760,7 @@ function appendPreparedCallArg(
 
     appendLines(lines, value.lines)
     args.push(value.expression)
-    appendObjectFunctionFieldArguments(args, arg, param, context, deps)
+    appendObjectFunctionFieldArguments(lines, args, arg, param, context, deps, calleeSeenTypes)
   } else if (isManagedRuntimeReturnType(paramValueType)) {
     const value = deps.emitCValueExpression(arg, context)
 

@@ -9,6 +9,7 @@ import {
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
+import type { CFunctionContext } from '../context.ts'
 import type {
   CFunctionReturnMapType,
   CObjectFieldInfo,
@@ -24,26 +25,7 @@ type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CStringMap = Map<string, string>
 type CStringNullableMap = Map<string, string | null>
 
-type CollectionFunctionContext = {
-  boxedVariables: Set<string>
-  cleanupEnabled: boolean
-  collectionLoweringDependencies?: CollectionLoweringDependencies
-  diagnostics: Diagnostic[]
-  failureStatement?: string | null
-  failureStatementUsed?: boolean
-  functionReturnMapTypes?: CFunctionReturnMapTypeMap
-  functionReturnSetElementTypes?: CStringNullableMap
-  mapTypes: CFunctionReturnMapTypeMap
-  nextId: number
-  objectShapes: CObjectShapeFieldMap
-  ownedValues: string[]
-  returnType?: string
-  setElementTypes: CStringMap
-  statusReturn: boolean
-  throwingFunction: boolean
-  usedCleanupGoto: boolean
-  variables: CStringMap
-}
+type CollectionFunctionContext = CFunctionContext
 
 export type CollectionLoweringDependencies = {
   emitCValueExpression(expression: AnyNode, context: CollectionFunctionContext): PreparedExpression

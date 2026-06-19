@@ -38,7 +38,7 @@ declare class AbortController {
   abort(): void
 }
 
-type CcjsDebugMemoryStats = {
+type InoxDebugMemoryStats = {
   readonly allocCount: number
   readonly reallocCount: number
   readonly freeCount: number
@@ -55,6 +55,12 @@ type CcjsDebugMemoryStats = {
 
 declare const ccjs: {
   readonly __debug: {
-    memory(): CcjsDebugMemoryStats
+    memory(): InoxDebugMemoryStats
+  }
+}
+
+declare const inox: {
+  readonly __debug: {
+    memory(): InoxDebugMemoryStats
   }
 }

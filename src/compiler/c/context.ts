@@ -14,6 +14,7 @@ import type {
   CClassInfo,
   CDgramMessageHandler,
   CFunctionParam,
+  CFunctionPointerAdapter,
   CFunctionReturnMapType,
   CFunctionType,
   CObjectAccessorReturnPath,
@@ -37,6 +38,7 @@ export type CCallbackWrapperMap = Map<string, CCallbackWrapper>
 export type CDgramMessageHandlerMap = Map<string, CDgramMessageHandler>
 export type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 export type CFunctionTypeMap = Map<string, CFunctionType>
+export type CFunctionPointerAdapterMap = Map<string, string>
 export type CHttpHandlerMap = Map<string, CHttpHandler>
 export type CNetHandlerMap = Map<string, CNetHandler>
 export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
@@ -138,8 +140,11 @@ export type CEmitContext = {
   functionAsyncFlags: CBooleanMap
   functionNames: CStringMap
   functionParams: Map<string, CFunctionParam[]>
+  functionPointerAdapterNames: CFunctionPointerAdapterMap
+  functionPointerAdapters: CFunctionPointerAdapter[]
   functionReturnArrayElementDeclaredTypes: CStringNullableMap
   functionReturnArrayElementTypes: CStringNullableMap
+  functionReturnDeclaredTypes: CStringNullableMap
   functionReturnMapTypes: CFunctionReturnMapTypeMap
   functionReturnNullables: CBooleanMap
   functionReturnPromiseValueTypes: CStringNullableMap
@@ -341,8 +346,11 @@ export function createFunctionContext(
     functionAsyncFlags: baseContext.functionAsyncFlags,
     functionNames: baseContext.functionNames,
     functionParams: baseContext.functionParams,
+    functionPointerAdapterNames: baseContext.functionPointerAdapterNames,
+    functionPointerAdapters: baseContext.functionPointerAdapters,
     functionReturnArrayElementDeclaredTypes: baseContext.functionReturnArrayElementDeclaredTypes,
     functionReturnArrayElementTypes: baseContext.functionReturnArrayElementTypes,
+    functionReturnDeclaredTypes: baseContext.functionReturnDeclaredTypes,
     functionReturnMapTypes: baseContext.functionReturnMapTypes,
     functionReturnNullables: baseContext.functionReturnNullables,
     functionReturnPromiseValueTypes: baseContext.functionReturnPromiseValueTypes,
@@ -453,6 +461,14 @@ export function emitFailureStatement(context: CFailureContext): string {
 
   if (context.returnType === 'void') {
     return 'return;'
+  }
+
+  if (
+    context.returnType === 'unknown' ||
+    isManagedRuntimeReturnType(context.returnType) ||
+    isOpaqueRuntimeValueType(context.returnType)
+  ) {
+    return 'return ccjs_undefined_value();'
   }
 
   return 'return 0;'

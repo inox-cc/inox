@@ -20,6 +20,7 @@ export type IrModuleRecord = {
 type IrTopLevelNode = AnyNode & {
   async?: boolean | null
   body?: AnyNode[]
+  declaredReturnType?: string | null
   exported?: boolean | null
   loc?: SourceLocation
   name?: string | null
@@ -335,6 +336,10 @@ function createFunctionDeclaration(item: IrTopLevelNode, name: string): IrFuncti
 
   if (loc != null) {
     declaration.loc = loc
+  }
+
+  if (item.declaredReturnType != null) {
+    declaration.declaredReturnType = item.declaredReturnType
   }
 
   if (item.returnArrayElementType != null) {

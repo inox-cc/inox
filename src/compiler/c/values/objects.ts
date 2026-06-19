@@ -75,7 +75,8 @@ export type ObjectVariableDeclarationDependencies = {
     context: ObjectFunctionContext,
     isConst: boolean,
     functionType: CFunctionType | null | undefined,
-    loc: AnyNode['loc']
+    loc: AnyNode['loc'],
+    seenTypes?: string[]
   ): string
   emitFunctionPointerVariableWithCInitializer(
     name: string,
@@ -83,8 +84,15 @@ export type ObjectVariableDeclarationDependencies = {
     context: ObjectFunctionContext,
     isConst: boolean,
     functionType: CFunctionType | null | undefined,
-    loc: AnyNode['loc']
+    loc: AnyNode['loc'],
+    seenTypes?: string[]
   ): string
+  emitRuntimeCallbackValueInto(
+    expression: AnyNode,
+    functionType: CFunctionType | null | undefined,
+    out: string,
+    context: ObjectFunctionContext
+  ): string[]
   emitCValueExpression(expression: AnyNode, context: ObjectFunctionContext): PreparedExpression
   inferExpressionType(expression: AnyNode, context: ObjectFunctionContext): string
   resolveFunctionValueType(expression: AnyNode, context: ObjectFunctionContext): CFunctionType | null
@@ -1044,16 +1052,27 @@ function emitObjectFunctionFieldVariableDeclaration(
   field: CObjectShapeField,
   property: ObjectPropertyNode,
   context: ObjectFunctionContext,
-  dependencies: ObjectVariableDeclarationDependencies
-): string {
-  return `${dependencies.emitFunctionPointerVariable(
-    emitCObjectFunctionFieldName(objectName, field.name),
-    property.value,
-    context,
-    true,
-    field.functionType,
-    property.value.loc
-  )};`
+  dependencies: ObjectVariableDeclarationDependencies,
+  seenTypes: string[]
+): string[] {
+  const name = emitCObjectFunctionFieldName(objectName, field.name)
+
+  if (isRuntimeObjectFunctionField(field)) {
+    registerOwnedValue(context, name)
+    return dependencies.emitRuntimeCallbackValueInto(property.value, field.functionType, name, context)
+  }
+
+  return [
+    `${dependencies.emitFunctionPointerVariable(
+      name,
+      property.value,
+      context,
+      true,
+      field.functionType,
+      property.value.loc,
+      seenTypes
+    )};`
+  ]
 }
 
 function emitNestedObjectFunctionFieldVariableDeclarations(
@@ -1061,10 +1080,25 @@ function emitNestedObjectFunctionFieldVariableDeclarations(
   field: CObjectShapeField,
   property: ObjectPropertyNode,
   context: ObjectFunctionContext,
-  dependencies: ObjectVariableDeclarationDependencies
+  dependencies: ObjectVariableDeclarationDependencies,
+  seenTypes: string[]
 ): string[] {
   if (field.valueType !== 'object') {
     return []
+  }
+
+  if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+    return []
+  }
+
+  const nestedSeenTypes: string[] = []
+
+  for (const seenType of seenTypes) {
+    nestedSeenTypes.push(seenType)
+  }
+
+  if (field.declaredType != null && !nestedSeenTypes.includes(field.declaredType)) {
+    nestedSeenTypes.push(field.declaredType)
   }
 
   return emitObjectShapeFunctionFieldVariableDeclarations(
@@ -1072,7 +1106,8 @@ function emitNestedObjectFunctionFieldVariableDeclarations(
     field.shape,
     objectFunctionFieldSource(property.value),
     context,
-    dependencies
+    dependencies,
+    nestedSeenTypes
   )
 }
 
@@ -1081,7 +1116,8 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
   shape: CObjectShape | null | undefined,
   source: ObjectFunctionFieldSource,
   context: ObjectFunctionContext,
-  dependencies: ObjectVariableDeclarationDependencies
+  dependencies: ObjectVariableDeclarationDependencies,
+  seenTypes: string[]
 ): string[] {
   const fields = shape?.fields
   const lines: string[] = []
@@ -1093,18 +1129,34 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
   for (const field of fields) {
     if (field.valueType === 'function') {
       if (isSupportedObjectFunctionField(field)) {
-        lines.push(emitObjectShapeFunctionFieldVariableDeclaration(objectName, field, source, context, dependencies))
+        appendLines(lines, emitObjectShapeFunctionFieldVariableDeclaration(objectName, field, source, context, dependencies, seenTypes))
       }
     } else if (field.valueType === 'object') {
+      if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+        continue
+      }
+
+      let pushedType = false
+
+      if (field.declaredType != null) {
+        seenTypes.push(field.declaredType)
+        pushedType = true
+      }
+
       appendLines(lines,
         emitObjectShapeFunctionFieldVariableDeclarations(
           `${objectName}_${field.name}`,
           field.shape,
           nestedObjectFunctionFieldSource(source, field.name),
           context,
-          dependencies
+          dependencies,
+          seenTypes
         )
       )
+
+      if (pushedType) {
+        seenTypes.pop()
+      }
     }
   }
 
@@ -1116,54 +1168,115 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
   field: CObjectShapeField,
   source: ObjectFunctionFieldSource,
   context: ObjectFunctionContext,
-  dependencies: ObjectVariableDeclarationDependencies
-): string {
+  dependencies: ObjectVariableDeclarationDependencies,
+  seenTypes: string[]
+): string[] {
   const value = objectFunctionFieldSourcePropertyValue(source, field.name)
   const name = emitCObjectFunctionFieldName(objectName, field.name)
 
+  if (isRuntimeObjectFunctionField(field)) {
+    return emitRuntimeObjectShapeFunctionFieldVariableDeclaration(name, field, source, value, context, dependencies)
+  }
+
   if (value != null) {
-    return `${dependencies.emitFunctionPointerVariable(
-      name,
-      value,
-      context,
-      true,
-      field.functionType,
-      value.loc
-    )};`
+    return [
+      `${dependencies.emitFunctionPointerVariable(
+        name,
+        value,
+        context,
+        true,
+        field.functionType,
+        value.loc,
+        seenTypes
+      )};`
+    ]
   }
 
   if (source.pathName != null) {
-    return `${dependencies.emitFunctionPointerVariableWithCInitializer(
-      name,
-      emitCObjectFunctionFieldName(source.pathName, field.name),
-      context,
-      true,
-      field.functionType,
-      field.loc ?? source.loc
-    )};`
+    return [
+      `${dependencies.emitFunctionPointerVariableWithCInitializer(
+        name,
+        emitCObjectFunctionFieldName(source.pathName, field.name),
+        context,
+        true,
+        field.functionType,
+        field.loc ?? source.loc,
+        seenTypes
+      )};`
+    ]
   }
 
   if (field.optional === true) {
-    return `${dependencies.emitFunctionPointerVariableWithCInitializer(
+    return [
+      `${dependencies.emitFunctionPointerVariableWithCInitializer(
+        name,
+        '0',
+        context,
+        true,
+        field.functionType,
+        field.loc ?? source.loc,
+        seenTypes
+      )};`
+    ]
+  }
+
+  context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, source.loc))
+
+  return [
+    `${dependencies.emitFunctionPointerVariableWithCInitializer(
       name,
       '0',
       context,
       true,
       field.functionType,
-      field.loc ?? source.loc
+      field.loc ?? source.loc,
+      seenTypes
     )};`
+  ]
+}
+
+function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
+  name: string,
+  field: CObjectShapeField,
+  source: ObjectFunctionFieldSource,
+  value: ObjectFieldNode | null,
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): string[] {
+  registerOwnedValue(context, name)
+
+  if (value != null) {
+    return dependencies.emitRuntimeCallbackValueInto(value, field.functionType, name, context)
+  }
+
+  if (source.pathName != null) {
+    const sourceName = emitCObjectFunctionFieldName(source.pathName, field.name)
+    const lines: string[] = []
+
+    appendLines(lines, emitPrepareOwnedValueWrite(name))
+    lines.push(`${name} = ${sourceName};`)
+    lines.push(`ccjs_retain(${name});`)
+
+    return lines
+  }
+
+  if (field.optional === true) {
+    const lines: string[] = []
+
+    appendLines(lines, emitPrepareOwnedValueWrite(name))
+    lines.push(`${name} = ccjs_null_value();`)
+
+    return lines
   }
 
   context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, source.loc))
 
-  return `${dependencies.emitFunctionPointerVariableWithCInitializer(
-    name,
-    '0',
-    context,
-    true,
-    field.functionType,
-    field.loc ?? source.loc
-  )};`
+  const lines: string[] = []
+
+  appendLines(lines, emitPrepareOwnedValueWrite(name))
+  lines.push(`${name} = ccjs_undefined_value();`)
+
+  return lines
 }
 
 function knownObjectFieldReadCall(
@@ -1227,6 +1340,7 @@ export function emitObjectVariableDeclaration(
 
   context.variables.set(statement.name, 'object')
   registerObjectShapeFields(context, statement.name, fields, new Set())
+  const seenTypes = objectVariableDeclaredTypes(statement)
 
   for (let index = 0; index < fields.length; index = index + 1) {
     const field = fields[index]
@@ -1235,7 +1349,7 @@ export function emitObjectVariableDeclaration(
     if (property != null) {
       if (field.valueType === 'function') {
         if (isSupportedObjectFunctionField(field)) {
-          lines.push(emitObjectFunctionFieldVariableDeclaration(statement.name, field, property, context, dependencies))
+          appendLines(lines, emitObjectFunctionFieldVariableDeclaration(statement.name, field, property, context, dependencies, seenTypes))
         }
 
         continue
@@ -1244,7 +1358,7 @@ export function emitObjectVariableDeclaration(
       const value = emitObjectFieldInitializerValue(field, property, context, dependencies)
       appendLines(lines, value.lines)
       lines.push(emitStatusCheck(`ccjs_object_init_known(${statement.name}, ${index}, ${value.expression})`, context))
-      appendLines(lines, emitNestedObjectFunctionFieldVariableDeclarations(statement.name, field, property, context, dependencies))
+      appendLines(lines, emitNestedObjectFunctionFieldVariableDeclarations(statement.name, field, property, context, dependencies, seenTypes))
     } else {
       if (field.optional !== true) {
         context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
@@ -1257,6 +1371,20 @@ export function emitObjectVariableDeclaration(
 
 function isSupportedObjectFunctionField(field: CObjectShapeField): boolean {
   return isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)
+}
+
+function isRuntimeObjectFunctionField(field: CObjectShapeField): boolean {
+  return !isPlainFunctionPointerType(field.functionType) && isRuntimeFunctionType(field.functionType)
+}
+
+function objectVariableDeclaredTypes(statement: AnyNode): string[] {
+  const seenTypes: string[] = []
+
+  if (statement.declaredType != null) {
+    seenTypes.push(statement.declaredType)
+  }
+
+  return seenTypes
 }
 
 function objectVariableShapeFields(

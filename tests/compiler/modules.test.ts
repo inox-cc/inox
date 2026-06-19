@@ -515,6 +515,46 @@ export function main(): void {
   }
 })
 
+test('compiles cyclic transitive type-only imports', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-cyclic-type-imports-'))
+
+  try {
+    await writeFile(
+      join(dir, 'a.ts'),
+      `import type { Child } from './b.ts'
+
+export type Parent = {
+  child: Child | null
+}
+
+export function main(): void {
+  console.log('ok')
+}
+`
+    )
+    await writeFile(
+      join(dir, 'b.ts'),
+      `import type { Parent } from './a.ts'
+
+export type Child = {
+  weak parent: Parent | null
+}
+`
+    )
+
+    const c = await compileFile(join(dir, 'a.ts'), {
+      target: 'c'
+    })
+
+    assert.match(c.code, /printf\("%s\\n", "ok"\);/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('does not recurse forever on cyclic transitive type-only imports', () => {
   const loc = {
     file: 'types.ts',

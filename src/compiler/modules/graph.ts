@@ -97,14 +97,17 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     ir: null,
     imports,
     reexports,
-    exports: collectExports(ast)
+    exports: collectExports(ast),
+    typeImportDeclarations: new Map()
   }
 
   context.modules.set(path, module)
 
   const importAliasDeclarations: Map<number, AnyNode[]> = new Map()
-  const importTypeDeclarations: Map<number, AnyNode[]> = new Map()
+  const importTypeDeclarations = module.typeImportDeclarations
   const reexportAliasDeclarations: AnyNode[] = []
+
+  prepareModuleTypeImportDeclarations(context, module)
 
   let importIndex = 0
 
@@ -114,6 +117,10 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     importIndex = importIndex + 1
 
     if (isRuntimeBuiltinImportSource(item.source)) {
+      continue
+    }
+
+    if (item.typeOnly) {
       continue
     }
 
@@ -285,6 +292,94 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
   return true
 }
 
+function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module: ModuleRecord): void {
+  if (module.typeImportDeclarations.size > 0) {
+    return
+  }
+
+  let importIndex = 0
+
+  for (const item of module.imports) {
+    const declarationIndex = importIndex
+    importIndex = importIndex + 1
+
+    if (!item.typeOnly) {
+      continue
+    }
+
+    if (isRuntimeBuiltinImportSource(item.source)) {
+      continue
+    }
+
+    if (!isRelativeSpecifier(item.source)) {
+      context.diagnostics.push(
+        diagnostic(
+          'CCJS_UNSUPPORTED_IMPORT_SOURCE',
+          `only relative imports are implemented, got ${item.source}`,
+          item.loc
+        )
+      )
+      continue
+    }
+
+    const importedPath = resolveModuleGraphImport(context, module.path, item.source, item.loc)
+
+    if (importedPath === '') {
+      continue
+    }
+
+    const importedOk = visitModuleGraphFile(context, importedPath)
+    const importedModule = context.modules.get(importedPath)
+
+    if (!importedOk && importedModule == null) {
+      continue
+    }
+
+    if (importedModule == null) {
+      continue
+    }
+
+    const types: AnyNode[] = []
+    const typeNames: Set<string> = new Set()
+    const importedExports: Map<string, AnyNode> = importedModule.exports
+
+    for (const specifier of item.specifiers) {
+      const exported = importedExports.get(specifier.imported)
+
+      if (exported == null) {
+        context.diagnostics.push(
+          diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
+        )
+        continue
+      }
+
+      if (exported.type !== 'TypeAliasDeclaration') {
+        context.diagnostics.push(
+          diagnostic(
+            'CCJS_UNKNOWN_EXPORT',
+            `${item.source} does not export type ${specifier.imported}`,
+            specifier.loc
+          )
+        )
+        continue
+      }
+
+      const declarations = createTypeImportDeclarations(specifier, moduleProgramForTypeImports(importedModule))
+
+      for (const declaration of declarations) {
+        if (!typeNames.has(declaration.name)) {
+          typeNames.add(declaration.name)
+          types.push(declaration)
+        }
+      }
+    }
+
+    if (types.length > 0) {
+      module.typeImportDeclarations.set(declarationIndex, types)
+    }
+  }
+}
+
 function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode[]): ProgramNode {
   if (declarations.length === 0) {
     return program
@@ -322,6 +417,10 @@ function moduleProgramForTypeImports(module: ModuleRecord): ProgramNode {
 
   if (hir != null) {
     return hir
+  }
+
+  if (module.typeImportDeclarations.size > 0) {
+    return insertImportSyntheticDeclarations(module.ast, module.typeImportDeclarations)
   }
 
   return module.ast

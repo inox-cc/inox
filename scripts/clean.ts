@@ -123,7 +123,9 @@ async function collectSystemTempPaths(root: string): Promise<string[]> {
     return []
   }
 
-  return entries.filter((entry) => entry.name.startsWith('ccjs-')).map((entry) => join(root, entry.name))
+  return entries
+    .filter((entry) => entry.name.startsWith('inox-') || entry.name.startsWith('ccjs-'))
+    .map((entry) => join(root, entry.name))
 }
 
 function isRepoTempFile(name: string): boolean {
@@ -207,10 +209,10 @@ function usage(): string {
   pnpm run clean -- --dry-run
   pnpm run clean -- --repo-only
 
-Removes known ccjs build outputs and temporary files:
+Removes known inox build outputs and temporary files:
 - repo outputs: ${repoOutputPaths.join(', ')}
 - repo temp files: ${[...repoTempFileNames, ...repoTempFileSuffixes.map((suffix) => `*${suffix}`)].join(', ')}
-- system temp entries named ccjs-* under ${systemTempRoots.join(', ')}
+- system temp entries named inox-* or ccjs-* under ${systemTempRoots.join(', ')}
 `
 }
 

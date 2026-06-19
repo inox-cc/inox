@@ -29,20 +29,32 @@ import { emitCConditionClause, emitCNegatedConditionClause, objectExpressionPath
 import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
-import type { PreparedArrayExpression } from './arrays.ts'
+import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
+import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
+import type { ClassLoweringDependencies } from './classes.ts'
+import type { CollectionLoweringDependencies } from './collections.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
-import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
+import type { StringLoweringDependencies } from './strings.ts'
+import type { AnyNode, Diagnostic, IrFunctionEffect, SourceLocation } from '../../types.ts'
 import type {
   CArrayElementInfo,
+  CAsyncTaskWrapper,
   CCallbackWrapper,
+  CClassInfo,
+  CDgramMessageHandler,
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
   CFunctionReturnMapType,
+  CFunctionParam,
+  CFunctionPointerAdapter,
   CFunctionType,
+  CHttpHandler,
+  CNetHandler,
   CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
+  CPromiseChainWrapper,
   CPromiseConstructorHandler,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
@@ -64,7 +76,10 @@ type CStringSet = Set<string>
 type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
 
 type CFunctionContext = {
+  arrayLoweringDependencies: ArrayLoweringDependencies
   arrayShapes: Map<string, CArrayElementInfo[]>
+  asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
+  asyncTaskWrappers: Map<string, CAsyncTaskWrapper>
   boxedMutableCaptureDeclarations: Set<StatementNode>
   boxedValueTypes: CStringMap
   boxedValues: string[]
@@ -72,22 +87,62 @@ type CFunctionContext = {
   breakFlowUsed: boolean
   breakTargets: CLoopFlowTarget[]
   callbackArrowWrappers: Map<AnyNode, CCallbackWrapper>
+  callbackWrappers: Map<string, CCallbackWrapper>
+  classInfos: Map<string, CClassInfo>
   classInstanceTypes: CStringMap
+  classLoweringDependencies: ClassLoweringDependencies
   cleanupEnabled: boolean
+  collectionLoweringDependencies: CollectionLoweringDependencies
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
+  cryptoImportNames: CStringSet
   diagnostics: Diagnostic[]
+  dgramBoundSockets: CStringSet
+  dgramCreateSocketNames: CStringSet
+  dgramImportNames: CStringSet
+  dgramMessageHandlers: Map<string, CDgramMessageHandler>
+  dgramMessageSockets: CStringSet
+  dgramReuseAddrSockets: CStringSet
   errorChannelUsed: boolean
   errorObjectNames: CStringSet
   errorTargets: string[]
+  eventLoopUsed: boolean
+  externalEventLoop: boolean
+  externalEventLoopFunctions: CStringSet
   failureStatement?: string | null
   failureStatementUsed?: boolean
   forceRuntimeStringDeclarations?: CStringSet
+  functionAsyncFlags: Map<string, boolean>
+  functionErrorOut: string | null
+  functionNames: CStringMap
+  functionParams: Map<string, CFunctionParam[]>
+  functionPointerAdapterNames: CStringMap
+  functionPointerAdapters: CFunctionPointerAdapter[]
+  functionReturnArrayElementDeclaredTypes: Map<string, string | null>
   functionReturnArrayElementTypes: Map<string, string | null>
+  functionReturnDeclaredTypes: Map<string, string | null>
+  functionReturnMapTypes: Map<string, CFunctionReturnMapType>
   functionReturnNullables: Map<string, boolean>
+  functionReturnOut: string | null
+  functionReturnPromiseValueTypes: Map<string, string | null>
+  functionReturnSetElementTypes: Map<string, string | null>
+  functionReturnShapes: Map<string, CObjectShape | null>
+  functionReturnTypes: CStringMap
+  functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   functionTypes: Map<string, CFunctionType>
+  httpCreateServerNames: CStringSet
+  httpHandlers: Map<string, CHttpHandler>
+  httpImportNames: CStringSet
+  jsGlobalRoots: CStringSet
   mapTypes: Map<string, CFunctionReturnMapType>
+  moduleObjectShapes: Map<string, CObjectShapeField[]>
   moduleValueNames: CStringMap
+  moduleValueTypes: CStringMap
+  netConnectNames: CStringSet
+  netCreateServerNames: CStringSet
+  netHandlers: Map<string, CNetHandler>
+  netImportNames: CStringSet
+  netReadingSockets: CStringSet
   narrowedNullableScalars: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
@@ -95,7 +150,13 @@ type CFunctionContext = {
   objectAccessorReturnPaths: CObjectAccessorReturnPathMap
   objectAliases: CStringMap
   objectShapes: Map<string, CObjectShapeField[]>
+  ownedCryptoHashes: string[]
+  ownedCryptoHmacs: string[]
+  ownedPromises: string[]
   ownedValues: string[]
+  processRuntime: boolean
+  promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
+  promiseChainWrappers: Map<string, CPromiseChainWrapper>
   promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
   promiseRejectionValueTypes: CStringMap
   promiseValueTypes: CStringMap
@@ -111,11 +172,14 @@ type CFunctionContext = {
   runtimeCallbackReturnType?: string
   runtimeCallbacks: CStringSet
   runtimeStrings: CStringSet
+  runtimeFunctionParams: Map<string, CFunctionType>
   setElementTypes: CStringMap
   statementLoweringDependencies: StatementLoweringDependencies
   statusReturn: boolean
+  stringLoweringDependencies: StringLoweringDependencies
   throwingFunction: boolean
   throwingFunctions: CStringSet
+  unhandledRejectionFlag: string | null
   usedCleanupGoto: boolean
   usedRuntimeCallbackCleanupGoto?: boolean
   variables: CStringMap
@@ -2737,6 +2801,22 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
   }
 
+  if (deps.isIndexAccessExpression(statement.init)) {
+    const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
+
+    if (runtimeElement != null && isRuntimeValueDeclarationValueType(runtimeElement.valueType)) {
+      return emitRuntimeValueVariableDeclaration(statement, statement.init, context, runtimeElement.valueType)
+    }
+  }
+
+  if (statement.init.type === 'CallExpression' && statement.init.objectRuntimeMethod != null) {
+    return emitRuntimeValueVariableDeclaration(statement, statement.init, context, 'array')
+  }
+
+  if (statement.init.type === 'AwaitExpression' && deps.inferExpressionType(statement.init, context) === 'string') {
+    return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
+  }
+
   if (isRuntimeValueLocalExpression(statement.init, context)) {
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
   }
@@ -2749,18 +2829,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
 
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context, valueType)
-  }
-
-  if (deps.isIndexAccessExpression(statement.init)) {
-    const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
-
-    if (runtimeElement != null && isRuntimeValueDeclarationValueType(runtimeElement.valueType)) {
-      return emitRuntimeValueVariableDeclaration(statement, statement.init, context, runtimeElement.valueType)
-    }
-  }
-
-  if (statement.init.type === 'CallExpression' && statement.init.objectRuntimeMethod != null) {
-    return emitRuntimeValueVariableDeclaration(statement, statement.init, context, 'array')
   }
 
   if (

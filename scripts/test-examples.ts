@@ -53,7 +53,7 @@ async function checkExample(file: string, rel: string, metadata: Map<string, str
   }
 
   for (const target of targets) {
-    const result = await runCommand(process.execPath, ['bin/ccjs.ts', 'run', file, '--target', target])
+    const result = await runCommand(process.execPath, ['bin/inox.ts', 'run', file, '--target', target])
     const expectedStdout = `${metadata.get('stdout') ?? ''}\n`
     const stdout = normalizeNewlines(result.stdout)
 

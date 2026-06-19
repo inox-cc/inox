@@ -14,10 +14,6 @@ import type {
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 
-type PathVariableMap = {
-  set(name: string, valueType: string): void
-}
-
 type PathCContext = {
   cleanupEnabled: boolean
   failureStatement?: string | null
@@ -29,7 +25,7 @@ type PathCContext = {
   statusReturn: boolean
   throwingFunction: boolean
   usedCleanupGoto: boolean
-  variables: PathVariableMap
+  variables: Map<string, string>
 }
 
 export type PathLoweringDependencies = {

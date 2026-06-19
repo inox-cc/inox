@@ -67,7 +67,7 @@ export function debugRuntimeMethodNameFromKnownPath(_path: string[]): string {
 }
 
 export function isDebugRuntimeMethodPath(path: string[]): boolean {
-  if (path.length !== 3 || path[0] !== 'ccjs' || path[1] !== '__debug') {
+  if (path.length !== 3 || (path[0] !== 'inox' && path[0] !== 'ccjs') || path[1] !== '__debug') {
     return false
   }
 

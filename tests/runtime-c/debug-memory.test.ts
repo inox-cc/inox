@@ -1,7 +1,7 @@
 import test from 'node:test'
 import { assert, compileRuntimeProgram, join, mkdtemp, rm, runCommand, tmpdir, writeFile } from '../helpers/runtime-c.ts'
 
-test('CLI links debug memory runtime when ccjs.__debug.memory is used', async (t) => {
+test('CLI links debug memory runtime when inox.__debug.memory is used', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -16,13 +16,13 @@ test('CLI links debug memory runtime when ccjs.__debug.memory is used', async (t
   try {
     await writeFile(
       entry,
-      `const before = ccjs.__debug.memory()
-const after = ccjs.__debug.memory()
+      `const before = inox.__debug.memory()
+const after = inox.__debug.memory()
 console.log(after.allocCount - before.allocCount)
 `
     )
 
-    const build = await runCommand(process.execPath, ['bin/ccjs.ts', 'build', entry, '--target', 'c', '-o', output])
+    const build = await runCommand(process.execPath, ['bin/inox.ts', 'build', entry, '--target', 'c', '-o', output])
 
     assert.equal(build.code, 0, build.stderr)
 
@@ -78,7 +78,7 @@ console.log(
 `
     )
 
-    const build = await runCommand(process.execPath, ['bin/ccjs.ts', 'build', entry, '--target', 'c', '-o', output])
+    const build = await runCommand(process.execPath, ['bin/inox.ts', 'build', entry, '--target', 'c', '-o', output])
 
     assert.equal(build.code, 0, build.stderr)
 
@@ -144,7 +144,7 @@ console.log(
 `
     )
 
-    const build = await runCommand(process.execPath, ['bin/ccjs.ts', 'build', entry, '--target', 'c', '-o', output])
+    const build = await runCommand(process.execPath, ['bin/inox.ts', 'build', entry, '--target', 'c', '-o', output])
 
     assert.equal(build.code, 0, build.stderr)
 
