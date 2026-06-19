@@ -249,6 +249,36 @@ export function main(): void {
   assert.match(result.code, /classify\(inox_number_value\(7\)\)/)
 })
 
+test('lowers typeof undefined checks for raw C string references without runtime tags', () => {
+  const result = compileSource(
+    `type Node = {
+  valueType: string
+}
+
+function read(node: Node): string {
+  const statementValueType = node.valueType
+
+  if (statementValueType !== null && typeof statementValueType !== 'undefined') {
+    return statementValueType
+  }
+
+  return 'none'
+}
+
+export function main(): void {
+  console.log(read({ valueType: 'string' }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /const inox_string\s*\*\s*statementValueType =/)
+  assert.doesNotMatch(result.code, /statementValueType\.tag/)
+  assert.match(result.code, /!\(statementValueType == 0\)/)
+})
+
 test('lowers Object.values and Object.entries inside C for-of object arrays', () => {
   const result = compileSource(
     `export function main(): void {

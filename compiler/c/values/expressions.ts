@@ -188,6 +188,15 @@ type PreparedUrlSearchParamsExpression = {
   valueType?: string
 }
 
+type TypeofOperandStorage = 'runtime-value' | 'raw-string' | 'raw-number' | 'raw-boolean' | 'raw-pointer'
+
+type PreparedTypeofOperand = {
+  lines: string[]
+  expression: string
+  storage: TypeofOperandStorage
+  valueType: string
+}
+
 type CFunctionCallReturnInfo = {
   returnType: string
   returnNullable: boolean
@@ -252,7 +261,39 @@ function isRuntimeReferenceEqualityType(valueType: string): boolean {
   )
 }
 
-function typeofRuntimeTagCheck(value: string, typeName: string): string | null {
+function referenceName(expression: CValueNode): string | null {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  return expression.path[0]
+}
+
+function cBooleanLiteral(value: boolean): string {
+  if (value) {
+    return '1'
+  }
+
+  return '0'
+}
+
+function isRawPointerType(valueType: string): boolean {
+  return (
+    valueType === 'function' ||
+    valueType === 'timer' ||
+    valueType === 'crypto-hash' ||
+    valueType === 'crypto-hmac' ||
+    valueType === 'dgram-socket' ||
+    valueType === 'net-address' ||
+    valueType === 'net-server' ||
+    valueType === 'net-socket' ||
+    valueType === 'http-request' ||
+    valueType === 'http-response' ||
+    valueType === 'http-server'
+  )
+}
+
+function typeofRuntimeValueTagCheck(value: string, typeName: string): string | null {
   if (typeName === 'undefined') {
     return `${value}.tag == INOX_TAG_UNDEFINED`
   }
@@ -283,12 +324,111 @@ function typeofRuntimeTagCheck(value: string, typeName: string): string | null {
   return null
 }
 
+function typeofRawOperandCheck(operand: PreparedTypeofOperand, typeName: string): string | null {
+  if (operand.storage === 'raw-string') {
+    if (typeName === 'undefined') {
+      return `${operand.expression} == 0`
+    }
+
+    if (typeName === 'string') {
+      return `${operand.expression} != 0`
+    }
+
+    return cBooleanLiteral(false)
+  }
+
+  if (operand.storage === 'raw-number') {
+    return cBooleanLiteral(typeName === 'number')
+  }
+
+  if (operand.storage === 'raw-boolean') {
+    return cBooleanLiteral(typeName === 'boolean')
+  }
+
+  if (operand.storage === 'raw-pointer') {
+    if (typeName === 'undefined') {
+      return `${operand.expression} == 0`
+    }
+
+    if (typeName === 'function' && operand.valueType === 'function') {
+      return `${operand.expression} != 0`
+    }
+
+    return cBooleanLiteral(false)
+  }
+
+  return null
+}
+
+function typeofOperandCheck(operand: PreparedTypeofOperand, typeName: string): string | null {
+  if (operand.storage === 'runtime-value') {
+    return typeofRuntimeValueTagCheck(operand.expression, typeName)
+  }
+
+  return typeofRawOperandCheck(operand, typeName)
+}
+
 function emitPreparedTypeofArgumentValue(
   expression: CValueNode,
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
-): PreparedExpression {
+): PreparedTypeofOperand {
   const valueType = deps.inferExpressionType(expression, context)
+  const name = referenceName(expression)
+
+  if (name !== null && typeof name !== 'undefined') {
+    const reference = deps.emitReference(expression, context)
+    const variableType = context.variables.get(name)
+
+    if (context.boxedVariables.has(name) || context.nullableVariables.has(name)) {
+      return {
+        lines: [],
+        expression: reference,
+        storage: 'runtime-value',
+        valueType
+      }
+    }
+
+    if (
+      context.runtimeStrings.has(name) ||
+      context.runtimeStrings.has(reference) ||
+      variableType === 'string'
+    ) {
+      return {
+        lines: [],
+        expression: reference,
+        storage: 'raw-string',
+        valueType: 'string'
+      }
+    }
+
+    if (variableType === 'number') {
+      return {
+        lines: [],
+        expression: reference,
+        storage: 'raw-number',
+        valueType: variableType
+      }
+    }
+
+    if (variableType === 'boolean') {
+      return {
+        lines: [],
+        expression: reference,
+        storage: 'raw-boolean',
+        valueType: variableType
+      }
+    }
+
+    if (variableType !== null && typeof variableType !== 'undefined' && isRawPointerType(variableType)) {
+      return {
+        lines: [],
+        expression: reference,
+        storage: 'raw-pointer',
+        valueType: variableType
+      }
+    }
+  }
 
   if (
     expression.type === 'Reference' &&
@@ -297,11 +437,20 @@ function emitPreparedTypeofArgumentValue(
   ) {
     return {
       lines: [],
-      expression: deps.emitReference(expression, context)
+      expression: deps.emitReference(expression, context),
+      storage: 'runtime-value',
+      valueType
     }
   }
 
-  return deps.emitCValueExpression(expression, context)
+  const value = deps.emitCValueExpression(expression, context)
+
+  return {
+    lines: value.lines,
+    expression: value.expression,
+    storage: 'runtime-value',
+    valueType
+  }
 }
 
 function emitPreparedTypeofCompareExpression(
@@ -337,7 +486,7 @@ function emitPreparedTypeofCompareExpression(
   }
 
   const value = emitPreparedTypeofArgumentValue(argument, context, deps)
-  const check = typeofRuntimeTagCheck(value.expression, typeName)
+  const check = typeofOperandCheck(value, typeName)
 
   if (check === null || typeof check === 'undefined') {
     return null
