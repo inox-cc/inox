@@ -372,7 +372,12 @@ export function emitUrlObjectFieldAssignment(
     return null
   }
 
-  const field: string = expression.urlRuntimeField
+  const field = expression.urlRuntimeField
+
+  if (field == null) {
+    return null
+  }
+
   const fieldIndex = urlObjectFieldIndex(field)
 
   if (fieldIndex === -1 || !isMutableUrlObjectField(field)) {

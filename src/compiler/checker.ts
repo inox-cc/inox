@@ -270,10 +270,159 @@ type RuntimeCallInfo = {
   unsupported: boolean
 }
 
+type AnyNodeFieldOptions = {
+  arrayElementType?: ValueType | null
+  arrayElementDeclaredType?: string | null
+  shape?: ObjectShapeInfo | null
+}
+
+function isAnyNodeChildFieldName(name: string): boolean {
+  return (
+    name === 'argument' ||
+    name === 'callee' ||
+    name === 'expression' ||
+    name === 'handler' ||
+    name === 'index' ||
+    name === 'init' ||
+    name === 'left' ||
+    name === 'object' ||
+    name === 'right' ||
+    name === 'target'
+  )
+}
+
 type FsBooleanOptions = {
   recursive?: boolean
   force?: boolean
   withFileTypes?: boolean
+}
+
+function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
+  return {
+    valueType: 'object',
+    nullable: false,
+    functionType: null,
+    shape: anyNodeObjectShape(loc),
+    arrayElementType: null,
+    arrayElementDeclaredType: null,
+    mapKeyType: null,
+    mapValueType: null,
+    promiseValueType: null,
+    setElementType: null
+  }
+}
+
+function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
+  return {
+    kind: 'object',
+    builtin: 'compiler.AnyNode',
+    dynamic: true,
+    dynamicField: anyNodeField('', 'unknown', null, true, loc),
+    fields: [
+      anyNodeField('type', 'string', null, true, loc),
+      anyNodeField('loc', 'object', null, false, loc, { shape: anyNodeLocObjectShape(loc) }),
+      anyNodeField('name', 'string', null, false, loc),
+      anyNodeField('path', 'array', 'string[]', false, loc, {
+        arrayElementType: 'string',
+        arrayElementDeclaredType: 'string'
+      }),
+      anyNodeField('args', 'array', null, false, loc, {
+        arrayElementType: 'object'
+      }),
+      anyNodeField('params', 'array', null, false, loc, {
+        arrayElementType: 'object'
+      }),
+      anyNodeField('methods', 'array', null, false, loc, {
+        arrayElementType: 'object'
+      }),
+      anyNodeField('fields', 'array', null, false, loc, {
+        arrayElementType: 'object'
+      }),
+      anyNodeField('properties', 'array', null, false, loc, {
+        arrayElementType: 'object'
+      }),
+      anyNodeField('elements', 'array', null, false, loc, {
+        arrayElementType: 'object'
+      }),
+      anyNodeField('cases', 'array', null, false, loc, {
+        arrayElementType: 'object'
+      }),
+      anyNodeField('body', 'unknown', null, false, loc),
+      anyNodeField('callee', 'unknown', null, false, loc),
+      anyNodeField('expression', 'unknown', null, false, loc),
+      anyNodeField('init', 'unknown', null, false, loc),
+      anyNodeField('target', 'unknown', null, false, loc),
+      anyNodeField('value', 'unknown', null, false, loc),
+      anyNodeField('left', 'unknown', null, false, loc),
+      anyNodeField('right', 'unknown', null, false, loc),
+      anyNodeField('argument', 'unknown', null, false, loc),
+      anyNodeField('object', 'unknown', null, false, loc),
+      anyNodeField('index', 'unknown', null, false, loc),
+      anyNodeField('handler', 'unknown', null, false, loc),
+      anyNodeField('expressionBody', 'boolean', null, false, loc),
+      anyNodeField('property', 'string', null, false, loc),
+      anyNodeField('operator', 'string', null, false, loc),
+      anyNodeField('declaredType', 'string', null, true, loc),
+      anyNodeField('valueType', 'unknown', null, false, loc),
+      anyNodeField('arrayElementType', 'string', null, true, loc),
+      anyNodeField('arrayElementDeclaredType', 'string', null, true, loc),
+      anyNodeField('mapKeyType', 'string', null, true, loc),
+      anyNodeField('mapValueType', 'string', null, true, loc),
+      anyNodeField('promiseValueType', 'string', null, true, loc),
+      anyNodeField('setElementType', 'string', null, true, loc),
+      anyNodeField('propertyValueType', 'string', null, true, loc),
+      anyNodeField('functionType', 'object', null, true, loc),
+      anyNodeField('shape', 'object', null, true, loc),
+      anyNodeField('pathRuntimeMethod', 'string', null, true, loc),
+      anyNodeField('pathRuntimeConstant', 'string', null, true, loc),
+      anyNodeField('processRuntimeMethod', 'string', null, true, loc),
+      anyNodeField('processRuntimeProperty', 'string', null, true, loc),
+      anyNodeField('processRuntimeEnvName', 'string', null, true, loc),
+      anyNodeField('dgramMessageHandlerName', 'string', null, true, loc),
+      anyNodeField('urlRuntimeMethod', 'string', null, true, loc),
+      anyNodeField('urlRuntimeField', 'string', null, true, loc),
+      anyNodeField('httpHandlerName', 'string', null, true, loc)
+    ]
+  }
+}
+
+function anyNodeLocObjectShape(loc: SourceLocation): ObjectShapeInfo {
+  return {
+    kind: 'object',
+    fields: [
+      anyNodeField('file', 'string', null, true, loc),
+      anyNodeField('line', 'number', null, false, loc),
+      anyNodeField('column', 'number', null, false, loc)
+    ]
+  }
+}
+
+function anyNodeField(
+  name: string,
+  valueType: ValueType,
+  declaredType: string | null,
+  nullable: boolean,
+  loc: SourceLocation,
+  options: AnyNodeFieldOptions = {}
+): AnyNode {
+  return {
+    name,
+    optional: true,
+    readonly: false,
+    ownership: 'strong',
+    declaredType,
+    valueType,
+    nullable,
+    arrayElementType: options.arrayElementType ?? null,
+    arrayElementDeclaredType: options.arrayElementDeclaredType ?? null,
+    mapKeyType: null,
+    mapValueType: null,
+    promiseValueType: null,
+    setElementType: null,
+    functionType: null,
+    shape: options.shape ?? null,
+    loc
+  }
 }
 
 function resolvedValueTypeMetadata(
@@ -720,10 +869,11 @@ class Checker {
   }
 
   resolveParam(param: AnyNode): AnyNode {
-    let declaredType = param.valueType
+    let declaredType: string = param.valueType
+    const paramDeclaredType = param.declaredType
 
-    if (param.declaredType != null) {
-      declaredType = param.declaredType
+    if (paramDeclaredType != null) {
+      declaredType = paramDeclaredType
     }
 
     const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
@@ -833,7 +983,7 @@ class Checker {
 
   resolveClassField(field: AnyNode): AnyNode {
     const fieldInfo = this.resolveFieldDeclaredType(field)
-    const declaredType = field.valueType
+    const declaredType: string = field.valueType
 
     return {
       type: field.type,
@@ -1562,10 +1712,11 @@ class Checker {
     if (expression.type === 'TypeAssertionExpression') {
       const sourceValueType = this.checkExpression(expression.expression)
       const asserted = expression.expression
-      let declaredType = expression.valueType
+      let declaredType: string = expression.valueType
+      const expressionDeclaredType = expression.declaredType
 
-      if (expression.declaredType != null) {
-        declaredType = expression.declaredType
+      if (expressionDeclaredType != null) {
+        declaredType = expressionDeclaredType
       }
 
       if (declaredType === 'const') {
@@ -2219,6 +2370,11 @@ class Checker {
     }
 
     const shape = this.resolveExpressionShape(expression.object)
+    const anyNodeMetadataType = this.checkAnyNodeMetadataMemberExpression(expression, objectType, shape)
+
+    if (anyNodeMetadataType != null) {
+      return anyNodeMetadataType
+    }
 
     if (shape == null) {
       return 'unknown'
@@ -2261,6 +2417,55 @@ class Checker {
     }
 
     return valueType
+  }
+
+  checkAnyNodeMetadataMemberExpression(
+    expression: AnyNode,
+    objectType: ValueType,
+    shape: ObjectShapeInfo | null
+  ): ValueType | null {
+    const directAnyNode = objectType === 'object' && shape != null && shape.builtin === 'compiler.AnyNode'
+    const childAnyNode = this.isAnyNodeChildExpression(expression.object)
+
+    if (!directAnyNode && !childAnyNode) {
+      return null
+    }
+
+    if (expression.property === 'path') {
+      expression.valueType = 'array'
+      expression.nullable = false
+      expression.arrayElementType = 'string'
+      expression.arrayElementDeclaredType = 'string'
+      expression.shape = null
+      return 'array'
+    }
+
+    if (expression.property === 'loc') {
+      expression.valueType = 'object'
+      expression.nullable = false
+      expression.shape = anyNodeLocObjectShape(expression.loc)
+      return 'object'
+    }
+
+    return null
+  }
+
+  isAnyNodeChildExpression(expression: AnyNode): boolean {
+    if (expression.type !== 'MemberExpression') {
+      return false
+    }
+
+    if (!isAnyNodeChildFieldName(expression.property)) {
+      return false
+    }
+
+    const parentShape = this.resolveExpressionShape(expression.object)
+
+    if (parentShape != null && parentShape.builtin === 'compiler.AnyNode') {
+      return true
+    }
+
+    return this.isAnyNodeChildExpression(expression.object)
   }
 
   checkOptionalMemberExpression(expression: AnyNode): ValueType {
@@ -2379,8 +2584,9 @@ class Checker {
 
     const fieldType = this.resolveFieldDeclaredType(field)
     const targetValueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
+    const targetNullable = resolvedFieldNullableMetadata(field, fieldType)
 
-    expression.target.nullable = resolvedFieldNullableMetadata(field, fieldType)
+    expression.target.nullable = targetNullable
     const narrowedKey = nullableNarrowingKey(expression.target)
 
     if (narrowedKey != null) {
@@ -2409,7 +2615,7 @@ class Checker {
       valueType,
       fieldType.valueType,
       expression.value.loc,
-      fieldType.nullable,
+      targetNullable,
       this.expressionCanBeNull(expression.value)
     )
 
@@ -2425,13 +2631,20 @@ class Checker {
 
     if (fieldType.valueType === 'map') {
       const actual = this.resolveExpressionMapType(expression.value)
+      let actualKey: ValueType | null = null
+      let actualValue: ValueType | null = null
+
+      if (actual != null) {
+        actualKey = actual.key
+        actualValue = actual.value
+      }
 
       if (fieldType.mapKeyType != null) {
-        this.checkAssignableType(actual?.key, fieldType.mapKeyType, expression.value.loc, false, false)
+        this.checkAssignableType(actualKey, fieldType.mapKeyType, expression.value.loc, false, false)
       }
 
       if (fieldType.mapValueType != null) {
-        this.checkAssignableType(actual?.value, fieldType.mapValueType, expression.value.loc, false, false)
+        this.checkAssignableType(actualValue, fieldType.mapValueType, expression.value.loc, false, false)
       }
     }
 
@@ -2794,8 +3007,9 @@ class Checker {
 
     const fieldType = this.resolveFieldDeclaredType(field)
     const targetValueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
+    const targetNullable = resolvedFieldNullableMetadata(field, fieldType)
 
-    expression.target.nullable = resolvedFieldNullableMetadata(field, fieldType)
+    expression.target.nullable = targetNullable
     expression.target.valueType = targetValueType
     expression.target.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.target.arrayElementDeclaredType = resolvedStringMetadata(
@@ -2818,7 +3032,7 @@ class Checker {
       valueType,
       fieldType.valueType,
       expression.value.loc,
-      fieldType.nullable,
+      targetNullable,
       this.expressionCanBeNull(expression.value)
     )
 
@@ -2834,13 +3048,20 @@ class Checker {
 
     if (fieldType.valueType === 'map') {
       const actual = this.resolveExpressionMapType(expression.value)
+      let actualKey: ValueType | null = null
+      let actualValue: ValueType | null = null
+
+      if (actual != null) {
+        actualKey = actual.key
+        actualValue = actual.value
+      }
 
       if (fieldType.mapKeyType != null) {
-        this.checkAssignableType(actual?.key, fieldType.mapKeyType, expression.value.loc, false, false)
+        this.checkAssignableType(actualKey, fieldType.mapKeyType, expression.value.loc, false, false)
       }
 
       if (fieldType.mapValueType != null) {
-        this.checkAssignableType(actual?.value, fieldType.mapValueType, expression.value.loc, false, false)
+        this.checkAssignableType(actualValue, fieldType.mapValueType, expression.value.loc, false, false)
       }
     }
 
@@ -8114,7 +8335,11 @@ class Checker {
 
     const symbol = this.getCallableSymbol(arg)
 
-    const params = symbol?.params ?? null
+    let params: AnyNode[] | null = null
+
+    if (symbol != null && symbol.params != null) {
+      params = symbol.params
+    }
 
     if (params != null && params.length !== functionType.params.length) {
       this.report(
@@ -9259,7 +9484,7 @@ class Checker {
     }
 
     let constructorParams: AnyNode[] = []
-    const symbolConstructorParams = symbol?.constructorParams ?? null
+    const symbolConstructorParams = symbol.constructorParams ?? null
 
     if (symbolConstructorParams != null) {
       constructorParams = symbolConstructorParams
@@ -9357,10 +9582,13 @@ class Checker {
           const properties: CheckerObjectPropertyNode[] = expression.args[0].properties
 
           for (const property of properties) {
-            let propertyValueType = property.value.valueType
+            let propertyValueType: ValueType = 'unknown'
+            const knownPropertyValueType = property.value.valueType
 
-            if (propertyValueType == null) {
+            if (knownPropertyValueType == null) {
               propertyValueType = this.checkExpression(property.value)
+            } else {
+              propertyValueType = knownPropertyValueType
             }
 
             this.checkAssignableType(
@@ -10237,13 +10465,20 @@ class Checker {
 
       if (fieldType.valueType === 'map') {
         const actual = this.resolveExpressionMapType(property.value)
+        let actualKey: ValueType | null = null
+        let actualValue: ValueType | null = null
+
+        if (actual != null) {
+          actualKey = actual.key
+          actualValue = actual.value
+        }
 
         if (fieldType.mapKeyType != null) {
-          this.checkAssignableType(actual?.key, fieldType.mapKeyType, property.loc, false, false)
+          this.checkAssignableType(actualKey, fieldType.mapKeyType, property.loc, false, false)
         }
 
         if (fieldType.mapValueType != null) {
-          this.checkAssignableType(actual?.value, fieldType.mapValueType, property.loc, false, false)
+          this.checkAssignableType(actualValue, fieldType.mapValueType, property.loc, false, false)
         }
       }
 
@@ -10338,8 +10573,8 @@ class Checker {
 
   isThisExpression(expression: AnyNode): boolean {
     return (
-      expression?.type === 'ThisExpression' ||
-      (expression?.type === 'Reference' &&
+      expression.type === 'ThisExpression' ||
+      (expression.type === 'Reference' &&
         expression.path.length === 1 &&
         firstPathSegment(expression.path) === 'this')
     )
@@ -10573,7 +10808,7 @@ class Checker {
       valueType = declared.valueType
     }
 
-    let inferredDeclaredType = elementDeclaredType
+    let inferredDeclaredType: string | null = elementDeclaredType
 
     if (declared != null) {
       inferredDeclaredType = statement.declaredType
@@ -10933,7 +11168,13 @@ class Checker {
       valueType = this.inferNullableAccessValueType(receiver)
     }
 
-    if (!this.isRuntimeNullableType(valueType)) {
+    if (valueType == null) {
+      return
+    }
+
+    const narrowedValueType: ValueType = valueType
+
+    if (!this.isRuntimeNullableType(narrowedValueType)) {
       return
     }
 
@@ -10944,7 +11185,11 @@ class Checker {
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const name = firstPathSegment(expression.path)
       const symbol = this.scope.resolve(name)
-      const valueType = symbol?.valueType ?? null
+      let valueType: ValueType | null = null
+
+      if (symbol != null) {
+        valueType = symbol.valueType
+      }
 
       if (valueType != null) {
         return valueType
@@ -11317,6 +11562,10 @@ class Checker {
       }
     }
 
+    if (name === 'AnyNode') {
+      return anyNodeResolvedTypeInfo(loc)
+    }
+
     if (isNullableTypeName(name)) {
       const nullableTypeName = nullableTypeNameFromKnownTypeName(name)
       const inner = this.resolveDeclaredType(nullableTypeName, loc)
@@ -11608,10 +11857,11 @@ class Checker {
           }
 
           for (const param of shape.params) {
-            let declaredType = param.valueType
+            let declaredType: string = param.valueType
+            const paramDeclaredType = param.declaredType
 
-            if (param.declaredType != null) {
-              declaredType = param.declaredType
+            if (paramDeclaredType != null) {
+              declaredType = paramDeclaredType
             }
 
             const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
@@ -11792,10 +12042,11 @@ class Checker {
 
   resolveObjectShapeField(field: AnyNode, fields: AnyNode[]): AnyNode {
     const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
-    let declaredType = field.valueType
+    let declaredType: string = field.valueType
+    const fieldDeclaredType = field.declaredType
 
-    if (field.declaredType != null) {
-      declaredType = field.declaredType
+    if (fieldDeclaredType != null) {
+      declaredType = fieldDeclaredType
     }
 
     let fieldInfo = this.resolveFieldDeclaredType(field)
@@ -11873,10 +12124,11 @@ class Checker {
     }
 
     for (const param of functionType.params) {
-      let declaredType = param.valueType
+      let declaredType: string = param.valueType
+      const paramDeclaredType = param.declaredType
 
-      if (param.declaredType != null) {
-        declaredType = param.declaredType
+      if (paramDeclaredType != null) {
+        declaredType = paramDeclaredType
       }
 
       const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
@@ -11926,7 +12178,7 @@ class Checker {
     let dynamic = false
     let dynamicField: AnyNode | null = null
 
-    const baseTypes: string[] = shape?.baseTypes ?? []
+    const baseTypes: string[] = shape.baseTypes ?? []
 
     for (const name of baseTypes) {
       const base = this.types.get(name)
@@ -11960,20 +12212,22 @@ class Checker {
       return this.resolveWeakFieldDeclaredType(field)
     }
 
-    let declaredType = field.valueType
+    let declaredType: string = field.valueType
+    const fieldDeclaredType = field.declaredType
 
-    if (field.declaredType != null) {
-      declaredType = field.declaredType
+    if (fieldDeclaredType != null) {
+      declaredType = fieldDeclaredType
     }
 
     return this.resolveDeclaredType(declaredType, field.loc)
   }
 
   resolveWeakFieldDeclaredType(field: AnyNode): ResolvedTypeInfo {
-    let declaredName = field.valueType
+    let declaredName: string = field.valueType
+    const fieldDeclaredType = field.declaredType
 
-    if (field.declaredType != null) {
-      declaredName = field.declaredType
+    if (fieldDeclaredType != null) {
+      declaredName = fieldDeclaredType
     }
 
     let targetName = declaredName
@@ -12089,12 +12343,13 @@ class Checker {
 
     for (const field of fields) {
       const declared = this.resolveWeakTargetShapeFieldType(field)
-      let declaredType = field.valueType
+      let declaredType: string = field.valueType
+      const fieldDeclaredType = field.declaredType
       let promiseValueType: ValueType | null = null
       const functionType = resolvedFunctionTypeMetadata(declared.functionType, field.functionType)
 
-      if (field.declaredType != null) {
-        declaredType = field.declaredType
+      if (fieldDeclaredType != null) {
+        declaredType = fieldDeclaredType
       }
 
       if (declared.promiseValueType != null) {
@@ -12126,7 +12381,7 @@ class Checker {
       })
     }
 
-    const resolvedBaseTypes: string[] = shape?.baseTypes ?? []
+    const resolvedBaseTypes: string[] = shape.baseTypes ?? []
 
     const resolvedShape: ObjectShapeInfo = {
       kind: 'object',
@@ -12143,10 +12398,11 @@ class Checker {
   }
 
   resolveWeakTargetShapeFieldType(field: AnyNode): ResolvedTypeInfo {
-    let declaredType = field.valueType
+    let declaredType: string = field.valueType
+    const fieldDeclaredType = field.declaredType
 
-    if (field.declaredType != null) {
-      declaredType = field.declaredType
+    if (fieldDeclaredType != null) {
+      declaredType = fieldDeclaredType
     }
 
     return this.resolveWeakTargetShapeTypeName(declaredType, field.loc)

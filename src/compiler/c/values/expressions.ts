@@ -4415,7 +4415,9 @@ function callExpressionReturnsNullableScalar(
   }
 
   const path = expression.callee.path
-  return cBooleanValueIsTrue(context.functionReturnNullables.get(path[0]))
+  const name: string = path[0]
+
+  return context.functionReturnNullables.get(name) === true
 }
 
 function emitUnsupportedCValueExpression(

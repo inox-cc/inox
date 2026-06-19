@@ -161,10 +161,11 @@ function lowerExpressionWithContext(expression: LowerExpressionNode, context: Lo
 
 function lowerTypeAssertionExpression(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode {
   const lowered = lowerExpressionWithContext(expression.expression, context)
-  let declaredType = expression.valueType
+  let declaredType: string = expression.valueType
+  const expressionDeclaredType = expression.declaredType
 
-  if (expression.declaredType != null) {
-    declaredType = expression.declaredType
+  if (expressionDeclaredType != null) {
+    declaredType = expressionDeclaredType
   }
 
   if (declaredType === 'const') {

@@ -304,7 +304,13 @@ function registerObjectShapeFields(
     const shape = field.shape
     const fieldPath = `${name}_${field.name}`
 
-    if (field.valueType !== 'object' || shape == null || shape.fields == null || seen.has(shape)) {
+    if (
+      field.valueType !== 'object' ||
+      shape == null ||
+      shape.builtin === 'compiler.AnyNode' ||
+      shape.fields == null ||
+      seen.has(shape)
+    ) {
       continue
     }
 
@@ -328,6 +334,10 @@ export function isIndexAccessExpression(expression: AnyNode): boolean {
 
 export function resolveKnownObjectMember(expression: AnyNode, context: ObjectFunctionContext): CKnownObjectMemberField | null {
   if (!isMemberAccessExpression(expression)) {
+    return null
+  }
+
+  if (isCompilerAnyNodeExpression(expression.object)) {
     return null
   }
 
@@ -408,6 +418,10 @@ export function resolveKnownObjectIndex(expression: AnyNode, context: ObjectFunc
     return null
   }
 
+  if (isCompilerAnyNodeExpression(expression.object)) {
+    return null
+  }
+
   const objectName = resolveCObjectExpressionName(expression.object)
 
   if (objectName != null) {
@@ -427,6 +441,14 @@ export function resolveKnownObjectIndex(expression: AnyNode, context: ObjectFunc
   }
 
   return null
+}
+
+function isCompilerAnyNodeExpression(expression: AnyNode | null | undefined): boolean {
+  if (expression == null || expression.shape == null) {
+    return false
+  }
+
+  return expression.shape.builtin === 'compiler.AnyNode'
 }
 
 function knownObjectIndexField(
@@ -459,6 +481,10 @@ export function resolveObjectExpressionIndex(expression: AnyNode): CObjectIndexF
 }
 
 function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: string): CObjectIndexFieldInfo | null {
+  if (isCompilerAnyNodeExpression(objectExpression)) {
+    return null
+  }
+
   if (objectExpression.shape == null || objectExpression.shape.fields == null) {
     return null
   }
@@ -1127,12 +1153,13 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
   dependencies: ObjectVariableDeclarationDependencies,
   seenTypes: string[]
 ): string[] {
-  const fields = shape?.fields
   const lines: string[] = []
 
-  if (fields == null) {
+  if (shape == null || shape.fields == null) {
     return lines
   }
+
+  const fields = shape.fields
 
   for (const field of fields) {
     if (field.valueType === 'function') {
@@ -1307,6 +1334,10 @@ export function registerObjectShape(
   shape: CObjectShape | null | undefined
 ): void {
   if (shape == null) {
+    return
+  }
+
+  if (shape.builtin === 'compiler.AnyNode') {
     return
   }
 

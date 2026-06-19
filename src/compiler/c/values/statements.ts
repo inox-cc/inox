@@ -833,7 +833,7 @@ export function emitFunctionScalarVariableDeclaration(
   if (runtimeFunctionType != null) {
     context.functionTypes.set(statement.name, runtimeFunctionType)
   } else {
-    context.functionTypes.set(statement.name, statement.functionType)
+    context.functionTypes.set(statement.name, normalizeFunctionType(statement.functionType))
   }
 
   if (isRuntimeFunctionType(statement.functionType) || runtimeFunctionType != null) {
@@ -1773,7 +1773,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
 
   if (inferred === 'function') {
     context.variables.set(statement.name, 'function')
-    context.functionTypes.set(statement.name, statement.functionType)
+    context.functionTypes.set(statement.name, normalizeFunctionType(statement.functionType))
 
     if (isRuntimeFunctionType(statement.functionType)) {
       return {
@@ -2929,10 +2929,11 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   }
 
   if (isDynamicRuntimeValueDeclaration(statement, context)) {
-    let valueType = statement.valueType
+    let valueType: string = 'unknown'
+    const statementValueType = statement.valueType
 
-    if (valueType == null) {
-      valueType = 'unknown'
+    if (statementValueType != null) {
+      valueType = statementValueType
     }
 
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context, valueType)

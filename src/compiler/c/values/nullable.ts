@@ -410,7 +410,13 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
 }
 
 export function emitNullableRuntimeValueVariableDeclaration(statement: AnyNode, context: NullableFunctionContext): string[] {
-  const valueType = statement.valueType
+  let valueType: string = 'unknown'
+  const statementValueType = statement.valueType
+
+  if (statementValueType != null) {
+    valueType = statementValueType
+  }
+
   const expectedTag = cRuntimeValueTag(valueType)
 
   registerOwnedValue(context, statement.name)

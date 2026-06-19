@@ -1692,6 +1692,7 @@ function collectModuleObjectShapes(
       statement.type === 'VariableDeclaration' &&
       statement.valueType === 'object' &&
       statement.shape != null &&
+      statement.shape.builtin !== 'compiler.AnyNode' &&
       statement.shape.fields != null
     ) {
       registerModuleObjectShape(result, statement.name, statement.shape.fields)
@@ -1703,6 +1704,7 @@ function collectModuleObjectShapes(
       statement.type === 'VariableDeclaration' &&
       statement.valueType === 'object' &&
       statement.shape != null &&
+      statement.shape.builtin !== 'compiler.AnyNode' &&
       statement.shape.fields != null
     ) {
       registerModuleObjectShape(result, statement.name, statement.shape.fields)
@@ -4122,7 +4124,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
+  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 
     if (context.nullableVariables.has(name) && isNullableScalarType(context.variables.get(name))) {
@@ -4133,15 +4135,15 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     }
   }
 
-  if (expression?.type === 'OptionalMemberExpression') {
+  if (expression != null && expression.type === 'OptionalMemberExpression') {
     return emitCOptionalMemberValueExpression(expression, context)
   }
 
-  if (expression?.type === 'OptionalIndexExpression') {
+  if (expression != null && expression.type === 'OptionalIndexExpression') {
     return emitCOptionalIndexValueExpression(expression, context)
   }
 
-  if (expression?.type === 'OptionalCallExpression') {
+  if (expression != null && expression.type === 'OptionalCallExpression') {
     return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
   }
 
@@ -4163,7 +4165,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     return mapIndexGet
   }
 
-  if (expression?.type === 'CallExpression' && isNullableScalarRuntimeExpression(expression, context)) {
+  if (expression != null && expression.type === 'CallExpression' && isNullableScalarRuntimeExpression(expression, context)) {
     const valueType = inferExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
     const call = emitPreparedCallExpression(expression, context)
@@ -4255,14 +4257,14 @@ function emitNullableFunctionValueExpression(
   functionType: CFunctionType | null | undefined,
   context: CFunctionContext
 ): PreparedExpression {
-  if (expression?.type === 'NullLiteral') {
+  if (expression != null && expression.type === 'NullLiteral') {
     return {
       lines: [],
       expression: 'ccjs_null_value()'
     }
   }
 
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
+  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 
     if (context.nullableVariables.has(name) && context.variables.get(name) === 'function') {
@@ -4719,7 +4721,7 @@ function isRuntimeLogValueType(valueType: string): boolean {
 }
 
 function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionContext): boolean {
-  if (expression?.type !== 'Reference' || expression.path.length !== 1) {
+  if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
     return false
   }
 
@@ -4749,7 +4751,7 @@ function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext
 }
 
 function emitStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
-  if (expression?.type === 'Reference') {
+  if (expression != null && expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
 
     if (isBoxedRuntimeStringName(name, context)) {
@@ -5044,7 +5046,7 @@ function emitRuntimeErrorLogValue(expression: AnyNode, context: CFunctionContext
 }
 
 function emitErrorLogObjectExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
+  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
     return {
       lines: [],
       expression: emitObjectValueReference(expression.path[0], context)
@@ -5067,7 +5069,7 @@ function emitPreparedUpdateExpression(expression: AnyNode, context: CFunctionCon
 }
 
 function emitReference(expression: AnyNode, context: CFunctionContext): string {
-  if (expression?.type === 'Reference') {
+  if (expression != null && expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
 
     if (context.variables.has(name)) {
@@ -6420,7 +6422,7 @@ function inferExpressionType(expression: AnyNode, context: CFunctionContext): st
 }
 
 function isErrorConstructorExpression(expression: AnyNode): boolean {
-  if (expression?.type !== 'NewExpression' || expression.callee.type !== 'Reference') {
+  if (expression == null || expression.type !== 'NewExpression' || expression.callee.type !== 'Reference') {
     return false
   }
 
@@ -6430,7 +6432,7 @@ function isErrorConstructorExpression(expression: AnyNode): boolean {
 }
 
 function isFetchAbortControllerConstructorExpression(expression: AnyNode): boolean {
-  if (expression?.type !== 'NewExpression' || expression.callee.type !== 'Reference') {
+  if (expression == null || expression.type !== 'NewExpression' || expression.callee.type !== 'Reference') {
     return false
   }
 
@@ -6473,7 +6475,7 @@ function emitPreparedArrayIsArrayCallExpression(expression: AnyNode, context: CF
 }
 
 function cObjectRuntimeCallName(expression: AnyNode): string | null {
-  if (expression?.type !== 'CallExpression' || expression.args.length !== 1) {
+  if (expression == null || expression.type !== 'CallExpression' || expression.args.length !== 1) {
     return null
   }
 
@@ -6527,7 +6529,7 @@ function isKnownErrorValueExpression(
     return true
   }
 
-  if (expression?.type === 'Reference' && expression.path.length === 1) {
+  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
     return errorObjectNames.has(expression.path[0])
   }
 

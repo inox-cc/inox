@@ -172,21 +172,22 @@ function isCollectionMemberAccessExpression(expression: CollectionNode, context:
 }
 
 function reportCollectionHashability(
-  valueType: string,
+  valueType: string | null | undefined,
   subject: string,
   loc: SourceLocation | null | undefined,
   context: CollectionFunctionContext
 ): void {
+  const checkedType = valueType ?? 'unknown'
   const deps = context.collectionLoweringDependencies
 
   if (deps != null) {
-    deps.reportCCollectionHashability(valueType, subject, loc, context)
+    deps.reportCCollectionHashability(checkedType, subject, loc, context)
     return
   }
 
   context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
 
-  reportFallbackCollectionHashability(valueType, subject, loc, context)
+  reportFallbackCollectionHashability(checkedType, subject, loc, context)
 }
 
 function resolveKnownCollectionObjectIndex(

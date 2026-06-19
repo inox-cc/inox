@@ -207,7 +207,7 @@ test('lowers Object.keys and Object.values calls to C object arrays', () => {
   assert.match(result.code, /ccjs_array_get\(ccjs_object_entries_\d+, 0, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, user, &ccjs_log_value_\d+\)/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, keys, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /const ccjs_string\* firstKey = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /const ccjs_string\s*\*\s*firstKey = \(ccjs_string\*\)(?:ccjs_value_\d+|firstKey_value_\d+)\.as\.ref;/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, values, &ccjs_log_value_\d+\)/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, first, &ccjs_log_value_\d+\)/)
   assert.match(result.code, /ccjs_console_format_value\(&ccjs_default_allocator, entries, &ccjs_log_value_\d+\)/)
@@ -1476,11 +1476,9 @@ export function main(): void {
     /ccjs_return = ccjs_value_\d+;\n {2}if \(ccjs_return\.tag != CCJS_TAG_STRING \|\| ccjs_return\.as\.ref == 0\)\s+goto ccjs_cleanup;\n {2}ccjs_retain\(ccjs_return\);\n {2}goto ccjs_cleanup;/
   )
   assert.match(result.code, /return ccjs_return;/)
-  assert.match(
-    result.code,
-    /ccjs_value ccjs_value_\d+ = ccjs_undefined_value\(\);\n {2}ccjs_release\(ccjs_value_\d+\);\n {2}ccjs_value_\d+ = ccjs_undefined_value\(\);\n {2}ccjs_value_\d+ = getName\(\);/
-  )
-  assert.match(result.code, /const ccjs_string \*name = \(ccjs_string \*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /ccjs_value ccjs_value_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(result.code, /ccjs_release\(ccjs_value_\d+\);\n {2}ccjs_value_\d+ = ccjs_undefined_value\(\);\n {2}ccjs_value_\d+ = getName\(\);/)
+  assert.match(result.code, /const ccjs_string\s*\*\s*name = \(ccjs_string\*\)(?:ccjs_value_\d+|name_value_\d+)\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
 
@@ -1593,7 +1591,7 @@ export function main(): void {
     result.code,
     /ccjs_string_concat_parts\(&ccjs_default_allocator, ccjs_cmp_string_\d+->bytes, ccjs_cmp_string_\d+->len, "!", 1, &ccjs_value_\d+\)/
   )
-  assert.match(result.code, /const ccjs_string \*message = \(ccjs_string \*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /const ccjs_string\s*\*\s*message = \(ccjs_string\*\)(?:ccjs_value_\d+|message_value_\d+)\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)message->len, message->bytes\);/)
 })
 
@@ -1731,7 +1729,7 @@ test('compiles if else blocks to C', () => {
 
   assert.match(c.code, /if \(1 < 2\) \{/)
   assert.match(c.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "yes", 3, &ccjs_value_\d+\)/)
-  assert.match(c.code, /text = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(c.code, /text = \(ccjs_string\*\)(?:ccjs_value_\d+|text_value_\d+)\.as\.ref;/)
 })
 
 
@@ -1892,7 +1890,7 @@ export function main(): void {
     result.code,
     /\{\n\s+ccjs_release\(ccjs_value_\d+\);\n\s+ccjs_value_\d+ = ccjs_undefined_value\(\);\n\s+ccjs_value_\d+ = getName\(\);/
   )
-  assert.match(result.code, /const ccjs_string \*name = \(ccjs_string \*\)ccjs_value_\d+\.as\.ref;\n\s+for \(;;\) \{/)
+  assert.match(result.code, /const ccjs_string\s*\*\s*name = \(ccjs_string\*\)(?:ccjs_value_\d+|name_value_\d+)\.as\.ref;[\s\S]*for \(;;\) \{/)
   assert.match(result.code, /if \(!\(index < 1\)\) break;/)
   assert.doesNotMatch(
     result.code,
@@ -2385,6 +2383,7 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
       exported: true,
       async: false,
       params: [],
+      declaredReturnType: 'void',
       returnType: 'void',
       returnNullable: false,
       loc: {
@@ -3096,7 +3095,7 @@ export function main(): void {
 
   assert.match(result.code, /ccjs_value run\(ccjs_value context, ccjs_value \(\*ccjs_objfn_context_dep_emit\)\(ccjs_value\)\)/)
   assert.match(result.code, /ccjs_value_\d+ = ccjs_objfn_context_dep_emit\(context\);/)
-  assert.match(result.code, /run\(ccjs_object_\d+, emit\)/)
+  assert.match(result.code, /run\(ccjs_object_\d+, (?:emit|ccjs_function_pointer_adapter_\d+)\)/)
   assert.doesNotMatch(result.code, /ccjs_value ccjs_objfn_context_dep_emit/)
 })
 
@@ -3232,6 +3231,33 @@ test('compiles simple optional object member and index access to C', () => {
   assert.match(c.code, /if \(ccjs_object_get_known\(data, 0, &ccjs_field_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/)
   assert.match(c.code, /const ccjs_string \*name = \(ccjs_string \*\)ccjs_field_\d+\.as\.ref;/)
   assert.match(c.code, /if \(ccjs_object_get\(data, "score", 5, &ccjs_log_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/)
+})
+
+
+test('lowers nested AnyNode path element access as a string array index', () => {
+  const result = compileSource(
+    `type AnyNode = {
+  type?: string
+  [key: string]: any
+}
+
+function firstCalleeSegment(expression: AnyNode): string {
+  if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return ''
+  }
+
+  const path = expression.callee.path
+  const name: string = path[0]
+  return name
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_array_get\(path, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /const ccjs_string\* name = \(ccjs_string\*\)name_value_\d+\.as\.ref;/)
 })
 
 

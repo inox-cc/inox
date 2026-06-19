@@ -1022,7 +1022,7 @@ function emitHttpZeroArgCallbackLines(
     return []
   }
 
-  if (callback.type !== 'ArrowFunctionExpression' || callback.params.length !== 0 || callback.async) {
+  if (callback.type !== 'ArrowFunctionExpression' || callback.params.length !== 0 || callback.async === true) {
     context.diagnostics.push(
       diagnostic(
         'CCJS_HTTP_SERVER',

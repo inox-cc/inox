@@ -260,7 +260,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
         continue
       }
 
-      if (item.typeOnly && exported.type !== 'TypeAliasDeclaration') {
+      if (item.typeOnly === true && exported.type !== 'TypeAliasDeclaration') {
         context.diagnostics.push(
           diagnostic(
             'CCJS_UNKNOWN_EXPORT',

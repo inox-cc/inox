@@ -143,6 +143,10 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     return namedResolvedType(name)
   }
 
+  if (name === 'AnyNode') {
+    return anyNodeResolvedType()
+  }
+
   const typeInfo = context.types.get(name)
   const cached = context.resolvedTypes.get(name)
 
@@ -282,6 +286,7 @@ function resolveObjectShape(shape: LowerTypeNode, context: LowerContext): LowerT
 
   return {
     kind: 'object',
+    builtin: nullableString(shape.builtin),
     baseTypes: copyStringArray(shape.baseTypes),
     dynamic: shape.dynamic === true || bases.dynamic,
     fields: resolvedFields
@@ -514,20 +519,26 @@ function resolveFieldDeclaredType(field: LowerTypeNode, context: LowerContext): 
     return resolveWeakFieldDeclaredType(field, context)
   }
 
-  let valueType = field.valueType
+  let valueType: string = field.valueType
+  const declaredType = field.declaredType
 
-  if (field.declaredType != null) {
-    valueType = field.declaredType
+  if (declaredType != null) {
+    valueType = declaredType
   }
 
   return resolveDeclaredType(valueType, context)
 }
 
 function resolveWeakFieldDeclaredType(field: LowerTypeNode, context: LowerContext): LowerResolvedType {
-  let targetName = field.valueType
+  let targetName: string = field.valueType
+  const declaredType = field.declaredType
 
-  if (isNullableTypeName(field.valueType)) {
-    targetName = nullableTypeNameFromKnownTypeName(field.valueType)
+  if (declaredType != null) {
+    targetName = declaredType
+  }
+
+  if (isNullableTypeName(targetName)) {
+    targetName = nullableTypeNameFromKnownTypeName(targetName)
   }
 
   const typeInfo = context.types.get(targetName)
@@ -796,6 +807,18 @@ function collectClassNames(ast: ProgramNode): Set<string> {
 function namedResolvedType(valueType: string): LowerResolvedType {
   const resolved = unresolvedType()
   resolved.valueType = valueType
+
+  return resolved
+}
+
+function anyNodeResolvedType(): LowerResolvedType {
+  const resolved = namedResolvedType('object')
+  resolved.shape = {
+    kind: 'object',
+    builtin: 'compiler.AnyNode',
+    dynamic: true,
+    fields: []
+  }
 
   return resolved
 }

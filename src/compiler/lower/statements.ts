@@ -306,10 +306,11 @@ function lowerNameDiffers(left: string, right: string): boolean {
 }
 
 export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
-  let declaredType = param.valueType
+  let declaredType: string = param.valueType
+  const paramDeclaredType = param.declaredType
 
-  if (param.declaredType != null) {
-    declaredType = param.declaredType
+  if (paramDeclaredType != null) {
+    declaredType = paramDeclaredType
   }
 
   const declared = resolveDeclaredType(declaredType, context)
